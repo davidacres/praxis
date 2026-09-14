@@ -632,8 +632,10 @@ export interface AiDelegateInput {
   toolMode?: AgentToolMode;
   /** Starts the issue's read-only analysis as the first turn of its normal chat session. */
   purpose?: 'analysis';
-  /** Optional discovered runtime host and skills to use for this session. */
+  /** Legacy combined id; new callers send profileId and hostId. */
   agentId?: string;
+  profileId?: string;
+  hostId?: string;
   skillNames?: string[];
 }
 
