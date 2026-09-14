@@ -1905,9 +1905,9 @@ export function App() {
                       sessions={agentSessions.map(session => ({
                         issueKey: session.issueKey,
                         title: session.title ?? session.taskDefinition.goal.slice(0, 60),
-                        agentId: session.agentId,
-                        profileId: session.profileId,
-                        hostId: session.hostId
+                        ...(session.agentId ? { agentId: session.agentId } : {}),
+                        ...(session.profileId ? { profileId: session.profileId } : {}),
+                        ...(session.hostId ? { hostId: session.hostId } : {})
                       }))}
                       onLifecycle={agentLifecycle}
                       onActivate={activateSkill}
