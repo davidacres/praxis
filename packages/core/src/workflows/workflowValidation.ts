@@ -156,7 +156,10 @@ function normalizeNode(value: unknown): WorkflowNode {
         ...base,
         type: 'agent-task',
         agent: {
-          agentId: typeof agentRaw.agentId === 'string' ? agentRaw.agentId : '',
+          agentId: typeof agentRaw.agentId === 'string' ? agentRaw.agentId : typeof agentRaw.hostId === 'string' ? agentRaw.hostId : '',
+          ...(typeof agentRaw.profileId === 'string' ? { profileId: agentRaw.profileId } : {}),
+          ...(typeof agentRaw.hostId === 'string' ? { hostId: agentRaw.hostId } : {}),
+          ...(typeof agentRaw.providerId === 'string' ? { providerId: agentRaw.providerId } : {}),
           scope: agentRaw.scope === 'project' ? 'project' : 'global',
           // Defaults to the narrowest mode: an unreadable value must never
           // grant a stage more tool access than it was authored with.
