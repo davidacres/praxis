@@ -168,7 +168,10 @@ export class AiSessionManager {
         | 'workflowRunId'
         | 'workflowNodeId'
         | 'agentId'
+        | 'profileId'
+        | 'hostId'
         | 'activeSkills'
+        | 'skillActivations'
       >
     >
   ): void {
@@ -189,6 +192,11 @@ export class AiSessionManager {
     if (runtime.workflowRunId !== undefined) record.workflowRunId = runtime.workflowRunId.trim() || undefined;
     if (runtime.workflowNodeId !== undefined) record.workflowNodeId = runtime.workflowNodeId.trim() || undefined;
     if (runtime.agentId !== undefined) record.agentId = runtime.agentId.trim() || undefined;
+    if (runtime.profileId !== undefined) record.profileId = runtime.profileId.trim() || undefined;
+    if (runtime.hostId !== undefined) record.hostId = runtime.hostId.trim() || undefined;
+    if (runtime.skillActivations !== undefined) {
+      record.skillActivations = runtime.skillActivations.length > 0 ? runtime.skillActivations : undefined;
+    }
     if (runtime.activeSkills !== undefined) {
       record.activeSkills = runtime.activeSkills.length > 0 ? runtime.activeSkills : undefined;
     }
