@@ -101,7 +101,7 @@ test('TASK-247: mirrorBundledAgents writes manifests and is idempotent', async (
       const profile = await fs.readFile(profilePath, 'utf8');
       assert.strictEqual(content.id, id);
       assert.match(profile, new RegExp(`^---\\n(?:.|\\n)*id: ${id}`, 'm'));
-      assert.match(profile, /## Instructions/);
+      assert.ok(profile.includes(BUNDLED_AGENT_DEFINITIONS[id].brief.trim()));
     }
 
     // Second run is idempotent
