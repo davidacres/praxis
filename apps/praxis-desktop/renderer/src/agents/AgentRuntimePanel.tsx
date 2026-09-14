@@ -42,14 +42,14 @@ export function AgentRuntimePanel({
   onOpenSession
 }: AgentRuntimePanelProps) {
   const profile = selection?.kind === 'profile' ? snapshot?.profiles?.find(item => item.profile.id === selection.id) : undefined;
-  const agent = selection?.kind === 'agent' ? snapshot?.runtimeHosts?.find(a => a.manifest.id === selection.id) : undefined;
+  const agent = selection?.kind === 'agent' ? (snapshot?.runtimeHosts ?? snapshot?.agents)?.find(a => a.manifest.id === selection.id) : undefined;
   const skill = selection?.kind === 'skill' ? snapshot?.skills.find(s => s.metadata.name === selection.name) : undefined;
 
   if (!snapshot || (!profile && !agent && !skill)) {
     return (
       <div className="empty-state" data-testid="agent-runtime-empty">
         <Icon name="zap" size={26} />
-        <span>Runtime state &mdash; host, capabilities, sessions &mdash; appears here for the selected agent or skill.</span>
+        <span>Runtime state &mdash; host, capabilities, sessions &mdash; appears here for the selected profile, host or skill.</span>
       </div>
     );
   }
