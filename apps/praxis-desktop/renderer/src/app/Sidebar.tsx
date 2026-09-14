@@ -684,10 +684,12 @@ export function Sidebar({
                 }
                 catalog={agentCatalog}
                 activeAgentId={activeAgentId}
+                activeAgentProfileId={activeAgentProfileId}
                 activeSkillName={activeSkillName}
                 projectName={projectNameForScope}
                 onSelectFeature={() => onSelectFeature('agents')}
                 onSelectAgent={onSelectAgent}
+                onSelectAgentProfile={onSelectAgentProfile}
                 onSelectSkill={onSelectSkill}
                 onNewAgentItem={onNewAgentItem}
               />
@@ -939,10 +941,12 @@ function AgentsNav({
   onToggleCollapsed,
   catalog,
   activeAgentId,
+  activeAgentProfileId,
   activeSkillName,
   projectName,
   onSelectFeature,
   onSelectAgent,
+  onSelectAgentProfile,
   onSelectSkill,
   onNewAgentItem
 }: {
@@ -973,7 +977,7 @@ function AgentsNav({
       skills: (catalog?.skills ?? []).filter(skill => skill.scope === scope)
     }))
     .filter(group => group.profiles.length > 0 || group.agents.length > 0 || group.skills.length > 0);
-  const total = (catalog?.profiles.length ?? 0) + (catalog?.runtimeHosts.length ?? catalog?.agents.length ?? 0) + (catalog?.skills.length ?? 0);
+  const total = (catalog?.profiles?.length ?? 0) + (catalog?.runtimeHosts?.length ?? catalog?.agents.length ?? 0) + (catalog?.skills.length ?? 0);
 
   return (
     <>
