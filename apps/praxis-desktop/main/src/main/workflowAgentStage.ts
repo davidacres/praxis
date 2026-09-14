@@ -65,7 +65,7 @@ export async function runWorkflowAgentStage(
   const policy = getWorkflowPolicyStore().effectiveForProject(workflowRun.projectId)?.profile;
   const preflight = preflightStage(
     node,
-    { agents: snapshot.agents, skills: snapshot.skills, capabilities: snapshot.capabilities },
+    { agents: snapshot.agents, runtimeHosts: snapshot.runtimeHosts, profiles: snapshot.profiles, skills: snapshot.skills, capabilities: snapshot.capabilities },
     policy
   );
   if (!preflight.ok || !preflight.binding) {
@@ -85,6 +85,13 @@ export async function runWorkflowAgentStage(
   const sessions = getAiSessionManager();
   const settings = getSettingsBackend().read();
   const provider = settings.ai.activeProvider;
+  if (preflight.binding.providerId && preflight.binding.providerId !== provider) {
+    settled.cancel();
+    return {
+      status: 'failed',
+      error: `Stage requires provider "${preflight.binding.providerId}" but "${provider}" is active.`
+    };
+  }
   const descriptor = PROVIDER_DESCRIPTORS[provider];
   const taskDefinition = buildStageTaskDefinition(context);
 
@@ -102,16 +109,16 @@ export async function runWorkflowAgentStage(
   const settled = waitForSession(issueKey);
 
   try {
-    if (preflight.binding.skills.length > 0) {
-      const activations = await Promise.all(
-        preflight.binding.skills.map(skill =>
-          getAgentRuntimeManager().activateSkill(preflight.binding!.agentId, skill.name)
-        )
-      );
-      taskDefinition.goal += `\n\nActivated runtime skills:\n${activations
-        .map(item => `## ${item.skill.metadata.name}\n${item.instructions}`)
-        .join('\n\n')}`;
-    }
+    const runtime = getAgentRuntimeManager();
+    const skillNames = preflight.binding.skills.map(skill => skill.name);
+    await Promise.all(skillNames.map(name => runtime.activateSkill(preflight.binding!.hostId, name)));
+    const binding = await runtime.createBinding(
+      preflight.binding.profileId,
+      preflight.binding.hostId,
+      { id: provider },
+      skillNames
+    );
+    taskDefinition.goal += `\n\n${await runtime.bindingContext(binding)}`;
 
     dispatch.signal?.throwIfAborted();
     if (descriptor.kind === 'cli-agent') {
@@ -155,7 +162,11 @@ export async function runWorkflowAgentStage(
       worktreePath,
       toolMode,
       workflowRunId: workflowRun.runId,
-      workflowNodeId: node.id
+      workflowNodeId: node.id,
+      agentId: preflight.binding.profileId,
+      profileId: preflight.binding.profileId,
+      hostId: preflight.binding.hostId,
+      activeSkills: preflight.binding.skills.map(skill => skill.name)
     });
   }
 
