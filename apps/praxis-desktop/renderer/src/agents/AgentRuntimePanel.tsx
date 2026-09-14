@@ -23,7 +23,7 @@ export interface AgentRuntimePanelProps {
   selection?: CatalogSelection;
   busy: boolean;
   activations: ActivationMap;
-  sessions: Array<{ issueKey: string; title: string; agentId?: string }>;
+  sessions: Array<{ issueKey: string; title: string; agentId?: string; profileId?: string; hostId?: string }>;
   onLifecycle: (agentId: string, action: LifecycleAction) => void;
   onActivate: (agentId: string, skillName: string) => void;
   onStartSession?: (agentId: string, skillNames: string[]) => void;
@@ -57,14 +57,14 @@ export function AgentRuntimePanel({
   return (
     <section className="inspector agent-runtime" aria-label="Agent runtime">
       {profile ? (
-        <ProfileBinding profile={profile} snapshot={snapshot} sessions={sessions.filter(session => session.agentId === profile.profile.id)} onOpenSession={onOpenSession} />
+        <ProfileBinding profile={profile} snapshot={snapshot} sessions={sessions.filter(session => (session.profileId ?? session.agentId) === profile.profile.id)} onOpenSession={onOpenSession} />
       ) : agent ? (
         <AgentRuntime
           agent={agent}
           snapshot={snapshot}
           busy={busy}
           activations={activations[agent.manifest.id] ?? []}
-          sessions={sessions.filter(session => session.agentId === agent.manifest.id)}
+          sessions={sessions.filter(session => (session.hostId ?? session.agentId) === agent.manifest.id)}
           onLifecycle={onLifecycle}
           {...(onStartSession ? { onStartSession } : {})}
           {...(onOpenSession ? { onOpenSession } : {})}
