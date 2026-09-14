@@ -117,11 +117,15 @@ test('a full-tools session drives the in-app browser and reads the page', async 
   await expect(win.locator('[data-testid="browser-pane"]')).toBeVisible({ timeout: 15000 });
   await expect(win.locator('[data-testid="browser-url-input"]')).toHaveValue(new RegExp(pageOrigin.replace(/[.]/g, '\\.')));
 
-  // The navigate tool result carried the page text back into the transcript.
-  await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('the needle is 4815162342', {
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+
+  // The navigate tool result carried the page text back — under Activity's
+  // grouped completion gadget now, not inlined into the chat transcript.
+  await win.locator('[data-testid="session-tab-activity"]').click();
+  await win.locator('[data-testid="tool-completion-gadget"] [data-testid="tool-completion-item"]').first().click();
+  await expect(win.locator('[data-testid="tool-completion-selected-detail"]')).toContainText('the needle is 4815162342', {
     timeout: 15000
   });
-  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
 });
 
 test('the toolbar navigates the in-app browser by hand', async () => {

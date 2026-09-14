@@ -28,8 +28,8 @@ test('VERIFY: Marketplace loads and displays real GitHub packages', async () => 
   await window.getByRole('button', { name: /settings/i }).first().click();
   
   // Navigate to Themes
-  await window.getByRole('button', { name: /appearance/i }).click();
-  await window.getByRole('button', { name: /themes/i }).click();
+  await window.getByTestId('settings-nav-appearance').click();
+  await window.getByTestId('settings-nav-appearance-themes').click();
 
   // Get marketplace section
   const marketplace = window.locator('[data-testid="theme-marketplace"]');
