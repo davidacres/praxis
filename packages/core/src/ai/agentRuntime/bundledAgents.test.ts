@@ -91,11 +91,17 @@ test('TASK-247: mirrorBundledAgents writes manifests and is idempotent', async (
 
     for (const id of Object.keys(BUNDLED_AGENT_DEFINITIONS)) {
       const manifestPath = path.join(tmp, id, 'agent.json');
+      const profilePath = path.join(tmp, id, 'AGENT.md');
       const stat = await fs.stat(manifestPath);
+      const profileStat = await fs.stat(profilePath);
       assert.ok(stat.isFile());
+      assert.ok(profileStat.isFile());
 
       const content = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+      const profile = await fs.readFile(profilePath, 'utf8');
       assert.strictEqual(content.id, id);
+      assert.match(profile, new RegExp(`^---\\n(?:.|\\n)*id: ${id}`, 'm'));
+      assert.match(profile, /## Instructions/);
     }
 
     // Second run is idempotent
