@@ -15,6 +15,8 @@ export interface AgentHostHandle {
   agentId: string;
   capabilities: AgentCapabilities;
   process?: ChildProcess;
+  /** Returns true only after the host accepted the native skill activation. */
+  activateSkill?(skill: { name: string; path: string; instructions: string }): Promise<boolean>;
   dispose(): Promise<void>;
 }
 
@@ -37,6 +39,16 @@ function normalizeCapabilities(value: unknown): AgentCapabilities {
     ...(typeof candidate.model === 'string' ? { model: candidate.model } : {}),
     ...(typeof candidate.version === 'string' ? { version: candidate.version } : {})
   };
+}
+
+async function httpRequest(url: URL, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function httpCapabilities(url: string, timeoutMs: number): Promise<AgentCapabilities> {
@@ -63,7 +75,19 @@ export async function loadAgentHost(agent: DiscoveredAgent, timeoutMs = 5000): P
   const entry = agent.manifest.entry;
   if (agent.manifest.type === 'http') {
     if (typeof entry !== 'object' || !entry.url) throw new Error('HTTP agent requires entry.url.');
-    return { agentId: agent.manifest.id, capabilities: await httpCapabilities(entry.url, timeoutMs), dispose: async () => {} };
+    return {
+      agentId: agent.manifest.id,
+      capabilities: await httpCapabilities(entry.url, timeoutMs),
+      activateSkill: async skill => {
+        const response = await httpRequest(new URL('/skills/activate', entry.url!), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(skill)
+        }, timeoutMs);
+        return response.ok;
+      },
+      dispose: async () => {}
+    };
   }
   const { command, args } = commandEntry(entry);
   const child = spawn(command, args, { cwd: agent.rootPath, shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { PATH: process.env.PATH ?? '' } });
