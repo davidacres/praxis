@@ -1,1 +1,121 @@
-import type { AgentTransport } from './agentRuntime/manifest';\n\n/**\n * Provider-neutral AI execution vocabulary.\n *\n * These contracts distinguish the model provider, runtime host, role/profile,\n * reusable skill and execution session. Adapters may map them to native\n * provider features, but must not collapse them back into one concept.\n */\n\nexport type AgentHostTransport = AgentTransport;\n\nexport interface AgentProviderRef { id: string; model?: string; }\n\nexport interface AgentHostManifest {\n  id: string;\n  name: string;\n  transport: AgentHostTransport;\n  entry: string | { command?: string; args?: string[]; url?: string };\n  providerIds?: string[];\n  capabilities?: AgentHostCapabilities;\n}\n\nexport interface AgentHostCapabilities {\n  supportsNativeProfiles?: boolean;\n  supportsNativeSkills?: boolean;\n  supportsTools?: boolean;\n  supportsResume?: boolean;\n  supportsModes?: boolean;\n}\n\nexport interface AgentProfile {\n  id: string;\n  name: string;\n  description?: string;\n  instructions: string;\n  preferredSkills?: string[];\n  requiredCapabilities?: string[];\n  toolMode?: 'read-only' | 'project-only' | 'full';\n}\n\nexport interface AgentSkillRef {\n  id: string;\n  version?: string;\n  instructions: string;\n  requiredTools?: string[];\n  inputSchema?: Record<string, unknown>;\n  outputSchema?: Record<string, unknown>;\n}\n\nexport type SkillActivationMode = 'native' | 'tools' | 'context';\n\nexport interface AgentSkillActivation {\n  skillId: string;\n  mode: SkillActivationMode;\n  reason: string;\n  instructionsIncluded: boolean;\n}\n\nexport interface AgentBinding {\n  profile: AgentProfile;\n  provider: AgentProviderRef;\n  host: AgentHostManifest;\n  skills: AgentSkillRef[];\n  activations: AgentSkillActivation[];\n}\n\n/** Plans a truthful fallback for each skill using host-advertised capabilities. */\nexport function planSkillActivations(skills: AgentSkillRef[], capabilities: AgentHostCapabilities): AgentSkillActivation[] {\n  return skills.map(skill => {\n    if (capabilities.supportsNativeSkills) return { skillId: skill.id, mode: 'native', reason: 'Host advertises native skill support.', instructionsIncluded: false };\n    if (capabilities.supportsTools && skill.requiredTools?.length) return { skillId: skill.id, mode: 'tools', reason: 'Host supports the skill tools but not native skills.', instructionsIncluded: true };\n    return { skillId: skill.id, mode: 'context', reason: 'No confirmed native skill or tool activation path.', instructionsIncluded: true };\n  });\n}\n\n/** Builds the stable context fallback for non-native providers. */\nexport function buildProfileContext(binding: Pick<AgentBinding, 'profile' | 'skills' | 'activations'>): string {\n  const included = binding.activations.filter(item => item.instructionsIncluded);\n  return [\n    '## Praxis agent profile: ' + binding.profile.name,\n    binding.profile.instructions,\n    included.length === 0 ? '' : '## Praxis skills',\n    ...binding.skills.flatMap(skill => {\n      const activation = included.find(item => item.skillId === skill.id);\n      return activation ? ['### ' + skill.id + ' (' + activation.mode + ')', skill.instructions] : [];\n    })\n  ].filter(Boolean).join('\\n\\n');\n}
+import type { AgentTransport, DiscoveredAgent } from './agentRuntime/manifest';
+
+export type AgentHostTransport = AgentTransport;
+export type SkillActivationMode = 'native' | 'tools' | 'context';
+
+export interface AgentProviderRef {
+  id: string;
+  model?: string;
+}
+
+export interface AgentHostCapabilities {
+  supportsNativeProfiles?: boolean;
+  supportsNativeSkills?: boolean;
+  supportsTools?: boolean;
+  supportsResume?: boolean;
+  supportsModes?: boolean;
+}
+
+export interface AgentHostManifest {
+  id: string;
+  name: string;
+  transport: AgentHostTransport;
+  entry: string | { command?: string; args?: string[]; url?: string };
+  providerIds?: string[];
+  capabilities?: AgentHostCapabilities;
+}
+
+export interface AgentProfile {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  preferredSkills?: string[];
+  requiredCapabilities?: string[];
+  toolMode?: 'read-only' | 'project-only' | 'full';
+  version?: string;
+}
+
+export interface AgentSkillRef {
+  id: string;
+  version?: string;
+  instructions: string;
+  requiredTools?: string[];
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+}
+
+export interface AgentSkillActivation {
+  skillId: string;
+  mode: SkillActivationMode;
+  reason: string;
+  instructionsIncluded: boolean;
+}
+
+export interface AgentBinding {
+  profile: AgentProfile;
+  provider: AgentProviderRef;
+  host: AgentHostManifest;
+  skills: AgentSkillRef[];
+  activations: AgentSkillActivation[];
+}
+
+/** Adapts a legacy agent.json record into the canonical runtime-host contract. */
+export function toAgentHostManifest(agent: DiscoveredAgent): AgentHostManifest {
+  return {
+    id: agent.manifest.id,
+    name: agent.manifest.name,
+    transport: agent.manifest.type,
+    entry: agent.manifest.entry
+  };
+}
+
+/**
+ * Plans a truthful fallback for each skill. Native mode is used only when the
+ * host explicitly advertised it; otherwise instructions are preserved.
+ */
+export function planSkillActivations(
+  skills: AgentSkillRef[],
+  capabilities: AgentHostCapabilities
+): AgentSkillActivation[] {
+  return skills.map(skill => {
+    if (capabilities.supportsNativeSkills) {
+      return {
+        skillId: skill.id,
+        mode: 'native',
+        reason: 'Runtime host explicitly advertises native skill support.',
+        instructionsIncluded: false
+      };
+    }
+    if (capabilities.supportsTools && (skill.requiredTools?.length ?? 0) > 0) {
+      return {
+        skillId: skill.id,
+        mode: 'tools',
+        reason: 'Runtime host supports tools but not native skill activation.',
+        instructionsIncluded: true
+      };
+    }
+    return {
+      skillId: skill.id,
+      mode: 'context',
+      reason: 'No confirmed native skill activation path is available.',
+      instructionsIncluded: true
+    };
+  });
+}
+
+/** Builds the portable instruction context used when native activation is unavailable. */
+export function buildProfileContext(
+  binding: Pick<AgentBinding, 'profile' | 'skills' | 'activations'>
+): string {
+  const sections = [
+    `## Praxis agent profile: ${binding.profile.name}`,
+    binding.profile.instructions
+  ];
+  for (const skill of binding.skills) {
+    const activation = binding.activations.find(item => item.skillId === skill.id);
+    if (!activation?.instructionsIncluded) continue;
+    sections.push(`## Praxis skill: ${skill.id} (${activation.mode})`, skill.instructions);
+  }
+  return sections.filter(Boolean).join('\n\n');
+}
