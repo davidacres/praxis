@@ -22,8 +22,8 @@ export interface HostRuntimeStatus {
 export interface AgentRuntimeSnapshot {
   /** @deprecated Use runtimeHosts. Kept for persisted/UI compatibility. */
   agents: DiscoveredAgent[];
-  runtimeHosts: DiscoveredAgent[];
-  profiles: DiscoveredAgentProfile[];
+  runtimeHosts?: DiscoveredAgent[];
+  profiles?: DiscoveredAgentProfile[];
   skills: DiscoveredSkill[];
   capabilities: Record<string, AgentCapabilities>;
   hosts: Record<string, HostRuntimeStatus>;
@@ -132,7 +132,7 @@ export class AgentRuntimeManager {
     const skill = snapshot.skills.find(candidate => candidate.metadata.name === skillName);
     if (!skill) throw new Error(`Skill ${skillName} was not discovered.`);
     if (skill.error) throw new Error(`Skill ${skillName} is invalid: ${skill.error}`);
-    const hostDefinition = snapshot.runtimeHosts.find(candidate => candidate.manifest.id === hostId);
+    const hostDefinition = (snapshot.runtimeHosts ?? snapshot.agents).find(candidate => candidate.manifest.id === hostId);
     if (!hostDefinition) throw new Error(`Runtime host ${hostId} was not discovered.`);
     const host = this.hosts.get(hostId) ?? await loadAgentHost(hostDefinition);
     if (!this.hosts.has(hostId)) {
@@ -161,7 +161,7 @@ export class AgentRuntimeManager {
     skillNames: string[]
   ): Promise<AgentBinding> {
     const snapshot = await this.list();
-    const profile = snapshot.profiles.find(candidate => candidate.profile.id === profileId);
+    const profile = (snapshot.profiles ?? []).find(candidate => candidate.profile.id === profileId);
     if (!profile) throw new Error(`Agent profile ${profileId} was not discovered.`);
     if (profile.error) throw new Error(`Agent profile ${profileId} is invalid: ${profile.error}`);
     if (!profile.trusted) throw new Error(`Agent profile ${profileId} is not trusted.`);
