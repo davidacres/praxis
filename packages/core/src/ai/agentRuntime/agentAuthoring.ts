@@ -16,6 +16,7 @@ import {
   type AgentTransport,
   type CatalogScope
 } from './manifest';
+import { parseAgentProfile } from './profileRegistry';
 
 export interface NewAgentInput {
   scope: CatalogScope;
@@ -261,6 +262,25 @@ export function validateAgentImport(
     preview: {
       kind: 'agent',
       name: safe.name ?? id,
+      duplicate: !!safe.name && existingIds.includes(safe.name),
+      errors
+    }
+  };
+}
+
+/** Validates a would-be imported AGENT.md profile. */
+export function validateAgentProfileImport(
+  profileMarkdown: string,
+  existingIds: string[]
+): { preview: ImportPreview } {
+  const parsed = parseAgentProfile(profileMarkdown, '');
+  const errors = parsed.error ? [parsed.error] : [];
+  const safe = parsed.profile.id ? safeSegment(parsed.profile.id) : { error: 'id: missing' };
+  if (safe.error) errors.push(safe.error.startsWith('id') ? safe.error : `id: ${safe.error}`);
+  return {
+    preview: {
+      kind: 'profile',
+      name: safe.name ?? parsed.profile.id,
       duplicate: !!safe.name && existingIds.includes(safe.name),
       errors
     }
