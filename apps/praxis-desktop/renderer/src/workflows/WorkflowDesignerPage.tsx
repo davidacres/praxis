@@ -705,32 +705,9 @@ function AgentStageFields({
 
   return (
     <>
-      <Field label="Agent profile" warning={profileWarning}>
-        {profiles.length > 0 ? (
-          <select value={selectedProfileId} onChange={event => setAgent({ profileId: event.target.value })}>
-            <option value="">— choose a profile —</option>
-            {profiles.map(profile => (
-              <option key={profile.profile.id} value={profile.profile.id}>
-                {profile.profile.name}{profile.legacy ? ' (legacy brief)' : ''}{profile.trusted ? '' : ' (untrusted)'}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input value={selectedProfileId} placeholder="e.g. praxis-reviewer" onChange={event => setAgent({ profileId: event.target.value })} />
-        )}
-      </Field>
-
-      <Field label="Provider">
-        <input
-          value={node.agent.providerId ?? ''}
-          placeholder="Active project provider"
-          onChange={event => setAgent({ providerId: event.target.value || undefined })}
-        />
-      </Field>
-
       <Field
-        label="Runtime host"
-        warning={agentWarning}
+        label="Agent profile"
+        warning={profileWarning}
         actions={
           recommendationAvailable === true && recommendableAgents.length > 0 ? (
             hasRecommendation ? (
@@ -767,6 +744,29 @@ function AgentStageFields({
           ) : undefined
         }
       >
+        {profiles.length > 0 ? (
+          <select value={selectedProfileId} onChange={event => setAgent({ profileId: event.target.value })}>
+            <option value="">— choose a profile —</option>
+            {profiles.map(profile => (
+              <option key={profile.profile.id} value={profile.profile.id}>
+                {profile.profile.name}{profile.legacy ? ' (legacy brief)' : ''}{profile.trusted ? '' : ' (untrusted)'}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input value={selectedProfileId} placeholder="e.g. praxis-reviewer" onChange={event => setAgent({ profileId: event.target.value })} />
+        )}
+      </Field>
+
+      <Field label="Provider">
+        <input
+          value={node.agent.providerId ?? ''}
+          placeholder="Active project provider"
+          onChange={event => setAgent({ providerId: event.target.value || undefined })}
+        />
+      </Field>
+
+      <Field label="Runtime host" warning={agentWarning}>
         {agents.length > 0 ? (
           <select
             value={selectedHostId}
