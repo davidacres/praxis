@@ -53,12 +53,14 @@ export interface NewSessionProps {
     mode: SessionMode;
     workingDirectory?: string;
     runInWorktree?: boolean;
-    /** Discovered runtime agent + skills to attribute this session to (FX-BF-011). */
+    /** Explicit provider-neutral profile and executable host binding. */
     agentId?: string;
+    profileId?: string;
+    hostId?: string;
     skillNames?: string[];
   }) => Promise<void>;
-  /** Pre-attributes the composer to a discovered agent (from the Agent Hub). */
-  agentContext?: { agentId: string; skillNames: string[] };
+  /** Pre-attributes the composer to a profile/host binding from the Agent Hub. */
+  agentContext?: { agentId: string; profileId?: string; hostId?: string; skillNames: string[] };
   /** Working folder pre-selected by the caller (e.g. the chosen project board's folder). */
   defaultWorkingDirectory?: string;
   /**
@@ -432,7 +434,12 @@ export function NewSession({
         ...(workingDirectory ? { workingDirectory } : {}),
         ...(runInWorktree ? { runInWorktree: true } : {}),
         ...(agentContext
-          ? { agentId: agentContext.agentId, ...(agentContext.skillNames.length ? { skillNames: agentContext.skillNames } : {}) }
+          ? {
+              agentId: agentContext.agentId,
+              profileId: agentContext.profileId ?? agentContext.agentId,
+              hostId: agentContext.hostId ?? agentContext.agentId,
+              ...(agentContext.skillNames.length ? { skillNames: agentContext.skillNames } : {})
+            }
           : {})
       });
       setGoal('');
@@ -455,7 +462,7 @@ export function NewSession({
           <div className="session-agent-context" role="note" data-testid="new-session-agent-context">
             <Icon name="robot" size={14} />
             <span>
-              Attributed to agent <strong>{agentContext.agentId}</strong>
+              Profile <strong>{agentContext.profileId ?? agentContext.agentId}</strong> · host <strong>{agentContext.hostId ?? agentContext.agentId}</strong>
               {agentContext.skillNames.length > 0 && <> · skills: {agentContext.skillNames.join(', ')}</>}
             </span>
           </div>
