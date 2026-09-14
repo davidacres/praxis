@@ -78,10 +78,27 @@ export class AgentRuntimeManager {
         this.options.trustedSkillRoots ?? this.options.skillRoots ?? []
       )
     ]);
+    const alignedProfiles = [...profiles];
+    for (const runtimeHost of runtimeHosts) {
+      if (alignedProfiles.some(profile => profile.profile.id === runtimeHost.manifest.id)) continue;
+      alignedProfiles.push({
+        profile: {
+          id: runtimeHost.manifest.id,
+          name: runtimeHost.manifest.name,
+          instructions: `Use the ${runtimeHost.manifest.name} runtime to complete the supplied task.`
+        },
+        profilePath: runtimeHost.manifestPath,
+        rootPath: runtimeHost.rootPath,
+        fingerprint: 'legacy-host-profile',
+        scope: runtimeHost.scope,
+        trusted: runtimeHost.trusted,
+        legacy: true
+      });
+    }
     this.snapshot = {
       agents: runtimeHosts,
       runtimeHosts,
-      profiles,
+      profiles: alignedProfiles,
       skills,
       capabilities: Object.fromEntries([...this.hosts].map(([id, host]) => [id, host.capabilities])),
       hosts: Object.fromEntries(this.hostStatus),
