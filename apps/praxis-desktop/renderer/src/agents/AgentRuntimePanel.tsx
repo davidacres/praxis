@@ -41,8 +41,8 @@ export function AgentRuntimePanel({
   onStartSession,
   onOpenSession
 }: AgentRuntimePanelProps) {
-  const profile = selection?.kind === 'profile' ? snapshot?.profiles.find(item => item.profile.id === selection.id) : undefined;
-  const agent = selection?.kind === 'agent' ? snapshot?.runtimeHosts.find(a => a.manifest.id === selection.id) : undefined;
+  const profile = selection?.kind === 'profile' ? snapshot?.profiles?.find(item => item.profile.id === selection.id) : undefined;
+  const agent = selection?.kind === 'agent' ? snapshot?.runtimeHosts?.find(a => a.manifest.id === selection.id) : undefined;
   const skill = selection?.kind === 'skill' ? snapshot?.skills.find(s => s.metadata.name === selection.name) : undefined;
 
   if (!snapshot || (!profile && !agent && !skill)) {
@@ -83,12 +83,12 @@ function ProfileBinding({
   sessions,
   onOpenSession
 }: {
-  profile: AgentRuntimeSnapshot['profiles'][number];
+  profile: NonNullable<AgentRuntimeSnapshot['profiles']>[number];
   snapshot: AgentRuntimeSnapshot;
   sessions: Array<{ issueKey: string; title: string }>;
   onOpenSession?: (issueKey: string) => void;
 }) {
-  const compatibleHosts = snapshot.runtimeHosts.filter(host => host.errors.length === 0 && host.trusted);
+  const compatibleHosts = (snapshot.runtimeHosts ?? snapshot.agents).filter(host => host.errors.length === 0 && host.trusted);
   return (
     <>
       <div className="agent-runtime-block">
