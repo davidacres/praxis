@@ -400,3 +400,12 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | TASK-303 | Task | Add ARIA roles, labels and announcements for panel drag/drop | Proposed | FX-BE-106 |
 | TASK-304 | Task | Verify PanelShell chrome across the theme/mode/surface-pack matrix | Proposed | FX-BE-104 |
 | TASK-305 | Task | Add end-to-end journey coverage and update documentation | Proposed | TASK-303, TASK-304 |
+
+| FX-BF-038 | Feature | Separate providers, runtime hosts, agent profiles and skills | Ready for validation | FX-BF-009, FX-BF-010, FX-BF-011, FX-BF-013, FX-BF-035 |
+| FX-BE-115 | Story | Canonical contracts and terminology | Implemented | FX-BF-038 |
+| FX-BE-116 | Story | Legacy manifest and profile migration | Implemented | FX-BE-115 |
+| FX-BE-117 | Story | Provider and runtime-host adapter binding | Implemented | FX-BE-115 |
+| FX-BE-118 | Story | Skill activation and fallback execution | Implemented | FX-BE-117 |
+| FX-BE-119 | Story | Workflow and session persistence migration | Implemented | FX-BE-116, FX-BE-117 |
+| FX-BE-120 | Story | Agent Hub, designer and composer UX | Implemented | FX-BE-119 |
+| FX-BE-121 | Story | End-to-end compatibility and documentation | Ready for validation | FX-BE-118, FX-BE-120 |
