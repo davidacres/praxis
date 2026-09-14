@@ -126,7 +126,7 @@ export function preflightStage(
     };
   }
 
-  if (catalog.profiles && catalog.profiles.length > 0 && !profile) {
+  if ((ref.profileId || (catalog.profiles && catalog.profiles.length > 0)) && !profile) {
     failures.push({
       kind: 'profile-not-found',
       message: `Agent profile "${profileId}" is not in the ${ref.scope} catalog.`,
