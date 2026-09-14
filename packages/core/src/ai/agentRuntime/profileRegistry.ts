@@ -119,12 +119,12 @@ export async function discoverAgentProfiles(
       seen.add(id);
       result.push({
         profile: { id, name: definition.manifest.name, instructions: definition.brief },
-        profilePath: path.join('/bundled', id, 'brief.md'),
+        profilePath: path.join('/bundled', id, 'AGENT.md'),
         rootPath: path.join('/bundled', id),
         fingerprint: createHash('sha256').update(definition.brief).digest('hex'),
         scope: 'global',
         trusted: true,
-        legacy: true
+        legacy: false
       });
     }
   }
