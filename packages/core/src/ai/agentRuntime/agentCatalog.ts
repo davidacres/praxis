@@ -31,8 +31,8 @@ export function groupCatalog(snapshot: Pick<AgentRuntimeSnapshot, 'agents' | 'ru
     .map(scope => ({
       scope,
       label: SCOPE_LABEL[scope],
-      agents: snapshot.runtimeHosts.filter(agent => agent.scope === scope),
-      profiles: snapshot.profiles.filter(profile => profile.scope === scope),
+      agents: (snapshot.runtimeHosts ?? snapshot.agents).filter(agent => agent.scope === scope),
+      profiles: (snapshot.profiles ?? []).filter(profile => profile.scope === scope),
       skills: snapshot.skills.filter(skill => skill.scope === scope)
     }))
     .filter(group => group.agents.length > 0 || group.profiles.length > 0 || group.skills.length > 0);
