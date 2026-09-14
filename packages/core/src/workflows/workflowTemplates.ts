@@ -33,7 +33,11 @@ export interface WorkflowTemplate {
 }
 
 export interface WorkflowAgentDependency {
+  /** Legacy runtime-host alias retained for existing installers. */
   agentId: string;
+  profileId: string;
+  hostId: string;
+  providerId?: string;
   scope: 'global' | 'project';
   skillNames: string[];
   nodeIds: string[];
@@ -88,7 +92,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         x: 0,
         y: 160,
         inputs: [],
-        agent: { agentId: 'praxis-planner', scope: 'global', toolMode: 'read-only' },
+        agent: { agentId: 'praxis-planner', profileId: 'praxis-planner', hostId: 'praxis-planner', scope: 'global', toolMode: 'read-only' },
         instructions: 'Produce an implementation plan for the assigned task.',
         outputs: [{ id: 'plan-doc', kind: 'plan', required: true, description: 'The implementation plan.' }],
         mutatesWorktree: false
@@ -100,7 +104,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         x: 240,
         y: 160,
         inputs: ['plan-doc'],
-        agent: { agentId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
+        agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
         instructions: 'Implement the plan. Commit the change and report the ref.',
         outputs: [{ id: 'change-diff', kind: 'diff', required: true, description: 'The implemented change.' }],
         mutatesWorktree: true,
@@ -113,7 +117,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         x: 480,
         y: 0,
         inputs: ['change-diff'],
-        agent: { agentId: 'praxis-reviewer', scope: 'global', toolMode: 'read-only' },
+        agent: { agentId: 'praxis-reviewer', profileId: 'praxis-reviewer', hostId: 'praxis-reviewer', scope: 'global', toolMode: 'read-only' },
         instructions: 'Review the implementation snapshot for correctness and quality.',
         outputs: [{ id: 'review-report', kind: 'report', required: true }],
         mutatesWorktree: false,
@@ -192,7 +196,7 @@ export function quickChangeTemplate(): WorkflowDefinition {
         x: 0,
         y: 0,
         inputs: [],
-        agent: { agentId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
+        agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
         instructions: 'Implement the assigned change.',
         outputs: [{ id: 'change-diff', kind: 'diff', required: true }],
         mutatesWorktree: true
@@ -299,7 +303,7 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         x: 0,
         y: 160,
         inputs: [],
-        agent: { agentId: 'praxis-planner', scope: 'global', toolMode: 'read-only' },
+        agent: { agentId: 'praxis-planner', profileId: 'praxis-planner', hostId: 'praxis-planner', scope: 'global', toolMode: 'read-only' },
         instructions: 'Analyze requirements, verify existing architecture, and produce structured plan.',
         outputs: [{ id: 'plan-doc', kind: 'plan', required: true }],
         mutatesWorktree: false
@@ -311,7 +315,7 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         x: 200,
         y: 160,
         inputs: ['plan-doc'],
-        agent: { agentId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
+        agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
         instructions: 'Implement changes matching plan specifications and commit changes to the branch.',
         outputs: [{ id: 'change-diff', kind: 'diff', required: true }],
         mutatesWorktree: true,
@@ -617,56 +621,79 @@ export function extractWorkflowDependencies(
   availableAgents: Record<string, unknown> = AVAILABLE_AGENT_DEFINITIONS,
   availableSkills: Record<string, unknown> = AVAILABLE_SKILL_DEFINITIONS
 ): WorkflowAgentDependency[] {
-  const byAgent = new Map<string, { scope: 'global' | 'project'; skills: Set<string>; nodeIds: string[] }>();
+  type Entry = {
+    profileId: string;
+    hostId: string;
+    providerId?: string;
+    scope: 'global' | 'project';
+    skills: Set<string>;
+    nodeIds: string[];
+  };
+  const byBinding = new Map<string, Entry>();
 
   for (const node of workflow.nodes) {
     if (node.type !== 'agent-task') continue;
     const ref = node.agent;
-    let entry = byAgent.get(ref.agentId);
+    const profileId = ref.profileId ?? ref.agentId;
+    const hostId = ref.hostId ?? ref.agentId;
+    const key = `${ref.scope}:${profileId}:${hostId}:${ref.providerId ?? ''}`;
+    let entry = byBinding.get(key);
     if (!entry) {
-      entry = { scope: ref.scope, skills: new Set<string>(), nodeIds: [] };
-      byAgent.set(ref.agentId, entry);
+      entry = {
+        profileId,
+        hostId,
+        ...(ref.providerId ? { providerId: ref.providerId } : {}),
+        scope: ref.scope,
+        skills: new Set<string>(),
+        nodeIds: []
+      };
+      byBinding.set(key, entry);
     }
     entry.nodeIds.push(node.id);
-    if (ref.skillNames) {
-      for (const skill of ref.skillNames) {
-        entry.skills.add(skill);
-      }
-    }
+    for (const skill of ref.skillNames ?? []) entry.skills.add(skill);
   }
 
+  const runtimeHosts = catalog.runtimeHosts ?? catalog.agents;
   const out: WorkflowAgentDependency[] = [];
-  for (const [agentId, entry] of byAgent) {
-    const agentInCatalog = catalog.agents.find(a => a.manifest.id === agentId);
-    const agentInstalled = Boolean(agentInCatalog && agentInCatalog.trusted && agentInCatalog.errors.length === 0);
+  for (const entry of byBinding.values()) {
+    const host = runtimeHosts.find(candidate => candidate.manifest.id === entry.hostId);
+    const hostInstalled = Boolean(host && host.trusted && host.errors.length === 0);
+    const profile = catalog.profiles?.find(candidate => candidate.profile.id === entry.profileId);
+    const profileInstalled = catalog.profiles === undefined
+      ? entry.profileId === entry.hostId
+      : Boolean(profile && profile.trusted && !profile.error);
 
     const skillNames = [...entry.skills];
-    const missingSkills = skillNames.filter(name => !catalog.skills.some(s => s.metadata.name === name));
+    const missingSkills = skillNames.filter(name => !catalog.skills.some(skill => skill.metadata.name === name));
+    const bundledBindingAvailable =
+      entry.profileId === entry.hostId && Boolean(availableAgents[entry.hostId]);
+    const hostAvailable = hostInstalled || Boolean(availableAgents[entry.hostId]);
+    const profileAvailable = profileInstalled || bundledBindingAvailable;
+    const skillsAvailable = missingSkills.every(name => Boolean(availableSkills[name]));
 
     let status: 'installed' | 'available' | 'missing';
     let reason: string | undefined;
-
-    if (agentInstalled && missingSkills.length === 0) {
+    if (hostInstalled && profileInstalled && missingSkills.length === 0) {
       status = 'installed';
+    } else if (hostAvailable && profileAvailable && skillsAvailable) {
+      status = 'available';
+      const missing: string[] = [];
+      if (!profileInstalled) missing.push(`profile "${entry.profileId}"`);
+      if (!hostInstalled) missing.push(`runtime host "${entry.hostId}"`);
+      if (missingSkills.length) missing.push(`skills (${missingSkills.join(', ')})`);
+      reason = `${missing.join(', ')} available for installation.`;
     } else {
-      const agentAvailable = Boolean(agentInstalled || availableAgents[agentId]);
-      const skillsAvailable = missingSkills.every(name => Boolean(availableSkills[name]));
-
-      if (agentAvailable && skillsAvailable) {
-        status = 'available';
-        reason = !agentInstalled
-          ? `Agent "${agentId}" is available and will be installed upon selection.`
-          : `Skills (${missingSkills.join(', ')}) are available and will be installed upon selection.`;
-      } else {
-        status = 'missing';
-        reason = !agentAvailable
-          ? `Agent "${agentId}" is not installed and not available in the catalog.`
-          : `Required skills (${missingSkills.filter(n => !availableSkills[n]).join(', ')}) are not available.`;
-      }
+      status = 'missing';
+      if (!profileAvailable) reason = `Agent profile "${entry.profileId}" is not installed or available.`;
+      else if (!hostAvailable) reason = `Runtime host "${entry.hostId}" is not installed or available.`;
+      else reason = `Required skills (${missingSkills.filter(name => !availableSkills[name]).join(', ')}) are not available.`;
     }
 
     out.push({
-      agentId,
+      agentId: entry.hostId,
+      profileId: entry.profileId,
+      hostId: entry.hostId,
+      ...(entry.providerId ? { providerId: entry.providerId } : {}),
       scope: entry.scope,
       skillNames,
       nodeIds: entry.nodeIds,

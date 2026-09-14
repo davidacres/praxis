@@ -23,10 +23,10 @@ export interface AgentRuntimePanelProps {
   selection?: CatalogSelection;
   busy: boolean;
   activations: ActivationMap;
-  sessions: Array<{ issueKey: string; title: string; agentId?: string }>;
+  sessions: Array<{ issueKey: string; title: string; agentId?: string; profileId?: string; hostId?: string }>;
   onLifecycle: (agentId: string, action: LifecycleAction) => void;
   onActivate: (agentId: string, skillName: string) => void;
-  onStartSession?: (agentId: string, skillNames: string[]) => void;
+  onStartSession?: (agentId: string, skillNames: string[], profileId?: string) => void;
   onOpenSession?: (issueKey: string) => void;
 }
 
@@ -41,27 +41,36 @@ export function AgentRuntimePanel({
   onStartSession,
   onOpenSession
 }: AgentRuntimePanelProps) {
-  const agent = selection?.kind === 'agent' ? snapshot?.agents.find(a => a.manifest.id === selection.id) : undefined;
+  const profile = selection?.kind === 'profile' ? snapshot?.profiles?.find(item => item.profile.id === selection.id) : undefined;
+  const agent = selection?.kind === 'agent' ? (snapshot?.runtimeHosts ?? snapshot?.agents)?.find(a => a.manifest.id === selection.id) : undefined;
   const skill = selection?.kind === 'skill' ? snapshot?.skills.find(s => s.metadata.name === selection.name) : undefined;
 
-  if (!snapshot || (!agent && !skill)) {
+  if (!snapshot || (!profile && !agent && !skill)) {
     return (
       <div className="empty-state" data-testid="agent-runtime-empty">
         <Icon name="zap" size={26} />
-        <span>Runtime state &mdash; host, capabilities, sessions &mdash; appears here for the selected agent or skill.</span>
+        <span>Runtime state &mdash; host, capabilities, sessions &mdash; appears here for the selected profile, host or skill.</span>
       </div>
     );
   }
 
   return (
     <section className="inspector agent-runtime" aria-label="Agent runtime">
-      {agent ? (
+      {profile ? (
+        <ProfileBinding
+          profile={profile}
+          snapshot={snapshot}
+          sessions={sessions.filter(session => (session.profileId ?? session.agentId) === profile.profile.id)}
+          {...(onStartSession ? { onStartSession } : {})}
+          {...(onOpenSession ? { onOpenSession } : {})}
+        />
+      ) : agent ? (
         <AgentRuntime
           agent={agent}
           snapshot={snapshot}
           busy={busy}
           activations={activations[agent.manifest.id] ?? []}
-          sessions={sessions.filter(session => session.agentId === agent.manifest.id)}
+          sessions={sessions.filter(session => (session.hostId ?? session.agentId) === agent.manifest.id)}
           onLifecycle={onLifecycle}
           {...(onStartSession ? { onStartSession } : {})}
           {...(onOpenSession ? { onOpenSession } : {})}
@@ -70,6 +79,64 @@ export function AgentRuntimePanel({
         <SkillRuntime skill={skill} snapshot={snapshot} busy={busy} activations={activations} onActivate={onActivate} />
       ) : null}
     </section>
+  );
+}
+
+
+function ProfileBinding({
+  profile,
+  snapshot,
+  sessions,
+  onStartSession,
+  onOpenSession
+}: {
+  profile: NonNullable<AgentRuntimeSnapshot['profiles']>[number];
+  snapshot: AgentRuntimeSnapshot;
+  sessions: Array<{ issueKey: string; title: string }>;
+  onStartSession?: (hostId: string, skillNames: string[], profileId?: string) => void;
+  onOpenSession?: (issueKey: string) => void;
+}) {
+  const compatibleHosts = (snapshot.runtimeHosts ?? snapshot.agents).filter(host => host.errors.length === 0 && host.trusted);
+  const [hostId, setHostId] = useState(compatibleHosts[0]?.manifest.id ?? '');
+  return (
+    <>
+      <div className="agent-runtime-block">
+        <Line label="Type">Provider-neutral agent profile</Line>
+        <Line label="Compatible hosts">{compatibleHosts.length ? compatibleHosts.map(host => host.manifest.name).join(', ') : 'none available'}</Line>
+        <Line label="Preferred skills">{profile.profile.preferredSkills?.join(', ') || 'none'}</Line>
+        <Line label="Execution">Bind this profile to any compatible runtime host; the provider remains selected in the session composer.</Line>
+      </div>
+      {onStartSession && compatibleHosts.length > 0 && (
+        <div className="inspector-actions">
+          <label className="form-field">
+            <span>Runtime host</span>
+            <select value={hostId} onChange={event => setHostId(event.target.value)}>
+              {compatibleHosts.map(host => (
+                <option key={host.manifest.id} value={host.manifest.id}>{host.manifest.name}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!hostId}
+            onClick={() => onStartSession(hostId, profile.profile.preferredSkills ?? [], profile.profile.id)}
+          >
+            <Icon name="chats" size={13} /> Open a session
+          </button>
+        </div>
+      )}
+      {sessions.length > 0 && (
+        <div className="agent-runtime-block">
+          <span className="rail-sub">Sessions</span>
+          <ul className="agent-runtime-sessions">
+            {sessions.map(session => (
+              <li key={session.issueKey}><button type="button" className="btn-compact" onClick={() => onOpenSession?.(session.issueKey)}>{session.title}</button></li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   );
 }
 

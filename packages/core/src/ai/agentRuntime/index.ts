@@ -9,6 +9,7 @@ export {
 export * from './manifest';
 export * from './discovery';
 export * from './skillRegistry';
+export * from './profileRegistry';
 export * from './manager';
 export * from './hostLoader';
 export * from './agentCatalog';

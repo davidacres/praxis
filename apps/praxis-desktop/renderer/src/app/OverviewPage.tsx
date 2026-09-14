@@ -28,8 +28,8 @@ export function OverviewPage({ projects, boards, connections, sessions, connecti
   const healthyConnections = connections.filter(connection => connectionChecks[connection.id]?.status !== 'error').length;
   const recentProjects = [...projects].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4);
   const recentSessions = sessions.slice(0, 4);
-  const [runtime, setRuntime] = useState<{ agents: number; skills: number }>();
-  useEffect(() => { void window.praxis.agentRuntime.list().then(snapshot => setRuntime({ agents: snapshot.agents.length, skills: snapshot.skills.length })).catch(() => setRuntime({ agents: 0, skills: 0 })); }, []);
+  const [runtime, setRuntime] = useState<{ profiles: number; hosts: number; skills: number }>();
+  useEffect(() => { void window.praxis.agentRuntime.list().then(snapshot => setRuntime({ profiles: snapshot.profiles?.length ?? 0, hosts: (snapshot.runtimeHosts ?? snapshot.agents).length, skills: snapshot.skills.length })).catch(() => setRuntime({ profiles: 0, hosts: 0, skills: 0 })); }, []);
 
   return (
     <div className="overview-page" data-testid="overview-page">
@@ -71,7 +71,7 @@ export function OverviewPage({ projects, boards, connections, sessions, connecti
         </section>
         <section className="overview-panel"><PanelHeading title="Workspace health" action={connections.length ? 'Connections' : undefined} onAction={onOpenConnections} />
           {connections.length === 0 ? <EmptyOverview icon="plug" text="Connect a tracker to monitor workspace health." action="Connections" onAction={onOpenConnections} /> : <div className="overview-health-list">{connections.slice(0, 5).map(connection => { const check = connectionChecks[connection.id]; const status = check?.status === 'error' ? 'Unavailable' : check?.status === 'ok' ? 'Healthy' : 'Not checked'; const width = check?.status === 'error' ? 28 : check?.status === 'ok' ? 100 : 58; return <div className="overview-health-card" key={connection.id}><div className="overview-health-row"><span className={`overview-health-dot ${check?.status === 'error' ? 'error' : check?.status === 'ok' ? 'ok' : ''}`} /><span><strong>{connection.name}</strong><small>{connection.mode} · {status}</small></span><Icon name="chevron-right" size={14} /></div><div className="overview-health-bar"><i style={{ width: `${width}%` }} /></div></div>; })}</div>}
-          <div className="overview-runtime-widget"><span className="overview-runtime-icon"><Icon name="zap" size={15} /></span><span><strong>Agent runtime</strong><small>{runtime ? `${runtime.agents} hosts · ${runtime.skills} skills indexed` : 'Checking hosts and skills…'}</small></span><span className="overview-health-dot ok" /></div>
+          <div className="overview-runtime-widget"><span className="overview-runtime-icon"><Icon name="zap" size={15} /></span><span><strong>Agent runtime</strong><small>{runtime ? `${runtime.profiles} profiles · ${runtime.hosts} hosts · ${runtime.skills} skills` : 'Checking profiles, hosts and skills…'}</small></span><span className="overview-health-dot ok" /></div>
         </section>
       </div>
 

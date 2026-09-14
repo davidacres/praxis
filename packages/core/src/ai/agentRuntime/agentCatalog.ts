@@ -8,6 +8,7 @@
 
 import type { CatalogScope, DiscoveredAgent } from './manifest';
 import type { DiscoveredSkill } from './skillRegistry';
+import type { DiscoveredAgentProfile } from './profileRegistry';
 import type { AgentCapabilities } from './hostLoader';
 import type { AgentRuntimeSnapshot } from './manager';
 
@@ -15,23 +16,26 @@ import type { AgentRuntimeSnapshot } from './manager';
 export interface CatalogGroup {
   scope: CatalogScope;
   label: string;
+  /** Executable runtime hosts (legacy property name retained by snapshot). */
   agents: DiscoveredAgent[];
+  profiles: DiscoveredAgentProfile[];
   skills: DiscoveredSkill[];
 }
 
 const SCOPE_LABEL: Record<CatalogScope, string> = { global: 'Global', project: 'This project' };
 
 /** Splits a snapshot into Global / project groups, dropping empty ones. */
-export function groupCatalog(snapshot: Pick<AgentRuntimeSnapshot, 'agents' | 'skills'>): CatalogGroup[] {
+export function groupCatalog(snapshot: Pick<AgentRuntimeSnapshot, 'agents' | 'runtimeHosts' | 'profiles' | 'skills'>): CatalogGroup[] {
   const order: CatalogScope[] = ['global', 'project'];
   return order
     .map(scope => ({
       scope,
       label: SCOPE_LABEL[scope],
-      agents: snapshot.agents.filter(agent => agent.scope === scope),
+      agents: (snapshot.runtimeHosts ?? snapshot.agents).filter(agent => agent.scope === scope),
+      profiles: (snapshot.profiles ?? []).filter(profile => profile.scope === scope),
       skills: snapshot.skills.filter(skill => skill.scope === scope)
     }))
-    .filter(group => group.agents.length > 0 || group.skills.length > 0);
+    .filter(group => group.agents.length > 0 || group.profiles.length > 0 || group.skills.length > 0);
 }
 
 /** Why this agent's host may not be started, or undefined when it is safe to. */

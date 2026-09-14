@@ -61,7 +61,7 @@ import { RunProfileEditor } from '../projects/RunProfileEditor';
 import { DeploymentsPage } from '../deployments/DeploymentsPage';
 import { AgentDetailPage } from '../agents/AgentDetailPage';
 import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
-import { CreateAgentDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
+import { CreateAgentDialog, CreateAgentProfileDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
 import type { ActivationMap, CatalogSelection, LifecycleAction } from '../agents/agentSelection';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 import { useDialogs } from '../ui/dialogs';
@@ -118,9 +118,11 @@ interface Route {
   /** Agent Hub → New Session handoff (FX-BF-011): the discovered agent and its
    *  active skills to attribute the new session to. Transient, not persisted. */
   newSessionAgent?: string;
+  newSessionProfile?: string;
   newSessionSkills?: string[];
   /** The catalog item selected in the Agents tree (`feature === 'agents'`). */
   agentId?: string;
+  agentProfileId?: string;
   skillName?: string;
   /** Whether the in-app browser was visible in the selected AI session. */
   browserOpen?: boolean;
@@ -230,6 +232,7 @@ function readLastWorkspaceRoute(workspaceId: string): Route {
       ...(typeof stored.workflowId === 'string' ? { workflowId: stored.workflowId } : {}),
       ...(stored.workflowView === 'runs' ? { workflowView: 'runs' } : {}),
       ...(typeof stored.agentId === 'string' ? { agentId: stored.agentId } : {}),
+      ...(typeof stored.agentProfileId === 'string' ? { agentProfileId: stored.agentProfileId } : {}),
       ...(typeof stored.skillName === 'string' ? { skillName: stored.skillName } : {})
     };
   } catch {
@@ -251,6 +254,7 @@ function writeLastWorkspaceRoute(workspaceId: string, route: Route): void {
     ...(route.feature === 'workflows' && route.workflowView ? { workflowView: route.workflowView } : {}),
     ...(route.feature === 'workflows' && route.workflowId ? { workflowId: route.workflowId } : {}),
     ...(route.feature === 'agents' && route.agentId ? { agentId: route.agentId } : {}),
+    ...(route.feature === 'agents' && route.agentProfileId ? { agentProfileId: route.agentProfileId } : {}),
     ...(route.feature === 'agents' && route.skillName ? { skillName: route.skillName } : {})
   };
   try {
@@ -374,7 +378,7 @@ export function App() {
   const [agentsBusy, setAgentsBusy] = useState(false);
   const [agentError, setAgentError] = useState<string>();
   const [activations, setActivations] = useState<ActivationMap>({});
-  const [agentDialog, setAgentDialog] = useState<'agent' | 'skill' | 'import'>();
+  const [agentDialog, setAgentDialog] = useState<'agent' | 'profile' | 'skill' | 'import'>();
 
   const loadAgents = useCallback(async (hard: boolean) => {
     setAgentsBusy(true);
@@ -909,11 +913,13 @@ export function App() {
   const agentSelection: CatalogSelection | undefined =
     route.feature !== 'agents'
       ? undefined
-      : route.agentId
-        ? { kind: 'agent', id: route.agentId }
-        : route.skillName
-          ? { kind: 'skill', name: route.skillName }
-          : undefined;
+      : route.agentProfileId
+        ? { kind: 'profile', id: route.agentProfileId }
+        : route.agentId
+          ? { kind: 'agent', id: route.agentId }
+          : route.skillName
+            ? { kind: 'skill', name: route.skillName }
+            : undefined;
 
   const activateSkill = useCallback(
     (agentId: string, skillName: string) =>
@@ -1160,8 +1166,11 @@ export function App() {
     agentSessions.forEach(session => {
       entries.push({ id: `session:${session.issueKey}`, label: session.title || session.issueKey, hint: session.issueKey, group: 'Sessions', icon: 'robot', run: () => navigate({ feature: 'sessions', sessionKey: session.issueKey }) });
     });
-    (agentSnapshot?.agents ?? []).forEach(agent => {
-      entries.push({ id: `agent:${agent.manifest.id}`, label: agent.manifest.name, hint: 'Agent', group: 'Agents', icon: 'robot', run: () => navigate({ feature: 'agents', agentId: agent.manifest.id }) });
+    (agentSnapshot?.profiles ?? []).forEach(profile => {
+      entries.push({ id: `profile:${profile.profile.id}`, label: profile.profile.name, hint: 'Agent profile', group: 'Agents', icon: 'robot', run: () => navigate({ feature: 'agents', agentProfileId: profile.profile.id }) });
+    });
+    (agentSnapshot?.runtimeHosts ?? agentSnapshot?.agents ?? []).forEach(host => {
+      entries.push({ id: `host:${host.manifest.id}`, label: host.manifest.name, hint: 'Runtime host', group: 'Agents', icon: 'zap', run: () => navigate({ feature: 'agents', agentId: host.manifest.id }) });
     });
     (agentSnapshot?.skills ?? []).forEach(skill => {
       entries.push({ id: `skill:${skill.metadata.name}`, label: skill.metadata.name, hint: 'Skill', group: 'Agents', icon: 'sparkles', run: () => navigate({ feature: 'agents', skillName: skill.metadata.name }) });
@@ -1290,7 +1299,7 @@ export function App() {
   const renderNewSession = () => (
     <NewSession
       boards={workspaceBoards}
-      onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree, agentId, skillNames }) => {
+      onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree, agentId, profileId, hostId, skillNames }) => {
         const projectId = projectIdForConnection(board?.connectionId, connections);
         const project = projectId
           ? workspaceProjects.find(item => item.id === projectId)
@@ -1306,13 +1315,20 @@ export function App() {
           workingDirectory: project?.workspaceFolder ?? workingDirectory,
           ...(runInWorktree ? { runInWorktree: true } : {}),
           ...(agentId ? { agentId } : {}),
+          ...(profileId ? { profileId } : {}),
+          ...(hostId ? { hostId } : {}),
           ...(skillNames?.length ? { skillNames } : {})
         });
         await window.praxis.ai.renameSession(record.issueKey, title);
         navigate({ feature: 'sessions', sessionKey: record.issueKey });
       }}
       {...(route.newSessionAgent
-        ? { agentContext: { agentId: route.newSessionAgent, skillNames: route.newSessionSkills ?? [] } }
+        ? { agentContext: {
+            agentId: route.newSessionAgent,
+            profileId: route.newSessionProfile ?? route.newSessionAgent,
+            hostId: route.newSessionAgent,
+            skillNames: route.newSessionSkills ?? []
+          } }
         : {})}
       defaultWorkingDirectory={composerProject?.workspaceFolder ?? boardProject?.workspaceFolder}
       {...(composerProject
@@ -1796,9 +1812,11 @@ export function App() {
                   onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
                   agentCatalog={agentSnapshot}
                   activeAgentId={route.feature === 'agents' ? route.agentId : undefined}
+                  activeAgentProfileId={route.feature === 'agents' ? route.agentProfileId : undefined}
                   activeSkillName={route.feature === 'agents' ? route.skillName : undefined}
-                  onSelectAgent={agentId => navigate({ ...route, feature: 'agents', agentId, skillName: undefined })}
-                  onSelectSkill={skillName => navigate({ ...route, feature: 'agents', skillName, agentId: undefined })}
+                  onSelectAgent={agentId => navigate({ ...route, feature: 'agents', agentId, agentProfileId: undefined, skillName: undefined })}
+                  onSelectAgentProfile={agentProfileId => navigate({ ...route, feature: 'agents', agentProfileId, agentId: undefined, skillName: undefined })}
+                  onSelectSkill={skillName => navigate({ ...route, feature: 'agents', skillName, agentId: undefined, agentProfileId: undefined })}
                   onNewAgentItem={kind => (kind === 'rescan' ? void loadAgents(true) : setAgentDialog(kind))}
                   projectWorkflows={workflowsByProject}
                   activeWorkflowId={route.feature === 'workflows' && route.workflowView !== 'runs' ? route.workflowId : undefined}
@@ -1898,15 +1916,18 @@ export function App() {
                       sessions={agentSessions.map(session => ({
                         issueKey: session.issueKey,
                         title: session.title ?? session.taskDefinition.goal.slice(0, 60),
-                        agentId: session.agentId
+                        ...(session.agentId ? { agentId: session.agentId } : {}),
+                        ...(session.profileId ? { profileId: session.profileId } : {}),
+                        ...(session.hostId ? { hostId: session.hostId } : {})
                       }))}
                       onLifecycle={agentLifecycle}
                       onActivate={activateSkill}
                       onOpenSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
-                      onStartSession={(agentId, skillNames) =>
+                      onStartSession={(agentId, skillNames, profileId) =>
                         navigate({
                           newSession: true,
                           newSessionAgent: agentId,
+                          ...(profileId ? { newSessionProfile: profileId } : {}),
                           ...(skillNames.length ? { newSessionSkills: skillNames } : {}),
                           ...(composerProject ? { projectId: composerProject.id } : {})
                         })
@@ -2144,10 +2165,18 @@ export function App() {
           }}
         />
       )}
+      {agentDialog === 'profile' && (
+        <CreateAgentProfileDialog
+          defaultScope="global"
+          existingIds={(agentSnapshot?.profiles ?? []).map(profile => profile.profile.id)}
+          onClose={() => setAgentDialog(undefined)}
+          onCreated={snap => { setAgentSnapshot(snap); setAgentDialog(undefined); }}
+        />
+      )}
       {agentDialog === 'agent' && (
         <CreateAgentDialog
           defaultScope="global"
-          existingIds={(agentSnapshot?.agents ?? []).map(agent => agent.manifest.id)}
+          existingIds={(agentSnapshot?.runtimeHosts ?? agentSnapshot?.agents ?? []).map(agent => agent.manifest.id)}
           onClose={() => setAgentDialog(undefined)}
           onCreated={snap => { setAgentSnapshot(snap); setAgentDialog(undefined); }}
         />

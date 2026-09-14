@@ -17,10 +17,9 @@
  *   designer but nothing else — deliberately kept as separate types so the
  *   canvas can evolve without dragging execution semantics along.
  *
- * Agents are referenced by stable Agent Hub id only. A definition never embeds
- * an executable manifest: what a node may run is resolved at preflight against
- * the discovered, trusted catalog, so revoking trust takes effect immediately
- * rather than being frozen into a saved workflow.
+ * Agent profiles and runtime hosts are referenced independently by stable ids.
+ * Legacy definitions keep agentId as a host/profile fallback. A definition never
+ * embeds executable configuration: preflight resolves the live trusted catalog.
  */
 
 import { createHash } from 'node:crypto';
@@ -59,9 +58,15 @@ export interface WorkflowCapabilityRequirement {
  * as an explicit drift decision instead of quietly changing what a stage does.
  */
 export interface WorkflowAgentRef {
-  /** `AgentManifest.id` from the Agent Hub catalog. */
+  /** Legacy combined id. New definitions set this to the runtime host id for compatibility. */
   agentId: string;
-  /** Which catalog the agent must resolve from. */
+  /** Provider-neutral role/instruction profile. Defaults to agentId for legacy definitions. */
+  profileId?: string;
+  /** Executable runtime host. Defaults to agentId for legacy definitions. */
+  hostId?: string;
+  /** Provider preference. Undefined means use the project's active provider. */
+  providerId?: string;
+  /** Which catalog the profile and host must resolve from. */
   scope: WorkflowScope;
   /** `SkillMetadata.name` values to activate for the stage. */
   skillNames?: string[];

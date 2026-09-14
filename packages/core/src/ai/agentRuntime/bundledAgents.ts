@@ -58,7 +58,21 @@ Rules:
 
 export interface BundledAgentDefinition {
   manifest: AgentManifest;
+  /** Provider-neutral agent-profile instructions. */
   brief: string;
+}
+
+function bundledProfileDoc(definition: BundledAgentDefinition): string {
+  return [
+    '---',
+    `id: ${definition.manifest.id}`,
+    `name: ${definition.manifest.name}`,
+    'version: 1.0.0',
+    '---',
+    '',
+    definition.brief.trim(),
+    ''
+  ].join('\n');
 }
 
 export const BUNDLED_AGENT_DEFINITIONS: Record<string, BundledAgentDefinition> = {
@@ -234,7 +248,7 @@ export async function installAvailableAgent(agentId: string, targetAgentsDir: st
   const agentDir = path.join(targetAgentsDir, agentId);
   await mkdir(agentDir, { recursive: true });
   await writeFile(path.join(agentDir, 'agent.json'), JSON.stringify(def.manifest, null, 2), 'utf8');
-  await writeFile(path.join(agentDir, 'brief.md'), def.brief, 'utf8');
+  await writeFile(path.join(agentDir, 'AGENT.md'), bundledProfileDoc(def), 'utf8');
   return true;
 }
 
@@ -279,7 +293,7 @@ export async function mirrorBundledAgents(targetDir: string): Promise<string[]> 
     try {
       await mkdir(agentDir, { recursive: true });
       const manifestFile = path.join(agentDir, 'agent.json');
-      const briefFile = path.join(agentDir, 'brief.md');
+      const profileFile = path.join(agentDir, 'AGENT.md');
 
       let shouldWriteManifest = true;
       try {
@@ -296,9 +310,9 @@ export async function mirrorBundledAgents(targetDir: string): Promise<string[]> 
         await writeFile(manifestFile, JSON.stringify(def.manifest, null, 2), 'utf8');
       }
       try {
-        await writeFile(briefFile, def.brief, { encoding: 'utf8', flag: 'wx' });
+        await writeFile(profileFile, bundledProfileDoc(def), { encoding: 'utf8', flag: 'wx' });
       } catch {
-        // brief already exists, preserve
+        // Profile already exists; preserve user edits.
       }
       mirrored.push(id);
     } catch {
