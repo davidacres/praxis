@@ -137,6 +137,7 @@ export class AgentRuntimeManager {
     await this.hosts.get(hostId)?.dispose();
     this.hosts.delete(hostId);
     this.hostStatus.delete(hostId);
+    this.skillModes.delete(hostId);
     return this.refresh();
   }
 
