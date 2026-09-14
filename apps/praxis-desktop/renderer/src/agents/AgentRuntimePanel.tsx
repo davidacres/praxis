@@ -41,10 +41,11 @@ export function AgentRuntimePanel({
   onStartSession,
   onOpenSession
 }: AgentRuntimePanelProps) {
-  const agent = selection?.kind === 'agent' ? snapshot?.agents.find(a => a.manifest.id === selection.id) : undefined;
+  const profile = selection?.kind === 'profile' ? snapshot?.profiles.find(item => item.profile.id === selection.id) : undefined;
+  const agent = selection?.kind === 'agent' ? snapshot?.runtimeHosts.find(a => a.manifest.id === selection.id) : undefined;
   const skill = selection?.kind === 'skill' ? snapshot?.skills.find(s => s.metadata.name === selection.name) : undefined;
 
-  if (!snapshot || (!agent && !skill)) {
+  if (!snapshot || (!profile && !agent && !skill)) {
     return (
       <div className="empty-state" data-testid="agent-runtime-empty">
         <Icon name="zap" size={26} />
@@ -55,7 +56,9 @@ export function AgentRuntimePanel({
 
   return (
     <section className="inspector agent-runtime" aria-label="Agent runtime">
-      {agent ? (
+      {profile ? (
+        <ProfileBinding profile={profile} snapshot={snapshot} sessions={sessions.filter(session => session.agentId === profile.profile.id)} onOpenSession={onOpenSession} />
+      ) : agent ? (
         <AgentRuntime
           agent={agent}
           snapshot={snapshot}
@@ -70,6 +73,41 @@ export function AgentRuntimePanel({
         <SkillRuntime skill={skill} snapshot={snapshot} busy={busy} activations={activations} onActivate={onActivate} />
       ) : null}
     </section>
+  );
+}
+
+
+function ProfileBinding({
+  profile,
+  snapshot,
+  sessions,
+  onOpenSession
+}: {
+  profile: AgentRuntimeSnapshot['profiles'][number];
+  snapshot: AgentRuntimeSnapshot;
+  sessions: Array<{ issueKey: string; title: string }>;
+  onOpenSession?: (issueKey: string) => void;
+}) {
+  const compatibleHosts = snapshot.runtimeHosts.filter(host => host.errors.length === 0 && host.trusted);
+  return (
+    <>
+      <div className="agent-runtime-block">
+        <Line label="Type">Provider-neutral agent profile</Line>
+        <Line label="Compatible hosts">{compatibleHosts.length ? compatibleHosts.map(host => host.manifest.name).join(', ') : 'none available'}</Line>
+        <Line label="Preferred skills">{profile.profile.preferredSkills?.join(', ') || 'none'}</Line>
+        <Line label="Execution">Choose this profile, a provider and a runtime host in a session or workflow stage.</Line>
+      </div>
+      {sessions.length > 0 && (
+        <div className="agent-runtime-block">
+          <span className="rail-sub">Sessions</span>
+          <ul className="agent-runtime-sessions">
+            {sessions.map(session => (
+              <li key={session.issueKey}><button type="button" className="btn-compact" onClick={() => onOpenSession?.(session.issueKey)}>{session.title}</button></li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   );
 }
 
