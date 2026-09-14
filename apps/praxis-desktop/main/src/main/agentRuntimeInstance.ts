@@ -6,7 +6,10 @@ import { getSettingsBackend } from './settingsBackendInstance';
 let manager: AgentRuntimeManager | undefined;
 
 export interface AgentRuntimeRoots {
+  /** Legacy executable host roots. */
   agents: Record<CatalogScope, string>;
+  runtimeHosts: Record<CatalogScope, string>;
+  profiles: Record<CatalogScope, string>;
   skills: Record<CatalogScope, string>;
 }
 
@@ -15,8 +18,11 @@ export function getAgentRuntimeRoots(): AgentRuntimeRoots {
   const workingDirectory = getSettingsBackend().read().ai.workingDirectory.trim() || process.cwd();
   const projectRoot = path.join(workingDirectory, '.praxis');
   const userRoot = app.getPath('userData');
+  const runtimeHosts = { global: path.join(userRoot, 'agents'), project: path.join(projectRoot, 'agents') };
   return {
-    agents: { global: path.join(userRoot, 'agents'), project: path.join(projectRoot, 'agents') },
+    agents: runtimeHosts,
+    runtimeHosts,
+    profiles: { global: path.join(userRoot, 'profiles'), project: path.join(projectRoot, 'profiles') },
     skills: { global: path.join(userRoot, 'skills'), project: path.join(projectRoot, 'skills') }
   };
 }
@@ -31,6 +37,8 @@ export function getAgentRuntimeManager(): AgentRuntimeManager {
       projectAgentsPath: roots.agents.project,
       allowProjectAgents: process.env.PRAXIS_ALLOW_PROJECT_AGENTS !== '0',
       includeBundled: true,
+      profileRoots: [roots.profiles.global, roots.profiles.project, roots.runtimeHosts.global, roots.runtimeHosts.project],
+      trustedProfileRoots: [roots.profiles.global, roots.runtimeHosts.global],
       skillRoots: [roots.skills.global, roots.skills.project],
       trustedSkillRoots: [roots.skills.global]
     });
