@@ -401,11 +401,37 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | TASK-304 | Task | Verify PanelShell chrome across the theme/mode/surface-pack matrix | Proposed | FX-BE-104 |
 | TASK-305 | Task | Add end-to-end journey coverage and update documentation | Proposed | TASK-303, TASK-304 |
 
-| FX-BF-038 | Feature | Separate providers, runtime hosts, agent profiles and skills | Ready for validation | FX-BF-009, FX-BF-010, FX-BF-011, FX-BF-013, FX-BF-035 |
+| FX-BF-038 | Feature | Separate providers, runtime hosts, agent profiles and skills | Complete | FX-BF-009, FX-BF-010, FX-BF-011, FX-BF-013, FX-BF-035 |
 | FX-BE-115 | Story | Canonical contracts and terminology | Implemented | FX-BF-038 |
 | FX-BE-116 | Story | Legacy manifest and profile migration | Implemented | FX-BE-115 |
 | FX-BE-117 | Story | Provider and runtime-host adapter binding | Implemented | FX-BE-115 |
 | FX-BE-118 | Story | Skill activation and fallback execution | Implemented | FX-BE-117 |
 | FX-BE-119 | Story | Workflow and session persistence migration | Implemented | FX-BE-116, FX-BE-117 |
 | FX-BE-120 | Story | Agent Hub, designer and composer UX | Implemented | FX-BE-119 |
-| FX-BE-121 | Story | End-to-end compatibility and documentation | Ready for validation | FX-BE-118, FX-BE-120 |
+| FX-BE-121 | Story | End-to-end compatibility and documentation | Implemented | FX-BE-118, FX-BE-120 |
+
+| FX-BF-039 | Feature | Import Claude Code / Copilot plugins; add a visual, native cross-provider hook engine | Proposed | FX-BF-009, FX-BF-018, FX-BF-038 |
+| FX-BE-107 | Story | Plugin marketplace contracts and source resolution | Proposed | FX-BF-018 |
+| TASK-306 | Task | Define plugin source, marketplace entry, and manifest contracts | Proposed | FX-BE-107 |
+| TASK-307 | Task | Implement marketplace source resolution and caching | Proposed | TASK-306 |
+| FX-BE-108 | Story | Agent/skill/MCP conversion into canonical contracts | Proposed | FX-BE-107, FX-BF-038 |
+| TASK-308 | Task | Convert agents/*.md and SKILL.md into AgentProfile/AgentSkillRef | Proposed | FX-BE-108, TASK-307 |
+| TASK-309 | Task | Import .mcp.json entries into Praxis's MCP server config | Proposed | FX-BE-108 |
+| FX-BE-109 | Story | Visual design exploration | Proposed | FX-BE-108 |
+| TASK-310 | Task | Design the marketplace browsing, preview, and trust-diff experience | Proposed | FX-BE-109 |
+| TASK-311 | Task | Design the visual hook builder and hook management surfaces | Proposed | FX-BE-109 |
+| FX-BE-110 | Story | Agent Hub marketplace card UX | Proposed | FX-BE-109, FX-BE-108 |
+| TASK-312 | Task | Build the marketplace card grid and provenance display | Proposed | FX-BE-110, TASK-310, TASK-307 |
+| TASK-313 | Task | Build the preview-before-install and trust-diff flow | Proposed | TASK-312, TASK-310 |
+| FX-BE-111 | Story | Native cross-provider hook engine | Proposed | FX-BF-038 |
+| TASK-314 | Task | Define the native hook event/matcher/action contract | Proposed | FX-BE-111 |
+| TASK-315 | Task | Execute native hooks against every runtime host's session pipeline | Proposed | TASK-314 |
+| FX-BE-112 | Story | Visual hook builder and management UI | Proposed | FX-BE-109, FX-BE-111 |
+| TASK-316 | Task | Build the visual hook builder | Proposed | FX-BE-112, TASK-311, TASK-314 |
+| TASK-317 | Task | Build the hook management view | Proposed | TASK-316 |
+| FX-BE-113 | Story | Claude Code hook passthrough and best-effort import | Proposed | FX-BE-108, FX-BE-111, FX-BE-112 |
+| TASK-318 | Task | Pass hooks.json straight through to Claude Code CLI | Proposed | FX-BE-113, TASK-308 |
+| TASK-319 | Task | Best-effort translate hooks.json into the native hook format | Proposed | TASK-314, TASK-318, TASK-317 |
+| FX-BE-114 | Story | Trust, security, and verification | Proposed | FX-BE-110, FX-BE-113 |
+| TASK-320 | Task | Extend trust-on-install to imported plugins and hook scripts | Proposed | FX-BE-114, TASK-313, TASK-316, TASK-318, TASK-319, TASK-309 |
+| TASK-321 | Task | Deterministic fixtures, full e2e coverage, and documentation | Proposed | TASK-320 |
