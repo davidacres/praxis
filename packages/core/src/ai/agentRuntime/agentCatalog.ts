@@ -25,7 +25,7 @@ export interface CatalogGroup {
 const SCOPE_LABEL: Record<CatalogScope, string> = { global: 'Global', project: 'This project' };
 
 /** Splits a snapshot into Global / project groups, dropping empty ones. */
-export function groupCatalog(snapshot: Pick<AgentRuntimeSnapshot, 'agents' | 'profiles' | 'skills'>): CatalogGroup[] {
+export function groupCatalog(snapshot: Pick<AgentRuntimeSnapshot, 'agents' | 'runtimeHosts' | 'profiles' | 'skills'>): CatalogGroup[] {
   const order: CatalogScope[] = ['global', 'project'];
   return order
     .map(scope => ({
