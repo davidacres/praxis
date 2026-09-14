@@ -528,7 +528,7 @@ export function registerAiIpc(): void {
       }
       if (profileId && hostId) {
         sessionManager.updateAgentRuntime(issue.key, {
-          agentId: profileId,
+          agentId: hostId,
           profileId,
           hostId,
           ...(input.skillNames?.length ? { activeSkills: input.skillNames } : {}),
