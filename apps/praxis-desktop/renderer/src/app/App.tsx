@@ -61,7 +61,7 @@ import { RunProfileEditor } from '../projects/RunProfileEditor';
 import { DeploymentsPage } from '../deployments/DeploymentsPage';
 import { AgentDetailPage } from '../agents/AgentDetailPage';
 import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
-import { CreateAgentDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
+import { CreateAgentDialog, CreateAgentProfileDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
 import type { ActivationMap, CatalogSelection, LifecycleAction } from '../agents/agentSelection';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 import { useDialogs } from '../ui/dialogs';
@@ -121,6 +121,7 @@ interface Route {
   newSessionSkills?: string[];
   /** The catalog item selected in the Agents tree (`feature === 'agents'`). */
   agentId?: string;
+  agentProfileId?: string;
   skillName?: string;
   /** Whether the in-app browser was visible in the selected AI session. */
   browserOpen?: boolean;
@@ -230,6 +231,7 @@ function readLastWorkspaceRoute(workspaceId: string): Route {
       ...(typeof stored.workflowId === 'string' ? { workflowId: stored.workflowId } : {}),
       ...(stored.workflowView === 'runs' ? { workflowView: 'runs' } : {}),
       ...(typeof stored.agentId === 'string' ? { agentId: stored.agentId } : {}),
+      ...(typeof stored.agentProfileId === 'string' ? { agentProfileId: stored.agentProfileId } : {}),
       ...(typeof stored.skillName === 'string' ? { skillName: stored.skillName } : {})
     };
   } catch {
@@ -251,6 +253,7 @@ function writeLastWorkspaceRoute(workspaceId: string, route: Route): void {
     ...(route.feature === 'workflows' && route.workflowView ? { workflowView: route.workflowView } : {}),
     ...(route.feature === 'workflows' && route.workflowId ? { workflowId: route.workflowId } : {}),
     ...(route.feature === 'agents' && route.agentId ? { agentId: route.agentId } : {}),
+    ...(route.feature === 'agents' && route.agentProfileId ? { agentProfileId: route.agentProfileId } : {}),
     ...(route.feature === 'agents' && route.skillName ? { skillName: route.skillName } : {})
   };
   try {
@@ -374,7 +377,7 @@ export function App() {
   const [agentsBusy, setAgentsBusy] = useState(false);
   const [agentError, setAgentError] = useState<string>();
   const [activations, setActivations] = useState<ActivationMap>({});
-  const [agentDialog, setAgentDialog] = useState<'agent' | 'skill' | 'import'>();
+  const [agentDialog, setAgentDialog] = useState<'agent' | 'profile' | 'skill' | 'import'>();
 
   const loadAgents = useCallback(async (hard: boolean) => {
     setAgentsBusy(true);
@@ -909,11 +912,13 @@ export function App() {
   const agentSelection: CatalogSelection | undefined =
     route.feature !== 'agents'
       ? undefined
-      : route.agentId
-        ? { kind: 'agent', id: route.agentId }
-        : route.skillName
-          ? { kind: 'skill', name: route.skillName }
-          : undefined;
+      : route.agentProfileId
+        ? { kind: 'profile', id: route.agentProfileId }
+        : route.agentId
+          ? { kind: 'agent', id: route.agentId }
+          : route.skillName
+            ? { kind: 'skill', name: route.skillName }
+            : undefined;
 
   const activateSkill = useCallback(
     (agentId: string, skillName: string) =>
@@ -1796,9 +1801,11 @@ export function App() {
                   onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
                   agentCatalog={agentSnapshot}
                   activeAgentId={route.feature === 'agents' ? route.agentId : undefined}
+                  activeAgentProfileId={route.feature === 'agents' ? route.agentProfileId : undefined}
                   activeSkillName={route.feature === 'agents' ? route.skillName : undefined}
-                  onSelectAgent={agentId => navigate({ ...route, feature: 'agents', agentId, skillName: undefined })}
-                  onSelectSkill={skillName => navigate({ ...route, feature: 'agents', skillName, agentId: undefined })}
+                  onSelectAgent={agentId => navigate({ ...route, feature: 'agents', agentId, agentProfileId: undefined, skillName: undefined })}
+                  onSelectAgentProfile={agentProfileId => navigate({ ...route, feature: 'agents', agentProfileId, agentId: undefined, skillName: undefined })}
+                  onSelectSkill={skillName => navigate({ ...route, feature: 'agents', skillName, agentId: undefined, agentProfileId: undefined })}
                   onNewAgentItem={kind => (kind === 'rescan' ? void loadAgents(true) : setAgentDialog(kind))}
                   projectWorkflows={workflowsByProject}
                   activeWorkflowId={route.feature === 'workflows' && route.workflowView !== 'runs' ? route.workflowId : undefined}
@@ -2142,6 +2149,14 @@ export function App() {
             bumpWorkflows();
             navigate({ projectId, feature: 'workflows', workflowId: definition.id });
           }}
+        />
+      )}
+      {agentDialog === 'profile' && (
+        <CreateAgentProfileDialog
+          defaultScope="global"
+          existingIds={(agentSnapshot?.profiles ?? []).map(profile => profile.profile.id)}
+          onClose={() => setAgentDialog(undefined)}
+          onCreated={snap => { setAgentSnapshot(snap); setAgentDialog(undefined); }}
         />
       )}
       {agentDialog === 'agent' && (
