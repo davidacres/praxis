@@ -86,7 +86,6 @@ export async function runWorkflowAgentStage(
   const settings = getSettingsBackend().read();
   const provider = settings.ai.activeProvider;
   if (preflight.binding.providerId && preflight.binding.providerId !== provider) {
-    settled.cancel();
     return {
       status: 'failed',
       error: `Stage requires provider "${preflight.binding.providerId}" but "${provider}" is active.`
