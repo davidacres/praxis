@@ -109,7 +109,8 @@ export class AgentRuntimeManager {
   }
 
   public async start(hostId: string): Promise<AgentRuntimeSnapshot> {
-    const hostDefinition = (await this.list()).runtimeHosts.find(candidate => candidate.manifest.id === hostId);
+    const listed = await this.list();
+    const hostDefinition = (listed.runtimeHosts ?? listed.agents).find(candidate => candidate.manifest.id === hostId);
     if (!hostDefinition) throw new Error(`Runtime host ${hostId} was not discovered.`);
     await this.hosts.get(hostId)?.dispose();
     this.hosts.delete(hostId);
