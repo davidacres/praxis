@@ -68,6 +68,10 @@ test('the Agent Hub and Workflow designer sit inside the normal app shell', asyn
   await tree.getByTestId('agent-nav-item').filter({ hasText: 'Praxis Reviewer' }).click();
   await expect(page.getByRole('main').getByRole('heading', { name: 'Praxis Reviewer', level: 1 })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Agent runtime' })).toBeVisible();
+  // The rescan the sidebar triggered above repopulates its own agent list
+  // asynchronously, independently of the centre/right panes already checked —
+  // give it a moment to settle before a whole-page screenshot.
+  await page.waitForTimeout(300);
   // The catalog source path is a per-run temp directory, so it is masked out.
   await expect(page).toHaveScreenshot('app-shell-agents.png', { mask: [page.locator('.agent-path')] });
 
