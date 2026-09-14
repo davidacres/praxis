@@ -1,12 +1,12 @@
 ---
-**Status:** 🧪 Ready for validation
+**Status:** ✅ Complete
 **Created:** 2026-09-14
 **Type:** Feature
 **Priority:** Critical
 id: FX-BF-038
 slug: provider-host-agent-profile-skill-alignment
 title: "Separate providers, runtime hosts, agent profiles and skills"
-status: Ready for Validation
+status: Complete
 updated: 2026-09-14
 dependencies: [FX-BF-009, FX-BF-010, FX-BF-011, FX-BF-013, FX-BF-035]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -75,7 +75,7 @@ This makes it unclear whether a workflow is selecting a role, a process, a model
 | FX-BE-118 | Skill activation and fallback execution | FX-BE-117 | Implemented |
 | FX-BE-119 | Workflow and session persistence migration | FX-BE-116, FX-BE-117 | Implemented |
 | FX-BE-120 | Agent Hub and composer UX | FX-BE-119 | Implemented |
-| FX-BE-121 | End-to-end compatibility and documentation | FX-BE-118, FX-BE-120 | Ready for validation |
+| FX-BE-121 | End-to-end compatibility and documentation | FX-BE-118, FX-BE-120 | Implemented |
 
 ## Definition of done
 
@@ -94,4 +94,31 @@ A single Praxis agent profile can be selected with any compatible provider and h
 
 ## Verification
 
-Required before release: run `npm run check-types`, `npm run test:core`, and `npm run test:desktop` in a full checkout. This implementation environment could update the authenticated repository but could not obtain an authenticated local checkout, and no commit status checks are configured on main. Static source review and focused regression tests were added for contracts, profile discovery/authoring, workflow binding and HTTP native-skill confirmation.
+Ran to completion in a full local checkout on 2026-09-14:
+
+- `npm run check-types` — clean across every workspace (core, desktop main, desktop renderer, mobile, mobile-protocol).
+- `npm run test:core` — 1066/1066 passing. Two pre-existing failures were found and fixed: `fullSdlcTemplates.test.ts`'s bundled-agent readiness test didn't pass `catalog.profiles` (now uses `discoverAgentProfiles([], [], true)`, since `preflightStage` requires a matching profile once a node names one), and a stale assertion string for the renamed "runtime host ... available for installation" dependency reason.
+- `npm run test:desktop` (functional project) — 263/263 passing after fixing three real issues this pass surfaced:
+  - **Production bug**: `workflowIpc.ts`'s `catalogSnapshot()` (backing the New Workflow dialog's template-readiness display) dropped `runtimeHosts`/`profiles` from the live catalog snapshot, so every bundled-agent stage showed a false "profile not found" / "Missing agents" warning even though the same stage starts and runs fine via `workflowAgentStage.ts` (which already carried both fields). Fixed to match.
+  - `aiBrowser.spec.ts` asserted a tool's raw output text directly in the chat transcript; that content now lives under the session inspector's Activity tab (`ToolCompletionGadget`) per the chat-gadgets redesign — every sibling ACP test file was already updated for this, this one was missed. Updated to match.
+  - `verify-marketplace.spec.ts` used an ambiguous `getByRole('button', { name: /appearance/i })` locator that started matching two buttons; switched to the established `settings-nav-appearance` / `settings-nav-appearance-themes` test-id pattern used elsewhere, and generated its never-committed baseline screenshots.
+  - Six stale visual snapshot baselines (Agent Hub, app shell, marketplace panels, project home) were regenerated against the new profile/host-aware UI after visually confirming each diff was an intentional layout change, not a regression.
+- **Known pre-existing flake, unrelated to this feature**: `marketplace.spec.ts`'s "Themes marketplace filter toggle" screenshot has a timing-sensitive "Recent themes" card count/order that doesn't always settle before the screenshot fires (~75% pass rate observed across repeated runs even after adding a stabilization wait). Root cause looks like the Recent-themes list reacting to interaction history from earlier in the same test with its own async timing, independent of the profile/host separation work — flagged rather than chased further to avoid scope creep.
+- **Security note surfaced during this pass, not fixed here pending owner confirmation**: `verify-marketplace.spec.ts` had a hardcoded, live GitHub personal access token committed in plaintext. Flagged to the repo owner for revocation; not scrubbed from history without their say-so.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Dependencies
+
+
+
+## Comments
+
+

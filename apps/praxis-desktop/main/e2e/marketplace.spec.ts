@@ -299,6 +299,10 @@ test('Themes marketplace filter toggle shows All and Installed views with screen
   // Screenshot 2: Click installed filter to show only installed items
   await marketplace.locator('[data-testid="theme-marketplace-filter-installed"]').click();
   await expect(marketplace.locator('[data-testid="theme-marketplace-installed-item"]')).toContainText('Nord Aurora');
+  // The installed-item text can appear a tick before the surrounding list
+  // settles from its own IPC-backed refresh, which otherwise still had a
+  // pending re-render at the exact moment `toHaveScreenshot` fired.
+  await window.waitForTimeout(300);
   await expect(window).toHaveScreenshot('marketplace-filter-installed-view.png');
 
   // Screenshot 3: Switch back to "All" view

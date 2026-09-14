@@ -11,6 +11,7 @@ import {
 } from './workflowTemplates';
 import { validateWorkflow } from './workflowValidation';
 import { getBundledAgentManifests } from '../ai/agentRuntime/bundledAgents';
+import { discoverAgentProfiles } from '../ai/agentRuntime/profileRegistry';
 
 test('TASK-248: fullSdlcTemplate passes workflow validation', () => {
   const template = fullSdlcTemplate('node');
@@ -48,11 +49,16 @@ test('TASK-248: fullSdlcTemplate passes workflow validation', () => {
   assert.strictEqual(deployEdge.required, false);
 });
 
-test('TASK-248: assessTemplateReadiness against bundled agents reports structureOk and agentsOk', () => {
+test('TASK-248: assessTemplateReadiness against bundled agents reports structureOk and agentsOk', async () => {
   const template = fullSdlcTemplate('node');
   const bundled = getBundledAgentManifests();
+  // Bundled stages name a profile (FX-BF-038), so preflight needs the bundled
+  // AGENT.md profiles alongside the runtime hosts, the same way the real
+  // catalog snapshot supplies both — not just the legacy manifest list.
+  const profiles = await discoverAgentProfiles([], [], true);
   const readiness = assessTemplateReadiness(template, {
     agents: bundled,
+    profiles,
     skills: [],
     capabilities: {}
   });
@@ -179,5 +185,8 @@ test('full-sdlc-dotnet identifies agent dependencies and reports autoInstallable
   assert.ok(csharpDep);
   assert.strictEqual(csharpDep.status, 'available');
   assert.deepStrictEqual(csharpDep.skillNames, ['dotnet-solid-dry']);
-  assert.ok(csharpDep.reason?.includes('available and will be installed upon selection'));
+  // Wording tracks the FX-BF-038 profile/runtime-host split ("runtime host
+  // ..., skills (...) available for installation"), not the old "agent"
+  // phrasing this assertion checked before.
+  assert.ok(csharpDep.reason?.includes('available for installation'));
 });

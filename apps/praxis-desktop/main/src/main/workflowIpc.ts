@@ -176,7 +176,18 @@ async function projectDefinitions(projectId: string): Promise<WorkflowDefinition
 async function catalogSnapshot(): Promise<AgentCatalogSnapshot> {
   try {
     const snapshot = await getAgentRuntimeManager().list();
-    return { agents: snapshot.agents, skills: snapshot.skills, capabilities: snapshot.capabilities };
+    // Must carry runtimeHosts/profiles alongside the legacy `agents` list —
+    // see workflowAgentStage.ts's identical catalog shape. Dropping them here
+    // made every bundled-agent stage report a false "profile not found"
+    // (preflightStage requires a matching catalog.profiles entry once a node
+    // names a profileId), even though the same stage starts and runs fine.
+    return {
+      agents: snapshot.agents,
+      runtimeHosts: snapshot.runtimeHosts,
+      profiles: snapshot.profiles,
+      skills: snapshot.skills,
+      capabilities: snapshot.capabilities
+    };
   } catch {
     return { agents: [], skills: [], capabilities: {} };
   }
