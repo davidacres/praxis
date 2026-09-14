@@ -1,7 +1,8 @@
 /**
  * Stage preflight and Agent Hub binding (FX-BE-020 / TASK-098).
  *
- * A workflow definition names an agent by id; it never carries the manifest.
+ * A workflow definition names an agent profile and runtime host independently;
+ * legacy agentId values are used as both ids during migration.
  * Preflight is where that name is resolved against what is actually discovered,
  * trusted, and loadable *right now* — which is the whole reason definitions
  * store ids rather than manifests. Revoking trust or breaking a manifest takes
@@ -19,6 +20,7 @@ import type { AgentToolMode } from '../ai/agentTypes';
 import type { AgentCapabilities } from '../ai/agentRuntime/hostLoader';
 import type { DiscoveredAgent } from '../ai/agentRuntime/manifest';
 import type { DiscoveredSkill } from '../ai/agentRuntime/skillRegistry';
+import type { DiscoveredAgentProfile } from '../ai/agentRuntime/profileRegistry';
 import {
   isAgentTaskNode,
   nodeMutatesWorktree,
@@ -30,7 +32,10 @@ import {
 
 /** The subset of a runtime snapshot preflight needs. */
 export interface AgentCatalogSnapshot {
+  /** Legacy name for runtime hosts. */
   agents: DiscoveredAgent[];
+  runtimeHosts?: DiscoveredAgent[];
+  profiles?: DiscoveredAgentProfile[];
   skills: DiscoveredSkill[];
   /** Keyed by agent id; present only for agents whose host has been loaded. */
   capabilities: Record<string, AgentCapabilities>;
@@ -38,6 +43,9 @@ export interface AgentCatalogSnapshot {
 
 export type PreflightFailureKind =
   | 'agent-not-found'
+  | 'profile-not-found'
+  | 'profile-invalid'
+  | 'profile-untrusted'
   | 'agent-invalid'
   | 'agent-untrusted'
   | 'agent-unavailable'
@@ -59,7 +67,13 @@ export interface PreflightFailure {
 /** Everything the orchestrator needs to actually start the stage. */
 export interface StageAgentBinding {
   nodeId: string;
+  /** Legacy host attribution. */
   agentId: string;
+  profileId: string;
+  profileInstructions: string;
+  profileFingerprint?: string;
+  hostId: string;
+  providerId?: string;
   agentRootPath: string;
   skills: Array<{ name: string; skillPath: string; instructionsPath: string; fingerprint: string }>;
   toolMode: AgentToolMode;
@@ -94,25 +108,50 @@ export function preflightStage(
   const failures: PreflightFailure[] = [];
   const ref = node.agent;
   const requireTrust = policy?.requireTrustedAgents ?? true;
-
-  const agent = catalog.agents.find(candidate => candidate.manifest.id === ref.agentId);
+  const hostId = ref.hostId || hostId;
+  const profileId = ref.profileId || hostId;
+  const runtimeHosts = catalog.runtimeHosts ?? catalog.agents;
+  const agent = runtimeHosts.find(candidate => candidate.manifest.id === hostId);
+  const profile = catalog.profiles?.find(candidate => candidate.profile.id === profileId);
   if (!agent) {
     return {
       ok: false,
       failures: [
         {
           kind: 'agent-not-found',
-          message: `Agent "${ref.agentId}" is not in the ${ref.scope} catalog.`,
-          remediation: `Install or import an agent with id "${ref.agentId}", or point this stage at one that exists.`
+          message: `Agent "${hostId}" is not in the ${ref.scope} catalog.`,
+          remediation: `Install or import an agent with id "${hostId}", or point this stage at one that exists.`
         }
       ]
     };
   }
 
+  if (catalog.profiles && catalog.profiles.length > 0 && !profile) {
+    failures.push({
+      kind: 'profile-not-found',
+      message: `Agent profile "${profileId}" is not in the ${ref.scope} catalog.`,
+      remediation: `Create or import an AGENT.md profile with id "${profileId}", or select an existing profile.`
+    });
+  }
+  if (profile?.error) {
+    failures.push({
+      kind: 'profile-invalid',
+      message: `Agent profile "${profileId}" is invalid: ${profile.error}`,
+      remediation: `Fix ${profile.profilePath}.`
+    });
+  }
+  if (profile && requireTrust && !profile.trusted) {
+    failures.push({
+      kind: 'profile-untrusted',
+      message: `Agent profile "${profileId}" is not trusted.`,
+      remediation: 'Move the profile under the trusted profiles folder, or relax requireTrustedAgents.'
+    });
+  }
+
   if (agent.errors.length > 0) {
     failures.push({
       kind: 'agent-invalid',
-      message: `Agent "${ref.agentId}" has a malformed manifest: ${agent.errors
+      message: `Agent "${hostId}" has a malformed manifest: ${agent.errors
         .map(error => `${error.path}: ${error.message}`)
         .join('; ')}`,
       remediation: `Fix ${agent.manifestPath}.`
@@ -126,26 +165,26 @@ export function preflightStage(
   if (requireTrust && !agent.trusted) {
     failures.push({
       kind: 'agent-untrusted',
-      message: `Agent "${ref.agentId}" is not trusted.`,
+      message: `Agent "${hostId}" is not trusted.`,
       remediation:
         'Move the agent under the trusted agents folder, or relax requireTrustedAgents in the workflow policy.'
     });
   }
 
-  const capabilities = catalog.capabilities[ref.agentId];
+  const capabilities = catalog.capabilities[hostId];
   const required = ref.requiredCapabilities;
   if (required && Object.keys(required).length > 0) {
     if (!capabilities) {
       failures.push({
         kind: 'agent-unavailable',
-        message: `Agent "${ref.agentId}" declares capability requirements but its host is not running.`,
+        message: `Agent "${hostId}" declares capability requirements but its host is not running.`,
         remediation: 'Start the agent from the Agent Hub so its capabilities can be read.'
       });
     } else {
       for (const unmet of unmetCapabilities(required, capabilities)) {
         failures.push({
           kind: 'capability-unsupported',
-          message: `Agent "${ref.agentId}" does not support ${unmet}, which this stage requires.`,
+          message: `Agent "${hostId}" does not support ${unmet}, which this stage requires.`,
           remediation: `Choose an agent that supports ${unmet}, or drop the requirement from the stage.`
         });
       }
@@ -172,7 +211,12 @@ export function preflightStage(
     failures: [],
     binding: {
       nodeId: node.id,
-      agentId: ref.agentId,
+      agentId: hostId,
+      profileId,
+      profileInstructions: profile?.profile.instructions ?? '',
+      ...(profile ? { profileFingerprint: profile.fingerprint } : {}),
+      hostId,
+      ...(ref.providerId ? { providerId: ref.providerId } : {}),
       agentRootPath: agent.rootPath,
       skills: (ref.skillNames ?? []).map(name => {
         const skill = catalog.skills.find(candidate => candidate.metadata.name === name) as DiscoveredSkill;
