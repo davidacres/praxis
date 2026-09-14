@@ -26,7 +26,7 @@ export interface AgentRuntimePanelProps {
   sessions: Array<{ issueKey: string; title: string; agentId?: string; profileId?: string; hostId?: string }>;
   onLifecycle: (agentId: string, action: LifecycleAction) => void;
   onActivate: (agentId: string, skillName: string) => void;
-  onStartSession?: (agentId: string, skillNames: string[]) => void;
+  onStartSession?: (agentId: string, skillNames: string[], profileId?: string) => void;
   onOpenSession?: (issueKey: string) => void;
 }
 
@@ -57,7 +57,13 @@ export function AgentRuntimePanel({
   return (
     <section className="inspector agent-runtime" aria-label="Agent runtime">
       {profile ? (
-        <ProfileBinding profile={profile} snapshot={snapshot} sessions={sessions.filter(session => (session.profileId ?? session.agentId) === profile.profile.id)} onOpenSession={onOpenSession} />
+        <ProfileBinding
+          profile={profile}
+          snapshot={snapshot}
+          sessions={sessions.filter(session => (session.profileId ?? session.agentId) === profile.profile.id)}
+          {...(onStartSession ? { onStartSession } : {})}
+          {...(onOpenSession ? { onOpenSession } : {})}
+        />
       ) : agent ? (
         <AgentRuntime
           agent={agent}
@@ -81,22 +87,45 @@ function ProfileBinding({
   profile,
   snapshot,
   sessions,
+  onStartSession,
   onOpenSession
 }: {
   profile: NonNullable<AgentRuntimeSnapshot['profiles']>[number];
   snapshot: AgentRuntimeSnapshot;
   sessions: Array<{ issueKey: string; title: string }>;
+  onStartSession?: (hostId: string, skillNames: string[], profileId?: string) => void;
   onOpenSession?: (issueKey: string) => void;
 }) {
   const compatibleHosts = (snapshot.runtimeHosts ?? snapshot.agents).filter(host => host.errors.length === 0 && host.trusted);
+  const [hostId, setHostId] = useState(compatibleHosts[0]?.manifest.id ?? '');
   return (
     <>
       <div className="agent-runtime-block">
         <Line label="Type">Provider-neutral agent profile</Line>
         <Line label="Compatible hosts">{compatibleHosts.length ? compatibleHosts.map(host => host.manifest.name).join(', ') : 'none available'}</Line>
         <Line label="Preferred skills">{profile.profile.preferredSkills?.join(', ') || 'none'}</Line>
-        <Line label="Execution">Choose this profile, a provider and a runtime host in a session or workflow stage.</Line>
+        <Line label="Execution">Bind this profile to any compatible runtime host; the provider remains selected in the session composer.</Line>
       </div>
+      {onStartSession && compatibleHosts.length > 0 && (
+        <div className="inspector-actions">
+          <label className="form-field">
+            <span>Runtime host</span>
+            <select value={hostId} onChange={event => setHostId(event.target.value)}>
+              {compatibleHosts.map(host => (
+                <option key={host.manifest.id} value={host.manifest.id}>{host.manifest.name}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!hostId}
+            onClick={() => onStartSession(hostId, profile.profile.preferredSkills ?? [], profile.profile.id)}
+          >
+            <Icon name="chats" size={13} /> Open a session
+          </button>
+        </div>
+      )}
       {sessions.length > 0 && (
         <div className="agent-runtime-block">
           <span className="rail-sub">Sessions</span>
