@@ -276,8 +276,12 @@ export interface AgentSessionRecord {
    * active at launch. Attribution only — the conversation still runs on the
    * session's AI provider.
    */
+  /** Agent profile attribution. Legacy records used agentId for a combined profile/host id. */
   agentId?: string;
+  profileId?: string;
+  hostId?: string;
   activeSkills?: string[];
+  skillActivations?: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }>;
   state: AgentTaskState;
   taskDefinition: AgentTaskDefinition;
   delivery?: DeliverySessionMetadata;

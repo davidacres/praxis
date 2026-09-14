@@ -479,13 +479,20 @@ export function registerAiIpc(): void {
       }
       const effectiveWorkingDirectory = worktree?.worktreePath ?? workingDirectory;
 
-      // Runtime skills are activated only when explicitly requested. Their full
-      // instructions are injected after metadata discovery, preserving progressive
-      // disclosure and the existing provider permission model.
-      if (input.agentId && input.skillNames?.length) {
+      const profileId = input.profileId ?? input.agentId;
+      const hostId = input.hostId ?? input.agentId;
+      let skillActivations: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }> = [];
+      if (!!profileId !== !!hostId) throw new Error('A session binding requires both an agent profile and runtime host.');
+      if (profileId && hostId) {
         const runtime = getAgentRuntimeManager();
-        const activations = await Promise.all(input.skillNames.map(name => runtime.activateSkill(input.agentId!, name)));
-        taskDefinition.goal += `\n\nActivated runtime skills:\n${activations.map(item => `## ${item.skill.metadata.name}\n${item.instructions}`).join('\n\n')}`;
+        const skillNames = input.skillNames ?? [];
+        await Promise.all(skillNames.map(name => runtime.activateSkill(hostId, name)));
+        const binding = await runtime.createBinding(profileId, hostId, { id: provider, ...(input.model ? { model: input.model } : {}) }, skillNames);
+        skillActivations = binding.activations.map(activation => {
+          const version = binding.skills.find(skill => skill.id === activation.skillId)?.version;
+          return { skillId: activation.skillId, mode: activation.mode, ...(version ? { version } : {}) };
+        });
+        taskDefinition.goal += `\n\n${await runtime.bindingContext(binding)}`;
       }
 
       if (descriptor.kind === 'cli-agent') {
@@ -520,10 +527,13 @@ export function registerAiIpc(): void {
       if (input.connectionId) {
         sessionManager.updateAgentRuntime(issue.key, { connectionId: input.connectionId });
       }
-      if (input.agentId) {
+      if (profileId && hostId) {
         sessionManager.updateAgentRuntime(issue.key, {
-          agentId: input.agentId,
-          ...(input.skillNames?.length ? { activeSkills: input.skillNames } : {})
+          agentId: hostId,
+          profileId,
+          hostId,
+          ...(input.skillNames?.length ? { activeSkills: input.skillNames } : {}),
+          ...(skillActivations.length ? { skillActivations } : {})
         });
       }
       if (worktree) {

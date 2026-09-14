@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { AgentRuntimeSnapshot, AgentTransport, CatalogScope, ImportPreview } from '@praxis/core';
+import type { AgentRuntimeSnapshot, AgentTransport, CatalogScope, ImportPreview, NewAgentProfileInput } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import {
   AGENT_TRANSPORTS,
@@ -311,7 +311,7 @@ export function ImportDialog({
   onImported: (snapshot: AgentRuntimeSnapshot) => void;
 }) {
   const [scope, setScope] = useState<CatalogScope>(defaultScope);
-  const [kind, setKind] = useState<'agent' | 'skill'>('agent');
+  const [kind, setKind] = useState<'agent' | 'profile' | 'skill'>('agent');
   const [sourceDir, setSourceDir] = useState<string>();
   const [preview, setPreview] = useState<ImportPreview>();
   const [onDuplicate, setOnDuplicate] = useState<'block' | 'rename'>('block');
@@ -319,7 +319,7 @@ export function ImportDialog({
   const [error, setError] = useState<string>();
 
   const choose = async () => {
-    const folder = await window.praxis.dialog.pickFolder('Choose the agent or skill folder to import');
+    const folder = await window.praxis.dialog.pickFolder('Choose the runtime host, agent profile or skill folder to import');
     if (!folder) return;
     setSourceDir(folder);
     setError(undefined);
@@ -333,7 +333,7 @@ export function ImportDialog({
     }
   };
 
-  const rePreview = (nextKind: 'agent' | 'skill', nextScope: CatalogScope) => {
+  const rePreview = (nextKind: 'agent' | 'profile' | 'skill', nextScope: CatalogScope) => {
     setKind(nextKind);
     setScope(nextScope);
     if (!sourceDir) return;
@@ -360,7 +360,7 @@ export function ImportDialog({
 
   return (
     <Shell
-      title="Import agent or skill"
+      title="Import runtime host, agent profile or skill"
       onClose={onClose}
       busy={busy}
       error={error}
@@ -372,7 +372,11 @@ export function ImportDialog({
         <legend>Kind</legend>
         <label className="form-check">
           <input type="radio" name="kind" checked={kind === 'agent'} onChange={() => rePreview('agent', scope)} />
-          Agent folder (contains <code>agent.json</code>)
+          Runtime host folder (contains <code>agent.json</code>)
+        </label>
+        <label className="form-check">
+          <input type="radio" name="kind" checked={kind === 'profile'} onChange={() => rePreview('profile', scope)} />
+          Agent profile folder (contains <code>AGENT.md</code>)
         </label>
         <label className="form-check">
           <input type="radio" name="kind" checked={kind === 'skill'} onChange={() => rePreview('skill', scope)} />
@@ -415,6 +419,70 @@ export function ImportDialog({
           )}
         </div>
       )}
+    </Shell>
+  );
+}
+
+
+export function CreateAgentProfileDialog({
+  defaultScope,
+  existingIds,
+  onClose,
+  onCreated
+}: {
+  defaultScope: CatalogScope;
+  existingIds: string[];
+  onClose: () => void;
+  onCreated: (snapshot: AgentRuntimeSnapshot) => void;
+}) {
+  const [draft, setDraft] = useState<NewAgentProfileInput>({
+    scope: defaultScope,
+    id: '',
+    name: '',
+    instructions: ''
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const idError = draft.id && !/^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$/.test(draft.id)
+    ? 'Use 2–64 lowercase letters, digits or dashes.'
+    : existingIds.includes(draft.id)
+      ? 'That profile id already exists.'
+      : undefined;
+  const canSubmit = !!draft.id && !!draft.name.trim() && !!draft.instructions.trim() && !idError;
+
+  const submit = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      onCreated(await window.praxis.agentRuntime.createProfile(draft));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Shell title="New agent profile" onClose={onClose} busy={busy} error={error} canSubmit={canSubmit} submitLabel="Create profile" onSubmit={() => void submit()}>
+      <ScopeField value={draft.scope} onChange={scope => setDraft(current => ({ ...current, scope }))} />
+      <Field label="Profile ID" error={idError}>
+        <input value={draft.id} placeholder="praxis-implementer" onChange={event => setDraft(current => ({ ...current, id: event.target.value }))} />
+      </Field>
+      <Field label="Display name">
+        <input value={draft.name} placeholder="Praxis Implementer" onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} />
+      </Field>
+      <Field label="Description">
+        <input value={draft.description ?? ''} onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} />
+      </Field>
+      <Field label="Preferred skills (comma-separated)">
+        <input
+          value={(draft.preferredSkills ?? []).join(', ')}
+          onChange={event => setDraft(current => ({ ...current, preferredSkills: event.target.value.split(',').map(value => value.trim()).filter(Boolean) }))}
+        />
+      </Field>
+      <Field label="Agent instructions">
+        <textarea rows={10} value={draft.instructions} onChange={event => setDraft(current => ({ ...current, instructions: event.target.value }))} />
+      </Field>
+      <p className="hint">Creates a provider-neutral AGENT.md profile. Runtime hosts are configured separately.</p>
     </Shell>
   );
 }

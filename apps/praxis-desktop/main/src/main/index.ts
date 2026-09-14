@@ -294,8 +294,8 @@ void app.whenReady().then(async () => {
     .catch(error => getLogBus().appendLine(`[marketplace] launch reconcile failed: ${error instanceof Error ? error.message : String(error)}`))
     .finally(() => {
       void getAgentRuntimeManager().refresh().then(async snapshot => {
-        getLogBus().appendLine(`[agent-runtime] discovered ${snapshot.agents.length} agents and ${snapshot.skills.length} skills`);
-        for (const agent of snapshot.agents.filter(candidate => candidate.trusted && candidate.manifest.activation === 'startup')) {
+        getLogBus().appendLine(`[agent-runtime] discovered ${snapshot.profiles?.length ?? 0} profiles, ${(snapshot.runtimeHosts ?? snapshot.agents).length} runtime hosts, and ${snapshot.skills.length} skills`);
+        for (const agent of (snapshot.runtimeHosts ?? snapshot.agents).filter(candidate => candidate.trusted && candidate.manifest.activation === 'startup')) {
           try {
             await getAgentRuntimeManager().start(agent.manifest.id);
             getLogBus().appendLine(`[agent-runtime] started ${agent.manifest.id}`);

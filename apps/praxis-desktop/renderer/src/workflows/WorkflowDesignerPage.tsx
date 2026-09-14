@@ -578,21 +578,22 @@ function AgentStageFields({
   recommendationAvailable: boolean | undefined;
   set: (patch: Partial<WorkflowNode>) => void;
 }) {
-  const agents = catalog?.agents ?? [];
+  const agents = catalog?.runtimeHosts ?? catalog?.agents ?? [];
+  const profiles = catalog?.profiles ?? [];
   const skills = catalog?.skills ?? [];
   const requireTrust = policy?.requireTrustedAgents ?? true;
 
   // Trusted, preflight-clean candidates only — recommending an agent the
   // stage would immediately fail preflight on isn't a recommendation.
-  const recommendableAgents = agents.filter(candidate => candidate.errors.length === 0 && (!requireTrust || candidate.trusted));
+  const recommendableAgents = profiles.filter(candidate => !candidate.error && (!requireTrust || candidate.trusted));
   const recommendationInput = useMemo(
     () => ({
       stageName: node.name,
       instructions: node.instructions,
       candidates: recommendableAgents.map(candidate => ({
-        agentId: candidate.manifest.id,
-        name: candidate.manifest.name,
-        skills: candidate.manifest.skills
+        agentId: candidate.profile.id,
+        name: candidate.profile.name,
+        skills: candidate.profile.preferredSkills
       }))
     }),
     [node.name, node.instructions, recommendableAgents]
@@ -655,10 +656,13 @@ function AgentStageFields({
     }
   }, [workflowId, node.id, recommendationInput]);
 
-  const chosen = agents.find(candidate => candidate.manifest.id === node.agent.agentId);
-  const caps = catalog?.capabilities[node.agent.agentId];
+  const selectedHostId = node.agent.hostId || node.agent.agentId;
+  const selectedProfileId = node.agent.profileId || node.agent.agentId;
+  const chosen = agents.find(candidate => candidate.manifest.id === selectedHostId);
+  const chosenProfile = profiles.find(candidate => candidate.profile.id === selectedProfileId);
+  const caps = catalog?.capabilities[selectedHostId];
   const unusable =
-    node.agent.agentId && chosen
+    selectedHostId && chosen
       ? chosen.errors.length > 0 || (requireTrust && !chosen.trusted)
       : false;
 
@@ -667,8 +671,8 @@ function AgentStageFields({
   const agentWarning =
     agents.length === 0
       ? 'No agents were discovered. Install one under the trusted agents folder, or advance this stage by hand from the run monitor.'
-      : node.agent.agentId && !chosen
-        ? `"${node.agent.agentId}" is not in the discovered catalog — the stage will fail preflight until it is installed.`
+      : selectedHostId && !chosen
+        ? `"${selectedHostId}" is not in the discovered runtime host catalog — the stage will fail preflight until it is installed.`
         : unusable
           ? `This agent would fail preflight ${
               chosen && chosen.errors.length > 0
@@ -678,6 +682,16 @@ function AgentStageFields({
           : undefined;
 
   const setAgent = (patch: Partial<typeof node.agent>) => set({ agent: { ...node.agent, ...patch } });
+  const profileWarning =
+    profiles.length === 0
+      ? 'No agent profiles were discovered. Create an AGENT.md profile in the Agent Hub.'
+      : selectedProfileId && !chosenProfile
+        ? `"${selectedProfileId}" is not in the profile catalog.`
+        : chosenProfile?.error
+          ? chosenProfile.error
+          : requireTrust && chosenProfile && !chosenProfile.trusted
+            ? 'The selected profile is not trusted.'
+            : undefined;
 
   const toggleSkill = (name: string, fingerprint: string, on: boolean) => {
     const skillNames = on
@@ -692,8 +706,8 @@ function AgentStageFields({
   return (
     <>
       <Field
-        label="Agent"
-        warning={agentWarning}
+        label="Agent profile"
+        warning={profileWarning}
         actions={
           recommendationAvailable === true && recommendableAgents.length > 0 ? (
             hasRecommendation ? (
@@ -712,7 +726,7 @@ function AgentStageFields({
                 type="button"
                 className="icon-btn icon-btn-sm wf-recommend-btn"
                 data-testid="wf-recommend-agent-btn"
-                title="Ask the configured AI to recommend an agent for this stage — cached afterwards, never re-asked automatically"
+                title="Ask the configured AI to recommend an agent profile for this stage — cached afterwards, never re-asked automatically"
                 disabled={recommendState.status === 'loading'}
                 onClick={() => void requestRecommendation()}
               >
@@ -730,10 +744,33 @@ function AgentStageFields({
           ) : undefined
         }
       >
+        {profiles.length > 0 ? (
+          <select value={selectedProfileId} onChange={event => setAgent({ profileId: event.target.value })}>
+            <option value="">— choose a profile —</option>
+            {profiles.map(profile => (
+              <option key={profile.profile.id} value={profile.profile.id}>
+                {profile.profile.name}{profile.legacy ? ' (legacy brief)' : ''}{profile.trusted ? '' : ' (untrusted)'}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input value={selectedProfileId} placeholder="e.g. praxis-reviewer" onChange={event => setAgent({ profileId: event.target.value })} />
+        )}
+      </Field>
+
+      <Field label="Provider">
+        <input
+          value={node.agent.providerId ?? ''}
+          placeholder="Active project provider"
+          onChange={event => setAgent({ providerId: event.target.value || undefined })}
+        />
+      </Field>
+
+      <Field label="Runtime host" warning={agentWarning}>
         {agents.length > 0 ? (
           <select
-            value={node.agent.agentId}
-            onChange={event => setAgent({ agentId: event.target.value })}
+            value={selectedHostId}
+            onChange={event => setAgent({ hostId: event.target.value, agentId: event.target.value })}
           >
             <option value="">— choose an agent —</option>
             {agents.map(agent => (
@@ -743,22 +780,22 @@ function AgentStageFields({
                 {agent.errors.length > 0 ? ' (invalid manifest)' : ''}
               </option>
             ))}
-            {node.agent.agentId && !chosen && (
-              <option value={node.agent.agentId}>{node.agent.agentId} (not discovered)</option>
+            {selectedHostId && !chosen && (
+              <option value={selectedHostId}>{selectedHostId} (not discovered)</option>
             )}
           </select>
         ) : (
           <input
-            value={node.agent.agentId}
-            placeholder="e.g. praxis-reviewer"
-            onChange={event => setAgent({ agentId: event.target.value })}
+            value={selectedHostId}
+            placeholder="e.g. claude-acp"
+            onChange={event => setAgent({ hostId: event.target.value, agentId: event.target.value })}
           />
         )}
       </Field>
 
       {recommendState.status === 'loading' && (
         <p className="hint wf-recommend-status" data-testid="wf-recommend-loading">
-          Asking the AI which agent fits this stage…
+          Asking the AI which agent profile fits this stage…
         </p>
       )}
       {recommendState.status === 'error' && (
@@ -771,7 +808,7 @@ function AgentStageFields({
           <Icon name="sparkles" size={12} />
           <div className="wf-recommend-result-text">
             <strong>
-              {agents.find(candidate => candidate.manifest.id === recommendState.agentId)?.manifest.name ?? recommendState.agentId}
+              {profiles.find(candidate => candidate.profile.id === recommendState.agentId)?.profile.name ?? recommendState.agentId}
             </strong>
             <span>{recommendState.rationale}</span>
             {recommendState.stale && (
@@ -785,11 +822,11 @@ function AgentStageFields({
             className="btn btn-compact"
             data-testid="wf-recommend-use"
             onClick={() => {
-              setAgent({ agentId: recommendState.agentId });
+              setAgent({ profileId: recommendState.agentId });
               setRecommendState({ status: 'idle' });
             }}
           >
-            Use this agent
+            Use this profile
           </button>
           <button
             type="button"

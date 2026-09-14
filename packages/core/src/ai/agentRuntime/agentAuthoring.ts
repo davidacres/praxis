@@ -16,6 +16,7 @@ import {
   type AgentTransport,
   type CatalogScope
 } from './manifest';
+import { parseAgentProfile } from './profileRegistry';
 
 export interface NewAgentInput {
   scope: CatalogScope;
@@ -32,6 +33,16 @@ export interface NewAgentInput {
   skills?: string[];
   /** Also emit a labelled starter implementation for the transport. */
   scaffold?: boolean;
+}
+
+export interface NewAgentProfileInput {
+  scope: CatalogScope;
+  id: string;
+  name: string;
+  description?: string;
+  version?: string;
+  preferredSkills?: string[];
+  instructions: string;
 }
 
 export interface NewSkillInput {
@@ -202,10 +213,33 @@ export function planNewSkill(input: NewSkillInput, existingNames: string[]): Cre
   return { folder: folder.name!, files, errors: [] };
 }
 
+
+/** Canonical AGENT.md document for a provider-neutral role profile. */
+export function buildAgentProfileDoc(input: NewAgentProfileInput): string {
+  const lines = ['---', `id: ${input.id.trim()}`, `name: ${input.name.trim()}`];
+  if (input.description?.trim()) lines.push(`description: ${input.description.trim()}`);
+  if (input.version?.trim()) lines.push(`version: ${input.version.trim()}`);
+  const skills = (input.preferredSkills ?? []).map(value => value.trim()).filter(Boolean);
+  if (skills.length) lines.push(`skills: ${skills.join(', ')}`);
+  lines.push('---', '', input.instructions.trim(), '');
+  return lines.join('\n');
+}
+
+export function planNewAgentProfile(input: NewAgentProfileInput, existingIds: string[]): CreationPlan {
+  const errors: string[] = [];
+  const folder = safeSegment(input.id);
+  if (folder.error) errors.push(`id: ${folder.error}`);
+  if (!input.name.trim()) errors.push('name: A display name is required.');
+  if (!input.instructions.trim()) errors.push('instructions: Agent instructions are required.');
+  if (folder.name && existingIds.includes(folder.name)) errors.push(`id: "${folder.name}" already exists in this scope.`);
+  if (errors.length) return { folder: folder.name ?? '', files: [], errors };
+  return { folder: folder.name!, files: [{ path: 'AGENT.md', content: buildAgentProfileDoc(input) }], errors: [] };
+}
+
 // ── Import validation ────────────────────────────────────────────────────
 
 export interface ImportPreview {
-  kind: 'agent' | 'skill';
+  kind: 'agent' | 'profile' | 'skill';
   /** Proposed folder name in the target scope. */
   name: string;
   /** True when `name` already exists — the caller must resolve before writing. */
@@ -228,6 +262,25 @@ export function validateAgentImport(
     preview: {
       kind: 'agent',
       name: safe.name ?? id,
+      duplicate: !!safe.name && existingIds.includes(safe.name),
+      errors
+    }
+  };
+}
+
+/** Validates a would-be imported AGENT.md profile. */
+export function validateAgentProfileImport(
+  profileMarkdown: string,
+  existingIds: string[]
+): { preview: ImportPreview } {
+  const parsed = parseAgentProfile(profileMarkdown, '');
+  const errors = parsed.error ? [parsed.error] : [];
+  const safe = parsed.profile.id ? safeSegment(parsed.profile.id) : { error: 'id: missing' };
+  if (safe.error) errors.push(safe.error.startsWith('id') ? safe.error : `id: ${safe.error}`);
+  return {
+    preview: {
+      kind: 'profile',
+      name: safe.name ?? parsed.profile.id,
       duplicate: !!safe.name && existingIds.includes(safe.name),
       errors
     }
