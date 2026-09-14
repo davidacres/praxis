@@ -77,3 +77,42 @@ and remove any of it cleanly.
 ## Comments
 
 
+
+
+**PRAXIS-F18** — 2026-09-14T00:17:14.031Z
+## AI Review by Claude Code (local)
+
+## Review: PRAXIS-F18 / FX-BF-018 — Add-on marketplace
+
+Pulled the underlying feature file (`fx-bf-018-addon-marketplace/feature.md`) and its one story (`FX-BE-042`) to review against the ticket fields, since the ticket description is truncated mid-sentence in this view. Overall this is a well-scoped, technically detailed ticket — the gaps below are mostly about status accuracy and closure criteria, not missing design thinking.
+
+### Clarity — good
+- "Scope" section draws a crisp, defensible boundary (connection types excluded because they're code, not catalogue data) and explains *why*, not just *what*.
+- "Close when" is a concrete, testable acceptance scenario written from the user's point of view.
+
+### Completeness gaps
+
+1. **Story is far more "done" than "In Progress" suggests.** `FX-BE-042`'s "As built" section already documents a full core engine, host wiring, and renderer integration, plus 49 unit tests and 5 e2e specs — and the files exist in the repo (`packages/core/src/marketplace/`, `marketplaceIpc.ts`, `marketplace.spec.ts`, etc.). If the remaining work is only the three "Open" items, the ticket should say so explicitly (e.g. "blocked on Open items only") so a reader doesn't have to diff the doc against the repo to figure out how close this is to Done.
+
+2. **The three "Open" items have no disposition.** The story lists:
+   - Agent add-on end-to-end proof against a live registry (only mock-tested)
+   - Marketplace token fallback to a configured GitHub connection's token
+   - A published example add-on repo
+
+   None are marked as blocking-for-close vs. deferred-to-follow-up. Given "Close when" explicitly requires a user to "install an agent... once trusted," and agent trust is the most security-sensitive path in this feature, item 1 in particular reads like it *should* gate closure — worth an explicit call.
+
+3. **Dependency mismatch.** The ticket's `Depends On: PRAXIS-S16-35, PRAXIS-F11, PRAXIS-F12` lists these as dependencies, but the feature file's own "Dependencies" section says **"None hard"** — those three are reused patterns (pagination, trust model, template tiers), not blockers. If the tracker treats `Depends On` as a hard gate, this ticket may be shown as blocked when it isn't. Worth reconciling which is authoritative.
+
+4. **Status metadata is internally inconsistent.** The frontmatter comment block says `**Status:** 📋 To Do` while the `status:` field says `In Progress`. Same discrepancy exists in the story file. If anything parses the comment line instead of the field, this ticket could be miscategorized.
+
+### Missing technical context
+
+- **Failure/rollback behavior isn't specified.** What happens on a partial install failure (tarball downloaded, extraction or path-traversal check fails mid-way)? Is the partial `userData/addons/<kind>/<id>/` directory cleaned up, or can it leave orphaned state?
+- **Revoking agent trust mid-session** — no mention of whether revoking trust for a running agent stops it cleanly or leaves it running until restart.
+- **GitHub API rate limits** aren't addressed. `reconcileInstalledOnLaunch()` calls the registry on every boot for update checks; for users with large catalogues or frequent restarts this could hit REST/rate-limit ceilings — worth stating the fallback behavior (silent skip vs. surfaced error).
+- **Yanked/removed packages**: if a registry owner deletes a package or version after a user has it installed, is there defined behavior for update checks or reinstall attempts?
+
+### Ambiguities worth resolving before close
+
+- Is "Priority: Medium" still right given the scope (touches Settings, Themes, Surfaces, Agent Runtime, Workflow Templates, and a new trust/integrity path)? Not a defect, but worth a sanity check against the size of the surface area actually shipped.
+- Confirm whether the three "Open" items become their own follow-up tickets or stay as open sub-tasks under this one — as written, there's no tracking mechanism for them once FX-BF-018 is marked Done.

@@ -52,6 +52,7 @@ import { getServiceForConnection } from './serviceRegistry';
 import { isAnalysisConfirmed } from './aiWorkflowIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
 import { getCurrentBranch } from './gitService';
+import { getProjectStore } from './projectStoreInstance';
 
 /** Builds the default general task for an issue when the caller didn't supply one. */
 function buildDefaultTask(
@@ -712,7 +713,12 @@ export function registerAiIpc(): void {
 
   ipcMain.handle('ai:listWorkflowPacks', async () => {
     const settings = getSettingsBackend().read();
-    return discoverWorkspaceAgentWorkflows(settings.ai.workingDirectory.trim() || undefined);
+    const configuredRoot = settings.ai.workingDirectory.trim();
+    const projectRoot = getProjectStore()
+      .list()
+      .map(project => project.workspaceFolder?.trim())
+      .find((folder): folder is string => Boolean(folder));
+    return discoverWorkspaceAgentWorkflows(configuredRoot || projectRoot || undefined);
   });
 
   ipcMain.handle('ai:getWorkflowAssignment', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) =>
