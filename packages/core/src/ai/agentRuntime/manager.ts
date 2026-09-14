@@ -165,7 +165,7 @@ export class AgentRuntimeManager {
     if (!profile) throw new Error(`Agent profile ${profileId} was not discovered.`);
     if (profile.error) throw new Error(`Agent profile ${profileId} is invalid: ${profile.error}`);
     if (!profile.trusted) throw new Error(`Agent profile ${profileId} is not trusted.`);
-    const host = snapshot.runtimeHosts.find(candidate => candidate.manifest.id === hostId);
+    const host = (snapshot.runtimeHosts ?? snapshot.agents).find(candidate => candidate.manifest.id === hostId);
     if (!host) throw new Error(`Runtime host ${hostId} was not discovered.`);
 
     const skills: AgentSkillRef[] = await Promise.all(skillNames.map(async name => {
