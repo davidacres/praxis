@@ -108,8 +108,8 @@ export function preflightStage(
   const failures: PreflightFailure[] = [];
   const ref = node.agent;
   const requireTrust = policy?.requireTrustedAgents ?? true;
-  const hostId = ref.hostId || hostId;
-  const profileId = ref.profileId || hostId;
+  const hostId = ref.hostId || ref.agentId;
+  const profileId = ref.profileId || ref.agentId;
   const runtimeHosts = catalog.runtimeHosts ?? catalog.agents;
   const agent = runtimeHosts.find(candidate => candidate.manifest.id === hostId);
   const profile = catalog.profiles?.find(candidate => candidate.profile.id === profileId);
