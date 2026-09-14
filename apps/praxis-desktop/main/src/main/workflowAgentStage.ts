@@ -167,7 +167,7 @@ export async function runWorkflowAgentStage(
       toolMode,
       workflowRunId: workflowRun.runId,
       workflowNodeId: node.id,
-      agentId: preflight.binding.profileId,
+      agentId: preflight.binding.hostId,
       profileId: preflight.binding.profileId,
       hostId: preflight.binding.hostId,
       activeSkills: preflight.binding.skills.map(skill => skill.name),
