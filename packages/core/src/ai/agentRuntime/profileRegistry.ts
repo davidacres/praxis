@@ -44,12 +44,14 @@ export function parseAgentProfile(content: string, fallbackId: string): { profil
   const id = parsed.values.get('id') || fallbackId;
   const name = parsed.values.get('name') || id;
   const preferredSkills = (parsed.values.get('skills') ?? '').split(',').map(value => value.trim()).filter(Boolean);
+  const description = parsed.values.get('description');
+  const version = parsed.values.get('version');
   const profile: AgentProfile = {
     id,
     name,
     instructions: parsed.body,
-    ...(parsed.values.get('description') ? { description: parsed.values.get('description') } : {}),
-    ...(parsed.values.get('version') ? { version: parsed.values.get('version') } : {}),
+    ...(description ? { description } : {}),
+    ...(version ? { version } : {}),
     ...(preferredSkills.length ? { preferredSkills } : {})
   };
   if (parsed.error) return { profile, error: parsed.error };
