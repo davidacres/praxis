@@ -1,12 +1,12 @@
 ---
-**Status:** 🚧 In progress
+**Status:** 🧪 Ready for validation
 **Created:** 2026-09-14
 **Type:** Feature
 **Priority:** Critical
 id: FX-BF-038
 slug: provider-host-agent-profile-skill-alignment
 title: "Separate providers, runtime hosts, agent profiles and skills"
-status: In Progress
+status: Ready for Validation
 updated: 2026-09-14
 dependencies: [FX-BF-009, FX-BF-010, FX-BF-011, FX-BF-013, FX-BF-035]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -69,22 +69,29 @@ This makes it unclear whether a workflow is selecting a role, a process, a model
 
 | Ref | Work | Depends on | Status |
 | --- | --- | --- | --- |
-| FX-BE-115 | Canonical contracts and terminology | — | In progress |
-| FX-BE-116 | Legacy manifest/profile migration | FX-BE-115 | Planned |
-| FX-BE-117 | Provider/host adapter binding | FX-BE-115 | Planned |
-| FX-BE-118 | Skill activation and fallback execution | FX-BE-117 | Planned |
-| FX-BE-119 | Workflow and session persistence migration | FX-BE-116, FX-BE-117 | Planned |
-| FX-BE-120 | Agent Hub and composer UX | FX-BE-119 | Planned |
-| FX-BE-121 | End-to-end compatibility and documentation | FX-BE-118, FX-BE-120 | Planned |
+| FX-BE-115 | Canonical contracts and terminology | — | Implemented |
+| FX-BE-116 | Legacy manifest/profile migration | FX-BE-115 | Implemented |
+| FX-BE-117 | Provider/host adapter binding | FX-BE-115 | Implemented |
+| FX-BE-118 | Skill activation and fallback execution | FX-BE-117 | Implemented |
+| FX-BE-119 | Workflow and session persistence migration | FX-BE-116, FX-BE-117 | Implemented |
+| FX-BE-120 | Agent Hub and composer UX | FX-BE-119 | Implemented |
+| FX-BE-121 | End-to-end compatibility and documentation | FX-BE-118, FX-BE-120 | Ready for validation |
 
 ## Definition of done
 
 A single Praxis agent profile can be selected with any compatible provider and host. The same workflow can run through ACP, gateway and local-tool execution. Praxis shows the selected profile, provider, host, skills and activation modes separately; no provider is claimed to support a native skill unless it confirms that capability; old manifests remain readable and receive migration guidance; focused and desktop tests pass.
 
-## Initial implementation
+## Implemented
 
-packages/core/src/ai/agentContracts.ts introduces the canonical vocabulary and a pure activation planner. Existing runtime code is intentionally not renamed in this first slice; subsequent stories migrate it behind these contracts.
+- Canonical provider, runtime-host, AGENT.md profile, skill, activation and binding contracts.
+- Separate profile and host discovery with legacy brief.md and agent.json compatibility.
+- Explicit workflow profile/provider/host/skill fields, migration, preflight, dependency readiness and dispatch context.
+- Session launch and persistence of profile id, host id, provider, skills and activation modes.
+- Agent Hub creation/import/detail/navigation for profiles, runtime hosts and skills.
+- Workflow Designer selectors for profile, provider, runtime host and skills.
+- Profile-to-host session launch UI, runtime diagnostics, Settings paths/counts and command-palette entries.
+- Confirmed HTTP native skill activation with tools/context fallback and deterministic stub-host coverage.
 
 ## Verification
 
-Run core type checking and tests, then desktop type checking and tests. Include cases for native skill support, tool fallback, context fallback, missing capabilities, legacy manifests and persisted-session compatibility.
+Required before release: run `npm run check-types`, `npm run test:core`, and `npm run test:desktop` in a full checkout. This implementation environment could update the authenticated repository but could not obtain an authenticated local checkout, and no commit status checks are configured on main. Static source review and focused regression tests were added for contracts, profile discovery/authoring, workflow binding and HTTP native-skill confirmation.
