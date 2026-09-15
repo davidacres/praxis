@@ -48,6 +48,8 @@ export interface AcpAgentStartOptions {
    * browser). Applied only when the agent advertises `mcpCapabilities.http`.
    */
   mcpServers?: AcpHttpMcpServer[];
+  /** A host-scheduled AI-to-AI turn; do not persist its routing instruction as a user turn. */
+  internalConversationTurn?: boolean;
 }
 
 export interface AcpHttpMcpServer {
@@ -665,7 +667,7 @@ export class AcpAgentHost {
     const prompt = [
       systemPrompt,
       this.buildConversationTranscript(record.events),
-      `User follow-up:\n${followUp}`
+      `${options.internalConversationTurn ? 'Conversation routing instruction' : 'User follow-up'}:\n${followUp}`
     ].filter((part): part is string => Boolean(part)).join('\n\n');
 
     const client = new AcpClientWrapper({
@@ -698,7 +700,12 @@ export class AcpAgentHost {
     // Clear the live buffer before publishing the follow-up so the previous
     // answer cannot briefly render after the new user message.
     this.sessionManager.updateAgentOutput(issueKey, { responseText: '' });
-    this.appendEvent(issueKey, evt('user_input_completed', 'You', followUp));
+    this.appendEvent(
+      issueKey,
+      options.internalConversationTurn
+        ? evt('conversation_turn', 'Conversation turn started')
+        : evt('user_input_completed', 'You', followUp)
+    );
     this.sessionManager.updateAgentState(issueKey, 'executing');
 
     task.promptPromise = (async () => {

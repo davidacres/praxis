@@ -66,6 +66,7 @@ import type {
   AgentSessionRecord,
   AgentTaskDefinition,
   AgentToolMode,
+  AiStartConversationInput,
   SessionMode,
   AgentWorkflowReference,
   IssueWorkflowAssignment
@@ -709,6 +710,9 @@ export interface AiIpc {
   updateSessionModel(issueKey: string, model: string): Promise<AgentSessionRecord>;
   /** Hands the same Praxis session to another provider and seeds it with the living brief. */
   handoverSession(issueKey: string, input: AiHandoverInput): Promise<AgentSessionRecord>;
+  startConversation(issueKey: string, input: AiStartConversationInput): Promise<AgentSessionRecord>;
+  stopConversation(issueKey: string): Promise<AgentSessionRecord>;
+  setConversationToolOwner(issueKey: string, participantId: string): Promise<AgentSessionRecord>;
   /** Saves user edits to the living handover brief. */
   editHandoverBrief(
     issueKey: string,

@@ -6,6 +6,7 @@ import type {
   AiDelegateInput,
   AiHandoverBriefEdits,
   AiHandoverInput,
+  AiStartConversationInput,
   AiProvider,
   AiReviewProgress,
   AppSettings,
@@ -214,6 +215,11 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:updateSessionModel', issueKey, model),
     handoverSession: (issueKey: string, input: AiHandoverInput) =>
       ipcRenderer.invoke('ai:handoverSession', issueKey, input),
+    startConversation: (issueKey: string, input: AiStartConversationInput) =>
+      ipcRenderer.invoke('ai:startConversation', issueKey, input),
+    stopConversation: (issueKey: string) => ipcRenderer.invoke('ai:stopConversation', issueKey),
+    setConversationToolOwner: (issueKey: string, participantId: string) =>
+      ipcRenderer.invoke('ai:setConversationToolOwner', issueKey, participantId),
     editHandoverBrief: (issueKey: string, expectedRevision: number, edits: AiHandoverBriefEdits) =>
       ipcRenderer.invoke('ai:editHandoverBrief', issueKey, expectedRevision, edits),
     removeWorktree: (issueKey: string) => ipcRenderer.invoke('ai:removeWorktree', issueKey),
