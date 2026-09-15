@@ -161,7 +161,8 @@ const KNOWN_AI_PROVIDERS: readonly AiProvider[] = [
   'anthropic',
   'claude-code-cli',
   'codex-cli',
-  'copilot-cli'
+  'copilot-cli',
+  'antigravity-cli'
 ];
 
 export interface PreviewSettings {
