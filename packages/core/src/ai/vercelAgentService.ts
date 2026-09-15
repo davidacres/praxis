@@ -82,6 +82,8 @@ export interface VercelAgentStartOptions {
       requestPermission: (request: { kind: string; description: string; detail?: string }) => Promise<PermissionDecision>
     ): Promise<{ ok: boolean; content: string }>;
   };
+  /** A host-scheduled AI-to-AI turn; its routing instruction is not a human chat message. */
+  internalConversationTurn?: boolean;
 }
 
 export class VercelAgentService {
@@ -592,7 +594,9 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     this.appendEvent(
       issueKey,
       followUp
-        ? evt('user_input_completed', 'You', followUp)
+        ? options.internalConversationTurn
+          ? evt('conversation_turn', 'Conversation turn started')
+          : evt('user_input_completed', 'You', followUp)
         : evt('session_start', 'Session resumed')
     );
     this.logger.appendLine(`[VercelAgent] Resumed session for ${issueKey}`);

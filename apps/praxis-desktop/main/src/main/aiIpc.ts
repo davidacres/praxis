@@ -22,6 +22,7 @@ import {
   type AiDelegateInput,
   type AiHandoverBriefEdits,
   type AiHandoverInput,
+  type AiStartConversationInput,
   type AiProvider,
   buildHandoverEnvelope,
   type AiReviewProgress,
@@ -281,7 +282,11 @@ export function registerAiIpc(): void {
     }
   }
 
-  async function continueRecordedSession(issueKey: string, message: string): Promise<void> {
+  async function continueRecordedSession(
+    issueKey: string,
+    message: string,
+    options?: { internalConversationTurn?: boolean }
+  ): Promise<void> {
     const followUp = message.trim();
     if (!followUp) {
       throw new Error('Enter a follow-up message.');
@@ -303,6 +308,7 @@ export function registerAiIpc(): void {
         model: record.model,
         workingDirectory,
         toolMode,
+        internalConversationTurn: options?.internalConversationTurn,
         ...(browserMcp ? { mcpServers: [browserMcp] } : {})
       });
       return;
@@ -322,11 +328,70 @@ export function registerAiIpc(): void {
       model: record.model || connection.model,
       workingDirectory,
       toolMode,
+      internalConversationTurn: options?.internalConversationTurn,
       toolExtension: mergeToolExtensions(
         trackerToolExtension(trackerService, toolMode),
         browserToolExtension(toolMode)
       )
     }, followUp);
+  }
+
+  const queuedConversationTurns = new Set<string>();
+  const startingConversationTurns = new Set<string>();
+
+  function conversationPrompt(record: AgentSessionRecord): string {
+    const conversation = record.conversation!;
+    const speaker = conversation.participants.find(participant => participant.id === conversation.currentSpeakerId)!;
+    const other = conversation.participants.find(participant => participant.id !== speaker.id)!;
+    // `prepareAgentConversationTurn` has already made `speaker` the active
+    // runtime. Build the portable context from the *other* participant so the
+    // prompt never tells an AI it is taking over from itself.
+    const envelope = buildHandoverEnvelope(
+      { ...record, provider: other.provider, model: other.model },
+      { provider: speaker.provider, model: speaker.model }
+    );
+    const access = record.toolMode === 'full'
+      ? 'You currently hold the only write-capable tool access. Do not act concurrently with the other AI.'
+      : 'You are read-only for this turn. Do not write files, execute commands, or mutate external systems.';
+    return [
+      `You are ${speaker.displayLabel}, participating in a bounded Praxis ${conversation.mode} conversation.`,
+      `Address ${other.displayLabel} and the human directly. This is AI turn ${conversation.turnsUsed + 1} of ${conversation.turnCap}.`,
+      access,
+      'Give one concise, self-contained response, then stop so Praxis can yield to the other AI.',
+      '',
+      envelope.text
+    ].join('\n');
+  }
+
+  function queueConversationTurn(issueKey: string): void {
+    if (queuedConversationTurns.has(issueKey) || startingConversationTurns.has(issueKey)) return;
+    queuedConversationTurns.add(issueKey);
+    setTimeout(() => {
+      queuedConversationTurns.delete(issueKey);
+      void runConversationTurn(issueKey).catch(() => undefined);
+    }, 0);
+  }
+
+  async function runConversationTurn(issueKey: string): Promise<void> {
+    if (startingConversationTurns.has(issueKey)) return;
+    const current = sessionManager.getAgentSession(issueKey);
+    if (!current?.conversation || current.conversation.state !== 'running') return;
+    if (hasActiveTask(issueKey)) {
+      queueConversationTurn(issueKey);
+      return;
+    }
+    startingConversationTurns.add(issueKey);
+    try {
+      const prepared = sessionManager.prepareAgentConversationTurn(issueKey);
+      if (prepared.conversation?.state !== 'running') return;
+      await continueRecordedSession(issueKey, conversationPrompt(prepared), { internalConversationTurn: true });
+    } catch {
+      const record = sessionManager.getAgentSession(issueKey);
+      if (record?.conversation?.state === 'running') sessionManager.finishAgentConversation(issueKey, 'failed');
+      throw new Error('The multi-AI conversation could not start its next turn.');
+    } finally {
+      startingConversationTurns.delete(issueKey);
+    }
   }
 
   ipcMain.handle('ai:getStatus', async () => getAiProviderStatus());
@@ -685,6 +750,9 @@ export function registerAiIpc(): void {
   ipcMain.handle(
     'ai:continueSession',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, message: string) => {
+      if (sessionManager.getAgentSession(issueKey)?.conversation?.state === 'running') {
+        throw new Error('Stop the multi-AI conversation before sending a single-agent follow-up.');
+      }
       await continueRecordedSession(issueKey, message);
     }
   );
@@ -756,6 +824,40 @@ export function registerAiIpc(): void {
       });
       await continueRecordedSession(issueKey, envelope.text);
       return sessionManager.getAgentSession(issueKey)!;
+    }
+  );
+
+  ipcMain.handle(
+    'ai:startConversation',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, input: AiStartConversationInput) => {
+      if (!input || !['consult', 'debate', 'pair'].includes(input.mode)) throw new Error('Choose a conversation mode.');
+      if (!input.provider || !PROVIDER_DESCRIPTORS[input.provider]) throw new Error('Choose a valid second AI provider.');
+      const record = sessionManager.getAgentSession(issueKey);
+      if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+      if (hasActiveTask(issueKey)) throw new Error('Wait for the current session turn to finish before bringing in another AI.');
+      const model = input.model?.trim() || undefined;
+      if (model) await assertModelAvailable(input.provider, model);
+      const started = sessionManager.startAgentConversation(issueKey, { ...input, model });
+      queueConversationTurn(issueKey);
+      return started;
+    }
+  );
+
+  ipcMain.handle('ai:stopConversation', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
+    const record = sessionManager.getAgentSession(issueKey);
+    if (!record?.conversation || record.conversation.state !== 'running') throw new Error('No multi-AI conversation is running.');
+    // Mark it stopped before cancelling the active host: host cleanup emits an
+    // activity change, and that callback must never schedule one final turn.
+    const stopped = sessionManager.finishAgentConversation(issueKey, 'stopped');
+    await abortActiveTask(issueKey);
+    return stopped;
+  });
+
+  ipcMain.handle(
+    'ai:setConversationToolOwner',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, participantId: string) => {
+      if (hasActiveTask(issueKey)) throw new Error('Tool ownership can only change between turns.');
+      return sessionManager.setAgentConversationToolOwner(issueKey, participantId);
     }
   );
 
@@ -949,6 +1051,20 @@ export function registerAiIpc(): void {
     }
   );
 
+  const scheduleWhenTaskSettles = (issueKey: string) => {
+    const record = sessionManager.getAgentSession(issueKey);
+    if (!record?.conversation || record.conversation.state !== 'running' || hasActiveTask(issueKey)) return;
+    if (record.state === 'completed') {
+      sessionManager.completeAgentConversationTurn(issueKey);
+      const next = sessionManager.getAgentSession(issueKey);
+      if (next?.conversation?.state === 'running') queueConversationTurn(issueKey);
+    } else if (record.state === 'failed' || record.state === 'aborted') {
+      sessionManager.finishAgentConversation(issueKey, 'failed');
+    }
+  };
+  agentService.onDidChangeActiveTask(scheduleWhenTaskSettles);
+  getAcpAgentHost().onDidChangeActiveTask(scheduleWhenTaskSettles);
+
   sessionManager.onDidChangeAgentSession((record: AgentSessionRecord) => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed()) {
@@ -956,5 +1072,8 @@ export function registerAiIpc(): void {
       }
       win.webContents.send('ai:sessionChanged', record);
     }
+    // A terminal state is published before each host removes its task. The
+    // active-task listeners above schedule the next speaker only after that
+    // cleanup, preserving the one-runtime-at-a-time invariant.
   });
 }

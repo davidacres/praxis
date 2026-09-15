@@ -8,6 +8,9 @@ import type {
   AgentEventSummary,
   AgentModeOption,
   AgentSessionRecord,
+  AgentConversation,
+  AgentConversationParticipant,
+  AiStartConversationInput,
   AgentTaskDefinition,
   AgentTaskListItem,
   AgentTaskState,
@@ -317,7 +320,22 @@ export class AiSessionManager {
     if (!record) {
       return;
     }
-    record.events.push(...events);
+    const activeSpeaker = record.conversation?.state === 'running'
+      ? record.conversation.participants.find(participant => participant.id === record.conversation?.currentSpeakerId)
+      : undefined;
+    record.events.push(...events.map(event =>
+      event.type === 'message' && activeSpeaker && !event.speaker
+        ? {
+            ...event,
+            speaker: {
+              participantId: activeSpeaker.id,
+              provider: activeSpeaker.provider,
+              model: activeSpeaker.model,
+              displayLabel: activeSpeaker.displayLabel
+            }
+          }
+        : event
+    ));
     if (incrementSteps) {
       record.stepCount += incrementSteps;
     }
@@ -728,7 +746,7 @@ export class AiSessionManager {
     next: {
       provider?: AiProvider;
       model?: string;
-      reason: 'model_change' | 'provider_handover';
+      reason: 'model_change' | 'provider_handover' | 'conversation_turn';
       clearNativeRuntime?: boolean;
       eventSummary: string;
       eventDetail?: string;
@@ -756,6 +774,105 @@ export class AiSessionManager {
       summary: next.eventSummary,
       detail: next.eventDetail
     });
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
+  /** Starts a bounded opt-in conversation without changing the handover contract. */
+  public startAgentConversation(issueKey: string, input: AiStartConversationInput): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+    assertCanChangeSessionRuntime(record);
+    if (!record.provider) throw new Error('This session has no provider to invite another AI into.');
+    if (record.conversation?.state === 'running') throw new Error('A multi-AI conversation is already running.');
+    const turnCap = Math.max(1, Math.min(20, Math.floor(input.turnCap)));
+    if (!Number.isFinite(turnCap)) throw new Error('Choose a valid conversation turn cap.');
+    const host: AgentConversationParticipant = {
+      id: 'host', provider: record.provider, model: record.model, role: 'host',
+      displayLabel: `${record.provider ?? 'AI'}${record.model ? ` · ${record.model}` : ''}`
+    };
+    const guest: AgentConversationParticipant = {
+      id: 'guest', provider: input.provider, model: input.model?.trim() || undefined, role: 'guest',
+      displayLabel: `${input.provider}${input.model?.trim() ? ` · ${input.model.trim()}` : ''}`
+    };
+    if (host.provider === guest.provider && host.model === guest.model) {
+      throw new Error('Choose a different provider or model for the second AI.');
+    }
+    const conversation: AgentConversation = {
+      mode: input.mode,
+      participants: [host, guest],
+      currentSpeakerId: guest.id,
+      toolOwnerId: host.id,
+      originalToolMode: record.toolMode ?? 'full',
+      turnCap,
+      turnsUsed: 0,
+      state: 'running'
+    };
+    record.conversation = conversation;
+    record.events.push({ timestamp: new Date().toISOString(), type: 'conversation_turn', summary: `Started ${input.mode} conversation with ${guest.displayLabel}` });
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
+  /** Selects the next speaker and enforces the only-writer rule before a turn starts. */
+  public prepareAgentConversationTurn(issueKey: string): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    const conversation = record?.conversation;
+    if (!record || !conversation || conversation.state !== 'running') throw new Error('No running multi-AI conversation.');
+    if (conversation.turnsUsed >= conversation.turnCap) return this.finishAgentConversation(issueKey, 'capped');
+    const speaker = conversation.participants.find(participant => participant.id === conversation.currentSpeakerId);
+    if (!speaker) throw new Error('The current conversation speaker is missing.');
+    record.toolMode = conversation.mode === 'pair' && conversation.toolOwnerId === speaker.id ? 'full' : 'read-only';
+    return this.transitionAgentRuntime(issueKey, {
+      provider: speaker.provider,
+      model: speaker.model,
+      reason: 'conversation_turn',
+      clearNativeRuntime: true,
+      eventSummary: `${speaker.displayLabel}'s conversation turn`
+    });
+  }
+
+  /** Counts a finished AI turn and either schedules the other speaker or caps the conversation. */
+  public completeAgentConversationTurn(issueKey: string): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    const conversation = record?.conversation;
+    if (!record || !conversation || conversation.state !== 'running') throw new Error('No running multi-AI conversation.');
+    conversation.turnsUsed += 1;
+    if (conversation.turnsUsed >= conversation.turnCap) return this.finishAgentConversation(issueKey, 'capped');
+    conversation.currentSpeakerId = conversation.participants.find(p => p.id !== conversation.currentSpeakerId)?.id ?? conversation.currentSpeakerId;
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
+  /** Stops a conversation between turns and restores the current tool owner as the single-agent runtime. */
+  public finishAgentConversation(issueKey: string, state: 'stopped' | 'capped' | 'failed'): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    const conversation = record?.conversation;
+    if (!record || !conversation) throw new Error('No multi-AI conversation is active.');
+    conversation.state = state;
+    const owner = conversation.participants.find(participant => participant.id === conversation.toolOwnerId)
+      ?? conversation.participants[0];
+    record.provider = owner.provider;
+    record.model = owner.model;
+    record.toolMode = conversation.originalToolMode;
+    record.events.push({ timestamp: new Date().toISOString(), type: 'conversation_turn', summary: state === 'capped' ? `Conversation stopped at its ${conversation.turnCap}-turn cap.` : state === 'failed' ? 'Conversation stopped after a provider failure.' : 'Conversation stopped by you.' });
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
+  /** Transfers pair-mode tool ownership only between turns. */
+  public setAgentConversationToolOwner(issueKey: string, participantId: string): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    const conversation = record?.conversation;
+    if (!record || !conversation || conversation.state !== 'running') throw new Error('No running multi-AI conversation.');
+    assertCanChangeSessionRuntime(record);
+    if (conversation.mode !== 'pair') throw new Error('Tool ownership can only change in pair mode.');
+    if (!conversation.participants.some(participant => participant.id === participantId)) throw new Error('Unknown conversation participant.');
+    conversation.toolOwnerId = participantId;
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
     return record;
