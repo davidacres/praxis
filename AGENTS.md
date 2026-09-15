@@ -575,9 +575,12 @@ the next gap is found by reading it rather than by assuming.
   Every one of them was moved there once already — into the inspector for the
   sidebar-consolidation pass, then back to the composer because that buried them
   where the user is about to act, instead of showing them where Claude and Copilot
-  both do: beside the input. `SessionInspector` keeps live status, the task list, the
-  changeset, and terminal actions (abort, remove worktree) — things to watch or act on
-  for the session as a whole, not facts read once before typing a message.
+  both do: beside the input. Change-model and hand-over chips also live on that
+  composer row (disabled while a turn is running). `SessionInspector` keeps live
+  status, the session purpose, the living handover brief, runtime history, the
+  task list, the changeset, and terminal actions (abort, remove worktree) —
+  things to watch or act on for the session as a whole, not facts read once
+  before typing a message.
 - **`.session-mode-toggle` is one shared style for the Chat/Analysis/Review
   control, used both when a session starts (`NewSession`) and to re-run a
   finished one (`SessionsPage`'s composer).** It used to be two near-identical

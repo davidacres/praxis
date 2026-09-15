@@ -2,9 +2,9 @@
 
 Legend: **✓** complete · **?** partial / not finished · **✗** missing
 
-Current state of Praxis desktop (Electron) as of 2026-09-09. Core backends ship
+Current state of Praxis desktop (Electron) as of 2026-09-15. Core backends ship
 to all hosts; desktop-specific features are in the renderer (`apps/praxis-desktop/renderer`)
-and Electron integration. Last audited: 2026-09-09.
+and Electron integration. Last audited: 2026-09-15.
 
 ## Backends & connections
 
@@ -78,6 +78,10 @@ and Electron integration. Last audited: 2026-09-09.
 | Agent selection | ✓ | Agent Hub browser; runs system runtime or CLI executable |
 | Assign workflow pack | ✓ | Dropdown in delegate picker; attaches pack to session |
 | Active sessions view + view/abort session | ✓ | Sessions sidebar section; console shows live event stream |
+| Session purpose in the inspector | ✓ | Summary tab shows the ticket/plan goal, scope and definition of done (FX-BE-115) |
+| Living handover brief | ✓ | Auto-refreshes after each completed turn; user-editable notes survive refresh (FX-BE-115) |
+| Change model during a session | ✓ | Composer action; blocked while a turn is running; records a runtime epoch (FX-BE-115) |
+| Hand over to another AI | ✓ | Same Praxis session and worktree; receiving AI gets a redacted brief and is asked to inspect files (FX-BE-115) |
 | AI review of issue | ✓ | Issue detail action; review panel streams markdown |
 | Issue analysis window | ✓ | Issue detail action; runs analysis workflow + shows results inline |
 | Delivery workflow (publish command / artifact pattern) | ✓ | Workflow stages with delivery gates; publishes artifacts to Claude.ai |

@@ -6,10 +6,10 @@
 type: Task
 id: TASK-328
 title: "Prove migration, handover and model-switch behavior end to end"
-status: Proposed
+status: Done
 story: FX-BE-115
 feature: FX-BF-035
-updated: 2026-09-14
+updated: 2026-09-15
 dependencies: [TASK-326, TASK-327]
 ---
 

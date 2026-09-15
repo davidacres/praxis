@@ -8,7 +8,7 @@ id: FX-BE-115
 title: "Continuous session handover, model switching and living brief"
 status: Done
 feature: FX-BF-035
-updated: 2026-09-14
+updated: 2026-09-15
 dependencies: [FX-BE-092, FX-BE-093, FX-BF-015, FX-BF-017]
 ---
 

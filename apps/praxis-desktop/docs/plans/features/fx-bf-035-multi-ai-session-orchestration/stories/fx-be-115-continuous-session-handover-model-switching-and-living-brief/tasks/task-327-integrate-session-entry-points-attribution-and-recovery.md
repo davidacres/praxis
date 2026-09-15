@@ -6,10 +6,10 @@
 type: Task
 id: TASK-327
 title: "Integrate every session entry point and preserve attribution and recovery"
-status: Proposed
+status: Done
 story: FX-BE-115
 feature: FX-BF-035
-updated: 2026-09-14
+updated: 2026-09-15
 dependencies: [TASK-323, TASK-324, TASK-325, FX-BF-012, FX-BF-013]
 ---
 
