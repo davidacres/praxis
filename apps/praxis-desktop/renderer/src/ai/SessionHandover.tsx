@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { AgentSessionRecord, AiHandoverBriefEdits, AiProvider, HandoverBrief, ModelOptions } from '@praxis/core';
+import type { AgentConversationMode, AgentSessionRecord, AiHandoverBriefEdits, AiProvider, HandoverBrief, ModelOptions } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { isTerminalAgentState } from './aiSessionState';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from './modelProviders';
@@ -337,4 +337,94 @@ export function SessionRuntimeActions({
       </button>
     </>
   );
+}
+
+export function SessionConversationDialog({ session, open, onClose }: { session: AgentSessionRecord; open: boolean; onClose: () => void }) {
+  const defaultProvider = [...MODEL_PROVIDERS].find(provider => provider !== session.provider) ?? session.provider ?? 'openai';
+  const [provider, setProvider] = useState<AiProvider>(defaultProvider);
+  const [model, setModel] = useState('');
+  const [mode, setMode] = useState<AgentConversationMode>('consult');
+  const [turnCap, setTurnCap] = useState(6);
+  const [options, setOptions] = useState<ModelOptions>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    if (!open) return;
+    setProvider(defaultProvider);
+    setModel('');
+    setMode('consult');
+    setTurnCap(6);
+    setError(undefined);
+  }, [open, session.issueKey, defaultProvider]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void fetchModelOptions(provider, false).then(next => {
+      if (cancelled) return;
+      setOptions(next);
+      setModel(next?.currentValue || next?.options[0]?.value || '');
+    });
+    return () => { cancelled = true; };
+  }, [open, provider]);
+
+  if (!open) return null;
+  const submit = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await window.praxis.ai.startConversation(session.issueKey, { provider, model: model || undefined, mode, turnCap });
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return createPortal(
+    <div className="modal-backdrop" data-testid="session-conversation-dialog" onClick={onClose}>
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="session-conversation-title" onClick={event => event.stopPropagation()}>
+        <h2 id="session-conversation-title">Bring in another AI</h2>
+        <p className="hint">This starts a bounded, sequential conversation. Two models may incur spend; only one can hold tools at a time.</p>
+        <label className="session-brief-field"><span className="rail-sub">Second AI provider</span>
+          <select data-testid="session-conversation-provider" value={provider} onChange={event => setProvider(event.target.value as AiProvider)}>
+            {[...MODEL_PROVIDERS].map(id => <option key={id} value={id}>{PROVIDER_LABELS[id]}</option>)}
+          </select>
+        </label>
+        <label className="session-brief-field"><span className="rail-sub">Model</span>
+          {options?.options.length ? <select data-testid="session-conversation-model" value={model} onChange={event => setModel(event.target.value)}>{options.options.map(option => <option key={option.value} value={option.value}>{option.name || option.value}</option>)}</select>
+            : <input data-testid="session-conversation-model" value={model} onChange={event => setModel(event.target.value)} />}
+        </label>
+        <label className="session-brief-field"><span className="rail-sub">Mode</span>
+          <select data-testid="session-conversation-mode" value={mode} onChange={event => setMode(event.target.value as AgentConversationMode)}>
+            <option value="consult">Consult — both read only</option><option value="debate">Debate — both read only</option><option value="pair">Pair — one tool owner at a time</option>
+          </select>
+        </label>
+        <label className="session-brief-field"><span className="rail-sub">Total AI turns</span>
+          <input data-testid="session-conversation-turn-cap" type="number" min={1} max={20} value={turnCap} onChange={event => setTurnCap(Number(event.target.value))} />
+        </label>
+        {error && <p className="hint is-danger">{error}</p>}
+        <div className="session-brief-actions"><button type="button" className="btn btn-primary" data-testid="session-conversation-confirm" disabled={busy || !model} onClick={() => void submit()}>{busy ? 'Starting…' : 'Start conversation'}</button><button type="button" className="btn" onClick={onClose}>Cancel</button></div>
+      </div>
+    </div>, document.body
+  );
+}
+
+export function SessionConversationActions({ session, onStart, onStop, onToolOwner }: {
+  session: AgentSessionRecord; onStart: () => void; onStop: () => void; onToolOwner: (id: string) => void;
+}) {
+  const conversation = session.conversation;
+  const idle = canChangeSessionRuntime(session);
+  if (conversation?.state === 'running') {
+    const current = conversation.participants.find(participant => participant.id === conversation.currentSpeakerId);
+    const owner = conversation.participants.find(participant => participant.id === conversation.toolOwnerId);
+    return <>
+      <span className="composer-chip session-runtime-chip" data-testid="session-conversation-status">{conversation.mode} · {conversation.turnsUsed}/{conversation.turnCap} · {current?.displayLabel}</span>
+      <span className="composer-chip session-runtime-chip" data-testid="session-conversation-tool-owner">Tools: {owner?.displayLabel ?? 'None'}</span>
+      {conversation.mode === 'pair' && idle && conversation.participants.map(participant => <button key={participant.id} className="composer-chip" type="button" data-testid={`session-conversation-owner-${participant.id}`} disabled={participant.id === conversation.toolOwnerId} onClick={() => onToolOwner(participant.id)}>Give tools to {participant.role}</button>)}
+      <button type="button" className="composer-chip" data-testid="session-stop-conversation" onClick={onStop}><Icon name="close" size={14} />Stop conversation</button>
+    </>;
+  }
+  return <button type="button" className="composer-chip" data-testid="session-start-conversation" disabled={!idle} title={idle ? 'Bring a second AI into this session' : 'Wait until this turn finishes.'} onClick={onStart}><Icon name="chats" size={14} />Bring in another AI</button>;
 }
