@@ -424,6 +424,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     if (result.status === 'completed') {
       this.sessionManager.updateAgentState(issueKey, 'completed');
       this.appendEvent(issueKey, evt('idle', 'Agent session idle after completion'));
+      void this.sessionManager.refreshHandoverBrief(issueKey);
     } else if (result.status === 'aborted') {
       // abortTask already sets state
     } else if (result.status === 'step_limit') {

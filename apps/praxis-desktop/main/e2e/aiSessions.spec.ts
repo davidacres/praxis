@@ -430,15 +430,15 @@ test('the inspector is tabbed state, not a second copy of the conversation', asy
   const inspector = win.locator('[data-testid="session-inspector"]');
   await expect(inspector).not.toContainText('FX-BE-097');
   await expect(win.locator('[data-testid="session-last-message"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-purpose-goal"]')).toContainText('Summarise the plan.');
+  await expect(win.locator('[data-testid="session-handover-brief"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-brief-progress"]')).toContainText('Here is a table');
+  await expect(win.locator('[data-testid="session-summary-idle"]')).toHaveCount(0);
 
   // Three tabs, with real tab semantics.
   const tabs = inspector.getByRole('tab');
   await expect(tabs).toHaveCount(3);
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
-
-  // A finished session with no plan has nothing live to show, and says so
-  // rather than rendering a blank pane.
-  await expect(win.locator('[data-testid="session-summary-idle"]')).toContainText('finished');
 
   await win.locator('[data-testid="session-tab-changes"]').click();
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'false');
@@ -500,4 +500,82 @@ test('the agent\'s reply uses the pane it has; yours stays a reply beside it', a
   // spoke without reading a label.
   expect(userBox!.width).toBeLessThan(paneBox!.width * 0.6);
   expect(userBox!.x).toBeGreaterThan(assistantBox!.x);
+});
+
+test('change model and handover stay disabled while a turn is running', async () => {
+  mock = await startMockGatewayServer({ mode: 'hang' });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-handover-busy-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Keep running.' } });
+  });
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await expect(win.locator('[data-testid="session-change-model"]')).toBeDisabled();
+  await expect(win.locator('[data-testid="session-handover"]')).toBeDisabled();
+  await win.evaluate(async () => {
+    const sessions = await window.praxis.ai.listSessions();
+    if (sessions[0]) await window.praxis.ai.abort(sessions[0].issueKey);
+  });
+});
+
+test('a completed session can edit its brief, change model, and hand over', async () => {
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    models: [{ id: 'mock/model' }, { id: 'mock/other' }]
+  });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-handover-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      task: { goal: 'Ship the living brief.', scope: 'Session inspector', definitionOfDone: 'Handover works' }
+    });
+  });
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  await expect(win.locator('[data-testid="session-purpose-goal"]')).toContainText('Ship the living brief.');
+  await expect(win.locator('[data-testid="session-purpose-scope"]')).toContainText('Session inspector');
+  await expect.poll(async () => win.locator('[data-testid="session-brief-progress"]').textContent(), {
+    timeout: 15000
+  }).toContain('Mock gateway reply');
+
+  await win.locator('[data-testid="session-brief-edit"]').click();
+  await win.locator('[data-testid="session-brief-notes"]').fill('Keep the worktree.');
+  await win.locator('[data-testid="session-brief-save"]').click();
+  await expect(win.locator('[data-testid="session-brief-notes"]')).toHaveText('Keep the worktree.');
+
+  await win.locator('[data-testid="session-change-model"]').click();
+  const modelDialog = win.locator('[data-testid="session-model-dialog"]');
+  await expect(modelDialog).toBeVisible();
+  await expect(modelDialog.locator('[data-testid="session-transition-model"] option[value="mock/other"]')).toHaveCount(1, {
+    timeout: 15000
+  });
+  await modelDialog.locator('[data-testid="session-transition-model"]').selectOption('mock/other');
+  await modelDialog.locator('[data-testid="session-transition-confirm"]').click();
+  await expect(modelDialog).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/other');
+  await expect(win.locator('[data-testid="session-runtime-epoch"]')).toHaveCount(2);
+
+  await win.locator('[data-testid="session-handover"]').click();
+  const handover = win.locator('[data-testid="session-handover-dialog"]');
+  await expect(handover).toBeVisible();
+  await handover.locator('[data-testid="session-handover-provider"]').selectOption('vercel-gateway');
+  await expect(handover.locator('[data-testid="session-transition-model"] option[value="mock/model"]')).toHaveCount(1, {
+    timeout: 15000
+  });
+  await handover.locator('[data-testid="session-transition-model"]').selectOption('mock/model');
+  await handover.locator('[data-testid="session-transition-confirm"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/model');
+  await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('taking over this Praxis session');
+  await expect(win.locator('[data-testid="session-brief-notes"]')).toHaveText('Keep the worktree.');
+  await expect(win.locator('[data-testid="session-runtime-epoch"]')).toHaveCount(3);
 });

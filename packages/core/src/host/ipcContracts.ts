@@ -639,6 +639,27 @@ export interface AiDelegateInput {
   skillNames?: string[];
 }
 
+export interface AiHandoverBriefEdits {
+  progress?: string;
+  changes?: string;
+  decisions?: string;
+  risks?: string;
+  openQuestions?: string;
+  nextSteps?: string;
+  userNotes?: string;
+}
+
+export interface AiHandoverInput {
+  provider: AiProvider;
+  model?: string;
+  expectedBriefRevision: number;
+  briefEdits?: AiHandoverBriefEdits;
+}
+
+export interface AiSessionModelInput {
+  model: string;
+}
+
 /**
  * AI slice: Vercel-gateway provider setup plus agent session lifecycle. The API
  * key lives in the OS-keychain secrets store and never crosses IPC — the
@@ -684,6 +705,16 @@ export interface AiIpc {
   abort(issueKey: string): Promise<void>;
   /** Sends a follow-up message and continues the existing recorded session. */
   continueSession(issueKey: string, message: string): Promise<void>;
+  /** Changes the model used for the next turn of an idle session. */
+  updateSessionModel(issueKey: string, model: string): Promise<AgentSessionRecord>;
+  /** Hands the same Praxis session to another provider and seeds it with the living brief. */
+  handoverSession(issueKey: string, input: AiHandoverInput): Promise<AgentSessionRecord>;
+  /** Saves user edits to the living handover brief. */
+  editHandoverBrief(
+    issueKey: string,
+    expectedRevision: number,
+    edits: AiHandoverBriefEdits
+  ): Promise<AgentSessionRecord>;
   /**
    * Removes the git worktree a session was created in (branch and checkout).
    * Fails if the session has no worktree or its task is still running.
