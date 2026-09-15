@@ -22,7 +22,7 @@ import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { basename, contextPressure, formatCost, isWorkflowStageSession, liveActivity, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
-import { SessionConversationActions, SessionConversationDialog, SessionRuntimeActions, SessionTransitionDialogs } from './SessionHandover';
+import { SessionConversationActions, SessionConversationDialog, canChangeSessionRuntime, SessionTransitionDialogs } from './SessionHandover';
 import { GadgetBlockList } from './gadgets';
 import { gadgetMessageKey, groupBlocksByMessage, mayContainGadget, stripGadgetFences } from './gadgets/messageText';
 
@@ -1037,26 +1037,33 @@ export function SessionsPage({
                       <span className="terminal-context-dot" aria-hidden="true" />
                     </button>
                   )}
-                  {/* Fixed for the session's life — the same facts the New Session
-                      composer asked for when it started, read back here rather
-                      than tucked away in the inspector. */}
+                  {/* Read back from the session state; interactive when idle to allow runtime changes. */}
                   {selected.provider && (
-                    <span className="composer-chip session-runtime-chip" data-testid="session-provider" title="This session's AI provider">
+                    <button 
+                      type="button"
+                      className="composer-chip session-runtime-chip" 
+                      data-testid="session-provider" 
+                      title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Hand this session to another AI' : "This session's AI provider"}
+                      disabled={conversationRunning || !canChangeSessionRuntime(selected)}
+                      onClick={() => setTransitionDialog('handover')}
+                    >
                       <Icon name={providerIconName(selected.provider)} size={14} />
                       {PROVIDER_LABELS[selected.provider]}
-                    </span>
+                    </button>
                   )}
                   {selected.model && (
-                    <span className="composer-chip session-runtime-chip" data-testid="session-model" title="This session's AI model">
+                    <button 
+                      type="button"
+                      className="composer-chip session-runtime-chip" 
+                      data-testid="session-model" 
+                      title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Change the model for the next turn' : "This session's AI model"}
+                      disabled={conversationRunning || !canChangeSessionRuntime(selected)}
+                      onClick={() => setTransitionDialog('model')}
+                    >
                       <Icon name="sparkles" size={14} />
                       {selected.model}
-                    </span>
+                    </button>
                   )}
-                  {!conversationRunning && <SessionRuntimeActions
-                    session={selected}
-                    onChangeModel={() => setTransitionDialog('model')}
-                    onHandover={() => setTransitionDialog('handover')}
-                  />}
                   <SessionConversationActions
                     session={selected}
                     onStart={() => setConversationDialogOpen(true)}

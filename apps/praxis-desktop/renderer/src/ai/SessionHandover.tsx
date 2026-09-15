@@ -300,44 +300,7 @@ export function SessionTransitionDialogs({ session, open, onClose }: TransitionD
   );
 }
 
-export function SessionRuntimeActions({
-  session,
-  onChangeModel,
-  onHandover
-}: {
-  session: AgentSessionRecord;
-  onChangeModel: () => void;
-  onHandover: () => void;
-}) {
-  const idle = canChangeSessionRuntime(session);
-  const reason = idle ? undefined : 'Wait until this turn finishes.';
-  return (
-    <>
-      <button
-        type="button"
-        className="composer-chip"
-        data-testid="session-change-model"
-        disabled={!idle}
-        title={reason ?? 'Change the model for the next turn'}
-        onClick={onChangeModel}
-      >
-        <Icon name="sparkles" size={14} />
-        Change model
-      </button>
-      <button
-        type="button"
-        className="composer-chip"
-        data-testid="session-handover"
-        disabled={!idle}
-        title={reason ?? 'Hand this session to another AI'}
-        onClick={onHandover}
-      >
-        <Icon name={session.provider ? providerIconName(session.provider) : 'globe'} size={14} />
-        Hand over
-      </button>
-    </>
-  );
-}
+
 
 export function SessionConversationDialog({ session, open, onClose }: { session: AgentSessionRecord; open: boolean; onClose: () => void }) {
   const defaultProvider = [...MODEL_PROVIDERS].find(provider => provider !== session.provider) ?? session.provider ?? 'openai';
