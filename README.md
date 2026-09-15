@@ -112,6 +112,13 @@ cd apps/praxis-desktop/main
 PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent
 ```
 
+Cross-provider handover (two signed-in CLIs, spends twice) is the same project:
+
+```bash
+cd apps/praxis-desktop/main
+PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent e2e/aiLiveHandover.live.spec.ts
+```
+
 ### Run the app
 
 ```bash

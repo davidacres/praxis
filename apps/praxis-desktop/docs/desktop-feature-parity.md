@@ -82,6 +82,7 @@ and Electron integration. Last audited: 2026-09-15.
 | Living handover brief | ✓ | Auto-refreshes after each completed turn; user-editable notes survive refresh (FX-BE-115) |
 | Change model during a session | ✓ | Composer action; blocked while a turn is running; records a runtime epoch (FX-BE-115) |
 | Hand over to another AI | ✓ | Same Praxis session and worktree; receiving AI gets a redacted brief and is asked to inspect files (FX-BE-115) |
+| Multi-AI conversation in one session | ✓ | Opt-in Bring in another AI (consult / debate / pair); attributed assistant speakers, sequential tool ownership and capped turns; not default handover (FX-BE-122) |
 | AI review of issue | ✓ | Issue detail action; review panel streams markdown |
 | Issue analysis window | ✓ | Issue detail action; runs analysis workflow + shows results inline |
 | Delivery workflow (publish command / artifact pattern) | ✓ | Workflow stages with delivery gates; publishes artifacts to Claude.ai |

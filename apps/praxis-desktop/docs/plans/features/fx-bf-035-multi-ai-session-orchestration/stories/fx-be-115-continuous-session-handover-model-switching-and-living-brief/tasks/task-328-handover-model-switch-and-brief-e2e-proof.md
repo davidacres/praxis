@@ -24,7 +24,9 @@ accessibility or visual regressions.
 ## Implementation notes
 
 - Extend the real scripted ACP fixture and add deterministic API provider stubs;
-  no live-agent test belongs in the default suite.
+  no live-agent test belongs in the default suite. Opt-in proof of a real
+  two-agent handover lives in `e2e/aiLiveHandover.live.spec.ts` (`PRAXIS_LIVE_AGENT=1`
+  and `--project=live-agent` only).
 - Cover old-record loading, automatic refresh after each completed turn, user edit
   preservation, stale/failed refresh display, API model change, ACP config-option
   change, ACP fresh-runtime fallback and cross-provider handover.

@@ -28,6 +28,7 @@ Praxis can plan, launch, observe, hand off, review and recover AI coding session
 - Continuous in-session model changes, provider handovers and runtime history.
 - A living, user-editable handover brief and visible ticket or plan purpose.
 - Manual and automated provider handoffs.
+- Opt-in multi-AI conversation (consult / debate / pair) in one session, distinct from handover.
 - Redacted operational evidence and deterministic validation.
 
 ## Non-goals
@@ -35,6 +36,7 @@ Praxis can plan, launch, observe, hand off, review and recover AI coding session
 - Reimplementing Claude, Codex or Copilot.
 - Reading private provider conversation histories.
 - Allowing concurrent writes to one worktree.
+- Making multi-AI conversation the default instead of one-way handover.
 - Automatically merging unvalidated or policy-blocked changes.
 - Requiring cloud services for the local milestone.
 - Treating a provider completion claim as proof of success.
@@ -49,6 +51,7 @@ Praxis can plan, launch, observe, hand off, review and recover AI coding session
 | FX-BE-094 | Worktree, file claims and change governance | Planned | FX-BE-092, FX-BF-003 |
 | FX-BE-095 | Orchestration runtime, task graph and recovery | Planned | FX-BE-093, FX-BE-094, FX-BF-013 |
 | FX-BE-096 | Session operations and review experience | Planned | FX-BE-095, FX-BE-115, FX-BF-014, FX-BF-015 |
+| FX-BE-122 | Opt-in multi-AI conversation in one session | Complete | FX-BE-115, FX-BE-092, FX-BF-015, FX-BF-017 |
 
 ## Definition of done
 
@@ -66,4 +69,3 @@ Use stub adapters for deterministic end-to-end tests and captured output fixture
 
 
 ## Comments
-

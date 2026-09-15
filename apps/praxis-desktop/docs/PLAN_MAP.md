@@ -327,6 +327,7 @@ Canonical sequencing and architectural decisions: [multi-AI orchestration roadma
 | FX-BE-095 | Story | Orchestration runtime, task graph and recovery | Planned | FX-BE-093, FX-BE-094, FX-BF-013 |
 | FX-BE-115 | Story | Continuous session handover, model switching and living brief | Complete | FX-BE-092, FX-BE-093, FX-BF-015, FX-BF-017 |
 | FX-BE-096 | Story | Session operations and review experience | Planned | FX-BE-095, FX-BE-115, FX-BF-014, FX-BF-015 |
+| FX-BE-122 | Story | Opt-in multi-AI conversation in one session | Complete | FX-BE-115, FX-BE-092, FX-BF-015, FX-BF-017 |
 | TASK-253 | Task | Define shared session contracts | Planned | FX-BE-092 |
 | TASK-254 | Task | Generate bounded context snapshots | Planned | TASK-253 |
 | TASK-255 | Task | Generate provider-specific prompts | Planned | TASK-254 |
@@ -357,6 +358,12 @@ Canonical sequencing and architectural decisions: [multi-AI orchestration roadma
 | TASK-326 | Task | Show purpose, brief, history and transition controls | Complete | TASK-322, TASK-323, TASK-324, TASK-325, FX-BF-015 |
 | TASK-327 | Task | Integrate session entry points, attribution and recovery | Complete | TASK-323, TASK-324, TASK-325, FX-BF-012, FX-BF-013 |
 | TASK-328 | Task | Prove handover, model switch and living brief in e2e | Complete | TASK-326, TASK-327 |
+| TASK-329 | Task | Add conversation, participant and speaker-attribution contracts | Complete | FX-BE-122, FX-BE-115, FX-BE-092 |
+| TASK-330 | Task | Host bounded turn-taking between two providers | Complete | TASK-329, TASK-325 |
+| TASK-331 | Task | Render each AI as a distinct speaker in chat | Complete | TASK-329, FX-BF-015, FX-BF-017 |
+| TASK-332 | Task | Add Bring in another AI, stop and tool-owner controls | Complete | TASK-330, TASK-331 |
+| TASK-333 | Task | Enforce tool ownership, turn cap and spend visibility | Complete | TASK-330, TASK-332 |
+| TASK-334 | Task | Prove conversation, identity and safety end to end | Complete | TASK-331, TASK-332, TASK-333 |
 
 ## Interactive chat gadgets
 

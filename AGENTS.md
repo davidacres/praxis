@@ -755,6 +755,23 @@ project and additionally refuse to run without the env opt-in:
 PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent
 ```
 
+Handover between two real CLIs is the same opt-in project, in
+`aiLiveHandover.live.spec.ts` — first agent fixes addition only, then Praxis
+hands the same session to a second signed-in CLI (`PRAXIS_LIVE_HANDOVER_TO` /
+`PRAXIS_LIVE_HANDOVER_CMD`, default Codex) which must finish multiplication
+from the envelope. Run that file alone when you want the spendy proof.
+
+`aiLiveConversation.live.spec.ts` is the corresponding FX-BE-122 proof: it
+starts an explicit two-turn, read-only consult with Claude Code and Codex and
+asserts two visible attributed speakers. It uses the same `PRAXIS_LIVE_AGENT=1`
+gate and is never part of `npm run test:desktop`.
+
+**Hand over** is deliberately one-way. The separate **Bring in another AI**
+composer action starts a bounded multi-AI conversation: both speakers remain in
+one transcript, turns are sequential, consult/debate are read-only, and pair
+mode grants full tools only to the selected owner. Never fold that opt-in flow
+into handover or record its internal routing instructions as user messages.
+
 Never add them to `npm run test:desktop`. Keep the task small and self-verifying —
 the current one seeds a repository whose own `node --test` suite fails and asks the
 agent to make it pass, so success is measured by running that suite afterwards
