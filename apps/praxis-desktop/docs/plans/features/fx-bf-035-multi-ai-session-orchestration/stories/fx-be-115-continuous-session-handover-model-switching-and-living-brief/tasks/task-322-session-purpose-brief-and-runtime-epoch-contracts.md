@@ -6,10 +6,10 @@
 type: Task
 id: TASK-322
 title: "Add purpose, living-brief and runtime-epoch session contracts"
-status: Proposed
+status: Done
 story: FX-BE-115
 feature: FX-BF-035
-updated: 2026-09-14
+updated: 2026-09-15
 dependencies: [FX-BE-115, FX-BE-092]
 ---
 

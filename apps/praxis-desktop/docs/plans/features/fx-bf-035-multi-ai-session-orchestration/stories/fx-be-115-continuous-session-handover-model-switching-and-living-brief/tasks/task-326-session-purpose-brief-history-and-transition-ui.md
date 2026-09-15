@@ -6,10 +6,10 @@
 type: Task
 id: TASK-326
 title: "Add purpose, brief, runtime history and transition controls to the session UI"
-status: Proposed
+status: Done
 story: FX-BE-115
 feature: FX-BF-035
-updated: 2026-09-14
+updated: 2026-09-15
 dependencies: [TASK-322, TASK-323, TASK-324, TASK-325, FX-BF-015]
 ---
 

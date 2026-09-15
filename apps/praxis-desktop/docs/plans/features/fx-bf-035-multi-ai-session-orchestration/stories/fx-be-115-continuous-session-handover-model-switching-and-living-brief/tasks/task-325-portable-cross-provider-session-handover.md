@@ -6,10 +6,10 @@
 type: Task
 id: TASK-325
 title: "Hand a continuous session between providers using portable context"
-status: Proposed
+status: Done
 story: FX-BE-115
 feature: FX-BF-035
-updated: 2026-09-14
+updated: 2026-09-15
 dependencies: [TASK-322, TASK-323, FX-BE-092, FX-BE-093]
 ---
 

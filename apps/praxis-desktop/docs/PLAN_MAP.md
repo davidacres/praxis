@@ -325,7 +325,8 @@ Canonical sequencing and architectural decisions: [multi-AI orchestration roadma
 | FX-BE-093 | Story | Provider adapters and capability preflight | Planned | FX-BE-092 |
 | FX-BE-094 | Story | Worktree, file claims and change governance | Planned | FX-BE-092, FX-BF-003 |
 | FX-BE-095 | Story | Orchestration runtime, task graph and recovery | Planned | FX-BE-093, FX-BE-094, FX-BF-013 |
-| FX-BE-096 | Story | Session operations and review experience | Planned | FX-BE-095, FX-BF-014, FX-BF-015 |
+| FX-BE-115 | Story | Continuous session handover, model switching and living brief | Complete | FX-BE-092, FX-BE-093, FX-BF-015, FX-BF-017 |
+| FX-BE-096 | Story | Session operations and review experience | Planned | FX-BE-095, FX-BE-115, FX-BF-014, FX-BF-015 |
 | TASK-253 | Task | Define shared session contracts | Planned | FX-BE-092 |
 | TASK-254 | Task | Generate bounded context snapshots | Planned | TASK-253 |
 | TASK-255 | Task | Generate provider-specific prompts | Planned | TASK-254 |
@@ -349,6 +350,13 @@ Canonical sequencing and architectural decisions: [multi-AI orchestration roadma
 | TASK-273 | Task | Add safe session operations | Planned | TASK-271 |
 | TASK-274 | Task | Add merge-readiness ledger | Planned | TASK-272, TASK-273 |
 | TASK-275 | Task | Add accessibility and E2E verification | Planned | TASK-274 |
+| TASK-322 | Task | Add purpose, living-brief and runtime-epoch session contracts | Complete | FX-BE-115, FX-BE-092 |
+| TASK-323 | Task | Refresh a revision-safe living brief after every completed turn | Complete | TASK-322 |
+| TASK-324 | Task | Change models between turns with runtime epochs | Complete | TASK-322, FX-BE-093 |
+| TASK-325 | Task | Hand a continuous session between providers | Complete | TASK-322, TASK-323, FX-BE-092, FX-BE-093 |
+| TASK-326 | Task | Show purpose, brief, history and transition controls | Complete | TASK-322, TASK-323, TASK-324, TASK-325, FX-BF-015 |
+| TASK-327 | Task | Integrate session entry points, attribution and recovery | Complete | TASK-323, TASK-324, TASK-325, FX-BF-012, FX-BF-013 |
+| TASK-328 | Task | Prove handover, model switch and living brief in e2e | Complete | TASK-326, TASK-327 |
 
 ## Interactive chat gadgets
 
