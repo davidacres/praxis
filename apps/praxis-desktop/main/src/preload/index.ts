@@ -4,6 +4,8 @@ import type {
   AgentWorkflowReference,
   AiAnalysisState,
   AiDelegateInput,
+  AiHandoverBriefEdits,
+  AiHandoverInput,
   AiProvider,
   AiReviewProgress,
   AppSettings,
@@ -208,6 +210,12 @@ const praxis: PraxisIpc = {
     abort: (issueKey: string) => ipcRenderer.invoke('ai:abort', issueKey),
     continueSession: (issueKey: string, message: string) =>
       ipcRenderer.invoke('ai:continueSession', issueKey, message),
+    updateSessionModel: (issueKey: string, model: string) =>
+      ipcRenderer.invoke('ai:updateSessionModel', issueKey, model),
+    handoverSession: (issueKey: string, input: AiHandoverInput) =>
+      ipcRenderer.invoke('ai:handoverSession', issueKey, input),
+    editHandoverBrief: (issueKey: string, expectedRevision: number, edits: AiHandoverBriefEdits) =>
+      ipcRenderer.invoke('ai:editHandoverBrief', issueKey, expectedRevision, edits),
     removeWorktree: (issueKey: string) => ipcRenderer.invoke('ai:removeWorktree', issueKey),
     switchSessionMode: (issueKey: string, mode: SessionMode) =>
       ipcRenderer.invoke('ai:switchSessionMode', issueKey, mode),

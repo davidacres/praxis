@@ -20,7 +20,10 @@ import {
   type AgentToolMode,
   type AgentWorkflowReference,
   type AiDelegateInput,
+  type AiHandoverBriefEdits,
+  type AiHandoverInput,
   type AiProvider,
+  buildHandoverEnvelope,
   type AiReviewProgress,
   type IssueDetails,
   type IssueTrackerService,
@@ -267,6 +270,64 @@ function mergeToolExtensions(...parts: Array<ToolExtension | undefined>): ToolEx
 export function registerAiIpc(): void {
   const sessionManager = getAiSessionManager();
   const agentService = getVercelAgentService();
+
+  async function assertModelAvailable(provider: AiProvider, model: string): Promise<void> {
+    const descriptor = PROVIDER_DESCRIPTORS[provider];
+    const options = descriptor.kind === 'cli-agent'
+      ? await listCliModelOptions(provider).catch(() => undefined)
+      : await listApiModelOptions(provider).catch(() => undefined);
+    if (options && options.options.length > 0 && !options.options.some(option => option.value === model)) {
+      throw new Error(`${model} is not available for ${descriptor.label}.`);
+    }
+  }
+
+  async function continueRecordedSession(issueKey: string, message: string): Promise<void> {
+    const followUp = message.trim();
+    if (!followUp) {
+      throw new Error('Enter a follow-up message.');
+    }
+    const record = sessionManager.getAgentSession(issueKey);
+    if (!record) {
+      throw new Error(`No agent session found for ${issueKey}.`);
+    }
+    const provider = record.provider ?? getSettingsBackend().read().ai.activeProvider;
+    const descriptor = PROVIDER_DESCRIPTORS[provider];
+    const settings = getSettingsBackend().read();
+    const workingDirectory = record.workingDirectory?.trim() || settings.ai.workingDirectory.trim() || undefined;
+    const toolMode = record.toolMode ?? 'full';
+
+    if (descriptor.kind === 'cli-agent') {
+      const browserMcp = await browserMcpServerForSession(issueKey, toolMode);
+      await getAcpAgentHost().continueTask(issueKey, followUp, {
+        ...resolveAcpStartOptions(provider),
+        model: record.model,
+        workingDirectory,
+        toolMode,
+        ...(browserMcp ? { mcpServers: [browserMcp] } : {})
+      });
+      return;
+    }
+
+    const connection = await resolveConnectionOptions(provider);
+    if (!connection.apiKey) {
+      throw new Error(`No ${descriptor.label} API key configured. Add one under Settings → AI Provider.`);
+    }
+    const trackerService = record.issueKey.startsWith('SESSION-')
+      ? undefined
+      : await getServiceForConnection(record.connectionId).catch(() => undefined);
+    await agentService.resumeTask(issueKey, {
+      provider,
+      apiKey: connection.apiKey,
+      gatewayUrl: connection.gatewayUrl,
+      model: record.model || connection.model,
+      workingDirectory,
+      toolMode,
+      toolExtension: mergeToolExtensions(
+        trackerToolExtension(trackerService, toolMode),
+        browserToolExtension(toolMode)
+      )
+    }, followUp);
+  }
 
   ipcMain.handle('ai:getStatus', async () => getAiProviderStatus());
 
@@ -624,51 +685,77 @@ export function registerAiIpc(): void {
   ipcMain.handle(
     'ai:continueSession',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, message: string) => {
-      const followUp = message.trim();
-      if (!followUp) {
-        throw new Error('Enter a follow-up message.');
-      }
+      await continueRecordedSession(issueKey, message);
+    }
+  );
+
+  ipcMain.handle(
+    'ai:updateSessionModel',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, model: string) => {
+      const trimmed = model.trim();
+      if (!trimmed) throw new Error('Choose a model.');
       const record = sessionManager.getAgentSession(issueKey);
-      if (!record) {
-        throw new Error(`No agent session found for ${issueKey}.`);
+      if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+      if (hasActiveTask(issueKey)) {
+        throw new Error('Wait for the session to finish this turn before changing model.');
       }
       const provider = record.provider ?? getSettingsBackend().read().ai.activeProvider;
+      await assertModelAvailable(provider, trimmed);
+      if (record.model === trimmed) return record;
       const descriptor = PROVIDER_DESCRIPTORS[provider];
-      const settings = getSettingsBackend().read();
-      const workingDirectory = record.workingDirectory?.trim() || settings.ai.workingDirectory.trim() || undefined;
-      const toolMode = record.toolMode ?? 'full';
-
-      if (descriptor.kind === 'cli-agent') {
-        const browserMcp = await browserMcpServerForSession(issueKey, toolMode);
-        await getAcpAgentHost().continueTask(issueKey, followUp, {
-          ...resolveAcpStartOptions(provider),
-          model: record.model,
-          workingDirectory,
-          toolMode,
-          ...(browserMcp ? { mcpServers: [browserMcp] } : {})
-        });
-        return;
-      }
-
-      const connection = await resolveConnectionOptions(provider);
-      if (!connection.apiKey) {
-        throw new Error(`No ${descriptor.label} API key configured. Add one under Settings → AI Provider.`);
-      }
-      const trackerService = record.issueKey.startsWith('SESSION-')
-        ? undefined
-        : await getServiceForConnection(record.connectionId).catch(() => undefined);
-      await agentService.resumeTask(issueKey, {
+      return sessionManager.transitionAgentRuntime(issueKey, {
         provider,
-        apiKey: connection.apiKey,
-        gatewayUrl: connection.gatewayUrl,
-        model: record.model || connection.model,
-        workingDirectory,
-        toolMode,
-        toolExtension: mergeToolExtensions(
-          trackerToolExtension(trackerService, toolMode),
-          browserToolExtension(toolMode)
-        )
-      }, followUp);
+        model: trimmed,
+        reason: 'model_change',
+        clearNativeRuntime: descriptor.kind === 'cli-agent',
+        eventSummary: `Model changed to ${trimmed}`,
+        eventDetail: record.model ? `Previous model: ${record.model}` : undefined
+      });
+    }
+  );
+
+  ipcMain.handle(
+    'ai:editHandoverBrief',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      issueKey: string,
+      expectedRevision: number,
+      edits: AiHandoverBriefEdits
+    ) => {
+      sessionManager.editHandoverBrief(issueKey, expectedRevision, edits);
+      return sessionManager.getAgentSession(issueKey)!;
+    }
+  );
+
+  ipcMain.handle(
+    'ai:handoverSession',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, input: AiHandoverInput) => {
+      const record = sessionManager.getAgentSession(issueKey);
+      if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+      if (hasActiveTask(issueKey)) {
+        throw new Error('Wait for the session to finish this turn before handing over.');
+      }
+      const targetProvider = input.provider;
+      const descriptor = PROVIDER_DESCRIPTORS[targetProvider];
+      if (!descriptor) throw new Error('Unknown provider.');
+      const model = input.model?.trim() || undefined;
+      if (model) await assertModelAvailable(targetProvider, model);
+      if (input.briefEdits) {
+        sessionManager.editHandoverBrief(issueKey, input.expectedBriefRevision, input.briefEdits);
+      }
+      await sessionManager.refreshHandoverBrief(issueKey);
+      const current = sessionManager.getAgentSession(issueKey) ?? record;
+      const envelope = buildHandoverEnvelope(current, { provider: targetProvider, model });
+      sessionManager.transitionAgentRuntime(issueKey, {
+        provider: targetProvider,
+        model,
+        reason: 'provider_handover',
+        clearNativeRuntime: true,
+        eventSummary: `Handed over to ${descriptor.label}${model ? ` (${model})` : ''}`,
+        eventDetail: envelope.text
+      });
+      await continueRecordedSession(issueKey, envelope.text);
+      return sessionManager.getAgentSession(issueKey)!;
     }
   );
 

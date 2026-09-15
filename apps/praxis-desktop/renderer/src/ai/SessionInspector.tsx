@@ -4,6 +4,7 @@ import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
 import { SessionChanges } from './SessionChanges';
+import { SessionHandoverBrief, SessionPurposeBlock, SessionRuntimeHistory } from './SessionHandover';
 import { SessionTasks } from './SessionTasks';
 import { SessionActivity } from './SessionActivity';
 import { failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, reasoningSnippet, sessionMode } from './sessionNav';
@@ -140,6 +141,9 @@ export function SessionInspector({ session }: SessionInspectorProps) {
       <div className="inspector-body" role="tabpanel" data-testid={`session-panel-${tab}`}>
         {tab === 'summary' && (
           <>
+            <SessionPurposeBlock session={session} />
+            <SessionHandoverBrief session={session} />
+            <SessionRuntimeHistory session={session} />
             {/* What the agent says it's doing, live — stays put here while the
                 transcript in the centre pane keeps scrolling past it. */}
             <SessionTasks session={session} />
@@ -164,7 +168,7 @@ export function SessionInspector({ session }: SessionInspectorProps) {
             {/* Everything on this tab is live state, so a finished session with
                 no recorded plan has genuinely nothing to show. Saying so beats
                 a blank pane, which reads as a failure to load. */}
-            {!activity && !reasoning && !session.taskList?.length && (
+            {!activity && !reasoning && !session.taskList?.length && !session.purpose && !session.handoverBrief && (
               <div className="empty-state" data-testid="session-summary-idle">
                 <Icon name="check" size={24} />
                 <span>

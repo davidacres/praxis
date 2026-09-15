@@ -217,7 +217,54 @@ export type AgentEventType =
   | 'task_complete'
   | 'aborted'
   | 'info'
-  | 'warning';
+  | 'warning'
+  | 'model_change'
+  | 'provider_handover';
+
+/** Why a session exists — a snapshot of the ticket or plan at session creation. */
+export interface SessionPurpose {
+  issueKey: string;
+  title?: string;
+  goal: string;
+  scope: string;
+  definitionOfDone: string;
+}
+
+export type HandoverBriefFreshness = 'updating' | 'fresh' | 'stale' | 'failed';
+
+/** Structured living account of the session, distinct from git file listings. */
+export interface HandoverBrief {
+  schemaVersion: number;
+  revision: number;
+  updatedAt: string;
+  /** Number of events covered by this revision. */
+  sourceEventCount: number;
+  freshness: HandoverBriefFreshness;
+  lastError?: string;
+  progress: string;
+  changes: string;
+  decisions: string;
+  risks: string;
+  openQuestions: string;
+  nextSteps: string;
+  /** User-authored notes; automatic refresh must not erase these. */
+  userNotes: string;
+  touchedFiles: string[];
+}
+
+export type RuntimeEpochReason = 'started' | 'model_change' | 'provider_handover';
+
+/** One provider/model segment inside a continuous Praxis session. */
+export interface SessionRuntimeEpoch {
+  id: string;
+  provider?: AiProvider;
+  model?: string;
+  runtimeSessionId?: string;
+  startedAt: string;
+  endedAt?: string;
+  reason: RuntimeEpochReason;
+  tokenUsage?: TokenUsage;
+}
 
 /** Persisted chat turn for gateway agent resume (OpenAI-compatible wire messages). */
 export interface AgentConversationMessage {
@@ -284,6 +331,12 @@ export interface AgentSessionRecord {
   skillActivations?: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }>;
   state: AgentTaskState;
   taskDefinition: AgentTaskDefinition;
+  /** Ticket/plan purpose captured when the session started. Older records fall back to taskDefinition. */
+  purpose?: SessionPurpose;
+  /** Living handover brief; absent on records written before FX-BE-115. */
+  handoverBrief?: HandoverBrief;
+  /** Provider/model segments. Older records have none; current provider/model still apply. */
+  runtimeEpochs?: SessionRuntimeEpoch[];
   delivery?: DeliverySessionMetadata;
   events: AgentEventSummary[];
   planText?: string;

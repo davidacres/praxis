@@ -17,6 +17,7 @@ export * from './ai/providers/modelCatalog';
 export * from './ai/acp/acpAgentHost';
 export * from './ai/cliProbe';
 export * from './ai/agentTypes';
+export * from './ai/sessionHandover';
 export * from './ai/agentContracts';
 export * from './ai/agentEventUtils';
 export * from './ai/agentWorkflowCatalog';

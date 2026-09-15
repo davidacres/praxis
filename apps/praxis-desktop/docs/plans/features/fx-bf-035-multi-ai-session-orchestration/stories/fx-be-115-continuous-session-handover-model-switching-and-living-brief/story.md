@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-14
 **Type:** Story
 **Priority:** High
 type: Story
 id: FX-BE-115
 title: "Continuous session handover, model switching and living brief"
-status: To Do
+status: Done
 feature: FX-BF-035
 updated: 2026-09-14
 dependencies: [FX-BE-092, FX-BE-093, FX-BF-015, FX-BF-017]

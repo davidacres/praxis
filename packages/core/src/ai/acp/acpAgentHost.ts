@@ -178,6 +178,15 @@ function readAcpToolContent(content: acp.ToolCallContent[] | null | undefined): 
   return { fileChanges, output: textParts.join('\n').trim() };
 }
 
+async function applyAcpModel(client: AcpClientWrapper, model?: string): Promise<void> {
+  if (!model) return;
+  try {
+    await client.setConfigOption('model', model);
+  } catch {
+    // Not every ACP agent exposes a model config option; the prompt still runs.
+  }
+}
+
 export class AcpAgentHost {
   private readonly activeTasks = new Map<string, ActiveAcpTask>();
   private readonly activeTaskListeners = new Set<(issueKey: string) => void>();
@@ -283,9 +292,7 @@ export class AcpAgentHost {
     options.signal?.addEventListener('abort', cancel, { once: true });
     try {
       await client.connect();
-      if (options.model) {
-        await client.setConfigOption('model', options.model);
-      }
+      await applyAcpModel(client, options.model);
       await client.prompt(prompt);
       if (!content.trim()) {
         throw new Error('The CLI agent returned an empty response.');
@@ -550,9 +557,7 @@ export class AcpAgentHost {
 
     task.promptPromise = (async () => {
       await client.connect();
-      if (options.model) {
-        await client.setConfigOption('model', options.model);
-      }
+      await applyAcpModel(client, options.model);
       // `session/new` triggers no prompt/completion of its own, so reading
       // modes here (rather than only reacting to `current_mode_update` later)
       // costs nothing and means the composer has something to show even
@@ -585,6 +590,7 @@ export class AcpAgentHost {
       if (response.stopReason === 'end_turn' || response.stopReason === 'max_turn_requests') {
         this.sessionManager.updateAgentState(issue.key, 'completed');
         this.appendEvent(issue.key, evt('task_complete', 'Agent completed the task'));
+        void this.sessionManager.refreshHandoverBrief(issue.key);
       } else if (response.stopReason === 'cancelled') {
         // abortTask already sets the terminal state.
       } else {
@@ -697,7 +703,7 @@ export class AcpAgentHost {
 
     task.promptPromise = (async () => {
       await client.connect();
-      if (options.model) await client.setConfigOption('model', options.model);
+      await applyAcpModel(client, options.model);
       const response = await client.prompt(prompt);
       if (client.sessionId) {
         this.sessionManager.updateAgentRuntime(issueKey, { runtimeSessionId: client.sessionId });
@@ -709,6 +715,7 @@ export class AcpAgentHost {
       if (response.stopReason === 'end_turn' || response.stopReason === 'max_turn_requests') {
         this.sessionManager.updateAgentState(issueKey, 'completed');
         this.appendEvent(issueKey, evt('task_complete', 'Agent completed the follow-up'));
+        void this.sessionManager.refreshHandoverBrief(issueKey);
       } else {
         this.sessionManager.updateAgentState(issueKey, 'failed');
         this.appendEvent(issueKey, evt('error', `Agent stopped: ${response.stopReason}`));
