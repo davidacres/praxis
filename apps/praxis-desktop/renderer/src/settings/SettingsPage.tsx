@@ -1441,8 +1441,8 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     keyLabel: '',
     urlPlaceholder: '',
     modelPlaceholder: '',
-    defaultCommand: 'antigravity',
-    notInstalledHint: 'Not found on PATH — run "npm install -g antigravity".'
+    defaultCommand: 'antigravity-cli',
+    notInstalledHint: 'Not found on PATH — run "npm install -g antigravity-cli".'
   }
 ];
 
