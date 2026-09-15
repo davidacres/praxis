@@ -416,7 +416,6 @@ test('the inspector is tabbed state, not a second copy of the conversation', asy
   });
   await win.locator('[data-testid="nav-sessions"]').click();
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
-
   // The reply is in the transcript, once.
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText('FX-BE-097');
 
@@ -578,4 +577,43 @@ test('a completed session can edit its brief, change model, and hand over', asyn
   await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('taking over this Praxis session');
   await expect(win.locator('[data-testid="session-brief-notes"]')).toHaveText('Keep the worktree.');
   await expect(win.locator('[data-testid="session-runtime-epoch"]')).toHaveCount(3);
+});
+
+test('an opt-in conversation alternates attributed AI turns and stops at its cap', async () => {
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    models: [{ id: 'mock/model' }, { id: 'mock/other' }]
+  });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-conversation-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+  const session = await win.evaluate(async () => window.praxis.ai.delegate({
+    provider: 'vercel-gateway', task: { goal: 'Compare the two approaches.' }
+  }));
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  const hostModel = await win.evaluate(key => window.praxis.ai.listSessions().then(records =>
+    records.find(record => record.issueKey === key)?.model
+  ), session.issueKey);
+
+  await win.locator('[data-testid="session-start-conversation"]').click();
+  const dialog = win.locator('[data-testid="session-conversation-dialog"]');
+  await expect(dialog).toBeVisible();
+  await dialog.locator('[data-testid="session-conversation-provider"]').selectOption('vercel-gateway');
+  await dialog.locator('[data-testid="session-conversation-model"]').selectOption('mock/other');
+  await dialog.locator('[data-testid="session-conversation-turn-cap"]').fill('2');
+  await dialog.locator('[data-testid="session-conversation-confirm"]').click();
+
+  await expect.poll(async () => win.evaluate(key => window.praxis.ai.listSessions().then(records => {
+    const conversation = records.find(record => record.issueKey === key)?.conversation;
+    return conversation ? `${conversation.state}:${conversation.turnsUsed}` : '';
+  }), session.issueKey), { timeout: 15000 }).toBe('capped:2');
+  await expect(win.locator('[data-testid="session-chat-user"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-chat-assistant"]')).toHaveCount(3);
+  await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('Vercel AI Gateway · mock/other');
+  await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText(`Vercel AI Gateway · ${hostModel}`);
+  await expect(win.locator('[data-testid="session-start-conversation"]')).toBeVisible();
 });
