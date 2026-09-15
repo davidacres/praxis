@@ -12,9 +12,22 @@ import type {
   AgentTaskListItem,
   AgentTaskState,
   AgentWorkflowReference,
+  HandoverBrief,
   IssueWorkflowAssignment,
   WorkflowAssignmentSource
 } from './agentTypes';
+import {
+  applyHandoverBriefContent,
+  applyHandoverBriefUserEdits,
+  appendRuntimeEpoch,
+  assertCanChangeSessionRuntime,
+  buildDeterministicHandoverBrief,
+  emptyHandoverBrief,
+  hydrateSessionHandoverFields,
+  initialRuntimeEpoch,
+  nativeRuntimeClearedPatch,
+  purposeFromTask
+} from './sessionHandover';
 
 const STORAGE_KEY = 'praxis.aiSessions';
 const AGENT_STORAGE_KEY = 'praxis.agentSessions';
@@ -28,6 +41,8 @@ export class AiSessionManager {
   private agentSessions: Map<string, AgentSessionRecord>;
   private workflowAssignments: Map<string, IssueWorkflowAssignment>;
   private modelOverrides: Map<string, string>;
+  /** Revision at the start of the in-flight brief refresh, so a late complete cannot clobber a newer one. */
+  private handoverRefreshBase = new Map<string, number>();
 
   private readonly _onDidChangeSession = new Emitter<{
     issueKey: string;
@@ -128,21 +143,26 @@ export class AiSessionManager {
     model?: string,
     runtime?: Pick<AgentSessionRecord, 'workingDirectory' | 'toolMode' | 'runtimeSessionId' | 'connectionId'>
   ): AgentSessionRecord {
+    const startedAt = new Date().toISOString();
+    const trimmedModel = model?.trim() || undefined;
     const record: AgentSessionRecord = {
       issueKey,
       sessionId,
       provider,
-      model: model?.trim() || undefined,
+      model: trimmedModel,
       workingDirectory: runtime?.workingDirectory?.trim() || undefined,
       toolMode: runtime?.toolMode ?? 'full',
       runtimeSessionId: runtime?.runtimeSessionId,
       connectionId: runtime?.connectionId,
       state: 'not_started',
       taskDefinition,
+      purpose: purposeFromTask(taskDefinition, issueKey),
+      handoverBrief: emptyHandoverBrief(startedAt),
+      runtimeEpochs: [initialRuntimeEpoch(provider, trimmedModel, startedAt, runtime?.runtimeSessionId)],
       mode: taskDefinition.sessionMode ?? (taskDefinition.kind === 'analysis' ? 'analysis' : taskDefinition.kind === 'review' ? 'review' : 'chat'),
       events: [],
       stepCount: 0,
-      startedAt: new Date().toISOString(),
+      startedAt,
       boardId: this.sessions.get(issueKey)?.boardId
     };
     this.agentSessions.set(issueKey, record);
@@ -181,7 +201,11 @@ export class AiSessionManager {
       record.workingDirectory = runtime.workingDirectory.trim() || undefined;
     }
     if (runtime.toolMode !== undefined) record.toolMode = runtime.toolMode;
-    if (runtime.runtimeSessionId !== undefined) record.runtimeSessionId = runtime.runtimeSessionId;
+    if (runtime.runtimeSessionId !== undefined) {
+      record.runtimeSessionId = runtime.runtimeSessionId;
+      const open = record.runtimeEpochs?.find(epoch => !epoch.endedAt);
+      if (open) open.runtimeSessionId = runtime.runtimeSessionId;
+    }
     if (runtime.connectionId !== undefined) record.connectionId = runtime.connectionId;
     if (runtime.worktreePath !== undefined) record.worktreePath = runtime.worktreePath.trim() || undefined;
     if (runtime.worktreeBranch !== undefined) record.worktreeBranch = runtime.worktreeBranch.trim() || undefined;
@@ -360,6 +384,15 @@ export class AiSessionManager {
       outputTokens: add(running.outputTokens, usage.outputTokens),
       totalTokens: add(running.totalTokens, usage.totalTokens)
     };
+    const openEpoch = record.runtimeEpochs?.find(epoch => !epoch.endedAt);
+    if (openEpoch) {
+      const epochRunning = openEpoch.tokenUsage ?? {};
+      openEpoch.tokenUsage = {
+        inputTokens: add(epochRunning.inputTokens, usage.inputTokens),
+        outputTokens: add(epochRunning.outputTokens, usage.outputTokens),
+        totalTokens: add(epochRunning.totalTokens, usage.totalTokens)
+      };
+    }
     // Context pressure is this turn's prompt, not the running total — replace.
     if (typeof usage.inputTokens === 'number') {
       record.contextTokens = usage.inputTokens;
@@ -583,6 +616,151 @@ export class AiSessionManager {
     }
   }
 
+  /**
+   * Marks the living brief as updating and returns the revision a later
+   * complete/fail call must still match. Returns undefined when there is no session.
+   */
+  public beginHandoverBriefRefresh(issueKey: string): number | undefined {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) return undefined;
+    const brief = record.handoverBrief ?? emptyHandoverBrief();
+    record.handoverBrief = { ...brief, freshness: 'updating', lastError: undefined };
+    this.handoverRefreshBase.set(issueKey, brief.revision);
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return brief.revision;
+  }
+
+  /** Commits a refresh only when the expected revision is still current. */
+  public completeHandoverBriefRefresh(
+    issueKey: string,
+    expectedRevision: number,
+    content = buildDeterministicHandoverBrief(this.agentSessions.get(issueKey) as AgentSessionRecord)
+  ): HandoverBrief | undefined {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) return undefined;
+    const previous = record.handoverBrief ?? emptyHandoverBrief();
+    if (this.handoverRefreshBase.get(issueKey) !== expectedRevision) {
+      return previous;
+    }
+    this.handoverRefreshBase.delete(issueKey);
+    record.handoverBrief = applyHandoverBriefContent(previous, content, record.events.length);
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record.handoverBrief;
+  }
+
+  public failHandoverBriefRefresh(issueKey: string, expectedRevision: number, error: string): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) return;
+    const previous = record.handoverBrief ?? emptyHandoverBrief();
+    if (this.handoverRefreshBase.get(issueKey) !== expectedRevision) return;
+    this.handoverRefreshBase.delete(issueKey);
+    record.handoverBrief = {
+      ...previous,
+      freshness: 'failed',
+      lastError: error
+    };
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  public updateHandoverBriefFromEvents(issueKey: string): HandoverBrief | undefined {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) return undefined;
+    const previous = record.handoverBrief ?? emptyHandoverBrief();
+    record.handoverBrief = applyHandoverBriefContent(
+      previous,
+      buildDeterministicHandoverBrief(record),
+      record.events.length
+    );
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record.handoverBrief;
+  }
+
+  /**
+   * Refresh after a completed user-visible turn. Never throws into the turn:
+   * a failed summarizer leaves the previous brief marked failed/stale.
+   */
+  public async refreshHandoverBrief(
+    issueKey: string,
+    summarizer?: (record: AgentSessionRecord) => Promise<ReturnType<typeof buildDeterministicHandoverBrief>>
+  ): Promise<void> {
+    const expected = this.beginHandoverBriefRefresh(issueKey);
+    if (expected === undefined) return;
+    const record = this.agentSessions.get(issueKey);
+    if (!record) return;
+    try {
+      const content = summarizer
+        ? await summarizer(record)
+        : buildDeterministicHandoverBrief(record);
+      this.completeHandoverBriefRefresh(issueKey, expected, content);
+    } catch (error) {
+      this.failHandoverBriefRefresh(
+        issueKey,
+        expected,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  public editHandoverBrief(
+    issueKey: string,
+    expectedRevision: number,
+    edits: Partial<Pick<HandoverBrief, 'progress' | 'changes' | 'decisions' | 'risks' | 'openQuestions' | 'nextSteps' | 'userNotes'>>
+  ): HandoverBrief {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+    const previous = record.handoverBrief ?? emptyHandoverBrief();
+    record.handoverBrief = applyHandoverBriefUserEdits(previous, expectedRevision, edits);
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record.handoverBrief;
+  }
+
+  /**
+   * Changes the current provider and/or model, closing the open epoch and
+   * opening a new one. Provider handovers clear non-transferable native state.
+   */
+  public transitionAgentRuntime(
+    issueKey: string,
+    next: {
+      provider?: AiProvider;
+      model?: string;
+      reason: 'model_change' | 'provider_handover';
+      clearNativeRuntime?: boolean;
+      eventSummary: string;
+      eventDetail?: string;
+    }
+  ): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+    assertCanChangeSessionRuntime(record);
+    const provider = next.provider ?? record.provider;
+    const model = next.model?.trim() || undefined;
+    const clearNative = next.clearNativeRuntime ?? next.reason === 'provider_handover';
+    record.runtimeEpochs = appendRuntimeEpoch(record.runtimeEpochs ?? [], {
+      provider,
+      model,
+      reason: next.reason
+    });
+    record.provider = provider;
+    record.model = model;
+    if (clearNative) {
+      Object.assign(record, nativeRuntimeClearedPatch());
+    }
+    record.events.push({
+      timestamp: new Date().toISOString(),
+      type: next.reason,
+      summary: next.eventSummary,
+      detail: next.eventDetail
+    });
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
   public dispose(): void {
     this._onDidChangeSession.dispose();
     this._onDidChangeAgentSession.dispose();
@@ -658,7 +836,7 @@ export class AiSessionManager {
                 : event
             )
           : [];
-        result.set(key, {
+        result.set(key, hydrateSessionHandoverFields({
           ...value,
           toolMode: value.toolMode === 'read-only' || value.toolMode === 'project-only' ? value.toolMode : 'full',
           state: interrupted ? 'aborted' : value.state,
@@ -673,7 +851,7 @@ export class AiSessionManager {
                 }
               ]
             : events
-        });
+        }, interrupted));
       }
     }
     return result;

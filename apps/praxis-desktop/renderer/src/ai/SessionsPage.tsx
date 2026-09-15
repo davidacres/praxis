@@ -22,6 +22,7 @@ import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { basename, contextPressure, formatCost, isWorkflowStageSession, liveActivity, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
+import { SessionRuntimeActions, SessionTransitionDialogs } from './SessionHandover';
 import { GadgetBlockList } from './gadgets';
 import { gadgetMessageKey, groupBlocksByMessage, mayContainGadget, stripGadgetFences } from './gadgets/messageText';
 
@@ -197,6 +198,7 @@ export function SessionsPage({
   const [gadgetResults, setGadgetResults] = useState<Record<string, GadgetActionResult>>({});
   const [busyGadgetId, setBusyGadgetId] = useState<string>();
   const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
+  const [transitionDialog, setTransitionDialog] = useState<'model' | 'handover' | undefined>();
   const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
   const [browserMaximized, setBrowserMaximized] = useState(false);
   const browserDismissed = useRef(initialBrowserOpen === false);
@@ -1020,6 +1022,11 @@ export function SessionsPage({
                       {selected.model}
                     </span>
                   )}
+                  <SessionRuntimeActions
+                    session={selected}
+                    onChangeModel={() => setTransitionDialog('model')}
+                    onHandover={() => setTransitionDialog('handover')}
+                  />
                   <span
                     className="composer-chip session-runtime-chip"
                     data-testid="session-tool-mode"
@@ -1091,6 +1098,13 @@ export function SessionsPage({
           </>
         )}
       </div>
+      {selected && (
+        <SessionTransitionDialogs
+          session={selected}
+          open={transitionDialog}
+          onClose={() => setTransitionDialog(undefined)}
+        />
+      )}
     </div>
   );
 }

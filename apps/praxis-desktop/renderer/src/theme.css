@@ -11214,6 +11214,44 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-inspector > .inspector-actions {
   flex-shrink: 0;
 }
+.session-purpose strong,
+.session-handover-brief strong {
+  display: block;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.session-brief-head,
+.session-brief-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.session-brief-freshness {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+.session-brief-freshness.is-updating { color: var(--accent); }
+.session-brief-freshness.is-stale,
+.session-brief-freshness.is-failed { color: var(--danger); }
+.session-brief-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.session-brief-field textarea,
+.session-brief-field select,
+.session-brief-field input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.session-epoch-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
 
 /* The failure count, on the tab itself. This is the whole reason the log moved:
    buried in a closed disclosure at the foot of the transcript, the one urgent
