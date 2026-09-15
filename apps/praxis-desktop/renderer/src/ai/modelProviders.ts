@@ -15,7 +15,8 @@ export const PROVIDER_LABELS: Record<AiProvider, string> = {
   anthropic: 'Anthropic',
   'claude-code-cli': 'Claude Code',
   'codex-cli': 'Codex CLI',
-  'copilot-cli': 'GitHub Copilot'
+  'copilot-cli': 'GitHub Copilot',
+  'antigravity-cli': 'Antigravity'
 };
 
 /**
@@ -24,10 +25,10 @@ export const PROVIDER_LABELS: Record<AiProvider, string> = {
  * chat-completions API call. Shown with a distinct icon (terminal, vs. globe
  * for API providers).
  */
-export const CLI_AGENT_PROVIDERS: ReadonlySet<AiProvider> = new Set(['claude-code-cli', 'codex-cli', 'copilot-cli']);
+export const CLI_AGENT_PROVIDERS: ReadonlySet<AiProvider> = new Set(['claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli']);
 
 /** `hostKind: 'acp'` providers — every CLI-hosted agent, driven over the Agent Client Protocol: Claude Code, Codex, and GitHub Copilot (`copilot --acp`). */
-export const ACP_PROVIDERS: ReadonlySet<AiProvider> = new Set(['claude-code-cli', 'codex-cli', 'copilot-cli']);
+export const ACP_PROVIDERS: ReadonlySet<AiProvider> = new Set(['claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli']);
 
 /** `kind: 'api'` providers with a real model-listing endpoint (`ai.listApiModelOptions`). */
 export const API_MODEL_PROVIDERS: ReadonlySet<AiProvider> = new Set(['vercel-gateway', 'openai', 'anthropic']);
