@@ -7,7 +7,7 @@ type: Feature
 # FX-BF-006: Praxis Atlas — Explorable Spatial Workspace
 
 **Type:** Feature
-**Status:** 📋 Proposed
+**Status:** 📋 To Do
 **Owner:** Electron desktop app
 **Priority:** Lowest
 **Risk:** High
