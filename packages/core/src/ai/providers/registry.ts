@@ -63,6 +63,13 @@ export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
     // own interactive/print modes without it.
     defaultCommand: 'copilot',
     defaultArgs: ['--acp']
+  },
+  'antigravity-cli': {
+    id: 'antigravity-cli',
+    kind: 'cli-agent',
+    hostKind: 'acp',
+    label: 'Antigravity',
+    defaultCommand: 'antigravity'
   }
 };
 

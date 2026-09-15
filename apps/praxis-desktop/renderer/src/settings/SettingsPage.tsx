@@ -1433,6 +1433,16 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     cliPathDescription:
       'Runs the bundled @github/copilot runtime automatically — auth comes from GITHUB_TOKEN/gh CLI login, not a stored key. Override with an absolute path only if you need a different runtime executable.',
     notInstalledHint: 'The custom runtime path above was not found.'
+  },
+  {
+    id: 'antigravity-cli',
+    kind: 'cli-agent',
+    label: 'Antigravity',
+    keyLabel: '',
+    urlPlaceholder: '',
+    modelPlaceholder: '',
+    defaultCommand: 'antigravity',
+    notInstalledHint: 'Not found on PATH — run "npm install -g antigravity".'
   }
 ];
 
