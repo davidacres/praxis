@@ -198,6 +198,8 @@ export interface AgentEventSummary {
   detail?: string;
   /** Structured tool metadata for `tool_start` / `tool_complete`; absent on older records. */
   data?: AgentToolEventData;
+  /** The AI participant that produced an assistant message in a multi-AI conversation. */
+  speaker?: AgentConversationSpeaker;
 }
 
 export type AgentEventType =
@@ -219,7 +221,48 @@ export type AgentEventType =
   | 'info'
   | 'warning'
   | 'model_change'
-  | 'provider_handover';
+  | 'provider_handover'
+  | 'conversation_turn';
+
+export type AgentConversationMode = 'consult' | 'debate' | 'pair';
+export type AgentConversationState = 'idle' | 'running' | 'stopped' | 'capped' | 'failed';
+
+/** A named AI in an opt-in conversation. The host is the original session runtime. */
+export interface AgentConversationParticipant {
+  id: string;
+  provider: AiProvider;
+  model?: string;
+  role: 'host' | 'guest';
+  displayLabel: string;
+}
+
+/** Stable identity carried by completed assistant message events. */
+export interface AgentConversationSpeaker {
+  participantId: string;
+  provider: AiProvider;
+  model?: string;
+  displayLabel: string;
+}
+
+/** Persisted state for a bounded, sequential conversation between two AIs. */
+export interface AgentConversation {
+  mode: AgentConversationMode;
+  participants: [AgentConversationParticipant, AgentConversationParticipant];
+  currentSpeakerId: string;
+  toolOwnerId: string;
+  /** Tool mode to restore when the opt-in conversation ends. */
+  originalToolMode: AgentToolMode;
+  turnCap: number;
+  turnsUsed: number;
+  state: AgentConversationState;
+}
+
+export interface AiStartConversationInput {
+  provider: AiProvider;
+  model?: string;
+  mode: AgentConversationMode;
+  turnCap: number;
+}
 
 /** Why a session exists — a snapshot of the ticket or plan at session creation. */
 export interface SessionPurpose {
@@ -252,7 +295,7 @@ export interface HandoverBrief {
   touchedFiles: string[];
 }
 
-export type RuntimeEpochReason = 'started' | 'model_change' | 'provider_handover';
+export type RuntimeEpochReason = 'started' | 'model_change' | 'provider_handover' | 'conversation_turn';
 
 /** One provider/model segment inside a continuous Praxis session. */
 export interface SessionRuntimeEpoch {
@@ -337,6 +380,8 @@ export interface AgentSessionRecord {
   handoverBrief?: HandoverBrief;
   /** Provider/model segments. Older records have none; current provider/model still apply. */
   runtimeEpochs?: SessionRuntimeEpoch[];
+  /** Present only for an explicitly started multi-AI conversation. */
+  conversation?: AgentConversation;
   delivery?: DeliverySessionMetadata;
   events: AgentEventSummary[];
   planText?: string;

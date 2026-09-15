@@ -182,6 +182,54 @@ test('provider handover clears native ACP state', () => {
   assert.equal(next.events.at(-1)?.type, 'provider_handover');
 });
 
+test('a conversation attributes assistant messages and caps sequential turns', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', {
+    kind: 'general', goal: 'compare options', scope: '', definitionOfDone: ''
+  }, 'openai', 'gpt-host', { toolMode: 'full' });
+  mgr.updateAgentState('SESSION-abc', 'completed');
+  mgr.startAgentConversation('SESSION-abc', {
+    provider: 'anthropic', model: 'claude-guest', mode: 'consult', turnCap: 2
+  });
+
+  let current = mgr.prepareAgentConversationTurn('SESSION-abc');
+  assert.equal(current.provider, 'anthropic');
+  assert.equal(current.toolMode, 'read-only', 'consult never grants tools');
+  mgr.appendAgentEvents('SESSION-abc', [{ timestamp: '2026-01-01T00:00:01.000Z', type: 'message', summary: 'Guest', detail: 'Consider A.' }]);
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.events.at(-1)?.speaker?.participantId, 'guest');
+
+  current = mgr.completeAgentConversationTurn('SESSION-abc');
+  assert.equal(current.conversation?.turnsUsed, 1);
+  assert.equal(current.conversation?.currentSpeakerId, 'host');
+  current = mgr.prepareAgentConversationTurn('SESSION-abc');
+  assert.equal(current.provider, 'openai');
+  mgr.appendAgentEvents('SESSION-abc', [{ timestamp: '2026-01-01T00:00:02.000Z', type: 'message', summary: 'Host', detail: 'A is best.' }]);
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.events.at(-1)?.speaker?.participantId, 'host');
+
+  current = mgr.completeAgentConversationTurn('SESSION-abc');
+  assert.equal(current.conversation?.state, 'capped');
+  assert.equal(current.provider, 'openai', 'the host remains the ordinary follow-up runtime');
+  assert.equal(current.toolMode, 'full', 'the original tool mode is restored after the conversation');
+});
+
+test('pair mode grants tools only to the selected owner between turns', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', {
+    kind: 'general', goal: 'pair', scope: '', definitionOfDone: ''
+  }, 'openai', 'gpt-host', { toolMode: 'full' });
+  mgr.updateAgentState('SESSION-abc', 'completed');
+  mgr.startAgentConversation('SESSION-abc', { provider: 'anthropic', model: 'claude-guest', mode: 'pair', turnCap: 3 });
+  let current = mgr.prepareAgentConversationTurn('SESSION-abc');
+  assert.equal(current.toolMode, 'read-only', 'the guest is not the initial owner');
+  mgr.completeAgentConversationTurn('SESSION-abc');
+  mgr.setAgentConversationToolOwner('SESSION-abc', 'guest');
+  current = mgr.prepareAgentConversationTurn('SESSION-abc');
+  assert.equal(current.toolMode, 'read-only', 'the host no longer owns tools');
+  mgr.completeAgentConversationTurn('SESSION-abc');
+  current = mgr.prepareAgentConversationTurn('SESSION-abc');
+  assert.equal(current.toolMode, 'full', 'only the promoted guest receives tools');
+});
+
 test('token usage is attributed to the open epoch', () => {
   const mgr = new AiSessionManager(storeWith({}));
   mgr.createAgentSession('SESSION-abc', 's1', {
@@ -190,4 +238,3 @@ test('token usage is attributed to the open epoch', () => {
   mgr.addAgentTokenUsage('SESSION-abc', { inputTokens: 10, outputTokens: 2, totalTokens: 12 });
   assert.equal(mgr.getAgentSession('SESSION-abc')?.runtimeEpochs?.[0].tokenUsage?.totalTokens, 12);
 });
-
