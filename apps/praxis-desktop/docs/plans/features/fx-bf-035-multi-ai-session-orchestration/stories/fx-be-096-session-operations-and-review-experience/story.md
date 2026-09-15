@@ -9,7 +9,7 @@ title: "Session operations and review experience"
 status: To Do
 feature: FX-BF-035
 updated: 2026-09-10
-dependencies: [FX-BE-095, FX-BF-014, FX-BF-015]
+dependencies: [FX-BE-095, FX-BE-115, FX-BF-014, FX-BF-015]
 ---
 
 # FX-BE-096: Session operations and review experience
@@ -17,6 +17,11 @@ dependencies: [FX-BE-095, FX-BF-014, FX-BF-015]
 ## Outcome
 
 Users can understand multi-provider work, inspect context and evidence, and make safe operational decisions.
+
+This story builds the broader orchestration monitor and merge-readiness experience
+on top of FX-BE-115's continuous-session purpose, living brief, provider/model
+runtime history and handover controls rather than introducing a second session
+summary or reassignment model.
 
 ## Tasks
 
@@ -42,5 +47,4 @@ Contract tests, fixture repositories, captured provider output, failure and reco
 
 
 ## Comments
-
 
