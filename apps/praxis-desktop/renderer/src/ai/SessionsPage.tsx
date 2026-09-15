@@ -22,7 +22,7 @@ import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { basename, contextPressure, formatCost, isWorkflowStageSession, liveActivity, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
-import { SessionRuntimeActions, SessionTransitionDialogs } from './SessionHandover';
+import { SessionConversationActions, SessionConversationDialog, SessionRuntimeActions, SessionTransitionDialogs } from './SessionHandover';
 import { GadgetBlockList } from './gadgets';
 import { gadgetMessageKey, groupBlocksByMessage, mayContainGadget, stripGadgetFences } from './gadgets/messageText';
 
@@ -199,6 +199,7 @@ export function SessionsPage({
   const [busyGadgetId, setBusyGadgetId] = useState<string>();
   const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
   const [transitionDialog, setTransitionDialog] = useState<'model' | 'handover' | undefined>();
+  const [conversationDialogOpen, setConversationDialogOpen] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
   const [browserMaximized, setBrowserMaximized] = useState(false);
   const browserDismissed = useRef(initialBrowserOpen === false);
@@ -255,6 +256,7 @@ export function SessionsPage({
   }, []);
 
   const selected = sessions.find(session => session.issueKey === selectedKey) ?? sessions[0];
+  const conversationRunning = selected?.conversation?.state === 'running';
   const terminalForContext = terminalSessions.find(session => session.id === activeTerminalId && session.hasContext)
     ?? [...terminalSessions].reverse().find(session => session.hasContext && (
       !selected?.workingDirectory || session.cwd === selected.workingDirectory
@@ -453,7 +455,7 @@ export function SessionsPage({
   }, [selected?.issueKey, selected?.taskDefinition.kind]);
 
   const sendFollowUp = async () => {
-    if (!selected || !followUp.trim() || !isTerminalAgentState(selected.state)) return;
+    if (!selected || !followUp.trim() || !isTerminalAgentState(selected.state) || selected.conversation?.state === 'running') return;
     setSendingFollowUp(true);
     setFollowUpError(undefined);
     try {
@@ -485,6 +487,28 @@ export function SessionsPage({
       setFollowUpError(error instanceof Error ? error.message : String(error));
     } finally {
       setAbortingSession(false);
+    }
+  };
+
+  const stopConversation = async () => {
+    if (!selected || !conversationRunning) return;
+    setAbortingSession(true);
+    setFollowUpError(undefined);
+    try {
+      await window.praxis.ai.stopConversation(selected.issueKey);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAbortingSession(false);
+    }
+  };
+
+  const setConversationToolOwner = async (participantId: string) => {
+    if (!selected) return;
+    try {
+      await window.praxis.ai.setConversationToolOwner(selected.issueKey, participantId);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -694,7 +718,11 @@ export function SessionsPage({
                     key={`${event.timestamp}-${index}`}
                     data-testid={event.type === 'message' ? 'session-chat-assistant' : 'session-chat-user'}
                   >
-                    <div className="session-chat-author">{event.type === 'message' ? 'AI agent' : 'You'}</div>
+                    <div className="session-chat-author">{event.type === 'message'
+                      ? event.speaker
+                        ? `${PROVIDER_LABELS[event.speaker.provider]}${event.speaker.model ? ` · ${event.speaker.model}` : ''}`
+                        : 'AI agent'
+                      : 'You'}</div>
                     {terminalContext && (
                       <details className="session-chat-terminal-context">
                         <summary><Icon name="terminal" size={13} /> Recent terminal output <span>{terminalContext.cwd}</span></summary>
@@ -718,7 +746,9 @@ export function SessionsPage({
               })}
               {shouldRenderResponseFallback && (
                 <div className="session-chat-message is-assistant" data-testid="session-response">
-                  <div className="session-chat-author">AI agent</div>
+                  <div className="session-chat-author">{selected?.conversation?.state === 'running'
+                    ? (() => { const speaker = selected.conversation.participants.find(participant => participant.id === selected.conversation?.currentSpeakerId); return speaker ? `${PROVIDER_LABELS[speaker.provider]}${speaker.model ? ` · ${speaker.model}` : ''}` : 'AI agent'; })()
+                    : 'AI agent'}</div>
                   <Markdown text={selected?.responseText ?? ''} testId="session-chat-markdown" />
                 </div>
               )}
@@ -844,11 +874,11 @@ export function SessionsPage({
                   rows={2}
                   data-testid="session-follow-up-input"
                   value={followUp}
-                  disabled={!isTerminalAgentState(selected.state) || sendingFollowUp}
+                  disabled={!isTerminalAgentState(selected.state) || sendingFollowUp || conversationRunning}
                   placeholder={
-                    isTerminalAgentState(selected.state)
+                    isTerminalAgentState(selected.state) && !conversationRunning
                       ? 'Ask the agent to clarify, change, or continue…'
-                      : 'The agent is working…'
+                      : conversationRunning ? 'The AI conversation is running…' : 'The agent is working…'
                   }
                   onChange={event => setFollowUp(event.target.value)}
                   onKeyDown={event => {
@@ -863,7 +893,7 @@ export function SessionsPage({
                       one can only be stopped, so this only appears once it's
                       actually a choice. Mirrors where the New Session composer
                       puts the same control when a session starts. */}
-                  {isTerminalAgentState(selected.state) && !isWorkflowStageSession(selected) && (
+                  {isTerminalAgentState(selected.state) && !conversationRunning && !isWorkflowStageSession(selected) && (
                     <div className="session-mode-toggle" role="group" aria-label="Switch session mode">
                       {(['chat', 'analysis', 'review'] as const).map(mode => (
                         <button
@@ -1022,10 +1052,16 @@ export function SessionsPage({
                       {selected.model}
                     </span>
                   )}
-                  <SessionRuntimeActions
+                  {!conversationRunning && <SessionRuntimeActions
                     session={selected}
                     onChangeModel={() => setTransitionDialog('model')}
                     onHandover={() => setTransitionDialog('handover')}
+                  />}
+                  <SessionConversationActions
+                    session={selected}
+                    onStart={() => setConversationDialogOpen(true)}
+                    onStop={() => void stopConversation()}
+                    onToolOwner={participantId => void setConversationToolOwner(participantId)}
                   />
                   <span
                     className="composer-chip session-runtime-chip"
@@ -1063,19 +1099,21 @@ export function SessionsPage({
                   <span className="spacer" />
                   <button
                     className={`composer-send${!isTerminalAgentState(selected.state) ? ' composer-send-cancel' : ''}`}
-                    aria-label={!isTerminalAgentState(selected.state) ? 'Cancel response' : sendingFollowUp ? 'Sending message' : 'Send message'}
-                    title={!isTerminalAgentState(selected.state) ? (abortingSession ? 'Cancelling…' : 'Cancel response') : sendingFollowUp ? 'Sending…' : 'Send message'}
+                    aria-label={conversationRunning ? 'Stop conversation' : !isTerminalAgentState(selected.state) ? 'Cancel response' : sendingFollowUp ? 'Sending message' : 'Send message'}
+                    title={conversationRunning ? (abortingSession ? 'Stopping…' : 'Stop conversation') : !isTerminalAgentState(selected.state) ? (abortingSession ? 'Cancelling…' : 'Cancel response') : sendingFollowUp ? 'Sending…' : 'Send message'}
                     data-testid="session-follow-up-send"
-                    disabled={abortingSession || (isTerminalAgentState(selected.state) && (sendingFollowUp || !followUp.trim()))}
+                    disabled={abortingSession || (!conversationRunning && isTerminalAgentState(selected.state) && (sendingFollowUp || !followUp.trim()))}
                     onClick={() => {
-                      if (!isTerminalAgentState(selected.state)) {
+                      if (conversationRunning) {
+                        void stopConversation();
+                      } else if (!isTerminalAgentState(selected.state)) {
                         void abortSession();
                       } else {
                         void sendFollowUp();
                       }
                     }}
                   >
-                    <Icon name={!isTerminalAgentState(selected.state) ? 'close' : 'arrow-up'} size={15} />
+                    <Icon name={conversationRunning || !isTerminalAgentState(selected.state) ? 'close' : 'arrow-up'} size={15} />
                   </button>
                 </div>
               </div>
@@ -1105,6 +1143,7 @@ export function SessionsPage({
           onClose={() => setTransitionDialog(undefined)}
         />
       )}
+      {selected && <SessionConversationDialog session={selected} open={conversationDialogOpen} onClose={() => setConversationDialogOpen(false)} />}
     </div>
   );
 }
