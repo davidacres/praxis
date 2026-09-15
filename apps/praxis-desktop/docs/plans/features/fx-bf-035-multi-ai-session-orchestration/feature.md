@@ -25,6 +25,8 @@ Praxis can plan, launch, observe, hand off, review and recover AI coding session
 - Dependency-aware dispatch and bounded parallelism.
 - Event log, cancellation, timeout, retry and recovery.
 - Session monitor, context inspection, handoff review and merge readiness.
+- Continuous in-session model changes, provider handovers and runtime history.
+- A living, user-editable handover brief and visible ticket or plan purpose.
 - Manual and automated provider handoffs.
 - Redacted operational evidence and deterministic validation.
 
@@ -43,13 +45,14 @@ Praxis can plan, launch, observe, hand off, review and recover AI coding session
 | --- | --- | --- | --- |
 | FX-BE-092 | Shared session context and handoff contracts | Planned | FX-BF-011, FX-BF-019 |
 | FX-BE-093 | Provider adapters and capability preflight | Planned | FX-BE-092 |
+| FX-BE-115 | Continuous session handover, model switching and living brief | Planned | FX-BE-092, FX-BE-093, FX-BF-015, FX-BF-017 |
 | FX-BE-094 | Worktree, file claims and change governance | Planned | FX-BE-092, FX-BF-003 |
 | FX-BE-095 | Orchestration runtime, task graph and recovery | Planned | FX-BE-093, FX-BE-094, FX-BF-013 |
-| FX-BE-096 | Session operations and review experience | Planned | FX-BE-095, FX-BF-014, FX-BF-015 |
+| FX-BE-096 | Session operations and review experience | Planned | FX-BE-095, FX-BE-115, FX-BF-014, FX-BF-015 |
 
 ## Definition of done
 
-A fixture repository can run design, implementation, independent review and final validation stages across providers; each stage receives the correct context, changes are isolated and attributed, handoffs are consumable by the next provider, failures are recoverable, and the UI exposes the complete evidence chain.
+A fixture repository can run design, implementation, independent review and final validation stages across providers; each stage receives the correct context, changes are isolated and attributed, handoffs are consumable by the next provider, failures are recoverable, and the UI exposes the purpose, living handover brief, runtime history and complete evidence chain.
 
 ## Verification
 
@@ -63,5 +66,4 @@ Use stub adapters for deterministic end-to-end tests and captured output fixture
 
 
 ## Comments
-
 
