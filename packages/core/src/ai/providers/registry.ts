@@ -69,7 +69,7 @@ export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
     kind: 'cli-agent',
     hostKind: 'acp',
     label: 'Antigravity',
-    defaultCommand: 'antigravity-cli'
+    defaultCommand: 'agy'
   }
 };
 
