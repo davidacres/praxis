@@ -34,7 +34,7 @@ export interface KindAddons {
   busy: string | undefined;
   error: string | undefined;
   browse(): Promise<void>;
-  install(packageName: string, options?: { version?: string; trustAgent?: boolean }): Promise<void>;
+  install(packageName: string, options?: { version?: string; trust?: boolean }): Promise<void>;
   update(id: string): Promise<void>;
   remove(id: string): Promise<void>;
   setTrust(id: string, enabled: boolean): Promise<void>;
@@ -135,7 +135,7 @@ export function useKindAddons(kind: AddonKind): KindAddons {
       }),
     setTrust: (id, enabled) =>
       run(`trust:${id}`, async () => {
-        await window.praxis.marketplace.setAgentTrust(id, enabled);
+        await window.praxis.marketplace.setTrust(kind, id, enabled);
         await loadInstalled();
       }),
     checkForUpdates: () =>

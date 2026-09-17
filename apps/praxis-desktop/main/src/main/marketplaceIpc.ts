@@ -16,7 +16,7 @@ import {
   readActiveAppearance,
   refreshAgentRuntimeForAddons,
   removeInstalledAddon,
-  setInstalledAgentTrust,
+  setInstalledAddonTrust,
   setMarketplaceToken
 } from './marketplaceInstance';
 
@@ -52,7 +52,7 @@ export function registerMarketplaceIpc(): void {
     async (_event, packageName: string, options?: MarketplaceInstallOptions) => {
       const service = await buildMarketplaceService();
       const record = await service.install(packageName, options);
-      if (record.manifest.kind === 'agent') {
+      if (record.manifest.kind === 'agent' || record.manifest.kind === 'skill') {
         await refreshAgentRuntimeForAddons();
       }
       emitMarketplaceChanged();
@@ -66,7 +66,7 @@ export function registerMarketplaceIpc(): void {
   ipcMain.handle('marketplace:update', async (_event, kind: AddonKind, id: string) => {
     const service = await buildMarketplaceService();
     const record = await service.update(kind, id);
-    if (kind === 'agent') {
+    if (kind === 'agent' || kind === 'skill') {
       await refreshAgentRuntimeForAddons();
     }
     emitMarketplaceChanged();
@@ -83,8 +83,8 @@ export function registerMarketplaceIpc(): void {
     return service.checkForUpdates();
   });
 
-  ipcMain.handle('marketplace:setAgentTrust', (_event, id: string, enabled: boolean) =>
-    setInstalledAgentTrust(id, enabled)
+  ipcMain.handle('marketplace:setTrust', (_event, kind: AddonKind, id: string, enabled: boolean) =>
+    setInstalledAddonTrust(kind, id, enabled)
   );
 
   onMarketplaceChanged(() => {

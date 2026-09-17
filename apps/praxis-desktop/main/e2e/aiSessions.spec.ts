@@ -215,6 +215,20 @@ test('composer selects a board and open ticket, names the session, and streams t
   });
   await persistedRow.waitFor();
   await persistedRow.click();
+  await expect(win.locator('[data-testid="session-provider"]')).toBeEnabled();
+  await expect(win.locator('[data-testid="session-model"]')).toBeEnabled();
+  await win.locator('[data-testid="session-model"]').click();
+  const persistedModelMenu = win.locator('[data-testid="session-model-menu"]');
+  await expect(persistedModelMenu).toBeVisible();
+  await expect.poll(() => persistedModelMenu.evaluate(element => getComputedStyle(element).position)).toBe('fixed');
+  await expect(persistedModelMenu.locator('[data-testid^="session-model-option-"]')).not.toHaveCount(0);
+  await win.keyboard.press('Escape');
+  await win.locator('[data-testid="session-provider"]').click();
+  const persistedProviderMenu = win.locator('[data-testid="session-provider-menu"]');
+  await expect(persistedProviderMenu).toBeVisible();
+  await expect.poll(() => persistedProviderMenu.evaluate(element => getComputedStyle(element).position)).toBe('fixed');
+  await expect(persistedProviderMenu.locator('[data-testid^="session-provider-option-"]')).not.toHaveCount(0);
+  await win.keyboard.press('Escape');
   const persistedTranscriptOrder = await win.locator('.session-chat-message').evaluateAll(nodes =>
     nodes.map(node => node.classList.contains('is-assistant') ? 'assistant' : 'user')
   );
@@ -501,7 +515,7 @@ test('the agent\'s reply uses the pane it has; yours stays a reply beside it', a
   expect(userBox!.x).toBeGreaterThan(assistantBox!.x);
 });
 
-test('change model and handover stay disabled while a turn is running', async () => {
+test('change model and handover stay unreachable while a turn is running', async () => {
   mock = await startMockGatewayServer({ mode: 'hang' });
   app = await launchTestApp(undefined, undefined, {
     ...NO_GATEWAY_ENV,
@@ -513,8 +527,14 @@ test('change model and handover stay disabled while a turn is running', async ()
     await window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Keep running.' } });
   });
   await win.locator('[data-testid="nav-sessions"]').click();
-  await expect(win.locator('[data-testid="session-change-model"]')).toBeDisabled();
-  await expect(win.locator('[data-testid="session-handover"]')).toBeDisabled();
+  // The collapsed composer (a single-agent turn running, no conversation to
+  // queue a directed message into) hides the model/provider chips entirely
+  // now, rather than showing them disabled — see `followUpCollapsed` in
+  // SessionsPage.tsx. Still the same guarantee this test exists to prove:
+  // you cannot reach model/provider changes while a turn is running.
+  await expect(win.locator('[data-testid="session-activity-status"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-model"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-provider"]')).toHaveCount(0);
   await win.evaluate(async () => {
     const sessions = await window.praxis.ai.listSessions();
     if (sessions[0]) await window.praxis.ai.abort(sessions[0].issueKey);
@@ -532,6 +552,10 @@ test('a completed session can edit its brief, change model, and hand over', asyn
     AI_GATEWAY_URL: mock.baseUrl
   });
   const win = app.window;
+  await win.evaluate(async ({ baseUrl }) => {
+    await window.praxis.settings.set({ ai: { providers: { openai: { baseUrl } } } });
+    await window.praxis.ai.setProviderApiKey('openai', 'e2e-openai-handover-key');
+  }, { baseUrl: mock.baseUrl });
   await win.evaluate(async () => {
     await window.praxis.ai.delegate({
       provider: 'vercel-gateway',
@@ -551,32 +575,48 @@ test('a completed session can edit its brief, change model, and hand over', asyn
   await win.locator('[data-testid="session-brief-save"]').click();
   await expect(win.locator('[data-testid="session-brief-notes"]')).toHaveText('Keep the worktree.');
 
-  await win.locator('[data-testid="session-change-model"]').click();
-  const modelDialog = win.locator('[data-testid="session-model-dialog"]');
-  await expect(modelDialog).toBeVisible();
-  await expect(modelDialog.locator('[data-testid="session-transition-model"] option[value="mock/other"]')).toHaveCount(1, {
-    timeout: 15000
-  });
-  await modelDialog.locator('[data-testid="session-transition-model"]').selectOption('mock/other');
-  await modelDialog.locator('[data-testid="session-transition-confirm"]').click();
-  await expect(modelDialog).toHaveCount(0);
+  await win.locator('[data-testid="session-model"]').click();
+  const modelMenu = win.locator('[data-testid="session-model-menu"]');
+  await expect(modelMenu).toBeVisible();
+  await expect(modelMenu.locator('[data-testid="session-model-refresh"]')).toBeVisible();
+  await expect(modelMenu.locator('[data-testid="session-model-option-mock/other"]')).toBeVisible({ timeout: 15000 });
+  const modelRequestsBeforeRefresh = mock.modelsRequestCount;
+  await modelMenu.locator('[data-testid="session-model-refresh"]').click();
+  await expect.poll(() => mock.modelsRequestCount).toBe(modelRequestsBeforeRefresh + 1);
+  await expect(modelMenu.locator('[data-testid="session-model-option-mock/other"]')).toBeVisible();
+  await modelMenu.locator('[data-testid="session-model-option-mock/other"]').click();
+  await expect(modelMenu).toHaveCount(0);
   await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/other');
   await expect(win.locator('[data-testid="session-runtime-epoch"]')).toHaveCount(2);
 
-  await win.locator('[data-testid="session-handover"]').click();
-  const handover = win.locator('[data-testid="session-handover-dialog"]');
-  await expect(handover).toBeVisible();
-  await handover.locator('[data-testid="session-handover-provider"]').selectOption('vercel-gateway');
-  await expect(handover.locator('[data-testid="session-transition-model"] option[value="mock/model"]')).toHaveCount(1, {
-    timeout: 15000
-  });
-  await handover.locator('[data-testid="session-transition-model"]').selectOption('mock/model');
-  await handover.locator('[data-testid="session-transition-confirm"]').click();
+  await win.locator('[data-testid="session-provider"]').click();
+  const providerMenu = win.locator('[data-testid="session-provider-menu"]');
+  await expect(providerMenu).toBeVisible();
+  const unavailableProvider = providerMenu.locator('[data-testid="session-provider-option-anthropic"]');
+  await expect(unavailableProvider).toBeDisabled();
+  await expect(unavailableProvider).toHaveAttribute('tabindex', '-1');
+  await unavailableProvider.dispatchEvent('click');
+  await expect(providerMenu).toBeVisible();
+  await expect(providerMenu.locator('[data-testid="session-handover-confirmation"]')).toHaveCount(0);
+  await providerMenu.locator('[data-testid="session-provider-option-openai"]').click();
+  const handoverConfirmation = providerMenu.locator('[data-testid="session-handover-confirmation"]');
+  await expect(handoverConfirmation).toContainText('Hand over to OpenAI?');
+  await expect(handoverConfirmation).toContainText('continues the current session');
+  await expect(handoverConfirmation.locator('[data-testid="session-handover-yes"]')).toBeVisible();
+  await expect(handoverConfirmation.locator('[data-testid="session-handover-no"]')).toBeVisible();
+  await expect(handoverConfirmation.locator('[data-testid="session-handover-always"]')).toBeVisible();
+  await handoverConfirmation.locator('[data-testid="session-handover-no"]').click();
+  await expect(providerMenu.locator('[data-testid="session-handover-confirmation"]')).toHaveCount(0);
+  await providerMenu.locator('[data-testid="session-provider-option-openai"]').click();
+  await providerMenu.locator('[data-testid="session-handover-always"]').click();
+  await expect(providerMenu).toHaveCount(0);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  await expect(win.locator('[data-testid="session-provider"]')).toContainText('OpenAI');
   await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/model');
   await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('taking over this Praxis session');
   await expect(win.locator('[data-testid="session-brief-notes"]')).toHaveText('Keep the worktree.');
   await expect(win.locator('[data-testid="session-runtime-epoch"]')).toHaveCount(3);
+  await expect.poll(() => win.evaluate(() => localStorage.getItem('praxis-ai-handover-confirmation'))).toBe('always');
 });
 
 test('an opt-in conversation alternates attributed AI turns and stops at its cap', async () => {
@@ -599,7 +639,8 @@ test('an opt-in conversation alternates attributed AI turns and stops at its cap
     records.find(record => record.issueKey === key)?.model
   ), session.issueKey);
 
-  await win.locator('[data-testid="session-start-conversation"]').click();
+  await win.locator('[data-testid="session-provider"]').click();
+  await win.locator('[data-testid="session-provider-add-vercel-gateway"]').click();
   const dialog = win.locator('[data-testid="session-conversation-dialog"]');
   await expect(dialog).toBeVisible();
   await dialog.locator('[data-testid="session-conversation-provider"]').selectOption('vercel-gateway');
@@ -615,5 +656,121 @@ test('an opt-in conversation alternates attributed AI turns and stops at its cap
   await expect(win.locator('[data-testid="session-chat-assistant"]')).toHaveCount(3);
   await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('Vercel AI Gateway · mock/other');
   await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText(`Vercel AI Gateway · ${hostModel}`);
-  await expect(win.locator('[data-testid="session-start-conversation"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-provider"]')).toBeVisible();
+});
+
+test('a human can direct a message to either participant during an AI conversation', async () => {
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    responseDelayMs: 2000,
+    models: [{ id: 'mock/model' }, { id: 'mock/other' }]
+  });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-directed-conversation-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+  const session = await win.evaluate(async () => window.praxis.ai.delegate({
+    provider: 'vercel-gateway', task: { goal: 'Review this implementation together.' }
+  }));
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  await win.locator('[data-testid="session-provider"]').click();
+  await win.locator('[data-testid="session-provider-add-vercel-gateway"]').click();
+  const dialog = win.locator('[data-testid="session-conversation-dialog"]');
+  await dialog.locator('[data-testid="session-conversation-provider"]').selectOption('vercel-gateway');
+  await dialog.locator('[data-testid="session-conversation-model"]').selectOption('mock/other');
+  await dialog.locator('[data-testid="session-conversation-turn-cap"]').fill('3');
+  await dialog.locator('[data-testid="session-conversation-confirm"]').click();
+
+  const target = win.locator('[data-testid="session-conversation-target"]');
+  await expect(target).toBeVisible();
+  await target.locator('select').selectOption('host');
+  await win.locator('[data-testid="session-follow-up-input"]').fill('Please review the other AI response for missing risks.');
+  await win.locator('[data-testid="session-conversation-send"]').click();
+  const directedMessage = win.locator('[data-testid="session-chat-user"]').last();
+  await expect(directedMessage).toContainText('Please review the other AI response', { timeout: 1000 });
+  await expect(directedMessage).toHaveAttribute('data-pending', 'true');
+  await expect(target.locator('select')).toHaveValue('host');
+  await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('Vercel AI Gateway · mock/other');
+  const hostModel = await win.evaluate(key => window.praxis.ai.listSessions().then(records =>
+    records.find(record => record.issueKey === key)?.conversation?.participants.find(participant => participant.id === 'host')?.model
+  ), session.issueKey);
+  if (hostModel) await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText(`Vercel AI Gateway · ${hostModel}`);
+  await expect(win.locator('[data-testid="session-chat-assistant"].session-chat-participant-host')).not.toHaveCount(0);
+  await expect(win.locator('[data-testid="session-chat-assistant"].session-chat-participant-guest')).not.toHaveCount(0);
+  await expect(win.locator('[data-testid="session-chat-assistant"] .session-chat-author svg')).not.toHaveCount(0);
+  await expect.poll(async () => win.evaluate(key => window.praxis.ai.listSessions().then(records => {
+    const conversation = records.find(record => record.issueKey === key)?.conversation;
+    return conversation ? `${conversation.state}:${conversation.turnsUsed}` : '';
+  }), session.issueKey), { timeout: 20000 }).toBe('capped:3');
+  await expect(win.locator('[data-testid="session-chat-user"]').last()).not.toHaveAttribute('data-pending', 'true');
+  const directedTurn = await win.locator('.session-chat-message').evaluateAll(nodes => nodes.map(node => ({
+    role: node.classList.contains('is-assistant') ? 'assistant' : 'user',
+    text: node.textContent ?? '',
+    participant: [...node.classList].find(name => name.startsWith('session-chat-participant-'))
+  })));
+  const directedIndex = directedTurn.findIndex(item => item.text.includes('Please review the other AI response'));
+  expect(directedIndex).toBeGreaterThan(-1);
+  expect(directedTurn[directedIndex + 1]).toMatchObject({
+    role: 'assistant',
+    participant: 'session-chat-participant-host'
+  });
+});
+
+test('focus mode presents sessions as tabs and keeps them available while starting a new session', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-focus-tabs-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+  const sessionKeys = await win.evaluate(async () => {
+    const first = await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      task: { goal: 'First focus-mode conversation.' }
+    });
+    await window.praxis.ai.renameSession(first.issueKey, 'First focus chat');
+    const second = await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      task: { goal: 'Second focus-mode conversation.' }
+    });
+    await window.praxis.ai.renameSession(second.issueKey, 'Second focus chat');
+    return [first.issueKey, second.issueKey];
+  });
+
+  await expect.poll(async () => win.evaluate(keys => window.praxis.ai.listSessions().then(records =>
+    keys.map(key => records.find(record => record.issueKey === key)?.state)
+  ), sessionKeys), { timeout: 15000 }).toEqual(['completed', 'completed']);
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.getByRole('button', { name: 'Toggle sidebar' }).click();
+  await win.getByRole('button', { name: 'Toggle secondary sidebar' }).click();
+
+  const tabs = win.locator('[data-testid="session-focus-tabs"]');
+  await expect(tabs).toBeVisible();
+  const focusHeader = tabs.locator('..');
+  await expect.poll(async () => focusHeader.evaluate(node => ({
+    header: node.getBoundingClientRect().height,
+    tabs: node.querySelector<HTMLElement>('[data-testid="session-focus-tabs"]')?.getBoundingClientRect().height ?? 0
+  }))).toEqual({ header: 31, tabs: 30 });
+  await expect(win.locator('[data-testid="session-focus-tab"]')).toHaveCount(2);
+  await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('Second focus chat');
+
+  const activeTab = win.locator('[data-testid="session-focus-tab"][aria-selected="true"]');
+  await activeTab.focus();
+  await activeTab.press('ArrowRight');
+  await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('First focus chat');
+  await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('First focus-mode conversation.');
+
+  await win.locator('[data-testid="session-focus-new"]').click();
+  await expect(win.locator('[data-testid="new-session-view"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-focus-tabs"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-focus-new"]')).toHaveClass(/active/);
+
+  await win.locator('[data-testid="session-focus-tab"]', { hasText: 'Second focus chat' }).click();
+  await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('Second focus chat');
+  await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('Second focus-mode conversation.');
 });

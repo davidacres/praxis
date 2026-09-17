@@ -230,6 +230,24 @@ test('pair mode grants tools only to the selected owner between turns', () => {
   assert.equal(current.toolMode, 'full', 'only the promoted guest receives tools');
 });
 
+test('a human conversation message queues for its chosen participant without duplicating transcript events', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', {
+    kind: 'general', goal: 'review', scope: '', definitionOfDone: ''
+  }, 'openai', 'gpt-host', { toolMode: 'full' });
+  mgr.updateAgentState('SESSION-abc', 'completed');
+  mgr.startAgentConversation('SESSION-abc', { provider: 'anthropic', model: 'claude-guest', mode: 'consult', turnCap: 3 });
+  const before = mgr.getAgentSession('SESSION-abc')!.events.length;
+  mgr.queueAgentConversationMessage('SESSION-abc', 'host', 'Check the guest response for risks.');
+  mgr.queueAgentConversationMessage('SESSION-abc', 'guest', 'Also compare the proposed fix.');
+  assert.equal(mgr.getAgentSession('SESSION-abc')!.events.length, before, 'the host appends the user event when the turn starts');
+  const pending = mgr.takeAgentConversationMessage('SESSION-abc');
+  assert.deepEqual(pending, { participantId: 'host', message: 'Check the guest response for risks.' });
+  assert.deepEqual(mgr.takeAgentConversationMessage('SESSION-abc'), { participantId: 'guest', message: 'Also compare the proposed fix.' });
+  mgr.setAgentConversationSpeaker('SESSION-abc', pending!.participantId);
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.conversation?.currentSpeakerId, 'host');
+});
+
 test('token usage is attributed to the open epoch', () => {
   const mgr = new AiSessionManager(storeWith({}));
   mgr.createAgentSession('SESSION-abc', 's1', {

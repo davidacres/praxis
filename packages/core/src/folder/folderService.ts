@@ -50,11 +50,13 @@ import {
   appendCommentToMarkdownFile,
   appendFeatureItemTableRow,
   computeFeatureRollupStatus,
+  removeFeatureItemTableRow,
   updateFeatureStoryTable,
   upgradeMarkdownFile,
   writeDescriptionToMarkdownFile,
   writeModelToMarkdownFile,
   writePriorityToMarkdownFile,
+  writeParentToMarkdownFile,
   writeReportedByToMarkdownFile,
   writeSeverityToMarkdownFile,
   writeStatusToMarkdownFile,
@@ -708,6 +710,74 @@ export class FolderService implements IssueTrackerService {
       issue.assignee = input.assignee ?? undefined;
     }
 
+    const hasParentPatch = Object.prototype.hasOwnProperty.call(input, 'parentKey');
+    if (hasParentPatch) {
+      const issueType = normalizeFolderIssueType(issue.issueType);
+      if (!issueType || issueType === 'Feature') {
+        throw new Error(buildParentValidationMessage(issue.issueType, 'folder', undefined));
+      }
+
+      const nextParentKey = input.parentKey?.trim() || undefined;
+      const parentFeature = this.resolveCreateParent(issue.projectKey, issueType, nextParentKey);
+      if (nextParentKey !== issue.parentKey) {
+        const previousPath = issue.sourcePath;
+        const previousParent = issue.parentKey
+          ? this.issues.find(candidate => candidate.key === issue.parentKey)
+          : undefined;
+        const nextChildSeq = this.getNextChildSequence(parentFeature.featureId!, issueType);
+        const nextPath = path.join(
+          path.dirname(parentFeature.sourcePath),
+          buildChildFileName(
+            issueType,
+            parentFeature.featureId!,
+            nextChildSeq,
+            input.summary?.trim() || issue.summary
+          )
+        );
+
+        this.recentWrites.add(previousPath);
+        this.recentWrites.add(nextPath);
+        try {
+          await folderFs().moveFile(previousPath, nextPath);
+        } finally {
+          setTimeout(() => {
+            this.recentWrites.delete(previousPath);
+            this.recentWrites.delete(nextPath);
+          }, 2000);
+        }
+
+        if (previousParent && issue.featureId !== undefined && issue.childSeq !== undefined) {
+          await this.writeFeatureItemTableRowRemoval(
+            previousParent,
+            issue.issueType,
+            issue.childSeq
+          );
+        }
+        await this.writeFeatureItemTableRow(
+          parentFeature,
+          issueType,
+          nextChildSeq,
+          input.summary?.trim() || issue.summary,
+          issue.status
+        );
+        this.recentWrites.add(nextPath);
+        try {
+          await writeParentToMarkdownFile(nextPath, parentFeature.key);
+        } finally {
+          setTimeout(() => this.recentWrites.delete(nextPath), 2000);
+        }
+
+        issue.key = issueType === 'Story'
+          ? stableStoryKey(issue.projectKey, parentFeature.featureId!, nextChildSeq)
+          : stableChildKey(issue.projectKey, issueType, parentFeature.featureId!, nextChildSeq);
+        issue.parentKey = parentFeature.key;
+        issue.featureId = parentFeature.featureId;
+        issue.featureDirName = parentFeature.featureDirName;
+        issue.childSeq = nextChildSeq;
+        issue.sourcePath = nextPath;
+      }
+    }
+
     // Persist summary changes to the markdown `# ` title line
     if (input.summary !== undefined && input.summary !== null) {
       this.recentWrites.add(issue.sourcePath);
@@ -1315,6 +1385,23 @@ export class FolderService implements IssueTrackerService {
         issueType,
         summary,
         status
+      );
+    } finally {
+      setTimeout(() => this.recentWrites.delete(parentFeature.sourcePath), 2000);
+    }
+  }
+
+  private async writeFeatureItemTableRowRemoval(
+    parentFeature: LiveIssue,
+    issueType: string,
+    childSeq: number
+  ): Promise<void> {
+    this.recentWrites.add(parentFeature.sourcePath);
+    try {
+      await removeFeatureItemTableRow(
+        parentFeature.sourcePath,
+        `${padFeatureId(parentFeature.featureId!)}.${childSeq}`,
+        issueType
       );
     } finally {
       setTimeout(() => this.recentWrites.delete(parentFeature.sourcePath), 2000);

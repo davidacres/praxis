@@ -7,18 +7,19 @@
  * discovers add-ons by listing the owner's npm packages through the GitHub
  * REST API, filtered by a name prefix.
  *
- * Four kinds are installable. `theme`, `surface-pack` and `workflow-template`
- * are declarative data and activate on install. `agent` ships executable
- * intent (skills, prompts) and installs **disabled** until the user grants it
- * trust.
+ * Five kinds are installable. `theme`, `surface-pack` and `workflow-template`
+ * are declarative data and activate on install. `agent` and `skill` ship
+ * executable intent (prompts, instructions, and — for a skill — optional
+ * scripts/references) and install **disabled** until the user grants trust.
  */
 
-export type AddonKind = 'theme' | 'surface-pack' | 'agent' | 'workflow-template';
+export type AddonKind = 'theme' | 'surface-pack' | 'agent' | 'skill' | 'workflow-template';
 
 export const ADDON_KINDS: readonly AddonKind[] = [
   'theme',
   'surface-pack',
   'agent',
+  'skill',
   'workflow-template'
 ];
 

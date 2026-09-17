@@ -56,6 +56,8 @@ export async function startMockGatewayServer(options: {
   toolCall?: { name: string; arguments: Record<string, unknown> };
   /** Optional first-turn tool calls; useful for exercising a long activity history. */
   toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+  /** Delay completion so a test can interact with an in-flight session. */
+  responseDelayMs?: number;
 }): Promise<MockGatewayServer> {
   const reply = options.reply ?? COMPLETE_REPLY;
   const models = options.models ?? [{ id: 'mock/model' }];
@@ -126,8 +128,12 @@ export async function startMockGatewayServer(options: {
               })
             );
           }
-          res.write('data: [DONE]\n\n');
-          res.end();
+          const finish = () => {
+            res.write('data: [DONE]\n\n');
+            res.end();
+          };
+          if (options.responseDelayMs) setTimeout(finish, options.responseDelayMs);
+          else finish();
         } else {
           // 'hang': keep the stream open so the session stays in-flight.
           openResponses.add(res);

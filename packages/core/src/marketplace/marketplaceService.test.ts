@@ -229,7 +229,7 @@ test('install leaves an agent add-on disabled unless trust is granted', async ()
   const untrusted = await service.install('praxis-addon-flow');
   assert.equal(untrusted.enabled, false);
 
-  const trusted = await service.install('praxis-addon-flow', { trustAgent: true });
+  const trusted = await service.install('praxis-addon-flow', { trust: true });
   assert.equal(trusted.enabled, true);
 });
 
@@ -311,7 +311,7 @@ test('install refuses an add-on that requires a newer app', async () => {
 test('checkForUpdates reports only installed add-ons with a strictly newer latest', async () => {
   const { service, storage } = makeService();
   await service.install('praxis-addon-nord', { version: '1.0.0' });
-  await service.install('praxis-addon-flow', { trustAgent: true });
+  await service.install('praxis-addon-flow', { trust: true });
 
   const updates = await service.checkForUpdates();
   assert.deepEqual(updates, [
@@ -337,21 +337,21 @@ test('update reinstalls at latest and preserves agent trust', async () => {
       )
     }
   });
-  await service.install('praxis-addon-flow', { version: '0.9.0', trustAgent: true });
+  await service.install('praxis-addon-flow', { version: '0.9.0', trust: true });
   const updated = await service.update('agent', 'flow');
   assert.equal(updated.version, '1.0.0');
   assert.equal(updated.enabled, true);
   assert.equal(storage.records.get('agent/flow')?.version, '1.0.0');
 });
 
-test('setAgentTrust flips the stored enabled flag and rejects an unknown id', async () => {
+test('setTrust flips the stored enabled flag and rejects an unknown id', async () => {
   const { service, storage } = makeService();
   await service.install('praxis-addon-flow');
-  await service.setAgentTrust('flow', true);
+  await service.setTrust('agent', 'flow', true);
   assert.equal(storage.records.get('agent/flow')?.enabled, true);
-  await service.setAgentTrust('flow', false);
+  await service.setTrust('agent', 'flow', false);
   assert.equal(storage.records.get('agent/flow')?.enabled, false);
-  await assert.rejects(() => service.setAgentTrust('ghost', true), /No installed agent add-on/);
+  await assert.rejects(() => service.setTrust('agent', 'ghost', true), /No installed agent add-on/);
 });
 
 test('remove deletes the install record', async () => {

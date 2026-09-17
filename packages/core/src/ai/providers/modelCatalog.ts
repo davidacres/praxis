@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { AiProvider } from '../../types';
 import { fetchModels, type GatewayOptions, type RawGatewayModel } from '../gateway/gatewayClient';
 import { fetchAnthropicModels } from './anthropicClient';
+import { fetchGeminiModels } from './geminiClient';
 
 /**
  * One selectable model, shared by every "model picker" surface — both
@@ -89,7 +90,11 @@ export async function listCatalogModels(
   const promise = (async () => {
     // Anthropic's Models API needs `x-api-key`/`anthropic-version` auth, not
     // OpenAI-style Bearer — everything else speaks the same `/v1/models` shape.
-    const raw = provider === 'anthropic' ? await fetchAnthropicModels(opts) : await fetchModels(opts);
+    const raw = provider === 'anthropic'
+      ? await fetchAnthropicModels(opts)
+      : provider === 'gemini'
+        ? await fetchGeminiModels(opts)
+        : await fetchModels(opts);
     const choices = normalize(raw);
     cache.set(key, { choices, fetchedAt: Date.now() });
     return choices;

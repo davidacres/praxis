@@ -32,6 +32,7 @@ Create the first functional version of the task designer as a standalone panel w
 | 01.2 | Story | Add ticket lookup and node creation | ✓ Obsolete |
 | 01.3 | Story | Add node dragging, deletion, and persistence | ✓ Obsolete |
 
+| 101.4 | Story | Create a visual agent view | 📋 Proposed |
 ## Dependencies
 1. Story 01.1 must land before 01.2.
 2. Story 01.2 must land before 01.3.

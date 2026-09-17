@@ -182,6 +182,70 @@ export async function appendFeatureItemTableRow(
 }
 
 /**
+ * Removes one child row from a feature's Items/Stories table. The reference and
+ * type identify the row; the summary is deliberately not required because a
+ * title edit may be saved alongside a parent change.
+ */
+export async function removeFeatureItemTableRow(
+  featureMdPath: string,
+  itemReference: string,
+  itemType: string
+): Promise<boolean> {
+  let content: string;
+  try {
+    content = await readUtf8(featureMdPath);
+  } catch {
+    return false;
+  }
+
+  const reference = itemReference.trim().toLowerCase();
+  const type = itemType.trim().toLowerCase();
+  const lines = content.split(/\r?\n/);
+  const rowIndex = lines.findIndex(line => {
+    if (!line.trim().startsWith('|')) {
+      return false;
+    }
+    const cells = line.split('|').map(cell => cell.trim().toLowerCase());
+    return cells[1] === reference && cells[2] === type;
+  });
+
+  if (rowIndex < 0) {
+    return false;
+  }
+
+  lines.splice(rowIndex, 1);
+  await folderFs().writeFile(featureMdPath, lines.join('\n'));
+  return true;
+}
+
+/** Updates or adds the parent reference stored in a child markdown file. */
+export async function writeParentToMarkdownFile(
+  filePath: string,
+  parentKey: string
+): Promise<boolean> {
+  const content = await readUtf8(filePath);
+  const parentLineRe = /^(\*\*Parent:\*\*\s*).*$/m;
+  let updated: string;
+  if (parentLineRe.test(content)) {
+    updated = content.replace(parentLineRe, `$1${parentKey}`);
+  } else {
+    const normalized = content.replace(/\r\n/g, '\n');
+    const lines = normalized.split('\n');
+    const typeIndex = lines.findIndex(line => /^\*\*Type:\*\*/i.test(line.trim()));
+    const insertIndex = typeIndex >= 0 ? typeIndex + 1 : 1;
+    lines.splice(insertIndex, 0, `**Parent:** ${parentKey}`);
+    updated = lines.join('\n');
+  }
+
+  if (updated === content) {
+    return false;
+  }
+
+  await folderFs().writeFile(filePath, updated);
+  return true;
+}
+
+/**
  * Updates the feature-level `**Status:**` based on aggregate story statuses.
  * Rules:
  * - All stories Done → feature is Done

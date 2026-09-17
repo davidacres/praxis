@@ -31,6 +31,7 @@ import { TaskDesignerSidebar } from '../taskDesigner/TaskDesignerSidebar';
 import { BottomPanel } from './BottomPanel';
 import { SessionInspector } from '../ai/SessionInspector';
 import { SessionsPage } from '../ai/SessionsPage';
+import { SessionFocusTabs } from '../ai/SessionFocusTabs';
 import { Icon } from '../ui/Icon';
 import { backendModeMeta } from '../board/boardMeta';
 import { useResizable } from './useResizable';
@@ -62,6 +63,7 @@ import { DeploymentsPage } from '../deployments/DeploymentsPage';
 import { AgentDetailPage } from '../agents/AgentDetailPage';
 import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
 import { CreateAgentDialog, CreateAgentProfileDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
+import { isHostShimProfile } from '../agents/agentCatalog';
 import type { ActivationMap, CatalogSelection, LifecycleAction } from '../agents/agentSelection';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 import { useDialogs } from '../ui/dialogs';
@@ -378,7 +380,7 @@ export function App() {
   const [agentsBusy, setAgentsBusy] = useState(false);
   const [agentError, setAgentError] = useState<string>();
   const [activations, setActivations] = useState<ActivationMap>({});
-  const [agentDialog, setAgentDialog] = useState<'agent' | 'profile' | 'skill' | 'import'>();
+  const [agentDialog, setAgentDialog] = useState<'agent' | 'profile' | 'skill' | 'import' | 'import-binding'>();
 
   const loadAgents = useCallback(async (hard: boolean) => {
     setAgentsBusy(true);
@@ -1166,12 +1168,20 @@ export function App() {
     agentSessions.forEach(session => {
       entries.push({ id: `session:${session.issueKey}`, label: session.title || session.issueKey, hint: session.issueKey, group: 'Sessions', icon: 'robot', run: () => navigate({ feature: 'sessions', sessionKey: session.issueKey }) });
     });
-    (agentSnapshot?.profiles ?? []).forEach(profile => {
+    (agentSnapshot?.profiles ?? []).filter(profile => !isHostShimProfile(profile)).forEach(profile => {
       entries.push({ id: `profile:${profile.profile.id}`, label: profile.profile.name, hint: 'Agent profile', group: 'Agents', icon: 'robot', run: () => navigate({ feature: 'agents', agentProfileId: profile.profile.id }) });
     });
-    (agentSnapshot?.runtimeHosts ?? agentSnapshot?.agents ?? []).forEach(host => {
-      entries.push({ id: `host:${host.manifest.id}`, label: host.manifest.name, hint: 'Runtime host', group: 'Agents', icon: 'zap', run: () => navigate({ feature: 'agents', agentId: host.manifest.id }) });
-    });
+    // Bindings with no curated AGENT.md profile only — one that already has a
+    // real profile shows up as that profile's entry above, and is managed
+    // from there.
+    (agentSnapshot?.runtimeHosts ?? agentSnapshot?.agents ?? [])
+      .filter(host => {
+        const profile = (agentSnapshot?.profiles ?? []).find(candidate => candidate.profile.id === host.manifest.id);
+        return !profile || isHostShimProfile(profile);
+      })
+      .forEach(host => {
+        entries.push({ id: `host:${host.manifest.id}`, label: host.manifest.name, hint: 'Launch binding (advanced)', group: 'Agents', icon: 'zap', run: () => navigate({ feature: 'agents', agentId: host.manifest.id }) });
+      });
     (agentSnapshot?.skills ?? []).forEach(skill => {
       entries.push({ id: `skill:${skill.metadata.name}`, label: skill.metadata.name, hint: 'Skill', group: 'Agents', icon: 'sparkles', run: () => navigate({ feature: 'agents', skillName: skill.metadata.name }) });
     });
@@ -1352,6 +1362,21 @@ export function App() {
     // A workspace-level session ("Sessions → New session"): the composer, not a
     // board or the project dashboard, even when a project is on the route.
     if (route.newSession) {
+      if (!sidebarVisible && !auxVisible) {
+        return (
+          <div className="sessions-focus-new-layout">
+            <div className="session-console-header session-focus-header session-focus-new-header">
+              <SessionFocusTabs
+                sessions={agentSessions}
+                newSessionActive
+                onSelectSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
+                onNewSession={() => undefined}
+              />
+            </div>
+            {renderNewSession()}
+          </div>
+        );
+      }
       return renderNewSession();
     }
     if (selectedProject && route.feature === 'workflows') {
@@ -1449,7 +1474,9 @@ export function App() {
           sessions={agentSessions}
           selectedKey={route.sessionKey}
           onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
+          onSelectSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
           onOpenAiSettings={() => setSettingsDialogCategory('ai')}
+          focusMode={!sidebarVisible && !auxVisible}
           initialBrowserOpen={route.browserOpen}
           initialBrowserUrl={route.browserUrl}
           onBrowserOpenChange={handleBrowserOpenChange}
@@ -2114,6 +2141,14 @@ export function App() {
                   refreshConnections();
                   navigate({ feature: 'connections' });
                 }}
+                onNewAgentItem={kind => {
+                  setSettingsDialogCategory(undefined);
+                  setAgentDialog(kind === 'import' ? 'import-binding' : kind);
+                }}
+                onOpenAgent={agentId => {
+                  setSettingsDialogCategory(undefined);
+                  navigate({ ...route, feature: 'agents', agentId, agentProfileId: undefined, skillName: undefined });
+                }}
               />
             </div>
             <footer className="settings-dialog-footer">
@@ -2192,6 +2227,15 @@ export function App() {
       {agentDialog === 'import' && (
         <ImportDialog
           defaultScope="global"
+          allowedKinds={['profile', 'skill']}
+          onClose={() => setAgentDialog(undefined)}
+          onImported={snap => { setAgentSnapshot(snap); setAgentDialog(undefined); }}
+        />
+      )}
+      {agentDialog === 'import-binding' && (
+        <ImportDialog
+          defaultScope="global"
+          allowedKinds={['agent']}
           onClose={() => setAgentDialog(undefined)}
           onImported={snap => { setAgentSnapshot(snap); setAgentDialog(undefined); }}
         />

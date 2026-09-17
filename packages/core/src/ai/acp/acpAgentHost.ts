@@ -18,6 +18,7 @@ import type { AiSessionManager } from '../aiSessionManager';
 import type { ModelOptions } from '../providers/modelCatalog';
 import type { PermissionDecision } from '../tools';
 import { AcpClientWrapper, type AcpPermissionRequest } from './acpClient';
+import { isProviderLimitError } from '../providerLimitError';
 
 /**
  * Phase-2 peer of `VercelAgentService` for `kind: 'cli-agent'` providers —
@@ -50,6 +51,8 @@ export interface AcpAgentStartOptions {
   mcpServers?: AcpHttpMcpServer[];
   /** A host-scheduled AI-to-AI turn; do not persist its routing instruction as a user turn. */
   internalConversationTurn?: boolean;
+  /** Host-supplied participant and handover context for an AI-to-AI or directed turn. */
+  conversationContext?: string;
 }
 
 export interface AcpHttpMcpServer {
@@ -268,7 +271,7 @@ export class AcpAgentHost {
         }))
       };
     } finally {
-      client.dispose();
+      await client.shutdown();
     }
   }
 
@@ -302,7 +305,7 @@ export class AcpAgentHost {
       return content.trim();
     } finally {
       options.signal?.removeEventListener('abort', cancel);
-      client.dispose();
+      await client.shutdown();
     }
   }
 
@@ -607,6 +610,9 @@ export class AcpAgentHost {
         if (record && !this.isTerminalState(record.state)) {
           this.sessionManager.updateAgentState(issue.key, 'failed');
           this.appendEvent(issue.key, evt('error', message));
+          if (isProviderLimitError(message)) {
+            this.appendEvent(issue.key, evt('error', 'Provider usage limit reached. The session was halted and will not retry automatically.'));
+          }
         }
       })
       .finally(() => {
@@ -663,7 +669,7 @@ export class AcpAgentHost {
       (options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false)
         ? `\n\n${BROWSER_TOOLS_PROMPT}`
         : ''
-    }`;
+    }${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
     const prompt = [
       systemPrompt,
       this.buildConversationTranscript(record.events),
@@ -731,6 +737,9 @@ export class AcpAgentHost {
       const text = error instanceof Error ? error.message : String(error);
       this.sessionManager.updateAgentState(issueKey, 'failed');
       this.appendEvent(issueKey, evt('error', text));
+      if (isProviderLimitError(text)) {
+        this.appendEvent(issueKey, evt('error', 'Provider usage limit reached. The session was halted and will not retry automatically.'));
+      }
     }).finally(() => void this.cleanupTask(issueKey));
   }
 
@@ -840,7 +849,7 @@ export class AcpAgentHost {
     if (!task) {
       return;
     }
-    task.client.dispose();
+    await task.client.shutdown();
     this.activeTasks.delete(issueKey);
     this.emitActiveTaskChange(issueKey);
   }

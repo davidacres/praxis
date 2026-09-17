@@ -26,6 +26,7 @@ import {
 import { PROVIDER_DESCRIPTORS, resolveProviderAdapter } from './providers/registry';
 import { localToolDefinitionsForMode, LocalToolExecutor, type PermissionDecision } from './tools';
 import { shouldAutoAllowToolPermission } from './tools/shellAllowlist';
+import { isProviderLimitError } from './providerLimitError';
 
 interface ActiveTask {
   issueKey: string;
@@ -41,6 +42,7 @@ interface ActiveTask {
     resolve: (response: string) => void;
   };
   messageBuffer: string;
+  reasoningBuffer?: string;
   loopPromise?: Promise<void>;
   ending?: boolean;
   timeoutHandle?: ReturnType<typeof setTimeout>;
@@ -84,6 +86,8 @@ export interface VercelAgentStartOptions {
   };
   /** A host-scheduled AI-to-AI turn; its routing instruction is not a human chat message. */
   internalConversationTurn?: boolean;
+  /** Host-supplied participant and handover context for an AI-to-AI or directed turn. */
+  conversationContext?: string;
 }
 
 export class VercelAgentService {
@@ -288,6 +292,14 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
           this.sessionManager.setAgentPlan(issueKey, task.messageBuffer, { persist: false });
         }
         break;
+      case 'thought_delta':
+        task.reasoningBuffer = (task.reasoningBuffer ?? '') + event.text;
+        this.sessionManager.updateAgentOutput(
+          issueKey,
+          { reasoningText: task.reasoningBuffer },
+          { persist: false }
+        );
+        break;
       case 'usage':
         this.sessionManager.addAgentTokenUsage(issueKey, event.usage);
         break;
@@ -481,6 +493,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       pendingPermissions: [],
       allowPermissionsForTask: false,
       messageBuffer: '',
+      reasoningBuffer: '',
       maxSteps
     };
     this.activeTasks.set(issue.key, task);
@@ -524,6 +537,9 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       if (record && !this.isTerminalState(record.state)) {
         this.sessionManager.updateAgentState(issue.key, 'failed');
         this.appendEvent(issue.key, evt('error', message));
+        if (isProviderLimitError(message)) {
+          this.appendEvent(issue.key, evt('error', 'Provider usage limit reached. The session was halted and will not retry automatically.'));
+        }
       }
     }).finally(() => {
       void this.cleanupTask(issue.key);
@@ -570,7 +586,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       (options.toolExtension?.definitions.some(tool => tool.name === 'browser_navigate') ?? false)
         ? `\n\n${BROWSER_TOOLS_PROMPT}`
         : ''
-    }`;
+    }${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
 
     const task: ActiveTask = {
       issueKey,
@@ -578,6 +594,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       pendingPermissions: [],
       allowPermissionsForTask: false,
       messageBuffer: followUpMessage?.trim() ? '' : (record.responseText ?? ''),
+      reasoningBuffer: '',
       maxSteps
     };
     this.activeTasks.set(issueKey, task);
@@ -630,6 +647,9 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       if (current && !this.isTerminalState(current.state)) {
         this.sessionManager.updateAgentState(issueKey, 'failed');
         this.appendEvent(issueKey, evt('error', message));
+        if (isProviderLimitError(message)) {
+          this.appendEvent(issueKey, evt('error', 'Provider usage limit reached. The session was halted and will not retry automatically.'));
+        }
       }
     }).finally(() => {
       void this.cleanupTask(issueKey);

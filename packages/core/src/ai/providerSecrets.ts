@@ -21,7 +21,7 @@ export function secretKeyForProvider(provider: AiProvider): string {
 }
 
 /** Providers whose credentials are stored in the AI provider secrets namespace. */
-const API_KEY_PROVIDERS: AiProvider[] = ['vercel-gateway', 'openai', 'anthropic'];
+const API_KEY_PROVIDERS: AiProvider[] = ['vercel-gateway', 'openai', 'anthropic', 'gemini'];
 
 /** Clears all AI provider keys without touching connection or OAuth secrets. */
 export async function resetProviderApiKeys(secrets: SecretsStore): Promise<void> {
@@ -76,7 +76,7 @@ export async function resolveProviderApiKey(
 }
 
 /** `kind: 'api'` providers a one-shot completion prompt can call directly. */
-const RECOMMENDATION_CANDIDATE_PROVIDERS: readonly AiProvider[] = ['vercel-gateway', 'openai', 'anthropic'];
+const RECOMMENDATION_CANDIDATE_PROVIDERS: readonly AiProvider[] = ['vercel-gateway', 'openai', 'anthropic', 'gemini'];
 
 export interface RecommendationProviderChoice {
   provider: AiProvider;

@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import type { AgentConversationMode, AgentSessionRecord, AiHandoverBriefEdits, AiProvider, HandoverBrief, ModelOptions } from '@praxis/core';
+import type { AgentConversationMode, AgentSessionRecord, AiHandoverBriefEdits, AiProvider, AiProviderStatus, HandoverBrief, ModelOptions } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { isTerminalAgentState } from './aiSessionState';
-import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from './modelProviders';
+import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName, refreshModelOptions } from './modelProviders';
 import { formatStarted } from './sessionNav';
 
 function purposeOf(session: AgentSessionRecord) {
@@ -17,7 +17,7 @@ function purposeOf(session: AgentSessionRecord) {
 }
 
 export function canChangeSessionRuntime(session: AgentSessionRecord): boolean {
-  return isTerminalAgentState(session.state) || session.state === 'paused' || session.state === 'not_started';
+  return session.state !== 'executing' && session.state !== 'planning';
 }
 
 function freshnessLabel(brief: HandoverBrief): string {
@@ -185,63 +185,124 @@ export function SessionRuntimeHistory({ session }: { session: AgentSessionRecord
   );
 }
 
+export interface ComposerPopoverPosition {
+  bottom: number;
+  left: number;
+}
+
 interface TransitionDialogsProps {
   session: AgentSessionRecord;
   open: 'model' | 'handover' | undefined;
+  position: ComposerPopoverPosition | undefined;
   onClose: () => void;
+  onAddProvider?: (provider: AiProvider) => void;
 }
 
-export function SessionTransitionDialogs({ session, open, onClose }: TransitionDialogsProps) {
-  const [provider, setProvider] = useState<AiProvider>(session.provider ?? 'openai');
-  const [model, setModel] = useState(session.model ?? '');
+const HANDOVER_CONFIRMATION_KEY = 'praxis-ai-handover-confirmation';
+
+function anchoredPopoverStyle(position: ComposerPopoverPosition, width: number): CSSProperties {
+  return {
+    position: 'fixed',
+    bottom: position.bottom,
+    left: Math.max(12, Math.min(position.left, window.innerWidth - width - 12))
+  };
+}
+
+function preferredModel(options: ModelOptions | undefined): string | undefined {
+  if (!options) return undefined;
+  if (options.currentValue && options.options.some(option => option.value === options.currentValue)) {
+    return options.currentValue;
+  }
+  return options.options[0]?.value;
+}
+
+export function SessionTransitionDialogs({ session, open, position, onClose, onAddProvider }: TransitionDialogsProps) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [options, setOptions] = useState<ModelOptions>();
+  const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>();
+  const [pendingProvider, setPendingProvider] = useState<AiProvider>();
+  const [modelFilter, setModelFilter] = useState('');
+  const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [notes, setNotes] = useState(session.handoverBrief?.userNotes ?? '');
 
   useEffect(() => {
     if (!open) return;
-    setProvider(session.provider ?? 'openai');
-    setModel(session.model ?? '');
-    setNotes(session.handoverBrief?.userNotes ?? '');
+    setPendingProvider(undefined);
+    setModelFilter('');
     setError(undefined);
-  }, [open, session.issueKey, session.model, session.provider, session.handoverBrief?.userNotes]);
+    setOptions(undefined);
+    setProviderStatuses(undefined);
+  }, [open, session.issueKey]);
 
   useEffect(() => {
-    if (!open) return;
+    if (open !== 'model' || !session.provider) return;
     let cancelled = false;
-    void fetchModelOptions(provider, false).then(next => {
-      if (cancelled) return;
-      setOptions(next);
-      setModel(current => {
-        if (next?.options.length && !next.options.some(option => option.value === current)) {
-          return next.currentValue || next.options[0].value;
-        }
-        return current;
+    setLoading(true);
+    void fetchModelOptions(session.provider, false)
+      .then(next => {
+        if (!cancelled) setOptions(next);
+      })
+      .catch(cause => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-    });
     return () => {
       cancelled = true;
     };
-  }, [open, provider]);
+  }, [open, session.provider]);
 
-  if (!open) return null;
+  useEffect(() => {
+    if (open !== 'handover') return;
+    let cancelled = false;
+    setLoading(true);
+    void window.praxis.ai.listProviderStatuses()
+      .then(statuses => {
+        if (!cancelled) setProviderStatuses(statuses);
+      })
+      .catch(cause => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
-  const title = open === 'model' ? 'Change model' : 'Hand over session';
-  const submit = async () => {
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element;
+      if (menuRef.current?.contains(target)) return;
+      if (target.closest('[data-testid="session-provider"], [data-testid="session-model"]')) return;
+      onClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [onClose, open]);
+
+  if (!open || !position) return null;
+
+  const changeModel = async (model: string) => {
+    if (model === session.model) {
+      onClose();
+      return;
+    }
     setBusy(true);
     setError(undefined);
     try {
-      if (open === 'model') {
-        await window.praxis.ai.updateSessionModel(session.issueKey, model);
-      } else {
-        await window.praxis.ai.handoverSession(session.issueKey, {
-          provider,
-          model: model || undefined,
-          expectedBriefRevision: session.handoverBrief?.revision ?? 0,
-          briefEdits: notes !== (session.handoverBrief?.userNotes ?? '') ? { userNotes: notes } : undefined
-        });
-      }
+      await window.praxis.ai.updateSessionModel(session.issueKey, model);
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -250,51 +311,175 @@ export function SessionTransitionDialogs({ session, open, onClose }: TransitionD
     }
   };
 
+  const refreshModels = async () => {
+    if (!session.provider) return;
+    setLoading(true);
+    setError(undefined);
+    try {
+      setOptions(await refreshModelOptions(session.provider));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handover = async (provider: AiProvider, remember: boolean) => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const providerModels = await fetchModelOptions(provider, false);
+      await window.praxis.ai.handoverSession(session.issueKey, {
+        provider,
+        model: preferredModel(providerModels),
+        expectedBriefRevision: session.handoverBrief?.revision ?? 0
+      });
+      if (remember) localStorage.setItem(HANDOVER_CONFIRMATION_KEY, 'always');
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const providerIsSelectable = (provider: AiProvider) =>
+    provider === session.provider || providerStatuses?.some(status => status.provider === provider && status.configured) === true;
+
+  const chooseProvider = (provider: AiProvider) => {
+    if (!providerIsSelectable(provider)) return;
+    if (provider === session.provider) {
+      onClose();
+      return;
+    }
+    if (localStorage.getItem(HANDOVER_CONFIRMATION_KEY) === 'always') {
+      void handover(provider, false);
+      return;
+    }
+    setPendingProvider(provider);
+    setError(undefined);
+  };
+
+  const filteredOptions = (options?.options ?? []).filter(option => {
+    const query = modelFilter.trim().toLowerCase();
+    return !query || option.name.toLowerCase().includes(query) || option.value.toLowerCase().includes(query);
+  });
+
   return createPortal(
-    <div className="modal-backdrop" data-testid={open === 'model' ? 'session-model-dialog' : 'session-handover-dialog'} onClick={onClose}>
-      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="session-transition-title" onClick={event => event.stopPropagation()}>
-        <h2 id="session-transition-title">{title}</h2>
-        {open === 'handover' && (
-          <p className="hint">
-            The same Praxis session, worktree and brief continue. The receiving AI starts a new native runtime and is asked to inspect the current files.
+    <div
+      ref={menuRef}
+      className="composer-provider-menu session-runtime-popover"
+      role={pendingProvider ? 'dialog' : 'listbox'}
+      aria-label={pendingProvider ? 'Confirm AI provider handover' : open === 'model' ? 'Model' : 'AI provider'}
+      data-testid={open === 'model' ? 'session-model-menu' : 'session-provider-menu'}
+      style={anchoredPopoverStyle(position, 300)}
+    >
+      {pendingProvider ? (
+        <div className="session-handover-confirm" data-testid="session-handover-confirmation">
+          <div className="session-popover-heading">
+            <Icon name="info" size={15} />
+            <strong>Hand over to {PROVIDER_LABELS[pendingProvider]}?</strong>
+          </div>
+          <p>
+            This continues the current session with {PROVIDER_LABELS[pendingProvider]}. The new AI receives the session brief and workspace context.
           </p>
-        )}
-        {open === 'handover' && (
-          <label className="session-brief-field">
-            <span className="rail-sub">Provider</span>
-            <select data-testid="session-handover-provider" value={provider} onChange={event => setProvider(event.target.value as AiProvider)}>
-              {[...MODEL_PROVIDERS].map(id => (
-                <option key={id} value={id}>{PROVIDER_LABELS[id]}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label className="session-brief-field">
-          <span className="rail-sub">Model</span>
-          {options?.options.length ? (
-            <select data-testid="session-transition-model" value={model} onChange={event => setModel(event.target.value)}>
-              {options.options.map(option => (
-                <option key={option.value} value={option.value}>{option.name || option.value}</option>
-              ))}
-            </select>
-          ) : (
-            <input data-testid="session-transition-model" value={model} onChange={event => setModel(event.target.value)} />
-          )}
-        </label>
-        {open === 'handover' && (
-          <label className="session-brief-field">
-            <span className="rail-sub">Notes for the next AI</span>
-            <textarea data-testid="session-handover-notes" rows={4} value={notes} onChange={event => setNotes(event.target.value)} />
-          </label>
-        )}
-        {error && <p className="hint is-danger">{error}</p>}
-        <div className="session-brief-actions">
-          <button type="button" className="btn btn-primary" data-testid="session-transition-confirm" disabled={busy || !model} onClick={() => void submit()}>
-            {busy ? 'Working…' : open === 'model' ? 'Change model' : 'Hand over'}
-          </button>
-          <button type="button" className="btn" data-testid="session-transition-cancel" onClick={onClose}>Cancel</button>
+          <p className="session-popover-note">Always skips this confirmation for future provider changes on this Praxis installation.</p>
+          {error && <p className="session-popover-error">{error}</p>}
+          <div className="session-popover-actions">
+            <button type="button" className="btn" data-testid="session-handover-no" disabled={busy} onClick={() => setPendingProvider(undefined)}>No</button>
+            <button type="button" className="btn" data-testid="session-handover-always" disabled={busy} onClick={() => void handover(pendingProvider, true)}>Always</button>
+            <button type="button" className="btn btn-primary" data-testid="session-handover-yes" disabled={busy} onClick={() => void handover(pendingProvider, false)}>{busy ? 'Handing over…' : 'Yes'}</button>
+          </div>
         </div>
-      </div>
+      ) : open === 'model' ? (
+        <>
+          <div className="model-menu-search-row">
+            <input
+              type="text"
+              className="input"
+              placeholder="Filter models…"
+              value={modelFilter}
+              onChange={event => setModelFilter(event.target.value)}
+              data-testid="session-model-filter"
+              autoFocus
+            />
+            <button
+              type="button"
+              className="model-menu-refresh"
+              aria-label={`Refresh ${session.provider ? PROVIDER_LABELS[session.provider] : ''} models`}
+              title="Refresh model list"
+              data-testid="session-model-refresh"
+              disabled={loading || busy}
+              onClick={() => void refreshModels()}
+            >
+              <Icon name="refresh" size={14} />
+            </button>
+          </div>
+          {loading && <div className="popover-label">Loading models…</div>}
+          {!loading && filteredOptions.length === 0 && <div className="popover-label">No models available</div>}
+          {filteredOptions.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              className={`composer-provider-option${session.model === option.value ? ' active' : ''}`}
+              data-testid={`session-model-option-${option.value}`}
+              role="option"
+              aria-selected={session.model === option.value}
+              title={option.description}
+              disabled={busy}
+              onClick={() => void changeModel(option.value)}
+            >
+              <Icon name="sparkles" size={14} />
+              {option.name || option.value}
+            </button>
+          ))}
+          {error && <p className="session-popover-error">{error}</p>}
+        </>
+      ) : (
+        <>
+          {loading && <div className="popover-label">Loading providers…</div>}
+          {!loading && [...MODEL_PROVIDERS].map(provider => {
+            const unavailable = !providerIsSelectable(provider);
+            return (
+              <div
+                key={provider}
+                className={`composer-provider-option${session.provider === provider ? ' active' : ''}${unavailable ? ' is-unavailable' : ''}`}
+                data-testid={`session-provider-option-${provider}`}
+                role="option"
+                aria-selected={session.provider === provider}
+                aria-disabled={unavailable}
+                tabIndex={unavailable ? -1 : 0}
+                title={unavailable ? 'Configure this provider in Settings first' : undefined}
+                onClick={unavailable ? undefined : () => chooseProvider(provider)}
+                onKeyDown={unavailable ? undefined : event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    chooseProvider(provider);
+                  }
+                }}
+              >
+                <Icon name={providerIconName(provider)} size={14} />
+                <span>{PROVIDER_LABELS[provider]}</span>
+                {unavailable && <small>Not configured</small>}
+                <button
+                  type="button"
+                  className="composer-provider-add"
+                  aria-label={`Add ${PROVIDER_LABELS[provider]} to this chat`}
+                  data-testid={`session-provider-add-${provider}`}
+                  disabled={unavailable}
+                  onClick={event => {
+                    event.stopPropagation();
+                    onAddProvider?.(provider);
+                  }}
+                >
+                  <Icon name="plus" size={13} />
+                </button>
+              </div>
+            );
+          })}
+          {error && <p className="session-popover-error">{error}</p>}
+        </>
+      )}
     </div>,
     document.body
   );
@@ -302,12 +487,16 @@ export function SessionTransitionDialogs({ session, open, onClose }: TransitionD
 
 
 
-export function SessionConversationDialog({ session, open, onClose }: { session: AgentSessionRecord; open: boolean; onClose: () => void }) {
+export function SessionConversationDialog({ session, open, position, onClose, initialProvider }: { session: AgentSessionRecord; open: boolean; position: ComposerPopoverPosition | undefined; onClose: () => void; initialProvider?: AiProvider }) {
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const defaultProvider = [...MODEL_PROVIDERS].find(provider => provider !== session.provider) ?? session.provider ?? 'openai';
   const [provider, setProvider] = useState<AiProvider>(defaultProvider);
   const [model, setModel] = useState('');
   const [mode, setMode] = useState<AgentConversationMode>('consult');
   const [turnCap, setTurnCap] = useState(6);
+  useEffect(() => {
+    if (open && initialProvider) setProvider(initialProvider);
+  }, [open, initialProvider]);
   const [options, setOptions] = useState<ModelOptions>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -332,7 +521,25 @@ export function SessionConversationDialog({ session, open, onClose }: { session:
     return () => { cancelled = true; };
   }, [open, provider]);
 
-  if (!open) return null;
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element;
+      if (popoverRef.current?.contains(target)) return;
+      onClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [onClose, open]);
+
+  if (!open || !position) return null;
   const submit = async () => {
     setBusy(true);
     setError(undefined);
@@ -346,10 +553,20 @@ export function SessionConversationDialog({ session, open, onClose }: { session:
     }
   };
   return createPortal(
-    <div className="modal-backdrop" data-testid="session-conversation-dialog" onClick={onClose}>
-      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="session-conversation-title" onClick={event => event.stopPropagation()}>
-        <h2 id="session-conversation-title">Bring in another AI</h2>
-        <p className="hint">This starts a bounded, sequential conversation. Two models may incur spend; only one can hold tools at a time.</p>
+    <div
+      ref={popoverRef}
+      className="composer-provider-menu session-conversation-popover"
+      role="dialog"
+      aria-labelledby="session-conversation-title"
+      data-testid="session-conversation-dialog"
+      style={anchoredPopoverStyle(position, 340)}
+    >
+        <div className="session-popover-heading">
+          <Icon name="chats" size={15} />
+          <strong id="session-conversation-title">Bring in another AI</strong>
+          <button type="button" className="icon-btn icon-btn-sm" aria-label="Close" onClick={onClose}><Icon name="close" size={13} /></button>
+        </div>
+        <p className="session-popover-note">Starts a bounded conversation. Two models may incur spend; only one can hold tools at a time.</p>
         <label className="session-brief-field"><span className="rail-sub">Second AI provider</span>
           <select data-testid="session-conversation-provider" value={provider} onChange={event => setProvider(event.target.value as AiProvider)}>
             {[...MODEL_PROVIDERS].map(id => <option key={id} value={id}>{PROVIDER_LABELS[id]}</option>)}
@@ -368,14 +585,14 @@ export function SessionConversationDialog({ session, open, onClose }: { session:
           <input data-testid="session-conversation-turn-cap" type="number" min={1} max={20} value={turnCap} onChange={event => setTurnCap(Number(event.target.value))} />
         </label>
         {error && <p className="hint is-danger">{error}</p>}
-        <div className="session-brief-actions"><button type="button" className="btn btn-primary" data-testid="session-conversation-confirm" disabled={busy || !model} onClick={() => void submit()}>{busy ? 'Starting…' : 'Start conversation'}</button><button type="button" className="btn" onClick={onClose}>Cancel</button></div>
-      </div>
+        <div className="session-popover-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn btn-primary" data-testid="session-conversation-confirm" disabled={busy || !model} onClick={() => void submit()}>{busy ? 'Starting…' : 'Start conversation'}</button></div>
     </div>, document.body
   );
 }
 
-export function SessionConversationActions({ session, onStart, onStop, onToolOwner }: {
-  session: AgentSessionRecord; onStart: () => void; onStop: () => void; onToolOwner: (id: string) => void;
+export function SessionConversationActions({ session, onStop, onToolOwner, targetId, onTargetChange }: {
+  session: AgentSessionRecord; onStop: () => void; onToolOwner: (id: string) => void;
+  targetId?: string; onTargetChange?: (id: string) => void;
 }) {
   const conversation = session.conversation;
   const idle = canChangeSessionRuntime(session);
@@ -383,11 +600,18 @@ export function SessionConversationActions({ session, onStart, onStop, onToolOwn
     const current = conversation.participants.find(participant => participant.id === conversation.currentSpeakerId);
     const owner = conversation.participants.find(participant => participant.id === conversation.toolOwnerId);
     return <>
-      <span className="composer-chip session-runtime-chip" data-testid="session-conversation-status">{conversation.mode} · {conversation.turnsUsed}/{conversation.turnCap} · {current?.displayLabel}</span>
-      <span className="composer-chip session-runtime-chip" data-testid="session-conversation-tool-owner">Tools: {owner?.displayLabel ?? 'None'}</span>
+      <label className="composer-chip session-conversation-target" data-testid="session-conversation-target">
+        <Icon name={providerIconName((conversation.participants.find(participant => participant.id === targetId) ?? current)?.provider ?? 'openai')} size={13} />
+        <span>Ask</span>
+        <select aria-label="Choose which AI receives your message" value={targetId ?? current?.id ?? ''} onChange={event => onTargetChange?.(event.target.value)}>
+          {conversation.participants.map(participant => <option key={participant.id} value={participant.id}>{participant.displayLabel}</option>)}
+        </select>
+      </label>
+      <span className="composer-chip session-runtime-chip is-readonly" data-testid="session-conversation-status">{conversation.mode} · {conversation.turnsUsed}/{conversation.turnCap} · {current?.displayLabel}</span>
+      <span className="composer-chip session-runtime-chip is-readonly" data-testid="session-conversation-tool-owner">Tools: {owner?.displayLabel ?? 'None'}</span>
       {conversation.mode === 'pair' && idle && conversation.participants.map(participant => <button key={participant.id} className="composer-chip" type="button" data-testid={`session-conversation-owner-${participant.id}`} disabled={participant.id === conversation.toolOwnerId} onClick={() => onToolOwner(participant.id)}>Give tools to {participant.role}</button>)}
       <button type="button" className="composer-chip" data-testid="session-stop-conversation" onClick={onStop}><Icon name="close" size={14} />Stop conversation</button>
     </>;
   }
-  return <button type="button" className="composer-chip" data-testid="session-start-conversation" disabled={!idle} title={idle ? 'Bring a second AI into this session' : 'Wait until this turn finishes.'} onClick={onStart}><Icon name="chats" size={14} />Bring in another AI</button>;
+  return null;
 }

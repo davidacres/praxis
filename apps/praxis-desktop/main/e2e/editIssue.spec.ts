@@ -28,6 +28,27 @@ function writeFixturePlansFolder(root: string): void {
       '## Description',
       '',
       'A demo feature for e2e testing.',
+      '',
+      '## Items',
+      '',
+      '| Ref | Type | Name | Status |',
+      '| --- | --- | --- | --- |',
+      '| 01.1 | Task | Edit me task | 📋 Proposed |',
+      ''
+    ].join('\n')
+  );
+  fs.mkdirSync(path.join(root, 'features', 'feature-02-target-feature'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'features', 'feature-02-target-feature', 'feature.md'),
+    [
+      '# Target Feature',
+      '',
+      '**Status:** 📋 Proposed',
+      '**Type:** Feature',
+      '',
+      '## Description',
+      '',
+      'The destination feature for the re-parenting test.',
       ''
     ].join('\n')
   );
@@ -116,4 +137,41 @@ test('editing a live folder issue writes the priority back to markdown', async (
   // reloaded form shows the new title.
   await expect.poll(() => fs.readFileSync(taskPath, 'utf-8')).toMatch(/^# Edited task title$/m);
   await expect(window.locator('[data-testid="issue-edit-summary"]')).toHaveValue('Edited task title');
+});
+
+test('changing a folder ticket parent moves it to the selected feature', async () => {
+  await launchWithEditFixture();
+
+  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Edit E2E' }).click();
+  await expandAllIssueStacks(window);
+  await window.locator('[data-testid="issue-card"]', { hasText: 'Edit me task' }).click();
+
+  const parentField = window.locator('[data-testid="issue-edit-parent"]');
+  await expect(parentField).toBeEnabled();
+  await expect(parentField).toHaveValue('EDIT-F01');
+  await parentField.fill('EDIT-F02 — Target Feature');
+  await window.locator('[data-testid="issue-edit-save-btn"]').click();
+
+  const oldTaskPath = path.join(
+    plansDir,
+    'features',
+    'feature-01-demo-feature',
+    'task-01-01-edit-me-task.md'
+  );
+  const newTaskPath = path.join(
+    plansDir,
+    'features',
+    'feature-02-target-feature',
+    'task-02-1-edit-me-task.md'
+  );
+  const oldFeaturePath = path.join(plansDir, 'features', 'feature-01-demo-feature', 'feature.md');
+  const newFeaturePath = path.join(plansDir, 'features', 'feature-02-target-feature', 'feature.md');
+
+  await expect.poll(() => fs.existsSync(oldTaskPath)).toBe(false);
+  await expect.poll(() => fs.existsSync(newTaskPath)).toBe(true);
+  await expect.poll(() => fs.readFileSync(oldFeaturePath, 'utf-8')).not.toContain('Edit me task');
+  await expect.poll(() => fs.readFileSync(newFeaturePath, 'utf-8')).toContain(
+    '| 02.1 | Task | Edit me task | 📋 Proposed |'
+  );
+  await expect(window.locator('[data-testid="issue-edit-parent"]')).toHaveValue('EDIT-F02');
 });

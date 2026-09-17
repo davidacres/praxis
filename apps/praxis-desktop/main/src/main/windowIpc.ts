@@ -2,6 +2,22 @@ import * as os from 'node:os';
 import { BrowserWindow, ipcMain } from 'electron';
 
 const confirmedWindows = new WeakSet<BrowserWindow>();
+const APP_ZOOM_MIN = 0.7;
+const APP_ZOOM_MAX = 1.5;
+const APP_ZOOM_STEP = 0.1;
+
+function clampZoomFactor(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(APP_ZOOM_MAX, Math.max(APP_ZOOM_MIN, Math.round(value * 10) / 10));
+}
+
+function publishZoomFactor(win: BrowserWindow, factor: number): number {
+  const next = clampZoomFactor(factor);
+  if (win.isDestroyed()) return next;
+  win.webContents.setZoomFactor(next);
+  win.webContents.send('window:zoomChanged', next);
+  return next;
+}
 
 /**
  * The app runs frameless, so the renderer draws its own caption buttons and drives the native
@@ -92,6 +108,42 @@ export function registerWindowIpc(): void {
     const win = senderWindow(event);
     const applied = win ? setWindowVibrancy(win, mode === 'glass' ? 'glass' : 'off') && mode === 'glass' : false;
     return { applied };
+  });
+
+  ipcMain.handle('window:getZoomFactor', async (event: Electron.IpcMainInvokeEvent) =>
+    senderWindow(event)?.webContents.getZoomFactor() ?? 1
+  );
+
+  ipcMain.handle('window:setZoomFactor', async (event: Electron.IpcMainInvokeEvent, factor: number) => {
+    const win = senderWindow(event);
+    return win ? publishZoomFactor(win, factor) : 1;
+  });
+}
+
+/**
+ * Electron does not expose a native application menu in Praxis, so own the
+ * familiar browser/VS Code zoom shortcuts at the BrowserWindow boundary.
+ * This ensures they work from the chat, either sidebar, inspector, composer,
+ * and dialogs alike instead of depending on whichever renderer element has
+ * focus.
+ */
+export function attachWindowZoomShortcuts(win: BrowserWindow): void {
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || (!input.control && !input.meta)) return;
+    if (input.key === '0') {
+      event.preventDefault();
+      publishZoomFactor(win, 1);
+      return;
+    }
+    if (input.key === '+' || input.key === '=' || input.key === 'Add') {
+      event.preventDefault();
+      publishZoomFactor(win, win.webContents.getZoomFactor() + APP_ZOOM_STEP);
+      return;
+    }
+    if (input.key === '-' || input.key === '_' || input.key === 'Subtract') {
+      event.preventDefault();
+      publishZoomFactor(win, win.webContents.getZoomFactor() - APP_ZOOM_STEP);
+    }
   });
 }
 

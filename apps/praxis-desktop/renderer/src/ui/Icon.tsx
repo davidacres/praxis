@@ -25,6 +25,7 @@ export type IconName =
   | 'chevron-down'
   | 'chevron-right'
   | 'chevron-up'
+  | 'compress'
   | 'search'
   | 'sliders'
   | 'plus'
@@ -84,7 +85,16 @@ export type IconName =
   | 'zoom-in'
   | 'zoom-out'
   | 'check'
-  | 'sparkles';
+  | 'sparkles'
+  // AI provider identity — original glyphs in this set's own idiom, not
+  // reproductions of each company's actual trademarked logo. Distinguishes
+  // providers by shape, not just the `--tone-*` color they're paired with
+  // in theme.css (`.session-chat-provider-*` etc.) — 'terminal'/'globe'
+  // (below) is the fallback for every other provider.
+  | 'provider-openai'
+  | 'provider-claude'
+  | 'provider-codex'
+  | 'provider-antigravity';
 
 const PATHS: Record<IconName, string | string[]> = {
   'sidebar-left': [
@@ -114,6 +124,10 @@ const PATHS: Record<IconName, string | string[]> = {
   'chevron-down': 'M4.2 6.3 8 10.1l3.8-3.8',
   'chevron-right': 'M6.3 4.2 10.1 8l-3.8 3.8',
   'chevron-up': 'M4.2 9.7 8 5.9l3.8 3.8',
+  compress: [
+    'M6 2.5H2.5V6M10 2.5h3.5V6M6 13.5H2.5V10M10 13.5h3.5V10',
+    'M5 5 2.5 2.5M11 5l2.5-2.5M5 11l-2.5 2.5M11 11l2.5 2.5'
+  ],
   search: ['M7.2 2.6a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2z', 'M10.6 10.6 14 14'],
   sliders: [
     'M1.6 5.2h1.6M6.4 5.2h8M1.6 10.8h7.2M12 10.8h2.4',
@@ -180,7 +194,11 @@ const PATHS: Record<IconName, string | string[]> = {
   'zoom-in': ['M7.2 2.6a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2z', 'M10.6 10.6 14 14', 'M7.2 5.2v4M5.2 7.2h4'],
   'zoom-out': ['M7.2 2.6a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2z', 'M10.6 10.6 14 14', 'M5.2 7.2h4'],
   check: 'M3.2 8.4 6.6 11.8 12.8 4.4',
-  sparkles: ['M8 2.4l1.4 3.4 3.4 1.4-3.4 1.4L8 12l-1.4-3.4-3.4-1.4 3.4-1.4z', 'M12.4 10.4l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z']
+  sparkles: ['M8 2.4l1.4 3.4 3.4 1.4-3.4 1.4L8 12l-1.4-3.4-3.4-1.4 3.4-1.4z', 'M12.4 10.4l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z'],
+  'provider-openai': 'M13.2 8 10.6 3.5 5.4 3.5 2.8 8 5.4 12.5 10.6 12.5z',
+  'provider-claude': 'M8 2.6V13.4M12.68 5.3 3.32 10.7M12.68 10.7 3.32 5.3',
+  'provider-codex': 'M6.2 4.4 2.8 8l3.4 3.6M9.8 4.4 13.2 8l-3.4 3.6',
+  'provider-antigravity': ['M8 12.5V4.5M5.2 7.3 8 4.3l2.8 3', 'M4.5 13.4h7']
 };
 
 /** Glyphs drawn as solid shapes rather than outlines. */

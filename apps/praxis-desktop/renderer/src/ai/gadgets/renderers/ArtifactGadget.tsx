@@ -1,5 +1,6 @@
 import type { ArtifactGadgetPayload } from '@praxis/core';
 import { Icon } from '../../../ui/Icon';
+import { Markdown } from '../../../ui/Markdown';
 import { GadgetActionBar, GadgetHeading } from '../controls';
 import { payloadOf, type GadgetRendererProps } from '../gadgetContract';
 
@@ -8,6 +9,21 @@ function formatSize(bytes?: number): string | undefined {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const PREVIEWABLE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/avif']);
+
+function isPreviewableImage(mediaType: string | undefined, path: string): boolean {
+  return Boolean(
+    mediaType &&
+    PREVIEWABLE_IMAGE_TYPES.has(mediaType.toLowerCase()) &&
+    /\.(?:png|jpe?g|gif|webp|bmp|avif)$/i.test(path.split(/[?#]/, 1)[0] ?? '')
+  );
+}
+
+function markdownImageForArtifact(name: string, path: string): string {
+  const alt = name.replace(/[\[\]]/g, ' ').trim() || 'Artifact preview';
+  return `![${alt}](<${path}>)`;
 }
 
 /**
@@ -26,13 +42,23 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
       <ul className="gadget-artifacts">
         {payload.artifacts.map(artifact => {
           const size = formatSize(artifact.sizeBytes);
+          const previewableImage = isPreviewableImage(artifact.mediaType, artifact.path);
           return (
-            <li key={artifact.path}>
+            <li key={artifact.path} className={previewableImage ? 'gadget-artifact-image-item' : undefined}>
               <Icon name="file" size={13} />
               <span className="gadget-artifact-body">
                 <strong>{artifact.name}</strong>
                 <code className="gadget-artifact-path">{artifact.path}</code>
                 {artifact.description && <small>{artifact.description}</small>}
+                {previewableImage && (
+                  <div className="gadget-artifact-preview" data-testid="gadget-artifact-image-preview">
+                    <Markdown
+                      text={markdownImageForArtifact(artifact.name, artifact.path)}
+                      imageSessionId={gadget.scope.workId ?? gadget.scope.sessionId}
+                      testId="gadget-artifact-image-markdown"
+                    />
+                  </div>
+                )}
               </span>
               <span className="gadget-artifact-meta">
                 {artifact.mediaType && <span>{artifact.mediaType}</span>}

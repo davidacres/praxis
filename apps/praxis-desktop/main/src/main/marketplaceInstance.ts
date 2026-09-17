@@ -27,9 +27,10 @@ import { getSettingsBackend } from './settingsBackendInstance';
  *
  * - `theme` / `surface-pack`: exposed through {@link readActiveAppearance} for the
  *   renderer to register alongside the user's own custom themes/packs.
- * - `agent`: when trusted, the payload is mirrored into the global agents root
- *   (`userData/agents/<id>`) so the existing discovery + trust model picks it up;
- *   the download itself stays under `userData/addons/agent/<id>`.
+ * - `agent` / `skill`: when trusted, the payload is mirrored into the global
+ *   agents/skills root (`userData/agents/<id>` or `userData/skills/<id>`) so the
+ *   existing discovery + trust model picks it up; the download itself stays
+ *   under `userData/addons/<kind>/<id>`.
  * - `workflow-template`: read by `marketplaceWorkflowTemplates()` as a library tier.
  */
 
@@ -249,31 +250,39 @@ export async function marketplaceWorkflowTemplates(): Promise<unknown[]> {
 }
 
 /**
- * Mirrors a trusted agent add-on's payload into the global agents root so the
- * existing discovery + trust model runs it; clears the mirror otherwise. Called
- * on every trust change, remove, and once on launch.
+ * Mirrors a trusted `agent`/`skill` add-on's payload into the matching global
+ * discovery root so the existing discovery + trust model runs it; clears the
+ * mirror otherwise. Called on every trust change, remove, and once on launch.
  */
-export async function syncAgentAddons(): Promise<void> {
+async function syncAddonKindIntoDiscovery(kind: 'agent' | 'skill', globalRoot: string): Promise<void> {
   const store = getAddonStorage();
-  const globalAgentsRoot = getAgentRuntimeRoots().agents.global;
-  const installed = (await store.list()).filter(addon => addon.manifest.kind === 'agent');
+  const installed = (await store.list()).filter(addon => addon.manifest.kind === kind);
 
-  await fs.promises.mkdir(globalAgentsRoot, { recursive: true });
+  await fs.promises.mkdir(globalRoot, { recursive: true });
 
   for (const addon of installed) {
-    const target = path.join(globalAgentsRoot, addon.manifest.id);
-    const source = store.addonDir('agent', addon.manifest.id);
+    const target = path.join(globalRoot, addon.manifest.id);
+    const source = store.addonDir(kind, addon.manifest.id);
     await fs.promises.rm(target, { recursive: true, force: true });
     if (addon.enabled) {
       await fs.promises.cp(source, target, { recursive: true });
-      // The install record is bookkeeping, not part of the agent.
+      // The install record is bookkeeping, not part of the agent/skill.
       await fs.promises.rm(path.join(target, '.praxis-addon.json'), { force: true });
     }
   }
 }
 
+export async function syncAgentAddons(): Promise<void> {
+  await syncAddonKindIntoDiscovery('agent', getAgentRuntimeRoots().agents.global);
+}
+
+export async function syncSkillAddons(): Promise<void> {
+  await syncAddonKindIntoDiscovery('skill', getAgentRuntimeRoots().skills.global);
+}
+
 export async function refreshAgentRuntimeForAddons(): Promise<void> {
   await syncAgentAddons();
+  await syncSkillAddons();
   try {
     await getAgentRuntimeManager().refresh();
   } catch (error) {
@@ -283,6 +292,7 @@ export async function refreshAgentRuntimeForAddons(): Promise<void> {
 
 export async function reconcileInstalledOnLaunch(): Promise<void> {
   await syncAgentAddons();
+  await syncSkillAddons();
   const cfg = getSettingsBackend().read().marketplace;
   if (!cfg.checkOnLaunch) return;
   let status: MarketplaceStatus;
@@ -317,14 +327,14 @@ export function listInstalledAddons(): Promise<InstalledAddon[]> {
 
 export async function removeInstalledAddon(kind: AddonKind, id: string): Promise<void> {
   await getAddonStorage().remove(kind, id);
-  if (kind === 'agent') await refreshAgentRuntimeForAddons();
+  if (kind === 'agent' || kind === 'skill') await refreshAgentRuntimeForAddons();
   emitMarketplaceChanged();
 }
 
-export async function setInstalledAgentTrust(id: string, enabled: boolean): Promise<void> {
-  const addon = await getAddonStorage().get('agent', id);
-  if (!addon) throw new Error(`No installed agent add-on with id "${id}".`);
-  await getAddonStorage().setEnabled('agent', id, enabled);
+export async function setInstalledAddonTrust(kind: AddonKind, id: string, enabled: boolean): Promise<void> {
+  const addon = await getAddonStorage().get(kind, id);
+  if (!addon) throw new Error(`No installed ${kind} add-on with id "${id}".`);
+  await getAddonStorage().setEnabled(kind, id, enabled);
   await refreshAgentRuntimeForAddons();
   emitMarketplaceChanged();
 }

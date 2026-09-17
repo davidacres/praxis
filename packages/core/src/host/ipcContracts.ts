@@ -66,6 +66,7 @@ import type {
   AgentSessionRecord,
   AgentTaskDefinition,
   AgentToolMode,
+  AiConversationMessageInput,
   AiStartConversationInput,
   SessionMode,
   AgentWorkflowReference,
@@ -208,6 +209,12 @@ export interface WindowIpc {
   onMaximizeChange(listener: (maximized: boolean) => void): () => void;
   /** Notifies the renderer that closing would interrupt active AI sessions. */
   onCloseRequested(listener: (request: { runningSessionCount: number }) => void): () => void;
+  /** Returns the current whole-window UI zoom factor. */
+  getZoomFactor(): Promise<number>;
+  /** Sets the whole-window UI zoom factor and returns the clamped value. */
+  setZoomFactor(factor: number): Promise<number>;
+  /** Fires when keyboard shortcuts or another window changes the UI zoom. */
+  onZoomChange(listener: (factor: number) => void): () => void;
   /**
    * True when the OS can render a translucent ("vibrancy" / "acrylic") window
    * behind the app — macOS always, Windows 11 22H2+, never Linux. The Surface
@@ -461,8 +468,8 @@ export type MarketplaceConfigPatch = Partial<
 export interface MarketplaceInstallOptions {
   /** Pin a published version instead of `latest`. */
   version?: string;
-  /** Grant an agent add-on execution trust as part of installing it. */
-  trustAgent?: boolean;
+  /** Grant a non-declarative (`agent`, `skill`) add-on execution trust as part of installing it. */
+  trust?: boolean;
 }
 
 export interface MarketplaceIpc {
@@ -480,8 +487,8 @@ export interface MarketplaceIpc {
   update(kind: AddonKind, id: string): Promise<InstalledAddon>;
   remove(kind: AddonKind, id: string): Promise<void>;
   checkForUpdates(): Promise<AddonUpdate[]>;
-  /** Grants or revokes execution trust for an installed agent add-on. */
-  setAgentTrust(id: string, enabled: boolean): Promise<void>;
+  /** Grants or revokes execution trust for an installed non-declarative (`agent`, `skill`) add-on. */
+  setTrust(kind: AddonKind, id: string, enabled: boolean): Promise<void>;
   /** Fires after any install/remove/update/trust change. */
   onChanged(listener: () => void): () => void;
 }
@@ -696,6 +703,12 @@ export interface AiIpc {
   resetProviderApiKeys(): Promise<void>;
   /** Every persisted agent session, most recently started first. */
   listSessions(): Promise<AgentSessionRecord[]>;
+  /**
+   * Loads a raster image from the selected session's working folder for an
+   * in-app chat preview. The host enforces the session-folder boundary and
+   * returns a data URL so the renderer never receives filesystem access.
+   */
+  loadImagePreview(issueKey: string, filePath: string): Promise<string | undefined>;
   /** Renames a persisted session without changing its ticket binding or task goal. */
   renameSession(issueKey: string, title: string): Promise<AgentSessionRecord>;
   /** Aborts a running session if needed, then permanently removes its saved conversation. */
@@ -711,6 +724,8 @@ export interface AiIpc {
   /** Hands the same Praxis session to another provider and seeds it with the living brief. */
   handoverSession(issueKey: string, input: AiHandoverInput): Promise<AgentSessionRecord>;
   startConversation(issueKey: string, input: AiStartConversationInput): Promise<AgentSessionRecord>;
+  /** Queues a human message for a selected participant in a running AI conversation. */
+  sendConversationMessage(issueKey: string, input: AiConversationMessageInput): Promise<AgentSessionRecord>;
   stopConversation(issueKey: string): Promise<AgentSessionRecord>;
   setConversationToolOwner(issueKey: string, participantId: string): Promise<AgentSessionRecord>;
   /** Saves user edits to the living handover brief. */

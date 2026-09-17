@@ -87,6 +87,13 @@ export class AcpClientWrapper {
   private initializeResponse?: acp.InitializeResponse;
   private resumedSessionId?: string;
   private resumeAttempted = false;
+  /**
+   * A resumed provider may replay historical session updates while restoring
+   * its state. Those are context, not output from the new user turn, so only
+   * forward notifications while `session/prompt` itself is in flight.
+   */
+  private promptInFlight = false;
+  private lastReplayNotificationAt = 0;
   private disposed = false;
   constructor(private readonly options: AcpClientOptions) {}
 
@@ -186,8 +193,16 @@ export class AcpClientWrapper {
     });
 
     app.onNotification(acpModule.CLIENT_METHODS.session_update, ctx => {
-      if (this.resumedSessionId && ctx.params.sessionId === this.resumedSessionId) {
+      if (!this.resumedSessionId || ctx.params.sessionId !== this.resumedSessionId) {
+        return;
+      }
+      if (this.promptInFlight) {
         this.options.onSessionUpdate(ctx.params.update);
+      } else {
+        // Replay traffic from session/resume or session/load arriving before
+        // the prompt gate opens. Track it so `waitForReplayToQuiet` can wait
+        // out a slow or bursty flush instead of trusting one fixed delay.
+        this.lastReplayNotificationAt = Date.now();
       }
     });
 
@@ -344,6 +359,60 @@ export class AcpClientWrapper {
     });
   }
 
+  /** Gracefully closes a protocol session before the stdio transport is torn down. */
+  public async closeSession(): Promise<void> {
+    if (!this.connection || !this.acpModule) return;
+    const sessionId = this.resumedSessionId ?? this.session?.sessionId;
+    if (!sessionId || !this.initializeResponse?.agentCapabilities?.sessionCapabilities?.close) return;
+    try {
+      await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_close, { sessionId });
+    } catch {
+      // The process may already have exited; dispose() still handles the transport safely.
+    }
+  }
+
+  /**
+   * Lets short-lived ACP probes finish before tearing down stdio. Some CLI
+   * adapters do not advertise `session/close`; killing those immediately can
+   * make their final JSON-RPC write hit a closed pipe and crash with EPIPE.
+   * The wait resolves as soon as the child exits, so a well-behaved adapter
+   * adds no latency; the cap only bounds the worst case for an adapter that
+   * never exits on stdin close. Callers like `listAvailableModels()` run this
+   * on every invocation (its own doc comment calls that path "no cost"), so
+   * the cap is kept short rather than a full second.
+   */
+  public async shutdown(): Promise<void> {
+    if (this.disposed) return;
+    await this.closeSession();
+    const child = this.child;
+    if (child && !child.killed && child.stdin && !child.stdin.destroyed) {
+      const exited = new Promise<void>(resolve => child.once('exit', () => resolve()));
+      child.stdin.end();
+      await Promise.race([exited, new Promise<void>(resolve => setTimeout(resolve, 300))]);
+    }
+    this.dispose();
+  }
+
+  /**
+   * Waits for resumed-session replay notifications to stop arriving before
+   * the prompt gate opens. Polls for a quiet window rather than trusting one
+   * fixed delay, so a slow or bursty replay still finishes draining; capped
+   * so a provider whose replay never quiets down can't hang the turn.
+   */
+  private async waitForReplayToQuiet(): Promise<void> {
+    const quietWindowMs = 50;
+    const maxWaitMs = 500;
+    const pollMs = 20;
+    const deadline = Date.now() + maxWaitMs;
+    this.lastReplayNotificationAt = Date.now();
+    while (Date.now() < deadline) {
+      await new Promise<void>(resolve => setTimeout(resolve, pollMs));
+      if (Date.now() - this.lastReplayNotificationAt >= quietWindowMs) {
+        return;
+      }
+    }
+  }
+
   /**
    * Starts a new session and runs one prompt turn to completion, streaming
    * `session/update`s to `onSessionUpdate` as they arrive.
@@ -351,10 +420,20 @@ export class AcpClientWrapper {
   public async prompt(text: string): Promise<acp.PromptResponse> {
     if (await this.tryResumeSession()) {
       if (!this.connection || !this.acpModule) throw new Error('ACP client is not connected.');
-      return this.connection.agent.request(this.acpModule.AGENT_METHODS.session_prompt, {
-        sessionId: this.resumedSessionId!,
-        prompt: [{ type: 'text', text }]
-      });
+      // Let replay notifications queued by session/resume or session/load
+      // drain while the prompt gate is still closed, rather than trusting one
+      // fixed delay: they cross a subprocess pipe, so a slow or bursty flush
+      // can still be arriving after any single fixed wait.
+      await this.waitForReplayToQuiet();
+      this.promptInFlight = true;
+      try {
+        return await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_prompt, {
+          sessionId: this.resumedSessionId!,
+          prompt: [{ type: 'text', text }]
+        });
+      } finally {
+        this.promptInFlight = false;
+      }
     }
     const session = await this.ensureSession();
     const promptPromise = session.prompt(text);
