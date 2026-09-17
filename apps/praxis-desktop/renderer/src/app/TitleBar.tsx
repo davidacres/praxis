@@ -59,6 +59,7 @@ export function TitleBar({
   onOpenSettings
 }: TitleBarProps) {
   const [maximized, setMaximized] = useState(false);
+  const [zoomFactor, setZoomFactor] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement | null>(null);
   const contextButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -74,15 +75,36 @@ export function TitleBar({
   }, []);
 
   useEffect(() => {
-    const onReloadShortcut = (event: KeyboardEvent) => {
+    void window.praxis.window.getZoomFactor().then(setZoomFactor);
+    return window.praxis.window.onZoomChange(setZoomFactor);
+  }, []);
+
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'r') {
         event.preventDefault();
         void window.praxis.window.reload();
+        return;
+      }
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key === '0') {
+        event.preventDefault();
+        resetZoom();
+        return;
+      }
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        changeZoom(0.1);
+        return;
+      }
+      if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
+        changeZoom(-0.1);
       }
     };
-    window.addEventListener('keydown', onReloadShortcut);
-    return () => window.removeEventListener('keydown', onReloadShortcut);
-  }, []);
+    window.addEventListener('keydown', onShortcut);
+    return () => window.removeEventListener('keydown', onShortcut);
+  }, [zoomFactor]);
 
   useEffect(() => {
     if (!filterOpen) {
@@ -122,6 +144,12 @@ export function TitleBar({
   }, [filterOpen]);
 
   const activeFilterCount = boardFilter ? countActiveBoardFilters(boardFilter.value) : 0;
+  const changeZoom = (amount: number) => {
+    void window.praxis.window.setZoomFactor(zoomFactor + amount).then(setZoomFactor);
+  };
+  const resetZoom = () => {
+    void window.praxis.window.setZoomFactor(1).then(setZoomFactor);
+  };
 
   return (
     <header className={`titlebar${isMac ? ' titlebar-mac' : ''}`}>
@@ -241,6 +269,35 @@ export function TitleBar({
         >
           <Icon name="sidebar-right" />
         </button>
+        <div className="titlebar-zoom-controls" data-testid="titlebar-zoom-controls" aria-label="Application zoom">
+          <button
+            className="icon-btn icon-btn-sm"
+            data-testid="titlebar-zoom-out"
+            aria-label="Zoom out application"
+            title="Zoom out (⌘− / Ctrl−)"
+            onClick={() => changeZoom(-0.1)}
+          >
+            <Icon name="zoom-out" size={13} />
+          </button>
+          <button
+            className="titlebar-zoom-value"
+            data-testid="titlebar-zoom-reset"
+            aria-label={`Reset application zoom, currently ${Math.round(zoomFactor * 100)} percent`}
+            title="Reset application zoom (⌘0 / Ctrl+0)"
+            onClick={resetZoom}
+          >
+            {Math.round(zoomFactor * 100)}%
+          </button>
+          <button
+            className="icon-btn icon-btn-sm"
+            data-testid="titlebar-zoom-in"
+            aria-label="Zoom in application"
+            title="Zoom in (⌘+ / Ctrl+)"
+            onClick={() => changeZoom(0.1)}
+          >
+            <Icon name="zoom-in" size={13} />
+          </button>
+        </div>
         <button
           className="icon-btn"
           aria-label="Reload window"

@@ -1,13 +1,15 @@
 import type { AiProvider } from '../../types';
 import { DEFAULT_VERCEL_URL } from '../gateway/modelIds';
 import { anthropicAdapter } from './anthropicAdapter';
+import { geminiAdapter } from './geminiAdapter';
+import { DEFAULT_GEMINI_BASE_URL } from './geminiClient';
 import { openAiCompatibleAdapter } from './openAiCompatibleAdapter';
 import type { ProviderAdapter, ProviderDescriptor } from './providerAdapter';
 
 /** Developer-maintained provider registry — not user-editable. Unlike a plain
  * "URL + key" source list, each provider here has real adapter code because
  * their wire protocols genuinely differ (OpenAI-compatible vs. Anthropic
- * Messages vs., in Phase 2, a subprocess-hosted CLI agent). */
+ * Messages vs. Google Gemini vs., in Phase 2, a subprocess-hosted CLI agent). */
 export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
   'vercel-gateway': {
     id: 'vercel-gateway',
@@ -29,6 +31,13 @@ export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
     label: 'Anthropic',
     defaultBaseUrl: 'https://api.anthropic.com',
     defaultModel: 'claude-sonnet-4-6'
+  },
+  gemini: {
+    id: 'gemini',
+    kind: 'api',
+    label: 'Google Gemini',
+    defaultBaseUrl: DEFAULT_GEMINI_BASE_URL,
+    defaultModel: 'gemini-2.5-flash'
   },
   'claude-code-cli': {
     id: 'claude-code-cli',
@@ -69,14 +78,15 @@ export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
     kind: 'cli-agent',
     hostKind: 'acp',
     label: 'Antigravity',
-    defaultCommand: 'agy'
+    defaultCommand: 'antigravity-acp'
   }
 };
 
 const ADAPTERS: Partial<Record<AiProvider, ProviderAdapter>> = {
   'vercel-gateway': openAiCompatibleAdapter,
   openai: openAiCompatibleAdapter,
-  anthropic: anthropicAdapter
+  anthropic: anthropicAdapter,
+  gemini: geminiAdapter
 };
 
 /** Only valid for `kind: 'api'` providers — `kind: 'cli-agent'` providers use `AcpAgentHost` instead. */

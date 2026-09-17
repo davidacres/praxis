@@ -57,9 +57,19 @@ test('switching a finished session to Review sends the mode transition and resum
   await win.locator('[data-testid="nav-sessions"]').click();
   await win.locator('[data-testid="session-list-row"]').first().click();
 
-  // Lives among the composer's other chips, not in the sidebar.
-  const toggle = win.locator('.composer-controls .session-mode-toggle');
+  // Lives in the raised mode panel above the composer input, not in the sidebar.
+  const toggle = win.locator('[data-testid="session-mode-panel"] .session-mode-toggle');
   await expect(toggle).toBeVisible();
+  await win.locator('[data-testid="session-follow-up-input"]').focus();
+  await expect.poll(() => win.evaluate(() => {
+    const panel = document.querySelector<HTMLElement>('[data-testid="session-mode-panel"]');
+    const composer = document.querySelector<HTMLElement>('.session-follow-up-composer');
+    if (!panel || !composer) return false;
+    const panelStyle = getComputedStyle(panel);
+    const composerStyle = getComputedStyle(composer);
+    return panelStyle.borderTopWidth === '0px' && panelStyle.borderBottomWidth === '1px' && composerStyle.boxShadow !== 'none';
+  })).toBe(true);
+  await win.screenshot({ path: 'output/playwright/session-mode-panel.png' });
   await expect(win.locator('[data-testid="session-switch-mode-chat"]')).toHaveClass(/active/);
 
   await win.locator('[data-testid="session-switch-mode-review"]').click();

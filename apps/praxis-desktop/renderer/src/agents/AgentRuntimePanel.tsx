@@ -49,7 +49,7 @@ export function AgentRuntimePanel({
     return (
       <div className="empty-state" data-testid="agent-runtime-empty">
         <Icon name="zap" size={26} />
-        <span>Runtime state &mdash; host, capabilities, sessions &mdash; appears here for the selected profile, host or skill.</span>
+        <span>Runtime state &mdash; binding, capabilities, sessions &mdash; appears here for the selected profile, binding or skill.</span>
       </div>
     );
   }
@@ -58,9 +58,13 @@ export function AgentRuntimePanel({
     <section className="inspector agent-runtime" aria-label="Agent runtime">
       {profile ? (
         <ProfileBinding
+          key={profile.profile.id}
           profile={profile}
           snapshot={snapshot}
+          busy={busy}
+          activations={activations[profile.profile.id] ?? []}
           sessions={sessions.filter(session => (session.profileId ?? session.agentId) === profile.profile.id)}
+          onLifecycle={onLifecycle}
           {...(onStartSession ? { onStartSession } : {})}
           {...(onOpenSession ? { onOpenSession } : {})}
         />
@@ -86,36 +90,66 @@ export function AgentRuntimePanel({
 function ProfileBinding({
   profile,
   snapshot,
+  busy,
+  activations,
   sessions,
+  onLifecycle,
   onStartSession,
   onOpenSession
 }: {
   profile: NonNullable<AgentRuntimeSnapshot['profiles']>[number];
   snapshot: AgentRuntimeSnapshot;
+  busy: boolean;
+  activations: Array<{ skill: string; mode: string }>;
   sessions: Array<{ issueKey: string; title: string }>;
+  onLifecycle: (agentId: string, action: LifecycleAction) => void;
   onStartSession?: (hostId: string, skillNames: string[], profileId?: string) => void;
   onOpenSession?: (issueKey: string) => void;
 }) {
   const compatibleHosts = (snapshot.runtimeHosts ?? snapshot.agents).filter(host => host.errors.length === 0 && host.trusted);
-  const [hostId, setHostId] = useState(compatibleHosts[0]?.manifest.id ?? '');
+  // The launch binding that shares this profile's id is what actually runs
+  // it — bundled agents (Praxis Reviewer, etc.) always have one. Treat it as
+  // implicit and show its lifecycle directly, rather than asking the user to
+  // pick a binding for something Praxis already knows how to run.
+  const canonicalHost = compatibleHosts.find(host => host.manifest.id === profile.profile.id);
+  const [hostId, setHostId] = useState(canonicalHost?.manifest.id ?? compatibleHosts[0]?.manifest.id ?? '');
+
   return (
     <>
       <div className="agent-runtime-block">
         <Line label="Type">Provider-neutral agent profile</Line>
-        <Line label="Compatible hosts">{compatibleHosts.length ? compatibleHosts.map(host => host.manifest.name).join(', ') : 'none available'}</Line>
         <Line label="Preferred skills">{profile.profile.preferredSkills?.join(', ') || 'none'}</Line>
-        <Line label="Execution">Bind this profile to any compatible runtime host; the provider remains selected in the session composer.</Line>
+        {!canonicalHost && (
+          <Line label="Compatible bindings">{compatibleHosts.length ? compatibleHosts.map(host => host.manifest.name).join(', ') : 'none available'}</Line>
+        )}
       </div>
-      {onStartSession && compatibleHosts.length > 0 && (
+
+      {canonicalHost ? (
+        <HostLifecycle
+          host={canonicalHost}
+          snapshot={snapshot}
+          busy={busy}
+          activations={activations}
+          onLifecycle={onLifecycle}
+        />
+      ) : (
+        onStartSession &&
+        compatibleHosts.length > 0 && (
+          <div className="inspector-actions">
+            <label className="form-field">
+              <span>Launch binding</span>
+              <select value={hostId} onChange={event => setHostId(event.target.value)}>
+                {compatibleHosts.map(host => (
+                  <option key={host.manifest.id} value={host.manifest.id}>{host.manifest.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )
+      )}
+
+      {onStartSession && (canonicalHost || compatibleHosts.length > 0) && (
         <div className="inspector-actions">
-          <label className="form-field">
-            <span>Runtime host</span>
-            <select value={hostId} onChange={event => setHostId(event.target.value)}>
-              {compatibleHosts.map(host => (
-                <option key={host.manifest.id} value={host.manifest.id}>{host.manifest.name}</option>
-              ))}
-            </select>
-          </label>
           <button
             type="button"
             className="btn btn-primary"
@@ -126,6 +160,7 @@ function ProfileBinding({
           </button>
         </div>
       )}
+
       {sessions.length > 0 && (
         <div className="agent-runtime-block">
           <span className="rail-sub">Sessions</span>
@@ -149,27 +184,22 @@ function Line({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-function AgentRuntime({
-  agent,
+/** Status, capabilities, active skills, and start/restart/stop for one launch binding's process. */
+function HostLifecycle({
+  host,
   snapshot,
   busy,
   activations,
-  sessions,
-  onLifecycle,
-  onStartSession,
-  onOpenSession
+  onLifecycle
 }: {
-  agent: NonNullable<AgentRuntimeSnapshot['agents'][number]>;
+  host: NonNullable<AgentRuntimeSnapshot['agents'][number]>;
   snapshot: AgentRuntimeSnapshot;
   busy: boolean;
   activations: Array<{ skill: string; mode: string }>;
-  sessions: Array<{ issueKey: string; title: string }>;
   onLifecycle: (agentId: string, action: LifecycleAction) => void;
-  onStartSession?: (agentId: string, skillNames: string[]) => void;
-  onOpenSession?: (issueKey: string) => void;
 }) {
-  const id = agent.manifest.id;
-  const blocked = agentStartBlockedReason(agent);
+  const id = host.manifest.id;
+  const blocked = agentStartBlockedReason(host);
   const runtime = snapshot.hosts[id];
   const state = hostRuntimeState(snapshot, id);
   const caps = describeCapabilities(snapshot.capabilities[id]);
@@ -216,7 +246,40 @@ function AgentRuntime({
             {state === 'failed' ? 'Retry start' : 'Start host'}
           </button>
         )}
-        {onStartSession && (
+      </div>
+      {blocked && <p className="hint is-warn">{blocked}</p>}
+    </>
+  );
+}
+
+function AgentRuntime({
+  agent,
+  snapshot,
+  busy,
+  activations,
+  sessions,
+  onLifecycle,
+  onStartSession,
+  onOpenSession
+}: {
+  agent: NonNullable<AgentRuntimeSnapshot['agents'][number]>;
+  snapshot: AgentRuntimeSnapshot;
+  busy: boolean;
+  activations: Array<{ skill: string; mode: string }>;
+  sessions: Array<{ issueKey: string; title: string }>;
+  onLifecycle: (agentId: string, action: LifecycleAction) => void;
+  onStartSession?: (agentId: string, skillNames: string[]) => void;
+  onOpenSession?: (issueKey: string) => void;
+}) {
+  const id = agent.manifest.id;
+  const blocked = agentStartBlockedReason(agent);
+
+  return (
+    <>
+      <HostLifecycle host={agent} snapshot={snapshot} busy={busy} activations={activations} onLifecycle={onLifecycle} />
+
+      {onStartSession && (
+        <div className="inspector-actions">
           <button
             type="button"
             className="btn"
@@ -226,9 +289,8 @@ function AgentRuntime({
           >
             <Icon name="chats" size={13} /> Open a session
           </button>
-        )}
-      </div>
-      {blocked && <p className="hint is-warn">{blocked}</p>}
+        </div>
+      )}
 
       {sessions.length > 0 && (
         <div className="agent-runtime-block">

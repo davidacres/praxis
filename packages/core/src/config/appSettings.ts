@@ -159,6 +159,7 @@ const KNOWN_AI_PROVIDERS: readonly AiProvider[] = [
   'vercel-gateway',
   'openai',
   'anthropic',
+  'gemini',
   'claude-code-cli',
   'codex-cli',
   'copilot-cli',

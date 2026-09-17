@@ -6,6 +6,7 @@ import type {
   AiDelegateInput,
   AiHandoverBriefEdits,
   AiHandoverInput,
+  AiConversationMessageInput,
   AiStartConversationInput,
   AiProvider,
   AiReviewProgress,
@@ -143,6 +144,13 @@ const praxis: PraxisIpc = {
         listener(request);
       ipcRenderer.on('window:closeRequested', handler);
       return () => ipcRenderer.off('window:closeRequested', handler);
+    },
+    getZoomFactor: () => ipcRenderer.invoke('window:getZoomFactor') as Promise<number>,
+    setZoomFactor: (factor: number) => ipcRenderer.invoke('window:setZoomFactor', factor) as Promise<number>,
+    onZoomChange: (listener: (factor: number) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, factor: number) => listener(factor);
+      ipcRenderer.on('window:zoomChanged', handler);
+      return () => ipcRenderer.off('window:zoomChanged', handler);
     }
   },
   settings: {
@@ -204,6 +212,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:setProviderApiKey', provider, value),
     resetProviderApiKeys: () => ipcRenderer.invoke('ai:resetProviderApiKeys'),
     listSessions: () => ipcRenderer.invoke('ai:listSessions'),
+    loadImagePreview: (issueKey: string, filePath: string) =>
+      ipcRenderer.invoke('ai:loadImagePreview', issueKey, filePath) as Promise<string | undefined>,
     renameSession: (issueKey: string, title: string) =>
       ipcRenderer.invoke('ai:renameSession', issueKey, title),
     deleteSession: (issueKey: string) => ipcRenderer.invoke('ai:deleteSession', issueKey),
@@ -217,6 +227,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:handoverSession', issueKey, input),
     startConversation: (issueKey: string, input: AiStartConversationInput) =>
       ipcRenderer.invoke('ai:startConversation', issueKey, input),
+    sendConversationMessage: (issueKey: string, input: AiConversationMessageInput) =>
+      ipcRenderer.invoke('ai:sendConversationMessage', issueKey, input),
     stopConversation: (issueKey: string) => ipcRenderer.invoke('ai:stopConversation', issueKey),
     setConversationToolOwner: (issueKey: string, participantId: string) =>
       ipcRenderer.invoke('ai:setConversationToolOwner', issueKey, participantId),
@@ -476,8 +488,8 @@ const praxis: PraxisIpc = {
     update: (kind: string, id: string) => ipcRenderer.invoke('marketplace:update', kind, id),
     remove: (kind: string, id: string) => ipcRenderer.invoke('marketplace:remove', kind, id),
     checkForUpdates: () => ipcRenderer.invoke('marketplace:checkForUpdates'),
-    setAgentTrust: (id: string, enabled: boolean) =>
-      ipcRenderer.invoke('marketplace:setAgentTrust', id, enabled),
+    setTrust: (kind: string, id: string, enabled: boolean) =>
+      ipcRenderer.invoke('marketplace:setTrust', kind, id, enabled),
     onChanged: (listener: () => void) => {
       const handler = () => listener();
       ipcRenderer.on('marketplace:changed', handler);

@@ -672,7 +672,7 @@ function AgentStageFields({
     agents.length === 0
       ? 'No agents were discovered. Install one under the trusted agents folder, or advance this stage by hand from the run monitor.'
       : selectedHostId && !chosen
-        ? `"${selectedHostId}" is not in the discovered runtime host catalog — the stage will fail preflight until it is installed.`
+        ? `"${selectedHostId}" is not in the discovered launch binding catalog — the stage will fail preflight until it is installed.`
         : unusable
           ? `This agent would fail preflight ${
               chosen && chosen.errors.length > 0
@@ -766,7 +766,7 @@ function AgentStageFields({
         />
       </Field>
 
-      <Field label="Runtime host" warning={agentWarning}>
+      <Field label="Launch binding" warning={agentWarning}>
         {agents.length > 0 ? (
           <select
             value={selectedHostId}

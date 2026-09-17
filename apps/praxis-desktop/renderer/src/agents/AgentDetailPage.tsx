@@ -1,6 +1,6 @@
 import type { AgentRuntimeSnapshot, DiscoveredAgent, DiscoveredAgentProfile, DiscoveredSkill, ProjectRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { runningHostCount, transportLabel } from './agentCatalog';
+import { isHostShimProfile, runningHostCount, transportLabel } from './agentCatalog';
 import type { CatalogSelection } from './agentSelection';
 
 /**
@@ -133,8 +133,8 @@ function AgentRecord({ agent, project }: { agent: DiscoveredAgent; project?: Pro
         }
       />
 
-      <section className="agent-section" aria-label="Runtime host manifest">
-        <h2>Runtime host manifest</h2>
+      <section className="agent-section" aria-label="Launch binding manifest">
+        <h2>Launch binding manifest</h2>
         <Facts>
           <Fact label="ID">
             <code>{agent.manifest.id}</code>
@@ -238,7 +238,8 @@ function CatalogOverview({
   onOpenSettings?: () => void;
 }) {
   const running = runningHostCount(snapshot);
-  const empty = (snapshot.profiles ?? []).length === 0 && (snapshot.runtimeHosts ?? snapshot.agents).length === 0 && snapshot.skills.length === 0;
+  const curatedProfiles = (snapshot.profiles ?? []).filter(profile => !isHostShimProfile(profile));
+  const empty = curatedProfiles.length === 0 && snapshot.skills.length === 0;
 
   return (
     <>
@@ -246,16 +247,13 @@ function CatalogOverview({
         title="Agents"
         lede={
           empty
-            ? 'Agent profiles define behaviour, runtime hosts execute it, and skills add reusable capabilities.'
+            ? 'Agent profiles define behaviour, skills add reusable capabilities, and a provider is picked when a session starts.'
             : 'Pick an agent or skill in the sidebar to see its record. Runtime state and actions are in the right pane.'
         }
         chips={
           <>
             <span className="chip chip-muted">
-              {(snapshot.profiles ?? []).length} profile{(snapshot.profiles ?? []).length === 1 ? '' : 's'}
-            </span>
-            <span className="chip chip-muted">
-              {(snapshot.runtimeHosts ?? snapshot.agents).length} host{(snapshot.runtimeHosts ?? snapshot.agents).length === 1 ? '' : 's'}
+              {curatedProfiles.length} profile{curatedProfiles.length === 1 ? '' : 's'}
             </span>
             <span className="chip chip-muted">
               {snapshot.skills.length} skill{snapshot.skills.length === 1 ? '' : 's'}
@@ -272,11 +270,6 @@ function CatalogOverview({
             <strong>New agent profile</strong>
             <span>Create a provider-neutral AGENT.md role and instructions.</span>
           </button>
-          <button type="button" className="agent-start-card" onClick={() => onNew('agent')}>
-            <Icon name="robot" size={18} />
-            <strong>New runtime host</strong>
-            <span>Define a transport manifest and optional starter implementation.</span>
-          </button>
           <button type="button" className="agent-start-card" onClick={() => onNew('skill')}>
             <Icon name="sparkles" size={18} />
             <strong>New skill</strong>
@@ -285,12 +278,12 @@ function CatalogOverview({
           <button type="button" className="agent-start-card" onClick={() => onNew('import')}>
             <Icon name="folder-open" size={18} />
             <strong>Import</strong>
-            <span>Validate an existing folder and copy it in. Nothing is executed.</span>
+            <span>Validate an existing profile or skill folder and copy it in. Nothing is executed.</span>
           </button>
         </div>
         {onOpenSettings && (
           <p className="hint">
-            Discovery paths, trust policy, and diagnostics live in{' '}
+            Custom launch bindings, discovery paths, trust policy, and diagnostics live in{' '}
             <button type="button" className="btn-compact" onClick={onOpenSettings}>
               Settings → Agent runtime
             </button>

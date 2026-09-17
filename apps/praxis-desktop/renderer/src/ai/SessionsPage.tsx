@@ -4,6 +4,7 @@ import type {
   AgentEventSummary,
   AgentSessionRecord,
   AiAnalysisState,
+  AiProvider,
   AiProviderStatus,
   AnyGadgetEnvelope,
   ChatBlock,
@@ -22,9 +23,10 @@ import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { basename, contextPressure, formatCost, isWorkflowStageSession, liveActivity, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
-import { SessionConversationActions, SessionConversationDialog, canChangeSessionRuntime, SessionTransitionDialogs } from './SessionHandover';
+import { SessionConversationActions, SessionConversationDialog, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
+import { SessionFocusTabs } from './SessionFocusTabs';
 import { GadgetBlockList } from './gadgets';
-import { gadgetMessageKey, groupBlocksByMessage, mayContainGadget, stripGadgetFences } from './gadgets/messageText';
+import { gadgetMessageKey, groupBlocksByMessage, mayContainGadget, stripGadgetFences, visibleMessageText } from './gadgets/messageText';
 
 /**
  * Switching mode is not just a flag: the session is told, in its own thread,
@@ -89,7 +91,9 @@ export interface SessionsPageProps {
   sessions: AgentSessionRecord[];
   selectedKey: string | undefined;
   onNewSession: () => void;
+  onSelectSession: (issueKey: string) => void;
   onOpenAiSettings: () => void;
+  focusMode?: boolean;
   initialBrowserOpen?: boolean;
   initialBrowserUrl?: string;
   onBrowserOpenChange?: (open: boolean) => void;
@@ -160,7 +164,9 @@ export function SessionsPage({
   sessions,
   selectedKey,
   onNewSession,
+  onSelectSession,
   onOpenAiSettings,
+  focusMode = false,
   initialBrowserOpen,
   initialBrowserUrl,
   onBrowserOpenChange,
@@ -173,6 +179,13 @@ export function SessionsPage({
   const [followUp, setFollowUp] = useState('');
   const [followUpError, setFollowUpError] = useState<string | undefined>();
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
+  const [submittedTurn, setSubmittedTurn] = useState<{
+    issueKey: string;
+    message: string;
+    eventCount: number;
+    previousResponseText: string;
+    suppressPreviousResponse: boolean;
+  }>();
   const [abortingSession, setAbortingSession] = useState(false);
   /** Key is `${eventTimestamp}|${path}` — the specific edit being undone. */
   const [switchingMode, setSwitchingMode] = useState(false);
@@ -187,6 +200,7 @@ export function SessionsPage({
   const acpModeMenuRef = useRef<HTMLDivElement | null>(null);
   const acpCommandChipRef = useRef<HTMLButtonElement | null>(null);
   const acpCommandMenuRef = useRef<HTMLDivElement | null>(null);
+  const followUpTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [analysisState, setAnalysisState] = useState<AiAnalysisState | undefined>();
   const [confirmingAnalysis, setConfirmingAnalysis] = useState(false);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionInfo[]>([]);
@@ -198,8 +212,13 @@ export function SessionsPage({
   const [gadgetResults, setGadgetResults] = useState<Record<string, GadgetActionResult>>({});
   const [busyGadgetId, setBusyGadgetId] = useState<string>();
   const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
-  const [transitionDialog, setTransitionDialog] = useState<'model' | 'handover' | undefined>();
-  const [conversationDialogOpen, setConversationDialogOpen] = useState(false);
+  const [transitionPopover, setTransitionPopover] = useState<{ open: 'model' | 'handover'; position: ComposerPopoverPosition }>();
+  const [conversationPopoverPosition, setConversationPopoverPosition] = useState<ComposerPopoverPosition>();
+  const [conversationInitialProvider, setConversationInitialProvider] = useState<AiProvider>();
+  const [conversationTargetId, setConversationTargetId] = useState<string>();
+  const [contextPopoverPosition, setContextPopoverPosition] = useState<ComposerPopoverPosition>();
+  const contextChipRef = useRef<HTMLButtonElement | null>(null);
+  const contextPopoverRef = useRef<HTMLDivElement | null>(null);
   const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
   const [browserMaximized, setBrowserMaximized] = useState(false);
   const browserDismissed = useRef(initialBrowserOpen === false);
@@ -257,6 +276,23 @@ export function SessionsPage({
 
   const selected = sessions.find(session => session.issueKey === selectedKey) ?? sessions[0];
   const conversationRunning = selected?.conversation?.state === 'running';
+  const contextCompactionCommand = selected?.acpAvailableCommands?.find(command =>
+    command.name.replace(/^\/+/, '').trim().toLowerCase() === 'compact'
+  );
+  const canCompactContext = Boolean(contextCompactionCommand && selected && isTerminalAgentState(selected.state));
+  useEffect(() => {
+    setTransitionPopover(undefined);
+    setConversationPopoverPosition(undefined);
+    setConversationTargetId(undefined);
+    setContextPopoverPosition(undefined);
+  }, [selected?.issueKey]);
+  useEffect(() => {
+    if (selected?.conversation?.state === 'running') {
+      setConversationTargetId(current => current && selected.conversation?.participants.some(participant => participant.id === current)
+        ? current
+        : selected.conversation!.currentSpeakerId);
+    }
+  }, [selected?.conversation?.currentSpeakerId, selected?.conversation?.state]);
   const terminalForContext = terminalSessions.find(session => session.id === activeTerminalId && session.hasContext)
     ?? [...terminalSessions].reverse().find(session => session.hasContext && (
       !selected?.workingDirectory || session.cwd === selected.workingDirectory
@@ -284,9 +320,37 @@ export function SessionsPage({
     event =>
       (event.type === 'message' || event.type === 'user_input_completed') && Boolean(event.detail || event.summary)
   ) ?? [];
+  // A human can send a directed message while one of the AIs is still
+  // speaking. The host keeps those messages in the conversation queue until
+  // the current turn settles, so render that queue as part of the live thread
+  // instead of making the message appear one turn late.
+  const pendingConversationMessages = selected?.conversation?.state === 'running'
+    ? selected.conversation.pendingUserMessages ?? []
+    : [];
+  const activeSubmittedTurn = submittedTurn?.issueKey === selected?.issueKey ? submittedTurn : undefined;
+  const submittedTurnEvents = activeSubmittedTurn
+    ? selected?.events.slice(activeSubmittedTurn.eventCount) ?? []
+    : [];
+  const submittedTurnRecorded = Boolean(activeSubmittedTurn && submittedTurnEvents.some(event =>
+    event.type === 'user_input_completed' && event.detail?.trim() === activeSubmittedTurn.message.trim()
+  ));
+  const submittedTurnQueued = Boolean(activeSubmittedTurn && pendingConversationMessages.some(pending =>
+    pending.message === activeSubmittedTurn.message
+  ));
+  const submittedTurnAnswered = submittedTurnEvents.some(event => event.type === 'message');
+  const optimisticFollowUp = activeSubmittedTurn && !submittedTurnRecorded && !submittedTurnQueued
+    ? activeSubmittedTurn
+    : undefined;
+  const optimisticTerminalContext = optimisticFollowUp
+    ? parseTerminalContext(optimisticFollowUp.message)
+    : undefined;
+  const livePendingConversationMessages = optimisticFollowUp && !optimisticFollowUp.suppressPreviousResponse
+    ? [{ participantId: 'optimistic', message: optimisticFollowUp.message }]
+    : pendingConversationMessages;
   const latestEventResponse = [...conversationEvents]
     .reverse()
     .find(event => event.type === 'message')?.detail;
+  const visibleResponseText = selected?.responseText ? visibleMessageText(selected.responseText) : '';
   const lastConversationEvent = conversationEvents[conversationEvents.length - 1];
   // Completed sessions have their assistant replies in the event history. A
   // separate responseText fallback is only useful for an in-flight turn (or
@@ -298,10 +362,15 @@ export function SessionsPage({
       && lastConversationEvent?.type === 'user_input_completed'
   );
   const shouldRenderResponseFallback = Boolean(
-    selected?.responseText
-      && selected.responseText !== latestEventResponse
+    visibleResponseText
+      && selected?.responseText !== latestEventResponse
       && (!isTerminalAgentState(selected.state) || conversationEvents.length === 0)
       && !staleTerminalResponse
+      && !(
+        activeSubmittedTurn?.suppressPreviousResponse
+        && !submittedTurnAnswered
+        && selected?.responseText === activeSubmittedTurn.previousResponseText
+      )
   );
 
   const selectedSessionId = selected?.sessionId;
@@ -396,17 +465,50 @@ export function SessionsPage({
   // turn is in flight, in place of streaming every tool block. Shared with the
   // inspector's copy of the same line; see `liveActivity` in sessionNav.ts.
   const liveActivityText = selected ? liveActivity(selected) : undefined;
+  // Same conversation-aware speaker lookup as the response-fallback header
+  // below, so the "thinking" indicator's icon matches whichever AI actually
+  // holds the turn, not just whoever last set `record.provider`.
+  const activitySpeaker = selected?.conversation?.state === 'running'
+    ? selected.conversation.participants.find(participant => participant.id === selected.conversation?.currentSpeakerId)
+    : undefined;
+  const activityProvider = activitySpeaker?.provider ?? selected?.provider;
+
+  // Same condition as the textarea's own `disabled` below: a single-agent
+  // turn is in flight and there's no conversation to queue a directed message
+  // into, so the box has nothing useful to do — collapse it down to the
+  // controls row instead of sitting there disabled and empty.
+  const followUpCollapsed = !!selected && !isTerminalAgentState(selected.state) && !conversationRunning;
+
+  // The follow-up box starts at one line and grows with content, instead of
+  // reserving two rows' worth of empty space for the common case of a short
+  // reply. Reset to 'auto' first so a deletion shrinks the box back down —
+  // `scrollHeight` only ever reports the content's current natural height,
+  // never shrinks a box that's already taller than it needs to be. While a
+  // turn is running it collapses to 0 instead (the `.is-collapsed` CSS class
+  // zeroes its padding/min-height too, so this is the actual rendered height,
+  // not just clamped back up by the min-height floor); `theme.css` puts a
+  // `transition: height` on `.session-follow-up-input` so both directions
+  // animate rather than snapping.
+  useEffect(() => {
+    const node = followUpTextareaRef.current;
+    if (!node) return;
+    if (followUpCollapsed) {
+      node.style.height = '0px';
+      return;
+    }
+    node.style.height = 'auto';
+    node.style.height = `${node.scrollHeight}px`;
+  }, [followUp, followUpCollapsed]);
 
   // The pending permission the agent is blocked on, if any — surfaced as a
   // slide-up dock directly above the chat input.
   const pendingPermission = selected?.state === 'awaiting_approval'
     ? pendingPermissionEvent(selected.events)
     : undefined;
-  // How full the model's context is for the next turn — shown right above the
-  // input, the way Claude and Copilot surface it, rather than in a side panel
-  // the user has to go looking for. Hidden below two-thirds: a mostly-empty
-  // window is not news, and a warning that is always on screen stops reading
-  // as one.
+  // How full the model's context is for the next turn. A compact progress ring
+  // beside Send keeps it visible at every reported level; its popover carries
+  // the fuller warning and guidance without permanently occupying composer
+  // space.
   const context = selected ? contextPressure(selected) : undefined;
   // Spend against the user's own limit, totalled across every session that
   // reported a cost — the budget is theirs, not this session's. Same bands as
@@ -421,6 +523,24 @@ export function SessionsPage({
   };
   const permissionBusy = respondingTo === selected?.issueKey;
 
+  useEffect(() => {
+    if (!contextPopoverPosition) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (contextPopoverRef.current?.contains(target) || contextChipRef.current?.contains(target)) return;
+      setContextPopoverPosition(undefined);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContextPopoverPosition(undefined);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [contextPopoverPosition]);
+
   // Follow the stream: whenever the selected session gains events, pin the
   // console to the latest one (the list replaces the record object on every
   // push, so the count is the reliable change signal).
@@ -429,11 +549,12 @@ export function SessionsPage({
     if (node) {
       node.scrollTop = node.scrollHeight;
     }
-  }, [selected?.issueKey, selectedEventCount, selected?.responseText, latestEventResponse]);
+  }, [selected?.issueKey, selectedEventCount, selected?.responseText, latestEventResponse, pendingConversationMessages.length, optimisticFollowUp?.message]);
 
   useEffect(() => {
     setFollowUp('');
     setFollowUpError(undefined);
+    setSubmittedTurn(undefined);
   }, [selected?.issueKey]);
 
   useEffect(() => {
@@ -455,7 +576,34 @@ export function SessionsPage({
   }, [selected?.issueKey, selected?.taskDefinition.kind]);
 
   const sendFollowUp = async () => {
-    if (!selected || !followUp.trim() || !isTerminalAgentState(selected.state) || selected.conversation?.state === 'running') return;
+    if (!selected || !followUp.trim()) return;
+    if (selected.conversation?.state === 'running') {
+      const message = followUp.trim();
+      setSendingFollowUp(true);
+      setFollowUpError(undefined);
+      setSubmittedTurn({
+        issueKey: selected.issueKey,
+        message,
+        eventCount: selected.events.length,
+        previousResponseText: selected.responseText ?? '',
+        suppressPreviousResponse: false
+      });
+      setFollowUp('');
+      try {
+        await window.praxis.ai.sendConversationMessage(selected.issueKey, {
+          participantId: conversationTargetId ?? selected.conversation.currentSpeakerId,
+          message
+        });
+      } catch (error) {
+        setSubmittedTurn(undefined);
+        setFollowUp(current => current || message);
+        setFollowUpError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setSendingFollowUp(false);
+      }
+      return;
+    }
+    if (!isTerminalAgentState(selected.state)) return;
     setSendingFollowUp(true);
     setFollowUpError(undefined);
     try {
@@ -467,9 +615,33 @@ export function SessionsPage({
         const escapeContext = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         message = `<terminal_context cwd="${escapeContext(context.cwd)}" captured_at="${context.capturedAt}">\n${escapeContext(context.output)}\n</terminal_context>\n\n${message}`;
       }
-      await window.praxis.ai.continueSession(selected.issueKey, message);
+      setSubmittedTurn({
+        issueKey: selected.issueKey,
+        message,
+        eventCount: selected.events.length,
+        previousResponseText: selected.responseText ?? '',
+        suppressPreviousResponse: true
+      });
       setFollowUp('');
+      await window.praxis.ai.continueSession(selected.issueKey, message);
       setAttachTerminalContext(false);
+    } catch (error) {
+      setSubmittedTurn(undefined);
+      setFollowUp(current => current || followUp.trim());
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSendingFollowUp(false);
+    }
+  };
+
+  const compactContext = async () => {
+    if (!selected || !contextCompactionCommand || !isTerminalAgentState(selected.state)) return;
+    setSendingFollowUp(true);
+    setFollowUpError(undefined);
+    setContextPopoverPosition(undefined);
+    try {
+      const commandName = contextCompactionCommand.name.replace(/^\/+/, '').trim();
+      await window.praxis.ai.continueSession(selected.issueKey, `/${commandName}`);
     } catch (error) {
       setFollowUpError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -645,15 +817,26 @@ export function SessionsPage({
         )}
         {selected && (
           <>
-            <div className="session-console-header">
-              <Icon name="robot" size={14} />
-              <span
-                className="session-console-title"
-                data-testid="session-console-title"
-                title={sessionTitle(selected)}
-              >
-                {sessionLabel(selected)}
-              </span>
+            <div className={`session-console-header${focusMode ? ' session-focus-header' : ''}`}>
+              {focusMode ? (
+                <SessionFocusTabs
+                  sessions={sessions}
+                  selectedKey={selected.issueKey}
+                  onSelectSession={onSelectSession}
+                  onNewSession={onNewSession}
+                />
+              ) : (
+                <>
+                  <Icon name="robot" size={14} />
+                  <span
+                    className="session-console-title"
+                    data-testid="session-console-title"
+                    title={sessionTitle(selected)}
+                  >
+                    {sessionLabel(selected)}
+                  </span>
+                </>
+              )}
               <button
                 type="button"
                 className={`icon-btn icon-btn-sm${plainSurface ? ' active' : ''}`}
@@ -714,13 +897,13 @@ export function SessionsPage({
                 const terminalContext = event.type === 'user_input_completed' ? parseTerminalContext(event.detail) : undefined;
                 return (
                   <div
-                    className={`session-chat-message ${event.type === 'message' ? 'is-assistant' : 'is-user'}`}
+                    className={`session-chat-message ${event.type === 'message' ? `is-assistant session-chat-participant-${event.speaker?.participantId ?? 'legacy'}${event.speaker ? ` session-chat-provider-${event.speaker.provider}` : ''}` : 'is-user'}`}
                     key={`${event.timestamp}-${index}`}
                     data-testid={event.type === 'message' ? 'session-chat-assistant' : 'session-chat-user'}
                   >
                     <div className="session-chat-author">{event.type === 'message'
                       ? event.speaker
-                        ? `${PROVIDER_LABELS[event.speaker.provider]}${event.speaker.model ? ` · ${event.speaker.model}` : ''}`
+                        ? <><Icon name={providerIconName(event.speaker.provider)} size={13} />{`${PROVIDER_LABELS[event.speaker.provider]}${event.speaker.model ? ` · ${event.speaker.model}` : ''}`}</>
                         : 'AI agent'
                       : 'You'}</div>
                     {terminalContext && (
@@ -730,8 +913,11 @@ export function SessionsPage({
                       </details>
                     )}
                     <Markdown
-                      text={stripGadgetFences(terminalContext?.message ?? event.detail ?? event.summary ?? '')}
+                      text={event.type === 'message'
+                        ? visibleMessageText(event.detail ?? event.summary ?? '')
+                        : stripGadgetFences(terminalContext?.message ?? event.detail ?? event.summary ?? '')}
                       testId="session-chat-markdown"
+                      imageSessionId={selected?.issueKey}
                     />
                     {/* Whatever this message asked for, rendered where it was
                         asked rather than pooled at the bottom of the thread. */}
@@ -744,21 +930,66 @@ export function SessionsPage({
                   </div>
                 );
               })}
-              {shouldRenderResponseFallback && (
-                <div className="session-chat-message is-assistant" data-testid="session-response">
-                  <div className="session-chat-author">{selected?.conversation?.state === 'running'
-                    ? (() => { const speaker = selected.conversation.participants.find(participant => participant.id === selected.conversation?.currentSpeakerId); return speaker ? `${PROVIDER_LABELS[speaker.provider]}${speaker.model ? ` · ${speaker.model}` : ''}` : 'AI agent'; })()
-                    : 'AI agent'}</div>
-                  <Markdown text={selected?.responseText ?? ''} testId="session-chat-markdown" />
+              {optimisticFollowUp?.suppressPreviousResponse && (
+                <div
+                  className="session-chat-message is-user"
+                  data-testid="session-chat-user"
+                  data-pending="true"
+                >
+                  <div className="session-chat-author">You</div>
+                  {optimisticTerminalContext && (
+                    <details className="session-chat-terminal-context">
+                      <summary><Icon name="terminal" size={13} /> Recent terminal output <span>{optimisticTerminalContext.cwd}</span></summary>
+                      <pre>{optimisticTerminalContext.output}</pre>
+                    </details>
+                  )}
+                  <Markdown
+                    text={stripGadgetFences(optimisticTerminalContext?.message ?? optimisticFollowUp.message)}
+                    testId="session-chat-markdown"
+                    imageSessionId={selected?.issueKey}
+                  />
                 </div>
               )}
-              {liveActivityText ? (
+              {shouldRenderResponseFallback && (
+                <div className="session-chat-message is-assistant session-chat-participant-legacy" data-testid="session-response">
+                  <div className="session-chat-author">{selected?.conversation?.state === 'running'
+                    ? (() => { const speaker = selected.conversation.participants.find(participant => participant.id === selected.conversation?.currentSpeakerId); return speaker ? <><Icon name={providerIconName(speaker.provider)} size={13} />{`${PROVIDER_LABELS[speaker.provider]}${speaker.model ? ` · ${speaker.model}` : ''}`}</> : 'AI agent'; })()
+                    : 'AI agent'}</div>
+                  <Markdown text={visibleResponseText} testId="session-chat-markdown" imageSessionId={selected?.issueKey} />
+                </div>
+              )}
+              {livePendingConversationMessages.map((pending, index) => (
+                <div
+                  className="session-chat-message is-user"
+                  key={`pending-${pending.participantId}-${index}-${pending.message}`}
+                  data-testid="session-chat-user"
+                  data-pending="true"
+                >
+                  <div className="session-chat-author">You</div>
+                  <Markdown text={stripGadgetFences(pending.message)} testId="session-chat-markdown" imageSessionId={selected?.issueKey} />
+                </div>
+              ))}
+              {/* While the box is collapsed, this same readout moves into the
+                  composer controls (replacing the now-hidden commands/provider/
+                  model chips) instead of doubling up here — see `followUpCollapsed`
+                  above the composer. Still shown here for `conversationRunning`,
+                  where the box stays open (queuing a directed message) and there's
+                  no chip cluster being freed up to hold it instead. */}
+              {liveActivityText && !followUpCollapsed ? (
                 <div className="session-activity-status" data-testid="session-activity-status">
-                  <span className="session-activity-dot" aria-hidden="true" />
+                  {activityProvider ? (
+                    <Icon
+                      name={providerIconName(activityProvider)}
+                      size={13}
+                      className={`session-activity-icon session-activity-icon-${activityProvider}`}
+                    />
+                  ) : (
+                    <span className="session-activity-dot" aria-hidden="true" />
+                  )}
                   <span>{liveActivityText}</span>
                 </div>
               ) : (
-                !selected.responseText && conversationEvents.length === 0 && (
+                !liveActivityText && !visibleResponseText && conversationEvents.length === 0 && (
                   <span className="placeholder-text">Waiting for the agent to respond…</span>
                 )
               )}
@@ -835,65 +1066,9 @@ export function SessionsPage({
                   </p>
                 </div>
               )}
-              {context && context.level !== 'ok' && (
-                <div className={`composer-context-banner is-${context.level}`} data-testid="session-context">
-                  <div className="composer-context-heading">
-                    <Icon name={context.level === 'critical' ? 'warning' : 'zap'} size={13} />
-                    <span data-testid="session-context-figure">{context.percent}% of {Math.round(context.limit / 1000)}k context used</span>
-                  </div>
-                  <div
-                    className={`session-context-bar is-${context.level}`}
-                    role="progressbar"
-                    aria-valuenow={context.percent}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label="Context window used"
-                  >
-                    <span style={{ width: `${context.percent}%` }} />
-                  </div>
-                  <p>
-                    {context.level === 'critical'
-                      ? 'The next turn may not fit. Start a fresh session to carry on with a clean context.'
-                      : 'This conversation is filling the model’s window. Long tool output is the usual cause.'}
-                  </p>
-                </div>
-              )}
               <div className="composer session-follow-up-composer">
-                {attachTerminalContext && terminalForContext && (
-                  <div className="terminal-context-attachment" data-testid="terminal-context-attachment">
-                    <Icon name="terminal" size={14} />
-                    <span>Recent terminal output</span>
-                    <span className="terminal-context-cwd" title={terminalForContext.cwd}>{terminalForContext.cwd}</span>
-                    <button className="icon-btn icon-btn-sm" aria-label="Remove terminal context" onClick={() => setAttachTerminalContext(false)}>
-                      <Icon name="close" size={12} />
-                    </button>
-                  </div>
-                )}
-                <textarea
-                  className="composer-input"
-                  rows={2}
-                  data-testid="session-follow-up-input"
-                  value={followUp}
-                  disabled={!isTerminalAgentState(selected.state) || sendingFollowUp || conversationRunning}
-                  placeholder={
-                    isTerminalAgentState(selected.state) && !conversationRunning
-                      ? 'Ask the agent to clarify, change, or continue…'
-                      : conversationRunning ? 'The AI conversation is running…' : 'The agent is working…'
-                  }
-                  onChange={event => setFollowUp(event.target.value)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter' && !event.shiftKey && followUp.trim()) {
-                      event.preventDefault();
-                      void sendFollowUp();
-                    }
-                  }}
-                />
-              <div className="composer-controls">
-                  {/* A finished session can be re-run in a different mode; a live
-                      one can only be stopped, so this only appears once it's
-                      actually a choice. Mirrors where the New Session composer
-                      puts the same control when a session starts. */}
-                  {isTerminalAgentState(selected.state) && !conversationRunning && !isWorkflowStageSession(selected) && (
+                {isTerminalAgentState(selected.state) && !conversationRunning && !isWorkflowStageSession(selected) && (
+                  <div className="session-mode-panel" data-testid="session-mode-panel">
                     <div className="session-mode-toggle" role="group" aria-label="Switch session mode">
                       {(['chat', 'analysis', 'review'] as const).map(mode => (
                         <button
@@ -908,6 +1083,76 @@ export function SessionsPage({
                         </button>
                       ))}
                     </div>
+                    <div className="session-mode-panel-meta">
+                      <span className="composer-chip session-runtime-chip is-readonly" data-testid="session-tool-mode" title="Tool access for this session — fixed when it started">
+                        <Icon name={selected.toolMode === 'full' ? 'tools' : 'search'} size={14} />
+                        <span className="session-runtime-chip-label">
+                          {selected.toolMode === 'project-only' ? 'Project only' : selected.toolMode === 'read-only' ? 'Read only' : 'Full tools'}
+                        </span>
+                      </span>
+                      {selected.workingDirectory && (
+                        <span className="composer-chip session-runtime-chip is-readonly" data-testid="session-working-directory" title={selected.workingDirectory}>
+                          <Icon name="folder" size={14} />
+                          <span className="session-runtime-chip-label">{basename(selected.workingDirectory)}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {attachTerminalContext && terminalForContext && (
+                  <div className="terminal-context-attachment" data-testid="terminal-context-attachment">
+                    <Icon name="terminal" size={14} />
+                    <span>Recent terminal output</span>
+                    <span className="terminal-context-cwd" title={terminalForContext.cwd}>{terminalForContext.cwd}</span>
+                    <button className="icon-btn icon-btn-sm" aria-label="Remove terminal context" onClick={() => setAttachTerminalContext(false)}>
+                      <Icon name="close" size={12} />
+                    </button>
+                  </div>
+                )}
+                <textarea
+                  ref={followUpTextareaRef}
+                  className={`composer-input session-follow-up-input${followUpCollapsed ? ' is-collapsed' : ''}`}
+                  rows={1}
+                  data-testid="session-follow-up-input"
+                  value={followUp}
+                  disabled={followUpCollapsed || sendingFollowUp}
+                  placeholder={
+                    conversationRunning
+                      ? 'Message the selected AI…'
+                      : isTerminalAgentState(selected.state) ? 'Ask the agent to clarify, change, or continue…' : 'The agent is working…'
+                  }
+                  onChange={event => setFollowUp(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' && !event.shiftKey && followUp.trim()) {
+                      event.preventDefault();
+                      void sendFollowUp();
+                    }
+                  }}
+                />
+              <div className="composer-controls">
+                  {/* While the box is collapsed (a single-agent turn running,
+                      see `followUpCollapsed`), the commands/provider/model
+                      chips below have nothing to do — none are actionable
+                      mid-turn — so this takes their place with the same
+                      "what's happening now" readout the transcript used to
+                      show on its own line. The Session Mode chip is left
+                      alone: unlike the others it's genuinely only usable
+                      while a turn is running (`AcpAgentHost.setAcpMode`
+                      requires a live task), so hiding it here would remove
+                      the one window it's ever actionable in, not just declutter. */}
+                  {followUpCollapsed && liveActivityText && (
+                    <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid="session-activity-status">
+                      {activityProvider ? (
+                        <Icon
+                          name={providerIconName(activityProvider)}
+                          size={13}
+                          className={`session-activity-icon session-activity-icon-${activityProvider}`}
+                        />
+                      ) : (
+                        <span className="session-activity-dot" aria-hidden="true" />
+                      )}
+                      {liveActivityText}
+                    </span>
                   )}
                   {/* ACP's own Session Mode — only meaningful while the agent's
                       connection is live (`AcpAgentHost.setAcpMode` requires an
@@ -937,7 +1182,6 @@ export function SessionsPage({
                       >
                         <Icon name="sliders" size={14} />
                         {selected.acpAvailableModes.find(mode => mode.id === selected.acpCurrentModeId)?.name ?? 'Mode'}
-                        <Icon name="chevron-down" size={12} />
                       </button>
                     )}
                   {acpModeMenuPos &&
@@ -967,13 +1211,93 @@ export function SessionsPage({
                       </div>,
                       document.body
                     )}
-                  {/* The agent's own slash commands (ACP's `available_commands_update`).
-                      Clicking one inserts `/name ` into the composer — commands are
-                      plain prompt text over the same `session/prompt`, not a
-                      separate RPC, so there is nothing to invoke here but text
-                      insertion. Available regardless of run state: it edits the
-                      draft, same as typing, so it works whenever the input does. */}
-                  {selected.acpAvailableCommands && selected.acpAvailableCommands.length > 0 && (
+                  {terminalForContext && (
+                    <button
+                      className={`composer-chip terminal-context-button${attachTerminalContext ? ' active' : ''}`}
+                      type="button"
+                      aria-pressed={attachTerminalContext}
+                      title={attachTerminalContext ? 'Remove terminal output from this message' : 'Attach recent terminal output'}
+                      data-testid="attach-terminal-context"
+                      onClick={() => setAttachTerminalContext(value => !value)}
+                    >
+                      <Icon name="terminal" size={14} />
+                      Terminal
+                      <span className="terminal-context-dot" aria-hidden="true" />
+                    </button>
+                  )}
+                  {/* Read back from the session state; interactive when idle to allow runtime changes. */}
+                  {!followUpCollapsed && selected.provider && (
+                    <button 
+                      type="button"
+                      className={`composer-chip session-runtime-chip${transitionPopover?.open === 'handover' ? ' active' : ''}`}
+                      data-testid="session-provider" 
+                      title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Choose an AI provider' : "This session's AI provider"}
+                      aria-haspopup="listbox"
+                      aria-expanded={transitionPopover?.open === 'handover'}
+                      disabled={!conversationRunning && !canChangeSessionRuntime(selected)}
+                      onClick={event => {
+                        if (transitionPopover?.open === 'handover') {
+                          setTransitionPopover(undefined);
+                          return;
+                        }
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        setConversationPopoverPosition(undefined);
+                        setTransitionPopover({ open: 'handover', position: { bottom: window.innerHeight - rect.top + 6, left: rect.left } });
+                      }}
+                    >
+                      <Icon name={providerIconName(selected.provider)} size={14} />
+                      {PROVIDER_LABELS[selected.provider]}
+                    </button>
+                  )}
+                  {!followUpCollapsed && selected.model && (
+                    <button
+                      type="button"
+                      className={`composer-chip session-runtime-chip${transitionPopover?.open === 'model' ? ' active' : ''}`}
+                      data-testid="session-model" 
+                      title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Change the model for the next turn' : "This session's AI model"}
+                      aria-haspopup="listbox"
+                      aria-expanded={transitionPopover?.open === 'model'}
+                      disabled={conversationRunning || !canChangeSessionRuntime(selected)}
+                      onClick={event => {
+                        if (transitionPopover?.open === 'model') {
+                          setTransitionPopover(undefined);
+                          return;
+                        }
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        setConversationPopoverPosition(undefined);
+                        setTransitionPopover({ open: 'model', position: { bottom: window.innerHeight - rect.top + 6, left: rect.left } });
+                      }}
+                    >
+                      <Icon name="sparkles" size={14} />
+                      {selected.model}
+                    </button>
+                  )}
+                  <SessionConversationActions
+                    session={selected}
+                    onStop={() => void stopConversation()}
+                    onToolOwner={participantId => void setConversationToolOwner(participantId)}
+                    targetId={conversationTargetId}
+                    onTargetChange={setConversationTargetId}
+                  />
+                  {selected.worktreeBranch && (
+                    <span
+                      className="composer-chip session-runtime-chip is-readonly"
+                      data-testid="session-worktree"
+                      title={selected.worktreePath}
+                    >
+                      <Icon name="git-branch" size={14} />
+                      {selected.worktreeBranch}
+                      {selected.worktreeBaseBranch && (
+                        <span className="session-worktree-base"> from {selected.worktreeBaseBranch}</span>
+                      )}
+                    </span>
+                  )}
+                  <span className="spacer" />
+                  {/* Keep the agent's slash commands beside the context ring in
+                      the right-side action group. They insert `/name ` into the
+                      draft; the menu remains a portal so it is not clipped by
+                      the composer. */}
+                  {!followUpCollapsed && selected.acpAvailableCommands && selected.acpAvailableCommands.length > 0 && (
                     <button
                       ref={acpCommandChipRef}
                       className={`composer-chip${acpCommandMenuPos ? ' active' : ''}`}
@@ -994,7 +1318,6 @@ export function SessionsPage({
                     >
                       <Icon name="terminal" size={14} />
                       Commands
-                      <Icon name="chevron-down" size={12} />
                     </button>
                   )}
                   {acpCommandMenuPos &&
@@ -1023,87 +1346,46 @@ export function SessionsPage({
                       </div>,
                       document.body
                     )}
-                  {terminalForContext && (
+                  {context && (
                     <button
-                      className={`composer-chip terminal-context-button${attachTerminalContext ? ' active' : ''}`}
+                      ref={contextChipRef}
                       type="button"
-                      aria-pressed={attachTerminalContext}
-                      title={attachTerminalContext ? 'Remove terminal output from this message' : 'Attach recent terminal output'}
-                      data-testid="attach-terminal-context"
-                      onClick={() => setAttachTerminalContext(value => !value)}
+                      className={`session-context-chip is-${context.level}${contextPopoverPosition ? ' active' : ''}`}
+                      aria-label={`Context usage: ${context.percent}% used`}
+                      aria-haspopup="dialog"
+                      aria-expanded={Boolean(contextPopoverPosition)}
+                      aria-controls="session-context-popover"
+                      title={`${context.percent}% of context used`}
+                      data-testid="session-context-chip"
+                      onClick={() => {
+                        if (contextPopoverPosition) {
+                          setContextPopoverPosition(undefined);
+                          return;
+                        }
+                        const rect = contextChipRef.current?.getBoundingClientRect();
+                        if (rect) {
+                          setTransitionPopover(undefined);
+                          setConversationPopoverPosition(undefined);
+                          setContextPopoverPosition({
+                            bottom: window.innerHeight - rect.top + 6,
+                            left: rect.right - 300
+                          });
+                        }
+                      }}
                     >
-                      <Icon name="terminal" size={14} />
-                      Terminal
-                      <span className="terminal-context-dot" aria-hidden="true" />
+                      <svg viewBox="0 0 20 20" aria-hidden="true">
+                        <circle className="session-context-ring-track" cx="10" cy="10" r="7.5" />
+                        <circle
+                          className="session-context-ring-value"
+                          cx="10"
+                          cy="10"
+                          r="7.5"
+                          pathLength="100"
+                          strokeDasharray={`${context.percent} ${100 - context.percent}`}
+                        />
+                      </svg>
                     </button>
                   )}
-                  {/* Read back from the session state; interactive when idle to allow runtime changes. */}
-                  {selected.provider && (
-                    <button 
-                      type="button"
-                      className="composer-chip session-runtime-chip" 
-                      data-testid="session-provider" 
-                      title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Hand this session to another AI' : "This session's AI provider"}
-                      disabled={conversationRunning || !canChangeSessionRuntime(selected)}
-                      onClick={() => setTransitionDialog('handover')}
-                    >
-                      <Icon name={providerIconName(selected.provider)} size={14} />
-                      {PROVIDER_LABELS[selected.provider]}
-                    </button>
-                  )}
-                  {selected.model && (
-                    <button 
-                      type="button"
-                      className="composer-chip session-runtime-chip" 
-                      data-testid="session-model" 
-                      title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Change the model for the next turn' : "This session's AI model"}
-                      disabled={conversationRunning || !canChangeSessionRuntime(selected)}
-                      onClick={() => setTransitionDialog('model')}
-                    >
-                      <Icon name="sparkles" size={14} />
-                      {selected.model}
-                    </button>
-                  )}
-                  <SessionConversationActions
-                    session={selected}
-                    onStart={() => setConversationDialogOpen(true)}
-                    onStop={() => void stopConversation()}
-                    onToolOwner={participantId => void setConversationToolOwner(participantId)}
-                  />
-                  <span
-                    className="composer-chip session-runtime-chip"
-                    data-testid="session-tool-mode"
-                    title="Tool access for this session — fixed when it started"
-                  >
-                    <Icon name={selected.toolMode === 'full' ? 'tools' : 'search'} size={14} />
-                    {selected.toolMode === 'project-only'
-                      ? 'Project only'
-                      : selected.toolMode === 'read-only' ? 'Read only' : 'Full tools'}
-                  </span>
-                  {selected.workingDirectory && (
-                    <span
-                      className="composer-chip session-runtime-chip"
-                      data-testid="session-working-directory"
-                      title={selected.workingDirectory}
-                    >
-                      <Icon name="folder" size={14} />
-                      {basename(selected.workingDirectory)}
-                    </span>
-                  )}
-                  {selected.worktreeBranch && (
-                    <span
-                      className="composer-chip session-runtime-chip"
-                      data-testid="session-worktree"
-                      title={selected.worktreePath}
-                    >
-                      <Icon name="git-branch" size={14} />
-                      {selected.worktreeBranch}
-                      {selected.worktreeBaseBranch && (
-                        <span className="session-worktree-base"> from {selected.worktreeBaseBranch}</span>
-                      )}
-                    </span>
-                  )}
-                  <span className="spacer" />
                   <button
                     className={`composer-send${!isTerminalAgentState(selected.state) ? ' composer-send-cancel' : ''}`}
                     aria-label={conversationRunning ? 'Stop conversation' : !isTerminalAgentState(selected.state) ? 'Cancel response' : sendingFollowUp ? 'Sending message' : 'Send message'}
@@ -1122,8 +1404,73 @@ export function SessionsPage({
                   >
                     <Icon name={conversationRunning || !isTerminalAgentState(selected.state) ? 'close' : 'arrow-up'} size={15} />
                   </button>
+                  {conversationRunning && (
+                    <button
+                      type="button"
+                      className="composer-send composer-send-directed"
+                      aria-label="Send message to selected AI"
+                      title="Send this message to the selected AI"
+                      data-testid="session-conversation-send"
+                      disabled={abortingSession || sendingFollowUp || !followUp.trim()}
+                      onClick={() => void sendFollowUp()}
+                    >
+                      <Icon name="arrow-up" size={15} />
+                    </button>
+                  )}
                 </div>
               </div>
+              {context && contextPopoverPosition && createPortal(
+                <div
+                  ref={contextPopoverRef}
+                  id="session-context-popover"
+                  className={`composer-provider-menu session-context-popover is-${context.level}`}
+                  role="dialog"
+                  aria-label="Context usage details"
+                  data-testid="session-context"
+                  style={{
+                    position: 'fixed',
+                    bottom: contextPopoverPosition.bottom,
+                    left: Math.max(12, Math.min(contextPopoverPosition.left, window.innerWidth - 312))
+                  }}
+                >
+                  <div className="session-context-header">
+                    <div className="composer-context-heading">
+                      <Icon name={context.level === 'critical' ? 'warning' : context.level === 'warn' ? 'zap' : 'info'} size={13} />
+                      <span data-testid="session-context-figure">{context.percent}% of {Math.round(context.limit / 1000)}k context used</span>
+                    </div>
+                    {canCompactContext && (
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn-sm session-context-compact"
+                        aria-label="Compact context"
+                        title="Compact context"
+                        data-testid="session-context-compact"
+                        onClick={() => void compactContext()}
+                      >
+                        <Icon name="compress" size={13} />
+                      </button>
+                    )}
+                  </div>
+                  <div
+                    className={`session-context-bar is-${context.level}`}
+                    role="progressbar"
+                    aria-valuenow={context.percent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Context window used"
+                  >
+                    <span style={{ width: `${context.percent}%` }} />
+                  </div>
+                  <p>
+                    {context.level === 'critical'
+                      ? 'The next turn may not fit. Start a fresh session to carry on with a clean context.'
+                      : context.level === 'warn'
+                        ? 'This conversation is filling the model’s window. Long tool output is the usual cause.'
+                        : 'There is plenty of room for the next turn in this model’s context window.'}
+                  </p>
+                </div>,
+                document.body
+              )}
             </div>
             {browserOpen && (
               <div
@@ -1146,11 +1493,19 @@ export function SessionsPage({
       {selected && (
         <SessionTransitionDialogs
           session={selected}
-          open={transitionDialog}
-          onClose={() => setTransitionDialog(undefined)}
+          open={transitionPopover?.open}
+          position={transitionPopover?.position}
+          onClose={() => setTransitionPopover(undefined)}
+          onAddProvider={provider => {
+            const position = transitionPopover?.position;
+            setTransitionPopover(undefined);
+            setConversationPopoverPosition(position);
+            setConversationTargetId(undefined);
+            setConversationInitialProvider(provider);
+          }}
         />
       )}
-      {selected && <SessionConversationDialog session={selected} open={conversationDialogOpen} onClose={() => setConversationDialogOpen(false)} />}
+      {selected && <SessionConversationDialog session={selected} open={Boolean(conversationPopoverPosition)} position={conversationPopoverPosition} initialProvider={conversationInitialProvider} onClose={() => { setConversationPopoverPosition(undefined); setConversationInitialProvider(undefined); }} />}
     </div>
   );
 }

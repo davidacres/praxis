@@ -66,6 +66,7 @@ export interface ChatCompletionResult {
 
 export type StreamChatEvent =
   | { type: 'text_delta'; text: string }
+  | { type: 'thought_delta'; text: string }
   | { type: 'tool_call_delta'; index: number; id?: string; name?: string; argumentsDelta?: string }
   | { type: 'done'; result: ChatCompletionResult };
 

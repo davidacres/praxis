@@ -78,13 +78,25 @@ async function runSession(promptTokens: number): Promise<TestApp['window']> {
   return win;
 }
 
-test('a comfortable context says nothing at all', async () => {
-  // 20% full. A mostly-empty window is not news, and a bar that is always on
-  // screen is a bar nobody reads.
+test('a comfortable context stays compact and opens its details on demand', async () => {
+  // 20% full. The ring keeps usage visible without turning a healthy context
+  // into a persistent warning banner.
   const win = await runSession(20_000);
 
   await expect(win.getByTestId('session-tokens')).toBeVisible();
+  const chip = win.getByTestId('session-context-chip');
+  await expect(chip).toBeVisible();
+  await expect(chip).toHaveAttribute('aria-label', 'Context usage: 20% used');
   await expect(win.getByTestId('session-context')).toHaveCount(0);
+  await chip.click();
+  const context = win.getByTestId('session-context');
+  await expect(context).toBeVisible();
+  await expect(context.getByTestId('session-context-figure')).toHaveText('20% of 100k context used');
+  await expect(context).toContainText('plenty of room');
+  await expect(context.getByTestId('session-context-compact')).toHaveCount(0);
+  await chip.click();
+  await expect(win.getByTestId('session-context')).toHaveCount(0);
+  await expect(chip).toBeVisible();
 });
 
 test('the runtime facts sit on the composer as chips, not tucked in a side panel', async () => {
@@ -93,16 +105,28 @@ test('the runtime facts sit on the composer as chips, not tucked in a side panel
   const win = await runSession(20_000);
 
   const chips = win.locator('.composer-controls');
+  const modePanel = win.locator('[data-testid="session-mode-panel"]');
   await expect(chips.getByTestId('session-provider')).toContainText('Vercel AI Gateway');
   await expect(chips.getByTestId('session-model')).toContainText(MODEL.id);
-  await expect(chips.getByTestId('session-tool-mode')).toContainText('Read only');
-  await expect(chips.getByTestId('session-working-directory')).toBeVisible();
+  await expect(modePanel.getByTestId('session-tool-mode')).toContainText('Read only');
+  await expect(modePanel.getByTestId('session-working-directory')).toBeVisible();
+  const workingDirectoryIcon = modePanel.getByTestId('session-working-directory').locator('svg');
+  const workingDirectoryIconBox = await workingDirectoryIcon.boundingBox();
+  expect(workingDirectoryIconBox?.width).toBeGreaterThanOrEqual(12);
+  expect(workingDirectoryIconBox?.height).toBeGreaterThanOrEqual(12);
+  const contextChip = chips.getByTestId('session-context-chip');
+  const send = chips.getByTestId('session-follow-up-send');
+  await expect(contextChip).toBeVisible();
+  const [contextBox, sendBox] = await Promise.all([contextChip.boundingBox(), send.boundingBox()]);
+  expect(contextBox!.x).toBeLessThan(sendBox!.x);
+  expect(sendBox!.x - (contextBox!.x + contextBox!.width)).toBeLessThanOrEqual(8);
   await win.screenshot({ path: 'output/playwright/composer-runtime-chips.png', fullPage: true });
 });
 
 test('a filling context warns, and says what is causing it', async () => {
   const win = await runSession(72_000);
 
+  await win.getByTestId('session-context-chip').click();
   const context = win.getByTestId('session-context');
   await expect(context).toBeVisible();
   await expect(context.getByTestId('session-context-figure')).toHaveText('72% of 100k context used');
@@ -116,7 +140,7 @@ test('a filling context warns, and says what is causing it', async () => {
   // full sentence someone has to read is not a label.
   const sizes = await win.evaluate(() => ({
     heading: getComputedStyle(document.querySelector('.composer-context-heading')!).fontSize,
-    paragraph: getComputedStyle(document.querySelector('.composer-context-banner p')!).fontSize,
+    paragraph: getComputedStyle(document.querySelector('.session-context-popover p')!).fontSize,
     chip: getComputedStyle(document.querySelector('.session-runtime-chip')!).fontSize,
     chatMessage: getComputedStyle(document.querySelector('.session-chat-message')!).fontSize
   }));
@@ -129,6 +153,7 @@ test('a filling context warns, and says what is causing it', async () => {
 test('a nearly-full context escalates and tells the user what to do', async () => {
   const win = await runSession(92_000);
 
+  await win.getByTestId('session-context-chip').click();
   const context = win.getByTestId('session-context');
   await expect(context.getByTestId('session-context-figure')).toHaveText('92% of 100k context used');
   // Not just a redder bar — the advice changes to the action that resolves it.

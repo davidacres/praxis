@@ -93,3 +93,39 @@ test('the agent\'s own slash commands populate the composer and insert into the 
   // invoke, just an insertion into the draft the user can still edit.
   await expect(win.getByTestId('session-follow-up-input')).toHaveValue('/create_plan ');
 });
+
+test('context compaction is offered only when the ACP provider advertises /compact', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  const key = await delegate(win, 'WITH_USAGE WITH_COMMANDS please');
+
+  await expect
+    .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), key), { timeout: 20000 })
+    .toBe('completed');
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'WITH_USAGE WITH_COMMANDS please' }).click();
+  await expect(win.getByTestId('session-context-chip')).toBeVisible();
+  const commandsBox = await win.getByTestId('session-acp-commands').boundingBox();
+  const contextChipBox = await win.getByTestId('session-context-chip').boundingBox();
+  expect(commandsBox).not.toBeNull();
+  expect(contextChipBox).not.toBeNull();
+  expect(commandsBox!.x + commandsBox!.width).toBeLessThan(contextChipBox!.x);
+
+  await win.getByTestId('session-context-chip').click();
+  const context = win.getByTestId('session-context');
+  const compact = context.getByTestId('session-context-compact');
+  await expect(compact).toBeVisible();
+  await expect(compact).toHaveAttribute('aria-label', 'Compact context');
+  await compact.click();
+  await expect(win.getByTestId('session-context')).toHaveCount(0);
+  await expect
+    .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(item => item.issueKey === k)?.state), key), { timeout: 20000 })
+    .toBe('completed');
+  await expect
+    .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => {
+      const session = l.find(item => item.issueKey === k);
+      return session?.events.some(event => event.type === 'user_input_completed' && event.detail === '/compact');
+    }), key), { timeout: 20000 })
+    .toBe(true);
+});

@@ -149,6 +149,29 @@ test('delegate completes a session against a real ACP agent subprocess', async (
   );
 });
 
+test('ACP resume replay does not duplicate the previous answer into a follow-up', async () => {
+  app = await launchTestApp(undefined, undefined, { FAKE_ACP_REPLAY_ON_RESUME: '1' });
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+
+  await delegate(win, 'APP-212', 'claude-code-cli', 'Give the original response.');
+  await expect.poll(async () => (await readSession(win, 'APP-212'))?.state, { timeout: 15000 }).toBe('completed');
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-212' }).click();
+  await win.locator('[data-testid="session-follow-up-input"]').fill('DISTINCT_FOLLOW_UP answer only this question.');
+  await win.locator('[data-testid="session-follow-up-send"]').click();
+
+  await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('DISTINCT_FOLLOW_UP');
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  const replies = win.locator('[data-testid="session-chat-assistant"]');
+  await expect(replies).toHaveCount(2);
+  await expect(replies.last()).toContainText('Fresh response to the current question.');
+  await expect(replies.last()).not.toContainText('replayed');
+  const session = await readSession(win, 'APP-212');
+  expect(session?.responseText).toBe('Fresh response to the current question.');
+});
+
 test('an ACP diff tool call renders as a red/green diff in the console', async () => {
   app = await launchTestApp();
   const win = app.window;

@@ -165,6 +165,17 @@ const TRACKER_WRITE_TOOLS = [
   }
 ];
 
+const IMAGE_PREVIEW_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.avif': 'image/avif'
+};
+const MAX_IMAGE_PREVIEW_BYTES = 12 * 1024 * 1024;
+
 function trackerToolExtension(
   service: IssueTrackerService | undefined,
   toolMode: AgentToolMode
@@ -285,7 +296,7 @@ export function registerAiIpc(): void {
   async function continueRecordedSession(
     issueKey: string,
     message: string,
-    options?: { internalConversationTurn?: boolean }
+    options?: { internalConversationTurn?: boolean; conversationContext?: string }
   ): Promise<void> {
     const followUp = message.trim();
     if (!followUp) {
@@ -309,6 +320,7 @@ export function registerAiIpc(): void {
         workingDirectory,
         toolMode,
         internalConversationTurn: options?.internalConversationTurn,
+        conversationContext: options?.conversationContext,
         ...(browserMcp ? { mcpServers: [browserMcp] } : {})
       });
       return;
@@ -329,6 +341,7 @@ export function registerAiIpc(): void {
       workingDirectory,
       toolMode,
       internalConversationTurn: options?.internalConversationTurn,
+      conversationContext: options?.conversationContext,
       toolExtension: mergeToolExtensions(
         trackerToolExtension(trackerService, toolMode),
         browserToolExtension(toolMode)
@@ -372,7 +385,7 @@ export function registerAiIpc(): void {
     }, 0);
   }
 
-  async function runConversationTurn(issueKey: string): Promise<void> {
+  async function runConversationTurn(issueKey: string, humanMessage?: string): Promise<void> {
     if (startingConversationTurns.has(issueKey)) return;
     const current = sessionManager.getAgentSession(issueKey);
     if (!current?.conversation || current.conversation.state !== 'running') return;
@@ -384,7 +397,10 @@ export function registerAiIpc(): void {
     try {
       const prepared = sessionManager.prepareAgentConversationTurn(issueKey);
       if (prepared.conversation?.state !== 'running') return;
-      await continueRecordedSession(issueKey, conversationPrompt(prepared), { internalConversationTurn: true });
+      await continueRecordedSession(issueKey, humanMessage ?? 'Continue the conversation.', {
+        internalConversationTurn: !humanMessage,
+        conversationContext: conversationPrompt(prepared)
+      });
     } catch {
       const record = sessionManager.getAgentSession(issueKey);
       if (record?.conversation?.state === 'running') sessionManager.finishAgentConversation(issueKey, 'failed');
@@ -442,6 +458,57 @@ export function registerAiIpc(): void {
     [...sessionManager.getAllAgentSessions().values()].sort((a, b) =>
       b.startedAt.localeCompare(a.startedAt)
     )
+  );
+
+  ipcMain.handle(
+    'ai:loadImagePreview',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, filePath: string) => {
+      // Chat Markdown historically passed the issue key. Artifact gadgets use
+      // the session id because free-form sessions do not always have a ticket;
+      // accept both identifiers while keeping the same bounded file access.
+      const record = sessionManager.getAgentSession(issueKey) ??
+        [...sessionManager.getAllAgentSessions().values()].find(candidate => candidate.sessionId === issueKey);
+      const input = typeof filePath === 'string' ? filePath.trim() : '';
+      const workingDirectory = record?.worktreePath?.trim() || record?.workingDirectory?.trim();
+      if (!record || !workingDirectory || !input) return undefined;
+
+      const extension = nodePath.extname(input.split(/[?#]/, 1)[0]).toLowerCase();
+      const mediaType = IMAGE_PREVIEW_TYPES[extension];
+      if (!mediaType) return undefined;
+
+      // Markdown may contain a file URL when an agent copied one from a
+      // browser or editor. Resolve it to a path before applying the same
+      // session-folder boundary as the rest of the AI file tools.
+      let candidateInput = input;
+      if (/^file:\/\//i.test(candidateInput)) {
+        try {
+          candidateInput = decodeURIComponent(new URL(candidateInput).pathname);
+        } catch {
+          return undefined;
+        }
+      }
+
+      let absolute: string;
+      try {
+        absolute = resolveSandboxedPath(workingDirectory, candidateInput);
+      } catch (error) {
+        if (error instanceof PathSandboxError) return undefined;
+        throw error;
+      }
+
+      try {
+        const stat = await fsp.stat(absolute);
+        if (!stat.isFile() || stat.size > MAX_IMAGE_PREVIEW_BYTES) return undefined;
+        const contents = await fsp.readFile(absolute);
+        return `data:${mediaType};base64,${contents.toString('base64')}`;
+      } catch {
+        // A response can arrive before an image is flushed, or refer to an
+        // optional screenshot that was not produced. Keep the response useful
+        // and let the filename remain visible rather than surfacing an IPC
+        // error for a preview-only enhancement.
+        return undefined;
+      }
+    }
   );
 
   ipcMain.handle(
@@ -843,6 +910,25 @@ export function registerAiIpc(): void {
     }
   );
 
+  ipcMain.handle(
+    'ai:sendConversationMessage',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, input: { participantId: string; message: string }) => {
+      const message = typeof input?.message === 'string' ? input.message.trim() : '';
+      if (!message) throw new Error('Enter a message for the AI conversation.');
+      const record = sessionManager.getAgentSession(issueKey);
+      if (!record?.conversation || record.conversation.state !== 'running') throw new Error('No running multi-AI conversation.');
+      sessionManager.queueAgentConversationMessage(issueKey, input.participantId, message);
+      if (!hasActiveTask(issueKey) && !startingConversationTurns.has(issueKey)) {
+        const pending = sessionManager.takeAgentConversationMessage(issueKey);
+        if (pending) {
+          sessionManager.setAgentConversationSpeaker(issueKey, pending.participantId);
+          void runConversationTurn(issueKey, pending.message).catch(() => undefined);
+        }
+      }
+      return sessionManager.getAgentSession(issueKey)!;
+    }
+  );
+
   ipcMain.handle('ai:stopConversation', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
     const record = sessionManager.getAgentSession(issueKey);
     if (!record?.conversation || record.conversation.state !== 'running') throw new Error('No multi-AI conversation is running.');
@@ -1055,9 +1141,17 @@ export function registerAiIpc(): void {
     const record = sessionManager.getAgentSession(issueKey);
     if (!record?.conversation || record.conversation.state !== 'running' || hasActiveTask(issueKey)) return;
     if (record.state === 'completed') {
+      const pending = sessionManager.takeAgentConversationMessage(issueKey);
       sessionManager.completeAgentConversationTurn(issueKey);
       const next = sessionManager.getAgentSession(issueKey);
-      if (next?.conversation?.state === 'running') queueConversationTurn(issueKey);
+      if (next?.conversation?.state === 'running') {
+        if (pending) {
+          sessionManager.setAgentConversationSpeaker(issueKey, pending.participantId);
+          void runConversationTurn(issueKey, pending.message).catch(() => undefined);
+        } else {
+          queueConversationTurn(issueKey);
+        }
+      }
     } else if (record.state === 'failed' || record.state === 'aborted') {
       sessionManager.finishAgentConversation(issueKey, 'failed');
     }

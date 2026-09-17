@@ -6,6 +6,7 @@ import '@xterm/xterm/css/xterm.css';
 import type { AgentSessionRecord, TerminalCommandRecord, TerminalProfile, TerminalSessionInfo, TerminalSettings } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { getActiveTerminalId, setActiveTerminalId } from '../ai/terminalSelection';
+import { visibleMessageText } from '../ai/gadgets/messageText';
 import { useSettings } from '../settings/useSettings';
 import { DEFAULT_THEME_ID, terminalColorsForTheme } from '../settings/themes';
 
@@ -271,12 +272,16 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
     }
   };
 
-  const suggestedCommand = useMemo(() => {
+  const terminalAiResponse = useMemo(() => {
     const response = terminalAiSession?.responseText ?? terminalAiSession?.events.map(event => event.detail || event.summary).join('\n') ?? '';
-    const fenced = response.match(/```(?:bash|sh|zsh|shell|powershell|pwsh|cmd)?\s*\n?([\s\S]*?)```/i);
+    return visibleMessageText(response);
+  }, [terminalAiSession]);
+
+  const suggestedCommand = useMemo(() => {
+    const fenced = terminalAiResponse.match(/```(?:bash|sh|zsh|shell|powershell|pwsh|cmd)?\s*\n?([\s\S]*?)```/i);
     if (!fenced?.[1]) return undefined;
     return fenced[1].trim().split('\n').filter(line => !line.trim().startsWith('#')).join('\n').trim() || undefined;
-  }, [terminalAiSession]);
+  }, [terminalAiResponse]);
 
   return (
     <section className="bottom-panel" data-testid="bottom-panel" aria-label="Panel">
@@ -399,7 +404,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
                       <button type="button" className="primary" onClick={() => activeId && void window.praxis.terminal.write(activeId, `${suggestedCommand}\r`)}>Run</button>
                     </div>
                   </>}
-                  {!suggestedCommand && terminalAiSession.responseText && <p>{terminalAiSession.responseText}</p>}
+                  {!suggestedCommand && terminalAiResponse && <p>{terminalAiResponse}</p>}
                 </div>
               )}
             </div>

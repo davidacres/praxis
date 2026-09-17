@@ -255,6 +255,8 @@ export interface AgentConversation {
   turnCap: number;
   turnsUsed: number;
   state: AgentConversationState;
+  /** Human messages queued for specific participants while another turn is running. */
+  pendingUserMessages?: Array<{ participantId: string; message: string }>;
 }
 
 export interface AiStartConversationInput {
@@ -262,6 +264,12 @@ export interface AiStartConversationInput {
   model?: string;
   mode: AgentConversationMode;
   turnCap: number;
+}
+
+/** A human-directed message in an active bounded AI conversation. */
+export interface AiConversationMessageInput {
+  participantId: string;
+  message: string;
 }
 
 /** Why a session exists — a snapshot of the ticket or plan at session creation. */

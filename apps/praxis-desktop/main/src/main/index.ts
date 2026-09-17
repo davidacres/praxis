@@ -20,7 +20,7 @@ import { registerAiWorkflowIpc } from './aiWorkflowIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { registerWorkflowIpc, recoverWorkflowRunsOnStartup } from './workflowIpc';
 import { registerGitIpc } from './gitIpc';
-import { attachWindowCloseGuard, attachWindowStateEvents, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
+import { attachWindowCloseGuard, attachWindowStateEvents, attachWindowZoomShortcuts, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
 import { getSettingsBackend, initSettingsBackend } from './settingsBackendInstance';
 import { setMcpOAuthProviderSource } from '@praxis/core';
 import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
@@ -196,6 +196,7 @@ function createMainWindow(): void {
   });
 
   attachWindowStateEvents(win);
+  attachWindowZoomShortcuts(win);
   attachWindowCloseGuard(win, () => getAllActiveTaskIssueKeys().length);
   if (vibrancy) {
     setWindowVibrancy(win, 'glass');

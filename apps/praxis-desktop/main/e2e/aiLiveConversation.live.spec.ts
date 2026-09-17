@@ -8,11 +8,16 @@ import { spawnSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
-const HOST_PROVIDER = 'claude-code-cli';
+const HOST_PROVIDER = process.env.PRAXIS_LIVE_CONVERSATION_FROM ?? 'claude-code-cli';
 const HOST_COMMAND = process.env.PRAXIS_LIVE_AGENT_CMD ?? 'claude-agent-acp';
 const GUEST_PROVIDER = process.env.PRAXIS_LIVE_CONVERSATION_TO ?? 'codex-cli';
 const GUEST_COMMAND = process.env.PRAXIS_LIVE_CONVERSATION_CMD ?? 'codex-acp';
 const TURN_MS = 240000;
+const PROVIDER_LABELS: Record<string, string> = {
+  'claude-code-cli': 'Claude Code',
+  'codex-cli': 'Codex',
+  'copilot-cli': 'Copilot'
+};
 
 let app: TestApp | undefined;
 
@@ -63,7 +68,7 @@ test('two real CLI agents visibly alternate in a capped read-only consult', asyn
     task: { maxSteps: 3, timeoutMs }
   }), { provider: HOST_PROVIDER, timeoutMs: TURN_MS });
   const first = await waitFor(win, session.issueKey, record => record.state === 'completed');
-  expect(first?.state).toBe('completed');
+  expect(first?.state, JSON.stringify({ error: first?.error, events: first?.events?.slice(-3) })).toBe('completed');
 
   await win.evaluate(({ issueKey, provider }) => window.praxis.ai.startConversation(issueKey, {
     provider, mode: 'consult', turnCap: 2
@@ -77,6 +82,7 @@ test('two real CLI agents visibly alternate in a capped read-only consult', asyn
   expect((capped?.events ?? []).filter(event => event.type === 'user_input_completed')).toHaveLength(0);
 
   await win.locator('[data-testid="nav-sessions"]').click();
-  await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('Claude Code');
-  await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('Codex');
+  const thread = win.locator('[data-testid="session-chat-thread"]');
+  await expect(thread).toContainText(PROVIDER_LABELS[HOST_PROVIDER] ?? HOST_PROVIDER);
+  await expect(thread).toContainText(PROVIDER_LABELS[GUEST_PROVIDER] ?? GUEST_PROVIDER);
 });

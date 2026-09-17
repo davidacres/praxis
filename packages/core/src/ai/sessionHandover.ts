@@ -15,9 +15,7 @@ export const HANDOVER_BRIEF_SCHEMA_VERSION = 1;
 
 export const RUNTIME_BUSY_STATES: ReadonlySet<AgentTaskState> = new Set([
   'planning',
-  'executing',
-  'awaiting_approval',
-  'awaiting_input'
+  'executing'
 ]);
 
 export class StaleHandoverBriefRevisionError extends Error {

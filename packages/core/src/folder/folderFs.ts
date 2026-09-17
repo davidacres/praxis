@@ -19,6 +19,8 @@ export interface FolderFs {
   readDirectory(dirPath: string): Promise<Array<[string, 'file' | 'directory']>>;
   /** Create a directory, including any missing parents. A no-op if it exists. */
   mkdir(dirPath: string): Promise<void>;
+  /** Move a managed markdown file to another path in the plans tree. */
+  moveFile(sourcePath: string, targetPath: string): Promise<void>;
 }
 
 const nodeFolderFs: FolderFs = {
@@ -34,6 +36,9 @@ const nodeFolderFs: FolderFs = {
   },
   async mkdir(dirPath) {
     await fs.mkdir(dirPath, { recursive: true });
+  },
+  moveFile(sourcePath, targetPath) {
+    return fs.rename(sourcePath, targetPath);
   }
 };
 
