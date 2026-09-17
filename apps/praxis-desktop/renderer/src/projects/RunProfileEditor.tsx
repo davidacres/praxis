@@ -296,6 +296,7 @@ export function RunProfileEditor({ project }: RunProfileEditorProps) {
   if (!profile) {
     return (
       <div className="view-scroll run-page">
+        {discovered && renderDiscoveryPanel()}
         <div className="empty-state" data-testid="run-no-profile">
           <Icon name="server" size={28} />
           <span>No run profile yet.</span>
@@ -312,7 +313,6 @@ export function RunProfileEditor({ project }: RunProfileEditorProps) {
             </button>
           </div>
         </div>
-        {discovered && renderDiscoveryPanel()}
       </div>
     );
   }
