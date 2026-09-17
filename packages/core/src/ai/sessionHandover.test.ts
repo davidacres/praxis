@@ -96,6 +96,9 @@ test('handover envelope redacts secrets and asks the receiver to inspect files',
 
 test('busy states cannot change runtime', () => {
   assert.equal(canChangeSessionRuntime('executing'), false);
+  assert.equal(canChangeSessionRuntime('planning'), false);
+  assert.equal(canChangeSessionRuntime('awaiting_input'), true);
+  assert.equal(canChangeSessionRuntime('awaiting_approval'), true);
   assert.equal(canChangeSessionRuntime('completed'), true);
 });
 

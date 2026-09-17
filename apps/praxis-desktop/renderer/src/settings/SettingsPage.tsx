@@ -38,6 +38,7 @@ import {
 } from '../ai/sessionNav';
 import { useSettings } from './useSettings';
 import { useKindAddons } from './marketplaceAddons';
+import { isHostShimProfile } from '../agents/agentCatalog';
 import { BUILT_IN_GADGET_CATALOG } from '../ai/gadgets';
 import { allThemes, applySurfacePack, applyThemePreference, DEFAULT_THEME_ID, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
@@ -199,7 +200,7 @@ const CATEGORIES: CategoryDef[] = [
     id: 'agent-runtime',
     label: 'Agent Runtime',
     icon: 'robot',
-    description: 'Discovered agent hosts, capabilities, and progressively indexed skills.'
+    description: 'Local AI runtimes, agent profiles, launch bindings, and progressively indexed skills.'
   },
   {
     id: 'workflow-templates',
@@ -249,9 +250,11 @@ interface SettingsPageProps {
   connections: Connection[];
   onOpenConnections: () => void;
   initialCategory?: SettingsCategory;
+  onNewAgentItem?: (kind: 'agent' | 'import') => void;
+  onOpenAgent?: (agentId: string) => void;
 }
 
-export function SettingsPage({ connections, onOpenConnections, initialCategory = 'overview' }: SettingsPageProps) {
+export function SettingsPage({ connections, onOpenConnections, initialCategory = 'overview', onNewAgentItem, onOpenAgent }: SettingsPageProps) {
   const [active, setActive] = useState<SettingsCategory>(initialCategory);
   const [resettingData, setResettingData] = useState(false);
   const [resetConfirmation, setResetConfirmation] = useState<'defaults' | 'sessions' | 'project-data' | 'appearance'>();
@@ -357,7 +360,9 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'ai' && <AiSection settings={settings} update={update} connections={connections} />}
         {active === 'ai-usage' && <AiUsageStatsSection />}
         {active === 'gadgets' && <GadgetsSection />}
-        {active === 'agent-runtime' && <AgentRuntimeSection />}
+        {active === 'agent-runtime' && (
+          <AgentRuntimeSection settings={settings} onNewAgentItem={onNewAgentItem} onOpenAgent={onOpenAgent} />
+        )}
         {active === 'workflow-templates' && <WorkflowTemplatesSection />}
         {active === 'performance' && <PerformanceSection settings={settings} update={update} />}
         {active === 'delivery' && <DeliverySection settings={settings} update={update} />}
@@ -503,9 +508,18 @@ function NavGroup({
   );
 }
 
-function AgentRuntimeSection() {
+function AgentRuntimeSection({
+  settings,
+  onNewAgentItem,
+  onOpenAgent
+}: {
+  settings: AppSettings;
+  onNewAgentItem?: (kind: 'agent' | 'import') => void;
+  onOpenAgent?: (agentId: string) => void;
+}) {
   const [snapshot, setSnapshot] = useState<AgentRuntimeSnapshot>();
   const [roots, setRoots] = useState<{ agents: Record<string, string>; runtimeHosts?: Record<string, string>; profiles?: Record<string, string>; skills: Record<string, string> }>();
+  const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>([]);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -532,7 +546,18 @@ function AgentRuntimeSection() {
   useEffect(() => {
     void window.praxis.agentRuntime.list().then(setSnapshot).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
     void window.praxis.agentRuntime.roots().then(setRoots).catch(() => {});
+    void window.praxis.ai.listProviderStatuses().then(setProviderStatuses).catch(() => {});
   }, []);
+
+  const runtimeProviders = AI_PROVIDERS.filter(provider => provider.kind === 'cli-agent');
+  // Every binding always has *some* profile entry — one it wrote itself
+  // (curated) or one Praxis auto-synthesizes as a placeholder when it has no
+  // AGENT.md. Only the curated ones belong under "Agent profiles"; a binding
+  // whose only profile is that placeholder is a custom launch binding.
+  const profiles = (snapshot?.profiles ?? []).filter(profile => !isHostShimProfile(profile));
+  const launchBindings = snapshot?.runtimeHosts ?? snapshot?.agents ?? [];
+  const launchBindingsById = new Map(launchBindings.map(binding => [binding.manifest.id, binding]));
+  const standaloneBindings = launchBindings.filter(binding => !profiles.some(profile => profile.profile.id === binding.manifest.id));
 
   return (
     <section data-testid="settings-agent-runtime">
@@ -542,7 +567,7 @@ function AgentRuntimeSection() {
           <div className="settings-field-label">
             <strong>Registry</strong>
             <div className="settings-field-help">
-              Read-only diagnostics. Start hosts and activate skills from the <strong>Agents</strong> hub in the sidebar.
+              Read-only diagnostics. AI runtimes execute sessions; profiles define behaviour; launch bindings connect custom agents to Praxis.
             </div>
           </div>
           <div className="settings-field-control">
@@ -558,11 +583,11 @@ function AgentRuntimeSection() {
               <div className="settings-field-help">
                 Global profiles: <code>{roots.profiles?.global ?? roots.agents.global}</code>
                 <br />
-                Global runtime hosts: <code>{roots.runtimeHosts?.global ?? roots.agents.global}</code> · skills: <code>{roots.skills.global}</code>
+                Global launch bindings: <code>{roots.runtimeHosts?.global ?? roots.agents.global}</code> · skills: <code>{roots.skills.global}</code>
                 <br />
                 Project profiles: <code>{roots.profiles?.project ?? roots.agents.project}</code>
                 <br />
-                Project runtime hosts: <code>{roots.runtimeHosts?.project ?? roots.agents.project}</code> · skills: <code>{roots.skills.project}</code>
+                Project launch bindings: <code>{roots.runtimeHosts?.project ?? roots.agents.project}</code> · skills: <code>{roots.skills.project}</code>
               </div>
             </div>
           </div>
@@ -572,24 +597,88 @@ function AgentRuntimeSection() {
         {snapshot && (
           <>
             <div className="settings-section-description">
-              Last refreshed: {snapshot.refreshedAt || 'not yet'} · {snapshot.profiles?.length ?? 0} profiles · {(snapshot.runtimeHosts ?? snapshot.agents).length} runtime hosts · {snapshot.skills.length} skills · {Object.values(snapshot.hosts).filter(h => h.state === 'running').length} running
+              Last refreshed: {snapshot.refreshedAt || 'not yet'} · {runtimeProviders.length} AI runtimes · {profiles.length} profiles · {launchBindings.length} launch bindings · {snapshot.skills.length} skills
             </div>
-            {(snapshot.profiles ?? []).map(profile => (
-              <div className="settings-field-row" key={profile.profile.id} data-testid={`agent-runtime-profile-${profile.profile.id}`}>
-                <div className="settings-field-label">
-                  <strong>{profile.profile.name}</strong>
-                  <div className="settings-field-help">agent profile · {profile.scope} · {profile.trusted ? 'trusted' : 'approval required'}{profile.legacy ? ' · legacy brief.md' : ''}{profile.error ? ` · ${profile.error}` : ''}</div>
+
+            <h4 className="settings-subsection-title">AI runtimes</h4>
+            <p className="settings-field-help">
+              These are the executors used for AI sessions. Configure them in <strong>AI Provider</strong>; a profile such as Praxis Reviewer can run on any available runtime.
+            </p>
+            {runtimeProviders.map(runtime => {
+              const status = providerStatuses.find(candidate => candidate.provider === runtime.id);
+              const isActive = settings.ai.activeProvider === runtime.id;
+              return (
+                <div className="settings-field-row" key={runtime.id} data-testid={`agent-runtime-provider-${runtime.id}`}>
+                  <div className="settings-field-label">
+                    <strong>{runtime.label}</strong>
+                    <div className="settings-field-help">
+                      AI runtime · {status ? (status.configured ? 'available' : 'unavailable') : 'checking availability'}{isActive ? ' · active for new sessions' : ''}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            <h4 className="settings-subsection-title">Agent profiles</h4>
+            {profiles.map(profile => {
+              const binding = launchBindingsById.get(profile.profile.id);
+              return (
+                <div className="settings-field-row" key={profile.profile.id} data-testid={`agent-runtime-profile-${profile.profile.id}`}>
+                  <div className="settings-field-label">
+                    <strong>{profile.profile.name}</strong>
+                    <div className="settings-field-help">
+                      agent profile · {profile.scope} · {profile.trusted ? 'trusted' : 'approval required'} · uses the runtime selected for the session
+                      {binding ? ` · ${binding.manifest.type.toUpperCase()} launch binding` : ''}
+                      {profile.legacy ? ' · legacy brief.md' : ''}
+                      {profile.error ? ` · ${profile.error}` : ''}
+                      {binding?.errors.length ? ` · ${binding.errors.map(item => item.message).join('; ')}` : ''}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {profiles.length === 0 && <div className="placeholder-text">No agent profiles discovered.</div>}
+
+            <div className="settings-field-row">
+              <div className="settings-field-label">
+                <strong>Custom launch bindings</strong>
+                <div className="settings-field-help">
+                  Advanced: a transport manifest for an agent that isn't just an AGENT.md profile running on a provider — creation and import live here, not in the primary Agent Hub.
                 </div>
               </div>
-            ))}
-            {(snapshot.runtimeHosts ?? snapshot.agents).map(host => (
-              <div className="settings-field-row" key={host.manifest.id} data-testid={`agent-runtime-host-${host.manifest.id}`}>
-                <div className="settings-field-label">
-                  <strong>{host.manifest.name}</strong>
-                  <div className="settings-field-help">runtime host · {host.manifest.type} · {host.scope} · {host.trusted ? 'trusted' : 'approval required'}{host.errors.length ? ` · ${host.errors.map(item => item.message).join('; ')}` : ''}</div>
+              {(onNewAgentItem || onOpenAgent) && (
+                <div className="settings-field-control">
+                  {onNewAgentItem && (
+                    <>
+                      <button className="btn" type="button" onClick={() => onNewAgentItem('agent')} data-testid="agent-runtime-new-binding">
+                        New launch binding
+                      </button>
+                      <button className="btn" type="button" onClick={() => onNewAgentItem('import')} data-testid="agent-runtime-import-binding">
+                        Import…
+                      </button>
+                    </>
+                  )}
                 </div>
+              )}
+            </div>
+            {standaloneBindings.map(binding => (
+              <div className="settings-field-row" key={binding.manifest.id} data-testid={`agent-runtime-binding-${binding.manifest.id}`}>
+                <div className="settings-field-label">
+                  <strong>{binding.manifest.name}</strong>
+                  <div className="settings-field-help">launch binding · {binding.manifest.type} · {binding.scope} · {binding.trusted ? 'trusted' : 'approval required'}{binding.errors.length ? ` · ${binding.errors.map(item => item.message).join('; ')}` : ''}</div>
+                </div>
+                {onOpenAgent && (
+                  <div className="settings-field-control">
+                    <button className="btn-compact" type="button" onClick={() => onOpenAgent(binding.manifest.id)}>
+                      Manage
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
+            {standaloneBindings.length === 0 && <div className="placeholder-text">No custom launch bindings.</div>}
+
+            <h4 className="settings-subsection-title">Skills</h4>
             {snapshot.skills.map(skill => (
               <div className="settings-field-row" key={skill.metadata.name} data-testid={`agent-runtime-skill-${skill.metadata.name}`}>
                 <div className="settings-field-label">
@@ -598,6 +687,7 @@ function AgentRuntimeSection() {
                 </div>
               </div>
             ))}
+            {snapshot.skills.length === 0 && <div className="placeholder-text">No skills discovered.</div>}
           </>
         )}
 
@@ -768,14 +858,15 @@ export const ADDON_KIND_LABELS: Record<AddonKind, string> = {
   theme: 'Theme',
   'surface-pack': 'Surface pack',
   agent: 'Agent',
+  skill: 'Skill',
   'workflow-template': 'Workflow template'
 };
 
 /**
  * Central marketplace *configuration* only — the GitHub Packages owner, token,
  * and endpoints. Browsing and installing add-ons happens in each kind's own
- * panel (Themes, Surfaces, Agent Runtime), so a user sees the add-ons for a
- * thing where they already are.
+ * panel (Themes, Surfaces, Agent Runtime — Skills too, right alongside Agents),
+ * so a user sees the add-ons for a thing where they already are.
  */
 function MarketplaceSection() {
   const [status, setStatus] = useState<MarketplaceStatus>();
@@ -865,6 +956,7 @@ function MarketplaceSection() {
         theme: 0,
         'surface-pack': 0,
         agent: 0,
+        skill: 0,
         'workflow-template': 0
       };
       for (const entry of entries) {
@@ -1402,6 +1494,14 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     keyLabel: 'Anthropic API key',
     urlPlaceholder: 'https://api.anthropic.com',
     modelPlaceholder: 'e.g. claude-sonnet-4-6'
+  },
+  {
+    id: 'gemini',
+    kind: 'api',
+    label: 'Google Gemini',
+    keyLabel: 'Gemini API key',
+    urlPlaceholder: 'https://generativelanguage.googleapis.com',
+    modelPlaceholder: 'e.g. gemini-2.5-flash'
   },
   {
     id: 'claude-code-cli',

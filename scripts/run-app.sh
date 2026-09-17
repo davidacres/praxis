@@ -58,6 +58,7 @@ ok()   { printf '\033[32m  + %s\033[0m\n' "$1"; }
 # Electron exits 9 on flags it does not accept from NODE_OPTIONS (--use-system-ca
 # is the usual culprit in this org's shells), so every child runs without it.
 export NODE_OPTIONS=
+unset ELECTRON_RUN_AS_NODE
 
 assert_built() {
   local path="$1" hint="$2"

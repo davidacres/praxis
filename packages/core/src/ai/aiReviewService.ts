@@ -882,6 +882,99 @@ export async function reviewTicketWithClaude(
   return `## AI Review by ${agentName}\n\n${text}`;
 }
 
+export async function reviewTicketWithGemini(
+  issue: IssueDetails,
+  apiKey: string,
+  agentName: string,
+  options?: ReviewStreamOptions
+): Promise<string> {
+  const ticketContext = buildTicketContext(issue);
+  const userMessage = `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`;
+  const rawModel = options?.model?.trim() || 'gemini-2.5-flash';
+  const model = rawModel.replace(/^models\//, '');
+  const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
+  const baseUrl = (options?.gatewayUrl?.trim() || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
+
+  if (options?.onUpdate) {
+    const endpoint = `${baseUrl}/v1beta/models/${model}:streamGenerateContent?alt=sse`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userMessage }] }]
+      }),
+      signal: options.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(await extractApiError(response, 'Gemini'));
+    }
+
+    let content = '';
+    await consumeSseStream(response, (data: string) => {
+      let parsed: { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> };
+      try {
+        parsed = JSON.parse(data);
+      } catch {
+        return;
+      }
+      const parts = parsed.candidates?.[0]?.content?.parts ?? [];
+      for (const part of parts) {
+        if (!part.thought && part.text) {
+          content += part.text;
+          options.onUpdate?.(`## AI Review by ${agentName}\n\n${content}`);
+        }
+      }
+    });
+
+    const trimmed = content.trim();
+    if (!trimmed) {
+      throw new Error('Gemini returned an empty response.');
+    }
+
+    return `## AI Review by ${agentName}\n\n${trimmed}`;
+  }
+
+  const endpoint = `${baseUrl}/v1beta/models/${model}:generateContent`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'x-goog-api-key': apiKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: userMessage }] }]
+    }),
+    signal: options?.signal
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractApiError(response, 'Gemini'));
+  }
+
+  const data = await response.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
+  };
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  let text = '';
+  for (const part of parts) {
+    if (!part.thought && part.text) {
+      text += part.text;
+    }
+  }
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new Error('Gemini returned an empty response.');
+  }
+
+  return `## AI Review by ${agentName}\n\n${trimmed}`;
+}
+
 export async function reviewTicketWithVercelGateway(
   issue: IssueDetails,
   apiKey: string | undefined,

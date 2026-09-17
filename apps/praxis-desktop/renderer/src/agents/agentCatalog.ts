@@ -98,6 +98,18 @@ export function runningHostCount(snapshot: Pick<AgentRuntimeSnapshot, 'hosts'>):
   return Object.values(snapshot.hosts).filter(status => status.state === 'running').length;
 }
 
+/**
+ * True for the placeholder profile the backend auto-synthesizes (see
+ * `AgentRuntimeManager.refresh`) for a launch binding that has no AGENT.md —
+ * `fingerprint: 'legacy-host-profile'` is its literal marker. Every binding
+ * always gets *some* profile entry this way, so `profile.legacy` alone can't
+ * tell a genuine curated-but-old `brief.md` profile from a raw, uncurated
+ * binding; the fingerprint can.
+ */
+export function isHostShimProfile(profile: DiscoveredAgentProfile): boolean {
+  return profile.fingerprint === 'legacy-host-profile';
+}
+
 /** Transport → short human label. */
 export function transportLabel(type: DiscoveredAgent['manifest']['type']): string {
   const labels: Record<DiscoveredAgent['manifest']['type'], string> = {

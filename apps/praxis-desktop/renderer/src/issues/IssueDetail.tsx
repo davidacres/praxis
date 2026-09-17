@@ -302,6 +302,7 @@ const EDITABLE_FIELDS_BY_MODE: Record<BackendMode, ReadonlySet<EditableField>> =
     'priority',
     'severity',
     'reportedBy',
+    'parentKey',
     'ideaTranscript'
   ]),
   // App-storage projects: `ProjectIssueTrackerService.updateIssue` only writes
@@ -962,13 +963,17 @@ export function IssueDetail({
       setBusy(true);
       setError(undefined);
       try {
-        await window.praxis.issue.update(issueKey, payload, connectionId);
+        const updated = await window.praxis.issue.update(issueKey, payload, connectionId);
+        const savedIssueKey = updated.key;
         if (statusTransitionId) {
-          await window.praxis.issue.transition(issueKey, statusTransitionId, connectionId);
+          await window.praxis.issue.transition(savedIssueKey, statusTransitionId, connectionId);
         }
-        const loaded = await window.praxis.issue.get(issueKey, connectionId);
+        const loaded = await window.praxis.issue.get(savedIssueKey, connectionId);
         setIssue(loaded);
         syncDraftFromIssue(loaded);
+        if (savedIssueKey !== issueKey) {
+          onOpenIssue?.(savedIssueKey);
+        }
         onChanged();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));

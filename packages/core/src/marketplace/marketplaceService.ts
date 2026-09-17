@@ -46,10 +46,11 @@ export interface InstallOptions {
   /** Pin a specific published version instead of `latest`. */
   version?: string;
   /**
-   * Grant an agent add-on trust as part of the install. Ignored for declarative
-   * kinds (always enabled) — they cannot be installed disabled.
+   * Grant a non-declarative add-on (`agent`, `skill`) execution trust as part
+   * of the install. Ignored for declarative kinds (always enabled) — they
+   * cannot be installed disabled.
    */
-  trustAgent?: boolean;
+  trust?: boolean;
 }
 
 function noop(): void {
@@ -194,7 +195,7 @@ export class MarketplaceService {
       );
     }
 
-    const enabled = this.resolveEnabled(manifest, options.trustAgent);
+    const enabled = this.resolveEnabled(manifest, options.trust);
     const record: InstalledAddon = {
       manifest,
       packageName,
@@ -246,7 +247,7 @@ export class MarketplaceService {
       throw new Error(`No installed ${kind} add-on with id "${id}".`);
     }
     return this.install(current.packageName, {
-      trustAgent: current.enabled && kind === 'agent'
+      trust: current.enabled && !(DECLARATIVE_ADDON_KINDS as readonly string[]).includes(kind)
     });
   }
 
@@ -255,14 +256,14 @@ export class MarketplaceService {
     return this.storage.remove(kind, id);
   }
 
-  /** Grants or revokes trust for an installed agent add-on. */
-  public async setAgentTrust(id: string, enabled: boolean): Promise<void> {
-    const addon = await this.storage.get('agent', id);
+  /** Grants or revokes execution trust for an installed non-declarative add-on. */
+  public async setTrust(kind: AddonKind, id: string, enabled: boolean): Promise<void> {
+    const addon = await this.storage.get(kind, id);
     if (!addon) {
-      throw new Error(`No installed agent add-on with id "${id}".`);
+      throw new Error(`No installed ${kind} add-on with id "${id}".`);
     }
-    await this.storage.setEnabled('agent', id, enabled);
-    this.log(`[marketplace] agent/${id} ${enabled ? 'trusted' : 'trust revoked'}`);
+    await this.storage.setEnabled(kind, id, enabled);
+    this.log(`[marketplace] ${kind}/${id} ${enabled ? 'trusted' : 'trust revoked'}`);
   }
 
   private resolveLatest(packument: Packument): string | undefined {
@@ -273,11 +274,11 @@ export class MarketplaceService {
     return maxVersion(Object.keys(packument.versions));
   }
 
-  private resolveEnabled(manifest: AddonManifest, trustAgent: boolean | undefined): boolean {
+  private resolveEnabled(manifest: AddonManifest, trust: boolean | undefined): boolean {
     if ((DECLARATIVE_ADDON_KINDS as readonly string[]).includes(manifest.kind)) {
       return true;
     }
-    return trustAgent === true;
+    return trust === true;
   }
 }
 

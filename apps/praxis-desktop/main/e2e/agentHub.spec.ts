@@ -7,9 +7,13 @@ import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 /**
  * FX-BF-009 / FX-BF-010 / FX-BF-011 — the Agent Hub.
  *
- * Navigation is the sidebar tree under the Agents destination; the centre is the
- * catalog record; the shell's right pane is the runtime (lifecycle, activation,
- * sessions). Creation and import hang off the tree's `+` menu.
+ * The user-facing model is Agent + Provider + Model + Skills: the sidebar
+ * tree and its `+` menu only ever show agent profiles and skills. A launch
+ * binding (the `agent.json` process that actually runs a custom agent) is
+ * advanced/diagnostic plumbing that lives in Settings -> Agent Runtime —
+ * except the canonical binding for a bundled/seeded profile (same id), which
+ * merges into that profile's row so its lifecycle stays reachable from the
+ * primary record.
  */
 
 test.slow();
@@ -33,7 +37,13 @@ async function openAgents(page: Page): Promise<void> {
   await page.getByTestId('nav-agents').click();
   await page.getByTestId('nav-agents-new').click();
   await page.getByTestId('rescan-agents').click();
-  await expect(page.getByTestId('agent-nav-item').first()).toBeVisible();
+  await expect(page.getByTestId('profile-nav-item').first()).toBeVisible();
+}
+
+/** Open Settings -> Agent Runtime, where launch bindings are managed. */
+async function openAgentRuntimeSettings(page: Page): Promise<void> {
+  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('settings-nav-agent-runtime').click();
 }
 
 const record = (page: Page) => page.getByRole('main');
@@ -74,33 +84,26 @@ test.afterEach(async () => {
   await closeTestApp(app);
 });
 
-test('the sidebar tree lists the catalog and the centre shows the selected record', async () => {
+test('the sidebar tree lists agent profiles and skills only; a profile shows its record and bound runtime', async () => {
   const page = app.window;
   await openAgents(page);
 
-  // The tree groups by scope and marks trust / validity.
   const tree = page.getByRole('navigation', { name: 'Workspace' });
   await expect(tree.getByText('Global', { exact: true })).toBeVisible();
-  // 3 seeded here (Broken Agent, Live Agent, Praxis Reviewer — the last shares
-  // its id with a bundled agent, see bundledAgents.ts, so they merge into one
-  // nav item) plus the 4 other bundled global agents that ship with the app.
-  await expect(tree.getByTestId('agent-nav-item')).toHaveCount(7);
+  // Broken Agent and Live Agent are launch bindings with no profile, so they
+  // stay out of primary nav (Settings -> Agent Runtime only). Seeded Praxis
+  // Reviewer shares its id with a bundled profile, so it merges into that
+  // one row rather than adding a second. 5 bundled profiles total.
+  await expect(tree.getByTestId('profile-nav-item')).toHaveCount(5);
+  await expect(tree.getByTestId('agent-nav-item')).toHaveCount(0);
   await expect(tree.getByTestId('skill-nav-item')).toHaveCount(1);
 
-  // A valid agent's record is the centre pane; its runtime is the right pane.
-  await tree.getByTestId('agent-nav-item').filter({ hasText: 'Praxis Reviewer' }).click();
+  // A profile's record is the centre pane; the launch binding it runs on is
+  // the right pane's runtime — no separate binding row to pick.
+  await tree.getByTestId('profile-nav-item').filter({ hasText: 'Praxis Reviewer' }).click();
   await expect(record(page).getByRole('heading', { name: 'Praxis Reviewer', level: 1 })).toBeVisible();
   await expect(record(page).getByText('praxis-reviewer', { exact: true })).toBeVisible();
-  await expect(record(page).getByText('node review.js')).toBeVisible();
   await expect(runtime(page).getByRole('button', { name: 'Start host' })).toBeEnabled();
-  // The catalog source path is a per-run temp directory, so it is masked out.
-  await expect(page).toHaveScreenshot('agent-hub-record.png', { mask: [page.locator('.agent-path')] });
-
-  // An invalid manifest fails closed, with the reason in the record.
-  await tree.getByTestId('agent-nav-item').filter({ hasText: 'Broken Agent' }).click();
-  await expect(record(page).getByText(/Unsupported transport/)).toBeVisible();
-  await expect(runtime(page).getByRole('button', { name: 'Start host' })).toBeDisabled();
-  await expect(runtime(page).getByText(/Manifest is invalid/)).toBeVisible();
 
   // A skill record shows its package facts.
   await tree.getByTestId('skill-nav-item').click();
@@ -109,12 +112,45 @@ test('the sidebar tree lists the catalog and the centre shows the selected recor
   await expect(runtime(page).getByRole('button', { name: /^Activate/ })).toBeEnabled();
 });
 
+test('Agent Runtime settings separate AI runtimes from agent profiles, and manage standalone launch bindings', async () => {
+  const page = app.window;
+  // Rescanning via the sidebar (openAgents) refreshes the catalog the rest
+  // of the shell reads from — Settings' own Refresh only updates its local
+  // view, not the sidebar/record pane "Manage" navigates into.
+  await openAgents(page);
+  await openAgentRuntimeSettings(page);
+
+  const panel = page.getByTestId('settings-agent-runtime');
+  await expect(panel.getByRole('heading', { name: 'AI runtimes' })).toBeVisible();
+  await expect(panel.getByTestId('agent-runtime-provider-claude-code-cli')).toContainText('Claude Code (local)');
+  await expect(panel.getByTestId('agent-runtime-provider-codex-cli')).toContainText('Codex CLI (local)');
+
+  const reviewer = panel.getByTestId('agent-runtime-profile-praxis-reviewer');
+  await expect(reviewer).toContainText('Praxis Reviewer');
+  await expect(reviewer).toContainText('uses the runtime selected for the session');
+  await expect(reviewer).toContainText('ACP launch binding');
+  await expect(panel.getByTestId('agent-runtime-host-praxis-reviewer')).toHaveCount(0);
+
+  // A standalone binding (no matching profile) lists its manifest problem
+  // inline, and "Manage" opens its full record — the same invalid-manifest
+  // record that used to be reachable straight from the sidebar.
+  const broken = panel.getByTestId('agent-runtime-binding-broken-agent');
+  await expect(broken).toContainText('launch binding');
+  await expect(broken).toContainText(/Unsupported transport/);
+
+  await broken.getByRole('button', { name: 'Manage' }).click();
+  await expect(record(page).getByText(/Unsupported transport/)).toBeVisible();
+  await expect(runtime(page).getByRole('button', { name: 'Start host' })).toBeDisabled();
+  await expect(runtime(page).getByText(/Manifest is invalid/)).toBeVisible();
+});
+
 test('starting, restarting, and stopping a host moves its lifecycle state', async () => {
   const page = app.window;
   await openAgents(page);
-  const tree = page.getByRole('navigation', { name: 'Workspace' });
+  await openAgentRuntimeSettings(page);
+  const panel = page.getByTestId('settings-agent-runtime');
+  await panel.getByTestId('agent-runtime-binding-live-agent').getByRole('button', { name: 'Manage' }).click();
 
-  await tree.getByTestId('agent-nav-item').filter({ hasText: 'Live Agent' }).click();
   await expect(runtime(page).getByText('Stopped')).toBeVisible();
 
   await runtime(page).getByRole('button', { name: 'Start host' }).click();
@@ -139,7 +175,9 @@ test('activating a skill and opening a session carries the agent context', async
   await runtime(page).getByRole('button', { name: 'Activate' }).click();
   await expect(runtime(page).getByText(/live-agent · \w+ mode/)).toBeVisible();
 
-  await tree.getByTestId('agent-nav-item').filter({ hasText: 'Live Agent' }).click();
+  // Live Agent has no profile, so its record is reached through Settings.
+  await openAgentRuntimeSettings(page);
+  await page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-binding-live-agent').getByRole('button', { name: 'Manage' }).click();
   await expect(runtime(page).getByText(/code-audit \(\w+\)/)).toBeVisible();
   await runtime(page).getByRole('button', { name: 'Open a session' }).click();
   const context = page.getByTestId('new-session-agent-context');
@@ -147,12 +185,11 @@ test('activating a skill and opening a session carries the agent context', async
   await expect(context).toContainText('code-audit');
 });
 
-test('the Create agent wizard writes a validated, discoverable manifest', async () => {
+test('the New launch binding wizard writes a validated, discoverable manifest', async () => {
   const page = app.window;
-  await openAgents(page);
+  await openAgentRuntimeSettings(page);
+  await page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-new-binding').click();
 
-  await page.getByTestId('nav-agents-new').click();
-  await page.getByTestId('new-agent').click();
   const dialog = page.getByRole('dialog', { name: 'New agent' });
   await dialog.getByLabel('Display name').fill('Scaffolded Agent');
   await dialog.getByLabel('ID', { exact: true }).fill('Bad Id');
@@ -165,9 +202,17 @@ test('the Create agent wizard writes a validated, discoverable manifest', async 
   await dialog.getByRole('button', { name: 'Create agent' }).click();
   await expect(dialog).toBeHidden();
 
+  // The new binding has no profile, so it belongs in Settings, not the
+  // primary sidebar tree.
+  await openAgentRuntimeSettings(page);
+  await expect(page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-binding-scaffolded-agent')).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  await openAgents(page);
   await expect(
-    page.getByRole('navigation', { name: 'Workspace' }).getByTestId('agent-nav-item').filter({ hasText: 'Scaffolded Agent' })
-  ).toBeVisible();
+    page.getByRole('navigation', { name: 'Workspace' }).getByTestId('profile-nav-item').filter({ hasText: 'Scaffolded Agent' })
+  ).toHaveCount(0);
+
   const manifest = JSON.parse(
     fs.readFileSync(path.join(app.userDataDir, 'agents', 'scaffolded-agent', 'agent.json'), 'utf8')
   );
@@ -177,7 +222,7 @@ test('the Create agent wizard writes a validated, discoverable manifest', async 
 
 test('import validates a folder without executing it and rejects a bad manifest', async () => {
   const page = app.window;
-  await openAgents(page);
+  await openAgentRuntimeSettings(page);
 
   const good = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-import-good-'));
   fs.writeFileSync(
@@ -194,10 +239,11 @@ test('import validates a folder without executing it and rejects a bad manifest'
   ).rejects.toThrow();
 
   await page.evaluate(dir => window.praxis.agentRuntime.importItem('agent', dir, 'global', 'block'), good);
-  await page.getByTestId('nav-agents-new').click();
-  await page.getByTestId('rescan-agents').click();
+  // Settings is already open from the top of the test — re-clicking the
+  // titlebar toggle here would close it instead.
+  await page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-refresh').click();
   await expect(
-    page.getByRole('navigation', { name: 'Workspace' }).getByTestId('agent-nav-item').filter({ hasText: 'Imported Agent' })
+    page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-binding-imported-agent')
   ).toBeVisible();
   expect(fs.existsSync(path.join(app.userDataDir, 'agents', 'imported-agent', 'agent.json'))).toBe(true);
 });

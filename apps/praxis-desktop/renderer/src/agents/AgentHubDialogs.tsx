@@ -303,23 +303,34 @@ export function CreateSkillDialog({
 
 export function ImportDialog({
   defaultScope,
+  allowedKinds = ['agent', 'profile', 'skill'],
   onClose,
   onImported
 }: {
   defaultScope: CatalogScope;
+  /** Restricts which kind of folder this dialog accepts — the primary Agent Hub
+   * only offers profile/skill; launch-binding import is Settings-only. */
+  allowedKinds?: Array<'agent' | 'profile' | 'skill'>;
   onClose: () => void;
   onImported: (snapshot: AgentRuntimeSnapshot) => void;
 }) {
   const [scope, setScope] = useState<CatalogScope>(defaultScope);
-  const [kind, setKind] = useState<'agent' | 'profile' | 'skill'>('agent');
+  const [kind, setKind] = useState<'agent' | 'profile' | 'skill'>(allowedKinds[0] ?? 'profile');
   const [sourceDir, setSourceDir] = useState<string>();
   const [preview, setPreview] = useState<ImportPreview>();
   const [onDuplicate, setOnDuplicate] = useState<'block' | 'rename'>('block');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
+  const kindLabels: Record<'agent' | 'profile' | 'skill', string> = {
+    agent: 'launch binding',
+    profile: 'agent profile',
+    skill: 'skill'
+  };
+  const kindsDescription = allowedKinds.map(item => kindLabels[item]).join(', ').replace(/, ([^,]*)$/, ' or $1');
+
   const choose = async () => {
-    const folder = await window.praxis.dialog.pickFolder('Choose the runtime host, agent profile or skill folder to import');
+    const folder = await window.praxis.dialog.pickFolder(`Choose the ${kindsDescription} folder to import`);
     if (!folder) return;
     setSourceDir(folder);
     setError(undefined);
@@ -360,7 +371,7 @@ export function ImportDialog({
 
   return (
     <Shell
-      title="Import runtime host, agent profile or skill"
+      title={`Import ${kindsDescription}`}
       onClose={onClose}
       busy={busy}
       error={error}
@@ -370,18 +381,24 @@ export function ImportDialog({
     >
       <fieldset className="form-fieldset">
         <legend>Kind</legend>
-        <label className="form-check">
-          <input type="radio" name="kind" checked={kind === 'agent'} onChange={() => rePreview('agent', scope)} />
-          Runtime host folder (contains <code>agent.json</code>)
-        </label>
-        <label className="form-check">
-          <input type="radio" name="kind" checked={kind === 'profile'} onChange={() => rePreview('profile', scope)} />
-          Agent profile folder (contains <code>AGENT.md</code>)
-        </label>
-        <label className="form-check">
-          <input type="radio" name="kind" checked={kind === 'skill'} onChange={() => rePreview('skill', scope)} />
-          Skill folder (contains <code>SKILL.md</code>)
-        </label>
+        {allowedKinds.includes('agent') && (
+          <label className="form-check">
+            <input type="radio" name="kind" checked={kind === 'agent'} onChange={() => rePreview('agent', scope)} />
+            Launch binding folder (contains <code>agent.json</code>)
+          </label>
+        )}
+        {allowedKinds.includes('profile') && (
+          <label className="form-check">
+            <input type="radio" name="kind" checked={kind === 'profile'} onChange={() => rePreview('profile', scope)} />
+            Agent profile folder (contains <code>AGENT.md</code>)
+          </label>
+        )}
+        {allowedKinds.includes('skill') && (
+          <label className="form-check">
+            <input type="radio" name="kind" checked={kind === 'skill'} onChange={() => rePreview('skill', scope)} />
+            Skill folder (contains <code>SKILL.md</code>)
+          </label>
+        )}
       </fieldset>
       <ScopeField value={scope} onChange={next => rePreview(kind, next)} />
       <div className="agent-import-source">
@@ -482,7 +499,7 @@ export function CreateAgentProfileDialog({
       <Field label="Agent instructions">
         <textarea rows={10} value={draft.instructions} onChange={event => setDraft(current => ({ ...current, instructions: event.target.value }))} />
       </Field>
-      <p className="hint">Creates a provider-neutral AGENT.md profile. Runtime hosts are configured separately.</p>
+      <p className="hint">Creates a provider-neutral AGENT.md profile. Launch bindings for custom agents are configured separately.</p>
     </Shell>
   );
 }

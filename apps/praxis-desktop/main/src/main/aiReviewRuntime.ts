@@ -2,6 +2,7 @@ import {
   PROVIDER_DESCRIPTORS,
   buildTicketContext,
   reviewTicketWithClaude,
+  reviewTicketWithGemini,
   reviewTicketWithOpenAi,
   reviewTicketWithVercelGateway,
   type AiProvider,
@@ -44,7 +45,9 @@ export async function reviewIssueWithRuntime(
       ? reviewTicketWithOpenAi
       : options.provider === 'anthropic'
         ? reviewTicketWithClaude
-        : reviewTicketWithVercelGateway;
+        : options.provider === 'gemini'
+          ? reviewTicketWithGemini
+          : reviewTicketWithVercelGateway;
     return review(issue, connection.apiKey, agentName, {
       gatewayUrl: connection.gatewayUrl,
       model: options.model?.trim() || connection.model,

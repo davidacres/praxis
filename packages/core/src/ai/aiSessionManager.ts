@@ -847,6 +847,43 @@ export class AiSessionManager {
     return record;
   }
 
+  /** Queues a human message for a chosen participant; the host consumes it between turns. */
+  public queueAgentConversationMessage(issueKey: string, participantId: string, message: string): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    const conversation = record?.conversation;
+    const trimmed = message.trim();
+    if (!record || !conversation || conversation.state !== 'running') throw new Error('No running multi-AI conversation.');
+    if (!conversation.participants.some(participant => participant.id === participantId)) throw new Error('Unknown conversation participant.');
+    if (!trimmed) throw new Error('Enter a message for the AI conversation.');
+    conversation.pendingUserMessages = [...(conversation.pendingUserMessages ?? []), { participantId, message: trimmed }];
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
+  /** Takes the queued human message, if any, for scheduling the next turn. */
+  public takeAgentConversationMessage(issueKey: string): { participantId: string; message: string } | undefined {
+    const conversation = this.agentSessions.get(issueKey)?.conversation;
+    const pending = conversation?.pendingUserMessages?.[0];
+    if (!conversation || !pending) return undefined;
+    conversation.pendingUserMessages = conversation.pendingUserMessages!.slice(1);
+    if (conversation.pendingUserMessages.length === 0) delete conversation.pendingUserMessages;
+    void this.persistAgentSessions();
+    return pending;
+  }
+
+  /** Selects which participant should answer the next conversation turn. */
+  public setAgentConversationSpeaker(issueKey: string, participantId: string): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    const conversation = record?.conversation;
+    if (!record || !conversation || conversation.state !== 'running') throw new Error('No running multi-AI conversation.');
+    if (!conversation.participants.some(participant => participant.id === participantId)) throw new Error('Unknown conversation participant.');
+    conversation.currentSpeakerId = participantId;
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
   /** Stops a conversation between turns and restores the current tool owner as the single-agent runtime. */
   public finishAgentConversation(issueKey: string, state: 'stopped' | 'capped' | 'failed'): AgentSessionRecord {
     const record = this.agentSessions.get(issueKey);

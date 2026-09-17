@@ -107,7 +107,7 @@ test('a session that never reports a plan shows no Tasks block at all', async ()
   await expect(win.getByTestId('session-tasks')).toHaveCount(0);
 });
 
-test('an ACP agent reporting usage drives the context banner and shows its cost', async () => {
+test('an ACP agent reporting usage drives the context indicator and shows its cost', async () => {
   app = await launchTestApp();
   const win = app.window;
   await delegate(win, 'WITH_USAGE please');
@@ -115,9 +115,10 @@ test('an ACP agent reporting usage drives the context banner and shows its cost'
   await win.locator('[data-testid="nav-sessions"]').click();
   await win.locator('[data-testid="session-list-row"]', { hasText: 'WITH_USAGE please' }).click();
 
-  // `used`/`size` from ACP feed exactly the pair the composer banner reads, so
-  // a CLI-hosted session now gets the same warning an API-provider one does.
+  // `used`/`size` from ACP feed exactly the pair the composer indicator reads,
+  // so a CLI-hosted session gets the same details an API-provider one does.
   // This is the half of `usage_update` that was assumed impossible.
+  await win.getByTestId('session-context-chip').click();
   const context = win.getByTestId('session-context');
   await expect(context).toBeVisible();
   await expect(context.getByTestId('session-context-figure')).toHaveText('74% of 100k context used');

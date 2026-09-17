@@ -14,6 +14,7 @@ import type { AgentToolEventData } from '../agentTypes';
 
 export type AgentLoopEvent =
   | { type: 'text_delta'; text: string }
+  | { type: 'thought_delta'; text: string }
   | { type: 'message'; text: string }
   | { type: 'tool_start'; callId: string; name: string; arguments: Record<string, unknown> }
   | { type: 'tool_complete'; callId: string; name: string; ok: boolean; content: string; data?: AgentToolEventData }
@@ -144,6 +145,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         onTextDelta: text => {
           touch();
           emit({ type: 'text_delta', text });
+        },
+        onThoughtDelta: text => {
+          touch();
+          emit({ type: 'thought_delta', text });
         }
       });
       touch();
@@ -243,12 +248,15 @@ async function collectChatCompletion(
   options?: {
     signal?: AbortSignal;
     onTextDelta?: (text: string) => void;
+    onThoughtDelta?: (text: string) => void;
   }
 ): Promise<ChatCompletionResult> {
   let final: ChatCompletionResult = { text: '', toolCalls: [] };
   for await (const event of adapter.consumeChatStream(lines, options?.signal)) {
     if (event.type === 'text_delta') {
       options?.onTextDelta?.(event.text);
+    } else if (event.type === 'thought_delta') {
+      options?.onThoughtDelta?.(event.text);
     } else if (event.type === 'done') {
       final = event.result;
     }

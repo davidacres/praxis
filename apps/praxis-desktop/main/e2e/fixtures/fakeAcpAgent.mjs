@@ -18,8 +18,8 @@
 //     each one a full snapshot, the way TodoWrite/the ACP spec define it, not
 //     a diff against the last. Add "STOP_PLAN_MIDWAY" too to stop after the
 //     third task is still `in_progress`, for asserting the mid-run state.
-//   - "WITH_COMMANDS": sends an `available_commands_update` with two fake
-//     slash commands, one of them taking an argument.
+//   - "WITH_COMMANDS": sends an `available_commands_update` with fake slash
+//     commands, including `/compact` to exercise provider capability gating.
 // `session/new` always advertises two Session Modes ("Ask"/"Code") — harmless
 // for every other test (nothing else reads `acpAvailableModes`), and it means
 // `session/set_mode` can be exercised without a marker: it applies the switch
@@ -49,7 +49,12 @@ app.onRequest(acp.AGENT_METHODS.initialize, () => ({
   protocolVersion: acp.PROTOCOL_VERSION,
   // Advertise the http MCP transport so the client hands us `mcpServers`
   // (the in-app browser). Real Claude Code advertises this too.
-  agentCapabilities: { mcpCapabilities: { http: true } }
+  agentCapabilities: {
+    mcpCapabilities: { http: true },
+    ...(process.env.FAKE_ACP_REPLAY_ON_RESUME === '1'
+      ? { sessionCapabilities: { resume: true } }
+      : {})
+  }
 }));
 
 // Captured from `session/new` — the in-app browser MCP endpoint the client passes.
@@ -90,6 +95,24 @@ app.onRequest(acp.AGENT_METHODS.session_new, ctx => {
   };
 });
 
+app.onRequest(acp.AGENT_METHODS.session_resume, ctx => {
+  if (process.env.FAKE_ACP_REPLAY_ON_RESUME === '1') {
+    // Some real ACP hosts replay their latest message immediately after the
+    // resume response. It belongs to the previous turn and must not be folded
+    // into the next prompt's response buffer.
+    setTimeout(() => {
+      void ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+        sessionId: ctx.params.sessionId,
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Hello from the fake ACP agent. (replayed)' }
+        }
+      });
+    }, 0);
+  }
+  return {};
+});
+
 app.onRequest(acp.AGENT_METHODS.session_set_config_option, ctx => {
   if (ctx.params.configId === 'model' && 'value' in ctx.params) {
     currentModel = ctx.params.value;
@@ -115,7 +138,12 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     sessionId: ctx.params.sessionId,
     update: {
       sessionUpdate: 'agent_message_chunk',
-      content: { type: 'text', text: `Hello from the fake ACP agent. (model=${currentModel})` }
+      content: {
+        type: 'text',
+        text: promptText.includes('DISTINCT_FOLLOW_UP')
+          ? 'Fresh response to the current question.'
+          : `Hello from the fake ACP agent. (model=${currentModel})`
+      }
     }
   });
 
@@ -259,7 +287,8 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
         sessionUpdate: 'available_commands_update',
         availableCommands: [
           { name: 'research_codebase', description: 'Research the codebase before making changes' },
-          { name: 'create_plan', description: 'Draft a plan for the requested change', input: { hint: 'goal' } }
+          { name: 'create_plan', description: 'Draft a plan for the requested change', input: { hint: 'goal' } },
+          { name: 'compact', description: 'Compact the current context window' }
         ]
       }
     });

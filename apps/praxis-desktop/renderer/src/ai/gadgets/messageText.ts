@@ -15,6 +15,7 @@ export function mayContainGadget(text: string | undefined): boolean {
 }
 
 const FENCE = /^[ \t]*```[ \t]*praxis-gadget[ \t]*\r?\n[\s\S]*?^[ \t]*```[ \t]*$/gm;
+const MEMORY_CITATION_BLOCK = /(?:^|\r?\n)[ \t]*<oai-mem-citation\b[^>]*>[\s\S]*?(?:<\/oai-mem-citation>[ \t]*(?=\r?\n|$)|$)/gi;
 
 /**
  * Remove gadget fences from the text shown in the transcript.
@@ -27,6 +28,24 @@ export function stripGadgetFences(text: string): string {
   if (!mayContainGadget(text)) return text;
   FENCE.lastIndex = 0;
   return text.replace(FENCE, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * Remove provider transport metadata from user-facing assistant prose.
+ *
+ * The raw message event remains untouched for audit and diagnostics. Matching
+ * through end-of-input also keeps a citation block hidden while its closing
+ * tag is still arriving in a streamed response.
+ */
+export function stripInternalMessageMetadata(text: string): string {
+  if (!text.includes('<oai-mem-citation')) return text;
+  MEMORY_CITATION_BLOCK.lastIndex = 0;
+  return text.replace(MEMORY_CITATION_BLOCK, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** Prose that is safe and useful to show in a conversation surface. */
+export function visibleMessageText(text: string): string {
+  return stripInternalMessageMetadata(stripGadgetFences(text));
 }
 
 /** The block-ID prefix used for the nth message in a conversation. */

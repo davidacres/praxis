@@ -11,6 +11,7 @@ import type {
   WorkspaceRecord
 } from '@praxis/core';
 import { agentStateLabel, agentStateLaneClass } from '../ai/aiSessionState';
+import { isHostShimProfile } from '../agents/agentCatalog';
 import { isSynthesizedKey, sessionTitle } from '../ai/sessionNav';
 import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
@@ -972,12 +973,18 @@ function AgentsNav({
     .map(scope => ({
       scope,
       label: scope === 'global' ? 'Global' : projectName ?? 'This project',
-      profiles: (catalog?.profiles ?? []).filter(profile => profile.scope === scope),
-      agents: (catalog?.runtimeHosts ?? catalog?.agents ?? []).filter(agent => agent.scope === scope),
+      // Agents are their profile — the primary-nav identity is AGENT.md, not
+      // the launch binding that runs it. A binding with no AGENT.md gets an
+      // auto-synthesized placeholder profile so it still has *a* profile
+      // record; that placeholder is advanced/diagnostic-only and lives in
+      // Settings -> Agent Runtime instead of cluttering this tree with raw,
+      // uncurated entries. (profile.legacy alone isn't enough here — it's
+      // also true for a genuine old brief.md profile, which does belong.)
+      profiles: (catalog?.profiles ?? []).filter(profile => profile.scope === scope && !isHostShimProfile(profile)),
       skills: (catalog?.skills ?? []).filter(skill => skill.scope === scope)
     }))
-    .filter(group => group.profiles.length > 0 || group.agents.length > 0 || group.skills.length > 0);
-  const total = (catalog?.profiles?.length ?? 0) + (catalog?.runtimeHosts?.length ?? catalog?.agents.length ?? 0) + (catalog?.skills.length ?? 0);
+    .filter(group => group.profiles.length > 0 || group.skills.length > 0);
+  const total = groups.reduce((count, group) => count + group.profiles.length + group.skills.length, 0);
 
   return (
     <>
@@ -1020,9 +1027,6 @@ function AgentsNav({
               <button role="menuitem" data-testid="new-profile" onClick={() => { setMenuOpen(false); onNewAgentItem('profile'); }}>
                 <Icon name="robot" size={14} /><span><strong>New agent profile</strong><small>A provider-neutral AGENT.md role</small></span>
               </button>
-              <button role="menuitem" data-testid="new-agent" onClick={() => { setMenuOpen(false); onNewAgentItem('agent'); }}>
-                <Icon name="zap" size={14} /><span><strong>New runtime host</strong><small>Transport manifest plus starter</small></span>
-              </button>
               <button role="menuitem" data-testid="new-skill" onClick={() => { setMenuOpen(false); onNewAgentItem('skill'); }}>
                 <Icon name="sparkles" size={14} /><span><strong>New skill</strong><small>A SKILL.md package</small></span>
               </button>
@@ -1055,29 +1059,6 @@ function AgentsNav({
                 {profile.error ? <span className="tree-badge" title="Invalid profile">⚠</span> : profile.legacy ? <span className="tree-badge">legacy</span> : null}
               </button>
             ))}
-            {group.agents.map(agent => {
-              const state = catalog?.hosts[agent.manifest.id]?.state;
-              return (
-                <button
-                  key={`a:${agent.manifest.id}`}
-                  className={`tree-row agent-nav-row${active && activeAgentId === agent.manifest.id ? ' active' : ''}`}
-                  data-testid="agent-nav-item"
-                  onClick={() => onSelectAgent(agent.manifest.id)}
-                >
-                  <span className="tree-icon"><Icon name="zap" size={14} /></span>
-                  <span className="tree-label">{agent.manifest.name}</span>
-                  {state === 'running' ? (
-                    <span className="lane lane--running" title="Host running">●</span>
-                  ) : state === 'failed' ? (
-                    <span className="lane lane--failed" title="Failed to start">●</span>
-                  ) : agent.errors.length > 0 ? (
-                    <span className="tree-badge" title="Invalid manifest">⚠</span>
-                  ) : !agent.trusted ? (
-                    <span className="tree-badge">approval</span>
-                  ) : null}
-                </button>
-              );
-            })}
             {group.skills.map(skill => (
               <button
                 key={`s:${skill.metadata.name}`}

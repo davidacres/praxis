@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { test, expect, type Locator } from '@playwright/test';
 import {
   buildExpiredGadgetFixture,
@@ -55,14 +57,17 @@ async function sessionWithReply(
   options: {
     toolCall?: { name: string; arguments: Record<string, unknown> };
     toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+    imageFile?: { fileName: string; contents: Buffer };
   } = {}
 ) {
-  mock = await startMockGatewayServer({ mode: 'complete', reply, ...options });
+  const { imageFile, ...mockOptions } = options;
+  mock = await startMockGatewayServer({ mode: 'complete', reply, ...mockOptions });
   app = await launchTestApp(undefined, undefined, {
     ...NO_GATEWAY_ENV,
     AI_GATEWAY_API_KEY: 'e2e-gadget-key',
     AI_GATEWAY_URL: mock.baseUrl
   });
+  if (imageFile) fs.writeFileSync(path.join(app.userDataDir, imageFile.fileName), imageFile.contents);
   const win = app.window;
   // No `issueKey`: a free-form session, so nothing is looked up on a board.
   await win.evaluate(async () => {
@@ -156,6 +161,132 @@ test('assistant Markdown renders tables and emphasis in the chat bubble', async 
   await expect(activityPanel).not.toContainText('FX-BE-097 |');
 });
 
+test('image links and filenames render as clickable chat previews', async () => {
+  // A tiny valid PNG is enough to exercise the real host-side file read and
+  // Chromium image decode without making the fixture repository binary-heavy.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  const win = await sessionWithReply(
+    'The screenshot is ready.\n\n[screenshot.png](screenshot.png)\n\nA second copy is below:\n\nscreenshot.png',
+    { imageFile: { fileName: 'screenshot.png', contents: png } }
+  );
+
+  const assistant = win.locator('[data-testid="session-chat-assistant"]').last();
+  const images = assistant.locator('img.markdown-image-preview');
+  await expect(images).toHaveCount(2);
+  await expect.poll(() => images.first().evaluate(image => ({ src: image.getAttribute('src'), width: image.naturalWidth }))).toMatchObject({
+    src: expect.stringMatching(/^data:image\/png;base64,/),
+    width: 1
+  });
+
+  await images.first().click();
+  const lightbox = win.locator('[data-testid="markdown-image-lightbox"]');
+  await expect(lightbox).toBeVisible();
+  await expect(lightbox.locator('[data-testid="markdown-image-lightbox-image"]')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await expect(lightbox).toHaveAttribute('data-zoom', '1');
+  await lightbox.locator('[data-testid="markdown-image-lightbox-zoom-in"]').click();
+  await expect(lightbox).toHaveAttribute('data-zoom', '1.25');
+  await lightbox.locator('[data-testid="markdown-image-lightbox-zoom-reset"]').click();
+  await expect(lightbox).toHaveAttribute('data-zoom', '1');
+  await lightbox.locator('[data-testid="markdown-image-lightbox-zoom-out"]').click();
+  await expect(lightbox).toHaveAttribute('data-zoom', '0.75');
+  await lightbox.locator('[data-testid="markdown-image-lightbox-close"]').click();
+  await expect(lightbox).toHaveCount(0);
+  await images.first().click();
+  await expect(lightbox).toBeVisible();
+  await win.keyboard.press('Escape');
+  await expect(lightbox).toHaveCount(0);
+});
+
+test('image artifacts render as clickable chat previews', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-image-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-image-preview',
+      payload: {
+        title: 'Visual verification',
+        artifacts: [{
+          name: 'focus-mode-tabs.png',
+          path: 'focus-mode-tabs.png',
+          mediaType: 'image/png',
+          description: 'Focus-mode tabs after implementation'
+        }]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'The visual verification artifact is attached.'),
+    { imageFile: { fileName: 'focus-mode-tabs.png', contents: png } }
+  );
+
+  const gadget = win.locator('[data-testid="gadget-artifact"]');
+  await expect(gadget).toContainText('Focus-mode tabs after implementation');
+  const image = gadget.locator('[data-testid="gadget-artifact-image-preview"] img.markdown-image-preview');
+  await expect(image).toHaveCount(1);
+  await expect(gadget.locator('li.gadget-artifact-image-item')).toHaveCount(1);
+  await expect(gadget.locator('li.gadget-artifact-image-item')).toHaveCSS('border-style', 'none');
+  await expect(image).toHaveCSS('border-style', 'none');
+  await expect.poll(() => image.evaluate(element => ({
+    src: element.getAttribute('src'),
+    width: (element as HTMLImageElement).naturalWidth
+  }))).toMatchObject({
+    src: expect.stringMatching(/^data:image\/png;base64,/),
+    width: 1
+  });
+
+  await image.click();
+  const lightbox = win.locator('[data-testid="markdown-image-lightbox"]');
+  await expect(lightbox).toBeVisible();
+  await expect(lightbox.locator('[data-testid="markdown-image-lightbox-image"]')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await lightbox.locator('[data-testid="markdown-image-lightbox-close"]').click();
+  await expect(lightbox).toHaveCount(0);
+  await image.click();
+  await expect(lightbox).toBeVisible();
+  await win.keyboard.press('Escape');
+  await expect(lightbox).toHaveCount(0);
+});
+
+test('internal memory citations stay persisted but do not render in the transcript', async () => {
+  const rolloutId = '01a099ed-d2b7-7861-a7e0-89eee71e6e27';
+  const reply = [
+    'The visible answer stays in the conversation.',
+    '',
+    '<oai-mem-citation>',
+    '<citation_entries>',
+    'MEMORY.md:146-146|note=[Praxis desktop verification sequence]',
+    '</citation_entries>',
+    '<rollout_ids>',
+    rolloutId,
+    '</rollout_ids>',
+    '</oai-mem-citation>'
+  ].join('\n');
+  const win = await sessionWithReply(reply);
+
+  const assistant = win.locator('[data-testid="session-chat-assistant"]').last();
+  await expect(assistant).toContainText('The visible answer stays in the conversation.');
+  await expect(assistant).not.toContainText('oai-mem-citation');
+  await expect(assistant).not.toContainText('MEMORY.md');
+  await expect(assistant).not.toContainText(rolloutId);
+
+  // Presentation filtering must not destroy the provider response. The raw
+  // event remains available for audit, diagnostics, and session recovery.
+  const storedMessage = await win.evaluate(() => window.praxis.ai.listSessions().then(sessions =>
+    sessions[0]?.events.find(event => event.type === 'message')?.detail
+  ));
+  expect(storedMessage).toContain('<oai-mem-citation>');
+  expect(storedMessage).toContain(rolloutId);
+});
+
 test('chat producers receive the choice-gadget policy for genuine decisions', async () => {
   await sessionWithReply('There is no decision to make in this fixture.');
 
@@ -171,6 +302,8 @@ test('chat producers receive the choice-gadget policy for genuine decisions', as
   expect(systemPrompt).toContain('Do not turn every numbered list into controls.');
   expect(systemPrompt).toContain('"kind":"choice"');
   expect(systemPrompt).toContain('The host adds scope and issuedAt.');
+  expect(systemPrompt).toContain('publish it as an artifact gadget');
+  expect(systemPrompt).toContain('.praxis/session-artifacts/');
 });
 
 test('Settings lists each built-in gadget with its purpose', async () => {
