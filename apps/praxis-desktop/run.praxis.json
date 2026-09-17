@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "default",
+  "name": "Default run",
+  "services": [
+    {
+      "id": "main",
+      "name": "main",
+      "executable": "npm",
+      "args": [
+        "run",
+        "start"
+      ],
+      "cwd": "main",
+      "dependsOn": [
+        "renderer"
+      ],
+      "env": {
+        "PRAXIS_DEV_SERVER_URL": "http://localhost:5173"
+      }
+    },
+    {
+      "id": "renderer",
+      "name": "renderer",
+      "executable": "npm",
+      "args": [
+        "run",
+        "dev"
+      ],
+      "cwd": "renderer",
+      "port": 5173,
+      "readinessProbe": {
+        "kind": "http",
+        "path": "/"
+      }
+    }
+  ],
+  "createdAt": "2026-09-17T13:48:32.713Z",
+  "updatedAt": "2026-09-17T16:12:11.000Z"
+}
