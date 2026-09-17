@@ -450,3 +450,33 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | FX-BE-114 | Story | Trust, security, and verification | Proposed | FX-BE-110, FX-BE-113 |
 | TASK-320 | Task | Extend trust-on-install to imported plugins and hook scripts | Proposed | FX-BE-114, TASK-313, TASK-316, TASK-318, TASK-319, TASK-309 |
 | TASK-321 | Task | Deterministic fixtures, full e2e coverage, and documentation | Proposed | TASK-320 |
+
+## Connected agent workflow sessions
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| FX-BF-040 | Feature | Connected agent workflow sessions and governed delivery | Proposed | FX-BF-012, FX-BF-013, FX-BF-014, FX-BF-038 |
+| FX-BE-123 | Story | Workflow selection and session/run linkage | Planned | FX-BF-012, FX-BF-013, FX-BF-014, FX-BF-038 |
+| TASK-335 | Task | Define workflow-selection, controller-session, and run-link contracts | Planned | FX-BE-123 |
+| TASK-336 | Task | Add session composer workflow selection, readiness, and start flow | Planned | TASK-335 |
+| TASK-337 | Task | Persist and navigate controller, stage, run, and node attribution | Planned | TASK-335, TASK-336 |
+| FX-BE-124 | Story | Agent Hub host execution for interactive and stage sessions | Planned | FX-BF-011, FX-BF-013, FX-BF-038 |
+| TASK-338 | Task | Define and implement the runtime-host adapter launch contract | Planned | FX-BE-124 |
+| TASK-339 | Task | Route interactive delegation and workflow stages through one launch compiler | Planned | TASK-338 |
+| TASK-340 | Task | Enforce host scope, trust, capability, sandbox, and tool-mode preflight | Planned | TASK-338, TASK-339 |
+| FX-BE-125 | Story | Workflow packs and skill activation inside governed stages | Planned | FX-BF-010, FX-BF-011, FX-BF-012, FX-BF-038 |
+| TASK-341 | Task | Resolve workflow packs into stage task context and provenance | Planned | FX-BE-125 |
+| TASK-342 | Task | Compile skill activation and record native/tool/context outcomes | Planned | TASK-340 |
+| TASK-343 | Task | Migrate legacy issue workflow-pack assignments safely | Planned | TASK-341 |
+| FX-BE-126 | Story | Workflow Designer and Task Designer integration | Planned | FX-BF-012, FX-BF-014, FX-BF-015, FX-BF-017 |
+| TASK-344 | Task | Share runtime readiness and dependency contracts with Workflow Designer | Planned | TASK-340 |
+| TASK-345 | Task | Add explicit Task Designer plan-to-workflow input and promotion flow | Planned | TASK-335, TASK-344 |
+| TASK-346 | Task | Add cross-surface navigation and run/session provenance | Planned | TASK-337, TASK-345 |
+| FX-BE-127 | Story | Gate evaluation, approvals, and run operations | Planned | FX-BF-012, FX-BF-013, FX-BF-014, FX-BF-034 |
+| TASK-347 | Task | Make gate outcomes and evidence node-specific and durable | Planned | TASK-341 |
+| TASK-348 | Task | Implement explicit approval and bypass target handling and policy checks | Planned | TASK-347 |
+| TASK-349 | Task | Harden run monitor operations, recovery, retry, timeout, and audit events | Planned | TASK-337, TASK-348 |
+| FX-BE-128 | Story | Migration, observability, compatibility, and end-to-end proof | Planned | FX-BE-123, FX-BE-124, FX-BE-125, FX-BE-126, FX-BE-127 |
+| TASK-350 | Task | Define migrations and compatibility behavior for legacy records | Planned | TASK-335, TASK-343 |
+| TASK-351 | Task | Add redacted lifecycle diagnostics, audit events, and support docs | Planned | TASK-339, TASK-347, TASK-349 |
+| TASK-352 | Task | Add deterministic fixtures, real-host vertical E2E, and final verification | Planned | TASK-340, TASK-342, TASK-345, TASK-348, TASK-350, TASK-351 |
