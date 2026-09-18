@@ -195,6 +195,7 @@ function SessionUsageSummary({
   const sessionTokens = session.tokenUsage?.totalTokens;
   const spendRatio = spendLimit > 0 && localCurrency ? localCost / spendLimit : undefined;
   const providerWarning = provider?.windows.find(window => {
+    if (typeof window.usedPercent === 'number') return window.usedPercent >= 80;
     const used = window.usedTokens ?? window.usedCost;
     const limit = window.tokenLimit ?? window.costLimit;
     return typeof used === 'number' && typeof limit === 'number' && limit > 0 && used / limit >= 0.8;
@@ -243,8 +244,19 @@ function SessionUsageSummary({
       </div>
       <div className="session-usage-provider">
         <span className="session-usage-label">{session.provider ? `${PROVIDER_LABELS[session.provider]} account` : 'Provider account'}</span>
-        {provider?.credits ? <span>{provider.credits.remaining.toFixed(2)} {provider.credits.currency} credits remaining</span> : <span>{provider?.unavailableReason ?? 'Credits and account limits are not exposed by this provider.'}</span>}
+        {provider?.totalTokens ? <span>{Math.round(provider.totalTokens).toLocaleString()} cumulative tokens</span> : provider?.credits ? <span>{provider.credits.remaining.toFixed(2)} {provider.credits.currency} remaining</span> : <span>{provider?.unavailableReason ?? 'Credits and account limits are not exposed by this provider.'}</span>}
       </div>
+      {provider && provider.windows.length > 0 && (
+        <div className="session-usage-provider-windows">
+          {provider.windows.map(window => (
+            <div className="session-usage-card" key={`${window.period}-${window.label ?? ''}`}>
+              <span className="session-usage-label">{window.label ?? `Provider ${window.period}`}</span>
+              <strong>{typeof window.usedPercent === 'number' ? `${window.usedPercent}% used` : 'Usage reported'}</strong>
+              <small>{window.resetsAt ? `Resets ${new Date(window.resetsAt).toLocaleString()}` : 'Reset time unavailable'}</small>
+            </div>
+          ))}
+        </div>
+      )}
     </details>
   );
 }

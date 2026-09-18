@@ -14,6 +14,7 @@ import { getAiUsageLog } from './aiUsageLogInstance';
 import { getAiSessionManager } from './aiInstance';
 import { getSecretsStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
+import { codexCliSnapshot } from './codexUsage';
 
 const USAGE_SECRET_PREFIX = 'ai-usage:';
 
@@ -119,6 +120,7 @@ async function providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnap
  */
 export function registerAiUsageIpc(): void {
   registerProviderUsageAdapter('openai', openAiSnapshot);
+  registerProviderUsageAdapter('codex-cli', codexCliSnapshot);
   ipcMain.handle('aiUsage:series', async (_event, granularity: UsageGranularity, periodsBack: number) =>
     usageSeries(getAiUsageLog().list(), granularity, periodsBack)
   );

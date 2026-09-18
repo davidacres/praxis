@@ -11536,6 +11536,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-usage-model-row { display: flex; justify-content: space-between; gap: var(--space-3); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .session-usage-model-row span:last-child { color: var(--text-tertiary); text-align: right; }
 .session-usage-provider { color: var(--text-tertiary); }
+.session-usage-provider-windows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border-top: 1px solid var(--border); background: var(--border); }
 @media (max-width: 900px) { .session-usage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* ── Interactive chat gadgets (FX-BF-036) ──────────────────────────────────
    A gadget is a Praxis-owned surface sitting inside a provider's conversation,
