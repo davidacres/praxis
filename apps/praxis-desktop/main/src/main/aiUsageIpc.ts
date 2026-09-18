@@ -5,16 +5,120 @@ import {
   usageSeries,
   type AgentSessionRecord,
   type AiUsageEventInput,
-  type UsageGranularity
+  type UsageGranularity,
+  type AiProvider,
+  type ProviderUsageSnapshot,
+  type ProviderUsageWindow
 } from '@praxis/core';
 import { getAiUsageLog } from './aiUsageLogInstance';
 import { getAiSessionManager } from './aiInstance';
+import { getSecretsStore } from './connectionStoreInstance';
+import { getSettingsBackend } from './settingsBackendInstance';
+
+const USAGE_SECRET_PREFIX = 'ai-usage:';
+
+function periodStart(period: 'hour' | 'day' | 'week' | 'month'): number {
+  const now = new Date();
+  if (period === 'hour') now.setUTCMinutes(0, 0, 0);
+  else if (period === 'day') now.setUTCHours(0, 0, 0, 0);
+  else if (period === 'week') {
+    now.setUTCHours(0, 0, 0, 0);
+    const day = now.getUTCDay();
+    now.setUTCDate(now.getUTCDate() - (day === 0 ? 6 : day - 1));
+  } else {
+    now.setUTCDate(1);
+    now.setUTCHours(0, 0, 0, 0);
+  }
+  return Math.floor(now.getTime() / 1000);
+}
+
+function apiRoot(provider: AiProvider): string {
+  const settings = getSettingsBackend().read();
+  const config = provider === 'vercel-gateway' ? undefined : settings.ai.providers[provider];
+  return (provider === 'openai' ? config?.baseUrl : undefined)?.replace(/\/$/, '') || 'https://api.openai.com';
+}
+
+function numberAt(value: unknown, keys: string[]): number | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  for (const key of keys) {
+    const candidate = (value as Record<string, unknown>)[key];
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+    if (candidate && typeof candidate === 'object') {
+      const nested = numberAt(candidate, ['value', 'amount', 'quantity']);
+      if (nested !== undefined) return nested;
+    }
+  }
+  return undefined;
+}
+
+async function openAiSnapshot(): Promise<ProviderUsageSnapshot> {
+  const fetchedAt = new Date().toISOString();
+  const key = process.env.OPENAI_ADMIN_KEY || await getSecretsStore().get(`${USAGE_SECRET_PREFIX}openai`);
+  if (!key) return { provider: 'openai', fetchedAt, windows: [], unavailableReason: 'Add an OpenAI Admin API key to view account usage.' };
+  const root = apiRoot('openai');
+  const headers = { Authorization: `Bearer ${key}` };
+  const periods: Array<'hour' | 'day' | 'week' | 'month'> = ['hour', 'day', 'week', 'month'];
+  try {
+    const windows: ProviderUsageWindow[] = await Promise.all(periods.map(async period => {
+      const params = new URLSearchParams({
+        start_time: String(periodStart(period)),
+        bucket_width: period === 'hour' ? '1h' : '1d',
+        group_by: 'model'
+      });
+      const response = await fetch(`${root}/v1/organization/usage/completions?${params}`, { headers });
+      if (!response.ok) throw new Error(`OpenAI usage request failed (${response.status})`);
+      const body = await response.json() as { data?: Array<{ results?: unknown[] }> };
+      let tokens = 0;
+      for (const bucket of body.data ?? []) {
+        for (const result of bucket.results ?? []) {
+          tokens += numberAt(result, ['total_tokens']) ?? ((numberAt(result, ['input_tokens']) ?? 0) + (numberAt(result, ['output_tokens']) ?? 0));
+        }
+      }
+      return { period, usedTokens: tokens };
+    }));
+    // Costs are a separate Admin API resource. Keep this best-effort: token
+    // usage is still useful when an account cannot read cost records.
+    try {
+      const params = new URLSearchParams({ start_time: String(periodStart('month')), bucket_width: '1d' });
+      const response = await fetch(`${root}/v1/organization/costs?${params}`, { headers });
+      if (response.ok) {
+        const body = await response.json() as { data?: Array<{ results?: unknown[] }> };
+        let amount = 0;
+        for (const bucket of body.data ?? []) {
+          for (const result of bucket.results ?? []) amount += numberAt(result, ['amount', 'cost']) ?? 0;
+        }
+        if (amount > 0) windows[3] = { ...windows[3], usedCost: amount, currency: 'USD' };
+      }
+    } catch {
+      // Cost reporting is optional and must not hide token usage.
+    }
+    return { provider: 'openai', fetchedAt, windows };
+  } catch (error) {
+    return { provider: 'openai', fetchedAt, windows: [], unavailableReason: error instanceof Error ? error.message : 'OpenAI usage is unavailable.' };
+  }
+}
+
+type ProviderUsageAdapter = () => Promise<ProviderUsageSnapshot>;
+const providerUsageAdapters = new Map<AiProvider, ProviderUsageAdapter>();
+
+/** Provider adapters stay behind this registry so adding Anthropic/Gemini/etc.
+ * does not change the renderer contract or the session panel. */
+export function registerProviderUsageAdapter(provider: AiProvider, adapter: ProviderUsageAdapter): void {
+  providerUsageAdapters.set(provider, adapter);
+}
+
+async function providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot> {
+  const adapter = providerUsageAdapters.get(provider);
+  if (adapter) return adapter();
+  return { provider, fetchedAt: new Date().toISOString(), windows: [], unavailableReason: 'This provider does not expose an account usage API to Praxis yet.' };
+}
 
 /**
  * Registers the read-side `aiUsage:*` handlers — see `AiUsageIpc` in
  * `ipcContracts.ts` for why there's no renderer-facing write method.
  */
 export function registerAiUsageIpc(): void {
+  registerProviderUsageAdapter('openai', openAiSnapshot);
   ipcMain.handle('aiUsage:series', async (_event, granularity: UsageGranularity, periodsBack: number) =>
     usageSeries(getAiUsageLog().list(), granularity, periodsBack)
   );
@@ -22,6 +126,12 @@ export function registerAiUsageIpc(): void {
     compareLatestPeriod(getAiUsageLog().list(), granularity)
   );
   ipcMain.handle('aiUsage:listEvents', async () => getAiUsageLog().list());
+  ipcMain.handle('aiUsage:providerSnapshot', async (_event, provider: AiProvider) => providerSnapshot(provider));
+  ipcMain.handle('aiUsage:setProviderUsageKey', async (_event, provider: AiProvider, value: string) => {
+    const key = `${USAGE_SECRET_PREFIX}${provider}`;
+    if (value.trim()) await getSecretsStore().store(key, value.trim());
+    else await getSecretsStore().delete(key);
+  });
 }
 
 /**

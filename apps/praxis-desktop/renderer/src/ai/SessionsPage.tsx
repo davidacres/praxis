@@ -12,7 +12,9 @@ import type {
   GadgetActionValue,
   PermissionDecision,
   SessionMode,
-  TerminalSessionInfo
+  TerminalSessionInfo,
+  UsageBucket,
+  ProviderUsageSnapshot
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
@@ -149,6 +151,102 @@ function parseTerminalContext(detail: string | undefined) {
     output: decodeContextText(match[3]),
     message: match[4]
   } : undefined;
+}
+
+function SessionUsageSummary({
+  session,
+  sessions,
+  spendLimit
+}: {
+  session: AgentSessionRecord;
+  sessions: AgentSessionRecord[];
+  spendLimit: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [windows, setWindows] = useState<Record<string, UsageBucket | undefined>>({});
+  const [provider, setProvider] = useState<ProviderUsageSnapshot | undefined>();
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      window.praxis.aiUsage.series('hour', 1),
+      window.praxis.aiUsage.series('day', 1),
+      window.praxis.aiUsage.series('week', 1),
+      window.praxis.aiUsage.series('month', 1),
+      session.provider ? window.praxis.aiUsage.providerSnapshot(session.provider) : Promise.resolve(undefined)
+    ]).then(([hour, day, week, month, snapshot]) => {
+      if (cancelled) return;
+      setWindows({ hour: hour[0], day: day[0], week: week[0], month: month[0] });
+      setProvider(snapshot);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [session.provider, session.sessionId, session.tokenUsage?.totalTokens, session.cost?.amount]);
+
+  const modelTotals = new Map<string, { tokens: number; costs: Array<{ amount: number; currency: string }> }>();
+  for (const item of sessions) {
+    const key = item.model || 'Unknown model';
+    const row = modelTotals.get(key) ?? { tokens: 0, costs: [] };
+    row.tokens += item.tokenUsage?.totalTokens ?? 0;
+    if (item.cost) row.costs.push(item.cost);
+    modelTotals.set(key, row);
+  }
+  const localCost = sessions.reduce((total, item) => total + (item.cost?.amount ?? 0), 0);
+  const localCurrency = sessions.find(item => item.cost?.currency)?.cost?.currency;
+  const sessionTokens = session.tokenUsage?.totalTokens;
+  const spendRatio = spendLimit > 0 && localCurrency ? localCost / spendLimit : undefined;
+  const providerWarning = provider?.windows.find(window => {
+    const used = window.usedTokens ?? window.usedCost;
+    const limit = window.tokenLimit ?? window.costLimit;
+    return typeof used === 'number' && typeof limit === 'number' && limit > 0 && used / limit >= 0.8;
+  });
+  const formatWindow = (bucket: UsageBucket | undefined) => bucket ? `${Math.round(bucket.totalTokens).toLocaleString()} tokens` : '—';
+
+  return (
+    <details className="session-usage-summary" open={open} onToggle={event => setOpen(event.currentTarget.open)} data-testid="session-usage-summary">
+      <summary>
+        <Icon name="graph" size={14} />
+        <span>Usage</span>
+        <span className="session-usage-summary-meta">
+          {sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : 'No token data'}
+          {session.cost ? ` · ${formatCost(session.cost)}` : ''}
+        </span>
+        {providerWarning && <span className="session-usage-warning">Approaching provider limit</span>}
+      </summary>
+      <div className="session-usage-grid">
+        <div className="session-usage-card">
+          <span className="session-usage-label">This session</span>
+          <strong>{sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : 'Not reported'}</strong>
+          <small>{session.cost ? formatCost(session.cost) : 'Cost not reported by provider'}</small>
+        </div>
+        {(['hour', 'day', 'week', 'month'] as const).map(period => (
+          <div className="session-usage-card" key={period}>
+            <span className="session-usage-label">Last {period}</span>
+            <strong>{formatWindow(windows[period])}</strong>
+            <small>{windows[period]?.costByCurrency.map(cost => `${cost.amount.toFixed(2)} ${cost.currency}`).join(', ') || 'Cost unavailable'}</small>
+          </div>
+        ))}
+      </div>
+      {spendRatio !== undefined && spendRatio >= 0.8 && (
+        <div className={`session-usage-warning-banner${spendRatio >= 1 ? ' is-critical' : ''}`}>
+          <Icon name={spendRatio >= 1 ? 'warning' : 'zap'} size={13} />
+          {spendRatio >= 1 ? 'Your Praxis spend limit has been exceeded.' : 'You are approaching your Praxis spend limit.'}
+        </div>
+      )}
+      <div className="session-usage-models">
+        <span className="session-usage-label">By model</span>
+        {[...modelTotals.entries()].sort((a, b) => b[1].tokens - a[1].tokens).slice(0, 6).map(([model, row]) => (
+          <div className="session-usage-model-row" key={model}>
+            <span>{model}</span>
+            <span>{row.tokens ? `${Math.round(row.tokens).toLocaleString()} tokens` : '—'}{row.costs.length > 0 ? ` · ${row.costs.map(cost => formatCost(cost)).join(', ')}` : ''}</span>
+          </div>
+        ))}
+      </div>
+      <div className="session-usage-provider">
+        <span className="session-usage-label">{session.provider ? `${PROVIDER_LABELS[session.provider]} account` : 'Provider account'}</span>
+        {provider?.credits ? <span>{provider.credits.remaining.toFixed(2)} {provider.credits.currency} credits remaining</span> : <span>{provider?.unavailableReason ?? 'Credits and account limits are not exposed by this provider.'}</span>}
+      </div>
+    </details>
+  );
 }
 
 /**
@@ -1040,6 +1138,11 @@ export function SessionsPage({
 
             <div className="session-chat-composer">
               {followUpError && <div className="error-banner" data-testid="session-follow-up-error">{followUpError}</div>}
+              <SessionUsageSummary
+                session={selected}
+                sessions={sessions}
+                spendLimit={settings?.ai.spendLimit ?? 0}
+              />
               {spend && spend.level !== 'ok' && (
                 <div className={`composer-context-banner is-${spend.level}`} data-testid="session-spend">
                   <div className="composer-context-heading">

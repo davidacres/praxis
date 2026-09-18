@@ -1,5 +1,6 @@
 import type { AiUsageEvent } from '../ai/aiUsageLog';
 import type { UsageBucket, UsageComparison, UsageGranularity } from '../ai/aiUsageStats';
+import type { ProviderUsageSnapshot } from '../ai/providerUsage';
 import type { AgentRecommendationCandidate, AgentRecommendationResult } from '../ai/workflowAgentRecommendation';
 import type { StoredAgentRecommendation } from '../ai/workflowRecommendationCache';
 import type { TemplateRecommendationResult } from '../ai/workflowTemplateRecommendation';
@@ -872,6 +873,10 @@ export interface AiUsageIpc {
   compareLatestPeriod(granularity: UsageGranularity): Promise<UsageComparison>;
   /** The raw ledger, newest last — for a detail table; not meant for charting directly. */
   listEvents(): Promise<AiUsageEvent[]>;
+  /** Provider account usage/limits, when the provider exposes a supported API. */
+  providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot>;
+  /** Stores a provider's optional admin/usage credential in the OS keychain. */
+  setProviderUsageKey(provider: AiProvider, value: string): Promise<void>;
 }
 
 /**
