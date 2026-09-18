@@ -1562,6 +1562,42 @@ function spendGroupMeta(row: SpendGroupRow): string {
   return parts.join(' · ');
 }
 
+function UsageAdminKeyField({ provider }: { provider: AiProvider }) {
+  const [draft, setDraft] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const save = async (value: string) => {
+    setBusy(true);
+    try {
+      await window.praxis.aiUsage.setProviderUsageKey(provider, value);
+      setDraft('');
+      setSaved(Boolean(value.trim()));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      <input
+        type="password"
+        className="input"
+        data-testid="ai-usage-admin-key-input"
+        aria-label="Usage Admin API key"
+        placeholder={saved ? '••••••••  (saved)' : 'Optional admin key'}
+        value={draft}
+        onChange={event => setDraft(event.target.value)}
+        style={{ flex: 1 }}
+      />
+      <button type="button" className="btn btn-primary" data-testid="ai-usage-admin-key-save" disabled={busy || !draft.trim()} onClick={() => void save(draft)}>
+        Save
+      </button>
+      <button type="button" className="btn" data-testid="ai-usage-admin-key-clear" disabled={busy || !saved} onClick={() => void save('')}>
+        Clear
+      </button>
+    </div>
+  );
+}
+
 function AiSection({
   settings,
   update,
@@ -1848,6 +1884,14 @@ function AiSection({
               </button>
             </div>
           </FieldRow>
+          {selectedProviderId === 'openai' && (
+            <FieldRow
+              label="Usage Admin API key"
+              description="Optional OpenAI Admin API key for account usage, limits, and cost reporting. Stored encrypted in the OS keychain; it is never used for model requests."
+            >
+              <UsageAdminKeyField provider={selectedProviderId} />
+            </FieldRow>
+          )}
           <FieldRow
             label={isVercel ? 'Gateway URL' : `${selectedMeta.label} base URL`}
             description="Leave empty to use the default endpoint."

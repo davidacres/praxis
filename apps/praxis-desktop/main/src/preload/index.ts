@@ -308,7 +308,9 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('aiUsage:series', granularity, periodsBack),
     compareLatestPeriod: (granularity: UsageGranularity) =>
       ipcRenderer.invoke('aiUsage:compareLatestPeriod', granularity),
-    listEvents: () => ipcRenderer.invoke('aiUsage:listEvents')
+    listEvents: () => ipcRenderer.invoke('aiUsage:listEvents'),
+    providerSnapshot: (provider: AiProvider) => ipcRenderer.invoke('aiUsage:providerSnapshot', provider),
+    setProviderUsageKey: (provider: AiProvider, value: string) => ipcRenderer.invoke('aiUsage:setProviderUsageKey', provider, value)
   },
   taskDesigner: {
     getState: (boardId: string, connectionId?: string) =>

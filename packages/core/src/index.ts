@@ -38,6 +38,7 @@ export * from './ai/browserMcpServer';
 export * from './ai/aiReviewService';
 export * from './ai/aiUsageLog';
 export * from './ai/aiUsageStats';
+export * from './ai/providerUsage';
 export * from './ai/workflowAgentRecommendation';
 export * from './ai/workflowRecommendationCache';
 export * from './ai/workflowTemplateRecommendation';

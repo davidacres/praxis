@@ -25,6 +25,11 @@ test('periodStart: day and month bucket to UTC midnight', () => {
   assert.equal(periodStart(at, 'month').toISOString(), '2026-09-01T00:00:00.000Z');
 });
 
+test('periodStart: hour buckets to the UTC hour', () => {
+  const at = new Date('2026-09-16T23:59:42.000Z');
+  assert.equal(periodStart(at, 'hour').toISOString(), '2026-09-16T23:00:00.000Z');
+});
+
 test('usageSeries: sums tokens per day and zero-fills empty periods', () => {
   const reference = new Date('2026-09-16T10:00:00.000Z'); // Wednesday
   const events: AiUsageEvent[] = [

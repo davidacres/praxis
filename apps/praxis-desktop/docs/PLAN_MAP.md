@@ -480,3 +480,11 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | TASK-350 | Task | Define migrations and compatibility behavior for legacy records | Planned | TASK-335, TASK-343 |
 | TASK-351 | Task | Add redacted lifecycle diagnostics, audit events, and support docs | Planned | TASK-339, TASK-347, TASK-349 |
 | TASK-352 | Task | Add deterministic fixtures, real-host vertical E2E, and final verification | Planned | TASK-340, TASK-342, TASK-345, TASK-348, TASK-350, TASK-351 |
+
+## Session usage and provider allowance visibility
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| FX-BF-041 | Feature | Session usage and provider allowance visibility | Complete | FX-BF-015, FX-BF-035 |
+| FX-BE-129 | Story | Session usage, cost, and provider allowance visibility | Complete | FX-BF-041 |
+| TASK-353 | Task | Implement and verify session usage and provider allowance visibility | Complete | FX-BE-129 |

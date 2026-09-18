@@ -11503,6 +11503,40 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   font-size: var(--text-sm);
   line-height: 1.45;
 }
+
+/* Provider-neutral usage summary in the session composer. Account limits are
+   optional; local session totals remain useful when a provider reports none. */
+.session-usage-summary {
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.session-usage-summary > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+}
+.session-usage-summary > summary::-webkit-details-marker { display: none; }
+.session-usage-summary-meta { color: var(--text-tertiary); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.session-usage-warning { margin-left: auto; color: var(--warning); font-size: var(--text-xs); }
+.session-usage-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; border-top: 1px solid var(--border); background: var(--border); }
+.session-usage-card { display: grid; gap: 3px; min-width: 0; padding: var(--space-2) var(--space-3); background: var(--bg-elevated); }
+.session-usage-card strong { color: var(--text); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.session-usage-card small { color: var(--text-tertiary); font-size: var(--text-xs); }
+.session-usage-label { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .03em; }
+.session-usage-warning-banner { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--bg-elevated)); font-size: var(--text-sm); }
+.session-usage-warning-banner.is-critical { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--bg-elevated)); }
+.session-usage-models, .session-usage-provider { display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-top: 1px solid var(--border); font-size: var(--text-sm); }
+.session-usage-model-row { display: flex; justify-content: space-between; gap: var(--space-3); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.session-usage-model-row span:last-child { color: var(--text-tertiary); text-align: right; }
+.session-usage-provider { color: var(--text-tertiary); }
+@media (max-width: 900px) { .session-usage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* ── Interactive chat gadgets (FX-BF-036) ──────────────────────────────────
    A gadget is a Praxis-owned surface sitting inside a provider's conversation,
    so it has to read as *ours* without shouting over the transcript. The accent

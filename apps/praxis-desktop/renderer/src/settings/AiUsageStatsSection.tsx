@@ -18,6 +18,7 @@ import { Icon } from '../ui/Icon';
  */
 
 const GRANULARITIES: { value: UsageGranularity; label: string }[] = [
+  { value: 'hour', label: 'Hour' },
   { value: 'day', label: 'Day' },
   { value: 'week', label: 'Week' },
   { value: 'month', label: 'Month' }
@@ -34,6 +35,9 @@ function formatTokens(value: number): string {
 function formatPeriodLabel(iso: string, granularity: UsageGranularity): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
+  if (granularity === 'hour') {
+    return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
+  }
   if (granularity === 'day') {
     return new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric' }).format(date);
   }
@@ -131,7 +135,7 @@ function UsageBarChart({ buckets, granularity }: UsageBarChartProps) {
 function ComparisonCallout({ comparison }: { comparison: UsageComparison }) {
   const { current, deltaPercent } = comparison;
   const direction = deltaPercent === undefined ? 'flat' : deltaPercent > 0.5 ? 'up' : deltaPercent < -0.5 ? 'down' : 'flat';
-  const periodNoun = comparison.granularity === 'day' ? 'day' : comparison.granularity === 'week' ? 'week' : 'month';
+  const periodNoun = comparison.granularity === 'hour' ? 'hour' : comparison.granularity === 'day' ? 'day' : comparison.granularity === 'week' ? 'week' : 'month';
 
   return (
     <div className="ai-usage-headline">
