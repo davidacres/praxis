@@ -13,7 +13,7 @@
 
 import type { AiUsageEvent, AiUsageSource } from './aiUsageLog';
 
-export type UsageGranularity = 'day' | 'week' | 'month';
+export type UsageGranularity = 'hour' | 'day' | 'week' | 'month';
 
 export interface UsageBucket {
   /** ISO 8601 UTC instant marking the start of this bucket. */
@@ -41,6 +41,10 @@ function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
+function startOfUtcHour(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours()));
+}
+
 /** Monday of the ISO week containing `date`, at UTC midnight. */
 function startOfUtcWeek(date: Date): Date {
   const day = startOfUtcDay(date);
@@ -57,6 +61,8 @@ function startOfUtcMonth(date: Date): Date {
 
 export function periodStart(date: Date, granularity: UsageGranularity): Date {
   switch (granularity) {
+    case 'hour':
+      return startOfUtcHour(date);
     case 'day':
       return startOfUtcDay(date);
     case 'week':
@@ -69,6 +75,9 @@ export function periodStart(date: Date, granularity: UsageGranularity): Date {
 function nextPeriodStart(start: Date, granularity: UsageGranularity): Date {
   const next = new Date(start);
   switch (granularity) {
+    case 'hour':
+      next.setUTCHours(next.getUTCHours() + 1);
+      return next;
     case 'day':
       next.setUTCDate(next.getUTCDate() + 1);
       return next;
@@ -84,6 +93,9 @@ function nextPeriodStart(start: Date, granularity: UsageGranularity): Date {
 function previousPeriodStart(start: Date, granularity: UsageGranularity): Date {
   const prev = new Date(start);
   switch (granularity) {
+    case 'hour':
+      prev.setUTCHours(prev.getUTCHours() - 1);
+      return prev;
     case 'day':
       prev.setUTCDate(prev.getUTCDate() - 1);
       return prev;
