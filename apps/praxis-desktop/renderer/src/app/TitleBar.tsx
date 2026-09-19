@@ -38,6 +38,8 @@ export interface TitleBarProps {
   onToggleAux: () => void;
   panelVisible: boolean;
   onTogglePanel: () => void;
+  focusMode?: boolean;
+  onToggleFocusMode?: () => void;
   canGoBack: boolean;
   onBack: () => void;
   canGoForward: boolean;
@@ -78,6 +80,8 @@ export function TitleBar({
   onToggleAux,
   panelVisible,
   onTogglePanel,
+  focusMode: explicitFocusMode,
+  onToggleFocusMode,
   canGoBack,
   onBack,
   canGoForward,
@@ -87,6 +91,7 @@ export function TitleBar({
   settingsOpen,
   onOpenSettings
 }: TitleBarProps) {
+  const isFocusMode = explicitFocusMode ?? (!sidebarVisible && !auxVisible && !panelVisible);
   const [maximized, setMaximized] = useState(false);
   const [zoomFactor, setZoomFactor] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -451,6 +456,16 @@ export function TitleBar({
           onClick={onToggleAux}
         >
           <Icon name="sidebar-right" />
+        </button>
+        <button
+          className={`icon-btn${isFocusMode ? ' active' : ''}`}
+          aria-label="Toggle focus mode"
+          title="Toggle focus mode"
+          aria-pressed={isFocusMode}
+          onClick={onToggleFocusMode}
+          data-testid="toggle-focus-mode"
+        >
+          <Icon name="layout-focus" />
         </button>
         <div className="titlebar-zoom-controls" data-testid="titlebar-zoom-controls" aria-label="Application zoom">
           <button
