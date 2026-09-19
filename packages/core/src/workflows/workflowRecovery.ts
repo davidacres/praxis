@@ -21,6 +21,8 @@ import {
   type WorkflowRun
 } from './workflowRun';
 import { scheduleWorkflowRun } from './workflowScheduler';
+import { evaluateGates } from './workflowGates';
+import { findSnapshot } from './workflowStageSession';
 
 export interface WorkflowRecoveryResult {
   run: WorkflowRun;
@@ -75,6 +77,7 @@ export function findTimedOutNodes(run: WorkflowRun, now: string): string[] {
 export type WorkflowNextAction =
   | { kind: 'start-stage'; nodeId: string; label: string }
   | { kind: 'retry-stage'; nodeId: string; label: string; attemptsUsed: number; maxAttempts: number }
+  | { kind: 'rework-stage'; nodeId: string; label: string }
   | { kind: 'approve'; nodeId: string; label: string }
   | { kind: 'cancel-run'; label: string }
   | { kind: 'none'; label: string };
@@ -113,6 +116,23 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
       label: `Retry ${label(state.nodeId)}`,
       attemptsUsed: state.attempts.length,
       maxAttempts
+    });
+  }
+
+  const reworkSources = new Map<string, string[]>();
+  for (const approval of run.definition.nodes.filter(node => node.type === 'approval')) {
+    for (const gate of evaluateGates(run, approval.id)) {
+      if (gate.state !== 'stale' || !gate.nodeId) continue;
+      const source = findSnapshot(run, gate.nodeId)?.producedByNodeId;
+      if (!source) continue;
+      reworkSources.set(source, [...(reworkSources.get(source) ?? []), gate.gate]);
+    }
+  }
+  for (const [nodeId, gates] of reworkSources) {
+    actions.push({
+      kind: 'rework-stage',
+      nodeId,
+      label: `Start a new revision from ${label(nodeId)} (${[...new Set(gates)].join(', ')} stale)`
     });
   }
 

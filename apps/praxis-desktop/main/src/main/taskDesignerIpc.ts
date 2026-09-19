@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 import { ipcMain } from 'electron';
 import {
   GENERATED_FEATURES_DIRECTORY_NAME,
@@ -255,7 +256,8 @@ async function generateMasterPlan(
     outputPath: masterPlanFile,
     generatedFeaturesPath: generatedFeaturesRoot,
     generatedFeatureCount: artifacts.features.length,
-    generatedStoryCount: artifacts.storyCount
+    generatedStoryCount: artifacts.storyCount,
+    fingerprint: createHash('sha256').update(artifacts.masterPlanMarkdown, 'utf8').digest('hex')
   };
 }
 

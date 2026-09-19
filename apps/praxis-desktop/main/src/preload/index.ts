@@ -38,7 +38,7 @@ import type { ReconciledService, RunLogLine, RunServiceStatus } from '@praxis/co
 import type { BrowserDiagnosticsBundle } from '@praxis/core';
 import type { CreateDiagnosisSessionResult, PreviewVerificationCheck, PreviewVerificationOutcome } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
-import type { WorkflowDefinition } from '@praxis/core';
+import type { WorkflowDefinition, WorkflowPlanInput, WorkflowPolicyProfile } from '@praxis/core';
 import type { DeploymentProfile, DeploymentProfileIssue, PublishedArtifact } from '@praxis/core';
 import type { CredentialBindingStatus } from '@praxis/core';
 import type { DeploymentRun } from '@praxis/core';
@@ -346,8 +346,15 @@ const praxis: PraxisIpc = {
     validate: (projectId: string, definition: WorkflowDefinition) =>
       ipcRenderer.invoke('workflows:validate', projectId, definition),
     effectivePolicy: (projectId: string) => ipcRenderer.invoke('workflows:effectivePolicy', projectId),
-    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }) =>
-      ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle, issue),
+    listPolicies: () => ipcRenderer.invoke('workflows:listPolicies'),
+    savePolicy: (profile: WorkflowPolicyProfile) => ipcRenderer.invoke('workflows:savePolicy', profile),
+    removePolicy: (profileId: string) => ipcRenderer.invoke('workflows:removePolicy', profileId),
+    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }, controller?: { sessionKey: string; sessionId: string }, planInput?: WorkflowPlanInput) =>
+      ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle, issue, controller, planInput),
+    selectControllerRun: (sessionKey: string, runId: string) =>
+      ipcRenderer.invoke('workflows:selectControllerRun', sessionKey, runId),
+    removeControllerRun: (sessionKey: string, runId: string, reason?: string) =>
+      ipcRenderer.invoke('workflows:removeControllerRun', sessionKey, runId, reason),
     listRuns: (projectId: string) => ipcRenderer.invoke('workflows:listRuns', projectId),
     getRun: (runId: string) => ipcRenderer.invoke('workflows:getRun', runId),
     advanceStage: (
@@ -356,11 +363,12 @@ const praxis: PraxisIpc = {
       outcome: 'succeeded' | 'failed',
       detail?: { error?: string; snapshotRef?: string }
     ) => ipcRenderer.invoke('workflows:advanceStage', runId, nodeId, outcome, detail),
-    approveRun: (runId: string, actor: string, note?: string) =>
-      ipcRenderer.invoke('workflows:approveRun', runId, actor, note),
-    bypassGate: (runId: string, gate: string, actor: string, reason: string) =>
-      ipcRenderer.invoke('workflows:bypassGate', runId, gate, actor, reason),
+    approveRun: (runId: string, actor: string, note?: string, nodeId?: string) =>
+      ipcRenderer.invoke('workflows:approveRun', runId, actor, note, nodeId),
+    bypassGate: (runId: string, gate: string, actor: string, reason: string, nodeId?: string) =>
+      ipcRenderer.invoke('workflows:bypassGate', runId, gate, actor, reason, nodeId),
     retryStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:retryStage', runId, nodeId),
+    reworkStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:reworkStage', runId, nodeId),
     cancelRun: (runId: string, reason?: string) => ipcRenderer.invoke('workflows:cancelRun', runId, reason),
     onRunChanged: (listener: (runId: string) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, runId: string) => listener(runId);

@@ -22,9 +22,21 @@ export interface AgentWorkflowReference {
   id: string;
   name: string;
   description?: string;
+  /** Optional version declared by the pack front matter. */
+  version?: string;
   /** Repo-relative when possible so the same path works from a worktree. */
   instructionsPath: string;
   link?: string;
+}
+
+export type AgentWorkflowResolutionMode = 'content' | 'reference';
+
+/** Immutable provenance for the pack actually handed to a session. */
+export interface AgentWorkflowProvenance {
+  source: 'workspace';
+  resolutionMode: AgentWorkflowResolutionMode;
+  fingerprint: string;
+  version?: string;
 }
 
 export type WorkflowAssignmentSource = 'manual' | 'automatic' | 'analysis';
@@ -59,6 +71,7 @@ export interface AgentTaskDefinition {
   scope: string;
   definitionOfDone: string;
   workflow?: AgentWorkflowReference;
+  workflowProvenance?: AgentWorkflowProvenance;
   attachments?: AgentTaskAttachment[];
   nonGoals?: string[];
   completionContract?: string;
@@ -332,6 +345,20 @@ export interface AgentConversationMessage {
 /** Tool access granted to an agent session. Read-only is enforced by the host, not just prompted. */
 export type AgentToolMode = 'read-only' | 'full' | 'project-only';
 
+/** The transport that actually owned a session turn. */
+export type AgentRuntimeAdapter = 'acp' | 'gateway' | 'legacy-acp' | 'legacy-gateway';
+
+/** The role an AI session plays in a governed workflow. */
+export type WorkflowSessionRole = 'controller' | 'stage';
+
+/** Non-secret launch facts retained for session audit and recovery diagnostics. */
+export interface AgentRuntimeLaunch {
+  adapter: AgentRuntimeAdapter;
+  transport: 'acp' | 'gateway';
+  hostId?: string;
+  command?: string;
+}
+
 /** Explicit purpose of a user-facing AI session. */
 export type SessionMode = 'chat' | 'analysis' | 'review';
 
@@ -358,8 +385,12 @@ export interface AgentSessionRecord {
   toolMode?: AgentToolMode;
   /** Provider-owned identifier used when the runtime supports native resume. */
   runtimeSessionId?: string;
+  /** What actually launched this session; distinct from selected Agent Hub attribution. */
+  runtimeLaunch?: AgentRuntimeLaunch;
   /** Tracker connection bound when this issue session was created. */
   connectionId?: string;
+  /** Project workspace this interactive session belongs to, when known. */
+  projectId?: string;
   /**
    * Set when this session is a governed workflow stage (FX-BF-013). Together
    * these make a session traceable back to the run and node that started it —
@@ -367,7 +398,18 @@ export interface AgentSessionRecord {
    * Absent for ordinary ticket and composer sessions.
    */
   workflowRunId?: string;
+  /**
+   * Every governed run this interactive session controls, oldest first.
+   * `workflowRunId` remains the selected run for backwards compatibility and
+   * for the compact inspector summary; this list preserves earlier runs when
+   * someone adds another workflow from the same conversation.
+   */
+  workflowRunIds?: string[];
   workflowNodeId?: string;
+  /** The immutable workflow identity selected for this session. */
+  workflowId?: string;
+  workflowVersion?: number;
+  workflowRole?: WorkflowSessionRole;
   /**
    * Set when this session was launched from the Agent Hub (FX-BF-011): the
    * discovered runtime agent it is attributed to, and the skills that were
@@ -461,6 +503,10 @@ export interface AgentSessionRecord {
    */
   acpCurrentModeId?: string;
   acpAvailableModes?: AgentModeOption[];
+  /** Last failure message or abort reason recorded for this session. */
+  lastError?: string;
+  /** True when the failure was caused by a provider credit, rate, session, or usage limit. */
+  providerLimitReached?: boolean;
 }
 
 /** One slash command the agent advertised via `available_commands_update`. */

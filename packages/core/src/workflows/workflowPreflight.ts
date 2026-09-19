@@ -43,6 +43,7 @@ export interface AgentCatalogSnapshot {
 
 export type PreflightFailureKind =
   | 'agent-not-found'
+  | 'scope-mismatch'
   | 'profile-not-found'
   | 'profile-invalid'
   | 'profile-untrusted'
@@ -126,11 +127,26 @@ export function preflightStage(
     };
   }
 
+  if (agent.scope !== ref.scope) {
+    failures.push({
+      kind: 'scope-mismatch',
+      message: `Agent "${hostId}" belongs to the ${agent.scope} catalog, not the ${ref.scope} catalog.`,
+      remediation: `Select a ${ref.scope}-scoped host with id "${hostId}", or change the stage scope.`
+    });
+  }
+
   if ((ref.profileId || (catalog.profiles && catalog.profiles.length > 0)) && !profile) {
     failures.push({
       kind: 'profile-not-found',
       message: `Agent profile "${profileId}" is not in the ${ref.scope} catalog.`,
       remediation: `Create or import an AGENT.md profile with id "${profileId}", or select an existing profile.`
+    });
+  }
+  if (profile && profile.scope !== ref.scope) {
+    failures.push({
+      kind: 'scope-mismatch',
+      message: `Agent profile "${profileId}" belongs to the ${profile.scope} catalog, not the ${ref.scope} catalog.`,
+      remediation: `Select a ${ref.scope}-scoped profile with id "${profileId}", or change the stage scope.`
     });
   }
   if (profile?.error) {
@@ -256,6 +272,14 @@ function preflightSkills(
         kind: 'skill-invalid',
         message: `Skill "${name}" is invalid: ${skill.error}`,
         remediation: `Fix ${skill.instructionsPath}.`
+      });
+      continue;
+    }
+    if (skill.scope !== ref.scope) {
+      failures.push({
+        kind: 'scope-mismatch',
+        message: `Skill "${name}" belongs to the ${skill.scope} catalog, not the ${ref.scope} catalog.`,
+        remediation: `Select a ${ref.scope}-scoped skill, or change the stage scope.`
       });
       continue;
     }

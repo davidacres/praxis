@@ -45,6 +45,8 @@ export interface StageOutcome {
   exitCode?: number;
   /** Commit or worktree ref a mutating stage froze. */
   snapshotRef?: string;
+  /** Immutable upstream implementation snapshot this stage assessed. */
+  assessedSnapshotRef?: string;
   artifacts?: Array<{ contractId: string; kind: WorkflowArtifactKind; path?: string }>;
   findings?: CheckFindings;
 }
@@ -353,6 +355,7 @@ export class WorkflowOrchestrator {
                   ...(result.outcome.artifacts ? { artifacts: result.outcome.artifacts } : {}),
                   ...(result.outcome.exitCode !== undefined ? { exitCode: result.outcome.exitCode } : {}),
                   ...(result.outcome.snapshotRef ? { snapshotRef: result.outcome.snapshotRef } : {}),
+                  ...(result.outcome.assessedSnapshotRef ? { assessedSnapshotRef: result.outcome.assessedSnapshotRef } : {}),
                   ...(result.outcome.findings ? { findings: result.outcome.findings } : {})
                 })
               : applyWorkflowRunCommand(run, {

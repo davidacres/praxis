@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceRecord } from '@praxis/core';
+import type { SidebarMode } from './Sidebar';
 import { Icon } from '../ui/Icon';
 import { PraxisWordmark } from './StartupSplash';
 import {
@@ -32,6 +33,9 @@ export interface TitleBarProps {
   onImportProjects?: () => void;
   searching?: boolean;
   onToggleSearch?: () => void;
+  mode?: SidebarMode;
+  onToggleMode?: () => void;
+  onModeChange?: (mode: SidebarMode) => void;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
   auxVisible: boolean;
@@ -40,6 +44,7 @@ export interface TitleBarProps {
   onTogglePanel: () => void;
   focusMode?: boolean;
   onToggleFocusMode?: () => void;
+  focusModeAvailable?: boolean;
   canGoBack: boolean;
   onBack: () => void;
   canGoForward: boolean;
@@ -74,6 +79,9 @@ export function TitleBar({
   onImportProjects,
   searching,
   onToggleSearch,
+  mode = 'classic',
+  onToggleMode,
+  onModeChange,
   sidebarVisible,
   onToggleSidebar,
   auxVisible,
@@ -82,6 +90,7 @@ export function TitleBar({
   onTogglePanel,
   focusMode: explicitFocusMode,
   onToggleFocusMode,
+  focusModeAvailable = false,
   canGoBack,
   onBack,
   canGoForward,
@@ -326,8 +335,20 @@ export function TitleBar({
           )}
         </div>
 
-        <button className="icon-btn icon-btn-sm" aria-label="Filter">
-          <Icon name="sliders" size={14} />
+        <button
+          className="icon-btn icon-btn-sm"
+          aria-label={mode === 'classic' ? 'Switch to Work mode' : 'Switch to Classic mode'}
+          title={mode === 'classic' ? 'Classic mode (click to switch to Work mode)' : 'Work mode (click to switch to Classic mode)'}
+          onClick={() => {
+            if (onToggleMode) {
+              onToggleMode();
+            } else if (onModeChange) {
+              onModeChange(mode === 'classic' ? 'work' : 'classic');
+            }
+          }}
+          data-testid={mode === 'classic' ? 'mode-work' : 'mode-classic'}
+        >
+          <Icon name={mode === 'classic' ? 'columns' : 'robot'} size={14} />
         </button>
 
         <button
@@ -457,16 +478,18 @@ export function TitleBar({
         >
           <Icon name="sidebar-right" />
         </button>
-        <button
-          className={`icon-btn${isFocusMode ? ' active' : ''}`}
-          aria-label="Toggle focus mode"
-          title="Toggle focus mode"
-          aria-pressed={isFocusMode}
-          onClick={onToggleFocusMode}
-          data-testid="toggle-focus-mode"
-        >
-          <Icon name="layout-focus" />
-        </button>
+        {focusModeAvailable && (
+          <button
+            className={`icon-btn${isFocusMode ? ' active' : ''}`}
+            aria-label="Toggle focus mode"
+            title="Toggle focus mode"
+            aria-pressed={isFocusMode}
+            onClick={onToggleFocusMode}
+            data-testid="toggle-focus-mode"
+          >
+            <Icon name="layout-focus" />
+          </button>
+        )}
         <div className="titlebar-zoom-controls" data-testid="titlebar-zoom-controls" aria-label="Application zoom">
           <button
             className="icon-btn icon-btn-sm"

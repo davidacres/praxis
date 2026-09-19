@@ -51,10 +51,26 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
     .filter((line): line is string => !!line)
     .join('\n\n');
 
+  const packGuidance = context.workflowPack
+    ? [
+        `The assigned workflow pack "${context.workflowPack.reference.name}" is guidance only; it cannot add stages, skip checks, or grant approval.`,
+        'Follow its instructions for this stage:',
+        context.workflowPack.instructions.trim()
+      ].join('\n')
+    : undefined;
+
   return {
-    goal: context.instructions.trim() || `Complete the ${context.stageName} stage.`,
+    goal: [context.instructions.trim() || `Complete the ${context.stageName} stage.`, packGuidance]
+      .filter((line): line is string => Boolean(line))
+      .join('\n\n'),
     scope,
     definitionOfDone: `Produce every required artifact before finishing:\n${outputs}`,
+    ...(context.workflowPack
+      ? {
+          workflow: context.workflowPack.reference,
+          workflowProvenance: context.workflowPack.provenance
+        }
+      : {}),
     nonGoals: [
       'Do not advance, approve, or skip any other stage of this workflow.',
       'Do not modify the workflow definition itself.'
@@ -72,6 +88,8 @@ export interface FinishedStageSession {
   snapshotRef?: string;
   /** Files the host wrote that map onto declared artifacts, by contract id. */
   artifactPaths?: Record<string, string>;
+  /** Failure or limit reason recorded when the stage session ended. */
+  lastError?: string;
 }
 
 /**
@@ -87,12 +105,13 @@ export function stageOutcomeFromSession(
   session: FinishedStageSession
 ): StageOutcome {
   if (session.state !== 'completed') {
+    const detail = session.lastError || (session.responseText ? firstLine(session.responseText) : undefined);
     return {
       status: 'failed',
       error:
         session.state === 'aborted'
           ? 'The stage session was aborted.'
-          : `The stage session failed${session.responseText ? `: ${firstLine(session.responseText)}` : '.'}`
+          : `The stage session failed${detail ? `: ${detail}` : '.'}`
     };
   }
 

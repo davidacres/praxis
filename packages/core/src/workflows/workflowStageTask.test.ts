@@ -82,6 +82,31 @@ test('the brief forbids the agent advancing the workflow itself', () => {
   assert.ok(task.nonGoals?.some(goal => /approve, or skip/.test(goal)));
 });
 
+test('a governed stage receives bounded workflow-pack guidance and immutable provenance', () => {
+  const task = buildStageTaskDefinition(context({
+    workflowPack: {
+      reference: {
+        id: 'frontend-ui',
+        name: 'Frontend UI',
+        version: '2.1.0',
+        instructionsPath: '.github/skills/frontend-ui/SKILL.md'
+      },
+      instructions: 'Run the visual checks before declaring the stage complete.',
+      provenance: {
+        source: 'workspace',
+        resolutionMode: 'content',
+        fingerprint: 'sha256-pack',
+        version: '2.1.0'
+      }
+    }
+  }));
+
+  assert.equal(task.workflow?.id, 'frontend-ui');
+  assert.equal(task.workflowProvenance?.fingerprint, 'sha256-pack');
+  assert.match(task.goal, /visual checks/);
+  assert.match(task.goal, /guidance only/);
+});
+
 test('an empty instruction falls back to naming the stage rather than an empty goal', () => {
   const task = buildStageTaskDefinition(context({ instructions: '   ' }));
   assert.equal(task.goal, 'Complete the Review stage.');

@@ -13,6 +13,7 @@ interface ParsedWorkflowMetadata {
   id: string;
   name: string;
   description?: string;
+  version?: string;
 }
 
 export interface AgentWorkflowResolution {
@@ -160,10 +161,12 @@ function parseWorkflowMetadata(markdown: string, fallbackId: string): ParsedWork
   const id = extractFrontmatterValue(frontmatter, 'name') ?? fallbackId;
   const name = extractHeading(markdown) ?? titleFromSlug(id);
   const description = extractFrontmatterValue(frontmatter, 'description') ?? extractFirstParagraph(markdown);
+  const version = extractFrontmatterValue(frontmatter, 'version');
   return {
     id,
     name,
-    description
+    description,
+    ...(version ? { version } : {})
   };
 }
 
@@ -348,6 +351,7 @@ export async function resolveConfiguredAgentWorkflow(options: {
     id: metadata.id,
     name: metadata.name,
     description: metadata.description,
+    version: metadata.version,
     instructionsPath: toStoredInstructionsPath(options.workspaceRoot, instructionsFilePath),
     link: options.workflowUrl?.trim() || undefined
   };

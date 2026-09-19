@@ -30,7 +30,9 @@ import {
   type IssueTrackerService,
   type PermissionDecision,
   type SessionMode,
-  type VercelAgentStartOptions
+  type VercelAgentStartOptions,
+  isProviderLimitError,
+  extractProviderLimitMessage
 } from '@praxis/core';
 import {
   abortActiveTask,
@@ -43,7 +45,6 @@ import {
   listAiProviderStatuses,
   listApiModelOptions,
   listCliModelOptions,
-  resolveAcpStartOptions,
   resolveConnectionOptions,
   respondToActivePermission
 } from './aiInstance';
@@ -57,6 +58,12 @@ import { isAnalysisConfirmed } from './aiWorkflowIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
 import { getCurrentBranch } from './gitService';
 import { getProjectStore } from './projectStoreInstance';
+import {
+  continueAgentTask,
+  launchAgentTask,
+  prepareAgentLaunch,
+  preparePersistedAgentLaunch
+} from './agentSessionLauncher';
 
 /** Builds the default general task for an issue when the caller didn't supply one. */
 function buildDefaultTask(
@@ -307,46 +314,30 @@ export function registerAiIpc(): void {
       throw new Error(`No agent session found for ${issueKey}.`);
     }
     const provider = record.provider ?? getSettingsBackend().read().ai.activeProvider;
-    const descriptor = PROVIDER_DESCRIPTORS[provider];
     const settings = getSettingsBackend().read();
     const workingDirectory = record.workingDirectory?.trim() || settings.ai.workingDirectory.trim() || undefined;
     const toolMode = record.toolMode ?? 'full';
 
-    if (descriptor.kind === 'cli-agent') {
-      const browserMcp = await browserMcpServerForSession(issueKey, toolMode);
-      await getAcpAgentHost().continueTask(issueKey, followUp, {
-        ...resolveAcpStartOptions(provider),
-        model: record.model,
-        workingDirectory,
-        toolMode,
-        internalConversationTurn: options?.internalConversationTurn,
-        conversationContext: options?.conversationContext,
-        ...(browserMcp ? { mcpServers: [browserMcp] } : {})
-      });
-      return;
-    }
-
-    const connection = await resolveConnectionOptions(provider);
-    if (!connection.apiKey) {
-      throw new Error(`No ${descriptor.label} API key configured. Add one under Settings → AI Provider.`);
-    }
+    const prepared = await preparePersistedAgentLaunch(record, provider);
     const trackerService = record.issueKey.startsWith('SESSION-')
       ? undefined
       : await getServiceForConnection(record.connectionId).catch(() => undefined);
-    await agentService.resumeTask(issueKey, {
-      provider,
-      apiKey: connection.apiKey,
-      gatewayUrl: connection.gatewayUrl,
-      model: record.model || connection.model,
+    const browserMcp = prepared.plan.state === 'acp'
+      ? await browserMcpServerForSession(issueKey, toolMode)
+      : undefined;
+    await continueAgentTask(prepared, {
+      issueKey,
+      message: followUp,
+      model: record.model,
       workingDirectory,
       toolMode,
       internalConversationTurn: options?.internalConversationTurn,
       conversationContext: options?.conversationContext,
-      toolExtension: mergeToolExtensions(
-        trackerToolExtension(trackerService, toolMode),
-        browserToolExtension(toolMode)
-      )
-    }, followUp);
+      ...(browserMcp ? { mcpServers: [browserMcp] } : {}),
+      ...(prepared.plan.state === 'gateway'
+        ? { toolExtension: mergeToolExtensions(trackerToolExtension(trackerService, toolMode), browserToolExtension(toolMode)) }
+        : {})
+    });
   }
 
   const queuedConversationTurns = new Set<string>();
@@ -401,10 +392,23 @@ export function registerAiIpc(): void {
         internalConversationTurn: !humanMessage,
         conversationContext: conversationPrompt(prepared)
       });
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isLimit = isProviderLimitError(error);
+      const limitNotice = isLimit ? extractProviderLimitMessage(error) : undefined;
       const record = sessionManager.getAgentSession(issueKey);
-      if (record?.conversation?.state === 'running') sessionManager.finishAgentConversation(issueKey, 'failed');
-      throw new Error('The multi-AI conversation could not start its next turn.');
+      if (record?.conversation?.state === 'running') {
+        sessionManager.finishAgentConversation(issueKey, 'failed');
+        sessionManager.updateAgentState(issueKey, 'failed', limitNotice ?? message);
+        sessionManager.appendAgentEvents(issueKey, [
+          {
+            timestamp: new Date().toISOString(),
+            type: 'error',
+            summary: limitNotice ?? message
+          }
+        ]);
+      }
+      throw new Error(limitNotice ?? 'The multi-AI conversation could not start its next turn.');
     } finally {
       startingConversationTurns.delete(issueKey);
     }
@@ -544,11 +548,17 @@ export function registerAiIpc(): void {
       }
       const provider = input.provider ?? settings.ai.activeProvider;
       const descriptor = PROVIDER_DESCRIPTORS[provider];
+      const profileId = input.profileId ?? input.agentId;
+      const hostId = input.hostId ?? input.agentId;
 
-      // Only `kind: 'api'` providers need an API key up front — CLI-hosted
-      // providers (Claude Code, Codex) authenticate themselves.
-      const gateway = descriptor.kind === 'api' ? await resolveConnectionOptions(provider) : undefined;
-      if (descriptor.kind === 'api' && !gateway?.apiKey) {
+      // Provider-only sessions need an API key up front. A bound ACP host owns
+      // its own authentication, so selecting one must not be blocked by an
+      // unrelated API-provider setting.
+      const hasAgentBinding = !!profileId || !!hostId;
+      const gateway = !hasAgentBinding && descriptor.kind === 'api'
+        ? await resolveConnectionOptions(provider)
+        : undefined;
+      if (!hasAgentBinding && descriptor.kind === 'api' && !gateway?.apiKey) {
         throw new Error(`No ${descriptor.label} API key configured. Add one under Settings → AI Provider.`);
       }
 
@@ -672,53 +682,33 @@ export function registerAiIpc(): void {
       }
       const effectiveWorkingDirectory = worktree?.worktreePath ?? workingDirectory;
 
-      const profileId = input.profileId ?? input.agentId;
-      const hostId = input.hostId ?? input.agentId;
-      let skillActivations: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }> = [];
-      if (!!profileId !== !!hostId) throw new Error('A session binding requires both an agent profile and runtime host.');
-      if (profileId && hostId) {
-        const runtime = getAgentRuntimeManager();
-        const skillNames = input.skillNames ?? [];
-        await Promise.all(skillNames.map(name => runtime.activateSkill(hostId, name)));
-        const binding = await runtime.createBinding(profileId, hostId, { id: provider, ...(input.model ? { model: input.model } : {}) }, skillNames);
-        skillActivations = binding.activations.map(activation => {
-          const version = binding.skills.find(skill => skill.id === activation.skillId)?.version;
-          return { skillId: activation.skillId, mode: activation.mode, ...(version ? { version } : {}) };
-        });
-        taskDefinition.goal += `\n\n${await runtime.bindingContext(binding)}`;
-      }
-
-      if (descriptor.kind === 'cli-agent') {
-        const { command, args } = resolveAcpStartOptions(provider);
-        const browserMcp = await browserMcpServerForSession(issue.key, toolMode);
-        await getAcpAgentHost().startTask(issue, taskDefinition, provider, {
-          command,
-          args,
-          workingDirectory: effectiveWorkingDirectory,
-          model: input.model,
-          toolMode,
-          ...(browserMcp ? { mcpServers: [browserMcp] } : {})
-        });
-      } else {
-        await agentService.startTask(issue, taskDefinition, {
-          apiKey: gateway!.apiKey,
-          gatewayUrl: gateway!.gatewayUrl,
-          workingDirectory: effectiveWorkingDirectory,
-          model: input.model || gateway!.model,
-          provider,
-          toolMode,
-          toolExtension: mergeToolExtensions(
-            trackerToolExtension(issueService, toolMode),
-            browserToolExtension(toolMode)
-          )
-        });
-      }
+      const prepared = await prepareAgentLaunch({ profileId, hostId, provider, skillNames: input.skillNames });
+      if (prepared.binding) taskDefinition.goal += `\n\n${await getAgentRuntimeManager().bindingContext(prepared.binding)}`;
+      const skillActivations = prepared.skillActivations;
+      const browserMcp = prepared.plan.state === 'acp'
+        ? await browserMcpServerForSession(issue.key, toolMode)
+        : undefined;
+      await launchAgentTask(prepared, {
+        issue,
+        taskDefinition,
+        provider,
+        model: input.model,
+        workingDirectory: effectiveWorkingDirectory,
+        toolMode,
+        ...(browserMcp ? { mcpServers: [browserMcp] } : {}),
+        ...(prepared.plan.state === 'gateway'
+          ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode)) }
+          : {})
+      });
       const record = sessionManager.getAgentSession(issue.key);
       if (!record) {
         throw new Error(`Session for ${issue.key} did not start.`);
       }
       if (input.connectionId) {
         sessionManager.updateAgentRuntime(issue.key, { connectionId: input.connectionId });
+      }
+      if (input.projectId) {
+        sessionManager.updateAgentRuntime(issue.key, { projectId: input.projectId });
       }
       if (profileId && hostId) {
         sessionManager.updateAgentRuntime(issue.key, {

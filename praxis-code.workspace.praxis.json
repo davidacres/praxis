@@ -24,7 +24,7 @@
     {
       "id": "project-1788215224012-rap082",
       "name": "Praxis Desktop",
-      "key": "PRAXIS",
+      "key": "PRX",
       "type": "software",
       "purpose": "",
       "brief": {},
@@ -62,7 +62,7 @@
       "defaultAiToolMode": "full",
       "workItems": [],
       "createdAt": "2026-08-31T22:27:04.012Z",
-      "updatedAt": "2026-09-12T23:10:40.253Z",
+      "updatedAt": "2026-09-19T09:23:22.000Z",
       "projectFileStatus": "created",
       "icon": "rocket",
       "color": "green"

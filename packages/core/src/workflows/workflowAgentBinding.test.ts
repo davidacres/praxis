@@ -71,3 +71,15 @@ test('preflight fails closed when an explicit profile is missing', () => {
   assert.equal(result.ok, false);
   assert.equal(result.failures[0]?.kind, 'profile-not-found');
 });
+
+test('preflight fails closed when a resolved binding is from the wrong catalog scope', () => {
+  const result = preflightStage(node(), {
+    agents: [{ ...host, scope: 'project' }],
+    runtimeHosts: [{ ...host, scope: 'project' }],
+    profiles: [{ ...profile, scope: 'project' }],
+    skills: [],
+    capabilities: {}
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.failures.filter(failure => failure.kind === 'scope-mismatch').length >= 2);
+});

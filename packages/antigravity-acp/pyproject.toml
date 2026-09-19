@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "antigravity-acp"
+version = "0.1.0"
+description = "ACP stdio server wrapping the Antigravity (agy) CLI"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+antigravity-acp = "antigravity_acp.server:run"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["antigravity_acp*"]

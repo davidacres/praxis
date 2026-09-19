@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AgentSessionRecord } from '@praxis/core';
+import type { AgentSessionRecord, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
@@ -36,6 +36,8 @@ import { failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens
 
 export interface SessionInspectorProps {
   session?: AgentSessionRecord;
+  /** Open this session's durable workflow run in the detailed monitor. */
+  onOpenWorkflowRun?: (runId: string) => void;
 }
 
 type InspectorTab = 'summary' | 'activity' | 'changes';
@@ -46,16 +48,38 @@ const TABS: Array<{ id: InspectorTab; label: string }> = [
   { id: 'changes', label: 'Changes' }
 ];
 
-export function SessionInspector({ session }: SessionInspectorProps) {
+export function SessionInspector({ session, onOpenWorkflowRun }: SessionInspectorProps) {
   const { confirm } = useDialogs();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<InspectorTab>('summary');
+  const [workflowRun, setWorkflowRun] = useState<WorkflowRunSummary>();
 
   // Switching session resets to Summary. Keeping the previous tab would land
   // you on another session's Activity with no idea why you are looking at it.
   const sessionId = session?.sessionId;
   useEffect(() => setTab('summary'), [sessionId]);
+
+  const workflowRunId = session?.workflowRunId;
+  useEffect(() => {
+    let active = true;
+    setWorkflowRun(undefined);
+    if (!workflowRunId) return () => { active = false; };
+
+    const refresh = () => {
+      void window.praxis.workflows.getRun(workflowRunId).then(run => {
+        if (active) setWorkflowRun(run);
+      });
+    };
+    refresh();
+    const unsubscribe = window.praxis.workflows.onRunChanged(runId => {
+      if (runId === workflowRunId) refresh();
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [workflowRunId]);
 
   if (!session) {
     return (
@@ -141,6 +165,35 @@ export function SessionInspector({ session }: SessionInspectorProps) {
       <div className="inspector-body" role="tabpanel" data-testid={`session-panel-${tab}`}>
         {tab === 'summary' && (
           <>
+            {(session.workflowRunId || session.taskDefinition.workflow) && (
+              <div className="agent-runtime-block session-workflow-context" data-testid="session-workflow-context">
+                <span className="rail-sub">Governed workflow</span>
+                <strong>{workflowRun?.workflowName ?? session.taskDefinition.workflow?.name ?? session.workflowId ?? 'Workflow run'}</strong>
+                {session.workflowRunId && (
+                  <p className="rail-sub">
+                    Run {session.workflowRunId}
+                    {session.workflowNodeId ? ` · ${session.workflowNodeId}` : ''}
+                    {session.workflowRole ? ` · ${session.workflowRole}` : ''}
+                  </p>
+                )}
+                {session.taskDefinition.workflow && (
+                  <p className="rail-sub">
+                    Pack: {session.taskDefinition.workflow.name}
+                    {session.taskDefinition.workflow.version ? ` · v${session.taskDefinition.workflow.version}` : ''}
+                    {session.taskDefinition.workflowProvenance?.fingerprint
+                      ? ` · ${session.taskDefinition.workflowProvenance.fingerprint.slice(0, 12)}`
+                      : ''}
+                  </p>
+                )}
+              </div>
+            )}
+            {session.workflowRunId && (
+              <WorkflowExecutionSummary
+                run={workflowRun}
+                currentNodeId={session.workflowNodeId}
+                onOpenRun={onOpenWorkflowRun}
+              />
+            )}
             <SessionPurposeBlock session={session} />
             <SessionHandoverBrief session={session} />
             <SessionRuntimeHistory session={session} />
@@ -214,5 +267,78 @@ export function SessionInspector({ session }: SessionInspectorProps) {
       </div>
       {error && <p className="hint is-danger">{error}</p>}
     </section>
+  );
+}
+
+function WorkflowExecutionSummary({
+  run,
+  currentNodeId,
+  onOpenRun
+}: {
+  run?: WorkflowRunSummary;
+  currentNodeId?: string;
+  onOpenRun?: (runId: string) => void;
+}) {
+  if (!run) {
+    return (
+      <div className="agent-runtime-block session-workflow-progress" data-testid="session-workflow-progress-loading">
+        <span className="rail-sub">Workflow execution</span>
+        <span className="placeholder-text">Loading current stage…</span>
+      </div>
+    );
+  }
+
+  const completed = run.stages.filter(stage => stage.outcome === 'succeeded' || stage.outcome === 'skipped').length;
+  const active = run.stages.find(stage => stage.nodeId === currentNodeId)
+    ?? run.stages.find(stage => stage.lane === 'running' || stage.lane === 'awaiting' || stage.lane === 'ready');
+  const blockedGate = run.gates.find(gate => !['passed', 'bypassed'].includes(gate.state));
+
+  return (
+    <div className="agent-runtime-block session-workflow-progress" data-testid="session-workflow-progress">
+      <div className="session-workflow-progress-heading">
+        <span className="rail-sub">Workflow execution</span>
+        <span className={`chip session-workflow-status session-workflow-status-${run.status}`}>{run.status}</span>
+      </div>
+      <div className="session-workflow-progress-track" aria-label={`${completed} of ${run.stages.length} workflow stages complete`}>
+        <span style={{ width: `${run.stages.length ? Math.round((completed / run.stages.length) * 100) : 0}%` }} />
+      </div>
+      <p className="rail-sub session-workflow-progress-summary">
+        {completed} of {run.stages.length} stages complete
+        {active ? ` · ${active.name}: ${active.phase ?? (active.outcome === 'pending' ? active.lane : active.outcome)}` : ''}
+      </p>
+      {active && (
+        <p className="session-workflow-current-activity" data-testid="session-workflow-current-activity">
+          <strong>Now:</strong> {active.name} {active.phase ? `— ${active.phase}` : active.outcome === 'pending' ? `is ${active.lane}` : active.outcome}
+        </p>
+      )}
+      {blockedGate && (
+        <p className="session-workflow-gate" data-testid="session-workflow-blocked-gate">
+          {blockedGate.gate} gate: {blockedGate.state}
+        </p>
+      )}
+      <ol className="session-workflow-stage-list" aria-label="Workflow stages">
+        {run.stages.map(stage => {
+          const done = stage.outcome === 'succeeded' || stage.outcome === 'skipped';
+          const current = stage.nodeId === currentNodeId || (!currentNodeId && stage === active);
+          return (
+            <li key={stage.nodeId} className={`${done ? 'is-done' : ''}${current ? ' is-current' : ''}`}>
+              <span className="session-workflow-stage-marker" aria-hidden="true">{done ? '✓' : '·'}</span>
+              <span className="session-workflow-stage-name">{stage.name}</span>
+              <span className="rail-sub">{stage.phase ?? (stage.outcome === 'pending' ? stage.lane : stage.outcome)}</span>
+            </li>
+          );
+        })}
+      </ol>
+      {onOpenRun && (
+        <button
+          type="button"
+          className="btn btn-compact session-workflow-open-run"
+          data-testid="session-workflow-open-run"
+          onClick={() => onOpenRun(run.runId)}
+        >
+          Open full run
+        </button>
+      )}
+    </div>
   );
 }

@@ -16,6 +16,7 @@ import {
   WorkflowRunStore,
   applyWorkflowRunCommand,
   approveStage,
+  resolveApprovalTarget,
   summarizeWorkflowRun,
   type MobileCommand,
   type WorkflowPolicyProfile,
@@ -144,8 +145,7 @@ export function createDesktopMobileHostServiceDeps(): MobileHostServiceDeps {
     },
     approveRun: async (runId, actor, note) => {
       await getWorkflowOrchestrator().updateRun(runId, run => {
-        const approval = run.definition.nodes.find(node => node.type === 'approval');
-        if (!approval) throw new Error('This workflow has no approval stage.');
+        const approval = resolveApprovalTarget(run);
         const result = approveStage(
           run,
           approval.id,
