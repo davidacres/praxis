@@ -5,6 +5,7 @@ import {
   type GatewayToolDefinition,
   type StreamChatEvent,
   type TokenUsage,
+  type WireImageAttachment,
   type WireMessage
 } from '../gateway/wire';
 
@@ -24,6 +25,10 @@ import {
 export interface GeminiPart {
   text?: string;
   thought?: boolean;
+  inlineData?: {
+    mimeType: string;
+    data: string;
+  };
   functionCall?: {
     name: string;
     args?: Record<string, unknown>;
@@ -32,6 +37,10 @@ export interface GeminiPart {
     name: string;
     response: Record<string, unknown>;
   };
+}
+
+function imageParts(images: readonly WireImageAttachment[] | undefined): GeminiPart[] {
+  return (images ?? []).map(image => ({ inlineData: { mimeType: image.mimeType, data: image.dataBase64 } }));
 }
 
 export interface GeminiContent {
@@ -153,7 +162,9 @@ export function toGeminiContents(messages: readonly WireMessage[]): {
     // Role 'user' (system only ever appears leading, handled above)
     contents.push({
       role: 'user',
-      parts: [{ text: msg.content ?? '' }]
+      parts: msg.images?.length
+        ? [...(msg.content ? [{ text: msg.content }] : []), ...imageParts(msg.images)]
+        : [{ text: msg.content ?? '' }]
     });
     i++;
   }

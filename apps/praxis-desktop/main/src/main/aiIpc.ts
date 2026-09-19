@@ -31,6 +31,7 @@ import {
   type PermissionDecision,
   type SessionMode,
   type VercelAgentStartOptions,
+  type WireImageAttachment,
   isProviderLimitError,
   extractProviderLimitMessage
 } from '@praxis/core';
@@ -46,7 +47,8 @@ import {
   listApiModelOptions,
   listCliModelOptions,
   resolveConnectionOptions,
-  respondToActivePermission
+  respondToActivePermission,
+  testProviderConnection
 } from './aiInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { getSecretsStore } from './connectionStoreInstance';
@@ -64,6 +66,38 @@ import {
   prepareAgentLaunch,
   preparePersistedAgentLaunch
 } from './agentSessionLauncher';
+
+/**
+ * Normalises untrusted image attachments crossing IPC into strict
+ * `WireImageAttachment`s: base64 strings (no `data:` prefix) on a known image
+ * mime type, capped in count and total decoded size so a runaway composer
+ * cannot stall the turn or the persisted transcript.
+ */
+function sanitizeImages(images: unknown): WireImageAttachment[] {
+  if (!Array.isArray(images)) return [];
+  const allowedMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+  const sanitized: WireImageAttachment[] = [];
+  let totalBytes = 0;
+  for (const raw of images) {
+    if (sanitized.length >= MAX_ATTACHED_IMAGES) break;
+    const mimeType = typeof (raw as WireImageAttachment)?.mimeType === 'string'
+      ? (raw as WireImageAttachment).mimeType.toLowerCase()
+      : '';
+    const dataBase64 = typeof (raw as WireImageAttachment)?.dataBase64 === 'string'
+      ? (raw as WireImageAttachment).dataBase64.replace(/^data:[^,]*,/, '').replace(/\s+/g, '')
+      : '';
+    if (!allowedMimeTypes.has(mimeType) || !dataBase64 || dataBase64.length % 4 !== 0) continue;
+    totalBytes += Math.floor(dataBase64.length * 3 / 4);
+    if (totalBytes > MAX_ATTACHED_IMAGE_BYTES) break;
+    sanitized.push({ mimeType, dataBase64 });
+  }
+  return sanitized;
+}
+
+/** Cap on images carried by a single user turn. */
+const MAX_ATTACHED_IMAGES = 4;
+/** Cap on total decoded image bytes per turn (12 MB) — mirrors typical provider request limits. */
+const MAX_ATTACHED_IMAGE_BYTES = 12 * 1024 * 1024;
 
 /** Builds the default general task for an issue when the caller didn't supply one. */
 function buildDefaultTask(
@@ -303,7 +337,12 @@ export function registerAiIpc(): void {
   async function continueRecordedSession(
     issueKey: string,
     message: string,
-    options?: { internalConversationTurn?: boolean; conversationContext?: string }
+    options?: {
+      internalConversationTurn?: boolean;
+      conversationContext?: string;
+      /** Images pasted/dropped into the composer, forwarded to the agent with the message. */
+      images?: WireImageAttachment[];
+    }
   ): Promise<void> {
     const followUp = message.trim();
     if (!followUp) {
@@ -328,6 +367,7 @@ export function registerAiIpc(): void {
     await continueAgentTask(prepared, {
       issueKey,
       message: followUp,
+      ...(options?.images?.length ? { images: options.images } : {}),
       model: record.model,
       workingDirectory,
       toolMode,
@@ -376,7 +416,7 @@ export function registerAiIpc(): void {
     }, 0);
   }
 
-  async function runConversationTurn(issueKey: string, humanMessage?: string): Promise<void> {
+  async function runConversationTurn(issueKey: string, humanMessage?: string, images?: WireImageAttachment[]): Promise<void> {
     if (startingConversationTurns.has(issueKey)) return;
     const current = sessionManager.getAgentSession(issueKey);
     if (!current?.conversation || current.conversation.state !== 'running') return;
@@ -390,7 +430,8 @@ export function registerAiIpc(): void {
       if (prepared.conversation?.state !== 'running') return;
       await continueRecordedSession(issueKey, humanMessage ?? 'Continue the conversation.', {
         internalConversationTurn: !humanMessage,
-        conversationContext: conversationPrompt(prepared)
+        conversationContext: conversationPrompt(prepared),
+        images: images
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -440,6 +481,12 @@ export function registerAiIpc(): void {
       const statuses = await listAiProviderStatuses();
       return statuses.find(s => s.provider === provider) ?? (await getAiProviderStatus());
     }
+  );
+
+  ipcMain.handle(
+    'ai:testProviderApiKey',
+    async (_event: Electron.IpcMainInvokeEvent, provider: AiProvider) =>
+      testProviderConnection(provider)
   );
 
   ipcMain.handle('ai:resetProviderApiKeys', async () => {
@@ -806,11 +853,16 @@ export function registerAiIpc(): void {
 
   ipcMain.handle(
     'ai:continueSession',
-    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, message: string) => {
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      issueKey: string,
+      message: string,
+      images?: WireImageAttachment[]
+    ) => {
       if (sessionManager.getAgentSession(issueKey)?.conversation?.state === 'running') {
         throw new Error('Stop the multi-AI conversation before sending a single-agent follow-up.');
       }
-      await continueRecordedSession(issueKey, message);
+      await continueRecordedSession(issueKey, message, { images: sanitizeImages(images) });
     }
   );
 
@@ -902,17 +954,22 @@ export function registerAiIpc(): void {
 
   ipcMain.handle(
     'ai:sendConversationMessage',
-    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, input: { participantId: string; message: string }) => {
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      issueKey: string,
+      input: { participantId: string; message: string; images?: WireImageAttachment[] }
+    ) => {
       const message = typeof input?.message === 'string' ? input.message.trim() : '';
-      if (!message) throw new Error('Enter a message for the AI conversation.');
+      const images = sanitizeImages(input?.images);
+      if (!message && images.length === 0) throw new Error('Enter a message for the AI conversation.');
       const record = sessionManager.getAgentSession(issueKey);
       if (!record?.conversation || record.conversation.state !== 'running') throw new Error('No running multi-AI conversation.');
-      sessionManager.queueAgentConversationMessage(issueKey, input.participantId, message);
+      sessionManager.queueAgentConversationMessage(issueKey, input.participantId, message, images);
       if (!hasActiveTask(issueKey) && !startingConversationTurns.has(issueKey)) {
         const pending = sessionManager.takeAgentConversationMessage(issueKey);
         if (pending) {
           sessionManager.setAgentConversationSpeaker(issueKey, pending.participantId);
-          void runConversationTurn(issueKey, pending.message).catch(() => undefined);
+          void runConversationTurn(issueKey, pending.message, pending.images).catch(() => undefined);
         }
       }
       return sessionManager.getAgentSession(issueKey)!;
@@ -1137,7 +1194,7 @@ export function registerAiIpc(): void {
       if (next?.conversation?.state === 'running') {
         if (pending) {
           sessionManager.setAgentConversationSpeaker(issueKey, pending.participantId);
-          void runConversationTurn(issueKey, pending.message).catch(() => undefined);
+          void runConversationTurn(issueKey, pending.message, pending.images).catch(() => undefined);
         } else {
           queueConversationTurn(issueKey);
         }

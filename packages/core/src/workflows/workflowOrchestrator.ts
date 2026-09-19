@@ -25,6 +25,7 @@
 import {
   isAgentTaskNode,
   isCheckNode,
+  nodeMutatesWorktree,
   type CheckFindings,
   type WorkflowAgentTaskNode,
   type WorkflowArtifactKind,
@@ -32,7 +33,9 @@ import {
 } from './workflowTypes';
 import {
   applyWorkflowRunCommand,
+  downstreamNodeIds,
   isRunSettled,
+  reworkWorkflowRun,
   type WorkflowRun
 } from './workflowRun';
 import { advanceJoins, scheduleWorkflowRun } from './workflowScheduler';
@@ -366,7 +369,28 @@ export class WorkflowOrchestrator {
                   ...(result.outcome.exitCode !== undefined ? { exitCode: result.outcome.exitCode } : {}),
                   ...(result.outcome.findings ? { findings: result.outcome.findings } : {})
                 });
-        if (next !== run) await this.persist(next);
+        if (next !== run) {
+          const stage = next.definition.nodes.find(candidate => candidate.id === nodeId);
+          const downstreamHasPriorEvidence = Boolean(
+            stage && nodeMutatesWorktree(stage) && result.kind === 'outcome'
+              && result.outcome.status === 'succeeded' && result.outcome.snapshotRef
+              && next.definition.edges.some(edge => edge.from === nodeId)
+              && (() => {
+                const downstream = downstreamNodeIds(next, nodeId);
+                downstream.delete(nodeId);
+                return Object.values(next.nodes).some(state => downstream.has(state.nodeId) && state.attempts.length > 0)
+                  || next.gateDecisions.some(decision => downstream.has(decision.nodeId));
+              })()
+          );
+          if (downstreamHasPriorEvidence) {
+            const refreshed = reworkWorkflowRun(next, nodeId, at, { rerunSource: false });
+            if (!refreshed.reason) {
+              await this.persist(refreshed.run);
+              return;
+            }
+          }
+          await this.persist(next);
+        }
       },
       `settling ${nodeId}`
     );

@@ -22,6 +22,8 @@ export interface AiReviewRuntimeOptions {
   signal?: AbortSignal;
   onUpdate?: (markdown: string) => void;
   userPrompt?: string;
+  /** Workflow Designer assistant mode may author a validated workflow, but never files or arbitrary actions. */
+  allowMutations?: boolean;
 }
 
 /** Runs ticket review/analysis through the exact runtime selected in ticket details. */
@@ -41,7 +43,7 @@ export async function reviewIssueWithRuntime(
     if (!connection.apiKey) {
       throw new Error(`No ${descriptor.label} API key configured. Add one under Settings → AI Provider.`);
     }
-    const review = options.provider === 'openai'
+    const review = options.provider === 'openai' || options.provider === 'z-ai'
       ? reviewTicketWithOpenAi
       : options.provider === 'anthropic'
         ? reviewTicketWithClaude
@@ -53,13 +55,16 @@ export async function reviewIssueWithRuntime(
       model: options.model?.trim() || connection.model,
       systemPrompt,
       signal: options.signal,
-      onUpdate: options.onUpdate
+      onUpdate: options.onUpdate,
+      ...(descriptor.apiPath ? { apiPath: descriptor.apiPath } : {})
     });
   }
 
   const prompt = [
     systemPrompt,
-    'This is a read-only ticket review. Do not modify files or run destructive commands.',
+    options.allowMutations
+      ? 'This is a constrained Workflow Designer assistant. You may propose only changes to the supplied workflow definition; do not modify files, run commands, access tickets, or perform any other action.'
+      : 'This is a read-only ticket review. Do not modify files or run destructive commands.',
     `Review this ticket and respond in markdown:\n\n${buildTicketContext(issue)}`
   ].join('\n\n');
   const emit = (content: string) => options.onUpdate?.(`## AI Review by ${agentName}\n\n${content}`);

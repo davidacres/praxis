@@ -2,6 +2,7 @@ import type { AiSettings } from '../config/appSettings';
 import type { SecretsStore } from '../host/secrets';
 import type { AiProvider } from '../types';
 import { PROVIDER_DESCRIPTORS } from './providers/registry';
+import { isExecutableAvailable } from './cliProbe';
 import {
   clearVercelApiKey,
   getStoredVercelApiKey,
@@ -21,7 +22,7 @@ export function secretKeyForProvider(provider: AiProvider): string {
 }
 
 /** Providers whose credentials are stored in the AI provider secrets namespace. */
-const API_KEY_PROVIDERS: AiProvider[] = ['vercel-gateway', 'openai', 'anthropic', 'gemini'];
+const API_KEY_PROVIDERS: AiProvider[] = ['vercel-gateway', 'openai', 'anthropic', 'gemini', 'z-ai'];
 
 /** Clears all AI provider keys without touching connection or OAuth secrets. */
 export async function resetProviderApiKeys(secrets: SecretsStore): Promise<void> {
@@ -75,12 +76,23 @@ export async function resolveProviderApiKey(
   return getStoredProviderApiKey(secrets, provider);
 }
 
-/** `kind: 'api'` providers a one-shot completion prompt can call directly. */
-const RECOMMENDATION_CANDIDATE_PROVIDERS: readonly AiProvider[] = ['vercel-gateway', 'openai', 'anthropic', 'gemini'];
+/** Providers that can run the constrained recommendation prompt, either through
+ * a direct API completion or through an ACP-hosted CLI subprocess. */
+const RECOMMENDATION_CANDIDATE_PROVIDERS: readonly AiProvider[] = [
+  'vercel-gateway',
+  'openai',
+  'anthropic',
+  'gemini',
+  'z-ai',
+  'claude-code-cli',
+  'codex-cli',
+  'copilot-cli',
+  'antigravity-cli'
+];
 
 export interface RecommendationProviderChoice {
   provider: AiProvider;
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string;
   model?: string;
 }
@@ -94,9 +106,10 @@ function recommendationProviderConfig(provider: AiProvider, ai: AiSettings): { b
 }
 
 /**
- * Picks which `kind: 'api'` provider a one-shot AI "recommendation" completion
+ * Picks which provider a one-shot AI "recommendation" completion
  * (workflow template pick, workflow agent-for-stage pick) should use, and
- * resolves its credentials/config in one step.
+ * resolves its credentials/config in one step. API providers use their direct
+ * completion endpoint; ACP providers are launched by the desktop host.
  *
  * `ai.recommendationProvider` wins outright when set — if it isn't actually
  * configured, this throws rather than silently substituting a provider the
@@ -112,6 +125,16 @@ export async function resolveRecommendationProvider(
 ): Promise<RecommendationProviderChoice> {
   const explicit = ai.recommendationProvider;
   if (explicit) {
+    const descriptor = PROVIDER_DESCRIPTORS[explicit];
+    if (descriptor.kind === 'cli-agent') {
+      const command = ai.providers[explicit]?.cliPath?.trim() || descriptor.defaultCommand;
+      if (!command || !(await isExecutableAvailable(command))) {
+        throw new Error(
+          `${descriptor.label} is not available — install or configure its ACP command in Settings → AI, or change the Recommendations provider setting.`
+        );
+      }
+      return { provider: explicit, ...recommendationProviderConfig(explicit, ai) };
+    }
     const apiKey = await resolveProviderApiKey(secrets, explicit);
     if (!apiKey) {
       throw new Error(
@@ -130,10 +153,18 @@ export async function resolveRecommendationProvider(
     return true;
   });
   for (const provider of ordered) {
+    const descriptor = PROVIDER_DESCRIPTORS[provider];
+    if (descriptor.kind === 'cli-agent') {
+      const command = ai.providers[provider]?.cliPath?.trim() || descriptor.defaultCommand;
+      if (command && (await isExecutableAvailable(command))) {
+        return { provider, ...recommendationProviderConfig(provider, ai) };
+      }
+      continue;
+    }
     const apiKey = await resolveProviderApiKey(secrets, provider);
     if (apiKey) {
       return { provider, apiKey, ...recommendationProviderConfig(provider, ai) };
     }
   }
-  throw new Error('No AI provider is configured — add an API key in Settings → AI to use recommendations.');
+  throw new Error('No AI provider is configured — add an API key or an available ACP host in Settings → AI to use recommendations.');
 }

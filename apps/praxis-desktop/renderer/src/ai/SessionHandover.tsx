@@ -11,9 +11,8 @@ import type {
   SessionRuntimeEpoch
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { isTerminalAgentState } from './aiSessionState';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName, refreshModelOptions } from './modelProviders';
-import { formatStarted } from './sessionNav';
+import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing } from './sessionNav';
 
 function purposeOf(session: AgentSessionRecord) {
   return session.purpose ?? {
@@ -437,66 +436,78 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
           </div>
           {loading && <div className="popover-label">Loading models…</div>}
           {!loading && filteredOptions.length === 0 && <div className="popover-label">No models available</div>}
-          {filteredOptions.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              className={`composer-provider-option${session.model === option.value ? ' active' : ''}`}
-              data-testid={`session-model-option-${option.value}`}
-              role="option"
-              aria-selected={session.model === option.value}
-              title={option.description}
-              disabled={busy}
-              onClick={() => void changeModel(option.value)}
-            >
-              <Icon name="sparkles" size={14} />
-              {option.name || option.value}
-            </button>
-          ))}
+          {filteredOptions.map(option => {
+            const contextLimit = option.contextLength ?? getKnownContextLength(option.value, session.provider);
+            const contextSize = formatContextLength(contextLimit);
+            const pricing = option.pricing ?? getModelPricing(session.provider, option.value);
+            const cost = formatModelCost(pricing);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`composer-provider-option${session.model === option.value ? ' active' : ''}`}
+                data-testid={`session-model-option-${option.value}`}
+                role="option"
+                aria-selected={session.model === option.value}
+                title={option.description}
+                disabled={busy}
+                onClick={() => void changeModel(option.value)}
+              >
+                <Icon name="sparkles" size={14} />
+                <span className="composer-model-option-name">{option.name || option.value}</span>
+                {(contextSize || cost) && (
+                  <span className="composer-model-option-meta">
+                    {contextSize && <span className="composer-model-badge is-context">{contextSize}</span>}
+                    {cost && <span className="composer-model-badge is-cost">{cost}</span>}
+                  </span>
+                )}
+              </button>
+            );
+          })}
           {error && <p className="session-popover-error">{error}</p>}
         </>
       ) : (
         <>
           {loading && <div className="popover-label">Loading providers…</div>}
-          {!loading && [...MODEL_PROVIDERS].map(provider => {
-            const unavailable = !providerIsSelectable(provider);
-            return (
-              <div
-                key={provider}
-                className={`composer-provider-option${session.provider === provider ? ' active' : ''}${unavailable ? ' is-unavailable' : ''}`}
-                data-testid={`session-provider-option-${provider}`}
-                role="option"
-                aria-selected={session.provider === provider}
-                aria-disabled={unavailable}
-                tabIndex={unavailable ? -1 : 0}
-                title={unavailable ? 'Configure this provider in Settings first' : undefined}
-                onClick={unavailable ? undefined : () => chooseProvider(provider)}
-                onKeyDown={unavailable ? undefined : event => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    chooseProvider(provider);
-                  }
+          {/* Only providers with a usable key/CLI (or the session's own current
+              one, so it stays visible even if its config changed underneath
+              it) are worth showing — an unconfigured entry has no working
+              action here (its row and "add" button were both dead clicks). */}
+          {!loading && [...MODEL_PROVIDERS].filter(providerIsSelectable).map(provider => (
+            <div
+              key={provider}
+              className={`composer-provider-option${session.provider === provider ? ' active' : ''}`}
+              data-testid={`session-provider-option-${provider}`}
+              role="option"
+              aria-selected={session.provider === provider}
+              tabIndex={0}
+              onClick={() => chooseProvider(provider)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  chooseProvider(provider);
+                }
+              }}
+            >
+              <Icon name={providerIconName(provider)} size={14} />
+              <span>{PROVIDER_LABELS[provider]}</span>
+              <button
+                type="button"
+                className="composer-provider-add"
+                aria-label={`Add ${PROVIDER_LABELS[provider]} to this chat`}
+                data-testid={`session-provider-add-${provider}`}
+                onClick={event => {
+                  event.stopPropagation();
+                  onAddProvider?.(provider);
                 }}
               >
-                <Icon name={providerIconName(provider)} size={14} />
-                <span>{PROVIDER_LABELS[provider]}</span>
-                {unavailable && <small>Not configured</small>}
-                <button
-                  type="button"
-                  className="composer-provider-add"
-                  aria-label={`Add ${PROVIDER_LABELS[provider]} to this chat`}
-                  data-testid={`session-provider-add-${provider}`}
-                  disabled={unavailable}
-                  onClick={event => {
-                    event.stopPropagation();
-                    onAddProvider?.(provider);
-                  }}
-                >
-                  <Icon name="plus" size={13} />
-                </button>
-              </div>
-            );
-          })}
+                <Icon name="plus" size={13} />
+              </button>
+            </div>
+          ))}
+          {!loading && [...MODEL_PROVIDERS].every(provider => !providerIsSelectable(provider)) && (
+            <div className="popover-label">No providers configured — add one in Settings → AI.</div>
+          )}
           {error && <p className="session-popover-error">{error}</p>}
         </>
       )}
@@ -509,11 +520,28 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
 
 export function SessionConversationDialog({ session, open, position, onClose, initialProvider }: { session: AgentSessionRecord; open: boolean; position: ComposerPopoverPosition | undefined; onClose: () => void; initialProvider?: AiProvider }) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const defaultProvider = [...MODEL_PROVIDERS].find(provider => provider !== session.provider) ?? session.provider ?? 'openai';
+  // Undefined until the fetch below resolves — an empty configured list at
+  // that point reads as "still loading", not "nothing configured".
+  const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>();
+  const configuredProviders = [...MODEL_PROVIDERS].filter(id =>
+    providerStatuses?.some(status => status.provider === id && status.configured)
+  );
+  const defaultProvider =
+    configuredProviders.find(id => id !== session.provider) ?? configuredProviders[0] ?? session.provider ?? 'openai';
   const [provider, setProvider] = useState<AiProvider>(defaultProvider);
   const [model, setModel] = useState('');
   const [mode, setMode] = useState<AgentConversationMode>('consult');
   const [turnCap, setTurnCap] = useState(6);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void window.praxis.ai.listProviderStatuses().then(statuses => {
+      if (!cancelled) setProviderStatuses(statuses);
+    });
+    return () => { cancelled = true; };
+  }, [open]);
+
   useEffect(() => {
     if (open && initialProvider) setProvider(initialProvider);
   }, [open, initialProvider]);
@@ -528,7 +556,13 @@ export function SessionConversationDialog({ session, open, position, onClose, in
     setMode('consult');
     setTurnCap(6);
     setError(undefined);
-  }, [open, session.issueKey, defaultProvider]);
+    // Deliberately not keyed on `defaultProvider`/`providerStatuses`: this
+    // resets the form once when the dialog opens, not every time the async
+    // provider-status fetch resolves — otherwise it would stomp on
+    // `initialProvider` (set in the same batch as `open`) or a selection the
+    // user already made while the fetch was still in flight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, session.issueKey]);
 
   useEffect(() => {
     if (!open) return;
@@ -588,8 +622,15 @@ export function SessionConversationDialog({ session, open, position, onClose, in
         </div>
         <p className="session-popover-note">Starts a bounded conversation. Two models may incur spend; only one can hold tools at a time.</p>
         <label className="session-brief-field"><span className="rail-sub">Second AI provider</span>
-          <select data-testid="session-conversation-provider" value={provider} onChange={event => setProvider(event.target.value as AiProvider)}>
-            {[...MODEL_PROVIDERS].map(id => <option key={id} value={id}>{PROVIDER_LABELS[id]}</option>)}
+          <select
+            data-testid="session-conversation-provider"
+            value={provider}
+            disabled={!providerStatuses || configuredProviders.length === 0}
+            onChange={event => setProvider(event.target.value as AiProvider)}
+          >
+            {!providerStatuses && <option value={provider}>Loading providers…</option>}
+            {providerStatuses && configuredProviders.length === 0 && <option value={provider}>No providers configured</option>}
+            {configuredProviders.map(id => <option key={id} value={id}>{PROVIDER_LABELS[id]}</option>)}
           </select>
         </label>
         <label className="session-brief-field"><span className="rail-sub">Model</span>

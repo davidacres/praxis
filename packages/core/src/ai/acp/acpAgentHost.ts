@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
 import type { AiProvider, IssueDetails } from '../../types';
+import type { WireImageAttachment } from '../gateway/wire';
 import { BROWSER_TOOLS_PROMPT, buildSystemPrompt } from '../agentPrompt';
 import {
   AGENT_DEFAULTS,
@@ -53,6 +54,8 @@ export interface AcpAgentStartOptions {
   internalConversationTurn?: boolean;
   /** Host-supplied participant and handover context for an AI-to-AI or directed turn. */
   conversationContext?: string;
+  /** Images pasted/dropped into the composer, riding alongside the follow-up prompt as ACP image content blocks. */
+  images?: WireImageAttachment[];
 }
 
 export interface AcpHttpMcpServer {
@@ -114,9 +117,17 @@ function evt(
   type: AgentEventType,
   summary: string,
   detail?: string,
-  data?: AgentToolEventData
+  data?: AgentToolEventData,
+  attachments?: WireImageAttachment[]
 ): AgentEventSummary {
-  return { timestamp: now(), type, summary, detail, ...(data ? { data } : {}) };
+  return {
+    timestamp: now(),
+    type,
+    summary,
+    detail,
+    ...(data ? { data } : {}),
+    ...(attachments?.length ? { attachments } : {})
+  };
 }
 
 function isOpaquePermissionLabel(value: string, toolCallId: string): boolean {
@@ -650,6 +661,7 @@ export class AcpAgentHost {
     message: string,
     options: AcpAgentStartOptions
   ): Promise<void> {
+    const followUpImages = options.images;
     if (this.activeTasks.has(issueKey)) {
       throw new Error(`The agent is still working on ${issueKey}.`);
     }
@@ -718,14 +730,14 @@ export class AcpAgentHost {
       issueKey,
       options.internalConversationTurn
         ? evt('conversation_turn', 'Conversation turn started')
-        : evt('user_input_completed', 'You', followUp)
+        : evt('user_input_completed', 'You', followUp, undefined, followUpImages)
     );
     this.sessionManager.updateAgentState(issueKey, 'executing');
 
     task.promptPromise = (async () => {
       await client.connect();
       await applyAcpModel(client, options.model);
-      const response = await client.prompt(prompt);
+      const response = await client.prompt(prompt, followUpImages);
       if (client.sessionId) {
         this.sessionManager.updateAgentRuntime(issueKey, { runtimeSessionId: client.sessionId });
       }

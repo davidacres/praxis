@@ -11,6 +11,73 @@ export interface GatewayOptions {
   url: string;
   apiKey?: string;
   allowInsecureTls?: boolean;
+  /** Path prefix before the standard `/models` and `/chat/completions` routes. */
+  apiPath?: string;
+}
+
+export function isZaiHost(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return hostname.includes('z.ai') || hostname.includes('bigmodel.cn');
+  } catch {
+    return url.toLowerCase().includes('z.ai') || url.toLowerCase().includes('bigmodel.cn');
+  }
+}
+
+export function alternateZaiApiPath(currentPath?: string): string {
+  const normalized = (currentPath ?? '').toLowerCase();
+  if (normalized.includes('/coding/')) {
+    return '/api/paas/v4';
+  }
+  return '/api/coding/paas/v4';
+}
+
+const resolvedZaiApiPaths = new Map<string, string>();
+
+function zaiKey(opts: GatewayOptions): string {
+  return `${opts.url.toLowerCase()}::${opts.apiKey ?? ''}`;
+}
+
+export function recordWorkingZaiApiPath(opts: GatewayOptions, path: string): void {
+  resolvedZaiApiPaths.set(zaiKey(opts), path);
+}
+
+export function resolveEffectiveOptions(opts: GatewayOptions): GatewayOptions {
+  if (isZaiHost(opts.url)) {
+    const preferred = resolvedZaiApiPaths.get(zaiKey(opts));
+    if (preferred && preferred !== opts.apiPath) {
+      return { ...opts, apiPath: preferred };
+    }
+  }
+  return opts;
+}
+
+export function isNonRetryableRateLimit(body: string): boolean {
+  return /"1113"|"1001"|insufficient[_ -]?(?:quota|balance|funds)|no resource package|please recharge|credit balance (?:is )?too low/i.test(body);
+}
+
+export function endpoint(opts: GatewayOptions, suffix: string): string {
+  const cleanUrl = opts.url.replace(/\/+$/, '');
+  let cleanPath = (opts.apiPath ?? '/v1').replace(/\/+$/, '');
+  if (!cleanPath.startsWith('/')) {
+    cleanPath = `/${cleanPath}`;
+  }
+
+  try {
+    const u = new URL(cleanUrl);
+    if (u.pathname && u.pathname !== '/') {
+      if (cleanUrl.toLowerCase().endsWith(cleanPath.toLowerCase())) {
+        return `${cleanUrl}${suffix}`;
+      }
+      if (/\/api\/|\/v1\b/i.test(u.pathname)) {
+        return `${cleanUrl}${suffix}`;
+      }
+    }
+  } catch {
+    // fallback if not a standard absolute URL
+  }
+
+  return `${cleanUrl}${cleanPath}${suffix}`;
 }
 
 export interface GatewayModelArchitecture {
@@ -44,7 +111,8 @@ function buildHeaders(opts: GatewayOptions, extra: Record<string, string> = {}):
 
 /** Fetch the raw model list from `<url>/v1/models`. */
 export function fetchModels(opts: GatewayOptions, timeoutMs = 10000): Promise<RawGatewayModel[]> {
-  const target = `${opts.url.replace(/\/$/, '')}/v1/models`;
+  opts = resolveEffectiveOptions(opts);
+  const target = endpoint(opts, '/models');
   const isHttps = target.startsWith('https:');
   const client = requestModule(target);
   const u = new URL(target);
@@ -67,6 +135,16 @@ export function fetchModels(opts: GatewayOptions, timeoutMs = 10000): Promise<Ra
         });
         res.on('end', () => {
           if ((res.statusCode ?? 0) < 200 || (res.statusCode ?? 0) >= 300) {
+            if (res.statusCode === 429 && isZaiHost(opts.url) && body.includes('1113') && !(opts as { _zaiFallback?: boolean })._zaiFallback) {
+              const altPath = alternateZaiApiPath(opts.apiPath);
+              fetchModels({ ...opts, apiPath: altPath, _zaiFallback: true } as GatewayOptions, timeoutMs)
+                .then(result => {
+                  recordWorkingZaiApiPath(opts, altPath);
+                  resolve(result);
+                })
+                .catch(reject);
+              return;
+            }
             return reject(new GatewayHttpError(res.statusCode ?? 0, body));
           }
           try {
@@ -94,13 +172,15 @@ export function fetchModels(opts: GatewayOptions, timeoutMs = 10000): Promise<Ra
  * Auth probe via `<url>/v1/chat/completions`.
  * Valid keys typically return 400 for the fake model; bad keys return 401/403.
  */
-export function probeApiKeyAuth(opts: GatewayOptions, timeoutMs = 10_000): Promise<void> {
-  const target = `${opts.url.replace(/\/$/, '')}/v1/chat/completions`;
+export function probeApiKeyAuth(opts: GatewayOptions, timeoutMs = 10_000, probeModel?: string): Promise<void> {
+  opts = resolveEffectiveOptions(opts);
+  const target = endpoint(opts, '/chat/completions');
   const isHttps = target.startsWith('https:');
   const client = requestModule(target);
   const u = new URL(target);
+  const model = probeModel?.trim() || '__ticket_manager_auth_probe__';
   const bodyText = JSON.stringify({
-    model: '__ticket_manager_auth_probe__',
+    model,
     messages: [{ role: 'user', content: 'ping' }],
     max_tokens: 1,
     stream: false
@@ -127,7 +207,21 @@ export function probeApiKeyAuth(opts: GatewayOptions, timeoutMs = 10_000): Promi
         });
         res.on('end', () => {
           const status = res.statusCode ?? 0;
-          if (status === 401 || status === 403) {
+          if (status === 429 && isZaiHost(opts.url) && body.includes('1113') && !(opts as { _zaiFallback?: boolean })._zaiFallback) {
+            const altPath = alternateZaiApiPath(opts.apiPath);
+            probeApiKeyAuth({ ...opts, apiPath: altPath, _zaiFallback: true } as GatewayOptions, timeoutMs, probeModel)
+              .then(() => {
+                recordWorkingZaiApiPath(opts, altPath);
+                resolve();
+              })
+              .catch(reject);
+            return;
+          }
+          if (status === 401 || status === 403 || status === 429) {
+            reject(new GatewayHttpError(status, body));
+            return;
+          }
+          if (status >= 400 && status !== 400) {
             reject(new GatewayHttpError(status, body));
             return;
           }
@@ -162,7 +256,8 @@ export function postChatStream(
   timeoutMs = 300000,
   maxRetries = 3
 ): Promise<ChatStreamHandle> {
-  const target = `${opts.url.replace(/\/$/, '')}/v1/chat/completions`;
+  opts = resolveEffectiveOptions(opts);
+  const target = endpoint(opts, '/chat/completions');
   const isHttps = target.startsWith('https:');
   const client = requestModule(target);
   const u = new URL(target);
@@ -181,7 +276,10 @@ export function postChatStream(
           headers: buildHeaders(opts, {
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(bodyText).toString(),
-            Accept: 'text/event-stream'
+            Accept: 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+            'Accept-Encoding': 'identity'
           }),
           timeout: 0,
           ...(isHttps ? { rejectUnauthorized: !opts.allowInsecureTls } : {})
@@ -194,7 +292,24 @@ export function postChatStream(
               body += c;
             });
             res.on('end', () => {
-              if (isRetryableGatewayHttpStatus(status) && attempt < maxRetries) {
+              if (status === 429 && isZaiHost(opts.url) && body.includes('1113') && !(opts as { _zaiFallback?: boolean })._zaiFallback) {
+                const altPath = alternateZaiApiPath(opts.apiPath);
+                postChatStream(
+                  { ...opts, apiPath: altPath, _zaiFallback: true } as GatewayOptions,
+                  payload,
+                  signal,
+                  timeoutMs,
+                  maxRetries
+                )
+                  .then(handle => {
+                    recordWorkingZaiApiPath(opts, altPath);
+                    resolve(handle);
+                  })
+                  .catch(reject);
+                return;
+              }
+              const nonRetryable = isNonRetryableRateLimit(body);
+              if (!nonRetryable && isRetryableGatewayHttpStatus(status) && attempt < maxRetries) {
                 attempt++;
                 const delay = Math.pow(2, attempt - 1) * 1000;
                 setTimeout(() => {
@@ -278,12 +393,34 @@ export function postChatStream(
   return tryRequest();
 }
 
+export function formatGatewayErrorMessage(statusCode: number, body: string): string {
+  if (!body?.trim()) {
+    return `Gateway returned HTTP ${statusCode}`;
+  }
+  try {
+    const jsonMatch = body.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const obj = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+      const err = (obj.error && typeof obj.error === 'object') ? (obj.error as Record<string, unknown>) : obj;
+      const msg = typeof err.message === 'string' ? err.message : typeof err.msg === 'string' ? err.msg : undefined;
+      const code = err.code ?? obj.code;
+      if (msg?.trim()) {
+        const details = [code !== undefined && code !== '' ? `Code ${code}` : undefined, `HTTP ${statusCode}`].filter(Boolean);
+        return `${msg.trim()} (${details.join(' · ')})`;
+      }
+    }
+  } catch {
+    // not JSON
+  }
+  return `Gateway returned HTTP ${statusCode}: ${body.slice(0, 300)}`;
+}
+
 export class GatewayHttpError extends Error {
   constructor(
     public statusCode: number,
     public body: string
   ) {
-    super(`Gateway returned ${statusCode}: ${body.slice(0, 300)}`);
+    super(formatGatewayErrorMessage(statusCode, body));
     this.name = 'GatewayHttpError';
   }
 }

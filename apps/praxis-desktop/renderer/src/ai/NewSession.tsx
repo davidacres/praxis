@@ -11,6 +11,7 @@ import type {
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from './modelProviders';
+import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
 
 /** Last path segment, for a compact working-folder chip label. */
@@ -678,8 +679,17 @@ export function NewSession({
 
         <div className="composer">
           {error && (
-            <div className="error-banner" data-testid="new-session-error" style={{ margin: '8px 12px 0' }}>
-              {error}
+            <div className="error-banner" data-testid="new-session-error" style={{ margin: '8px 12px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>{error}</span>
+              <button
+                type="button"
+                className="icon-btn icon-btn-sm"
+                aria-label="Dismiss error"
+                title="Dismiss"
+                onClick={() => setError(undefined)}
+              >
+                <Icon name="close" size={13} />
+              </button>
             </div>
           )}
 
@@ -713,7 +723,10 @@ export function NewSession({
             placeholder="What's the goal?"
             value={goal}
             rows={2}
-            onChange={event => setGoal(event.target.value)}
+            onChange={event => {
+              setGoal(event.target.value);
+              if (error) setError(undefined);
+            }}
             onKeyDown={event => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
@@ -811,23 +824,36 @@ export function NewSession({
                 </div>,
                 document.body
               )}
-            {selectedProvider && MODEL_PROVIDERS.has(selectedProvider) && (modelsLoading || modelOptions) && (
-              <button
-                ref={modelChipRef}
-                className="composer-chip"
-                data-testid="new-session-model-chip"
-                aria-haspopup="listbox"
-                aria-expanded={Boolean(modelMenuPos)}
-                disabled={modelsLoading || !modelOptions}
-                onClick={toggleModelMenu}
-              >
-                <Icon name="sparkles" size={14} />
-                {modelsLoading
-                  ? 'Loading models…'
-                  : (modelOptions?.options.find(option => option.value === selectedModel)?.name ?? 'Model')}
-                <Icon name="chevron-down" size={12} />
-              </button>
-            )}
+            {selectedProvider && MODEL_PROVIDERS.has(selectedProvider) && (modelsLoading || modelOptions) && (() => {
+              const selectedOption = modelOptions?.options.find(option => option.value === selectedModel);
+              const contextLimit = selectedOption?.contextLength ?? getKnownContextLength(selectedModel, selectedProvider);
+              const contextSize = formatContextLength(contextLimit);
+              const pricing = selectedOption?.pricing ?? getModelPricing(selectedProvider, selectedModel);
+              const cost = formatModelCost(pricing);
+              return (
+                <button
+                  ref={modelChipRef}
+                  className="composer-chip"
+                  data-testid="new-session-model-chip"
+                  aria-haspopup="listbox"
+                  aria-expanded={Boolean(modelMenuPos)}
+                  disabled={modelsLoading || !modelOptions}
+                  onClick={toggleModelMenu}
+                >
+                  <Icon name="sparkles" size={14} />
+                  {modelsLoading
+                    ? 'Loading models…'
+                    : (
+                      <>
+                        <span>{selectedOption?.name ?? selectedModel ?? 'Model'}</span>
+                        {contextSize && <span className="composer-chip-meta">{contextSize}</span>}
+                        {cost && <span className="composer-chip-meta">{cost}</span>}
+                      </>
+                    )}
+                  <Icon name="chevron-down" size={12} />
+                </button>
+              );
+            })()}
             {modelMenuPos &&
               modelOptions &&
               createPortal(
@@ -862,23 +888,35 @@ export function NewSession({
                   {filteredModelOptions.length === 0 && (
                     <div className="popover-label">No matching models</div>
                   )}
-                  {filteredModelOptions.map(option => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={`composer-provider-option${selectedModel === option.value ? ' active' : ''}`}
-                      data-testid={`new-session-model-option-${option.value}`}
-                      role="option"
-                      aria-selected={selectedModel === option.value}
-                      title={option.description}
-                      onClick={() => {
-                        setSelectedModel(option.value);
-                        setModelMenuPos(undefined);
-                      }}
-                    >
-                      {option.name}
-                    </button>
-                  ))}
+                  {filteredModelOptions.map(option => {
+                    const contextLimit = option.contextLength ?? getKnownContextLength(option.value, selectedProvider);
+                    const contextSize = formatContextLength(contextLimit);
+                    const pricing = option.pricing ?? getModelPricing(selectedProvider, option.value);
+                    const cost = formatModelCost(pricing);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`composer-provider-option${selectedModel === option.value ? ' active' : ''}`}
+                        data-testid={`new-session-model-option-${option.value}`}
+                        role="option"
+                        aria-selected={selectedModel === option.value}
+                        title={option.description}
+                        onClick={() => {
+                          setSelectedModel(option.value);
+                          setModelMenuPos(undefined);
+                        }}
+                      >
+                        <span className="composer-model-option-name">{option.name}</span>
+                        {(contextSize || cost) && (
+                          <span className="composer-model-option-meta">
+                            {contextSize && <span className="composer-model-badge is-context">{contextSize}</span>}
+                            {cost && <span className="composer-model-badge is-cost">{cost}</span>}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>,
                 document.body
               )}

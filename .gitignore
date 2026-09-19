@@ -72,3 +72,10 @@ Desktop.ini
 test-results/
 playwright-report/
 apps/praxis-desktop/main/output/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+

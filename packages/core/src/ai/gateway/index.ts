@@ -4,6 +4,9 @@ export {
   postChatStream,
   isRetryableGatewayHttpStatus,
   GatewayHttpError,
+  endpoint,
+  isZaiHost,
+  alternateZaiApiPath,
   type GatewayOptions,
   type RawGatewayModel,
   type ChatStreamHandle
@@ -29,6 +32,7 @@ export {
   collectChatCompletion,
   sanitizeToolCallId,
   type WireMessage,
+  type WireImageAttachment,
   type WireRole,
   type GatewayToolDefinition,
   type ChatCompletionToolCall,

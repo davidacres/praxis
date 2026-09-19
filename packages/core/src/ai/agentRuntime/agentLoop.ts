@@ -7,6 +7,7 @@ import {
   type GatewayToolDefinition,
   trimToolOutputToBudget,
   type TokenUsage,
+  type WireImageAttachment,
   type WireMessage
 } from '../gateway';
 import type { ProviderAdapter } from '../providers/providerAdapter';
@@ -45,6 +46,8 @@ export interface AgentLoopOptions {
   history?: WireMessage[];
   /** Initial user prompt when starting a new task. Ignored when history already ends with user/tool turns. */
   userPrompt?: string;
+  /** Images pasted/dropped alongside `userPrompt` — ignored (like `userPrompt`) once history already ends with user/tool turns. */
+  userImages?: WireImageAttachment[];
   maxSteps?: number;
   timeoutMs?: number;
   idleTimeoutMs?: number;
@@ -88,10 +91,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const history: WireMessage[] = [...(options.history ?? [])];
   const lastHistoryRole = history.at(-1)?.role;
   if (
-    options.userPrompt?.trim() &&
+    (options.userPrompt?.trim() || options.userImages?.length) &&
     (history.length === 0 || lastHistoryRole === 'assistant')
   ) {
-    history.push({ role: 'user', content: options.userPrompt });
+    history.push({
+      role: 'user',
+      content: options.userPrompt,
+      ...(options.userImages?.length ? { images: options.userImages } : {})
+    });
   }
 
   const emit = (event: AgentLoopEvent): void => {
@@ -164,9 +171,20 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
 
       if (completion.toolCalls.length === 0) {
-        if (completion.text) {
-          history.push({ role: 'assistant', content: completion.text });
+        if (!completion.text.trim()) {
+          const message = completion.finishReason
+            ? `Model returned an empty response (finish reason: ${completion.finishReason}).`
+            : 'Model returned an empty response.';
+          emit({ type: 'error', message });
+          return {
+            status: 'failed',
+            text: '',
+            history,
+            stepCount,
+            error: message
+          };
         }
+        history.push({ role: 'assistant', content: completion.text });
         emit({ type: 'completed', text: completion.text });
         return { status: 'completed', text: completion.text, history, stepCount };
       }
@@ -274,4 +292,4 @@ function lastAssistantText(history: WireMessage[]): string {
   return '';
 }
 
-export type { ChatCompletionToolCall, WireMessage };
+export type { ChatCompletionToolCall, WireImageAttachment, WireMessage };

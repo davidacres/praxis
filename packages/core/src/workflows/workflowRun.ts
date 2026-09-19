@@ -293,11 +293,17 @@ export interface WorkflowReworkResult {
  * artifacts, snapshots, findings, and gate decisions are removed from active
  * state so no reviewer can accidentally approve a newer change with old proof.
  */
-export function reworkWorkflowRun(run: WorkflowRun, nodeId: string, at: string): WorkflowReworkResult {
+export function reworkWorkflowRun(
+  run: WorkflowRun,
+  nodeId: string,
+  at: string,
+  options: { rerunSource?: boolean } = {}
+): WorkflowReworkResult {
   const source = findNode(run, nodeId);
   if (!source) return { run, requeued: [], reason: `Stage "${nodeId}" was not found.` };
 
   const affected = downstreamNodeIds(run, nodeId);
+  if (options.rerunSource === false) affected.delete(nodeId);
   if ([...affected].some(id => run.nodes[id]?.outcome === 'running')) {
     return { run, requeued: [], reason: 'Stop the in-progress downstream stage before starting rework.' };
   }
@@ -759,7 +765,7 @@ function label(run: WorkflowRun, nodeId: string): string {
   return findNode(run, nodeId)?.name ?? nodeId;
 }
 
-function downstreamNodeIds(run: WorkflowRun, nodeId: string): Set<string> {
+export function downstreamNodeIds(run: WorkflowRun, nodeId: string): Set<string> {
   const outbound = new Map<string, string[]>();
   for (const edge of run.definition.edges) {
     outbound.set(edge.from, [...(outbound.get(edge.from) ?? []), edge.to]);

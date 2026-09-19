@@ -26,6 +26,17 @@ applySurfacePack(getInitialSurfaceId(), getInitialSurfaceOpts());
 // from the live theme.
 window.addEventListener('tm-theme-changed', () => refreshSurfacePattern());
 
+// A file dropped outside a handler that accepts it (the session chat
+// composer) would otherwise make Chromium navigate this window to the file —
+// destroying the app UI with an image/JSON blob. Swallow drops and dragovers
+// at the window level so only explicit `onDrop` handlers decide what happens.
+// Handlers that want files call `stopPropagation()` after consuming them.
+const swallowWindowFileDrag = (event: DragEvent) => {
+  if (Array.from(event.dataTransfer?.types ?? []).includes('Files')) event.preventDefault();
+};
+window.addEventListener('dragover', swallowWindowFileDrag);
+window.addEventListener('drop', swallowWindowFileDrag);
+
 // Motif motion is baked in or left out at paint time, not toggled in CSS — a
 // reduced-motion query inside an SVG-as-image is ignored by the renderer, so
 // the preference can only be honoured by re-baking when it changes.

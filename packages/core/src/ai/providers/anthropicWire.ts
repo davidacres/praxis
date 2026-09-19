@@ -4,6 +4,7 @@ import {
   type ChatCompletionToolCall,
   type GatewayToolDefinition,
   type StreamChatEvent,
+  type WireImageAttachment,
   type WireMessage
 } from '../gateway/wire';
 
@@ -18,8 +19,17 @@ import {
 
 type AnthropicContentBlock =
   | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'tool_result'; tool_use_id: string; content: string };
+
+/** Anthropic recommends images precede the text that refers to them. */
+function imageBlocks(images: readonly WireImageAttachment[] | undefined): AnthropicContentBlock[] {
+  return (images ?? []).map(image => ({
+    type: 'image',
+    source: { type: 'base64', media_type: image.mimeType, data: image.dataBase64 }
+  }));
+}
 
 interface AnthropicMessage {
   role: 'user' | 'assistant';
@@ -84,7 +94,13 @@ function toAnthropicMessages(messages: readonly WireMessage[]): {
     }
 
     // 'user' (system only ever appears leading, handled above)
-    out.push({ role: 'user', content: msg.content ?? '' });
+    if (msg.images?.length) {
+      const blocks = imageBlocks(msg.images);
+      if (msg.content) blocks.push({ type: 'text', text: msg.content });
+      out.push({ role: 'user', content: blocks });
+    } else {
+      out.push({ role: 'user', content: msg.content ?? '' });
+    }
     i++;
   }
 

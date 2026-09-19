@@ -6,7 +6,9 @@ import {
   builtInWorkflowTemplates,
   duplicateWorkflowDefinition,
   governedDeliveryTemplate,
+  fullSdlcTemplate,
   instantiateTemplateForProject,
+  promoteWorkflowPackToTemplate,
   quickChangeTemplate
 } from './workflowTemplates';
 import { validateWorkflow } from './workflowValidation';
@@ -15,6 +17,7 @@ import type { AgentCatalogSnapshot } from './workflowPreflight';
 import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition } from './workflowTypes';
 import type { DiscoveredAgent } from '../ai/agentRuntime/manifest';
 import type { DiscoveredAgentProfile } from '../ai/agentRuntime/profileRegistry';
+import type { AgentWorkflowReference } from '../ai/agentTypes';
 
 const T = '2026-09-02T10:00:00.000Z';
 
@@ -68,6 +71,11 @@ test('the governed delivery template converges review, QA, and security before a
   const security = template.nodes.find(node => node.id === 'security');
   assert.equal(qa?.type, 'check');
   assert.equal(security?.type, 'check');
+});
+
+test('full SDLC templates are ticket-triggered while ordinary delivery remains on-demand', () => {
+  assert.equal(governedDeliveryTemplate().trigger, undefined);
+  assert.equal(fullSdlcTemplate().trigger, 'ticket');
 });
 
 test('the quick-change template has no automated gates', () => {
@@ -135,6 +143,26 @@ test('duplicating a definition resets identity and version but keeps the graph',
   assert.equal(copy.version, 1);
   assert.equal(copy.nodes.length, original.nodes.length);
   assert.deepEqual(validateWorkflow(copy).errors, []);
+});
+
+test('promoting a workflow pack creates a governed project graph with an explicit approval handoff', () => {
+  const pack: AgentWorkflowReference = {
+    id: 'secure-review',
+    name: 'Secure review',
+    instructionsPath: '.github/skills/secure-review/SKILL.md'
+  };
+  const promoted = promoteWorkflowPackToTemplate({
+    pack,
+    projectId: 'p1',
+    agentId: 'praxis-implementer',
+    at: T
+  });
+  assert.equal(promoted.scope, 'project');
+  assert.equal(promoted.nodes.find(node => node.id === 'pack-stage')?.type, 'agent-task');
+  const stage = promoted.nodes.find(node => node.id === 'pack-stage');
+  assert.equal(stage?.type === 'agent-task' ? stage.workflowPackId : undefined, 'secure-review');
+  assert.equal(promoted.nodes.some(node => node.type === 'approval'), true);
+  assert.deepEqual(validateWorkflow(promoted).errors, []);
 });
 
 // ── Readiness ────────────────────────────────────────────────────────────

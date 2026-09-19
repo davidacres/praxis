@@ -260,7 +260,28 @@ export class JiraService implements IssueTrackerService {
   ): Promise<PagedIssues> {
     await this.ensureConnected();
 
-    const jql = this.buildIssueSearchJql(filters);
+    // Agile boards are not representable by the ordinary Jira search JQL: the
+    // board can include saved filters, ranking, and other board-specific
+    // configuration. Fetch the board's issue set first, then apply the same
+    // desktop filter semantics locally. Without this branch, a selected board
+    // fell through to a project-wide search and the filter bar showed issues
+    // that did not belong to that board.
+    const agileBoardId = filters.boardId
+      ? this.parseAgileBoardId({ id: filters.boardId } as Board)
+      : undefined;
+    if (agileBoardId && this.requireResolved().adapter === 'community') {
+      const boardIssues = await this.fetchAgileBoardIssues(agileBoardId);
+      const matching = sortIssuesByUpdated(
+        boardIssues.filter(issue => this.matchesIssueFilters(issue, filters))
+      );
+      return {
+        issues: matching.slice(startAt, startAt + pageSize),
+        total: matching.length,
+        hasMore: startAt + pageSize < matching.length
+      };
+    }
+
+    const jql = this.buildIssueSearchJql(filters, filters.boardId);
     const fields = [
       'summary',
       'status',
@@ -283,13 +304,30 @@ export class JiraService implements IssueTrackerService {
 
   public async getFilterMetadata(filters: IssueFilters): Promise<FilterMetadata> {
     await this.ensureConnected();
-    const jql = this.buildIssueSearchJql({
-      ...filters,
-      statuses: [],
-      issueTypes: [],
-      searchText: '',
-      parentKey: undefined
-    });
+    const agileBoardId = filters.boardId
+      ? this.parseAgileBoardId({ id: filters.boardId } as Board)
+      : undefined;
+    if (agileBoardId && this.requireResolved().adapter === 'community') {
+      const page = await this.getIssues(
+        { ...filters, statuses: [], issueTypes: [], searchText: '', parentKey: undefined },
+        0,
+        Number.MAX_SAFE_INTEGER
+      );
+      return {
+        statuses: [...new Set(page.issues.map(issue => issue.status))].sort((a, b) => a.localeCompare(b)),
+        issueTypes: [...new Set(page.issues.map(issue => issue.issueType))].sort((a, b) => a.localeCompare(b))
+      };
+    }
+    const jql = this.buildIssueSearchJql(
+      {
+        ...filters,
+        statuses: [],
+        issueTypes: [],
+        searchText: '',
+        parentKey: undefined
+      },
+      filters.boardId
+    );
     const search = await this.executeSearch(jql, ['status', 'issuetype', 'project'], 0, 200);
     return {
       statuses: [...new Set(search.issues.map(issue => issue.status))].sort((a, b) =>
@@ -317,6 +355,10 @@ export class JiraService implements IssueTrackerService {
     }
 
     const clauses = [`issuetype in (${allowedParentTypes.map(escapeJqlValue).join(', ')})`];
+    const boardScope = this.boardScopeJql(filters.boardId);
+    if (boardScope) {
+      clauses.push(`(${boardScope})`);
+    }
     const projectScope = this.resolveProjectScope(filters.projectKeys);
     if (projectScope.length > 0) {
       clauses.push(`project in (${projectScope.map(escapeJqlValue).join(', ')})`);
@@ -1440,8 +1482,12 @@ export class JiraService implements IssueTrackerService {
     return defaultProjectKey ? [defaultProjectKey] : [];
   }
 
-  private buildIssueSearchJql(filters: IssueFilters): string {
+  private buildIssueSearchJql(filters: IssueFilters, boardId?: string): string {
     const clauses: string[] = [];
+    const boardScope = this.boardScopeJql(boardId);
+    if (boardScope) {
+      clauses.push(`(${boardScope})`);
+    }
     const projectScope = this.resolveProjectScope(filters.projectKeys);
     if (projectScope.length > 0) {
       clauses.push(`project in (${projectScope.map(escapeJqlValue).join(', ')})`);
@@ -1469,6 +1515,45 @@ export class JiraService implements IssueTrackerService {
       }
     }
     return clauses.join(' AND ');
+  }
+
+  /** Returns the issue-set query for a non-agile derived Jira board. */
+  private boardScopeJql(boardId?: string): string | undefined {
+    if (!boardId) {
+      return undefined;
+    }
+    const epicKey = this.parseEpicKey(boardId);
+    if (epicKey) {
+      return this.buildLinkedEpicDescendantClause(epicKey);
+    }
+    const boardJql = this.parseJqlBoardQuery({ id: boardId } as Board)?.trim();
+    if (!boardJql) {
+      return undefined;
+    }
+    // ORDER BY belongs to the outer search, not to a nested board predicate.
+    return boardJql.replace(/\border\s+by\b[\s\S]*$/i, '').trim() || undefined;
+  }
+
+  private matchesIssueFilters(issue: IssueSummary, filters: IssueFilters): boolean {
+    if (filters.statuses.length > 0 && !filters.statuses.includes(issue.status)) {
+      return false;
+    }
+    if (filters.issueTypes.length > 0 && !filters.issueTypes.includes(issue.issueType)) {
+      return false;
+    }
+    if (filters.assigneeMode === 'me' && !issue.assignee) {
+      return false;
+    }
+    if (filters.parentKey && issue.parentKey !== filters.parentKey) {
+      return false;
+    }
+    const query = filters.searchText.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+    return `${issue.key} ${issue.summary} ${issue.description ?? ''}`
+      .toLowerCase()
+      .includes(query);
   }
 
   private async validateParentSelection(

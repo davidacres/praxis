@@ -25,6 +25,7 @@ import type {
   UpdateIssueInput
 } from '../types';
 import type { ModelOptions } from '../ai/providers/modelCatalog';
+import type { WireImageAttachment } from '../ai/gateway/wire';
 import type {
   ActivatedSkill,
   AgentRuntimeSnapshot,
@@ -703,6 +704,8 @@ export interface AiIpc {
   listApiModelOptions(provider: AiProvider, forceRefresh?: boolean): Promise<ModelOptions | undefined>;
   /** Stores a specific provider's API key encrypted; empty string clears it. */
   setProviderApiKey(provider: AiProvider, value: string): Promise<AiProviderStatus>;
+  /** Tests whether the configured API key and endpoint for a provider can connect successfully. */
+  testProviderApiKey(provider: AiProvider): Promise<{ ok: boolean; message: string }>;
   /** Clears all AI provider API keys so credentials can be re-entered after a keychain migration. */
   resetProviderApiKeys(): Promise<void>;
   /** Every persisted agent session, most recently started first. */
@@ -722,7 +725,12 @@ export interface AiIpc {
   /** Aborts the running task for an issue (no-op when none is active). */
   abort(issueKey: string): Promise<void>;
   /** Sends a follow-up message and continues the existing recorded session. */
-  continueSession(issueKey: string, message: string): Promise<void>;
+  /**
+   * Sends a follow-up message and continues the existing recorded session.
+   * `images` are attachments pasted/dropped into the composer, forwarded to the
+   * agent with the message as provider-native image content.
+   */
+  continueSession(issueKey: string, message: string, images?: WireImageAttachment[]): Promise<void>;
   /** Changes the model used for the next turn of an idle session. */
   updateSessionModel(issueKey: string, model: string): Promise<AgentSessionRecord>;
   /** Hands the same Praxis session to another provider and seeds it with the living brief. */
@@ -1087,12 +1095,25 @@ export interface WorkflowsIpc {
    * saves it. Returns the saved copy.
    */
   instantiate(projectId: string, templateId: string, name?: string): Promise<WorkflowDefinition>;
+  /** Promotes a discovered Markdown workflow pack into a governed project workflow. */
+  promotePack(
+    projectId: string,
+    packId: string,
+    binding: { agentId: string; profileId?: string; hostId?: string }
+  ): Promise<WorkflowDefinition>;
   /** Saves a project-scoped definition; rejects an invalid one with its errors. */
   save(projectId: string, definition: WorkflowDefinition): Promise<WorkflowDefinition>;
   /** Removes a project-scoped definition. */
   remove(projectId: string, workflowId: string): Promise<void>;
   /** Live validation for the designer — no persistence. */
   validate(projectId: string, definition: WorkflowDefinition): Promise<WorkflowValidationResult>;
+  /** The designer's constrained assistant: workflow questions, validation, and workflow edits only. */
+  assistant(
+    projectId: string,
+    definition: WorkflowDefinition,
+    message: string,
+    history?: readonly WorkflowAssistantMessage[]
+  ): Promise<WorkflowAssistantResult>;
   /** The composed policy governing this project, strictest-wins over global. */
   effectivePolicy(projectId: string): Promise<WorkflowPolicyProfile | undefined>;
   /** Every stored policy profile, global and project-scoped, across all projects. */
@@ -1210,6 +1231,17 @@ export interface WorkflowsIpc {
    * no session opens just to discover it has nothing to work from.
    */
   startDiagnosis(runId: string, nodeId: string, attempt: number): Promise<CreateDiagnosisSessionResult>;
+}
+
+export interface WorkflowAssistantMessage {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+export interface WorkflowAssistantResult {
+  action: 'answer' | 'updated' | 'rejected';
+  message: string;
+  workflow?: WorkflowDefinition;
 }
 
 /** One stage attempt's retained evidence, as read back through `WorkflowsIpc.getEvidence`. */

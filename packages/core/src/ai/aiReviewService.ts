@@ -149,6 +149,8 @@ export interface ReviewStreamOptions {
   signal?: AbortSignal;
   apiKey?: string;
   gatewayUrl?: string;
+  /** Path prefix for OpenAI-compatible APIs that do not use `/v1`. */
+  apiPath?: string;
 }
 
 export const ANALYSIS_CANCELLED_MESSAGE = 'Analysis cancelled.';
@@ -701,7 +703,7 @@ export async function reviewTicketWithOpenAi(
   const userMessage = `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`;
   const model = options?.model?.trim() || 'gpt-4o-mini';
   const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
-  const endpoint = `${(options?.gatewayUrl?.trim() || 'https://api.openai.com').replace(/\/+$/, '')}/v1/chat/completions`;
+  const endpoint = `${(options?.gatewayUrl?.trim() || 'https://api.openai.com').replace(/\/+$/, '')}${(options?.apiPath ?? '/v1').replace(/\/+$/, '')}/chat/completions`;
 
   if (options?.onUpdate) {
     const response = await fetch(endpoint, {
@@ -1491,4 +1493,3 @@ export function formatTicketReviewSummaryComment(
 
   return lines.join('\n').trim();
 }
-
