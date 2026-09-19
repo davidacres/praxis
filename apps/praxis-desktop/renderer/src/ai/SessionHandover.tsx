@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import type { AgentConversationMode, AgentSessionRecord, AiHandoverBriefEdits, AiProvider, AiProviderStatus, HandoverBrief, ModelOptions } from '@praxis/core';
+import type {
+  AgentConversationMode,
+  AgentSessionRecord,
+  AiHandoverBriefEdits,
+  AiProvider,
+  AiProviderStatus,
+  HandoverBrief,
+  ModelOptions,
+  SessionRuntimeEpoch
+} from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { isTerminalAgentState } from './aiSessionState';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName, refreshModelOptions } from './modelProviders';
@@ -158,14 +167,25 @@ export function SessionHandoverBrief({ session }: { session: AgentSessionRecord 
   );
 }
 
+export const MAX_DISPLAYED_RUNTIME_EPOCHS = 5;
+
+export function limitDisplayedRuntimeEpochs(
+  epochs: SessionRuntimeEpoch[],
+  max = MAX_DISPLAYED_RUNTIME_EPOCHS
+): SessionRuntimeEpoch[] {
+  if (epochs.length <= max) return epochs;
+  return epochs.slice(-max);
+}
+
 export function SessionRuntimeHistory({ session }: { session: AgentSessionRecord }) {
   const epochs = session.runtimeEpochs ?? [];
   if (epochs.length === 0) return null;
+  const displayedEpochs = limitDisplayedRuntimeEpochs(epochs);
   return (
     <div className="agent-runtime-block session-runtime-history" data-testid="session-runtime-history">
       <span className="rail-sub">Runtime history</span>
-      <ol className="session-epoch-list">
-        {epochs.map(epoch => (
+      <ol className="session-epoch-list" start={epochs.length - displayedEpochs.length + 1}>
+        {displayedEpochs.map(epoch => (
           <li key={epoch.id} data-testid="session-runtime-epoch">
             <strong>
               {epoch.provider ? PROVIDER_LABELS[epoch.provider] : 'Provider'}

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AgentSessionRecord } from './agentTypes';
 import {
+  appendRuntimeEpoch,
   applyHandoverBriefUserEdits,
   buildDeterministicHandoverBrief,
   buildHandoverEnvelope,
@@ -108,4 +109,18 @@ test('old records hydrate purpose, brief and a single epoch', () => {
   assert.equal(loaded.handoverBrief?.revision, 0);
   assert.equal(loaded.runtimeEpochs?.length, 1);
   assert.equal(loaded.runtimeEpochs?.[0].model, 'gpt-4.1');
+});
+
+test('runtime epochs accumulate without truncating full history for disk logging', () => {
+  let epochs = hydrateSessionHandoverFields(record({ provider: 'openai', model: 'gpt-4.1' })).runtimeEpochs ?? [];
+  for (let i = 1; i <= 10; i++) {
+    epochs = appendRuntimeEpoch(epochs, {
+      provider: 'openai',
+      model: `gpt-4.1-step-${i}`,
+      reason: 'model_change'
+    });
+  }
+  assert.equal(epochs.length, 11);
+  assert.equal(epochs[0].reason, 'started');
+  assert.equal(epochs[10].model, 'gpt-4.1-step-10');
 });
