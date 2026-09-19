@@ -13,7 +13,8 @@ import type {
 } from '@praxis/core';
 import { API_MODEL_PROVIDERS } from '../ai/modelProviders';
 import { Icon } from '../ui/Icon';
-import { WorkflowCanvas } from './WorkflowCanvas';
+import { WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
+import { WorkflowValidationDialog } from './WorkflowValidationDialog';
 import {
   addNode,
   bucketFeedback,
@@ -37,12 +38,12 @@ import {
  * centre column.
  */
 
-const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: string }> = [
-  { type: 'agent-task', label: 'Agent stage', icon: 'robot' },
-  { type: 'check', label: 'Check', icon: 'shield' },
-  { type: 'deployment', label: 'Deployment', icon: 'rocket' },
-  { type: 'approval', label: 'Approval', icon: 'check-square' },
-  { type: 'join', label: 'Join', icon: 'split-horizontal' }
+const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: string; description: string }> = [
+  { type: 'agent-task', label: 'Agent stage', icon: 'robot', description: 'Autonomous agent task stage' },
+  { type: 'check', label: 'Check', icon: 'shield', description: 'Verification, test, or security gate' },
+  { type: 'approval', label: 'Approval', icon: 'check-square', description: 'Manual human sign-off gate' },
+  { type: 'deployment', label: 'Deployment', icon: 'rocket', description: 'Deployment or release step' },
+  { type: 'join', label: 'Join', icon: 'split-horizontal', description: 'Parallel branches synchronizer' }
 ];
 
 const GATES: WorkflowGateKind[] = ['review', 'qa', 'security'];
@@ -53,6 +54,53 @@ function railGate(node: WorkflowNode): WorkflowGateKind | undefined {
   return node.type === 'agent-task' || node.type === 'check' || node.type === 'deployment'
     ? node.satisfiesGate
     : undefined;
+}
+
+function profileHostId(catalog: AgentRuntimeSnapshot | undefined, profileId: string): string | undefined {
+  const hosts = catalog?.runtimeHosts ?? catalog?.agents ?? [];
+  return hosts.find(host => host.manifest.id === profileId)?.manifest.id;
+}
+
+function bindProfileToStage(
+  definition: WorkflowDefinition,
+  catalog: AgentRuntimeSnapshot | undefined,
+  profileId: string,
+  at: { x: number; y: number }
+): WorkflowDefinition {
+  const profile = (catalog?.profiles ?? []).find(candidate => candidate.profile.id === profileId);
+  if (!profile) return definition;
+  const hostId = profileHostId(catalog, profileId) ?? '';
+  const node = newNode('agent-task', at);
+  if (node.type !== 'agent-task') return definition;
+  node.name = profile.profile.name;
+  node.agent = {
+    agentId: hostId,
+    profileId: profile.profile.id,
+    hostId,
+    scope: profile.scope,
+    toolMode: profile.profile.toolMode ?? 'read-only'
+  };
+  return addNode(definition, node);
+}
+
+function addSkillToStage(
+  definition: WorkflowDefinition,
+  catalog: AgentRuntimeSnapshot | undefined,
+  nodeId: string,
+  skillName: string
+): WorkflowDefinition {
+  const node = definition.nodes.find(candidate => candidate.id === nodeId);
+  const skill = (catalog?.skills ?? []).find(candidate => candidate.metadata.name === skillName);
+  if (!node || node.type !== 'agent-task' || !skill) return definition;
+  const skillNames = node.agent.skillNames ?? [];
+  if (skillNames.includes(skillName)) return definition;
+  return updateNode(definition, nodeId, {
+    agent: {
+      ...node.agent,
+      skillNames: [...skillNames, skillName],
+      skillFingerprints: { ...(node.agent.skillFingerprints ?? {}), [skillName]: skill.fingerprint }
+    }
+  } as never);
 }
 
 export interface WorkflowDesignerPageProps {
@@ -81,12 +129,25 @@ export function WorkflowDesignerPage({
   const [definition, setDefinition] = useState<WorkflowDefinition | undefined>();
   const [notFound, setNotFound] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
   const [inspectorTab, setInspectorTab] = useState<'stage' | 'connections'>('stage');
   const selectStage = useCallback(
     (nodeId: string | undefined) => {
       setSelectedNodeId(nodeId);
+      setSelectedEdgeId(undefined);
       if (nodeId) {
         setInspectorTab('stage');
+        onRequireAux?.();
+      }
+    },
+    [onRequireAux]
+  );
+  const selectEdge = useCallback(
+    (edgeId: string | undefined) => {
+      setSelectedEdgeId(edgeId);
+      if (edgeId) {
+        setSelectedNodeId(undefined);
+        setInspectorTab('connections');
         onRequireAux?.();
       }
     },
@@ -161,6 +222,23 @@ export function WorkflowDesignerPage({
     };
   }, [definition, project.id]);
 
+  const [validationDialogOpen, setValidationDialogOpen] = useState(false);
+  const [validating, setValidating] = useState(false);
+
+  const runValidation = useCallback(async () => {
+    if (!definition) return;
+    setValidating(true);
+    try {
+      const result = await window.praxis.workflows.validate(project.id, definition);
+      setFeedback(bucketFeedback(definition, result));
+      setValidationDialogOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setValidating(false);
+    }
+  }, [definition, project.id]);
+
   const mutate = useCallback((next: WorkflowDefinition) => {
     setDefinition(next);
     setSavedAt(undefined);
@@ -196,6 +274,86 @@ export function WorkflowDesignerPage({
   }, [project.id, workflowId, onSaved, onDeleted, confirm]);
 
   const selectedNode = definition?.nodes.find(node => node.id === selectedNodeId);
+  const profiles = catalog?.profiles ?? [];
+  const skills = catalog?.skills ?? [];
+  const selectedAgentStage = selectedNode?.type === 'agent-task' ? selectedNode : undefined;
+  const presentations = useMemo(
+    () =>
+      Object.fromEntries(
+        (definition?.nodes ?? []).flatMap(node => {
+          if (node.type !== 'agent-task') return [];
+          const profileId = node.agent.profileId || node.agent.agentId;
+          const profile = profiles.find(candidate => candidate.profile.id === profileId);
+          return [[node.id, { agent: (profile?.profile.name ?? profileId) || undefined, skills: node.agent.skillNames ?? [] }]];
+        })
+      ),
+    [definition, profiles]
+  );
+
+  const [toolboxView, setToolboxView] = useState<'all' | 'tools' | 'stages'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const q = searchQuery.trim().toLowerCase();
+  const showTools = toolboxView === 'all' || toolboxView === 'tools';
+  const showStages = toolboxView === 'all' || toolboxView === 'stages';
+
+  const filteredBlocks = useMemo(() => {
+    if (!q) return NODE_KINDS;
+    return NODE_KINDS.filter(k => k.label.toLowerCase().includes(q) || k.type.toLowerCase().includes(q));
+  }, [q]);
+
+  const filteredProfiles = useMemo(() => {
+    if (!q) return profiles;
+    return profiles.filter(
+      p => p.profile.name.toLowerCase().includes(q) || (p.profile.description && p.profile.description.toLowerCase().includes(q))
+    );
+  }, [profiles, q]);
+
+  const filteredSkills = useMemo(() => {
+    if (!q) return skills;
+    return skills.filter(
+      s => s.metadata.name.toLowerCase().includes(q) || (s.metadata.description && s.metadata.description.toLowerCase().includes(q))
+    );
+  }, [skills, q]);
+
+  const filteredNodes = useMemo(() => {
+    if (!definition) return [];
+    if (!q) return definition.nodes;
+    return definition.nodes.filter(n => n.name.toLowerCase().includes(q) || n.type.toLowerCase().includes(q));
+  }, [definition, q]);
+
+  const addProfileStage = useCallback(
+    (profileId: string, at?: { x: number; y: number }) => {
+      if (!definition) return;
+      const next = bindProfileToStage(
+        definition,
+        catalog,
+        profileId,
+        at ?? { x: 120, y: 120 + definition.nodes.length * 48 }
+      );
+      const added = next.nodes[next.nodes.length - 1];
+      mutate(next);
+      if (added) selectStage(added.id);
+    },
+    [definition, catalog, mutate, selectStage]
+  );
+
+  const useSkill = useCallback(
+    (skillName: string, targetNodeId?: string) => {
+      if (!definition) return;
+      const stageId = targetNodeId ?? selectedAgentStage?.id;
+      if (!stageId) {
+        setError('Select an agent stage before adding a skill. Skills guide an agent; they do not run on their own.');
+        return;
+      }
+      const next = addSkillToStage(definition, catalog, stageId, skillName);
+      if (next === definition) return;
+      setError(undefined);
+      mutate(next);
+      selectStage(stageId);
+    },
+    [definition, catalog, mutate, selectStage, selectedAgentStage]
+  );
 
   if (notFound) {
     return (
@@ -261,7 +419,12 @@ export function WorkflowDesignerPage({
             </div>
           )
         ) : (
-          <EdgeEditor definition={definition} onChange={mutate} />
+          <EdgeEditor
+            definition={definition}
+            selectedEdgeId={selectedEdgeId}
+            onSelectEdge={selectEdge}
+            onChange={mutate}
+          />
         )}
       </div>
     </section>
@@ -272,9 +435,21 @@ export function WorkflowDesignerPage({
       <header className="wf-header">
         <h1>{definition.name}</h1>
         <span className="wf-header-sub">{project.name}</span>
-        <button type="button" className="btn btn-compact wf-header-del" onClick={() => void remove()} disabled={busy}>
-          <Icon name="trash" size={13} /> Delete
-        </button>
+        <div className="wf-header-actions">
+          <button
+            type="button"
+            className="btn btn-compact"
+            data-testid="wf-validate-btn"
+            onClick={() => void runValidation()}
+            disabled={validating || busy}
+            title="Validate workflow connections, flow, and stage configuration"
+          >
+            <Icon name="shield" size={13} /> {validating ? 'Validating…' : 'Validate workflow'}
+          </button>
+          <button type="button" className="btn btn-compact wf-header-del" onClick={() => void remove()} disabled={busy}>
+            <Icon name="trash" size={13} /> Delete
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -284,67 +459,305 @@ export function WorkflowDesignerPage({
       )}
 
       <div className="wf-designer wf-designer--two">
-        <nav className="rail" aria-label="Workflow stages">
-          <div className="rail-head">
-            <strong>{definition.name}</strong>
-          </div>
+        <nav className="rail wf-composer-rail" aria-label="Workflow stages">
+          <div className="wf-rail-header">
+            <div className="wf-rail-header-top">
+              <span className="wf-rail-title">
+                <Icon name="tools" size={13} />
+                <span>Toolbox</span>
+              </span>
+              <span className="wf-rail-badge">{definition.nodes.length} stages</span>
+            </div>
 
-          <div role="group" aria-label="Add stage" className="rail-add">
-            {NODE_KINDS.map(kind => (
+            <div className="wf-rail-view-switch" role="tablist" aria-label="Toolbox view">
               <button
-                key={kind.type}
                 type="button"
-                className="chip"
-                onClick={() => {
-                  const node = newNode(kind.type, { x: 120, y: 120 + definition.nodes.length * 40 });
-                  mutate(addNode(definition, node));
-                  selectStage(node.id);
-                }}
+                role="tab"
+                aria-selected={toolboxView === 'all'}
+                className={`wf-view-btn${toolboxView === 'all' ? ' is-active' : ''}`}
+                onClick={() => setToolboxView('all')}
               >
-                <Icon name={kind.icon as never} size={13} /> {kind.label}
+                All
               </button>
-            ))}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={toolboxView === 'tools'}
+                className={`wf-view-btn${toolboxView === 'tools' ? ' is-active' : ''}`}
+                onClick={() => setToolboxView('tools')}
+              >
+                Tools
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={toolboxView === 'stages'}
+                className={`wf-view-btn${toolboxView === 'stages' ? ' is-active' : ''}`}
+                onClick={() => setToolboxView('stages')}
+              >
+                Stages
+              </button>
+            </div>
+
+            <div className="wf-rail-search">
+              <Icon name="search" size={12} />
+              <input
+                type="search"
+                placeholder="Filter tools & stages…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                aria-label="Filter tools and stages"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="wf-rail-search-clear"
+                  aria-label="Clear filter"
+                  onClick={() => setSearchQuery('')}
+                >
+                  <Icon name="close" size={10} />
+                </button>
+              )}
+            </div>
           </div>
 
-          <ul className="rail-list">
-            {definition.nodes.map(node => {
-              const issues = feedback?.byNode[node.id]?.length ?? 0;
-              const isEntry = node.id === definition.entryNodeId;
-              return (
-                <li key={node.id}>
-                  <button
-                    type="button"
-                    className="rail-row"
-                    aria-pressed={node.id === selectedNodeId}
-                    aria-label={`${node.name} (${node.type})${isEntry ? ', entry stage' : ''}${
-                      issues > 0 ? `, ${issues} issue${issues === 1 ? '' : 's'}` : ''
-                    }`}
-                    onClick={() => selectStage(node.id)}
-                  >
-                    <span className="rail-main">
-                      <span className="rail-name">{node.name}</span>
-                      <span className="rail-sub">{node.type}</span>
-                    </span>
-                    {issues > 0 ? (
-                      <span className="rail-mark is-issue" title={`${issues} validation issue${issues === 1 ? '' : 's'}`}>
-                        ⚠ {issues}
+          <div className="wf-rail-body">
+            {showTools && (
+              <section className="wf-toolbox-section" aria-labelledby="wf-section-blocks">
+                <div className="wf-section-header">
+                  <span id="wf-section-blocks">Blocks</span>
+                  <span className="wf-section-count">{filteredBlocks.length}</span>
+                </div>
+                <div className="wf-toolbox-grid" role="group" aria-label="Stage blocks">
+                  {filteredBlocks.map(kind => (
+                    <button
+                      key={kind.type}
+                      type="button"
+                      className="wf-tool-card wf-tool-card--block"
+                      draggable
+                      title={`Drag or click to add ${kind.label}: ${kind.description}`}
+                      onDragStart={event => {
+                        event.dataTransfer.effectAllowed = 'copy';
+                        event.dataTransfer.setData(
+                          'application/x-praxis-workflow-palette',
+                          JSON.stringify({ kind: 'stage', nodeType: kind.type } satisfies WorkflowPaletteItem)
+                        );
+                      }}
+                      onClick={() => {
+                        const node = newNode(kind.type, { x: 120, y: 120 + definition.nodes.length * 40 });
+                        mutate(addNode(definition, node));
+                        selectStage(node.id);
+                      }}
+                    >
+                      <span className="wf-tool-icon">
+                        <Icon name={kind.icon as never} size={13} />
                       </span>
-                    ) : isEntry ? (
-                      <span className="rail-mark is-entry">entry</span>
-                    ) : railGate(node) ? (
-                      <span className="rail-mark is-gate">{railGate(node)}</span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                      <span className="wf-tool-label">{kind.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {showTools && (
+              <section className="wf-composer-palette" aria-labelledby="wf-building-blocks">
+                <span id="wf-building-blocks" className="sr-only">Build with agents and skills</span>
+                <div className="wf-toolbox-section">
+                  <div className="wf-section-header">
+                    <span>Agents</span>
+                    <span className="wf-section-count">{filteredProfiles.length}</span>
+                  </div>
+                  <div className="wf-palette-group" role="group" aria-label="Available agents">
+                    {filteredProfiles.length > 0 ? (
+                      filteredProfiles.map(profile => {
+                        const blocked = profile.error || !profile.trusted;
+                        const title = profile.error
+                          ? `Cannot use ${profile.profile.name}: ${profile.error}`
+                          : !profile.trusted
+                            ? `${profile.profile.name} needs trust before it can run.`
+                            : `Add ${profile.profile.name} as an agent stage${profile.profile.description ? ` — ${profile.profile.description}` : ''}`;
+                        return (
+                          <button
+                            key={profile.profile.id}
+                            type="button"
+                            className="wf-palette-item wf-palette-item--agent"
+                            draggable={!blocked}
+                            disabled={Boolean(blocked)}
+                            title={title}
+                            data-testid={`wf-palette-agent-${profile.profile.id}`}
+                            onDragStart={event => {
+                              event.dataTransfer.effectAllowed = 'copy';
+                              event.dataTransfer.setData(
+                                'application/x-praxis-workflow-palette',
+                                JSON.stringify({ kind: 'agent', profileId: profile.profile.id } satisfies WorkflowPaletteItem)
+                              );
+                            }}
+                            onClick={() => addProfileStage(profile.profile.id)}
+                          >
+                            <span className="wf-palette-item-icon">
+                              <Icon name="robot" size={13} />
+                            </span>
+                            <div className="wf-palette-item-content">
+                              <span className="wf-palette-item-title">{profile.profile.name}</span>
+                              {profile.profile.description && (
+                                <span className="wf-palette-item-desc">{profile.profile.description}</span>
+                              )}
+                            </div>
+                            {blocked && (
+                              <span className="wf-palette-badge is-warn">
+                                {profile.error ? 'needs repair' : 'needs trust'}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="wf-palette-empty">No matching agents</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="wf-toolbox-section">
+                  <div className="wf-section-header">
+                    <span>Skills</span>
+                    <span className="wf-section-count">{filteredSkills.length}</span>
+                  </div>
+                  <div className="wf-palette-group" role="group" aria-label="Available skills">
+                    {filteredSkills.length > 0 ? (
+                      filteredSkills.map(skill => {
+                        const blocked = skill.error || !skill.trusted;
+                        const title = blocked
+                          ? `Cannot use ${skill.metadata.name}: ${skill.error ?? 'it needs trust before it can run.'}`
+                          : selectedAgentStage
+                            ? `Add ${skill.metadata.name} to ${selectedAgentStage.name}${skill.metadata.description ? ` — ${skill.metadata.description}` : ''}`
+                            : `Select an agent stage, then add ${skill.metadata.name}${skill.metadata.description ? ` — ${skill.metadata.description}` : ''}`;
+                        return (
+                          <button
+                            key={skill.metadata.name}
+                            type="button"
+                            className="wf-palette-item wf-palette-item--skill"
+                            draggable={!blocked}
+                            disabled={Boolean(blocked)}
+                            title={title}
+                            data-testid={`wf-palette-skill-${skill.metadata.name}`}
+                            onDragStart={event => {
+                              event.dataTransfer.effectAllowed = 'copy';
+                              event.dataTransfer.setData(
+                                'application/x-praxis-workflow-palette',
+                                JSON.stringify({ kind: 'skill', skillName: skill.metadata.name } satisfies WorkflowPaletteItem)
+                              );
+                            }}
+                            onClick={() => useSkill(skill.metadata.name)}
+                          >
+                            <span className="wf-palette-item-icon">
+                              <Icon name="sparkles" size={13} />
+                            </span>
+                            <div className="wf-palette-item-content">
+                              <span className="wf-palette-item-title">{skill.metadata.name}</span>
+                              {skill.metadata.description && (
+                                <span className="wf-palette-item-desc">{skill.metadata.description}</span>
+                              )}
+                            </div>
+                            {blocked && (
+                              <span className="wf-palette-badge is-warn">
+                                {skill.error ? 'needs repair' : 'needs trust'}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="wf-palette-empty">No matching skills</p>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {showStages && (
+              <section className="wf-toolbox-section wf-stages-section" aria-labelledby="wf-section-stages">
+                <div className="wf-section-header">
+                  <span id="wf-section-stages">Flow Stages</span>
+                  <span className="wf-section-count">{filteredNodes.length}</span>
+                </div>
+                <ul className="rail-list">
+                  {filteredNodes.map(node => {
+                    const issues = feedback?.byNode[node.id]?.length ?? 0;
+                    const isEntry = node.id === definition.entryNodeId;
+                    const icon =
+                      node.type === 'agent-task'
+                        ? 'robot'
+                        : node.type === 'check'
+                          ? 'shield'
+                          : node.type === 'deployment'
+                            ? 'rocket'
+                            : node.type === 'approval'
+                              ? 'check-square'
+                              : 'split-horizontal';
+                    return (
+                      <li key={node.id} className="wf-stage-rail-item">
+                        <button
+                          type="button"
+                          className="rail-row"
+                          aria-pressed={node.id === selectedNodeId}
+                          aria-label={`${node.name} (${node.type})${isEntry ? ', entry stage' : ''}${
+                            issues > 0 ? `, ${issues} issue${issues === 1 ? '' : 's'}` : ''
+                          }`}
+                          onClick={() => selectStage(node.id)}
+                        >
+                          <span className="rail-row-icon">
+                            <Icon name={icon as never} size={13} />
+                          </span>
+                          <span className="rail-main">
+                            <span className="rail-name">{node.name}</span>
+                            <span className="rail-sub">{node.type}</span>
+                          </span>
+                          {issues > 0 ? (
+                            <span className="rail-mark is-issue" title={`${issues} validation issue${issues === 1 ? '' : 's'}`}>
+                              ⚠ {issues}
+                            </span>
+                          ) : isEntry ? (
+                            <span className="rail-mark is-entry">entry</span>
+                          ) : railGate(node) ? (
+                            <span className="rail-mark is-gate">{railGate(node)}</span>
+                          ) : null}
+                        </button>
+                        <button
+                          type="button"
+                          className="wf-stage-rail-delete"
+                          title={`Delete stage ${node.name}`}
+                          aria-label={`Delete stage ${node.name}`}
+                          data-testid={`wf-stage-rail-delete-${node.id}`}
+                          onClick={e => {
+                            e.stopPropagation();
+                            mutate(removeNode(definition, node.id));
+                            if (selectedNodeId === node.id) selectStage(undefined);
+                          }}
+                        >
+                          <Icon name="trash" size={11} />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+          </div>
 
           <div className="rail-foot">
-            <ValidationSummary feedback={feedback} />
+            <ValidationSummary feedback={feedback} onOpenValidation={() => void runValidation()} />
             {!project.workspaceFolder && (
               <p className="hint is-warn">Attach a folder to this project to run this workflow.</p>
             )}
+            <button
+              type="button"
+              className="btn"
+              data-testid="wf-rail-validate-btn"
+              onClick={() => void runValidation()}
+              disabled={validating || busy}
+            >
+              <Icon name="shield" size={13} /> {validating ? 'Validating…' : 'Validate workflow'}
+            </button>
             <button
               type="button"
               onClick={save}
@@ -360,14 +773,70 @@ export function WorkflowDesignerPage({
           <WorkflowCanvas
             definition={definition}
             selectedNodeId={selectedNodeId}
+            selectedEdgeId={selectedEdgeId}
             issuesByNode={Object.fromEntries(
               Object.entries(feedback?.byNode ?? {}).map(([id, list]) => [id, list.length])
             )}
+            presentations={presentations}
             onChange={mutate}
             onSelectNode={selectStage}
+            onSelectEdge={selectEdge}
+            onPaletteDrop={(item, targetNodeId, at) => {
+              if (item.kind === 'stage') {
+                const node = newNode(item.nodeType, at);
+                mutate(addNode(definition, node));
+                selectStage(node.id);
+                return;
+              }
+              if (item.kind === 'agent') {
+                if (targetNodeId) {
+                  const target = definition.nodes.find(node => node.id === targetNodeId);
+                  if (target?.type === 'agent-task') {
+                    const profile = profiles.find(candidate => candidate.profile.id === item.profileId);
+                    if (profile) {
+                      const hostId = profileHostId(catalog, item.profileId) ?? '';
+                      mutate(
+                        updateNode(definition, target.id, {
+                          name: profile.profile.name,
+                          agent: {
+                            ...target.agent,
+                            agentId: hostId,
+                            profileId: profile.profile.id,
+                            hostId,
+                            scope: profile.scope,
+                            toolMode: profile.profile.toolMode ?? target.agent.toolMode
+                          }
+                        } as never)
+                      );
+                      selectStage(target.id);
+                      return;
+                    }
+                  }
+                }
+                addProfileStage(item.profileId, at);
+                return;
+              }
+              if (!targetNodeId) {
+                setError('Drop a skill onto an agent stage. Skills guide an agent; they do not create a runnable stage alone.');
+                return;
+              }
+              useSkill(item.skillName, targetNodeId);
+            }}
           />
         </div>
       </div>
+
+      {validationDialogOpen && (
+        <WorkflowValidationDialog
+          project={project}
+          definition={definition}
+          feedback={feedback}
+          onClose={() => setValidationDialogOpen(false)}
+          onSelectNode={selectStage}
+          onRevalidate={() => void runValidation()}
+          busy={validating}
+        />
+      )}
 
       {auxSlot ? createPortal(inspector, auxSlot) : null}
     </div>
@@ -376,11 +845,24 @@ export function WorkflowDesignerPage({
 
 // ── Validation summary ───────────────────────────────────────────────────
 
-function ValidationSummary({ feedback }: { feedback: BucketedFeedback | undefined }) {
+function ValidationSummary({
+  feedback,
+  onOpenValidation
+}: {
+  feedback: BucketedFeedback | undefined;
+  onOpenValidation?: () => void;
+}) {
   if (!feedback) return null;
   const graphIssues = feedback.byNode[''] ?? [];
   return (
-    <div role="status" aria-live="polite" className={`wf-validation${feedback.valid ? '' : ' is-invalid'}`}>
+    <div
+      role="status"
+      aria-live="polite"
+      className={`wf-validation${feedback.valid ? '' : ' is-invalid'}`}
+      onClick={onOpenValidation}
+      style={{ cursor: onOpenValidation ? 'pointer' : undefined }}
+      title={onOpenValidation ? 'Click to view validation details' : undefined}
+    >
       {feedback.valid ? (
         <>Valid — {feedback.warnings.length} warning{feedback.warnings.length === 1 ? '' : 's'}.</>
       ) : (
@@ -438,12 +920,15 @@ function NodeInspector({
           <button
             type="button"
             className="btn btn-compact"
+            data-testid="wf-stage-remove-btn"
+            title={`Delete ${node.name}`}
             onClick={() => {
               onChange(removeNode(definition, node.id));
               onSelectNode(undefined);
             }}
           >
-            Remove
+            <Icon name="trash" size={11} />
+            <span>Delete</span>
           </button>
         </div>
       </div>
@@ -931,9 +1416,13 @@ function GateSelect({
 
 function EdgeEditor({
   definition,
+  selectedEdgeId,
+  onSelectEdge,
   onChange
 }: {
   definition: WorkflowDefinition;
+  selectedEdgeId?: string;
+  onSelectEdge?: (edgeId: string | undefined) => void;
   onChange: (next: WorkflowDefinition) => void;
 }) {
   const [from, setFrom] = useState('');
@@ -982,8 +1471,13 @@ function EdgeEditor({
         {definition.edges.map(edge => {
           const fromName = definition.nodes.find(node => node.id === edge.from)?.name ?? edge.from;
           const toName = definition.nodes.find(node => node.id === edge.to)?.name ?? edge.to;
+          const isSelected = selectedEdgeId === edge.id;
           return (
-            <li key={edge.id} className="wf-edge-row">
+            <li
+              key={edge.id}
+              className={`wf-edge-row${isSelected ? ' is-selected' : ''}`}
+              onClick={() => onSelectEdge?.(edge.id)}
+            >
               <span className="wf-edge-label" title={`${fromName} → ${toName}`}>
                 {fromName} <span aria-hidden>→</span> {toName}
               </span>
@@ -1012,7 +1506,11 @@ function EdgeEditor({
                   className="btn-icon wf-edge-remove"
                   aria-label={`Remove connection ${fromName} to ${toName}`}
                   title="Remove"
-                  onClick={() => onChange(disconnect(definition, edge.id))}
+                  onClick={event => {
+                    event.stopPropagation();
+                    onChange(disconnect(definition, edge.id));
+                    if (selectedEdgeId === edge.id) onSelectEdge?.(undefined);
+                  }}
                 >
                   <Icon name="window-close" size={12} />
                 </button>

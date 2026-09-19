@@ -6,6 +6,7 @@ import { approveStage } from './workflowGates';
 import { summarizeWorkflowRun } from './workflowRunSummary';
 import { governedDeliveryTemplate } from './workflowTemplates';
 import { instantiateTemplateForProject } from './workflowTemplates';
+import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition, type WorkflowPolicyProfile } from './workflowTypes';
 
 const T = (m: number): string => new Date(Date.UTC(2026, 8, 2, 9, m)).toISOString();
 
@@ -75,6 +76,90 @@ test('gate rows track the owning stage outcome', () => {
   const summary = summarizeWorkflowRun(r);
   assert.equal(summary.gates.find(gate => gate.gate === 'review')?.state, 'passed');
   assert.equal(summary.gates.find(gate => gate.gate === 'qa')?.state, 'pending');
+});
+
+/** A single check → approval workflow whose approval node allows a bypass. */
+function bypassableDefinition(): WorkflowDefinition {
+  return {
+    schemaVersion: WORKFLOW_SCHEMA_VERSION,
+    id: 'd-bypass', name: 'Bypassable', scope: 'global', version: 1, entryNodeId: 'qa',
+    createdAt: T(0), updatedAt: T(0),
+    nodes: [
+      {
+        type: 'check', id: 'qa', name: 'QA', x: 0, y: 0, inputs: [],
+        command: 'npm', args: ['test'], successExitCodes: [0],
+        outputs: [{ id: 'qa-results', kind: 'test-results', required: true }], satisfiesGate: 'qa'
+      },
+      {
+        type: 'approval', id: 'approve', name: 'Approve', x: 0, y: 0, inputs: ['qa-results'],
+        prompt: 'Ship?', requiredGates: ['qa'], allowBypass: true
+      }
+    ],
+    edges: [{ id: 'e1', from: 'qa', to: 'approve', on: 'success', required: true }]
+  };
+}
+
+function permissivePolicy(): WorkflowPolicyProfile {
+  return {
+    schemaVersion: WORKFLOW_SCHEMA_VERSION,
+    id: 'p', name: 'Policy', scope: 'global',
+    requiredGates: [], requireHumanApproval: true, allowGateBypass: true, requireTrustedAgents: true,
+    maxAttemptsPerNode: 3, createdAt: T(0), updatedAt: T(0)
+  };
+}
+
+test('a failed gate that policy and the approval node allow to bypass is marked bypassable, with its approval node named', () => {
+  let r = createWorkflowRun({ runId: 'run-bypass', projectId: 'p1', definition: bypassableDefinition(), at: T(0) });
+  r = applyWorkflowRunCommand(r, { kind: 'node-started', nodeId: 'qa', at: T(1) });
+  r = applyWorkflowRunCommand(r, { kind: 'node-failed', nodeId: 'qa', at: T(2), error: 'flaky' });
+
+  const summary = summarizeWorkflowRun(r, permissivePolicy());
+  const qaGate = summary.gates.find(gate => gate.gate === 'qa');
+  assert.equal(qaGate?.state, 'failed');
+  assert.equal(qaGate?.bypassable, true);
+  assert.equal(qaGate?.approvalNodeId, 'approve');
+});
+
+test('a pending gate is never marked bypassable, even when policy and the node allow one', () => {
+  const summary = summarizeWorkflowRun(
+    createWorkflowRun({ runId: 'run-bypass-pending', projectId: 'p1', definition: bypassableDefinition(), at: T(0) }),
+    permissivePolicy()
+  );
+  const qaGate = summary.gates.find(gate => gate.gate === 'qa');
+  assert.equal(qaGate?.state, 'pending');
+  assert.equal(qaGate?.bypassable, false);
+});
+
+test('without a permissive policy, a failed gate is not marked bypassable even though the node allows one', () => {
+  let r = createWorkflowRun({ runId: 'run-bypass-no-policy', projectId: 'p1', definition: bypassableDefinition(), at: T(0) });
+  r = applyWorkflowRunCommand(r, { kind: 'node-started', nodeId: 'qa', at: T(1) });
+  r = applyWorkflowRunCommand(r, { kind: 'node-failed', nodeId: 'qa', at: T(2), error: 'flaky' });
+
+  const summary = summarizeWorkflowRun(r);
+  const qaGate = summary.gates.find(gate => gate.gate === 'qa');
+  assert.equal(qaGate?.bypassable, false);
+  // Distinguishes "the workflow itself would allow this" from "nothing
+  // would" — without it the UI has no way to explain the missing button.
+  assert.equal(qaGate?.bypassBlockedByPolicy, true);
+});
+
+test('a workflow whose approval node forbids bypass is never reported as policy-blocked', () => {
+  const forbidding: WorkflowDefinition = {
+    ...bypassableDefinition(),
+    nodes: bypassableDefinition().nodes.map(node =>
+      node.type === 'approval' ? { ...node, allowBypass: false } : node
+    )
+  };
+  let r = createWorkflowRun({ runId: 'run-bypass-forbidden', projectId: 'p1', definition: forbidding, at: T(0) });
+  r = applyWorkflowRunCommand(r, { kind: 'node-started', nodeId: 'qa', at: T(1) });
+  r = applyWorkflowRunCommand(r, { kind: 'node-failed', nodeId: 'qa', at: T(2), error: 'flaky' });
+
+  // Even with a permissive policy, the workflow itself never allowed this —
+  // there is nothing for a policy to unblock, so it must not read as blocked.
+  const summary = summarizeWorkflowRun(r, permissivePolicy());
+  const qaGate = summary.gates.find(gate => gate.gate === 'qa');
+  assert.equal(qaGate?.bypassable, false);
+  assert.equal(qaGate?.bypassBlockedByPolicy, undefined);
 });
 
 test('a failed required stage explains the block and offers retry', () => {

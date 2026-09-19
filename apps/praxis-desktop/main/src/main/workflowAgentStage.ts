@@ -1,9 +1,12 @@
+import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import * as path from 'node:path';
 import { promisify } from 'node:util';
 import {
-  PROVIDER_DESCRIPTORS,
   buildStageContext,
   buildStageTaskDefinition,
+  discoverWorkspaceAgentWorkflows,
   preflightStage,
   stageOutcomeFromSession,
   stageSessionKey,
@@ -15,17 +18,15 @@ import {
 } from '@praxis/core';
 import {
   abortActiveTask,
-  getAcpAgentHost,
   getAiSessionManager,
-  getVercelAgentService,
-  hasActiveTask,
-  resolveAcpStartOptions,
-  resolveConnectionOptions
+  hasActiveTask
 } from './aiInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { getWorkflowPolicyStore } from './workflowStoreInstance';
+import { getProjectStore } from './projectStoreInstance';
 import { workflowLogSink } from './workflowLogSink';
+import { launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 
 /**
  * Agent stages as real, attributed sessions (FX-BE-025 / TASK-114, TASK-115).
@@ -40,6 +41,53 @@ import { workflowLogSink } from './workflowLogSink';
  */
 
 const run = promisify(execFile);
+const MAX_WORKFLOW_PACK_BYTES = 48_000;
+
+function getProjectRoot(projectId: string): string | undefined {
+  return getProjectStore().get(projectId)?.workspaceFolder?.trim() || undefined;
+}
+
+async function resolveStageWorkflowPack(
+  workspaceRoot: string,
+  workflowPackId: string | undefined
+): Promise<import('@praxis/core').WorkflowPackContext | undefined> {
+  const requested = workflowPackId?.trim();
+  if (!requested) return undefined;
+
+  const workflows = await discoverWorkspaceAgentWorkflows(workspaceRoot);
+  const reference = workflows.find(candidate =>
+    candidate.id === requested ||
+    candidate.name === requested ||
+    candidate.instructionsPath === requested ||
+    path.basename(path.dirname(candidate.instructionsPath)) === requested
+  );
+  if (!reference) {
+    throw new Error(`Workflow pack "${requested}" was not found under ${path.join(workspaceRoot, '.github', 'skills')}.`);
+  }
+
+  const instructionsPath = path.isAbsolute(reference.instructionsPath)
+    ? reference.instructionsPath
+    : path.resolve(workspaceRoot, reference.instructionsPath);
+  const relative = path.relative(workspaceRoot, instructionsPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(`Workflow pack "${requested}" resolves outside the project workspace.`);
+  }
+
+  const instructions = await readFile(instructionsPath, 'utf8');
+  if (Buffer.byteLength(instructions, 'utf8') > MAX_WORKFLOW_PACK_BYTES) {
+    throw new Error(`Workflow pack "${requested}" is larger than the ${MAX_WORKFLOW_PACK_BYTES}-byte stage limit.`);
+  }
+  return {
+    reference,
+    instructions,
+    provenance: {
+      source: 'workspace',
+      resolutionMode: 'content',
+      fingerprint: createHash('sha256').update(instructions, 'utf8').digest('hex'),
+      ...(reference.version ? { version: reference.version } : {})
+    }
+  };
+}
 
 /** Whether the app can drive agent stages at all right now. */
 export function canDispatchAgentStage(): boolean {
@@ -80,6 +128,14 @@ export async function runWorkflowAgentStage(
   dispatch.signal?.throwIfAborted();
   const context = buildStageContext(workflowRun, node.id, preflight.binding);
   if (!context) return { status: 'failed', error: `Stage ${node.id} is not part of this run.` };
+  const projectRoot = getProjectRoot(workflowRun.projectId);
+  if (node.workflowPackId && !projectRoot) {
+    return { status: 'failed', error: 'This stage declares a workflow pack, but its project has no workspace folder.' };
+  }
+  const workflowPack = projectRoot
+    ? await resolveStageWorkflowPack(projectRoot, node.workflowPackId)
+    : undefined;
+  const stageContext = workflowPack ? { ...context, workflowPack } : context;
 
   const issueKey = stageSessionKey(workflowRun.runId, node.id);
   const sessions = getAiSessionManager();
@@ -91,8 +147,7 @@ export async function runWorkflowAgentStage(
       error: `Stage requires provider "${preflight.binding.providerId}" but "${provider}" is active.`
     };
   }
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
-  const taskDefinition = buildStageTaskDefinition(context);
+  const taskDefinition = buildStageTaskDefinition(stageContext);
 
   // A synthetic issue: the session store is issue-keyed, and a stage is not a
   // ticket, so it carries the run/node key instead.
@@ -109,46 +164,24 @@ export async function runWorkflowAgentStage(
   let skillActivations: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }> = [];
 
   try {
-    const runtime = getAgentRuntimeManager();
     const skillNames = preflight.binding.skills.map(skill => skill.name);
-    await Promise.all(skillNames.map(name => runtime.activateSkill(preflight.binding!.hostId, name)));
-    const binding = await runtime.createBinding(
-      preflight.binding.profileId,
-      preflight.binding.hostId,
-      { id: provider },
+    const prepared = await prepareAgentLaunch({
+      profileId: preflight.binding.profileId,
+      hostId: preflight.binding.hostId,
+      provider,
       skillNames
-    );
-    skillActivations = binding.activations.map(activation => {
-      const version = binding.skills.find(skill => skill.id === activation.skillId)?.version;
-      return { skillId: activation.skillId, mode: activation.mode, ...(version ? { version } : {}) };
     });
-    taskDefinition.goal += `\n\n${await runtime.bindingContext(binding)}`;
+    if (prepared.binding) taskDefinition.goal += `\n\n${await getAgentRuntimeManager().bindingContext(prepared.binding)}`;
 
     dispatch.signal?.throwIfAborted();
-    if (descriptor.kind === 'cli-agent') {
-      const { command, args } = resolveAcpStartOptions(provider);
-      await getAcpAgentHost().startTask(issue, taskDefinition, provider, {
-        command,
-        args,
-        workingDirectory: worktreePath,
-        toolMode
-      });
-    } else {
-      const gateway = await resolveConnectionOptions(provider);
-      dispatch.signal?.throwIfAborted();
-      if (!gateway.apiKey) {
-        settled.cancel();
-        return { status: 'failed', error: `No ${descriptor.label} API key configured for workflow stages.` };
-      }
-      await getVercelAgentService().startTask(issue, taskDefinition, {
-        apiKey: gateway.apiKey,
-        gatewayUrl: gateway.gatewayUrl,
-        workingDirectory: worktreePath,
-        model: gateway.model,
-        provider,
-        toolMode
-      });
-    }
+    await launchAgentTask(prepared, {
+      issue,
+      taskDefinition,
+      provider,
+      workingDirectory: worktreePath,
+      toolMode
+    });
+    skillActivations = prepared.skillActivations;
   } catch (error) {
     settled.cancel();
     return { status: 'failed', error: error instanceof Error ? error.message : String(error) };
@@ -167,6 +200,9 @@ export async function runWorkflowAgentStage(
       toolMode,
       workflowRunId: workflowRun.runId,
       workflowNodeId: node.id,
+      workflowId: workflowRun.workflowId,
+      workflowVersion: workflowRun.workflowVersion,
+      workflowRole: 'stage',
       agentId: preflight.binding.hostId,
       profileId: preflight.binding.profileId,
       hostId: preflight.binding.hostId,
@@ -200,7 +236,11 @@ function waitForSession(issueKey: string): { promise: Promise<FinishedStageSessi
     const settle = (state: FinishedStageSession['state']): void => {
       const record = sessions.getAgentSession(issueKey);
       dispose?.();
-      resolve({ state, ...(record?.responseText ? { responseText: record.responseText } : {}) });
+      resolve({
+        state,
+        ...(record?.responseText ? { responseText: record.responseText } : {}),
+        ...(record?.lastError ? { lastError: record.lastError } : {})
+      });
     };
 
     const subscription = sessions.onDidChangeAgentSession(record => {

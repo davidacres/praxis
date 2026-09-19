@@ -13,6 +13,7 @@
 // directly, not through this app's `ai:delegate` IPC.
 
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
@@ -102,6 +103,7 @@ async function readSession(
   workingDirectory?: string;
   toolMode?: string;
   runtimeSessionId?: string;
+  runtimeLaunch?: { adapter: string; transport: string; hostId?: string; command?: string };
 } | undefined> {
   return win.evaluate(async issueKey => {
     const w = window as unknown as {
@@ -147,6 +149,54 @@ test('delegate completes a session against a real ACP agent subprocess', async (
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText(
     'Hello from the fake ACP agent'
   );
+});
+
+test('an Agent Hub ACP binding launches its declared host entry point', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  const hostRoot = path.join(app.userDataDir, 'agents', 'bound-acp-host');
+  const profileRoot = path.join(app.userDataDir, 'profiles', 'bound-profile');
+  fs.mkdirSync(hostRoot, { recursive: true });
+  fs.mkdirSync(profileRoot, { recursive: true });
+  fs.writeFileSync(
+    path.join(hostRoot, 'agent.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      id: 'bound-acp-host',
+      name: 'Bound ACP Host',
+      type: 'acp',
+      entry: { command: process.execPath, args: [FIXTURE_PATH] }
+    })
+  );
+  fs.writeFileSync(
+    path.join(profileRoot, 'AGENT.md'),
+    '---\nid: bound-profile\nname: Bound Profile\n---\nUse the declared host transport.\n'
+  );
+  // If the old provider-only route is still used, this deliberately invalid
+  // provider command fails. The selected host entry is the only valid route.
+  await configureCliProvider(win, 'claude-code-cli', '/definitely/not-the-selected-host');
+  await win.evaluate(async () => window.praxis.agentRuntime.refresh());
+  await win.evaluate(async () => {
+    const w = window as unknown as {
+      praxis: { ai: { delegate: (input: Record<string, unknown>) => Promise<unknown> } };
+    };
+    await w.praxis.ai.delegate({
+      issueKey: 'APP-214',
+      provider: 'claude-code-cli',
+      profileId: 'bound-profile',
+      hostId: 'bound-acp-host',
+      task: { goal: 'Prove the selected Agent Hub host is the session transport.', maxSteps: 3, timeoutMs: 30000 }
+    });
+  });
+  await expect.poll(async () => (await readSession(win, 'APP-214'))?.state, { timeout: 15000 }).toBe('completed');
+  const session = await readSession(win, 'APP-214');
+  expect(session?.responseText).toContain('Hello from the fake ACP agent');
+  expect(session?.runtimeLaunch).toMatchObject({
+    adapter: 'acp',
+    transport: 'acp',
+    hostId: 'bound-acp-host',
+    command: process.execPath
+  });
 });
 
 test('ACP resume replay does not duplicate the previous answer into a follow-up', async () => {

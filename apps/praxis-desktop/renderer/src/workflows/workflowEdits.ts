@@ -72,10 +72,10 @@ export function updateNode(
   return touch(definition, nodes, definition.edges);
 }
 
-/** Repositions a node on the canvas; coordinates are rounded. */
+/** Repositions a node on the canvas; coordinates are rounded and clamped to non-negative. */
 export function moveNode(definition: WorkflowDefinition, nodeId: string, to: { x: number; y: number }): WorkflowDefinition {
   const nodes = definition.nodes.map(node =>
-    node.id === nodeId ? { ...node, x: Math.round(to.x), y: Math.round(to.y) } : node
+    node.id === nodeId ? { ...node, x: Math.max(0, Math.round(to.x)), y: Math.max(0, Math.round(to.y)) } : node
   );
   return touch(definition, nodes, definition.edges);
 }
@@ -168,4 +168,157 @@ export function bucketFeedback(
     byNode[key] = [...(byNode[key] ?? []), issue];
   }
   return { valid: result.valid, byNode, errors: result.errors, warnings: result.warnings };
+}
+
+export type ValidationCategoryKind = 'connections' | 'flow' | 'configuration' | 'gates' | 'policy';
+
+export interface WorkflowValidationCategory {
+  kind: ValidationCategoryKind;
+  title: string;
+  valid: boolean;
+  errors: Array<{ path: string; message: string }>;
+  warnings: Array<{ path: string; message: string }>;
+  summary: string;
+}
+
+export interface WorkflowValidationReport {
+  valid: boolean;
+  totalStages: number;
+  totalConnections: number;
+  entryNodeId?: string;
+  entryNodeName?: string;
+  categories: WorkflowValidationCategory[];
+  allErrors: Array<{ path: string; message: string; targetNodeId?: string; targetNodeName?: string; category: ValidationCategoryKind }>;
+  allWarnings: Array<{ path: string; message: string; targetNodeId?: string; targetNodeName?: string; category: ValidationCategoryKind }>;
+}
+
+export function categorizeWorkflowIssue(issue: { path: string; message: string }): ValidationCategoryKind {
+  const p = issue.path.toLowerCase();
+  const m = issue.message.toLowerCase();
+
+  if (
+    p.startsWith('edges') ||
+    m.includes('connection') ||
+    m.includes('edge') ||
+    m.includes('concurrent parent') ||
+    m.includes('join')
+  ) {
+    return 'connections';
+  }
+  if (
+    p.startsWith('entrynodeid') ||
+    m.includes('cycle') ||
+    m.includes('unreachable') ||
+    m.includes('entry node') ||
+    m.includes('inbound edge') ||
+    m.includes('ancestor') ||
+    m.includes('artifact') ||
+    p.includes('outputs') ||
+    p.includes('inputs')
+  ) {
+    return 'flow';
+  }
+  if (p.includes('gate') || m.includes('gate') || m.includes('finding')) {
+    return 'gates';
+  }
+  if (p.includes('policy') || m.includes('policy')) {
+    return 'policy';
+  }
+  return 'configuration';
+}
+
+export function analyzeWorkflowValidation(
+  definition: WorkflowDefinition,
+  feedback: BucketedFeedback | undefined
+): WorkflowValidationReport {
+  const errors = feedback?.errors ?? [];
+  const warnings = feedback?.warnings ?? [];
+  const valid = feedback?.valid ?? false;
+  const entryNode = definition.nodes.find(n => n.id === definition.entryNodeId);
+
+  const resolveTarget = (path: string): { targetNodeId?: string; targetNodeName?: string } => {
+    const match = NODE_PATH.exec(path);
+    if (match) {
+      const node = definition.nodes[Number(match[1])];
+      if (node) return { targetNodeId: node.id, targetNodeName: node.name };
+    }
+    return {};
+  };
+
+  const enrichedErrors = errors.map(e => ({
+    ...e,
+    ...resolveTarget(e.path),
+    category: categorizeWorkflowIssue(e)
+  }));
+
+  const enrichedWarnings = warnings.map(w => ({
+    ...w,
+    ...resolveTarget(w.path),
+    category: categorizeWorkflowIssue(w)
+  }));
+
+  const filterCat = (cat: ValidationCategoryKind) => ({
+    errors: enrichedErrors.filter(e => e.category === cat),
+    warnings: enrichedWarnings.filter(w => w.category === cat)
+  });
+
+  const conn = filterCat('connections');
+  const flow = filterCat('flow');
+  const config = filterCat('configuration');
+  const gates = filterCat('gates');
+  const policy = filterCat('policy');
+
+  const categories: WorkflowValidationCategory[] = [
+    {
+      kind: 'connections',
+      title: 'Connections & Edges',
+      valid: conn.errors.length === 0,
+      errors: conn.errors,
+      warnings: conn.warnings,
+      summary: conn.errors.length === 0
+        ? `All ${definition.edges.length} connection${definition.edges.length === 1 ? '' : 's'} are properly linked and valid.`
+        : `${conn.errors.length} connection issue${conn.errors.length === 1 ? '' : 's'} found.`
+    },
+    {
+      kind: 'flow',
+      title: 'Flow & Topology',
+      valid: flow.errors.length === 0,
+      errors: flow.errors,
+      warnings: flow.warnings,
+      summary: flow.errors.length === 0
+        ? `Entry stage "${entryNode?.name ?? definition.entryNodeId}" is set, graph is acyclic, and all stages are reachable.`
+        : `${flow.errors.length} flow / reachability issue${flow.errors.length === 1 ? '' : 's'} found.`
+    },
+    {
+      kind: 'configuration',
+      title: 'Stage Configuration',
+      valid: config.errors.length === 0,
+      errors: config.errors,
+      warnings: config.warnings,
+      summary: config.errors.length === 0
+        ? `All ${definition.nodes.length} stage${definition.nodes.length === 1 ? '' : 's'} have valid parameters, profiles, and commands.`
+        : `${config.errors.length} stage configuration issue${config.errors.length === 1 ? '' : 's'} found.`
+    },
+    {
+      kind: 'gates',
+      title: 'Gates & Policies',
+      valid: gates.errors.length === 0 && policy.errors.length === 0,
+      errors: [...gates.errors, ...policy.errors],
+      warnings: [...gates.warnings, ...policy.warnings],
+      summary: gates.errors.length === 0 && policy.errors.length === 0
+        ? 'Quality gates, security requirements, and delivery policies are satisfied.'
+        : `${gates.errors.length + policy.errors.length} gate / policy issue${gates.errors.length + policy.errors.length === 1 ? '' : 's'} found.`
+    }
+  ];
+
+  return {
+    valid,
+    totalStages: definition.nodes.length,
+    totalConnections: definition.edges.length,
+    entryNodeId: definition.entryNodeId,
+    entryNodeName: entryNode?.name,
+    categories,
+    allErrors: enrichedErrors,
+    allWarnings: enrichedWarnings
+  };
 }

@@ -52,18 +52,26 @@ export function WorkflowPipeline({ summary, selectedNodeId, onSelectNode }: Work
     [summary.stages]
   );
 
-  const boxes = useMemo<Record<string, CanvasBox>>(() => {
-    const map: Record<string, CanvasBox> = {};
-    for (const node of summary.graph.nodes) map[node.id] = { x: node.x, y: node.y, width: W, height: H };
-    return map;
-  }, [summary.graph.nodes]);
-
-  const bounds = useMemo(() => {
+  // Stored positions are relative to whichever node the designer happened to
+  // place first, so a branch drawn above or left of it (two approval nodes
+  // fanned out symmetrically, say) can have a negative x or y. Shifting every
+  // node by the graph's own minimum keeps the diagram's origin at (0, 0) —
+  // without it, a negative-positioned node renders above/left of this
+  // container's edge and is clipped, effectively invisible.
+  const { boxes, bounds } = useMemo(() => {
     const xs = summary.graph.nodes.map(n => n.x);
     const ys = summary.graph.nodes.map(n => n.y);
+    const minX = Math.min(0, ...xs);
+    const minY = Math.min(0, ...ys);
+    const map: Record<string, CanvasBox> = {};
+    for (const node of summary.graph.nodes) {
+      map[node.id] = { x: node.x - minX, y: node.y - minY, width: W, height: H };
+    }
+    const maxX = Math.max(0, ...xs.map(x => x - minX));
+    const maxY = Math.max(0, ...ys.map(y => y - minY));
     return {
-      w: Math.max(...xs, 0) + W + 24,
-      h: Math.max(...ys, 0) + H + 24
+      boxes: map,
+      bounds: { w: maxX + W + 24, h: maxY + H + 24 }
     };
   }, [summary.graph.nodes]);
 
@@ -130,6 +138,7 @@ export function WorkflowPipeline({ summary, selectedNodeId, onSelectNode }: Work
           {summary.graph.nodes.map(node => {
             const stage = stageByNode[node.id];
             const lane = stage?.lane ?? 'idle';
+            const box = boxes[node.id];
             return (
               <button
                 key={node.id}
@@ -140,8 +149,8 @@ export function WorkflowPipeline({ summary, selectedNodeId, onSelectNode }: Work
                   node.id === selectedNodeId ? ' is-selected' : ''
                 }`}
                 style={{
-                  left: node.x * scale,
-                  top: node.y * scale,
+                  left: box.x * scale,
+                  top: box.y * scale,
                   width: W * scale,
                   minHeight: H * scale
                 }}

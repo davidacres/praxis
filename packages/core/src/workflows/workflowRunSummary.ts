@@ -25,9 +25,10 @@ import {
 } from './workflowRun';
 import { deriveRunStatus, scheduleWorkflowRun } from './workflowScheduler';
 import { nextActions, outstandingNodes, type WorkflowNextAction } from './workflowRecovery';
-import { evaluateGates, type GateStatus } from './workflowGates';
+import { approvalReadiness, type GateStatus } from './workflowGates';
 import { stageSessionKey } from './workflowStageTask';
 import type { WorkflowPolicyProfile } from './workflowTypes';
+import type { WorkflowPlanInput } from './workflowRun';
 
 export interface StageRow {
   nodeId: string;
@@ -77,6 +78,9 @@ export interface WorkflowRunSummary {
   endedAt?: string;
   /** The ticket this run was started from, if any — see `WorkflowRun.issueKey`. */
   issueKey?: string;
+  controllerSessionKey?: string;
+  controllerSessionId?: string;
+  planInput?: WorkflowPlanInput;
 }
 
 function laneFor(
@@ -134,8 +138,33 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     };
   });
 
-  const approvalNode = run.definition.nodes.find(isApprovalNode);
-  const gates = approvalNode ? evaluateGates(run, approvalNode.id, policy) : [];
+  // Union across every approval node, not just the first — a gate kind
+  // required by more than one approval node evaluates identically for each
+  // (the owning stage decides it), so the first evaluation wins the dedupe.
+  // `approvalReadiness` (rather than `evaluateGates` directly) so each row
+  // can also carry whether it is currently bypassable and which approval
+  // node a bypass/approve of it would target.
+  const gatesByKind = new Map<string, GateStatus>();
+  for (const approval of run.definition.nodes.filter(isApprovalNode)) {
+    const readiness = approvalReadiness(run, approval.id, policy);
+    const bypassableKinds = new Set(readiness.bypassable.map(candidate => candidate.gate));
+    for (const gate of readiness.gates) {
+      if (gatesByKind.has(gate.gate)) continue;
+      const bypassable = bypassableKinds.has(gate.gate);
+      // The workflow itself would allow waiving this, but the effective
+      // policy (an explicit forbid, or none at all — the deny-by-default
+      // case) is what's actually stopping it.
+      const bypassBlockedByPolicy =
+        !bypassable && approval.allowBypass && gate.state !== 'pending' && gate.state !== 'passed' && gate.state !== 'bypassed';
+      gatesByKind.set(gate.gate, {
+        ...gate,
+        bypassable,
+        approvalNodeId: approval.id,
+        ...(bypassBlockedByPolicy ? { bypassBlockedByPolicy: true } : {})
+      });
+    }
+  }
+  const gates = [...gatesByKind.values()];
 
   // `run.status` is only advanced by settling commands; `awaiting-approval` is a
   // fact about the graph, so it is derived here the same way the scheduler does.
@@ -159,7 +188,10 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     events: run.events,
     startedAt: run.startedAt,
     ...(run.endedAt ? { endedAt: run.endedAt } : {}),
-    ...(run.issueKey ? { issueKey: run.issueKey } : {})
+    ...(run.issueKey ? { issueKey: run.issueKey } : {}),
+    ...(run.controllerSessionKey ? { controllerSessionKey: run.controllerSessionKey } : {}),
+    ...(run.controllerSessionId ? { controllerSessionId: run.controllerSessionId } : {}),
+    ...(run.planInput ? { planInput: run.planInput } : {})
   };
 }
 

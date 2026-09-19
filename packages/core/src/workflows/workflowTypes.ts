@@ -448,6 +448,8 @@ export interface WorkflowGateDecision {
   bypassed: boolean;
   bypassedBy?: string;
   reason?: string;
+  /** Immutable implementation snapshot this decision assessed. */
+  assessedSnapshotRef?: string;
   decidedAt: string;
 }
 

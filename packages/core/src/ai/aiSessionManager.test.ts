@@ -49,8 +49,42 @@ test('updateAgentRuntime persists Agent Hub attribution', () => {
   assert.equal(record?.agentId, 'praxis-reviewer');
   assert.deepEqual(record?.activeSkills, ['code-audit']);
 
+  mgr.updateAgentRuntime('SESSION-abc', {
+    runtimeLaunch: { adapter: 'acp', transport: 'acp', hostId: 'praxis-reviewer', command: '/agents/reviewer' }
+  });
+  assert.deepEqual(record?.runtimeLaunch, {
+    adapter: 'acp',
+    transport: 'acp',
+    hostId: 'praxis-reviewer',
+    command: '/agents/reviewer'
+  });
+
   mgr.updateAgentRuntime('SESSION-abc', { activeSkills: [] });
   assert.equal(mgr.getAgentSession('SESSION-abc')?.activeSkills, undefined);
+});
+
+test('updateAgentRuntime persists governed workflow controller linkage', () => {
+  const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('not_started') }));
+  mgr.updateAgentRuntime('SESSION-abc', {
+    workflowRunId: 'run-1',
+    workflowId: 'delivery',
+    workflowVersion: 3,
+    workflowRole: 'controller'
+  });
+  assert.deepEqual(mgr.getAgentSession('SESSION-abc') && {
+    workflowRunId: mgr.getAgentSession('SESSION-abc')?.workflowRunId,
+    workflowId: mgr.getAgentSession('SESSION-abc')?.workflowId,
+    workflowVersion: mgr.getAgentSession('SESSION-abc')?.workflowVersion,
+    workflowRole: mgr.getAgentSession('SESSION-abc')?.workflowRole
+  }, {
+    workflowRunId: 'run-1',
+    workflowId: 'delivery',
+    workflowVersion: 3,
+    workflowRole: 'controller'
+  });
+
+  mgr.updateAgentRuntime('SESSION-abc', { workflowRunIds: ['run-1', 'run-2', 'run-1'] });
+  assert.deepEqual(mgr.getAgentSession('SESSION-abc')?.workflowRunIds, ['run-1', 'run-2']);
 });
 
 test('token usage accumulates across a session\'s turns', () => {

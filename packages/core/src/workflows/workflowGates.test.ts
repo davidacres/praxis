@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyWorkflowRunCommand, createWorkflowRun, type WorkflowRun } from './workflowRun';
 import { advanceJoins } from './workflowScheduler';
-import { approvalReadiness, approveStage, bypassGate, evaluateGates, rejectStage } from './workflowGates';
+import { approvalReadiness, approveStage, bypassGate, evaluateGates, rejectStage, resolveApprovalTarget } from './workflowGates';
 import { preflightStage, preflightWorkflow, type AgentCatalogSnapshot } from './workflowPreflight';
 import { buildStageContext, findSnapshot, stageSessions } from './workflowStageSession';
 import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition, type WorkflowNode, type WorkflowPolicyProfile } from './workflowTypes';
@@ -307,6 +307,27 @@ test('a gate passes only when its owning node succeeded', () => {
   const gates = evaluateGates(r, 'approve');
   assert.equal(gates.find(gate => gate.gate === 'review')?.state, 'passed');
   assert.equal(gates.find(gate => gate.gate === 'qa')?.state, 'pending');
+  assert.equal(r.nodes.review.assessedSnapshotRef, 'sha-abc');
+});
+
+test('a completed review becomes stale when its implementation snapshot changes', () => {
+  let r = succeed(run(), 'implement', 1, 'sha-abc');
+  r = succeed(r, 'review', 3);
+
+  // A newer implementation revision is what a rework loop eventually records;
+  // completed review evidence must never be treated as approval for that work.
+  r = {
+    ...r,
+    nodes: {
+      ...r.nodes,
+      implement: { ...r.nodes.implement, snapshotRef: 'sha-def' }
+    }
+  };
+
+  const review = evaluateGates(r, 'approve').find(gate => gate.gate === 'review');
+  assert.equal(review?.state, 'stale');
+  assert.match(review?.detail ?? '', /sha-abc.*sha-def/);
+  assert.equal(approvalReadiness(r, 'approve').canApprove, false);
 });
 
 test('agent prose cannot pass a deterministic check gate', () => {
@@ -404,6 +425,10 @@ test('approval settles the stage and records a decision per passing gate', () =>
   assert.equal(result.run.nodes.approve.outcome, 'succeeded');
   assert.deepEqual(result.run.gateDecisions.map(decision => decision.gate).sort(), ['qa', 'review']);
   assert.ok(result.run.gateDecisions.every(decision => decision.passed && !decision.bypassed));
+  assert.deepEqual(
+    result.run.gateDecisions.map(decision => decision.assessedSnapshotRef),
+    ['sha-abc', 'sha-abc']
+  );
 });
 
 test('an approval must record who granted it', () => {
@@ -417,6 +442,72 @@ test('a rejection fails the stage with an attributed reason', () => {
   const rejected = rejectStage(r, 'approve', { actor: 'dave', reason: 'ship next week', at: T(9) });
   assert.equal(rejected.nodes.approve.outcome, 'failed');
   assert.match(rejected.nodes.approve.attempts[0].error ?? '', /Rejected by dave: ship next week/);
+});
+
+// ── Multiple approval nodes ─────────────────────────────────────────────
+
+/** Two independent approval branches, so both can await approval at once. */
+function definitionWithTwoApprovals(): WorkflowDefinition {
+  return {
+    schemaVersion: WORKFLOW_SCHEMA_VERSION,
+    id: 'd2', name: 'D2', scope: 'global', version: 1, entryNodeId: 'implement',
+    createdAt: T(0), updatedAt: T(0),
+    nodes: [
+      {
+        type: 'agent-task', id: 'implement', name: 'Implement', x: 0, y: 0, inputs: [],
+        agent: { agentId: 'coder', scope: 'global', toolMode: 'full' },
+        instructions: 'Build.', outputs: [{ id: 'change-diff', kind: 'diff', required: true }], mutatesWorktree: true
+      },
+      {
+        type: 'approval', id: 'approve-a', name: 'Approve A', x: 0, y: 0, inputs: [],
+        prompt: 'Ship A?', requiredGates: [], allowBypass: false
+      },
+      {
+        type: 'approval', id: 'approve-b', name: 'Approve B', x: 0, y: 0, inputs: [],
+        prompt: 'Ship B?', requiredGates: [], allowBypass: false
+      }
+    ],
+    edges: [
+      { id: 'e1', from: 'implement', to: 'approve-a', on: 'success', required: true },
+      { id: 'e2', from: 'implement', to: 'approve-b', on: 'success', required: true }
+    ]
+  };
+}
+
+function runWithTwoApprovals(): WorkflowRun {
+  return succeed(
+    createWorkflowRun({ runId: 'r2', projectId: 'p1', definition: definitionWithTwoApprovals(), at: T(0) }),
+    'implement',
+    1,
+    'sha-abc'
+  );
+}
+
+test('resolveApprovalTarget uses the only approval node when there is one', () => {
+  const r = succeed(run(), 'implement', 1, 'sha-abc');
+  assert.equal(resolveApprovalTarget(r).id, 'approve');
+});
+
+test('resolveApprovalTarget refuses to guess when several approvals are awaiting at once', () => {
+  const r = runWithTwoApprovals();
+  assert.throws(() => resolveApprovalTarget(r), /multiple approval stages/);
+  assert.equal(resolveApprovalTarget(r, 'approve-b').id, 'approve-b');
+});
+
+test('resolveApprovalTarget falls back to the one still awaiting once the other has settled', () => {
+  const settled = approveStage(runWithTwoApprovals(), 'approve-a', { actor: 'dave', at: T(9) });
+  assert.equal(settled.ok, true);
+  assert.equal(resolveApprovalTarget(settled.run).id, 'approve-b');
+});
+
+test('resolveApprovalTarget rejects an id that is not an approval stage', () => {
+  assert.throws(() => resolveApprovalTarget(run(), 'implement'), /is not an approval stage/);
+});
+
+test('approving one of several approval nodes never touches the others', () => {
+  const result = approveStage(runWithTwoApprovals(), 'approve-a', { actor: 'dave', at: T(9) });
+  assert.equal(result.run.nodes['approve-a'].outcome, 'succeeded');
+  assert.equal(result.run.nodes['approve-b'].outcome, 'pending');
 });
 
 // ── Bypass ───────────────────────────────────────────────────────────────

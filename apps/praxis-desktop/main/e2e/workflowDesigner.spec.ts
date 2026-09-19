@@ -16,8 +16,33 @@ test.slow();
 
 let app: TestApp;
 
+function seedAgent(userDataDir: string, id: string, name: string): void {
+  const dir = path.join(userDataDir, 'agents', id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'agent.json'),
+    JSON.stringify({ schemaVersion: 1, id, name, type: 'acp', entry: { command: 'node', args: ['agent.js'] } }, null, 2)
+  );
+  fs.writeFileSync(
+    path.join(dir, 'AGENT.md'),
+    `---\nid: ${id}\nname: ${name}\ndescription: Reviews implementation changes against repository standards.\nskills: code-audit\n---\nReview the supplied change and return structured findings.`
+  );
+}
+
+function seedSkill(userDataDir: string, name: string): void {
+  const dir = path.join(userDataDir, 'skills', name);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'SKILL.md'),
+    `---\nname: ${name}\ndescription: Reviews a change for correctness, risk, and repository conventions.\ntriggers: review, audit\n---\nInspect the supplied change and report blocking findings separately from suggestions.`
+  );
+}
+
 test.beforeEach(async () => {
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  seedAgent(app.userDataDir, 'code-reviewer', 'Code Reviewer');
+  seedSkill(app.userDataDir, 'code-audit');
+  await app.window.evaluate(async () => window.praxis.agentRuntime.refresh());
   await app.window.evaluate(async () => {
     const workspace = (await window.praxis.workspaces.list())[0];
     const project = await window.praxis.projects.create(
@@ -41,11 +66,9 @@ test.beforeEach(async () => {
   });
   await app.window.reload();
 });
-
 test.afterEach(async () => {
   await closeTestApp(app);
 });
-
 /** Create a project workflow from a template via the sidebar `+` and its dialog. */
 async function newWorkflow(page: Page, template: string, project = 'Delivery Project'): Promise<void> {
   await page.getByRole('button', { name: `New workflow in ${project}` }).click();
@@ -95,12 +118,11 @@ test('blocks save while the graph is invalid and announces the errors', async ()
 
   const rail = page.getByRole('navigation', { name: 'Workflow stages' });
   await rail.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
-  const agentControl = inspectorOf(page).getByLabel(/^Agent/);
-  if (await agentControl.evaluate(el => el.tagName.toLowerCase() === 'select')) {
-    await agentControl.selectOption('');
-  } else {
-    await agentControl.fill('');
-  }
+  // A configured profile is now always visible in the Agent Hub palette;
+  // clear the launch binding explicitly to make the stage unrunnable.
+  const bindingControl = inspectorOf(page).getByLabel('Launch binding');
+  if (await bindingControl.evaluate(el => el.tagName.toLowerCase() === 'select')) await bindingControl.selectOption('');
+  else await bindingControl.fill('');
 
   const status = page.getByRole('status').filter({ hasText: /error/ });
   await expect(status).toBeVisible();
@@ -126,6 +148,47 @@ test('the canvas moves a stage with the keyboard and stays in sync with the rail
 
   await rail.getByRole('button', { name: /^Review \(agent-task\)/ }).click();
   await expect(canvas.getByRole('button', { name: /^Review \(agent-task\)/ })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('nudging a stage past the canvas edge clamps its position instead of losing it off-screen', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Governed delivery');
+
+  const canvas = canvasOf(page);
+  const qaCard = canvas.getByRole('button', { name: /^QA \(check\)/ });
+  await qaCard.focus();
+
+  for (let i = 0; i < 30; i += 1) await qaCard.press('Shift+ArrowLeft');
+  for (let i = 0; i < 15; i += 1) await qaCard.press('Shift+ArrowUp');
+
+  await expect.poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.left)).toBe('0px');
+  await expect.poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.top)).toBe('0px');
+  await expect(qaCard).toBeVisible();
+});
+
+test('builds an agent handoff stage from the palette and attaches a specialist skill', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Quick change');
+
+  const palette = page.getByLabel('Workflow stages').getByLabel('Build with agents and skills');
+  const canvas = canvasOf(page);
+  const reviewer = palette.getByTestId('wf-palette-agent-code-reviewer');
+  const audit = palette.getByTestId('wf-palette-skill-code-audit');
+
+  await expect(reviewer).toBeVisible();
+  await expect(audit).toBeVisible();
+
+  // Dragging an agent to empty canvas creates a runnable specialist stage.
+  await reviewer.dragTo(canvas, { targetPosition: { x: 330, y: 180 } });
+  const reviewerStage = canvas.getByRole('button', { name: /^Code Reviewer \(agent-task\).*agent Code Reviewer/ });
+  await expect(reviewerStage).toBeVisible();
+  await expect(reviewerStage).toHaveAttribute('aria-pressed', 'true');
+
+  // Dropping a skill on that stage binds the specialist guidance and pins its version.
+  await audit.dragTo(reviewerStage);
+  await expect(reviewerStage).toContainText('code-audit');
+  await expect(inspectorOf(page).getByLabel('code-audit')).toBeChecked();
+  await expect(page.getByRole('main')).toHaveScreenshot('workflow-designer-composition.png');
 });
 
 test('a folder-backed project commits its workflow to .praxis/workflows and reloads it', async () => {
@@ -202,4 +265,115 @@ test('instantiating Full SDLC (.NET) identifies and installs missing agent depen
   // Workflow is loaded in designer
   await expect(canvasOf(page)).toBeVisible();
   await expect(canvasOf(page).getByRole('button', { name: /^Approve \(approval\)/ })).toBeVisible();
+});
+
+test('validates workflow connections, flow, and configuration via validate workflow button', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Quick change');
+
+  // 1. Valid workflow check
+  const validateBtn = page.getByTestId('wf-validate-btn');
+  await expect(validateBtn).toBeVisible();
+  await validateBtn.click();
+
+  const dialog = page.getByTestId('workflow-validation-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('wf-validation-banner')).toContainText('Workflow is configured and valid');
+  await expect(page.getByTestId('wf-val-category-connections')).toContainText('Valid');
+  await expect(page.getByTestId('wf-val-category-flow')).toContainText('Valid');
+  await expect(page.getByTestId('wf-val-category-configuration')).toContainText('Valid');
+
+  // Close dialog via Done button
+  await page.getByTestId('wf-val-done-btn').click();
+  await expect(dialog).toBeHidden();
+
+  // 2. Introduce an invalid configuration (clear launch binding / agent id)
+  const rail = page.getByRole('navigation', { name: 'Workflow stages' });
+  await rail.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
+  const bindingControl = inspectorOf(page).getByLabel('Launch binding');
+  if (await bindingControl.evaluate(el => el.tagName.toLowerCase() === 'select')) await bindingControl.selectOption('');
+  else await bindingControl.fill('');
+
+  // 3. Re-run validation via the rail validate button
+  const railValidateBtn = page.getByTestId('wf-rail-validate-btn');
+  await expect(railValidateBtn).toBeVisible();
+  await railValidateBtn.click();
+
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('wf-validation-banner')).toContainText('Workflow configuration requires attention');
+  await expect(page.getByTestId('wf-val-category-configuration')).toContainText(/issue/);
+
+  // Check Go to stage functionality
+  const gotoBtn = dialog.getByRole('button', { name: 'Go to stage' }).first();
+  await expect(gotoBtn).toBeVisible();
+  await gotoBtn.click();
+  await expect(dialog).toBeHidden();
+  await expect(canvasOf(page).getByRole('button', { name: /^Implement \(agent-task\)/ })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('clicking a connection on the canvas selects it and deletes it', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Quick change');
+
+  const canvas = canvasOf(page);
+  const edgeLine = canvas.locator('[data-testid^="wf-canvas-edge-line-"]').first();
+  await expect(edgeLine).toBeAttached();
+
+  // Click on the connection curve to select it and reveal the delete button
+  await edgeLine.click({ force: true });
+
+  const deleteBtn = canvas.locator('[data-testid^="wf-edge-delete-"]').first();
+  await expect(deleteBtn).toBeVisible();
+
+  // Clicking delete removes the connection
+  const edgeCountBefore = await canvas.locator('[data-testid^="wf-canvas-edge-line-"]').count();
+  await deleteBtn.click();
+
+  await expect.poll(async () => canvas.locator('[data-testid^="wf-canvas-edge-line-"]').count()).toBe(edgeCountBefore - 1);
+});
+
+test('selecting a connection and pressing Delete key removes it', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Quick change');
+
+  const canvas = canvasOf(page);
+  const edgeLine = canvas.locator('[data-testid^="wf-canvas-edge-line-"]').first();
+  await expect(edgeLine).toBeAttached();
+
+  await edgeLine.click({ force: true });
+  await expect(canvas.locator('[data-testid^="wf-edge-delete-"]').first()).toBeVisible();
+
+  const edgeCountBefore = await canvas.locator('[data-testid^="wf-canvas-edge-line-"]').count();
+  await page.keyboard.press('Delete');
+
+  await expect.poll(async () => canvas.locator('[data-testid^="wf-canvas-edge-line-"]').count()).toBe(edgeCountBefore - 1);
+});
+
+test('clicking delete on an agent task removes it from the canvas', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Quick change');
+
+  const canvas = canvasOf(page);
+  const stage = canvas.getByRole('button', { name: /^Implement \(agent-task\)/ });
+  await expect(stage).toBeVisible();
+
+  const deleteBtn = stage.locator('[data-testid^="wf-node-delete-"]');
+  await deleteBtn.click();
+
+  await expect(stage).toBeHidden();
+});
+
+test('selecting an agent task and pressing Delete key removes it', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Quick change');
+
+  const canvas = canvasOf(page);
+  const stage = canvas.getByRole('button', { name: /^Implement \(agent-task\)/ });
+  await expect(stage).toBeVisible();
+
+  await stage.click();
+  await expect(stage).toHaveAttribute('aria-pressed', 'true');
+
+  await page.keyboard.press('Delete');
+  await expect(stage).toBeHidden();
 });

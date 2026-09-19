@@ -9,6 +9,7 @@ import {
   assessTemplateReadiness,
   builtInWorkflowTemplates,
   bypassGate as bypassWorkflowGate,
+  resolveApprovalTarget,
   advanceJoins,
   createWorkflowRun,
   deleteProjectWorkflow,
@@ -22,9 +23,11 @@ import {
   readEvidenceBundle,
   readEvidenceContent,
   recoverWorkflowRun,
+  reworkWorkflowRun,
   resolveWorkflowCatalog,
   summarizeWorkflowRun,
   validateWorkflow,
+  preflightWorkflow,
   workflowFileName,
   writeProjectWorkflow,
   WorkflowRunStore,
@@ -51,12 +54,14 @@ import {
   type WorkflowGateKind,
   type WorkflowPolicyProfile,
   type WorkflowRun,
+  type WorkflowPlanInput,
   type WorkflowRunSummary,
   type WorkflowTemplate,
   type WorkflowValidationResult
 } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
 import { getAgentRuntimeManager, getAgentRuntimeRoots } from './agentRuntimeInstance';
+import { getAiSessionManager } from './aiInstance';
 import { marketplaceWorkflowTemplates } from './marketplaceInstance';
 import { getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
@@ -406,8 +411,8 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
 
   ipcMain.handle(
     'workflows:validate',
-    async (_event, _projectId: string, definition: WorkflowDefinition): Promise<WorkflowValidationResult> => {
-      return validateWorkflow(normalizeWorkflow(definition));
+    async (_event, projectId: string, definition: WorkflowDefinition): Promise<WorkflowValidationResult> => {
+      return validateWorkflow(normalizeWorkflow(definition), policyFor(projectId));
     }
   );
 
@@ -418,6 +423,21 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
     }
   );
 
+  ipcMain.handle('workflows:listPolicies', async (): Promise<WorkflowPolicyProfile[]> => {
+    return getWorkflowPolicyStore().list();
+  });
+
+  ipcMain.handle(
+    'workflows:savePolicy',
+    async (_event, profile: WorkflowPolicyProfile): Promise<WorkflowPolicyProfile> => {
+      return getWorkflowPolicyStore().save(profile);
+    }
+  );
+
+  ipcMain.handle('workflows:removePolicy', async (_event, profileId: string): Promise<void> => {
+    await getWorkflowPolicyStore().remove(profileId);
+  });
+
   // ── Runs ───────────────────────────────────────────────────────────────
 
   ipcMain.handle(
@@ -427,7 +447,9 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       projectId: string,
       workflowId: string,
       taskTitle: string,
-      issue?: { issueKey: string; connectionId?: string }
+      issue?: { issueKey: string; connectionId?: string },
+      controller?: { sessionKey: string; sessionId: string },
+      planInput?: WorkflowPlanInput
     ): Promise<WorkflowRunSummary> => {
       const definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
       if (!definition) throw new Error(`Workflow ${workflowId} was not found for this project.`);
@@ -437,17 +459,101 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
         throw new Error(`Cannot start an invalid workflow: ${result.errors.map(issue => issue.message).join('; ')}`);
       }
 
+      const livePreflight = preflightWorkflow(definition.nodes, await catalogSnapshot(), policyFor(projectId));
+      if (!livePreflight.ok) {
+        const blockers = Object.values(livePreflight.byNode)
+          .flatMap(stage => stage.failures)
+          .map(failure => `${failure.message} ${failure.remediation}`);
+        throw new Error(`Cannot start workflow until its Agent Hub bindings are ready: ${blockers.join(' ')}`);
+      }
+
+      if (controller) {
+        const session = getAiSessionManager().getAgentSession(controller.sessionKey);
+        if (!session || session.sessionId !== controller.sessionId) {
+          throw new Error('The workflow controller session was not found or has changed. Start the session again.');
+        }
+      }
+
       const run = createWorkflowRun({
         runId: randomUUID(),
         projectId,
         definition: { ...definition, name: `${definition.name} — ${taskTitle}`.trim() },
         at: new Date().toISOString(),
-        ...(issue?.issueKey ? { issueKey: issue.issueKey, issueConnectionId: issue.connectionId } : {})
+        ...(issue?.issueKey ? { issueKey: issue.issueKey, issueConnectionId: issue.connectionId } : {}),
+        ...(controller
+          ? { controllerSessionKey: controller.sessionKey, controllerSessionId: controller.sessionId }
+          : {}),
+        ...(planInput ? { planInput } : {})
       });
       await saveRun(run);
+      if (controller) {
+        const sessions = getAiSessionManager();
+        const current = sessions.getAgentSession(controller.sessionKey);
+        const existingRunIds = current?.workflowRunIds ?? (current?.workflowRunId ? [current.workflowRunId] : []);
+        sessions.updateAgentRuntime(controller.sessionKey, {
+          workflowRunId: run.runId,
+          workflowRunIds: [...existingRunIds, run.runId],
+          workflowNodeId: '',
+          workflowId: run.workflowId,
+          workflowVersion: run.workflowVersion,
+          workflowRole: 'controller'
+        });
+      }
       // Hand it straight to the orchestrator; deterministic stages start now.
       void getWorkflowOrchestrator().step(run.runId);
       return summarize(run);
+    }
+  );
+
+  ipcMain.handle(
+    'workflows:selectControllerRun',
+    async (_event: Electron.IpcMainInvokeEvent, sessionKey: string, runId: string): Promise<WorkflowRunSummary> => {
+      const run = runStore().get(runId);
+      if (!run || run.controllerSessionKey !== sessionKey) {
+        throw new Error('That workflow run is not controlled by this session.');
+      }
+      const sessions = getAiSessionManager();
+      const session = sessions.getAgentSession(sessionKey);
+      if (!session || (run.controllerSessionId && session.sessionId !== run.controllerSessionId)) {
+        throw new Error('The workflow controller session was not found or has changed.');
+      }
+      const existingRunIds = session.workflowRunIds ?? (session.workflowRunId ? [session.workflowRunId] : []);
+      sessions.updateAgentRuntime(sessionKey, {
+        workflowRunId: run.runId,
+        workflowRunIds: [...existingRunIds, run.runId],
+        workflowNodeId: '',
+        workflowId: run.workflowId,
+        workflowVersion: run.workflowVersion,
+        workflowRole: 'controller'
+      });
+      return summarize(run);
+    }
+  );
+
+  ipcMain.handle(
+    'workflows:removeControllerRun',
+    async (_event: Electron.IpcMainInvokeEvent, sessionKey: string, runId: string, reason?: string): Promise<void> => {
+      const sessions = getAiSessionManager();
+      const session = sessions.getAgentSession(sessionKey);
+      if (!session) throw new Error('That session was not found.');
+      const run = runStore().get(runId);
+      if (run && run.controllerSessionKey !== sessionKey) {
+        throw new Error('That workflow run is not controlled by this session.');
+      }
+      if (run && !isRunSettled(run)) {
+        await getWorkflowOrchestrator().cancel(runId, reason ?? 'Removed from the session.');
+      }
+      const existingRunIds = session.workflowRunIds ?? (session.workflowRunId ? [session.workflowRunId] : []);
+      const remaining = existingRunIds.filter(id => id !== runId);
+      const nextRunId = remaining[remaining.length - 1];
+      const nextRun = nextRunId ? runStore().get(nextRunId) : undefined;
+      sessions.updateAgentRuntime(sessionKey, {
+        workflowRunId: nextRunId ?? '',
+        workflowRunIds: remaining,
+        workflowNodeId: '',
+        workflowId: nextRun?.workflowId ?? '',
+        ...(nextRun ? { workflowVersion: nextRun.workflowVersion, workflowRole: 'controller' } : {})
+      });
     }
   );
 
@@ -502,10 +608,9 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
 
   ipcMain.handle(
     'workflows:approveRun',
-    async (_event, runId: string, actor: string, note?: string): Promise<WorkflowRunSummary> => {
+    async (_event, runId: string, actor: string, note?: string, nodeId?: string): Promise<WorkflowRunSummary> => {
       await withRun(runId, run => {
-        const approval = run.definition.nodes.find(node => node.type === 'approval');
-        if (!approval) throw new Error('This workflow has no approval stage.');
+        const approval = resolveApprovalTarget(run, nodeId);
 
         const result = approveStage(
           run,
@@ -523,10 +628,9 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
 
   ipcMain.handle(
     'workflows:bypassGate',
-    async (_event, runId: string, gate: string, actor: string, reason: string): Promise<WorkflowRunSummary> => {
+    async (_event, runId: string, gate: string, actor: string, reason: string, nodeId?: string): Promise<WorkflowRunSummary> => {
       await withRun(runId, run => {
-        const approval = run.definition.nodes.find(node => node.type === 'approval');
-        if (!approval) throw new Error('This workflow has no approval stage.');
+        const approval = resolveApprovalTarget(run, nodeId);
 
         const result = bypassWorkflowGate(
           run,
@@ -546,6 +650,17 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
     const summary = await withRun(runId, run =>
       applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId, at: new Date().toISOString() })
     );
+    await getWorkflowOrchestrator().step(runId);
+    const run = runStore().get(runId);
+    return run ? summarize(run) : summary;
+  });
+
+  ipcMain.handle('workflows:reworkStage', async (_event, runId: string, nodeId: string): Promise<WorkflowRunSummary> => {
+    const summary = await withRun(runId, run => {
+      const result = reworkWorkflowRun(run, nodeId, new Date().toISOString());
+      if (result.reason) throw new Error(result.reason);
+      return result.run;
+    });
     await getWorkflowOrchestrator().step(runId);
     const run = runStore().get(runId);
     return run ? summarize(run) : summary;
