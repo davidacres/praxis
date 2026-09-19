@@ -365,6 +365,32 @@ export function App() {
   const [sidebarVisible, setSidebarVisible] = useState(() => readPaneVisible('tm-pane-sidebar-visible', true));
   const [auxVisible, setAuxVisible] = useState(() => readPaneVisible('tm-pane-aux-visible', true));
   const [panelVisible, setPanelVisible] = useState(() => readPaneVisible('tm-pane-panel-visible', false));
+  const prevPanelsRef = useRef<{ sidebar: boolean; aux: boolean; panel: boolean } | null>(null);
+
+  const toggleFocusMode = useCallback(() => {
+    const isCurrentlyFocus = !sidebarVisible && !auxVisible && !panelVisible;
+    if (isCurrentlyFocus) {
+      const prev = prevPanelsRef.current;
+      if (prev && (prev.sidebar || prev.aux || prev.panel)) {
+        setSidebarVisible(prev.sidebar);
+        setAuxVisible(prev.aux);
+        setPanelVisible(prev.panel);
+      } else {
+        setSidebarVisible(true);
+        setAuxVisible(true);
+        setPanelVisible(false);
+      }
+    } else {
+      prevPanelsRef.current = {
+        sidebar: sidebarVisible,
+        aux: auxVisible,
+        panel: panelVisible
+      };
+      setSidebarVisible(false);
+      setAuxVisible(false);
+      setPanelVisible(false);
+    }
+  }, [sidebarVisible, auxVisible, panelVisible]);
   const [detailExpanded, setDetailExpanded] = useState(false);
   const [sidebarSearching, setSidebarSearching] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
@@ -1155,6 +1181,7 @@ export function App() {
     entries.push({ id: 'action:new-session', label: 'New session', group: 'Go to', icon: 'plus', keywords: 'start agent', run: () => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) }) });
     entries.push({ id: 'action:new-project', label: 'New project', group: 'Go to', icon: 'plus', run: () => requestProjectWizard('create') });
     entries.push({ id: 'action:add-existing-project', label: 'Add project from folder', group: 'Go to', icon: 'folder-open', keywords: 'existing repository import scan', run: () => requestProjectWizard('existing') });
+    entries.push({ id: 'action:toggle-focus-mode', label: 'Toggle focus mode', group: 'Go to', icon: 'layout-focus', keywords: 'zen hide panels sidebars focus', run: toggleFocusMode });
     workspaceProjects.forEach(project => {
       entries.push({ id: `project:${project.id}`, label: project.name, hint: `${project.key} · ${project.type}`, group: 'Projects', icon: 'folder-open', run: () => navigate({ projectId: project.id }) });
       entries.push({ id: `project-git:${project.id}`, label: `${project.name}: Git graph`, hint: project.key, group: 'Projects', icon: 'git-branch', keywords: 'repository history commits', run: () => navigate({ projectId: project.id, feature: 'git' }) });
@@ -1197,7 +1224,7 @@ export function App() {
       entries.push({ id: `settings:${id}`, label, hint: 'Settings', group: 'Settings', icon: 'gear', run: () => setSettingsDialogCategory(id) });
     });
     return entries;
-  }, [workspaceProjects, workspaceBoards, workflowsByProject, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestProjectWizard]);
+  }, [workspaceProjects, workspaceBoards, workflowsByProject, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestProjectWizard, toggleFocusMode]);
 
   /** Four stops over controls the shell already renders — see Walkthrough. */
   const walkthroughStops = useMemo<WalkthroughStop[]>(() => [
@@ -1723,6 +1750,8 @@ export function App() {
         onToggleAux={() => setAuxVisible(visible => !visible)}
         panelVisible={panelVisible}
         onTogglePanel={() => setPanelVisible(visible => !visible)}
+        focusMode={!sidebarVisible && !auxVisible && !panelVisible}
+        onToggleFocusMode={toggleFocusMode}
         canGoBack={nav.index > 0}
         onBack={() => setNav(current => ({ ...current, index: Math.max(0, current.index - 1) }))}
         canGoForward={nav.index < nav.entries.length - 1}
