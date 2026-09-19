@@ -343,6 +343,8 @@ export interface WorkflowDefinition {
   id: string;
   name: string;
   description?: string;
+  /** How this workflow is started. Ticket workflows cannot run without a ticket link. */
+  trigger?: 'on-demand' | 'ticket';
   scope: WorkflowScope;
   /** Required when `scope` is `project`; must be absent when `global`. */
   projectId?: string;

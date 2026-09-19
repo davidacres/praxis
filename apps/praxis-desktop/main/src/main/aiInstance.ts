@@ -4,6 +4,9 @@ import {
   AcpAgentHost,
   AiSessionManager,
   listCatalogModels,
+  getKnownContextLength,
+  getModelPricing,
+  probeApiKeyAuth,
   PROVIDER_DESCRIPTORS,
   resolveGatewayUrlFromEnv,
   VercelAgentService,
@@ -135,11 +138,26 @@ export async function listCliModelOptions(provider: AiProvider): Promise<ModelOp
   }
   const { command, args } = resolveAcpStartOptions(provider);
   const settings = getSettingsBackend().read();
-  return getAcpAgentHost().listAvailableModels({
+  const raw = await getAcpAgentHost().listAvailableModels({
     command,
     args,
     workingDirectory: settings.ai.workingDirectory.trim() || undefined
   });
+  if (!raw) {
+    return undefined;
+  }
+  return {
+    ...raw,
+    options: raw.options.map(opt => {
+      const contextLength = opt.contextLength ?? getKnownContextLength(opt.value, provider);
+      const pricing = opt.pricing ?? getModelPricing(provider, opt.value);
+      return {
+        ...opt,
+        ...(typeof contextLength === 'number' && contextLength > 0 ? { contextLength } : {}),
+        ...(pricing ? { pricing } : {})
+      };
+    })
+  };
 }
 
 /**
@@ -163,10 +181,49 @@ export async function listApiModelOptions(provider: AiProvider, forceRefresh?: b
   // picker resolves against the same gateway a session would actually use.
   const url = provider === 'vercel-gateway' ? resolveGatewayUrlFromEnv(gatewayUrl) : gatewayUrl || descriptor.defaultBaseUrl;
   try {
-    const options = await listCatalogModels(provider, { apiKey, url }, forceRefresh);
+    const options = await listCatalogModels(provider, { apiKey, url, apiPath: descriptor.apiPath }, forceRefresh);
     return { currentValue: model, options };
   } catch {
     return undefined;
+  }
+}
+
+/** Tests whether the configured API key and endpoint for a provider can connect successfully. */
+export async function testProviderConnection(provider: AiProvider): Promise<{ ok: boolean; message: string }> {
+  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  if (descriptor.kind !== 'api') {
+    return { ok: true, message: `${descriptor.label} is a local CLI agent.` };
+  }
+  const { apiKey, gatewayUrl, model } = await resolveConnectionOptions(provider);
+  if (!apiKey) {
+    throw new Error(`No ${descriptor.label} API key configured.`);
+  }
+  const url = provider === 'vercel-gateway' ? resolveGatewayUrlFromEnv(gatewayUrl) : gatewayUrl || descriptor.defaultBaseUrl;
+  const testModel = model || descriptor.defaultModel;
+
+  try {
+    if (provider === 'anthropic' || provider === 'gemini') {
+      await listCatalogModels(provider, { apiKey, url }, true);
+      return { ok: true, message: `Connected successfully to ${descriptor.label}.` };
+    }
+    // OpenAI, Vercel Gateway, Z.ai
+    await probeApiKeyAuth({ apiKey, url, apiPath: descriptor.apiPath }, 10_000, testModel);
+    return { ok: true, message: `Connected successfully to ${descriptor.label}.` };
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    let friendly = raw;
+    try {
+      const match = raw.match(/\{.*\}$/s);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (parsed?.error?.message) {
+          friendly = `${parsed.error.message}${parsed.error.code ? ` (code ${parsed.error.code})` : ''}`;
+        }
+      }
+    } catch {
+      // not JSON
+    }
+    throw new Error(friendly);
   }
 }
 

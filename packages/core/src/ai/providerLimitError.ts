@@ -7,7 +7,7 @@
  * - GitHub Copilot CLI / Codex CLI: "rate limit reached", "usage limit reached"
  */
 const LIMIT_REGEX =
-  /(?:weekly|monthly|daily|hourly|session|usage|rate|spending|billing|plan|tier)[_ -]?limit|hit (?:your )?(?:\w+ )?limit|reached (?:your )?(?:\w+ )?limit|exceeded (?:your )?(?:\w+ )?limit|quota|insufficient[_ -]?quota|out of quota|too many requests|resource[_ -]?exhausted|credits?[_ -]?(?:exhausted|depleted|empty|expired|zero|insufficient|out)|out of credits?|no credits? remaining|run out of credits?|credit balance (?:is )?too low|balance (?:is )?too low|rate[_ -]?limit|rate[_ -]?limited/i;
+  /(?:weekly|monthly|daily|hourly|session|usage|rate|spending|billing|plan|tier)[_ -]?limit|hit (?:your )?(?:\w+ )?limit|reached (?:your )?(?:\w+ )?limit|exceeded (?:your )?(?:\w+ )?limit|quota|insufficient[_ -]?(?:quota|balance|funds|credits?)|out of quota|too many requests|resource[_ -]?exhausted|credits?[_ -]?(?:exhausted|depleted|empty|expired|zero|insufficient|out)|out of credits?|no credits? remaining|run out of credits?|credit balance (?:is )?too low|balance (?:is )?too low|no resource package|please recharge|\b1113\b|rate[_ -]?limit|rate[_ -]?limited/i;
 
 /** True when an error or message indicates a rate, usage, session, credit, or quota limit. */
 export function isProviderLimitError(errorOrMessage: unknown): boolean {
@@ -27,7 +27,9 @@ export function isProviderLimitError(errorOrMessage: unknown): boolean {
       obj.status === 429 ||
       obj.statusCode === 429 ||
       obj.code === 429 ||
-      (typeof obj.code === 'string' && /quota|rate_limit|resource_exhausted/i.test(obj.code))
+      obj.code === '1113' ||
+      obj.code === 1113 ||
+      (typeof obj.code === 'string' && /quota|rate_limit|resource_exhausted|1113/i.test(obj.code))
     ) {
       return true;
     }
@@ -52,8 +54,21 @@ export function extractProviderLimitMessage(errorOrMessage: unknown): string {
     }
   }
 
-  // Strip generic transport/RPC wrappers like "Internal error: " or "RequestError: "
-  const cleaned = raw.replace(/^(?:RequestError:\s*)?(?:Internal error:\s*)?/i, '').trim();
+  // Strip generic transport/RPC wrappers like "Gateway returned 429: " or "Internal error: "
+  let cleaned = raw.replace(/^(?:RequestError:\s*)?(?:Internal error:\s*)?(?:Gateway returned \d+:\s*)?/i, '').trim();
+
+  // If cleaned is or contains JSON, extract the inner message
+  try {
+    const jsonMatch = cleaned.match(/\{.*\}$/s);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as { error?: { message?: string } };
+      if (parsed?.error?.message && typeof parsed.error.message === 'string') {
+        cleaned = parsed.error.message;
+      }
+    }
+  } catch {
+    // not JSON
+  }
 
   if (cleaned && LIMIT_REGEX.test(cleaned)) {
     return `Provider limit reached: ${cleaned}`;

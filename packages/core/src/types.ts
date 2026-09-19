@@ -17,7 +17,7 @@ export type BackendMode =
   | 'project';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
-export type AiProvider = 'vercel-gateway' | 'openai' | 'anthropic' | 'gemini' | 'claude-code-cli' | 'codex-cli' | 'copilot-cli' | 'antigravity-cli';
+export type AiProvider = 'vercel-gateway' | 'openai' | 'anthropic' | 'gemini' | 'z-ai' | 'claude-code-cli' | 'codex-cli' | 'copilot-cli' | 'antigravity-cli';
 
 export interface AiAssignment {
   provider: AiProvider;

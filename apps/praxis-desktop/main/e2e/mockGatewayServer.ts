@@ -42,7 +42,9 @@ function sseChunk(obj: unknown): string {
 }
 
 export async function startMockGatewayServer(options: {
-  mode: 'complete' | 'hang';
+  mode: 'complete' | 'hang' | 'error';
+  errorStatus?: number;
+  errorBody?: string;
   /** Custom assistant reply body — overrides the default one-liner (e.g. a
    *  workflow run that must end with a DELIVERY_RESULT / FEATURE_DECOMPOSITION_RESULT
    *  JSON block for the completion watcher to parse). */
@@ -73,6 +75,17 @@ export async function startMockGatewayServer(options: {
       });
       req.on('end', () => {
         requests.push({ authorization: req.headers.authorization, body });
+
+        if (options.mode === 'error') {
+          res.writeHead(options.errorStatus ?? 429, { 'Content-Type': 'application/json' });
+          res.end(options.errorBody ?? JSON.stringify({
+            error: {
+              code: '1113',
+              message: 'Insufficient balance or no resource package. Please recharge.'
+            }
+          }));
+          return;
+        }
 
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',

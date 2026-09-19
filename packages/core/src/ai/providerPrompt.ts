@@ -56,7 +56,7 @@ export async function runProviderPrompt(
 
   const requestedModel = options.model?.trim() || descriptor.defaultModel;
   const model = provider === 'vercel-gateway' ? toWireModelId(requestedModel) : requestedModel;
-  const gateway = { url: options.baseUrl?.trim() || descriptor.defaultBaseUrl, apiKey: options.apiKey };
+  const gateway = { url: options.baseUrl?.trim() || descriptor.defaultBaseUrl, apiKey: options.apiKey, apiPath: descriptor.apiPath };
   const idleTimeoutMs = options.streamIdleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 

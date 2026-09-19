@@ -146,11 +146,15 @@ class PreviewBrowserManager {
 
   setBounds(win: BrowserWindow, bounds: { x: number; y: number; width: number; height: number }): void {
     const view = this.ensure(win);
+    // Same zoom correction as `aiBrowser.ts`'s `setBounds` — see its comment.
+    // The renderer's rect is in that webContents' zoomed CSS-pixel space;
+    // this sibling view's bounds are in the window's unzoomed DIP space.
+    const zoom = win.webContents.getZoomFactor() || 1;
     this.lastBounds = {
-      x: Math.round(bounds.x),
-      y: Math.round(bounds.y),
-      width: Math.max(0, Math.round(bounds.width)),
-      height: Math.max(0, Math.round(bounds.height))
+      x: Math.round(bounds.x * zoom),
+      y: Math.round(bounds.y * zoom),
+      width: Math.max(0, Math.round(bounds.width * zoom)),
+      height: Math.max(0, Math.round(bounds.height * zoom))
     };
     view.setBounds(this.lastBounds);
   }

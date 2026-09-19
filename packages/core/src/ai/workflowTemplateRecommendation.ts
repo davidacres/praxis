@@ -1,8 +1,8 @@
 /**
  * "Recommend a workflow template" for the New Workflow dialog — the sibling
  * of `workflowAgentRecommendation.ts`, same shape: one lightweight
- * `runProviderPrompt` completion, not a session, against whichever `kind:
- * 'api'` provider `resolveRecommendationProvider` picked. The answer is
+ * constrained completion, not a session, against whichever direct API or ACP
+ * provider `resolveRecommendationProvider` picked. The answer is
  * cached on the project record itself
  * (`ProjectRecord.recommendedWorkflowTemplate` via
  * `ProjectStore.setRecommendedWorkflowTemplate`) rather than re-asked every
@@ -34,6 +34,12 @@ export interface TemplateRecommendationResult {
   provider: AiProvider;
   usage?: TokenUsage;
 }
+
+export type TemplateRecommendationPromptRunner = (
+  prompt: string,
+  systemPrompt: string,
+  signal?: AbortSignal
+) => Promise<{ text: string; model: string }>;
 
 const SYSTEM_PROMPT = `You are helping someone pick a workflow template for a software delivery project.
 Given the project's name, purpose, and a short brief, and a list of available workflow templates, pick the
@@ -88,22 +94,29 @@ function parseRecommendation(text: string, validIds: readonly string[]): { templ
 
 export async function recommendTemplateForProject(
   input: TemplateRecommendationInput,
-  options: { provider: AiProvider; apiKey: string; baseUrl?: string; model?: string; signal?: AbortSignal }
+  options: { provider: AiProvider; apiKey?: string; baseUrl?: string; model?: string; signal?: AbortSignal; promptRunner?: TemplateRecommendationPromptRunner }
 ): Promise<TemplateRecommendationResult> {
   if (input.candidates.length === 0) {
     throw new Error('No workflow templates are available to recommend from.');
   }
   let usage: TokenUsage | undefined;
-  const { text, model } = await runProviderPrompt(options.provider, buildPrompt(input), {
-    apiKey: options.apiKey,
-    baseUrl: options.baseUrl,
-    model: options.model,
-    systemPrompt: SYSTEM_PROMPT,
-    signal: options.signal,
-    onUsage: reported => {
-      usage = reported;
-    }
-  });
+  const response = options.promptRunner
+    ? await options.promptRunner(buildPrompt(input), SYSTEM_PROMPT, options.signal)
+    : options.apiKey
+      ? await runProviderPrompt(options.provider, buildPrompt(input), {
+          apiKey: options.apiKey,
+          baseUrl: options.baseUrl,
+          model: options.model,
+          systemPrompt: SYSTEM_PROMPT,
+          signal: options.signal,
+          onUsage: reported => {
+            usage = reported;
+          }
+        })
+      : (() => {
+          throw new Error('No API key or recommendation prompt runner was provided.');
+        })();
+  const { text, model } = response;
   const { templateId, rationale } = parseRecommendation(
     text,
     input.candidates.map(candidate => candidate.templateId)

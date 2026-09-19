@@ -1,5 +1,5 @@
 ---
-**Status:** To Do
+**Status:** 📋 Proposed
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Story
 **Priority:** Medium

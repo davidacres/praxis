@@ -39,6 +39,14 @@ export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
     defaultBaseUrl: DEFAULT_GEMINI_BASE_URL,
     defaultModel: 'gemini-2.5-flash'
   },
+  'z-ai': {
+    id: 'z-ai',
+    kind: 'api',
+    label: 'Z.ai',
+    defaultBaseUrl: 'https://api.z.ai',
+    defaultModel: 'glm-5.3',
+    apiPath: '/api/coding/paas/v4'
+  },
   'claude-code-cli': {
     id: 'claude-code-cli',
     kind: 'cli-agent',
@@ -85,6 +93,7 @@ export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
 const ADAPTERS: Partial<Record<AiProvider, ProviderAdapter>> = {
   'vercel-gateway': openAiCompatibleAdapter,
   openai: openAiCompatibleAdapter,
+  'z-ai': openAiCompatibleAdapter,
   anthropic: anthropicAdapter,
   gemini: geminiAdapter
 };

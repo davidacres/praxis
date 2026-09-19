@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 📋 To Do
 **Created:** 2026-09-17T21:31:56.564Z
 **Type:** Feature
 **Priority:** Medium

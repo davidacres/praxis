@@ -29,6 +29,11 @@ test('isProviderLimitError detects OpenAI and Anthropic quota and credit errors'
   assert.equal(isProviderLimitError('credits exhausted'), true);
   assert.equal(isProviderLimitError('out of credits'), true);
   assert.equal(isProviderLimitError('You have run out of credits for this billing period'), true);
+  assert.equal(isProviderLimitError('{"error":{"code":"1113","message":"Insufficient balance or no resource package. Please recharge."}}'), true);
+  assert.equal(
+    extractProviderLimitMessage('{"error":{"code":"1113","message":"Insufficient balance or no resource package. Please recharge."}}'),
+    'Provider limit reached: Insufficient balance or no resource package. Please recharge.'
+  );
 });
 
 test('isProviderLimitError returns false for normal failures', () => {
@@ -37,4 +42,18 @@ test('isProviderLimitError returns false for normal failures', () => {
   assert.equal(isProviderLimitError('Connection refused'), false);
   assert.equal(isProviderLimitError(''), false);
   assert.equal(isProviderLimitError(undefined), false);
+});
+
+test('GatewayHttpError formats error JSON into a clean user-facing message', async () => {
+  const { GatewayHttpError, formatGatewayErrorMessage } = await import('./gateway/gatewayClient.js');
+  const body = '{"error":{"code":"1113","message":"Insufficient balance or no resource package. Please recharge."}}';
+  assert.equal(
+    formatGatewayErrorMessage(429, body),
+    'Insufficient balance or no resource package. Please recharge. (Code 1113 · HTTP 429)'
+  );
+  const err = new GatewayHttpError(429, body);
+  assert.equal(
+    err.message,
+    'Insufficient balance or no resource package. Please recharge. (Code 1113 · HTTP 429)'
+  );
 });

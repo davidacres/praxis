@@ -278,6 +278,127 @@ function mandelbrotParts(ink: string, weight: number, w: number, h: number, fill
   return parts;
 }
 
+/* ── Circuit Board ────────────────────────────────────────────────────────
+   Technical printed-circuit-board (PCB) lattice with 45° chamfered copper
+   traces, bus highways, microchip (IC) packages with surface-mount pads,
+   circular vias with drill holes, test points, and ground-pour copper planes.
+   Boundary points are matched across all four edges to guarantee a seamless
+   tile repeat both ways.
+   ───────────────────────────────────────────────────────────────────────── */
+
+const CIRCUIT_GRID = 16;
+
+function circuitParts(ink: string, weight: number, w: number, h: number, fill = 0): string[] {
+  const sx = w / CIRCUIT_GRID;
+  const sy = h / CIRCUIT_GRID;
+  const rnd = (n: number) => Math.round(n * 100) / 100;
+  const x = (u: number) => rnd(u * sx);
+  const y = (v: number) => rnd(v * sy);
+  const sw = Math.max(0.6, rnd(weight * w));
+  const thinSw = Math.max(0.4, rnd(sw * 0.65));
+  const viaR = Math.max(1.8, rnd(0.38 * sx));
+  const holeR = Math.max(0.8, rnd(0.18 * sx));
+  const smdR = Math.max(0.8, rnd(0.15 * sx));
+
+  // 1. Primary bus highway lines (bold traces)
+  const busTracks = [
+    // Top wave highway (enters at 0,3; exits at 16,3)
+    `M${x(0)} ${y(3)}H${x(4)}L${x(6)} ${y(5)}H${x(9)}L${x(11)} ${y(3)}H${x(16)}`,
+    // Bottom wave highway (enters at 0,14; exits at 16,14)
+    `M${x(0)} ${y(14)}H${x(3)}L${x(4)} ${y(15)}H${x(7)}L${x(8)} ${y(14)}H${x(16)}`,
+    // Vertical left branch (enters at 3,0; exits at 3,16)
+    `M${x(3)} ${y(0)}V${y(2)}L${x(5)} ${y(4)}V${y(7)}`,
+    `M${x(3)} ${y(12)}V${y(16)}`
+  ].join('');
+
+  // 2. Interconnects and IC pin routes
+  const branchTracks = [
+    // Middle bus & Pin 2 (enters at 0,11; exits at 16,11)
+    `M${x(0)} ${y(11)}H${x(1)}L${x(3)} ${y(9)}H${x(6.8)}`,
+    `M${x(9.2)} ${y(9)}H${x(12)}L${x(14)} ${y(11)}H${x(16)}`,
+
+    // Pin 1 to bottom branch
+    `M${x(6.8)} ${y(8)}H${x(5)}L${x(4)} ${y(9)}V${y(11)}L${x(3)} ${y(12)}`,
+
+    // Pin 3 to local via
+    `M${x(6.8)} ${y(10)}H${x(5.5)}L${x(4.5)} ${y(11)}V${y(12)}`,
+
+    // Pin 4 to top-right exit (0,7 to 16,7)
+    `M${x(0)} ${y(7)}H${x(2)}L${x(3)} ${y(6)}H${x(4)}`,
+    `M${x(9.2)} ${y(8)}H${x(11)}L${x(12)} ${y(7)}H${x(16)}`,
+
+    // Pin 6 to bottom via
+    `M${x(9.2)} ${y(10)}H${x(11)}L${x(13)} ${y(12)}V${y(14)}`,
+
+    // Top vertical entry at x=8 (enters at 8,0; exits at 8,16)
+    `M${x(8)} ${y(0)}V${y(2)}L${x(9)} ${y(3)}`,
+    `M${x(8)} ${y(16)}V${y(15)}L${x(9)} ${y(14)}H${x(11)}`,
+
+    // Top vertical entry at x=12 (enters at 12,0; exits at 12,16)
+    `M${x(12)} ${y(0)}V${y(2)}L${x(14)} ${y(4)}V${y(6)}`,
+    `M${x(12)} ${y(16)}V${y(14)}L${x(11)} ${y(13)}H${x(9.5)}`,
+
+    // Small corner link
+    `M${x(14)} ${y(11)}L${x(15)} ${y(12)}V${y(13)}`
+  ].join('');
+
+  // 3. Components: IC Package & SMD Passives
+  const icBody = `<rect x="${x(6.8)}" y="${y(7.4)}" width="${rnd(2.4 * sx)}" height="${rnd(3.2 * sy)}" rx="${smdR}" fill="none" stroke="${ink}" stroke-width="${sw}"/>`;
+  const pin1Dot = `<circle cx="${x(7.3)}" cy="${y(7.9)}" r="${rnd(0.18 * sx)}" fill="${ink}"/>`;
+
+  // SMD chip capacitor/resistor at (2, 4)
+  const smdComp = [
+    `<rect x="${x(1.7)}" y="${y(3.6)}" width="${rnd(0.6 * sx)}" height="${rnd(0.3 * sy)}" rx="${rnd(smdR * 0.5)}" fill="none" stroke="${ink}" stroke-width="${thinSw}"/>`,
+    `<rect x="${x(1.7)}" y="${y(4.1)}" width="${rnd(0.6 * sx)}" height="${rnd(0.3 * sy)}" rx="${rnd(smdR * 0.5)}" fill="none" stroke="${ink}" stroke-width="${thinSw}"/>`,
+    `M${x(2)} ${y(3)}V${y(3.6)}M${x(2)} ${y(4.4)}V${y(5)}`
+  ].join('');
+
+  // 4. Vias & Solder Pads
+  const viaCoords: Array<[number, number]> = [
+    [4, 6], [5, 7], [4.5, 12], [9.5, 13], [13, 14],
+    [14, 6], [15, 13], [9, 3], [8, 5], [11, 14], [2, 5]
+  ];
+
+  const viaMarkup = viaCoords.map(([vx, vy]) =>
+    `<circle cx="${x(vx)}" cy="${y(vy)}" r="${viaR}" fill="none" stroke="${ink}" stroke-width="${thinSw}"/>` +
+    `<circle cx="${x(vx)}" cy="${y(vy)}" r="${holeR}" fill="${ink}"/>`
+  ).join('');
+
+  // Test points (concentric target rings)
+  const testPoints = [
+    `<circle cx="${x(2)}" cy="${y(13)}" r="${rnd(viaR * 1.3)}" fill="none" stroke="${ink}" stroke-width="${thinSw}" stroke-dasharray="2 2"/>` +
+    `<circle cx="${x(2)}" cy="${y(13)}" r="${viaR}" fill="none" stroke="${ink}" stroke-width="${thinSw}"/>` +
+    `<circle cx="${x(2)}" cy="${y(13)}" r="${holeR}" fill="${ink}"/>`,
+    `<circle cx="${x(14)}" cy="${y(2.5)}" r="${rnd(viaR * 1.3)}" fill="none" stroke="${ink}" stroke-width="${thinSw}" stroke-dasharray="2 2"/>` +
+    `<circle cx="${x(14)}" cy="${y(2.5)}" r="${viaR}" fill="none" stroke="${ink}" stroke-width="${thinSw}"/>` +
+    `<circle cx="${x(14)}" cy="${y(2.5)}" r="${holeR}" fill="${ink}"/>`
+  ].join('');
+
+  // 5. Solid Copper / Ground Pours (activated when fill > 0)
+  let solids = '';
+  if (fill > 0) {
+    const pourOpacity = rnd(Math.min(0.45, fill * 0.45));
+    // Ground planes with 45-degree chamfers
+    const pour1 = `M${x(0.6)} ${y(0.6)}H${x(2)}L${x(2.5)} ${y(1.1)}V${y(2)}L${x(2)} ${y(2.5)}H${x(0.6)}Z`;
+    const pour2 = `M${x(13.5)} ${y(13.5)}H${x(15.4)}V${y(15.4)}H${x(14)}L${x(13.5)} ${y(14.9)}Z`;
+    const pour3 = `M${x(13.5)} ${y(7.5)}H${x(15)}L${x(15.4)} ${y(7.9)}V${y(9.5)}L${x(15)} ${y(9.9)}H${x(13.5)}Z`;
+    // IC silicon die fill
+    const icFill = `<rect x="${x(6.8)}" y="${y(7.4)}" width="${rnd(2.4 * sx)}" height="${rnd(3.2 * sy)}" rx="${smdR}" fill="${ink}" fill-opacity="${rnd(pourOpacity * 0.8)}"/>`;
+
+    solids = `<path d="${pour1}${pour2}${pour3}" fill="${ink}" fill-opacity="${pourOpacity}"/>${icFill}`;
+  }
+
+  const smdPathIndex = smdComp.indexOf('M');
+  const part0 = `<path d="${busTracks}" fill="none" stroke="${ink}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const part1 = `<path d="${branchTracks}${smdComp.slice(smdPathIndex)}" fill="none" stroke="${ink}" stroke-width="${thinSw}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const part2 = `${icBody}${pin1Dot}${smdComp.slice(0, smdPathIndex)}${testPoints}`;
+  const part3 = viaMarkup;
+
+  const parts = [part0, part1, part2, part3];
+  if (solids) parts.push(solids);
+  return parts;
+}
+
 const PATTERNS: SurfacePatternDefinition[] = [
   {
     id: 'none',
@@ -445,6 +566,28 @@ const PATTERNS: SurfacePatternDefinition[] = [
         .map(([cx, cy]) => `<circle cx="${cx}" cy="${cy}" r="${w * 0.19}"/>`)
         .join('');
       return `<g fill="none" stroke="${ink}" stroke-width="${sw}">${rings}${corners}</g>`;
+    }
+  },
+  {
+    /**
+     * Technical printed circuit board (PCB) traces with 45° routed tracks,
+     * dual-in-line IC chip packages, surface-mount components, through-hole vias,
+     * test points, and ground-pour copper planes.
+     */
+    id: 'circuit',
+    name: 'Circuit',
+    fillable: true,
+    tile: { width: 1, height: 1 },
+    weight: 0.038,
+    parts: (ink, weight, w, h, fill = 0) => circuitParts(ink, weight, w, h, fill),
+    body: (ink, weight, w, h, fill = 0) => circuitParts(ink, weight, w, h, fill).join(''),
+    route: (w, h) => {
+      const sx = w / CIRCUIT_GRID;
+      const sy = h / CIRCUIT_GRID;
+      const rnd = (n: number) => Math.round(n * 100) / 100;
+      const x = (u: number) => rnd(u * sx);
+      const y = (v: number) => rnd(v * sy);
+      return `M${x(0)} ${y(3)}H${x(4)}L${x(6)} ${y(5)}H${x(9)}L${x(11)} ${y(3)}H${x(16)}`;
     }
   }
 ];

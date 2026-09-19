@@ -14,6 +14,7 @@
  */
 
 import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition } from './workflowTypes';
+import type { AgentWorkflowReference } from '../ai/agentTypes';
 import { validateWorkflow } from './workflowValidation';
 import type { AgentCatalogSnapshot } from './workflowPreflight';
 import { preflightWorkflow } from './workflowPreflight';
@@ -289,6 +290,7 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
     id,
     name: title,
     description,
+    trigger: 'ticket',
     scope: 'global',
     version: 1,
     entryNodeId: 'plan',
@@ -588,6 +590,70 @@ export function instantiateTemplateForProject(input: InstantiateTemplateInput): 
     version: 1,
     createdAt: input.at,
     updatedAt: input.at
+  };
+}
+
+/**
+ * Turns an existing workspace workflow pack into an executable governed
+ * template. The Markdown remains stage guidance; the generated approval node
+ * supplies the executable hand-off and human gate that a pack alone cannot.
+ */
+export function promoteWorkflowPackToTemplate(input: {
+  pack: AgentWorkflowReference;
+  projectId: string;
+  agentId: string;
+  profileId?: string;
+  hostId?: string;
+  at: string;
+}): WorkflowDefinition {
+  const id = `pack-${input.pack.id}-${input.projectId}`.replace(/[^a-zA-Z0-9_-]+/g, '-');
+  const stageId = 'pack-stage';
+  const approvalId = 'approval';
+  return {
+    schemaVersion: WORKFLOW_SCHEMA_VERSION,
+    id,
+    name: `${input.pack.name} workflow`,
+    description: input.pack.description ?? `Governed workflow generated from the ${input.pack.name} pack.`,
+    scope: 'project',
+    projectId: input.projectId,
+    trigger: 'on-demand',
+    version: 1,
+    entryNodeId: stageId,
+    createdAt: input.at,
+    updatedAt: input.at,
+    nodes: [
+      {
+        type: 'agent-task',
+        id: stageId,
+        name: input.pack.name,
+        x: 0,
+        y: 120,
+        inputs: [],
+        agent: {
+          agentId: input.agentId,
+          profileId: input.profileId ?? input.agentId,
+          hostId: input.hostId ?? input.agentId,
+          scope: 'global',
+          toolMode: 'full'
+        },
+        instructions: `Execute the work described by the ${input.pack.name} workflow pack and return its required evidence.`,
+        workflowPackId: input.pack.id,
+        outputs: [{ id: 'pack-report', kind: 'report', required: true, description: 'The pack execution report.' }],
+        mutatesWorktree: true
+      },
+      {
+        type: 'approval',
+        id: approvalId,
+        name: 'Review and approve',
+        x: 320,
+        y: 120,
+        inputs: ['pack-report'],
+        prompt: `Review the output produced by ${input.pack.name}.`,
+        requiredGates: [],
+        allowBypass: false
+      }
+    ],
+    edges: [{ id: 'pack-to-approval', from: stageId, to: approvalId, on: 'success', required: true }]
   };
 }
 

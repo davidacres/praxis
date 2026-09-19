@@ -14,6 +14,7 @@ export * from './ai/providerSecrets';
 export * from './ai/providers/providerAdapter';
 export * from './ai/providers/registry';
 export * from './ai/providers/modelCatalog';
+export * from './ai/providers/modelPricing';
 export * from './ai/providers/geminiClient';
 export * from './ai/providers/geminiWire';
 export * from './ai/providers/geminiAdapter';

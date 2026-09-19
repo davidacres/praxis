@@ -1,5 +1,5 @@
 import type { AiProvider } from '../types';
-import type { TokenUsage } from './gateway';
+import type { TokenUsage, WireImageAttachment } from './gateway';
 
 // ── Agent Task State Machine ─────────────────────────────────────────────
 //
@@ -213,6 +213,8 @@ export interface AgentEventSummary {
   data?: AgentToolEventData;
   /** The AI participant that produced an assistant message in a multi-AI conversation. */
   speaker?: AgentConversationSpeaker;
+  /** Images pasted/dropped into a `user_input_completed` turn, for the chat transcript to redisplay. */
+  attachments?: WireImageAttachment[];
 }
 
 export type AgentEventType =
@@ -269,7 +271,7 @@ export interface AgentConversation {
   turnsUsed: number;
   state: AgentConversationState;
   /** Human messages queued for specific participants while another turn is running. */
-  pendingUserMessages?: Array<{ participantId: string; message: string }>;
+  pendingUserMessages?: Array<{ participantId: string; message: string; images?: WireImageAttachment[] }>;
 }
 
 export interface AiStartConversationInput {
@@ -283,6 +285,8 @@ export interface AiStartConversationInput {
 export interface AiConversationMessageInput {
   participantId: string;
   message: string;
+  /** Images pasted/dropped into the composer, delivered to the addressed participant alongside the message. */
+  images?: WireImageAttachment[];
 }
 
 /** Why a session exists — a snapshot of the ticket or plan at session creation. */

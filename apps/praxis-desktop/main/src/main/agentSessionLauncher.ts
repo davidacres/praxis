@@ -9,7 +9,8 @@ import {
   type AiProvider,
   type IssueDetails,
   type AcpAgentStartOptions,
-  type VercelAgentStartOptions
+  type VercelAgentStartOptions,
+  type WireImageAttachment
 } from '@praxis/core';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import {
@@ -51,6 +52,8 @@ export interface AgentTaskLaunchInput {
 export interface AgentTaskContinueInput {
   issueKey: string;
   message: string;
+  /** Images pasted/dropped into the composer, forwarded to the agent with the message. */
+  images?: WireImageAttachment[];
   model?: string;
   workingDirectory?: string;
   toolMode: AgentToolMode;
@@ -226,6 +229,7 @@ export async function continueAgentTask(
       toolMode: input.toolMode,
       internalConversationTurn: input.internalConversationTurn,
       conversationContext: input.conversationContext,
+      ...(input.images?.length ? { images: input.images } : {}),
       ...(input.mcpServers ? { mcpServers: input.mcpServers } : {})
     });
     recordRuntimeLaunch(input.issueKey, prepared, 'acp');
@@ -248,7 +252,7 @@ export async function continueAgentTask(
     internalConversationTurn: input.internalConversationTurn,
     conversationContext: input.conversationContext,
     ...(input.toolExtension ? { toolExtension: input.toolExtension } : {})
-  }, input.message);
+  }, input.message, input.images);
   recordRuntimeLaunch(input.issueKey, prepared, 'gateway');
 }
 

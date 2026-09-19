@@ -10,6 +10,8 @@ export interface ApiProviderDescriptor {
   label: string;
   defaultBaseUrl: string;
   defaultModel: string;
+  /** Optional path prefix for OpenAI-compatible providers whose API is not rooted at `/v1`. */
+  apiPath?: string;
 }
 
 export interface CliAgentProviderDescriptor {

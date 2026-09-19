@@ -222,6 +222,38 @@ test('ACP resume replay does not duplicate the previous answer into a follow-up'
   expect(session?.responseText).toBe('Fresh response to the current question.');
 });
 
+test('a pasted image reaches an ACP agent as an image content block', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+
+  await delegate(win, 'APP-215', 'claude-code-cli', 'Start of the conversation.');
+  await expect.poll(async () => (await readSession(win, 'APP-215'))?.state, { timeout: 15000 }).toBe('completed');
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-215' }).click();
+  const input = win.locator('[data-testid="session-follow-up-input"]');
+  await input.waitFor();
+
+  // Paste a real (decodable) 2x2 PNG into the composer, then send with text.
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4z8DAAMQACf4B/4PiLjgAAAAASUVORK5CYII=';
+  await input.evaluate((node, encoded) => {
+    const bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], 'pasted.png', { type: 'image/png' }));
+    (node as HTMLTextAreaElement).focus();
+    node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, pngBase64);
+  await expect(win.locator('[data-testid="session-image-chip"]')).toBeVisible();
+
+  await input.fill('IMAGE_ECHO describe this image.');
+  await win.locator('[data-testid="session-follow-up-send"]').click();
+
+  // The fixture reports the image blocks it actually received over the ACP wire.
+  await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText('IMAGES_RECEIVED:1:image/png');
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+});
+
 test('an ACP diff tool call renders as a red/green diff in the console', async () => {
   app = await launchTestApp();
   const win = app.window;
