@@ -366,6 +366,8 @@ export function App() {
   const [auxVisible, setAuxVisible] = useState(() => readPaneVisible('tm-pane-aux-visible', true));
   const [panelVisible, setPanelVisible] = useState(() => readPaneVisible('tm-pane-panel-visible', false));
   const [detailExpanded, setDetailExpanded] = useState(false);
+  const [sidebarSearching, setSidebarSearching] = useState(false);
+  const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
   /** The right-pane element a feature portals its inspector into (Workflows, Git Graph). */
   const [auxSlotEl, setAuxSlotEl] = useState<HTMLElement | null>(null);
   const requireAux = useCallback(() => setAuxVisible(true), []);
@@ -1685,6 +1687,24 @@ export function App() {
         appVersion={appVersion}
         contextLabel={contextLabel}
         contextDetail={contextDetail}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        onSelectWorkspace={openWorkspace}
+        onDeleteWorkspace={deleteWorkspace}
+        onCreateWorkspace={createWorkspace}
+        onSaveWorkspace={saveWorkspaceToFile}
+        onOpenWorkspace={openWorkspaceFromFile}
+        onCloseWorkspace={closeWorkspace}
+        onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
+        onNewProject={() => requestProjectWizard('create')}
+        onAddExistingProject={() => requestProjectWizard('existing')}
+        onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
+        searching={sidebarSearching}
+        onToggleSearch={() => {
+          setSidebarSearching(open => !open);
+          setSidebarSearchQuery('');
+          if (!sidebarVisible) setSidebarVisible(true);
+        }}
         onOpenWhatsNew={() => setWhatsNewOpen(true)}
         settingsOpen={settingsDialogCategory !== undefined}
         onOpenSettings={() => setSettingsDialogCategory(current => current ? undefined : 'overview')}
@@ -1787,12 +1807,13 @@ export function App() {
                   projects={workspaceProjects}
                   workspaces={workspaces}
                   activeWorkspaceId={activeWorkspaceId}
-                  onSelectWorkspace={openWorkspace}
-                  onDeleteWorkspace={deleteWorkspace}
-                  onCreateWorkspace={createWorkspace}
-                  onSaveWorkspace={saveWorkspaceToFile}
-                  onOpenWorkspace={openWorkspaceFromFile}
-                  onCloseWorkspace={closeWorkspace}
+                  searching={sidebarSearching}
+                  query={sidebarSearchQuery}
+                  onQueryChange={setSidebarSearchQuery}
+                  onToggleSearch={() => {
+                    setSidebarSearching(open => !open);
+                    setSidebarSearchQuery('');
+                  }}
                   connections={connections}
                   connectionChecks={connectionChecks}
                   selectedBoardId={route.boardId}
