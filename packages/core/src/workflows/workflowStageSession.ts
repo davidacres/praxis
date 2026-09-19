@@ -23,6 +23,15 @@ import {
 } from './workflowTypes';
 import type { WorkflowRun } from './workflowRun';
 import type { StageAgentBinding } from './workflowPreflight';
+import type { AgentWorkflowProvenance, AgentWorkflowReference } from '../ai/agentTypes';
+
+/** A workflow-pack snapshot resolved before a governed stage is launched. */
+export interface WorkflowPackContext {
+  reference: AgentWorkflowReference;
+  /** Bounded SKILL.md content; never an arbitrary path supplied to the host. */
+  instructions: string;
+  provenance: AgentWorkflowProvenance;
+}
 
 /** Links one stage attempt to the agent session that ran it. */
 export interface WorkflowStageSession {
@@ -57,6 +66,8 @@ export interface WorkflowStageContext {
   snapshot?: WorkflowImplementationSnapshot;
   /** Present for agent stages that passed preflight. */
   binding?: StageAgentBinding;
+  /** Present when the node declares a workspace workflow pack. */
+  workflowPack?: WorkflowPackContext;
 }
 
 /**

@@ -31,6 +31,7 @@ import {
   nativeRuntimeClearedPatch,
   purposeFromTask
 } from './sessionHandover';
+import { isProviderLimitError } from './providerLimitError';
 
 const STORAGE_KEY = 'praxis.aiSessions';
 const AGENT_STORAGE_KEY = 'praxis.agentSessions';
@@ -183,13 +184,19 @@ export class AiSessionManager {
         | 'workingDirectory'
         | 'toolMode'
         | 'runtimeSessionId'
+        | 'runtimeLaunch'
         | 'connectionId'
+        | 'projectId'
         | 'worktreePath'
         | 'worktreeBranch'
         | 'worktreeBaseBranch'
         | 'worktreeName'
         | 'workflowRunId'
+        | 'workflowRunIds'
         | 'workflowNodeId'
+        | 'workflowId'
+        | 'workflowVersion'
+        | 'workflowRole'
         | 'agentId'
         | 'profileId'
         | 'hostId'
@@ -209,7 +216,9 @@ export class AiSessionManager {
       const open = record.runtimeEpochs?.find(epoch => !epoch.endedAt);
       if (open) open.runtimeSessionId = runtime.runtimeSessionId;
     }
+    if (runtime.runtimeLaunch !== undefined) record.runtimeLaunch = runtime.runtimeLaunch;
     if (runtime.connectionId !== undefined) record.connectionId = runtime.connectionId;
+    if (runtime.projectId !== undefined) record.projectId = runtime.projectId.trim() || undefined;
     if (runtime.worktreePath !== undefined) record.worktreePath = runtime.worktreePath.trim() || undefined;
     if (runtime.worktreeBranch !== undefined) record.worktreeBranch = runtime.worktreeBranch.trim() || undefined;
     if (runtime.worktreeBaseBranch !== undefined) {
@@ -217,7 +226,14 @@ export class AiSessionManager {
     }
     if (runtime.worktreeName !== undefined) record.worktreeName = runtime.worktreeName.trim() || undefined;
     if (runtime.workflowRunId !== undefined) record.workflowRunId = runtime.workflowRunId.trim() || undefined;
+    if (runtime.workflowRunIds !== undefined) {
+      const runIds = [...new Set(runtime.workflowRunIds.map(runId => runId.trim()).filter(Boolean))];
+      record.workflowRunIds = runIds.length > 0 ? runIds : undefined;
+    }
     if (runtime.workflowNodeId !== undefined) record.workflowNodeId = runtime.workflowNodeId.trim() || undefined;
+    if (runtime.workflowId !== undefined) record.workflowId = runtime.workflowId.trim() || undefined;
+    if (runtime.workflowVersion !== undefined) record.workflowVersion = runtime.workflowVersion;
+    if (runtime.workflowRole !== undefined) record.workflowRole = runtime.workflowRole;
     if (runtime.agentId !== undefined) record.agentId = runtime.agentId.trim() || undefined;
     if (runtime.profileId !== undefined) record.profileId = runtime.profileId.trim() || undefined;
     if (runtime.hostId !== undefined) record.hostId = runtime.hostId.trim() || undefined;
@@ -288,8 +304,8 @@ export class AiSessionManager {
     return record;
   }
 
-  /** Update agent session state and optionally set completedAt. */
-  public updateAgentState(issueKey: string, state: AgentTaskState): void {
+  /** Update agent session state and optionally set completedAt and failure reason. */
+  public updateAgentState(issueKey: string, state: AgentTaskState, reason?: string): void {
     const record = this.agentSessions.get(issueKey);
     if (!record) {
       return;
@@ -297,11 +313,23 @@ export class AiSessionManager {
     record.state = state;
     if (state === 'completed') {
       this.updateSessionStatus(issueKey, 'completed');
+      record.lastError = undefined;
+      record.providerLimitReached = undefined;
     } else if (state === 'failed' || state === 'aborted') {
       this.updateSessionStatus(issueKey, 'failed');
+      if (reason) {
+        record.lastError = reason;
+        if (isProviderLimitError(reason)) {
+          record.providerLimitReached = true;
+        }
+      }
     } else {
       this.updateSessionStatus(issueKey, 'active');
       record.completedAt = undefined;
+      if (state === 'executing') {
+        record.lastError = undefined;
+        record.providerLimitReached = undefined;
+      }
     }
     if (state === 'completed' || state === 'failed' || state === 'aborted') {
       record.completedAt = new Date().toISOString();
@@ -319,6 +347,14 @@ export class AiSessionManager {
     const record = this.agentSessions.get(issueKey);
     if (!record) {
       return;
+    }
+    for (const event of events) {
+      if (event.type === 'error' && isProviderLimitError(event.summary || event.detail)) {
+        record.providerLimitReached = true;
+        if (!record.lastError) {
+          record.lastError = event.summary || event.detail;
+        }
+      }
     }
     const activeSpeaker = record.conversation?.state === 'running'
       ? record.conversation.participants.find(participant => participant.id === record.conversation?.currentSpeakerId)

@@ -41,6 +41,8 @@ function pickDefaultModel(options: ModelOptions | undefined): string | undefined
 
 export interface NewSessionProps {
   boards: Board[];
+  /** Project-scoped governed definitions that can be attached to this session. */
+  workflowOptions?: SessionWorkflowOption[];
   /** Starts the session; rejects (e.g. provider not configured) surface inline. */
   onSubmit: (input: {
     board?: Board;
@@ -58,6 +60,7 @@ export interface NewSessionProps {
     profileId?: string;
     hostId?: string;
     skillNames?: string[];
+    workflowId?: string;
   }) => Promise<void>;
   /** Pre-attributes the composer to a profile/host binding from the Agent Hub. */
   agentContext?: { agentId: string; profileId?: string; hostId?: string; skillNames: string[] };
@@ -86,6 +89,15 @@ export interface NewSessionProps {
   onSelectedBoardChange?: (board: Board | undefined) => void;
 }
 
+export interface SessionWorkflowOption {
+  id: string;
+  name: string;
+  description?: string;
+  version: number;
+  ready: boolean;
+  blockers?: string[];
+}
+
 const FREEFORM_BOARD_ID = '__freeform__';
 
 /**
@@ -99,8 +111,9 @@ export function NewSession({
   connectionCount,
   onOpenConnections,
   projectCount = 0,
-  onNewProject
-  , toolModeForBoard,
+  onNewProject,
+  workflowOptions,
+  toolModeForBoard,
   onSelectedBoardChange,
   agentContext,
   defaultWorkingDirectory,
@@ -137,8 +150,10 @@ export function NewSession({
   const [mode, setMode] = useState<SessionMode>('chat');
   const [workingDirectory, setWorkingDirectory] = useState<string | undefined>(defaultWorkingDirectory);
   const [runInWorktree, setRunInWorktree] = useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
   const [folderIsRepo, setFolderIsRepo] = useState(false);
   const folderLocked = Boolean(defaultWorkingDirectory);
+  const workflowOptionsForPicker = workflowOptions ?? [];
   const [modelFilter, setModelFilter] = useState('');
   const [modelMenuPos, setModelMenuPos] = useState<{ top: number; left: number } | undefined>();
   const modelChipRef = useRef<HTMLButtonElement | null>(null);
@@ -206,6 +221,12 @@ export function NewSession({
       setSelectedBoardId('');
     }
   }, [selectableBoards, selectedBoardId]);
+
+  useEffect(() => {
+    if (selectedWorkflowId && !workflowOptionsForPicker.some(option => option.id === selectedWorkflowId)) {
+      setSelectedWorkflowId('');
+    }
+  }, [selectedWorkflowId, workflowOptionsForPicker]);
 
   useEffect(() => {
     setOpenTickets([]);
@@ -440,7 +461,8 @@ export function NewSession({
               hostId: agentContext.hostId ?? agentContext.agentId,
               ...(agentContext.skillNames.length ? { skillNames: agentContext.skillNames } : {})
             }
-          : {})
+          : {}),
+        ...(selectedWorkflowId ? { workflowId: selectedWorkflowId } : {})
       });
       setGoal('');
     } catch (err) {
@@ -699,6 +721,33 @@ export function NewSession({
               }
             }}
           />
+
+          {workflowOptionsForPicker.length > 0 && (
+            <label className="composer-workflow-picker">
+              <span>Workflow</span>
+              <select
+                className="input"
+                value={selectedWorkflowId}
+                data-testid="new-session-workflow-select"
+                onChange={event => setSelectedWorkflowId(event.target.value)}
+              >
+                <option value="">No governed workflow — ordinary session</option>
+                {workflowOptionsForPicker.map(option => (
+                  <option key={option.id} value={option.id}>
+                    {option.name} · v{option.version}{option.ready ? '' : ' — not ready'}
+                  </option>
+                ))}
+              </select>
+              {selectedWorkflowId && (() => {
+                const selected = workflowOptionsForPicker.find(option => option.id === selectedWorkflowId);
+                return selected && !selected.ready ? (
+                  <small className="form-hint form-hint-error">
+                    {selected.blockers?.join(' ') || 'This workflow is not ready to run.'}
+                  </small>
+                ) : selected?.description ? <small className="form-hint">{selected.description}</small> : null;
+              })()}
+            </label>
+          )}
 
           <div className="composer-controls">
             <div className="session-mode-toggle" role="group" aria-label="Session mode">

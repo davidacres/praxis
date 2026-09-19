@@ -264,6 +264,343 @@ test('a deterministic check runs on its own in the run worktree and unblocks app
   fs.rmSync(repo, { recursive: true, force: true });
 });
 
+test('a gate the workflow allows bypassing, but no policy has granted, explains why in the run monitor', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  const started = await page.evaluate(async repoPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'Bypass Delivery',
+        key: 'BYPS',
+        type: 'software',
+        purpose: '',
+        brief: {},
+        startingPoint: 'existing-folder',
+        folderPath: repoPath,
+        workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }],
+        starterTickets: [{ summary: 'First', description: '', issueType: 'Task', status: 'Backlog' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+
+    const now = new Date().toISOString();
+    const workflowId = `bypass-${project.id}`;
+    // "always" (not "success") so Approve is reachable even though Verify
+    // fails — this is the shape a workflow author uses when they want a gate
+    // that can still be bypassed instead of dead-ending the run.
+    await window.praxis.workflows.save(project.id, {
+      schemaVersion: 1,
+      id: workflowId,
+      name: 'Bypassable delivery',
+      scope: 'project',
+      projectId: project.id,
+      version: 1,
+      entryNodeId: 'verify',
+      createdAt: now,
+      updatedAt: now,
+      nodes: [
+        {
+          type: 'check', id: 'verify', name: 'Verify', x: 0, y: 0, inputs: [],
+          command: 'node', args: ['-e', 'process.exit(1)'], successExitCodes: [0],
+          outputs: [{ id: 'verify-log', kind: 'log', required: true }],
+          satisfiesGate: 'qa'
+        },
+        {
+          type: 'approval', id: 'approve', name: 'Approve', x: 200, y: 0, inputs: ['verify-log'],
+          prompt: 'Ship?', requiredGates: ['qa'], allowBypass: true
+        }
+      ],
+      edges: [{ id: 'e1', from: 'verify', to: 'approve', on: 'always', required: true }]
+    } as never);
+
+    const summary = await window.praxis.workflows.startRun(project.id, workflowId, 'Automated');
+    localStorage.setItem(
+      `praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`,
+      JSON.stringify({ projectId: project.id, feature: 'workflows' })
+    );
+    return { runId: summary.runId, projectId: project.id };
+  }, repo);
+
+  await expect
+    .poll(
+      async () => page.evaluate(async runId => (await window.praxis.workflows.getRun(runId))?.status, started.runId),
+      { timeout: 20000 }
+    )
+    .toBe('awaiting-approval');
+
+  await page.reload();
+  await openRunsTab(page);
+  await page.getByRole('navigation', { name: 'Runs' }).getByRole('button', { name: /Bypassable delivery/ }).first().click();
+
+  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  // No policy exists in this profile, so the workflow's own permission is
+  // not enough — the button must not appear, and the reason must be stated
+  // rather than the option silently missing.
+  await expect(runDetail.getByTestId('wf-bypass-qa')).toHaveCount(0);
+  await expect(runDetail.getByTestId('wf-bypass-blocked-qa')).toContainText(/no project or global policy/);
+
+  const artifacts = path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await page.screenshot({ path: path.join(artifacts, 'workflow-gates-bypass.png'), fullPage: true });
+
+  // The hint links straight to the page that can actually grant the permission.
+  await runDetail.getByRole('button', { name: 'Open policies' }).click();
+  await expect(page.getByRole('heading', { name: 'Policies' })).toBeVisible();
+
+  // Granting a project policy that allows bypass closes the loop: the same
+  // gate now offers the real button instead of the blocked explanation.
+  await page.evaluate(async projectId => {
+    const now = new Date().toISOString();
+    await window.praxis.workflows.savePolicy({
+      schemaVersion: 1,
+      id: `policy-project-${projectId}`,
+      name: 'Bypass Delivery policy',
+      scope: 'project',
+      projectId,
+      requiredGates: [],
+      requireHumanApproval: false,
+      allowGateBypass: true,
+      requireTrustedAgents: false,
+      maxAttemptsPerNode: 3,
+      createdAt: now,
+      updatedAt: now
+    });
+  }, started.projectId);
+
+  await page.reload();
+  await openRunsTab(page);
+  await page.getByRole('navigation', { name: 'Runs' }).getByRole('button', { name: /Bypassable delivery/ }).first().click();
+  const runDetailAfterPolicy = page.getByRole('region', { name: 'Run detail' });
+  await expect(runDetailAfterPolicy.getByTestId('wf-bypass-qa')).toBeVisible();
+  await expect(runDetailAfterPolicy.getByTestId('wf-bypass-blocked-qa')).toHaveCount(0);
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
+test('approving one of two simultaneously-awaiting approval nodes never touches the other', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  const started = await page.evaluate(async repoPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'Dual Approval Delivery',
+        key: 'DUAL',
+        type: 'software',
+        purpose: '',
+        brief: {},
+        startingPoint: 'existing-folder',
+        folderPath: repoPath,
+        workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }],
+        starterTickets: [{ summary: 'First', description: '', issueType: 'Task', status: 'Backlog' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+
+    // Two independent approval branches off one check, so both can await a
+    // human at once — the exact shape that "always approve the first
+    // approval node in the definition" got wrong.
+    const now = new Date().toISOString();
+    await window.praxis.workflows.save(project.id, {
+      schemaVersion: 1,
+      id: `dual-approval-${project.id}`,
+      name: 'Dual approval',
+      scope: 'project',
+      projectId: project.id,
+      version: 1,
+      entryNodeId: 'verify',
+      createdAt: now,
+      updatedAt: now,
+      nodes: [
+        {
+          type: 'check', id: 'verify', name: 'Verify', x: 0, y: 0, inputs: [],
+          command: 'git', args: ['--version'], successExitCodes: [0],
+          outputs: [{ id: 'verify-log', kind: 'log', required: true }],
+          satisfiesGate: 'qa'
+        },
+        {
+          type: 'approval', id: 'approve-a', name: 'Approve A', x: 200, y: -80, inputs: ['verify-log'],
+          prompt: 'Ship A?', requiredGates: [], allowBypass: false
+        },
+        {
+          type: 'approval', id: 'approve-b', name: 'Approve B', x: 200, y: 80, inputs: ['verify-log'],
+          prompt: 'Ship B?', requiredGates: [], allowBypass: false
+        }
+      ],
+      edges: [
+        { id: 'e1', from: 'verify', to: 'approve-a', on: 'success', required: true },
+        { id: 'e2', from: 'verify', to: 'approve-b', on: 'success', required: true }
+      ]
+    } as never);
+
+    const summary = await window.praxis.workflows.startRun(project.id, `dual-approval-${project.id}`, 'Automated');
+    return { runId: summary.runId, projectId: project.id };
+  }, repo);
+
+  // Both branches are independent, so both come up for approval at once.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async runId => {
+          const summary = await window.praxis.workflows.getRun(runId);
+          return summary?.actions.filter(action => action.kind === 'approve').map(action => action.nodeId).sort();
+        }, started.runId),
+      { timeout: 20000 }
+    )
+    .toEqual(['approve-a', 'approve-b']);
+
+  // Approving "B" explicitly must settle only "B" — not silently resolve to
+  // whichever approval happens to come first in the workflow definition.
+  await page.evaluate(
+    async runId => window.praxis.workflows.approveRun(runId, 'e2e', undefined, 'approve-b'),
+    started.runId
+  );
+
+  const afterB = await page.evaluate(async runId => {
+    const summary = await window.praxis.workflows.getRun(runId);
+    return {
+      status: summary?.status,
+      a: summary?.stages.find(row => row.nodeId === 'approve-a')?.outcome,
+      b: summary?.stages.find(row => row.nodeId === 'approve-b')?.outcome
+    };
+  }, started.runId);
+  expect(afterB.a).toBe('pending');
+  expect(afterB.b).toBe('succeeded');
+  expect(afterB.status).not.toBe('succeeded');
+
+  // With only "A" left awaiting, an approval with no explicit target resolves
+  // to it rather than refusing or guessing.
+  await page.evaluate(async runId => window.praxis.workflows.approveRun(runId, 'e2e'), started.runId);
+
+  const afterA = await page.evaluate(async runId => {
+    const summary = await window.praxis.workflows.getRun(runId);
+    return { status: summary?.status, a: summary?.stages.find(row => row.nodeId === 'approve-a')?.outcome };
+  }, started.runId);
+  expect(afterA.a).toBe('succeeded');
+  expect(afterA.status).toBe('succeeded');
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
+test('the run monitor shows one Approve button per simultaneously-awaiting approval node, each targeting its own', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  const started = await page.evaluate(async repoPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'Dual Approval UI',
+        key: 'DUIU',
+        type: 'software',
+        purpose: '',
+        brief: {},
+        startingPoint: 'existing-folder',
+        folderPath: repoPath,
+        workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }],
+        starterTickets: [{ summary: 'First', description: '', issueType: 'Task', status: 'Backlog' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+
+    const now = new Date().toISOString();
+    const workflowId = `dual-ui-${project.id}`;
+    await window.praxis.workflows.save(project.id, {
+      schemaVersion: 1,
+      id: workflowId,
+      name: 'Dual approval UI',
+      scope: 'project',
+      projectId: project.id,
+      version: 1,
+      entryNodeId: 'verify',
+      createdAt: now,
+      updatedAt: now,
+      nodes: [
+        {
+          type: 'check', id: 'verify', name: 'Verify', x: 0, y: 0, inputs: [],
+          command: 'git', args: ['--version'], successExitCodes: [0],
+          outputs: [{ id: 'verify-log', kind: 'log', required: true }],
+          satisfiesGate: 'qa'
+        },
+        {
+          type: 'approval', id: 'security-approval', name: 'Security approval', x: 200, y: -80, inputs: ['verify-log'],
+          prompt: 'Ship?', requiredGates: [], allowBypass: false
+        },
+        {
+          type: 'approval', id: 'release-approval', name: 'Release approval', x: 200, y: 80, inputs: ['verify-log'],
+          prompt: 'Ship?', requiredGates: [], allowBypass: false
+        }
+      ],
+      edges: [
+        { id: 'e1', from: 'verify', to: 'security-approval', on: 'success', required: true },
+        { id: 'e2', from: 'verify', to: 'release-approval', on: 'success', required: true }
+      ]
+    } as never);
+
+    const summary = await window.praxis.workflows.startRun(project.id, workflowId, 'Automated');
+    localStorage.setItem(
+      `praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`,
+      JSON.stringify({ projectId: project.id, feature: 'workflows' })
+    );
+    return { runId: summary.runId };
+  }, repo);
+
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async runId => {
+          const summary = await window.praxis.workflows.getRun(runId);
+          return summary?.actions.filter(action => action.kind === 'approve').length ?? 0;
+        }, started.runId),
+      { timeout: 20000 }
+    )
+    .toBe(2);
+
+  await page.reload();
+  await openRunsTab(page);
+  await page.getByRole('navigation', { name: 'Runs' }).getByRole('button', { name: /Dual approval UI/ }).first().click();
+
+  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  const securityApprove = runDetail.getByRole('button', { name: /Approve at Security approval/ });
+  const releaseApprove = runDetail.getByRole('button', { name: /Approve at Release approval/ });
+  await expect(securityApprove).toBeVisible();
+  await expect(releaseApprove).toBeVisible();
+  // Neither reads as the old, ambiguous plain "Approve" — each names its own stage.
+  await expect(runDetail.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
+
+  const artifacts = path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await page.screenshot({ path: path.join(artifacts, 'workflow-dual-approve-buttons.png'), fullPage: true });
+
+  await releaseApprove.click();
+  await expect(releaseApprove).toHaveCount(0);
+  // Only one approval is left awaiting, so its button simplifies back to
+  // plain "Approve" — the per-stage label exists only to disambiguate when
+  // more than one is in play at once.
+  await expect(runDetail.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
+
+  const afterRelease = await page.evaluate(async runId => {
+    const summary = await window.praxis.workflows.getRun(runId);
+    return {
+      security: summary?.stages.find(row => row.nodeId === 'security-approval')?.outcome,
+      release: summary?.stages.find(row => row.nodeId === 'release-approval')?.outcome
+    };
+  }, started.runId);
+  expect(afterRelease.release).toBe('succeeded');
+  expect(afterRelease.security).toBe('pending');
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
 /** Seeds a folder-backed project with a saved check-only workflow. */
 async function seedCheckWorkflow(
   page: Page,

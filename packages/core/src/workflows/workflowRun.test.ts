@@ -5,6 +5,7 @@ import {
   canRetry,
   createWorkflowRun,
   normalizeWorkflowRun,
+  reworkWorkflowRun,
   type WorkflowRun
 } from './workflowRun';
 import { advanceJoins, deriveRunStatus, scheduleWorkflowRun } from './workflowScheduler';
@@ -75,6 +76,21 @@ function definition(): WorkflowDefinition {
 function newRun(def: WorkflowDefinition = definition()): WorkflowRun {
   return createWorkflowRun({ runId: 'run-1', projectId: 'p1', definition: def, at: T(0) });
 }
+
+test('a run keeps its controller session relationship across normalization', () => {
+  const run = createWorkflowRun({
+    runId: 'run-controller',
+    projectId: 'p1',
+    definition: definition(),
+    at: T(0),
+    controllerSessionKey: 'SESSION-controller',
+    controllerSessionId: 'session-1'
+  });
+  const restored = normalizeWorkflowRun(JSON.parse(JSON.stringify(run)));
+  assert.ok(restored);
+  assert.equal(restored.controllerSessionKey, 'SESSION-controller');
+  assert.equal(restored.controllerSessionId, 'session-1');
+});
 
 /** Runs a node start→success with the artifacts its contract declares. */
 function succeed(run: WorkflowRun, nodeId: string, minute: number): WorkflowRun {
@@ -298,6 +314,46 @@ test('the run reports awaiting-approval only when nothing else can move', () => 
   assert.equal(deriveRunStatus(run), 'awaiting-approval');
 });
 
+test('rework opens a new implementation revision and clears only its downstream evidence', () => {
+  let run = succeed(newRun(), 'plan', 1);
+  run = succeed(run, 'implement', 3);
+  run = succeed(run, 'review', 5);
+  run = succeed(run, 'qa', 7);
+  run = succeed(run, 'security', 9);
+
+  const result = reworkWorkflowRun(run, 'implement', T(12));
+  assert.equal(result.reason, undefined);
+  assert.deepEqual(result.requeued, ['implement', 'review', 'qa', 'security', 'gates', 'approve']);
+  assert.equal(result.run.nodes.plan.outcome, 'succeeded', 'upstream planning remains valid');
+  for (const nodeId of result.requeued) {
+    assert.equal(result.run.nodes[nodeId].outcome, 'pending');
+    assert.deepEqual(result.run.nodes[nodeId].artifacts, []);
+  }
+  assert.equal(result.run.nodes.implement.attempts.length, 1, 'the earlier implementation attempt remains auditable');
+  assert.equal(result.run.status, 'running');
+  assert.deepEqual(scheduleWorkflowRun(result.run).ready, ['implement']);
+  assert.ok(result.run.events.some(event => event.kind === 'node-reworked' && event.nodeId === 'implement'));
+});
+
+test('a stale gate offers rework from the implementation snapshot that caused it', () => {
+  let run = succeed(newRun(), 'plan', 1);
+  run = succeed(run, 'implement', 3);
+  run = succeed(run, 'review', 5);
+  run = {
+    ...run,
+    nodes: {
+      ...run.nodes,
+      implement: { ...run.nodes.implement, snapshotRef: 'sha-new' },
+      review: { ...run.nodes.review, assessedSnapshotRef: 'sha-old' }
+    }
+  };
+
+  assert.deepEqual(
+    nextActions(run).filter(action => action.kind === 'rework-stage').map(action => action.nodeId),
+    ['implement']
+  );
+});
+
 // ── Retry ────────────────────────────────────────────────────────────────
 
 test('a failed stage within its attempt budget is retryable and keeps its history', () => {
@@ -508,4 +564,25 @@ test('a phase survives a normalize round-trip while the node is still running, a
   const settled = succeed(run, 'plan', 3);
   const restoredSettled = normalizeWorkflowRun(JSON.parse(JSON.stringify(settled)));
   assert.equal(restoredSettled?.nodes.plan.phase, undefined);
+});
+
+test('an explicit Task Designer plan input survives run creation and restart normalization', () => {
+  const planInput = {
+    source: 'task-designer' as const,
+    boardId: 'board-1',
+    outputPath: '/workspace/plans/master-plan.md',
+    generatedFeaturesPath: '/workspace/plans/features',
+    fingerprint: 'abc123',
+    generatedFeatureCount: 2,
+    generatedStoryCount: 6
+  };
+  const run = createWorkflowRun({
+    runId: 'run-plan-input',
+    projectId: 'project-1',
+    definition: definition(),
+    at: T(0),
+    planInput
+  });
+  const restored = normalizeWorkflowRun(JSON.parse(JSON.stringify(run)));
+  assert.deepEqual(restored?.planInput, planInput);
 });

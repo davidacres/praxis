@@ -14,7 +14,6 @@ import { PROVIDER_LABELS } from './modelProviders';
 export function sessionTitle(session: AgentSessionRecord): string {
   return session.title?.trim() || session.taskDefinition.goal.split('\n')[0];
 }
-
 /**
  * A free-form session (New Session composer, no tracker issue) is stored under a
  * synthesized `SESSION-<hex>` key — a unique internal handle, not something the
@@ -443,4 +442,26 @@ export function reportedSessionPaths(
     }
   }
   return paths;
+}
+
+const PROVIDER_LIMIT_REGEX =
+  /(?:weekly|monthly|daily|hourly|session|usage|rate|spending|billing|plan|tier)[_ -]?limit|hit (?:your )?(?:\w+ )?limit|reached (?:your )?(?:\w+ )?limit|exceeded (?:your )?(?:\w+ )?limit|quota|insufficient[_ -]?quota|out of quota|too many requests|resource[_ -]?exhausted|credits?[_ -]?(?:exhausted|depleted|empty|expired|zero|insufficient|out)|out of credits?|no credits? remaining|run out of credits?|credit balance (?:is )?too low|balance (?:is )?too low|rate[_ -]?limit|rate[_ -]?limited/i;
+
+export function isProviderLimitMessage(text?: string): boolean {
+  if (!text) return false;
+  return PROVIDER_LIMIT_REGEX.test(text);
+}
+
+export function sessionLimitNotice(session?: AgentSessionRecord): string | undefined {
+  if (!session) return undefined;
+  if (session.providerLimitReached && session.lastError) return session.lastError;
+  if (session.lastError && isProviderLimitMessage(session.lastError)) return session.lastError;
+  const lastErrorEvent = [...(session.events ?? [])].reverse().find(e => e.type === 'error');
+  if (lastErrorEvent && isProviderLimitMessage(lastErrorEvent.summary || lastErrorEvent.detail)) {
+    return lastErrorEvent.summary || lastErrorEvent.detail;
+  }
+  if (session.providerLimitReached) {
+    return 'Provider usage limit or credits exhausted. The session was halted and will not retry automatically.';
+  }
+  return undefined;
 }

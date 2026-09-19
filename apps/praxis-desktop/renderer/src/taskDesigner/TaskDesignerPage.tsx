@@ -18,7 +18,8 @@ import type {
   TaskDesignerPersistedState,
   TaskDesignerResolvedDroppedIssue,
   TaskDesignerTicketNode,
-  TaskDesignerWebsitePreviewNode
+  TaskDesignerWebsitePreviewNode,
+  TaskDesignerMasterPlanResult
 } from '@praxis/core';
 import { Icon, type IconName } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
@@ -43,6 +44,7 @@ interface TaskDesignerPageProps {
   onClose: () => void;
   onSelectionChange: (node: TaskDesignerCanvasNode | undefined) => void;
   externalSelectionId?: string;
+  onUseMasterPlan?: (result: TaskDesignerMasterPlanResult) => void;
 }
 
 type ActiveTool = 'select' | 'link';
@@ -134,7 +136,8 @@ export function TaskDesignerPage({
   board,
   onClose,
   onSelectionChange,
-  externalSelectionId
+  externalSelectionId,
+  onUseMasterPlan
 }: TaskDesignerPageProps) {
   const { confirm } = useDialogs();
   const [canvas, setCanvas] = useState<TaskDesignerPersistedState>(emptyCanvasState);
@@ -149,6 +152,7 @@ export function TaskDesignerPage({
   const [feedback, setFeedbackState] = useState<Feedback | undefined>();
   const [recommendation, setRecommendation] = useState<RecommendationState | undefined>();
   const [busy, setBusy] = useState<'recommend' | 'recommendBoard' | 'apply' | 'masterPlan' | undefined>();
+  const [generatedPlan, setGeneratedPlan] = useState<TaskDesignerMasterPlanResult>();
   /** Measured node boxes (layout px = canvas coords; CSS transform doesn't affect offset*). */
   const [sizes, setSizes] = useState<ReadonlyMap<string, { width: number; height: number }>>(new Map());
 
@@ -866,6 +870,7 @@ export function TaskDesignerPage({
         board.connectionId,
         canvasRef.current
       );
+      setGeneratedPlan(result);
       setFeedback(
         `Master plan generated at ${result.outputPath}. Generated ${result.generatedFeatureCount} feature file set(s) and ${result.generatedStoryCount} story file(s).`
       );
@@ -1668,6 +1673,10 @@ export function TaskDesignerPage({
             {toolButton('master-plan', 'file', 'Generate master plan', {
               busy: busy === 'masterPlan',
               onClick: () => void requestGenerateMasterPlan()
+            })}
+            {toolButton('use-workflow', 'play', 'Use generated plan in a workflow', {
+              hidden: !generatedPlan || !onUseMasterPlan,
+              onClick: () => generatedPlan && onUseMasterPlan?.(generatedPlan)
             })}
             {toolButton('recommend-flow', 'sparkles', 'AI recommend flow', {
               busy: busy === 'recommend',

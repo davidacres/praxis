@@ -27,12 +27,15 @@ import {
   type CheckFindingSeverity,
   type CheckFindings,
   type GateThresholdCondition,
+  type WorkflowApprovalNode,
   type WorkflowGateDecision,
   type WorkflowGateKind,
   type WorkflowPolicyProfile
 } from './workflowTypes';
 import { applyWorkflowRunCommand, type WorkflowRun } from './workflowRun';
 import { filterUnwaivedFindings } from './waiverRegister';
+import { findSnapshot } from './workflowStageSession';
+import { scheduleWorkflowRun } from './workflowScheduler';
 
 const SEVERITY_RANK: Record<CheckFindingSeverity, number> = {
   info: 0,
@@ -46,10 +49,28 @@ export interface GateStatus {
   gate: WorkflowGateKind;
   /** The node that owns this gate, if the workflow has one. */
   nodeId?: string;
-  state: 'passed' | 'failed' | 'pending' | 'missing' | 'bypassed';
+  state: 'passed' | 'failed' | 'pending' | 'stale' | 'missing' | 'bypassed';
   /** Whether the gate rests on a deterministic check rather than an agent. */
   deterministic: boolean;
   detail: string;
+  /**
+   * Whether policy and the owning approval node currently allow this gate to
+   * be waived — mirrors `ApprovalReadiness.bypassable`. Only set by callers
+   * with that readiness context (`evaluateGates` alone leaves it undefined);
+   * a pending gate is never bypassable, per `approvalReadiness`.
+   */
+  bypassable?: boolean;
+  /** Which approval node a bypass/approve of this gate would target, when a workflow has more than one. */
+  approvalNodeId?: string;
+  /**
+   * True when the workflow's own approval node would allow bypassing this
+   * gate, but the effective policy is what's actually preventing it —
+   * either an explicit forbid, or (the deny-by-default case) no policy
+   * profile exists at all. Distinguishes "policy is the blocker" from
+   * "the workflow itself never allowed this," so the UI can explain a
+   * bypass's absence instead of leaving it silently unavailable.
+   */
+  bypassBlockedByPolicy?: boolean;
 }
 
 export interface CiImportedEvidenceRecord {
@@ -92,7 +113,9 @@ export function evaluateGates(
     const owners = run.definition.nodes.filter(node => nodeGate(node) === gate);
     const decision = run.gateDecisions.find(candidate => candidate.gate === gate);
 
-    if (decision?.bypassed) {
+    const currentSnapshot = owners.length === 1 ? findSnapshot(run, owners[0].id)?.ref : undefined;
+
+    if (decision?.bypassed && (!currentSnapshot || decision.assessedSnapshotRef === currentSnapshot)) {
       return {
         gate,
         ...(owners.length === 1 ? { nodeId: owners[0].id } : {}),
@@ -202,6 +225,15 @@ export function evaluateGates(
       }
 
       if (state.outcome === 'succeeded') {
+        if (currentSnapshot && state.assessedSnapshotRef !== currentSnapshot) {
+          return {
+            gate,
+            nodeId: owner.id,
+            state: 'stale' as const,
+            deterministic,
+            detail: `${owner.name} assessed ${state.assessedSnapshotRef ?? 'an unrecorded snapshot'}, but implementation is now ${currentSnapshot}. Re-run this stage.`
+          };
+        }
         const conditions: GateThresholdCondition[] = [
           ...(policy?.gateThresholds?.[gate] ?? []),
           ...(approval.gateThresholds?.[gate] ?? []),
@@ -309,6 +341,19 @@ export function evaluateGates(
       };
     }
 
+    const staleOwners = enabledOwners.filter(owner => {
+      const snapshot = findSnapshot(run, owner.id)?.ref;
+      return !!snapshot && run.nodes[owner.id]?.assessedSnapshotRef !== snapshot;
+    });
+    if (staleOwners.length > 0) {
+      return {
+        gate,
+        state: 'stale' as const,
+        deterministic,
+        detail: `${staleOwners.map(owner => `${owner.name} assessed ${run.nodes[owner.id]?.assessedSnapshotRef ?? 'an unrecorded snapshot'} instead of ${findSnapshot(run, owner.id)?.ref}`).join('; ')}. Re-run the stale stage${staleOwners.length === 1 ? '' : 's'}.`
+      };
+    }
+
     // All enabled owners succeeded! Combine findings & metrics
     const combinedFindings = enabledOwners.flatMap(o => run.nodes[o.id]?.findings?.findings ?? []);
     const combinedMetrics: Record<string, number> = Object.assign(
@@ -375,6 +420,30 @@ export function evaluateGates(
       detail: `Scanners passed: ${enabledOwners.map(o => o.name).join(', ')}${disabledText} (${activeFindings.length} findings${waivedText}).`
     };
   });
+}
+
+/**
+ * Resolves which approval node an approve/bypass action targets.
+ *
+ * An explicit `nodeId` always wins. Otherwise this falls back to the
+ * workflow's only approval node, or — with several — the only one currently
+ * awaiting approval. With more than one candidate and no explicit id, it
+ * throws rather than guessing: silently picking "the first approval node in
+ * the definition" is the bug this exists to prevent.
+ */
+export function resolveApprovalTarget(run: WorkflowRun, nodeId?: string): WorkflowApprovalNode {
+  const approvals = run.definition.nodes.filter(isApprovalNode);
+  if (nodeId) {
+    const node = approvals.find(candidate => candidate.id === nodeId);
+    if (!node) throw new Error(`"${nodeId}" is not an approval stage in this workflow.`);
+    return node;
+  }
+  if (approvals.length === 0) throw new Error('This workflow has no approval stage.');
+  if (approvals.length === 1) return approvals[0];
+  const awaiting = new Set(scheduleWorkflowRun(run).awaitingApproval);
+  const ready = approvals.filter(approval => awaiting.has(approval.id));
+  if (ready.length === 1) return ready[0];
+  throw new Error('This workflow has multiple approval stages; specify which one to approve.');
 }
 
 /**
@@ -453,6 +522,7 @@ export function bypassGate(
     bypassed: true,
     bypassedBy: input.actor,
     reason: input.reason,
+    ...(target.nodeId ? { assessedSnapshotRef: findSnapshot(run, target.nodeId)?.ref } : {}),
     decidedAt: input.at
   };
 
@@ -499,6 +569,7 @@ export function approveStage(
         nodeId: gate.nodeId ?? approvalNodeId,
         passed: true,
         bypassed: false,
+        ...(gate.nodeId ? { assessedSnapshotRef: findSnapshot(next, gate.nodeId)?.ref } : {}),
         decidedAt: input.at
       }
     });

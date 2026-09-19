@@ -103,6 +103,7 @@ import type { WorkflowValidationResult } from '../workflows/workflowValidation';
 import type { WorkflowCatalog } from '../workflows/workflowStore';
 import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
+import type { WorkflowPlanInput } from '../workflows/workflowRun';
 import type { WorkflowEvidenceEntry } from '../workflows/workflowEvidence';
 import type { CreateDiagnosisSessionResult } from '../ai/diagnosisBrief';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileContent, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
@@ -618,6 +619,8 @@ export interface AiDelegateInput {
    */
   issueKey?: string;
   connectionId?: string;
+  /** Durable project ownership for project-scoped sessions and workflows. */
+  projectId?: string;
   /** Free-form goal for an issue-less session (the New Session composer path). */
   goal?: string;
   /** Task overrides; any omitted field falls back to a default built from the issue. */
@@ -1092,6 +1095,12 @@ export interface WorkflowsIpc {
   validate(projectId: string, definition: WorkflowDefinition): Promise<WorkflowValidationResult>;
   /** The composed policy governing this project, strictest-wins over global. */
   effectivePolicy(projectId: string): Promise<WorkflowPolicyProfile | undefined>;
+  /** Every stored policy profile, global and project-scoped, across all projects. */
+  listPolicies(): Promise<WorkflowPolicyProfile[]>;
+  /** Creates or updates a policy profile; rejects an invalid scope/projectId pairing. */
+  savePolicy(profile: WorkflowPolicyProfile): Promise<WorkflowPolicyProfile>;
+  /** Removes a policy profile. */
+  removePolicy(profileId: string): Promise<void>;
 
   // ── Runs (FX-BE-022) ────────────────────────────────────────────────────
   /**
@@ -1105,8 +1114,18 @@ export interface WorkflowsIpc {
     projectId: string,
     workflowId: string,
     taskTitle: string,
-    issue?: { issueKey: string; connectionId?: string }
+    issue?: { issueKey: string; connectionId?: string },
+    controller?: { sessionKey: string; sessionId: string },
+    planInput?: WorkflowPlanInput
   ): Promise<WorkflowRunSummary>;
+  /** Makes one of this session's controller runs its active workflow context. */
+  selectControllerRun(sessionKey: string, runId: string): Promise<WorkflowRunSummary>;
+  /**
+   * Cancels one of this session's controller runs if it is still active, then
+   * detaches it from the session. Falls back to another remaining run as the
+   * active context, or clears the session's workflow context if none remain.
+   */
+  removeControllerRun(sessionKey: string, runId: string, reason?: string): Promise<void>;
   /** Run summaries for a project, newest first. */
   listRuns(projectId: string): Promise<WorkflowRunSummary[]>;
   /** One run's summary, or undefined. */
@@ -1122,12 +1141,24 @@ export interface WorkflowsIpc {
     outcome: 'succeeded' | 'failed',
     detail?: { error?: string; snapshotRef?: string }
   ): Promise<WorkflowRunSummary>;
-  /** Grants approval at the run's approval stage; refuses while a required gate is unmet. */
-  approveRun(runId: string, actor: string, note?: string): Promise<WorkflowRunSummary>;
-  /** Records an attributed gate bypass, when policy and the stage permit one. */
-  bypassGate(runId: string, gate: string, actor: string, reason: string): Promise<WorkflowRunSummary>;
+  /**
+   * Grants approval at the run's approval stage; refuses while a required
+   * gate is unmet. `nodeId` targets a specific approval node — required when
+   * a workflow has more than one and several are awaiting approval at once;
+   * omitted, it resolves to the workflow's only approval node, or the only
+   * one currently awaiting.
+   */
+  approveRun(runId: string, actor: string, note?: string, nodeId?: string): Promise<WorkflowRunSummary>;
+  /**
+   * Records an attributed gate bypass, when policy and the stage permit one.
+   * `nodeId` targets a specific approval node, resolved the same way as
+   * `approveRun` when omitted.
+   */
+  bypassGate(runId: string, gate: string, actor: string, reason: string, nodeId?: string): Promise<WorkflowRunSummary>;
   /** Queues a failed stage for another attempt within its budget. */
   retryStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
+  /** Starts a new delivery revision and replays the selected stage's downstream path. */
+  reworkStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
   /** Cancels a run. */
   cancelRun(runId: string, reason?: string): Promise<WorkflowRunSummary>;
   /**
@@ -1396,6 +1427,7 @@ export interface TaskDesignerMasterPlanResult {
   generatedFeaturesPath: string;
   generatedFeatureCount: number;
   generatedStoryCount: number;
+  fingerprint: string;
 }
 
 /**

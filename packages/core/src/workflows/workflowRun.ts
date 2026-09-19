@@ -22,6 +22,8 @@ import {
   isCheckNode,
   isDeploymentNode,
   isTerminalOutcome,
+  nodeGate,
+  nodeMutatesWorktree,
   nodeOutputs,
   WORKFLOW_SCHEMA_VERSION,
   type CheckFindings,
@@ -31,6 +33,7 @@ import {
   type WorkflowNode,
   type WorkflowNodeOutcome
 } from './workflowTypes';
+import { findSnapshot } from './workflowStageSession';
 
 export type WorkflowRunStatus =
   | 'running'
@@ -51,6 +54,7 @@ export type WorkflowRunEventKind =
   | 'node-skipped'
   | 'node-cancelled'
   | 'node-retried'
+  | 'node-reworked'
   | 'node-interrupted'
   | 'node-progress'
   | 'artifact-produced'
@@ -90,6 +94,8 @@ export interface WorkflowNodeState {
    * worktree happens to hold by the time they run.
    */
   snapshotRef?: string;
+  /** Immutable upstream implementation snapshot this stage inspected. */
+  assessedSnapshotRef?: string;
   /**
    * A free-form sub-phase of the current attempt, reported via the
    * `node-progress` command — e.g. a deployment stage moving from
@@ -118,6 +124,12 @@ export interface WorkflowRun {
   endedAt?: string;
   /** Set when the run ended for a stated reason (cancellation, blocked gate). */
   endedReason?: string;
+  /** Session-store key for the user-facing session that controls this run. */
+  controllerSessionKey?: string;
+  /** Provider/runtime session id of the controller, when available. */
+  controllerSessionId?: string;
+  /** Explicit plan artifact handed off from Task Designer into this run. */
+  planInput?: WorkflowPlanInput;
   /**
    * The git worktree this run's stages execute in, once acquired. Recorded on
    * the run so a restart re-attaches to the same tree instead of branching a
@@ -143,6 +155,16 @@ export interface WorkflowRun {
   issueWriteBackAt?: string;
 }
 
+export interface WorkflowPlanInput {
+  source: 'task-designer';
+  boardId: string;
+  outputPath: string;
+  generatedFeaturesPath: string;
+  fingerprint: string;
+  generatedFeatureCount: number;
+  generatedStoryCount: number;
+}
+
 // ── Commands ─────────────────────────────────────────────────────────────
 
 export type WorkflowRunCommand =
@@ -155,6 +177,8 @@ export type WorkflowRunCommand =
       exitCode?: number;
       /** Commit or worktree ref this stage froze, for downstream inspection. */
       snapshotRef?: string;
+      /** Immutable upstream implementation snapshot this stage assessed. */
+      assessedSnapshotRef?: string;
       findings?: CheckFindings;
     }
   | { kind: 'node-failed'; nodeId: string; at: string; error: string; exitCode?: number; findings?: CheckFindings }
@@ -176,6 +200,9 @@ export function createWorkflowRun(input: {
   /** The ticket this run was started from, if any — see `WorkflowRun.issueKey`. */
   issueKey?: string;
   issueConnectionId?: string;
+  controllerSessionKey?: string;
+  controllerSessionId?: string;
+  planInput?: WorkflowPlanInput;
 }): WorkflowRun {
   const nodes: Record<string, WorkflowNodeState> = {};
   for (const node of input.definition.nodes) {
@@ -195,7 +222,10 @@ export function createWorkflowRun(input: {
     gateDecisions: [],
     startedAt: input.at,
     ...(input.issueKey ? { issueKey: input.issueKey } : {}),
-    ...(input.issueConnectionId ? { issueConnectionId: input.issueConnectionId } : {})
+    ...(input.issueConnectionId ? { issueConnectionId: input.issueConnectionId } : {}),
+    ...(input.controllerSessionKey ? { controllerSessionKey: input.controllerSessionKey } : {}),
+    ...(input.controllerSessionId ? { controllerSessionId: input.controllerSessionId } : {}),
+    ...(input.planInput ? { planInput: input.planInput } : {})
   };
 
   return append(run, { at: input.at, kind: 'run-started', message: `Run started for ${input.definition.name}.` });
@@ -219,6 +249,7 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
         exitCode: command.exitCode,
         artifacts: command.artifacts,
         snapshotRef: command.snapshotRef,
+        assessedSnapshotRef: command.assessedSnapshotRef,
         findings: command.findings
       });
     case 'node-failed':
@@ -245,6 +276,68 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
     case 'cancel':
       return cancelRun(run, command.at, command.reason);
   }
+}
+
+export interface WorkflowReworkResult {
+  run: WorkflowRun;
+  /** The source plus every downstream stage returned to pending. */
+  requeued: string[];
+  reason?: string;
+}
+
+/**
+ * Starts a new delivery revision without adding a cycle to the workflow graph.
+ *
+ * The selected stage is rerun and its downstream work is cleared for a new
+ * attempt. Earlier attempts and timeline events stay intact, while obsolete
+ * artifacts, snapshots, findings, and gate decisions are removed from active
+ * state so no reviewer can accidentally approve a newer change with old proof.
+ */
+export function reworkWorkflowRun(run: WorkflowRun, nodeId: string, at: string): WorkflowReworkResult {
+  const source = findNode(run, nodeId);
+  if (!source) return { run, requeued: [], reason: `Stage "${nodeId}" was not found.` };
+
+  const affected = downstreamNodeIds(run, nodeId);
+  if ([...affected].some(id => run.nodes[id]?.outcome === 'running')) {
+    return { run, requeued: [], reason: 'Stop the in-progress downstream stage before starting rework.' };
+  }
+
+  const nodes = { ...run.nodes };
+  for (const id of affected) {
+    const state = nodes[id];
+    if (!state) continue;
+    nodes[id] = {
+      nodeId: state.nodeId,
+      outcome: 'pending',
+      attempts: state.attempts,
+      artifacts: []
+    };
+  }
+
+  const affectedGates = new Set(
+    run.definition.nodes
+      .filter(node => affected.has(node.id))
+      .map(nodeGate)
+      .filter((gate): gate is NonNullable<typeof gate> => !!gate)
+  );
+  const next: WorkflowRun = {
+    ...run,
+    status: 'running',
+    endedAt: undefined,
+    endedReason: undefined,
+    nodes,
+    gateDecisions: run.gateDecisions.filter(decision => !affected.has(decision.nodeId) && !affectedGates.has(decision.gate))
+  };
+  const requeued = [...affected];
+  return {
+    run: append(next, {
+      at,
+      kind: 'node-reworked',
+      nodeId,
+      message: `${label(run, nodeId)} opened a new delivery revision; requeued ${requeued.map(id => label(run, id)).join(', ')}.`
+    }),
+    requeued
+  };
 }
 
 // ── Transitions ──────────────────────────────────────────────────────────
@@ -287,6 +380,7 @@ function settleNode(
     exitCode?: number;
     timedOut?: boolean;
     snapshotRef?: string;
+    assessedSnapshotRef?: string;
     artifacts?: Extract<WorkflowRunCommand, { kind: 'node-succeeded' }>['artifacts'];
     findings?: CheckFindings;
   }
@@ -299,6 +393,13 @@ function settleNode(
   let effective: 'succeeded' | 'failed' = outcome;
   let error = detail.error;
   const artifacts = outcome === 'succeeded' ? toArtifactRefs(run, nodeId, at, detail.artifacts ?? []) : [];
+  // A verification stage assesses the immutable snapshot that was available
+  // when it settled. Persist this even for direct/manual command callers so
+  // gate freshness is a property of the run record, not one dispatcher.
+  const assessedSnapshotRef =
+    effective === 'succeeded' && node && !nodeMutatesWorktree(node)
+      ? detail.assessedSnapshotRef ?? findSnapshot(run, nodeId)?.ref
+      : undefined;
 
   // A stage that did not produce what it declared has not succeeded, whatever
   // it reported. This is the check that keeps "review passed" from being prose.
@@ -337,6 +438,7 @@ function settleNode(
     attempts,
     artifacts,
     ...(effective === 'succeeded' && detail.snapshotRef ? { snapshotRef: detail.snapshotRef } : {}),
+    ...(assessedSnapshotRef ? { assessedSnapshotRef } : {}),
     ...(detail.findings ? { findings: detail.findings } : {})
   });
   next = append(next, {
@@ -470,8 +572,8 @@ function recordGate(run: WorkflowRun, at: string, decision: WorkflowGateDecision
     kind: 'gate-decided',
     nodeId: decision.nodeId,
     message: decision.bypassed
-      ? `Gate "${decision.gate}" bypassed by ${decision.bypassedBy ?? 'unknown'}: ${decision.reason ?? 'no reason given'}`
-      : `Gate "${decision.gate}" ${decision.passed ? 'passed' : 'failed'}.`
+      ? `Gate "${decision.gate}" bypassed by ${decision.bypassedBy ?? 'unknown'}: ${decision.reason ?? 'no reason given'}${decision.assessedSnapshotRef ? ` (snapshot ${decision.assessedSnapshotRef}).` : ''}`
+      : `Gate "${decision.gate}" ${decision.passed ? 'passed' : 'failed'}${decision.assessedSnapshotRef ? ` (snapshot ${decision.assessedSnapshotRef})` : ''}.`
   });
 }
 
@@ -594,6 +696,7 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
       attempts: Array.isArray(stored?.attempts) ? stored.attempts : [],
       artifacts: Array.isArray(stored?.artifacts) ? stored.artifacts : [],
       ...(typeof stored?.snapshotRef === 'string' ? { snapshotRef: stored.snapshotRef } : {}),
+      ...(typeof stored?.assessedSnapshotRef === 'string' ? { assessedSnapshotRef: stored.assessedSnapshotRef } : {}),
       // Only meaningful while running; a normalized non-running node simply
       // omits it rather than trusting a stale value from disk.
       ...(typeof stored?.phase === 'string' && isOutcome(stored?.outcome) && stored.outcome === 'running'
@@ -616,6 +719,9 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     startedAt: typeof raw.startedAt === 'string' ? raw.startedAt : '',
     ...(typeof raw.endedAt === 'string' ? { endedAt: raw.endedAt } : {}),
     ...(typeof raw.endedReason === 'string' ? { endedReason: raw.endedReason } : {}),
+    ...(typeof raw.controllerSessionKey === 'string' ? { controllerSessionKey: raw.controllerSessionKey } : {}),
+    ...(typeof raw.controllerSessionId === 'string' ? { controllerSessionId: raw.controllerSessionId } : {}),
+    ...(raw.planInput && typeof raw.planInput === 'object' ? { planInput: raw.planInput as WorkflowPlanInput } : {}),
     ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),
     ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
@@ -651,6 +757,22 @@ function findNode(run: WorkflowRun, nodeId: string): WorkflowNode | undefined {
 
 function label(run: WorkflowRun, nodeId: string): string {
   return findNode(run, nodeId)?.name ?? nodeId;
+}
+
+function downstreamNodeIds(run: WorkflowRun, nodeId: string): Set<string> {
+  const outbound = new Map<string, string[]>();
+  for (const edge of run.definition.edges) {
+    outbound.set(edge.from, [...(outbound.get(edge.from) ?? []), edge.to]);
+  }
+  const affected = new Set<string>();
+  const pending = [nodeId];
+  while (pending.length > 0) {
+    const current = pending.shift()!;
+    if (affected.has(current)) continue;
+    affected.add(current);
+    pending.push(...(outbound.get(current) ?? []));
+  }
+  return affected;
 }
 
 function toArtifactRefs(

@@ -18,7 +18,7 @@ import type { AiSessionManager } from '../aiSessionManager';
 import type { ModelOptions } from '../providers/modelCatalog';
 import type { PermissionDecision } from '../tools';
 import { AcpClientWrapper, type AcpPermissionRequest } from './acpClient';
-import { isProviderLimitError } from '../providerLimitError';
+import { isProviderLimitError, extractProviderLimitMessage } from '../providerLimitError';
 
 /**
  * Phase-2 peer of `VercelAgentService` for `kind: 'cli-agent'` providers —
@@ -592,6 +592,13 @@ export class AcpAgentHost {
       if (active.messageBuffer) {
         this.appendEvent(issue.key, evt('message', 'Assistant', active.messageBuffer));
       }
+      const isLimitInBuffer = isProviderLimitError(active.messageBuffer);
+      if (isLimitInBuffer) {
+        const limitNotice = extractProviderLimitMessage(active.messageBuffer);
+        this.sessionManager.updateAgentState(issue.key, 'failed', limitNotice);
+        this.appendEvent(issue.key, evt('error', limitNotice));
+        return;
+      }
       if (response.stopReason === 'end_turn' || response.stopReason === 'max_turn_requests') {
         this.sessionManager.updateAgentState(issue.key, 'completed');
         this.appendEvent(issue.key, evt('task_complete', 'Agent completed the task'));
@@ -599,8 +606,10 @@ export class AcpAgentHost {
       } else if (response.stopReason === 'cancelled') {
         // abortTask already sets the terminal state.
       } else {
-        this.sessionManager.updateAgentState(issue.key, 'failed');
-        this.appendEvent(issue.key, evt('error', `Agent stopped: ${response.stopReason}`));
+        const isLimit = isProviderLimitError(response.stopReason);
+        const reason = isLimit ? extractProviderLimitMessage(response.stopReason) : `Agent stopped: ${response.stopReason}`;
+        this.sessionManager.updateAgentState(issue.key, 'failed', reason);
+        this.appendEvent(issue.key, evt('error', reason));
       }
     })()
       .catch(error => {
@@ -608,11 +617,10 @@ export class AcpAgentHost {
         this.logger.appendLine(`[AcpAgent] Session failed for ${issue.key}: ${message}`);
         const record = this.sessionManager.getAgentSession(issue.key);
         if (record && !this.isTerminalState(record.state)) {
-          this.sessionManager.updateAgentState(issue.key, 'failed');
-          this.appendEvent(issue.key, evt('error', message));
-          if (isProviderLimitError(message)) {
-            this.appendEvent(issue.key, evt('error', 'Provider usage limit reached. The session was halted and will not retry automatically.'));
-          }
+          const isLimit = isProviderLimitError(error);
+          const limitNotice = isLimit ? extractProviderLimitMessage(error) : undefined;
+          this.sessionManager.updateAgentState(issue.key, 'failed', limitNotice ?? message);
+          this.appendEvent(issue.key, evt('error', limitNotice ?? message));
         }
       })
       .finally(() => {
@@ -725,21 +733,30 @@ export class AcpAgentHost {
       if (!active || active.ending) return;
       this.sessionManager.updateAgentOutput(issueKey, { responseText: active.messageBuffer });
       if (active.messageBuffer) this.appendEvent(issueKey, evt('message', 'Assistant', active.messageBuffer));
+      const isLimitInBuffer = isProviderLimitError(active.messageBuffer);
+      if (isLimitInBuffer) {
+        const limitNotice = extractProviderLimitMessage(active.messageBuffer);
+        this.sessionManager.updateAgentState(issueKey, 'failed', limitNotice);
+        this.appendEvent(issueKey, evt('error', limitNotice));
+        return;
+      }
       if (response.stopReason === 'end_turn' || response.stopReason === 'max_turn_requests') {
         this.sessionManager.updateAgentState(issueKey, 'completed');
         this.appendEvent(issueKey, evt('task_complete', 'Agent completed the follow-up'));
         void this.sessionManager.refreshHandoverBrief(issueKey);
       } else {
-        this.sessionManager.updateAgentState(issueKey, 'failed');
-        this.appendEvent(issueKey, evt('error', `Agent stopped: ${response.stopReason}`));
+        const isLimit = isProviderLimitError(response.stopReason);
+        const reason = isLimit ? extractProviderLimitMessage(response.stopReason) : `Agent stopped: ${response.stopReason}`;
+        this.sessionManager.updateAgentState(issueKey, 'failed', reason);
+        this.appendEvent(issueKey, evt('error', reason));
       }
     })().catch(error => {
       const text = error instanceof Error ? error.message : String(error);
-      this.sessionManager.updateAgentState(issueKey, 'failed');
-      this.appendEvent(issueKey, evt('error', text));
-      if (isProviderLimitError(text)) {
-        this.appendEvent(issueKey, evt('error', 'Provider usage limit reached. The session was halted and will not retry automatically.'));
-      }
+      this.logger.appendLine(`[AcpAgent] Follow-up failed for ${issueKey}: ${text}`);
+      const isLimit = isProviderLimitError(error);
+      const limitNotice = isLimit ? extractProviderLimitMessage(error) : undefined;
+      this.sessionManager.updateAgentState(issueKey, 'failed', limitNotice ?? text);
+      this.appendEvent(issueKey, evt('error', limitNotice ?? text));
     }).finally(() => void this.cleanupTask(issueKey));
   }
 

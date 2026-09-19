@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Connection, IssueFilters, ProjectRecord, WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
+import type { Connection, IssueFilters, ProjectRecord, WorkflowEvidenceView, WorkflowPlanInput, WorkflowRunSummary } from '@praxis/core';
 import { isIssueDone } from '../board/boardMeta';
 import { Icon } from '../ui/Icon';
 import { WorkflowPipeline } from './WorkflowPipeline';
@@ -31,6 +31,7 @@ const STATUS_TONE: Record<WorkflowRunSummary['status'], string> = {
 const GATE_CHIP: Record<string, string> = {
   passed: 'chip-success',
   failed: 'chip-danger',
+  stale: 'chip-danger',
   pending: 'chip-warn',
   bypassed: 'chip-warn',
   missing: 'chip-danger'
@@ -69,6 +70,14 @@ export interface WorkflowRunMonitorProps {
   /** Ask the shell to reveal the right pane (a stage was selected). */
   onRequireAux?: () => void;
   onOpenSession?: (sessionKey: string) => void;
+  /** Normal day-to-day workflow work starts from a session, which becomes the run controller. */
+  onStartSession?: () => void;
+  /** Opens the project's Policies page, offered when a bypass is blocked for lack of one. */
+  onOpenPolicies?: () => void;
+  /** Select a specific run when the monitor is opened from session context. */
+  initialRunId?: string;
+  initialPlanInput?: WorkflowPlanInput;
+  onPlanInputConsumed?: () => void;
 }
 
 interface IssueOption {
@@ -91,7 +100,12 @@ export function WorkflowRunMonitor({
   runnableWorkflows,
   auxSlot,
   onRequireAux,
-  onOpenSession
+  onOpenSession,
+  onStartSession,
+  onOpenPolicies,
+  initialRunId,
+  initialPlanInput,
+  onPlanInputConsumed
 }: WorkflowRunMonitorProps) {
   const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>();
@@ -108,6 +122,10 @@ export function WorkflowRunMonitor({
   const [evidenceError, setEvidenceError] = useState<string>();
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosisMessage, setDiagnosisMessage] = useState<string>();
+  const [bypassDraft, setBypassDraft] = useState<{ gate: string; reason: string }>();
+  const [bypassBusy, setBypassBusy] = useState(false);
+  const [planInput, setPlanInput] = useState<WorkflowPlanInput | undefined>(initialPlanInput);
+  useEffect(() => setPlanInput(initialPlanInput), [initialPlanInput]);
 
   // Preselect the only workflow, so a project with one goes straight to "Task".
   useEffect(() => {
@@ -170,9 +188,9 @@ export function WorkflowRunMonitor({
     async (keepId?: string) => {
       const list = await window.praxis.workflows.listRuns(project.id);
       setRuns(list);
-      setSelectedRunId(current => keepId ?? current ?? list[0]?.runId);
+      setSelectedRunId(current => keepId ?? initialRunId ?? current ?? list[0]?.runId);
     },
-    [project.id]
+    [project.id, initialRunId]
   );
 
   useEffect(() => {
@@ -244,20 +262,34 @@ export function WorkflowRunMonitor({
   };
 
   const act = useCallback(
-    async (fn: () => Promise<WorkflowRunSummary>) => {
+    async (fn: () => Promise<WorkflowRunSummary>): Promise<boolean> => {
       setError(undefined);
       try {
         const updated = await fn();
         await reload(updated.runId);
+        return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
+        return false;
       }
     },
     [reload]
   );
 
-  const canApprove = selected?.actions.some(a => a.kind === 'approve') ?? false;
+  /** Only clears the inline reason field once the bypass actually lands — a refusal (bad policy, wrong state) leaves it in place next to the error so the reason isn't lost. */
+  const confirmBypass = async (gate: string, approvalNodeId: string | undefined, reason: string) => {
+    if (!selected) return;
+    setBypassBusy(true);
+    const ok = await act(() =>
+      window.praxis.workflows.bypassGate(selected.runId, gate, 'desktop-user', reason, approvalNodeId)
+    );
+    setBypassBusy(false);
+    if (ok) setBypassDraft(undefined);
+  };
+
   const canCancel = selected?.actions.some(a => a.kind === 'cancel-run') ?? false;
+  const reworkActions = selected?.actions.filter(action => action.kind === 'rework-stage') ?? [];
+  const approveActions = selected?.actions.filter(action => action.kind === 'approve') ?? [];
 
   return (
     <div className="wf-runs">
@@ -278,15 +310,29 @@ export function WorkflowRunMonitor({
                 project.id,
                 startWorkflowId,
                 taskTitle.trim(),
-                matchedIssue ? { issueKey: matchedIssue.key, connectionId: matchedIssue.connectionId } : undefined
+                matchedIssue ? { issueKey: matchedIssue.key, connectionId: matchedIssue.connectionId } : undefined,
+                undefined,
+                planInput
               )
             ).then(() => {
               setTaskTitle('');
               setIssueKeyDraft('');
+              setPlanInput(undefined);
+              onPlanInputConsumed?.();
             });
           }}
         >
-          <strong>Start a run</strong>
+          <strong>Start a standalone run</strong>
+          {onStartSession && (
+            <p className="hint wf-runstart-session-hint">
+              For day-to-day work, <button type="button" className="btn-link" onClick={onStartSession}>open a new session</button> and choose a workflow so the session becomes its controller.
+            </p>
+          )}
+          {planInput && (
+            <p className="hint" data-testid="workflow-plan-input">
+              Plan input attached: master plan ({planInput.generatedFeatureCount} feature(s), {planInput.generatedStoryCount} stor{planInput.generatedStoryCount === 1 ? 'y' : 'ies'}).
+            </p>
+          )}
           {!project.workspaceFolder && (
             <p className="hint is-warn">
               No folder is attached — agent and check stages will need to be advanced by hand.
@@ -396,15 +442,48 @@ export function WorkflowRunMonitor({
                 <p>{selected.explanation}</p>
               </div>
               <div className="wf-board-actions">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={!canApprove}
-                  title={canApprove ? undefined : 'Every required gate must pass first'}
-                  onClick={() => void act(() => window.praxis.workflows.approveRun(selected.runId, 'desktop-user'))}
-                >
-                  Approve
-                </button>
+                {selected.controllerSessionKey && onOpenSession && (
+                  <button
+                    type="button"
+                    className="btn btn-compact"
+                    data-testid="wf-open-controller-session"
+                    onClick={() => onOpenSession(selected.controllerSessionKey as string)}
+                  >
+                    Open controller session
+                  </button>
+                )}
+                {reworkActions.map(action => (
+                  <button
+                    key={action.nodeId}
+                    type="button"
+                    className="btn btn-compact"
+                    title="Creates a new delivery revision and reruns its downstream review, security, and QA stages."
+                    onClick={() => void act(() => window.praxis.workflows.reworkStage(selected.runId, action.nodeId))}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+                {approveActions.length === 0 ? (
+                  <button type="button" className="btn btn-primary" disabled title="Every required gate must pass first">
+                    Approve
+                  </button>
+                ) : (
+                  approveActions.map(action => (
+                    <button
+                      key={action.nodeId}
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() =>
+                        void act(() => window.praxis.workflows.approveRun(selected.runId, 'desktop-user', undefined, action.nodeId))
+                      }
+                    >
+                      {/* Only one approval node is the overwhelmingly common case;
+                          keep its button reading plain "Approve" and reserve the
+                          per-stage label for when there's more than one to tell apart. */}
+                      {approveActions.length > 1 ? action.label : 'Approve'}
+                    </button>
+                  ))
+                )}
                 <button
                   type="button"
                   className="btn"
@@ -433,6 +512,9 @@ export function WorkflowRunMonitor({
                     <th scope="col">Gate</th>
                     <th scope="col">State</th>
                     <th scope="col">Detail</th>
+                    {selected.gates.some(gate => gate.bypassable || gate.bypassBlockedByPolicy) && (
+                      <th scope="col">Action</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -444,6 +526,66 @@ export function WorkflowRunMonitor({
                         {gate.deterministic && <span className="wf-gates-tag"> deterministic check</span>}
                       </td>
                       <td>{gate.detail}</td>
+                      {selected.gates.some(g => g.bypassable || g.bypassBlockedByPolicy) && (
+                        <td>
+                          {gate.bypassable && bypassDraft?.gate !== gate.gate && (
+                            <button
+                              type="button"
+                              className="btn btn-compact"
+                              data-testid={`wf-bypass-${gate.gate}`}
+                              onClick={() => setBypassDraft({ gate: gate.gate, reason: '' })}
+                            >
+                              Bypass
+                            </button>
+                          )}
+                          {gate.bypassable && bypassDraft?.gate === gate.gate && (
+                            <div className="wf-gate-bypass-form">
+                              <input
+                                className="input"
+                                aria-label={`Reason to bypass the ${gate.gate} gate`}
+                                placeholder="Reason (required)"
+                                value={bypassDraft.reason}
+                                disabled={bypassBusy}
+                                autoFocus
+                                onChange={e => setBypassDraft({ gate: gate.gate, reason: e.target.value })}
+                                onKeyDown={e => {
+                                  if (e.key === 'Escape') setBypassDraft(undefined);
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-compact btn-primary"
+                                data-testid={`wf-bypass-confirm-${gate.gate}`}
+                                disabled={bypassBusy || !bypassDraft.reason.trim()}
+                                onClick={() => void confirmBypass(gate.gate, gate.approvalNodeId, bypassDraft.reason.trim())}
+                              >
+                                {bypassBusy ? 'Bypassing…' : 'Confirm'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-compact"
+                                disabled={bypassBusy}
+                                onClick={() => setBypassDraft(undefined)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                          {!gate.bypassable && gate.bypassBlockedByPolicy && (
+                            <span className="wf-gates-tag" data-testid={`wf-bypass-blocked-${gate.gate}`}>
+                              This workflow allows a bypass, but no project or global policy currently permits one.
+                              {onOpenPolicies && (
+                                <>
+                                  {' '}
+                                  <button type="button" className="btn-link" onClick={onOpenPolicies}>
+                                    Open policies
+                                  </button>
+                                </>
+                              )}
+                            </span>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -673,4 +815,3 @@ export function WorkflowRunMonitor({
     </div>
   );
 }
-

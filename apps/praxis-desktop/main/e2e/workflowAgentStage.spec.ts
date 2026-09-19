@@ -183,7 +183,7 @@ test('an agent stage runs a real session and produces its declared artifact', as
     .toBe('succeeded');
 });
 
-test('an agent stage whose agent is not trusted fails preflight and never opens a session', async () => {
+test('an agent stage with a missing Agent Hub binding is rejected before a run or session exists', async () => {
   mock = await startMockGatewayServer({ mode: 'complete', reply: 'unused' });
   const repo = createRepository();
 
@@ -196,7 +196,7 @@ test('an agent stage whose agent is not trusted fails preflight and never opens 
   );
   const page = app.window;
 
-  const started = await page.evaluate(async repoPath => {
+  const failure = await page.evaluate(async repoPath => {
     const workspace = (await window.praxis.workspaces.list())[0];
     const project = await window.praxis.projects.create(
       {
@@ -226,28 +226,21 @@ test('an agent stage whose agent is not trusted fails preflight and never opens 
       ],
       edges: [{ id: 'e1', from: 'review', to: 'approve', on: 'success', required: true }]
     } as never);
-    const summary = await window.praxis.workflows.startRun(project.id, `u-${project.id}`, 'x');
-    return { runId: summary.runId };
+    try {
+      await window.praxis.workflows.startRun(project.id, `u-${project.id}`, 'x');
+      return { started: true };
+    } catch (cause) {
+      const sessions = await window.praxis.ai.listSessions();
+      return {
+        started: false,
+        message: cause instanceof Error ? cause.message : String(cause),
+        sessionOpened: sessions.some(session => session.workflowId === `u-${project.id}`)
+      };
+    }
   }, repo);
 
-  await expect
-    .poll(async () =>
-      page.evaluate(id => window.praxis.workflows.getRun(id).then(r => r?.stages.find(s => s.nodeId === 'review')?.outcome), started.runId)
-    )
-    .toBe('failed');
-
-  const failure = await page.evaluate(async runId => {
-    const summary = await window.praxis.workflows.getRun(runId);
-    const sessions = await window.praxis.ai.listSessions();
-    return {
-      error: summary?.stages.find(s => s.nodeId === 'review')?.lastError,
-      status: summary?.status,
-      sessionOpened: sessions.some(s => s.workflowRunId === runId)
-    };
-  }, started.runId);
-
-  expect(failure.error).toMatch(/not in the .* catalog|not trusted|preflight/i);
+  expect(failure.started).toBe(false);
+  expect(failure.message).toMatch(/not in the .* catalog|not trusted|preflight/i);
   expect(failure.sessionOpened).toBe(false);
   expect(mock.requests.length).toBe(0);
-  expect(failure.status).toBe('failed');
 });

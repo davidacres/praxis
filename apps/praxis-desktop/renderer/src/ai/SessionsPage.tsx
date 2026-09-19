@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type {
   AgentEventSummary,
@@ -14,7 +15,8 @@ import type {
   SessionMode,
   TerminalSessionInfo,
   UsageBucket,
-  ProviderUsageSnapshot
+  ProviderUsageSnapshot,
+  WorkflowRunSummary
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
@@ -24,11 +26,12 @@ import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
-import { basename, contextPressure, formatCost, isWorkflowStageSession, liveActivity, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
+import { basename, contextPressure, formatCost, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
 import { GadgetBlockList } from './gadgets';
 import { gadgetMessageKey, groupBlocksByMessage, mayContainGadget, stripGadgetFences, visibleMessageText } from './gadgets/messageText';
+import type { SessionWorkflowOption } from './NewSession';
 
 /**
  * Switching mode is not just a flag: the session is told, in its own thread,
@@ -92,6 +95,10 @@ export interface SessionsPageProps {
   /** All known agent sessions, most recent first. Live-updated by the App-level push subscription. */
   sessions: AgentSessionRecord[];
   selectedKey: string | undefined;
+  workflowOptions?: SessionWorkflowOption[];
+  onStartWorkflow?: (session: AgentSessionRecord, workflowId: string) => Promise<void>;
+  onSelectWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
+  onRemoveWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
   onNewSession: () => void;
   onSelectSession: (issueKey: string) => void;
   onOpenAiSettings: () => void;
@@ -153,6 +160,207 @@ function parseTerminalContext(detail: string | undefined) {
   } : undefined;
 }
 
+/** The everyday workflow control for an existing chat. */
+function SessionWorkflowControl({
+  session,
+  options,
+  onStartWorkflow,
+  onSelectWorkflowRun,
+  onRemoveWorkflowRun,
+  onError
+}: {
+  session: AgentSessionRecord;
+  options: SessionWorkflowOption[];
+  onStartWorkflow?: (session: AgentSessionRecord, workflowId: string) => Promise<void>;
+  onSelectWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
+  onRemoveWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
+  onError: (message: string | undefined) => void;
+}) {
+  const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<ComposerPopoverPosition>();
+  const [busy, setBusy] = useState<string>();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const runIds = [...new Set([
+    ...(session.workflowRunIds ?? []),
+    ...(session.workflowRunId ? [session.workflowRunId] : [])
+  ])];
+  const runKey = runIds.join('|');
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      if (runIds.length === 0) {
+        if (active) setRuns([]);
+        return;
+      }
+      void Promise.all(runIds.map(runId => window.praxis.workflows.getRun(runId)))
+        .then(found => {
+          if (active) setRuns(found.filter((run): run is WorkflowRunSummary => !!run));
+        })
+        .catch(() => {
+          if (active) setRuns([]);
+        });
+    };
+    refresh();
+    const unsubscribe = window.praxis.workflows.onRunChanged(runId => {
+      if (runIds.includes(runId)) refresh();
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [runKey, session.issueKey]);
+
+  const select = async (runId: string) => {
+    if (!onSelectWorkflowRun || runId === session.workflowRunId) return;
+    setBusy(runId);
+    onError(undefined);
+    try {
+      await onSelectWorkflowRun(session, runId);
+      setMenuOpen(false);
+      setMenuPosition(undefined);
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const start = async (workflowId: string) => {
+    if (!onStartWorkflow) return;
+    setBusy(workflowId);
+    onError(undefined);
+    try {
+      await onStartWorkflow(session, workflowId);
+      setMenuOpen(false);
+      setMenuPosition(undefined);
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const remove = async (event: MouseEvent, runId: string) => {
+    event.stopPropagation();
+    if (!onRemoveWorkflowRun) return;
+    setBusy(runId);
+    onError(undefined);
+    try {
+      await onRemoveWorkflowRun(session, runId);
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  if (!onStartWorkflow && runs.length === 0) return null;
+
+  const activeRun = runs.find(run => run.runId === session.workflowRunId);
+  const hasSelectableWorkflow = runs.length > 0 || options.length > 0;
+
+  return (
+    <div className="session-workflow-control" data-testid="session-workflow-chips">
+      <button
+        type="button"
+        className={`composer-chip session-runtime-chip${menuOpen ? ' active' : ''}`}
+        aria-expanded={menuOpen}
+        aria-haspopup="dialog"
+        disabled={!!busy || !hasSelectableWorkflow}
+        title={hasSelectableWorkflow ? 'Choose a workflow for this session' : 'No project workflows are available for this session.'}
+        data-testid="session-workflow-add"
+        ref={triggerRef}
+        onClick={() => {
+          if (menuOpen) {
+            setMenuOpen(false);
+            setMenuPosition(undefined);
+            return;
+          }
+          const rect = triggerRef.current?.getBoundingClientRect();
+          if (rect) setMenuPosition({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+          setMenuOpen(true);
+        }}
+      >
+        <Icon name="play" size={14} />
+        <span className="session-runtime-chip-label">{activeRun ? activeRun.workflowName : 'Workflow'}</span>
+      </button>
+      {menuOpen && menuPosition && createPortal(
+        <div
+          className="composer-provider-menu session-runtime-popover"
+          role="dialog"
+          aria-label="Select workflow"
+          data-testid="session-workflow-menu"
+          style={{ position: 'fixed', bottom: menuPosition.bottom, left: menuPosition.left }}
+        >
+          {runs.length > 0 && (
+            <section aria-label="Current workflows">
+              <div className="popover-label">Current workflows</div>
+              {runs.map(run => (
+                <div
+                  key={run.runId}
+                  className={`composer-provider-option${run.runId === session.workflowRunId ? ' active' : ''}`}
+                  role="option"
+                  aria-selected={run.runId === session.workflowRunId}
+                  aria-disabled={!!busy}
+                  tabIndex={busy ? -1 : 0}
+                  title={`${run.workflowName} · ${run.status}`}
+                  data-testid={`session-workflow-chip-${run.runId}`}
+                  onClick={busy ? undefined : () => void select(run.runId)}
+                  onKeyDown={busy ? undefined : event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      void select(run.runId);
+                    }
+                  }}
+                >
+                  <Icon name={run.runId === session.workflowRunId ? 'check' : 'arrow-right'} size={14} />
+                  <span>{run.workflowName}</span>
+                  <small>{run.status === 'awaiting-approval' ? 'Awaiting approval' : run.status}</small>
+                  {onRemoveWorkflowRun && (
+                    <button
+                      type="button"
+                      className="composer-provider-remove"
+                      aria-label={`Remove ${run.workflowName} from this session`}
+                      title="Remove this workflow from the session"
+                      data-testid={`session-workflow-remove-${run.runId}`}
+                      disabled={!!busy}
+                      onClick={event => void remove(event, run.runId)}
+                    >
+                      <Icon name="close" size={12} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </section>
+          )}
+          {runs.length > 0 && options.length > 0 && <div className="session-workflow-menu-divider" />}
+          {onStartWorkflow && options.length > 0 && (
+            <section aria-label="Start workflow">
+              <div className="popover-label">{runs.length > 0 ? 'Start another workflow' : 'Start a workflow'}</div>
+              {options.map(option => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="composer-provider-option"
+                  disabled={!option.ready || !!busy}
+                  title={option.ready ? option.description : option.blockers?.join(' ')}
+                  onClick={() => void start(option.id)}
+                >
+                  <Icon name="plus" size={14} />
+                  <span>{option.name}</span>
+                  {!option.ready && <small className="is-danger">{option.blockers?.[0] ?? 'Not ready'}</small>}
+                </button>
+              ))}
+            </section>
+          )}
+        </div>
+      , document.body)}
+    </div>
+  );
+}
+
 function SessionUsageSummary({
   session,
   sessions,
@@ -193,14 +401,15 @@ function SessionUsageSummary({
   const localCost = sessions.reduce((total, item) => total + (item.cost?.amount ?? 0), 0);
   const localCurrency = sessions.find(item => item.cost?.currency)?.cost?.currency;
   const sessionTokens = session.tokenUsage?.totalTokens;
-  const spendRatio = spendLimit > 0 && localCurrency ? localCost / spendLimit : undefined;
+  const isLimit = Boolean(session.providerLimitReached || sessionLimitNotice(session));
   const providerWarning = provider?.windows.find(window => {
     if (typeof window.usedPercent === 'number') return window.usedPercent >= 80;
     const used = window.usedTokens ?? window.usedCost;
     const limit = window.tokenLimit ?? window.costLimit;
     return typeof used === 'number' && typeof limit === 'number' && limit > 0 && used / limit >= 0.8;
-  });
+  }) || (isLimit ? { period: 'hour' as const, label: 'Limit reached', usedPercent: 100 } : undefined);
   const formatWindow = (bucket: UsageBucket | undefined) => bucket ? `${Math.round(bucket.totalTokens).toLocaleString()} tokens` : '—';
+  const spendRatio = spendLimit > 0 ? localCost / spendLimit : undefined;
 
   return (
     <details className="session-usage-summary" open={open} onToggle={event => setOpen(event.currentTarget.open)} data-testid="session-usage-summary">
@@ -211,13 +420,17 @@ function SessionUsageSummary({
           {sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : 'No token data'}
           {session.cost ? ` · ${formatCost(session.cost)}` : ''}
         </span>
-        {providerWarning && <span className="session-usage-warning">Approaching provider limit</span>}
+        {providerWarning && (
+          <span className={`session-usage-warning${isLimit || providerWarning.usedPercent === 100 ? ' is-limit' : ''}`}>
+            {isLimit || providerWarning.usedPercent === 100 ? (providerWarning.label && providerWarning.label !== 'Limit reached' ? providerWarning.label : 'Provider limit reached') : 'Approaching provider limit'}
+          </span>
+        )}
       </summary>
       <div className="session-usage-grid">
         <div className="session-usage-card">
           <span className="session-usage-label">This session</span>
-          <strong>{sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : 'Not reported'}</strong>
-          <small>{session.cost ? formatCost(session.cost) : 'Cost not reported by provider'}</small>
+          <strong>{sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : isLimit ? 'Limit reached' : 'Not reported'}</strong>
+          <small>{isLimit ? (session.lastError ?? 'Provider limit reached') : session.cost ? formatCost(session.cost) : 'Cost not reported by provider'}</small>
         </div>
         {(['hour', 'day', 'week', 'month'] as const).map(period => (
           <div className="session-usage-card" key={period}>
@@ -273,6 +486,10 @@ function SessionUsageSummary({
 export function SessionsPage({
   sessions,
   selectedKey,
+  workflowOptions = [],
+  onStartWorkflow,
+  onSelectWorkflowRun,
+  onRemoveWorkflowRun,
   onNewSession,
   onSelectSession,
   onOpenAiSettings,
@@ -1341,6 +1558,14 @@ export function SessionsPage({
                     </button>
                   )}
                   {/* Read back from the session state; interactive when idle to allow runtime changes. */}
+                  <SessionWorkflowControl
+                    session={selected}
+                    options={workflowOptions}
+                    onStartWorkflow={onStartWorkflow}
+                    onSelectWorkflowRun={onSelectWorkflowRun}
+                    onRemoveWorkflowRun={onRemoveWorkflowRun}
+                    onError={setFollowUpError}
+                  />
                   {!followUpCollapsed && selected.provider && (
                     <button 
                       type="button"

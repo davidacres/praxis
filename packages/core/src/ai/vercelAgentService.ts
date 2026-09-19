@@ -26,7 +26,7 @@ import {
 import { PROVIDER_DESCRIPTORS, resolveProviderAdapter } from './providers/registry';
 import { localToolDefinitionsForMode, LocalToolExecutor, type PermissionDecision } from './tools';
 import { shouldAutoAllowToolPermission } from './tools/shellAllowlist';
-import { isProviderLimitError } from './providerLimitError';
+import { isProviderLimitError, extractProviderLimitMessage } from './providerLimitError';
 
 interface ActiveTask {
   issueKey: string;
@@ -535,11 +535,10 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       this.logger.appendLine(`[VercelAgent] Session failed for ${issue.key}: ${message}`);
       const record = this.sessionManager.getAgentSession(issue.key);
       if (record && !this.isTerminalState(record.state)) {
-        this.sessionManager.updateAgentState(issue.key, 'failed');
-        this.appendEvent(issue.key, evt('error', message));
-        if (isProviderLimitError(message)) {
-          this.appendEvent(issue.key, evt('error', 'Provider usage limit reached. The session was halted and will not retry automatically.'));
-        }
+        const isLimit = isProviderLimitError(error);
+        const limitNotice = isLimit ? extractProviderLimitMessage(error) : undefined;
+        this.sessionManager.updateAgentState(issue.key, 'failed', limitNotice ?? message);
+        this.appendEvent(issue.key, evt('error', limitNotice ?? message));
       }
     }).finally(() => {
       void this.cleanupTask(issue.key);
@@ -645,11 +644,10 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       this.logger.appendLine(`[VercelAgent] Resume failed for ${issueKey}: ${message}`);
       const current = this.sessionManager.getAgentSession(issueKey);
       if (current && !this.isTerminalState(current.state)) {
-        this.sessionManager.updateAgentState(issueKey, 'failed');
-        this.appendEvent(issueKey, evt('error', message));
-        if (isProviderLimitError(message)) {
-          this.appendEvent(issueKey, evt('error', 'Provider usage limit reached. The session was halted and will not retry automatically.'));
-        }
+        const isLimit = isProviderLimitError(error);
+        const limitNotice = isLimit ? extractProviderLimitMessage(error) : undefined;
+        this.sessionManager.updateAgentState(issueKey, 'failed', limitNotice ?? message);
+        this.appendEvent(issueKey, evt('error', limitNotice ?? message));
       }
     }).finally(() => {
       void this.cleanupTask(issueKey);

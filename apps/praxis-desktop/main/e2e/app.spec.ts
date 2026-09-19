@@ -19,21 +19,28 @@ test('groups all layout toggles on the right side of the title bar', async () =>
   await expect(group.getByRole('button', { name: 'Toggle sidebar' })).toBeVisible();
   await expect(group.getByRole('button', { name: 'Toggle panel' })).toBeVisible();
   await expect(group.getByRole('button', { name: 'Toggle secondary sidebar' })).toBeVisible();
-  await expect(group.getByRole('button', { name: 'Toggle focus mode' })).toBeVisible();
-  const labels = await group.locator('button').evaluateAll(buttons => buttons.slice(0, 4).map(button => button.getAttribute('aria-label')));
+  await expect(group.getByRole('button', { name: 'Toggle focus mode' })).toHaveCount(0);
+  const labels = await group.locator('button').evaluateAll(buttons => buttons.slice(0, 3).map(button => button.getAttribute('aria-label')));
   expect(labels).toEqual([
     'Toggle sidebar',
     'Toggle panel',
-    'Toggle secondary sidebar',
-    'Toggle focus mode'
+    'Toggle secondary sidebar'
   ]);
 
   await group.getByRole('button', { name: 'Toggle sidebar' }).click();
   await expect(window.locator('.pane-sidebar')).toHaveCount(0);
 });
 
-test('focus mode hides left, right and bottom panels and restores them on toggle', async () => {
+test('focus mode button in titlebar is available in a session and toggles panels', async () => {
   const toggles = window.locator('.titlebar-layout-toggles');
+
+  // Not available when not in a session
+  await expect(toggles.getByRole('button', { name: 'Toggle focus mode' })).toHaveCount(0);
+
+  // Navigate to Sessions
+  await window.locator('[data-testid="nav-sessions"]').click();
+
+  // Focus mode button is now available in a session
   const focusBtn = toggles.getByRole('button', { name: 'Toggle focus mode' });
   await expect(focusBtn).toBeVisible();
 
@@ -55,6 +62,30 @@ test('focus mode hides left, right and bottom panels and restores them on toggle
   await focusBtn.click();
   await expect(window.locator('.pane-sidebar')).toBeVisible();
   await expect(window.locator('[data-testid="bottom-panel"]')).toBeVisible();
+});
+
+test('Praxis section in sidebar can expand to full sidebar and restore', async () => {
+  const sidebar = window.locator('.pane-sidebar');
+  await expect(sidebar).toBeVisible();
+
+  const maximizeBtn = sidebar.getByTestId('toggle-features-maximize');
+  await expect(maximizeBtn).toBeVisible();
+  await expect(maximizeBtn).toHaveAttribute('aria-label', 'Use full sidebar');
+
+  // Upper scroll area with projects/boards is visible
+  await expect(sidebar.locator('.sidebar-scroll')).toBeVisible();
+
+  // Click maximize to use full sidebar
+  await maximizeBtn.click();
+  await expect(maximizeBtn).toHaveAttribute('aria-label', 'Restore sidebar');
+  await expect(sidebar.locator('.sidebar-scroll')).toBeHidden();
+  await expect(sidebar.locator('.sidebar-footer-maximized')).toBeVisible();
+
+  // Click restore to return to normal
+  await maximizeBtn.click();
+  await expect(maximizeBtn).toHaveAttribute('aria-label', 'Use full sidebar');
+  await expect(sidebar.locator('.sidebar-scroll')).toBeVisible();
+  await expect(sidebar.locator('.sidebar-footer-maximized')).toHaveCount(0);
 });
 
 test('remembers which panels are open across a relaunch', async () => {

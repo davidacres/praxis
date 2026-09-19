@@ -64,7 +64,7 @@ export interface SidebarProps {
   onSelectBoard: (board: Board) => void;
   onSelectIssue: (board: Board, issueKey: string) => void;
   mode: SidebarMode;
-  onModeChange: (mode: SidebarMode) => void;
+  onModeChange?: (mode: SidebarMode) => void;
   activeFeature: FeatureId | undefined;
   activeGitView?: 'graph' | 'changes' | 'conflicts';
   onSelectFeature: (feature: FeatureId) => void;
@@ -96,8 +96,10 @@ export interface SidebarProps {
   projectWorkflows: Record<string, Array<{ id: string; name: string }>>;
   activeWorkflowId?: string;
   activeWorkflowRuns?: boolean;
+  activeWorkflowPolicies?: boolean;
   onSelectWorkflow: (project: ProjectRecord, workflowId: string) => void;
   onSelectWorkflowRuns: (project: ProjectRecord) => void;
+  onSelectWorkflowPolicies: (project: ProjectRecord) => void;
   /** Opens the project's Run profile editor (FX-BE-054). */
   onSelectRun: (project: ProjectRecord) => void;
   /** Opens the project's deployment profiles (FX-BE-059 / FX-BE-060). */
@@ -171,8 +173,10 @@ export function Sidebar({
   projectWorkflows,
   activeWorkflowId,
   activeWorkflowRuns,
+  activeWorkflowPolicies,
   onSelectWorkflow,
   onSelectWorkflowRuns,
+  onSelectWorkflowPolicies,
   onSelectRun,
   onSelectDeployments,
   onNewWorkflow,
@@ -213,6 +217,7 @@ export function Sidebar({
   // The "Praxis" footer carries its own toggle, separate from the
   // connection-group collapse map above, because it isn't tied to a folder key.
   const [featuresCollapsed, setFeaturesCollapsed] = useState(false);
+  const [featuresMaximized, setFeaturesMaximized] = useState(false);
   // Lets the "Praxis" footer grow taller than its natural content height
   // (e.g. a long Sessions list) at the cost of the boards/projects area above it.
   const praxisPanel = useResizable({
@@ -313,29 +318,6 @@ export function Sidebar({
 
   return (
     <nav className="sidebar" aria-label="Workspace">
-      <div className="segmented" role="tablist" aria-label="Sidebar mode">
-        <button
-          role="tab"
-          aria-selected={mode === 'classic'}
-          className={`segmented-btn${mode === 'classic' ? ' active' : ''}`}
-          onClick={() => onModeChange('classic')}
-          data-testid="mode-classic"
-        >
-          <Icon name="columns" size={13} />
-          Classic
-        </button>
-        <button
-          role="tab"
-          aria-selected={mode === 'work'}
-          className={`segmented-btn${mode === 'work' ? ' active' : ''}`}
-          onClick={() => onModeChange('work')}
-          data-testid="mode-work"
-        >
-          <Icon name="robot" size={13} />
-          Work
-        </button>
-      </div>
-
       {effectiveSearching && (
         <div style={{ padding: '4px 12px 8px' }}>
           <input
@@ -354,7 +336,7 @@ export function Sidebar({
         </div>
       )}
 
-      <div className="sidebar-scroll">
+      <div className="sidebar-scroll" style={featuresMaximized ? { display: 'none' } : undefined}>
         {mode === 'work' ? (
           <WorkModeView
             projects={projectEntries}
@@ -502,6 +484,11 @@ export function Sidebar({
                             data-testid="project-workflow-runs-nav-item"
                             onClick={() => onSelectWorkflowRuns(project)}
                           ><span className="tree-icon"><Icon name="play" size={14} /></span><span className="tree-label">Runs</span>{projectRunCount > 0 && <span className="tree-badge" title={`${projectRunCount} run${projectRunCount === 1 ? '' : 's'} in flight`}>{projectRunCount}</span>}</button>
+                          <button
+                            className={`tree-row project-workflow-child${activeFeature === 'workflows' && activeWorkflowPolicies && selectedProjectId === project.id ? ' active' : ''}`}
+                            data-testid="project-workflow-policies-nav-item"
+                            onClick={() => onSelectWorkflowPolicies(project)}
+                          ><span className="tree-icon"><Icon name="shield" size={14} /></span><span className="tree-label">Policies</span></button>
                         </>}
                         {projectDocuments?.exists && <>
                           <button className="sidebar-subsection-toggle" aria-expanded={!projectDocsCollapsed} data-testid="project-docs-nav-item" onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:docs`]: !projectDocsCollapsed }))}>
@@ -551,29 +538,78 @@ export function Sidebar({
         )}
       </div>
 
-      {mode === 'classic' && selectedIssueKey && (
+      {mode === 'classic' && selectedIssueKey && !featuresMaximized && (
         <IssuePeek issueKey={selectedIssueKey} connectionId={selectedIssueConnectionId} />
       )}
 
-      {!featuresCollapsed && (
+      {!featuresCollapsed && !featuresMaximized && (
         <div
           className={`splitter-h${praxisPanel.dragging ? ' dragging' : ''}`}
           aria-label="Resize Praxis section"
           {...praxisPanel.handleProps}
         />
       )}
-      <div className="sidebar-footer" style={featuresCollapsed ? undefined : { height: praxisPanel.size }}>
-        <button
-          className="feature-section-toggle sidebar-section-button"
-          aria-expanded={!featuresCollapsed}
-          data-testid="toggle-features"
-          onClick={() => setFeaturesCollapsed(collapsed => !collapsed)}
-        >
-          <span className="sidebar-section-label" style={{ margin: 0 }}>
-            Praxis
-          </span>
-          <span className={`tree-section-icon${featuresCollapsed ? '' : ' open'}`}><Icon name={featuresCollapsed ? 'chevron-right' : 'chevron-down'} size={14} /></span>
-        </button>
+      <div
+        className={`sidebar-footer${featuresMaximized ? ' sidebar-footer-maximized' : ''}`}
+        style={featuresCollapsed ? undefined : featuresMaximized ? { flex: '1 1 auto', height: '100%' } : { height: praxisPanel.size }}
+      >
+        <div className="feature-section-header feature-section-toggle">
+          <button
+            type="button"
+            className="feature-section-title"
+            aria-expanded={!featuresCollapsed}
+            onClick={() => {
+              if (featuresMaximized) {
+                setFeaturesMaximized(false);
+                setFeaturesCollapsed(true);
+              } else {
+                setFeaturesCollapsed(collapsed => !collapsed);
+              }
+            }}
+          >
+            <span className="sidebar-section-label" style={{ margin: 0 }}>
+              Praxis
+            </span>
+          </button>
+          <div className="feature-section-actions">
+            <button
+              type="button"
+              className="feature-section-action"
+              aria-label={featuresMaximized ? 'Restore sidebar' : 'Use full sidebar'}
+              title={featuresMaximized ? 'Restore sidebar' : 'Use full sidebar'}
+              data-testid="toggle-features-maximize"
+              onClick={() => {
+                if (featuresMaximized) {
+                  setFeaturesMaximized(false);
+                } else {
+                  setFeaturesCollapsed(false);
+                  setFeaturesMaximized(true);
+                }
+              }}
+            >
+              <Icon name={featuresMaximized ? 'window-restore' : 'window-maximize'} size={13} />
+            </button>
+            <button
+              type="button"
+              className="feature-section-action"
+              aria-label={featuresCollapsed ? 'Expand Praxis section' : 'Collapse Praxis section'}
+              title={featuresCollapsed ? 'Expand Praxis section' : 'Collapse Praxis section'}
+              data-testid="toggle-features"
+              onClick={() => {
+                if (featuresMaximized) {
+                  setFeaturesMaximized(false);
+                  setFeaturesCollapsed(true);
+                } else {
+                  setFeaturesCollapsed(collapsed => !collapsed);
+                }
+              }}
+            >
+              <span className={`tree-section-icon${featuresCollapsed ? '' : ' open'}`}>
+                <Icon name={featuresCollapsed ? 'chevron-right' : 'chevron-down'} size={14} />
+              </span>
+            </button>
+          </div>
+        </div>
         {!featuresCollapsed &&
           FEATURES.map(feature =>
             // Agents is the one destination that carries a catalog, so it
