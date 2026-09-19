@@ -119,14 +119,18 @@ export interface SidebarProps {
   selectedIssueKey?: string;
   selectedIssueConnectionId?: string;
   /** Saved workspaces and the active-workspace switcher. */
-  workspaces: WorkspaceRecord[];
+  workspaces?: WorkspaceRecord[];
   activeWorkspaceId?: string;
-  onSelectWorkspace: (workspaceId: string) => void;
-  onDeleteWorkspace: (workspaceId: string) => void;
-  onCreateWorkspace: () => void;
-  onSaveWorkspace: () => void;
-  onOpenWorkspace: () => void;
-  onCloseWorkspace: () => void;
+  onSelectWorkspace?: (workspaceId: string) => void;
+  onDeleteWorkspace?: (workspaceId: string) => void;
+  onCreateWorkspace?: () => void;
+  onSaveWorkspace?: () => void;
+  onOpenWorkspace?: () => void;
+  onCloseWorkspace?: () => void;
+  searching?: boolean;
+  query?: string;
+  onQueryChange?: (query: string) => void;
+  onToggleSearch?: () => void;
 }
 
 export function Sidebar({
@@ -185,11 +189,19 @@ export function Sidebar({
   onCreateWorkspace,
   onSaveWorkspace,
   onOpenWorkspace,
-  onCloseWorkspace
+  onCloseWorkspace,
+  searching,
+  query,
+  onQueryChange,
+  onToggleSearch
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [query, setQuery] = useState('');
-  const [searching, setSearching] = useState(false);
+  const [localQuery, setLocalQuery] = useState('');
+  const [localSearching, setLocalSearching] = useState(false);
+  const effectiveSearching = searching ?? localSearching;
+  const effectiveQuery = query !== undefined ? query : localQuery;
+  const setEffectiveQuery = onQueryChange ?? setLocalQuery;
+  const toggleEffectiveSearch = onToggleSearch ?? (() => { setLocalSearching(s => !s); setLocalQuery(''); });
   const { settings } = useSettings();
   const newProjectEnabled = settings?.preview.enableNewProject ?? true;
   // Brand artwork vs generic board-type glyphs — Appearance setting, applied
@@ -212,11 +224,9 @@ export function Sidebar({
   });
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [boardsCollapsed, setBoardsCollapsed] = useState(false);
-  const [newMenuOpen, setNewMenuOpen] = useState(false);
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [documentsByProjectId, setDocumentsByProjectId] = useState<Record<string, { exists: boolean; documents: ProjectDocument[] }>>({});
 
-  const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId);
+  const activeWorkspace = workspaces?.find(workspace => workspace.id === activeWorkspaceId);
   const projectNameForScope = projects.find(project => project.id === selectedProjectId)?.name;
   // The switcher scopes the Projects tree to the active workspace; with no
   // workspace selected every project shows.
@@ -255,7 +265,7 @@ export function Sidebar({
   }, [projects, activeWorkspaceId]);
 
   const projectEntries = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = effectiveQuery.trim().toLowerCase();
     return visibleProjects.map(project => {
       const projectConnection = connections.find(connection => connection.settings.projectId === project.id);
       const defaultBoard = boards.find(board => board.connectionId === projectConnection?.id);
@@ -287,7 +297,7 @@ export function Sidebar({
         visible: matchesProject || Boolean(matchesDefault) || matchingLinkedBoards.length > 0
       };
     }).filter(entry => entry.visible);
-  }, [boards, connections, visibleProjects, query]);
+  }, [boards, connections, visibleProjects, effectiveQuery]);
   const projectBoardKeys = useMemo(() => new Set(projectEntries.flatMap(({ defaultBoard, linkedBoards }) => [
     ...(defaultBoard ? [`${defaultBoard.connectionId}:${defaultBoard.id}`] : []),
     ...linkedBoards.map(({ board }) => `${board.connectionId}:${board.id}`)
@@ -303,96 +313,6 @@ export function Sidebar({
 
   return (
     <nav className="sidebar" aria-label="Workspace">
-      <div className="sidebar-header">
-        <div className="workspace-switcher">
-          <button
-            className="workspace-switcher-button"
-            aria-expanded={workspaceMenuOpen}
-            aria-label="Select workspace"
-            onClick={() => setWorkspaceMenuOpen(open => !open)}
-          >
-            <span className="workspace-switcher-mark"><Icon name="organization" size={14} /></span>
-            <span className="workspace-switcher-name">{activeWorkspace?.name ?? 'All projects'}</span>
-            <Icon name="chevron-down" size={13} />
-          </button>
-          {workspaceMenuOpen && (
-            <div className="workspace-menu" role="menu">
-              {workspaces.map(workspace => (
-                <div key={workspace.id} role="none" className="workspace-menu-row">
-                  <button
-                    role="menuitem"
-                    className={`workspace-menu-select${workspace.id === activeWorkspaceId ? ' active' : ''}`}
-                    onClick={() => { onSelectWorkspace(workspace.id); setWorkspaceMenuOpen(false); }}
-                  >
-                    <Icon name="organization" size={13} /><span>{workspace.name}</span>
-                  </button>
-                  <small className="workspace-menu-count">{workspace.projectIds.length}</small>
-                  <button
-                    type="button"
-                    className="workspace-menu-delete"
-                    aria-label={`Delete workspace ${workspace.name}`}
-                    title="Delete workspace"
-                    onClick={() => onDeleteWorkspace(workspace.id)}
-                  >
-                    <Icon name="trash" size={12} />
-                  </button>
-                </div>
-              ))}
-              <div className="workspace-menu-divider" />
-              <button role="menuitem" onClick={() => { onCreateWorkspace(); setWorkspaceMenuOpen(false); }}>
-                <Icon name="plus" size={13} /><span>Create blank workspace</span>
-              </button>
-              <button role="menuitem" onClick={() => { onCloseWorkspace(); setWorkspaceMenuOpen(false); }}>
-                <Icon name="organization" size={13} /><span>Create New Workspace</span>
-              </button>
-              {activeWorkspace && (
-                <button role="menuitem" onClick={() => { onSaveWorkspace(); setWorkspaceMenuOpen(false); }}>
-                  <Icon name="archive" size={13} /><span>Save to file</span>
-                </button>
-              )}
-              <button role="menuitem" onClick={() => { onOpenWorkspace(); setWorkspaceMenuOpen(false); }}>
-                <Icon name="folder-open" size={13} /><span>Open workspace file</span>
-              </button>
-              {activeWorkspace && (
-                <button role="menuitem" className="workspace-menu-close" onClick={() => { onCloseWorkspace(); setWorkspaceMenuOpen(false); }}>
-                  <Icon name="close" size={13} /><span>Close workspace</span>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="new-menu-anchor">
-          <button
-            className="new-pill new-pill-icon"
-            aria-label="New"
-            title="New (Ctrl+N)"
-            onClick={() => setNewMenuOpen(open => !open)}
-            data-testid="new-menu"
-          >
-            <Icon name="plus" size={13} />
-          </button>
-          {newMenuOpen && <div className="new-menu" role="menu">
-            {newProjectEnabled && <button role="menuitem" data-testid="new-project" onClick={() => { setNewMenuOpen(false); onNewProject(); }}><Icon name="plus" size={14} /><span><strong>Create New Project</strong><small>Start fresh with a brief and board</small></span></button>}
-            {newProjectEnabled && <button role="menuitem" data-testid="add-existing-project" onClick={() => { setNewMenuOpen(false); onAddExistingProject(); }}><Icon name="folder-open" size={14} /><span><strong>Create from existing folder</strong><small>Scan plans and connect them to a project</small></span></button>}
-            {newProjectEnabled && onImportProjects && <button role="menuitem" data-testid="import-projects" onClick={() => { setNewMenuOpen(false); onImportProjects(); }}><Icon name="markdown" size={14} /><span><strong>Import plans folders</strong><small>Turn several folders of markdown plans into projects</small></span></button>}
-            <button role="menuitem" data-testid="new-session" onClick={() => { setNewMenuOpen(false); onNewSession(); }}><Icon name="robot" size={14} /><span><strong>New Session</strong><small>Start an AI session in this workspace</small></span></button>
-          </div>}
-        </div>
-        <button className="icon-btn icon-btn-sm" aria-label="Filter">
-          <Icon name="sliders" size={14} />
-        </button>
-        <button
-          className={`icon-btn icon-btn-sm${searching ? ' active' : ''}`}
-          aria-label="Search boards"
-          onClick={() => {
-            setSearching(open => !open);
-            setQuery('');
-          }}
-        >
-          <Icon name="search" size={14} />
-        </button>
-      </div>
-
       <div className="segmented" role="tablist" aria-label="Sidebar mode">
         <button
           role="tab"
@@ -416,15 +336,20 @@ export function Sidebar({
         </button>
       </div>
 
-      {searching && (
+      {effectiveSearching && (
         <div style={{ padding: '4px 12px 8px' }}>
           <input
             className="input"
             style={{ width: '100%' }}
             autoFocus
             placeholder="Filter boards…"
-            value={query}
-            onChange={event => setQuery(event.target.value)}
+            value={effectiveQuery}
+            onChange={event => setEffectiveQuery(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Escape') {
+                toggleEffectiveSearch();
+              }
+            }}
           />
         </div>
       )}

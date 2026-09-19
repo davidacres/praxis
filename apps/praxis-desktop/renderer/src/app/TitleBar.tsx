@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { WorkspaceRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { PraxisWordmark } from './StartupSplash';
 import {
@@ -17,6 +18,20 @@ export interface TitleBarProps {
   appVersion?: string;
   contextLabel: string;
   contextDetail: string;
+  workspaces?: WorkspaceRecord[];
+  activeWorkspaceId?: string;
+  onSelectWorkspace?: (workspaceId: string) => void;
+  onDeleteWorkspace?: (workspaceId: string) => void;
+  onCreateWorkspace?: () => void;
+  onSaveWorkspace?: () => void;
+  onOpenWorkspace?: () => void;
+  onCloseWorkspace?: () => void;
+  onNewSession?: () => void;
+  onNewProject?: () => void;
+  onAddExistingProject?: () => void;
+  onImportProjects?: () => void;
+  searching?: boolean;
+  onToggleSearch?: () => void;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
   auxVisible: boolean;
@@ -43,6 +58,20 @@ export function TitleBar({
   appVersion,
   contextLabel,
   contextDetail,
+  workspaces,
+  activeWorkspaceId,
+  onSelectWorkspace,
+  onDeleteWorkspace,
+  onCreateWorkspace,
+  onSaveWorkspace,
+  onOpenWorkspace,
+  onCloseWorkspace,
+  onNewSession,
+  onNewProject,
+  onAddExistingProject,
+  onImportProjects,
+  searching,
+  onToggleSearch,
   sidebarVisible,
   onToggleSidebar,
   auxVisible,
@@ -61,13 +90,45 @@ export function TitleBar({
   const [maximized, setMaximized] = useState(false);
   const [zoomFactor, setZoomFactor] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement | null>(null);
   const contextButtonRef = useRef<HTMLButtonElement | null>(null);
+  const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
+  const newMenuRef = useRef<HTMLDivElement | null>(null);
   // macOS renders the native traffic lights on top of the page (see
   // `trafficLightPosition` in the main process) rather than in the DOM, so
   // nothing here reserves space for them by default, so the title bar keeps a
   // leading inset even though all layout toggles now live together at right.
   const isMac = navigator.platform.toLowerCase().includes('mac');
+
+  const activeWorkspace = workspaces?.find(w => w.id === activeWorkspaceId);
+  const newProjectEnabled = Boolean(activeWorkspaceId);
+
+  useEffect(() => {
+    if (!workspaceMenuOpen && !newMenuOpen) return;
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (workspaceMenuOpen && !workspaceMenuRef.current?.contains(target)) {
+        setWorkspaceMenuOpen(false);
+      }
+      if (newMenuOpen && !newMenuRef.current?.contains(target)) {
+        setNewMenuOpen(false);
+      }
+    };
+    const onDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setWorkspaceMenuOpen(false);
+        setNewMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+    document.addEventListener('keydown', onDocumentKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onDocumentPointerDown);
+      document.removeEventListener('keydown', onDocumentKeyDown);
+    };
+  }, [workspaceMenuOpen, newMenuOpen]);
 
   useEffect(() => {
     void window.praxis.window.isMaximized().then(setMaximized);
@@ -153,6 +214,128 @@ export function TitleBar({
 
   return (
     <header className={`titlebar${isMac ? ' titlebar-mac' : ''}`}>
+      <div className="titlebar-group titlebar-header-group">
+        <div className="workspace-switcher" ref={workspaceMenuRef}>
+          <button
+            className="workspace-switcher-button"
+            aria-expanded={workspaceMenuOpen}
+            aria-label="Select workspace"
+            onClick={() => setWorkspaceMenuOpen(open => !open)}
+          >
+            <span className="workspace-switcher-mark"><Icon name="organization" size={14} /></span>
+            <span className="workspace-switcher-name">{activeWorkspace?.name ?? 'All projects'}</span>
+            <Icon name="chevron-down" size={13} />
+          </button>
+          {workspaceMenuOpen && (
+            <div className="workspace-menu" role="menu">
+              {workspaces?.map(workspace => (
+                <div key={workspace.id} role="none" className="workspace-menu-row">
+                  <button
+                    role="menuitem"
+                    className={`workspace-menu-select${workspace.id === activeWorkspaceId ? ' active' : ''}`}
+                    onClick={() => { onSelectWorkspace?.(workspace.id); setWorkspaceMenuOpen(false); }}
+                  >
+                    <Icon name="organization" size={13} /><span>{workspace.name}</span>
+                  </button>
+                  <small className="workspace-menu-count">{workspace.projectIds.length}</small>
+                  {onDeleteWorkspace && (
+                    <button
+                      type="button"
+                      className="workspace-menu-delete"
+                      aria-label={`Delete workspace ${workspace.name}`}
+                      title="Delete workspace"
+                      onClick={() => onDeleteWorkspace(workspace.id)}
+                    >
+                      <Icon name="trash" size={12} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <div className="workspace-menu-divider" />
+              {onCreateWorkspace && (
+                <button role="menuitem" onClick={() => { onCreateWorkspace(); setWorkspaceMenuOpen(false); }}>
+                  <Icon name="plus" size={13} /><span>Create blank workspace</span>
+                </button>
+              )}
+              {onCloseWorkspace && (
+                <button role="menuitem" onClick={() => { onCloseWorkspace(); setWorkspaceMenuOpen(false); }}>
+                  <Icon name="organization" size={13} /><span>Create New Workspace</span>
+                </button>
+              )}
+              {activeWorkspace && onSaveWorkspace && (
+                <button role="menuitem" onClick={() => { onSaveWorkspace(); setWorkspaceMenuOpen(false); }}>
+                  <Icon name="archive" size={13} /><span>Save to file</span>
+                </button>
+              )}
+              {onOpenWorkspace && (
+                <button role="menuitem" onClick={() => { onOpenWorkspace(); setWorkspaceMenuOpen(false); }}>
+                  <Icon name="folder-open" size={13} /><span>Open workspace file</span>
+                </button>
+              )}
+              {activeWorkspace && onCloseWorkspace && (
+                <button role="menuitem" className="workspace-menu-close" onClick={() => { onCloseWorkspace(); setWorkspaceMenuOpen(false); }}>
+                  <Icon name="close" size={13} /><span>Close workspace</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="new-menu-anchor" ref={newMenuRef}>
+          <button
+            className="new-pill new-pill-icon"
+            aria-label="New"
+            title="New (Ctrl+N)"
+            onClick={() => setNewMenuOpen(open => !open)}
+            data-testid="new-menu"
+          >
+            <Icon name="plus" size={13} />
+          </button>
+          {newMenuOpen && (
+            <div className="new-menu" role="menu">
+              {newProjectEnabled && onNewProject && (
+                <button role="menuitem" data-testid="new-project" onClick={() => { setNewMenuOpen(false); onNewProject(); }}>
+                  <Icon name="plus" size={14} />
+                  <span><strong>Create New Project</strong><small>Start fresh with a brief and board</small></span>
+                </button>
+              )}
+              {newProjectEnabled && onAddExistingProject && (
+                <button role="menuitem" data-testid="add-existing-project" onClick={() => { setNewMenuOpen(false); onAddExistingProject(); }}>
+                  <Icon name="folder-open" size={14} />
+                  <span><strong>Create from existing folder</strong><small>Scan plans and connect them to a project</small></span>
+                </button>
+              )}
+              {newProjectEnabled && onImportProjects && (
+                <button role="menuitem" data-testid="import-projects" onClick={() => { setNewMenuOpen(false); onImportProjects(); }}>
+                  <Icon name="markdown" size={14} />
+                  <span><strong>Import plans folders</strong><small>Turn several folders of markdown plans into projects</small></span>
+                </button>
+              )}
+              {onNewSession && (
+                <button role="menuitem" data-testid="new-session" onClick={() => { setNewMenuOpen(false); onNewSession(); }}>
+                  <Icon name="robot" size={14} />
+                  <span><strong>New Session</strong><small>Start an AI session in this workspace</small></span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <button className="icon-btn icon-btn-sm" aria-label="Filter">
+          <Icon name="sliders" size={14} />
+        </button>
+
+        <button
+          className={`icon-btn icon-btn-sm${searching ? ' active' : ''}`}
+          aria-label="Search boards"
+          onClick={() => {
+            onToggleSearch?.();
+          }}
+        >
+          <Icon name="search" size={14} />
+        </button>
+      </div>
+
       <div className="titlebar-spacer" />
 
       {/* Back / forward sit against the context pill, and the whole block is

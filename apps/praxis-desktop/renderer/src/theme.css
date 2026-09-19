@@ -380,6 +380,16 @@ textarea {
   -webkit-app-region: no-drag;
 }
 
+.titlebar-header-group {
+  gap: var(--space-2);
+}
+
+.titlebar-header-group .workspace-switcher {
+  flex: 0 1 auto;
+  min-width: 120px;
+  max-width: 220px;
+}
+
 .titlebar-spacer {
   flex: 1;
 }
@@ -1626,7 +1636,7 @@ textarea {
 .segmented {
   display: flex;
   gap: 2px;
-  margin: 0 var(--space-3) var(--space-1);
+  margin: var(--space-2) var(--space-3) var(--space-1);
   padding: 2px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
