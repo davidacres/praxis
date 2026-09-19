@@ -2,6 +2,42 @@ import { useEffect, useRef, useState } from 'react';
 import type { AiProvider, IssueDetails } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
+import { useDialogs } from '../ui/dialogs';
+
+const REVIEW_COMMENT_MARKER = '<!-- praxis-ai-review:v1 -->';
+
+function latestAttachedReview(issue: IssueDetails | undefined): string | undefined {
+  const comments = issue?.comments ?? [];
+  for (let index = comments.length - 1; index >= 0; index -= 1) {
+    const body = comments[index]?.body ?? '';
+    if (body.startsWith(REVIEW_COMMENT_MARKER)) {
+      const review = body.slice(REVIEW_COMMENT_MARKER.length).trim();
+      if (review) return review;
+    }
+  }
+  return undefined;
+}
+
+/** Pulls the actionable section out without guessing at arbitrary review prose. */
+function reviewSuggestions(markdown: string): string | undefined {
+  const lines = markdown.split(/\r?\n/);
+  const heading = /^#{1,3}\s+(suggestions?|recommendations?|recommended next steps|next steps|action items?)\s*$/i;
+  const start = lines.findIndex(line => heading.test(line.trim()));
+  if (start < 0) return undefined;
+  const body: string[] = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^#{1,3}\s+/.test(lines[index].trim())) break;
+    body.push(lines[index]);
+  }
+  const result = body.join('\n').trim();
+  return result || undefined;
+}
+
+function appendSuggestions(description: string | undefined, suggestions: string): string {
+  const section = `## Review suggestions\n\n${suggestions}`;
+  const current = description?.trimEnd() ?? '';
+  return current.includes(section) ? current : `${current}${current ? '\n\n' : ''}${section}`;
+}
 
 interface AiReviewPageProps {
   issueKey: string;
@@ -17,11 +53,13 @@ interface AiReviewPageProps {
  * result back to the issue as a comment, like the extension's review command.
  */
 export function AiReviewPage({ issueKey, connectionId, provider, model, onClose }: AiReviewPageProps) {
+  const { confirm } = useDialogs();
   const [issue, setIssue] = useState<IssueDetails | undefined>();
   const [content, setContent] = useState('');
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [posted, setPosted] = useState(false);
+  const [attached, setAttached] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,7 +67,15 @@ export function AiReviewPage({ issueKey, connectionId, provider, model, onClose 
     setContent('');
     setError(undefined);
     setPosted(false);
-    void window.praxis.issue.get(issueKey, connectionId).then(setIssue);
+    setAttached(false);
+    void window.praxis.issue.get(issueKey, connectionId).then(loaded => {
+      setIssue(loaded);
+      const attached = latestAttachedReview(loaded);
+      if (attached) {
+        setContent(attached);
+        setAttached(true);
+      }
+    });
   }, [issueKey, connectionId]);
 
   // Live markdown stream for this issue's review.
@@ -63,10 +109,32 @@ export function AiReviewPage({ issueKey, connectionId, provider, model, onClose 
     setRunning(true);
     setError(undefined);
     setPosted(false);
+    setAttached(false);
     setContent('');
     try {
+      const ticket = issue ?? await window.praxis.issue.get(issueKey, connectionId);
+      if (!issue) {
+        setIssue(ticket);
+      }
       const markdown = await window.praxis.ai.reviewIssue(issueKey, connectionId, provider, model);
       setContent(markdown);
+
+      const suggestions = reviewSuggestions(markdown);
+      if (suggestions) {
+        const apply = await confirm({
+          title: 'Apply review suggestions?',
+          message: 'This will append the review suggestions to the ticket description so future AI sessions can use them.',
+          confirmLabel: 'Apply suggestions'
+        });
+        if (apply) {
+          const updated = await window.praxis.issue.update(
+            issueKey,
+            { description: appendSuggestions(ticket.description, suggestions) },
+            connectionId
+          );
+          setIssue(updated);
+        }
+      }
     } catch (err) {
       // The progress push also carries the error; this covers pre-stream failures.
       setError(err instanceof Error ? err.message : String(err));
@@ -81,8 +149,16 @@ export function AiReviewPage({ issueKey, connectionId, provider, model, onClose 
     }
     setError(undefined);
     try {
-      await window.praxis.issue.addComment(issueKey, content, connectionId);
+      await window.praxis.issue.addComment(
+        issueKey,
+        `${REVIEW_COMMENT_MARKER}\n\n${content}`,
+        connectionId
+      );
+      const refreshed = await window.praxis.issue.get(issueKey, connectionId);
+      setIssue(refreshed);
+      setContent(latestAttachedReview(refreshed) ?? content);
       setPosted(true);
+      setAttached(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -125,11 +201,11 @@ export function AiReviewPage({ issueKey, connectionId, provider, model, onClose 
           <button
             className="btn"
             data-testid="ai-review-post-comment"
-            disabled={posted}
+            disabled={posted || attached}
             onClick={() => void postAsComment()}
           >
             <Icon name="check-square" size={13} />
-            {posted ? 'Posted as comment' : 'Post as comment'}
+            {posted || attached ? 'Attached to ticket' : 'Post as comment'}
           </button>
         )}
       </div>

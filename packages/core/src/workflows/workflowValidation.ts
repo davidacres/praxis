@@ -132,6 +132,7 @@ export function normalizeWorkflow(value: unknown): WorkflowDefinition {
   };
 
   if (isText(raw.description)) definition.description = raw.description;
+  if (raw.trigger === 'ticket' || raw.trigger === 'on-demand') definition.trigger = raw.trigger;
   if (isText(raw.projectId)) definition.projectId = raw.projectId;
   if (raw.builtIn === true) definition.builtIn = true;
 

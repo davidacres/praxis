@@ -5,7 +5,9 @@ import type {
   ParentItemQueryOptions,
   UpdateIssueInput
 } from '@praxis/core';
+import { WorkflowRunStore } from '@praxis/core';
 import { getServiceForConnection } from './serviceRegistry';
+import { getWorkflowBackingStore } from './workflowStoreInstance';
 
 export function registerIssueIpc(): void {
   ipcMain.handle(
@@ -69,7 +71,18 @@ export function registerIssueIpc(): void {
       transitionId: string,
       connectionId?: string
     ) => {
-      await (await getServiceForConnection(connectionId)).transitionIssue(issueKey, transitionId);
+      const service = await getServiceForConnection(connectionId);
+      const transition = (await service.getTransitions(issueKey)).find(candidate => candidate.id === transitionId);
+      const target = transition?.toStatus?.trim().toLowerCase();
+      if (target && /^(done|closed|resolved|complete|completed)$/.test(target)) {
+        const blockingRun = new WorkflowRunStore(getWorkflowBackingStore()).list().find(run =>
+          run.issueKey === issueKey && run.definition.trigger === 'ticket' && run.status !== 'succeeded'
+        );
+        if (blockingRun) {
+          throw new Error(`Cannot complete ${issueKey} while ticket workflow "${blockingRun.definition.name}" is ${blockingRun.status}.`);
+        }
+      }
+      await service.transitionIssue(issueKey, transitionId);
     }
   );
 

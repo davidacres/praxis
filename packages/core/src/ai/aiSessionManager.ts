@@ -1,7 +1,7 @@
 import { Emitter } from '../host/emitter';
 import type { KeyValueStore } from '../host/stateStore';
 import type { AiAssignment, AiProvider } from '../types';
-import type { TokenUsage } from './gateway';
+import type { TokenUsage, WireImageAttachment } from './gateway';
 import type {
   DeliverySessionMetadata,
   AgentAvailableCommand,
@@ -32,6 +32,7 @@ import {
   purposeFromTask
 } from './sessionHandover';
 import { isProviderLimitError } from './providerLimitError';
+import { estimateCostUsd } from './providers/modelPricing';
 
 const STORAGE_KEY = 'praxis.aiSessions';
 const AGENT_STORAGE_KEY = 'praxis.agentSessions';
@@ -451,6 +452,16 @@ export class AiSessionManager {
     if (typeof usage.inputTokens === 'number') {
       record.contextTokens = usage.inputTokens;
     }
+    // API providers report only tokens, never cost (ACP hosts are the
+    // exception — see setAgentContextUsage). Where a maintained price table
+    // covers this provider/model, accumulate an estimate the same way
+    // `record.tokenUsage` accumulates; where it doesn't, cost stays unset
+    // rather than reading as zero.
+    const turnCost = estimateCostUsd(record.provider, record.model, usage);
+    if (turnCost) {
+      const priorAmount = record.cost?.currency === turnCost.currency ? record.cost.amount : 0;
+      record.cost = { amount: priorAmount + turnCost.amount, currency: turnCost.currency };
+    }
     this._onDidChangeAgentSession.fire(record);
   }
 
@@ -801,6 +812,15 @@ export class AiSessionManager {
     });
     record.provider = provider;
     record.model = model;
+    // A runtime transition is a fresh start on (possibly) a different
+    // provider — a rate/credit limit hit on the old runtime says nothing
+    // about the new one, so carrying it forward would falsely flag the new
+    // provider as already limited. `updateAgentState('executing')` clears
+    // the same two fields when a turn resumes; this covers the handover/
+    // model-change/conversation-turn paths, which change runtime without
+    // necessarily also transitioning through 'executing'.
+    record.lastError = undefined;
+    record.providerLimitReached = undefined;
     if (clearNative) {
       Object.assign(record, nativeRuntimeClearedPatch());
     }
@@ -884,21 +904,31 @@ export class AiSessionManager {
   }
 
   /** Queues a human message for a chosen participant; the host consumes it between turns. */
-  public queueAgentConversationMessage(issueKey: string, participantId: string, message: string): AgentSessionRecord {
+  public queueAgentConversationMessage(
+    issueKey: string,
+    participantId: string,
+    message: string,
+    images?: WireImageAttachment[]
+  ): AgentSessionRecord {
     const record = this.agentSessions.get(issueKey);
     const conversation = record?.conversation;
     const trimmed = message.trim();
     if (!record || !conversation || conversation.state !== 'running') throw new Error('No running multi-AI conversation.');
     if (!conversation.participants.some(participant => participant.id === participantId)) throw new Error('Unknown conversation participant.');
-    if (!trimmed) throw new Error('Enter a message for the AI conversation.');
-    conversation.pendingUserMessages = [...(conversation.pendingUserMessages ?? []), { participantId, message: trimmed }];
+    if (!trimmed && !(images?.length)) throw new Error('Enter a message for the AI conversation.');
+    conversation.pendingUserMessages = [
+      ...(conversation.pendingUserMessages ?? []),
+      { participantId, message: trimmed, ...(images?.length ? { images } : {}) }
+    ];
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
     return record;
   }
 
   /** Takes the queued human message, if any, for scheduling the next turn. */
-  public takeAgentConversationMessage(issueKey: string): { participantId: string; message: string } | undefined {
+  public takeAgentConversationMessage(
+    issueKey: string
+  ): { participantId: string; message: string; images?: WireImageAttachment[] } | undefined {
     const conversation = this.agentSessions.get(issueKey)?.conversation;
     const pending = conversation?.pendingUserMessages?.[0];
     if (!conversation || !pending) return undefined;

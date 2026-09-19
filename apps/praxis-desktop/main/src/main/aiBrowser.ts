@@ -159,11 +159,20 @@ class AiBrowserManager {
 
   setBounds(win: BrowserWindow, bounds: { x: number; y: number; width: number; height: number }): void {
     const view = this.ensure(win);
+    // The renderer measures its placeholder with `getBoundingClientRect()`,
+    // which reports coordinates in that webContents' own zoomed CSS-pixel
+    // space (app zoom shrinks the effective viewport, per `windowIpc.ts`'s
+    // `publishZoomFactor`). `WebContentsView.setBounds()` is a sibling-view
+    // geometry API positioned in the *window's* unzoomed DIP space, which
+    // never shrinks — so at any zoom other than 100% the raw rect undershoots
+    // and the native view drifts from its placeholder. Scaling by the host's
+    // zoom factor converts back to that DIP space.
+    const zoom = win.webContents.getZoomFactor() || 1;
     this.lastBounds = {
-      x: Math.round(bounds.x),
-      y: Math.round(bounds.y),
-      width: Math.max(0, Math.round(bounds.width)),
-      height: Math.max(0, Math.round(bounds.height))
+      x: Math.round(bounds.x * zoom),
+      y: Math.round(bounds.y * zoom),
+      width: Math.max(0, Math.round(bounds.width * zoom)),
+      height: Math.max(0, Math.round(bounds.height * zoom))
     };
     view.setBounds(this.lastBounds);
   }

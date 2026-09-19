@@ -11,6 +11,7 @@ import type { LogSink } from '../../host/logSink';
 import { resolveSandboxedPath } from '../tools/pathSandbox';
 import type { PermissionDecision } from '../tools';
 import type { AgentToolMode } from '../agentTypes';
+import type { WireImageAttachment } from '../gateway/wire';
 
 /**
  * Thin host-side wrapper around `@agentclientprotocol/sdk`'s `ClientApp` —
@@ -416,8 +417,22 @@ export class AcpClientWrapper {
   /**
    * Starts a new session and runs one prompt turn to completion, streaming
    * `session/update`s to `onSessionUpdate` as they arrive.
+   *
+   * `images`, when present, ride alongside `text` as ACP `ImageContent`
+   * blocks (base64 + mimeType — exactly `WireImageAttachment`'s shape). No
+   * `PromptCapabilities.image` negotiation happens here: every ACP host this
+   * app currently targets (Claude Code, Codex, Copilot) accepts image
+   * blocks, and an agent that genuinely can't would reject the request with
+   * a normal protocol error, surfaced the same way any other prompt failure
+   * already is.
    */
-  public async prompt(text: string): Promise<acp.PromptResponse> {
+  public async prompt(text: string, images?: readonly WireImageAttachment[]): Promise<acp.PromptResponse> {
+    const promptContent: string | acp.ContentBlock[] = images?.length
+      ? [
+          { type: 'text', text },
+          ...images.map(image => ({ type: 'image' as const, data: image.dataBase64, mimeType: image.mimeType }))
+        ]
+      : text;
     if (await this.tryResumeSession()) {
       if (!this.connection || !this.acpModule) throw new Error('ACP client is not connected.');
       // Let replay notifications queued by session/resume or session/load
@@ -429,14 +444,14 @@ export class AcpClientWrapper {
       try {
         return await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_prompt, {
           sessionId: this.resumedSessionId!,
-          prompt: [{ type: 'text', text }]
+          prompt: typeof promptContent === 'string' ? [{ type: 'text', text: promptContent }] : promptContent
         });
       } finally {
         this.promptInFlight = false;
       }
     }
     const session = await this.ensureSession();
-    const promptPromise = session.prompt(text);
+    const promptPromise = session.prompt(promptContent);
     for (;;) {
       const message = await session.nextUpdate();
       if (message.kind === 'session_update') {

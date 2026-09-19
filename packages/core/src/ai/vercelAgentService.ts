@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 import type { AiProvider, IssueDetails } from '../types';
-import { runAgentLoop, type AgentLoopEvent, type WireMessage } from './agentRuntime';
+import { runAgentLoop, type AgentLoopEvent, type WireImageAttachment, type WireMessage } from './agentRuntime';
 import { BROWSER_TOOLS_PROMPT, buildSystemPrompt, type PermissionInfo } from './agentPrompt';
 import {
   AGENT_DEFAULTS,
@@ -14,6 +14,7 @@ import {
 } from './agentTypes';
 import { classifyLocalTool, summariseToolArgs } from './toolEventClassify';
 import { listCatalogModels } from './providers/modelCatalog';
+import { getKnownContextLength } from './providers/modelPricing';
 import type { AiSessionManager } from './aiSessionManager';
 import {
   compactHistoryForReplay,
@@ -57,9 +58,17 @@ function evt(
   type: AgentEventType,
   summary: string,
   detail?: string,
-  data?: AgentToolEventData
+  data?: AgentToolEventData,
+  attachments?: WireImageAttachment[]
 ): AgentEventSummary {
-  return { timestamp: now(), type, summary, detail, ...(data ? { data } : {}) };
+  return {
+    timestamp: now(),
+    type,
+    summary,
+    detail,
+    ...(data ? { data } : {}),
+    ...(attachments?.length ? { attachments } : {})
+  };
 }
 
 export interface VercelAgentLogger {
@@ -141,6 +150,10 @@ export class VercelAgentService {
    * shows the prompt size without a percentage rather than guessing a window.
    */
   private noteContextLimit(issueKey: string, provider: AiProvider, gateway: GatewayOptions, model: string): void {
+    const known = getKnownContextLength(model, provider);
+    if (known) {
+      this.sessionManager.setAgentContextLimit(issueKey, known);
+    }
     void listCatalogModels(provider, gateway)
       .then(choices => {
         const limit = choices.find(choice => choice.value === model)?.contextLength;
@@ -167,7 +180,7 @@ export class VercelAgentService {
     if (!apiKey) {
       throw new Error(`${descriptor.label} API key is not configured.`);
     }
-    return { url: options.gatewayUrl?.trim() || descriptor.defaultBaseUrl, apiKey };
+    return { url: options.gatewayUrl?.trim() || descriptor.defaultBaseUrl, apiKey, apiPath: descriptor.apiPath };
   }
 
   private loadWorkflowInstructionsForPrompt(
@@ -375,6 +388,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     options: {
       systemPrompt: string;
       userPrompt?: string;
+      userImages?: WireImageAttachment[];
       history?: WireMessage[];
       gateway: GatewayOptions;
       provider: AiProvider;
@@ -413,6 +427,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       toolExecutor: compositeExecutor,
       history: options.history,
       userPrompt: options.userPrompt,
+      userImages: options.userImages,
       maxSteps: options.maxSteps,
       timeoutMs: options.timeoutMs,
       signal: task.abortController.signal,
@@ -453,8 +468,11 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       });
       return;
     } else {
-      this.sessionManager.updateAgentState(issueKey, 'failed');
-      if (result.error) {
+      this.sessionManager.updateAgentState(issueKey, 'failed', result.error);
+      const existingError = this.sessionManager.getAgentSession(issueKey)?.events.some(
+        e => e.type === 'error' && (e.summary === result.error || e.detail === result.error)
+      );
+      if (result.error && !existingError) {
         this.appendEvent(issueKey, evt('error', result.error));
       }
     }
@@ -550,7 +568,8 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
   public async resumeTask(
     issueKey: string,
     options: VercelAgentStartOptions,
-    followUpMessage?: string
+    followUpMessage?: string,
+    followUpImages?: WireImageAttachment[]
   ): Promise<void> {
     if (this.activeTasks.has(issueKey)) {
       return;
@@ -601,18 +620,19 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
 
     this.sessionManager.updateAgentState(issueKey, 'executing');
     const followUp = followUpMessage?.trim();
+    const hasFollowUp = Boolean(followUp) || Boolean(followUpImages?.length);
     // `responseText` is the live buffer for the current turn. Clear the prior
     // turn before publishing the user's follow-up, otherwise the renderer can
     // mistake the previous answer for a new response below that follow-up.
-    if (followUp) {
+    if (hasFollowUp) {
       this.sessionManager.updateAgentOutput(issueKey, { responseText: '' });
     }
     this.appendEvent(
       issueKey,
-      followUp
+      hasFollowUp
         ? options.internalConversationTurn
           ? evt('conversation_turn', 'Conversation turn started')
-          : evt('user_input_completed', 'You', followUp)
+          : evt('user_input_completed', 'You', followUp, undefined, followUpImages)
         : evt('session_start', 'Session resumed')
     );
     this.logger.appendLine(`[VercelAgent] Resumed session for ${issueKey}`);
@@ -621,15 +641,19 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       void this.failTaskForTimeout(issueKey, timeoutMs);
     }, timeoutMs);
 
-    const resumePrompt = followUp || (
-      history.length === 0
+    // An image-only follow-up (no caption) sends exactly that — empty text,
+    // the image alone — rather than being mistaken for "nothing new" and
+    // getting the auto-continue filler text below.
+    const resumePrompt = hasFollowUp
+      ? followUp ?? ''
+      : history.length === 0
         ? 'Continue the task from where you left off.'
-        : 'Continue the task. Use tools as needed and stop when the Definition of Done is met.'
-    );
+        : 'Continue the task. Use tools as needed and stop when the Definition of Done is met.';
 
     task.loopPromise = this.runLoopForIssue(issueKey, {
       systemPrompt,
       userPrompt: resumePrompt,
+      userImages: followUpImages,
       history,
       gateway,
       provider,

@@ -4,6 +4,7 @@ export {
   type AgentLoopOptions,
   type AgentLoopResult,
   type AgentToolExecutor,
+  type WireImageAttachment,
   type WireMessage
 } from './agentLoop';
 export * from './manifest';

@@ -1504,6 +1504,14 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     modelPlaceholder: 'e.g. gemini-2.5-flash'
   },
   {
+    id: 'z-ai',
+    kind: 'api',
+    label: 'Z.ai',
+    keyLabel: 'Z.ai API key',
+    urlPlaceholder: 'https://api.z.ai/api/coding/paas/v4',
+    modelPlaceholder: 'e.g. glm-5.3'
+  },
+  {
     id: 'claude-code-cli',
     kind: 'cli-agent',
     label: 'Claude Code (local)',
@@ -1615,6 +1623,8 @@ function AiSection({
   const [busy, setBusy] = useState(false);
   const [resettingKeys, setResettingKeys] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [testSuccess, setTestSuccess] = useState<string | undefined>();
+  const [testingKey, setTestingKey] = useState(false);
   const [managingModels, setManagingModels] = useState(false);
   const [spendSessions, setSpendSessions] = useState<AgentSessionRecord[]>([]);
   const [spendRangeDays, setSpendRangeDays] = useState<number | undefined>(undefined);
@@ -1663,6 +1673,8 @@ function AiSection({
   useEffect(() => {
     setKeyDraft('');
     setManagingModels(false);
+    setError(undefined);
+    setTestSuccess(undefined);
   }, [selectedProviderId]);
 
   const selectedMeta = AI_PROVIDERS.find(p => p.id === selectedProviderId)!;
@@ -1674,14 +1686,42 @@ function AiSection({
   const applyKey = async (value: string) => {
     setBusy(true);
     setError(undefined);
+    setTestSuccess(undefined);
     try {
       await window.praxis.ai.setProviderApiKey(selectedProviderId, value);
       reloadStatuses();
       setKeyDraft('');
+      if (value.trim()) {
+        try {
+          const res = await window.praxis.ai.testProviderApiKey(selectedProviderId);
+          setTestSuccess(`Key saved. ${res.message}`);
+        } catch (testErr) {
+          setError(`Key saved, but connection test failed: ${testErr instanceof Error ? testErr.message : String(testErr)}`);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const testKey = async () => {
+    setTestingKey(true);
+    setError(undefined);
+    setTestSuccess(undefined);
+    try {
+      if (keyDraft.trim()) {
+        await window.praxis.ai.setProviderApiKey(selectedProviderId, keyDraft.trim());
+        reloadStatuses();
+        setKeyDraft('');
+      }
+      const res = await window.praxis.ai.testProviderApiKey(selectedProviderId);
+      setTestSuccess(res.message);
+    } catch (err) {
+      setError(`Connection test failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setTestingKey(false);
     }
   };
 
@@ -1827,7 +1867,7 @@ function AiSection({
 
       <FieldRow
         label="Recommendations provider"
-        description="Which provider lightweight AI recommendations (workflow template pick, workflow agent-for-stage pick) use. Auto prefers the active provider above when it's an API provider and configured, else the first configured API provider — CLI-hosted providers (Claude Code, Codex, Copilot) can't run these single-completion requests."
+        description="Which provider lightweight AI recommendations (workflow template pick, workflow agent-for-stage pick) use. Auto prefers the active provider above when configured, else the first configured API provider or available ACP host."
       >
         <select
           className="input"
@@ -1839,7 +1879,7 @@ function AiSection({
           }}
         >
           <option value="">Auto (first configured provider)</option>
-          {AI_PROVIDERS.filter(meta => meta.kind === 'api').map(meta => (
+          {AI_PROVIDERS.filter(meta => meta.kind === 'api' || meta.kind === 'cli-agent').map(meta => (
             <option key={meta.id} value={meta.id}>
               {meta.label}
             </option>
@@ -1868,7 +1908,7 @@ function AiSection({
                 type="button"
                 className="btn btn-primary"
                 data-testid="ai-api-key-save"
-                disabled={busy || !keyDraft.trim()}
+                disabled={busy || testingKey || !keyDraft.trim()}
                 onClick={() => void applyKey(keyDraft)}
               >
                 Save key
@@ -1876,14 +1916,72 @@ function AiSection({
               <button
                 type="button"
                 className="btn"
+                data-testid="ai-api-key-test"
+                disabled={busy || testingKey || (!selectedStatus?.configured && !keyDraft.trim())}
+                onClick={() => void testKey()}
+              >
+                {testingKey ? 'Testing…' : 'Test key'}
+              </button>
+              <button
+                type="button"
+                className="btn"
                 data-testid="ai-api-key-clear"
-                disabled={busy || !selectedStatus || selectedStatus.keySource !== 'secret'}
+                disabled={busy || testingKey || !selectedStatus || selectedStatus.keySource !== 'secret'}
                 onClick={() => void applyKey('')}
               >
                 Clear
               </button>
             </div>
+            {testSuccess && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginTop: 8,
+                  padding: '7px 11px',
+                  borderRadius: 'var(--radius)',
+                  background: 'color-mix(in srgb, var(--success) 12%, var(--bg))',
+                  color: 'var(--success)',
+                  fontSize: 'var(--text-xs)'
+                }}
+                data-testid="ai-api-key-success"
+              >
+                <Icon name="check" size={13} />
+                <span>{testSuccess}</span>
+              </div>
+            )}
           </FieldRow>
+          {selectedProviderId === 'z-ai' && (
+            <FieldRow
+              label="Z.ai plan type"
+              description="GLM Coding Plan subscribers must use the coding endpoint. Pay-as-you-go subscribers use the general API endpoint."
+            >
+              <select
+                className="input"
+                data-testid="ai-z-ai-plan-select"
+                value={
+                  selectedConfig.baseUrl === 'https://api.z.ai/api/paas/v4'
+                    ? 'general'
+                    : selectedConfig.baseUrl === 'https://api.z.ai/api/coding/paas/v4' || !selectedConfig.baseUrl
+                      ? 'coding'
+                      : 'custom'
+                }
+                onChange={event => {
+                  const val = event.target.value;
+                  if (val === 'coding') {
+                    void commitUrl('https://api.z.ai/api/coding/paas/v4');
+                  } else if (val === 'general') {
+                    void commitUrl('https://api.z.ai/api/paas/v4');
+                  }
+                }}
+              >
+                <option value="coding">GLM Coding Plan (https://api.z.ai/api/coding/paas/v4) — Recommended</option>
+                <option value="general">General API / Pay-as-you-go (https://api.z.ai/api/paas/v4)</option>
+                <option value="custom">Custom base URL (configured below)</option>
+              </select>
+            </FieldRow>
+          )}
           {selectedProviderId === 'openai' && (
             <FieldRow
               label="Usage Admin API key"

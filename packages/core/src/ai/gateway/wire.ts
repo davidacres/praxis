@@ -11,11 +11,28 @@ export interface OpenAiToolCall {
   function: { name: string; arguments: string };
 }
 
+/**
+ * An image attached to a user turn — pasted or dropped into the composer.
+ * Carried on the canonical `WireMessage` itself (not a separate side
+ * channel) so it survives `compactHistoryForReplay` and rides along with the
+ * rest of that turn's history the same way persisted text content already
+ * does; each provider adapter is responsible for translating it into its own
+ * wire shape, the same as it already does for `content`.
+ */
+export interface WireImageAttachment {
+  /** e.g. `image/png`, `image/jpeg`, `image/webp`, `image/gif`. */
+  mimeType: string;
+  /** Base64-encoded image bytes — no `data:` prefix. */
+  dataBase64: string;
+}
+
 export interface WireMessage {
   role: WireRole;
   content?: string | null;
   tool_calls?: OpenAiToolCall[];
   tool_call_id?: string;
+  /** Only ever populated on a `role: 'user'` message. */
+  images?: WireImageAttachment[];
 }
 
 export interface GatewayToolDefinition {
@@ -118,6 +135,32 @@ function shouldEnableVercelAutoCaching(modelId: string): boolean {
   return id.includes('anthropic') || id.includes('claude') || id.includes('minimax');
 }
 
+type OpenAiContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+/**
+ * A message with no images passes through unchanged (`content` stays a bare
+ * string, matching every request this ever sent before images existed).
+ * Only a message actually carrying `images` gets OpenAI's multipart
+ * `content` array — text part first, then one `image_url` data-URL part per
+ * attachment.
+ */
+function toOpenAiWireMessage(message: WireMessage): Record<string, unknown> {
+  if (!message.images?.length) {
+    return { ...message };
+  }
+  const parts: OpenAiContentPart[] = [];
+  if (message.content) {
+    parts.push({ type: 'text', text: message.content });
+  }
+  for (const image of message.images) {
+    parts.push({ type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.dataBase64}` } });
+  }
+  const { images: _images, ...rest } = message;
+  return { ...rest, content: parts };
+}
+
 export interface BuildChatRequestArgs {
   modelId: string;
   messages: ReadonlyArray<WireMessage>;
@@ -132,7 +175,7 @@ export function buildChatRequest(args: BuildChatRequestArgs): Record<string, unk
   const stream = args.stream !== false;
   const body: Record<string, unknown> = {
     model: args.modelId,
-    messages: args.messages,
+    messages: args.messages.map(toOpenAiWireMessage),
     stream,
     max_tokens: typeof args.maxTokens === 'number' ? args.maxTokens : 8192
   };
@@ -255,6 +298,17 @@ export function compactHistoryForReplay(history: ReadonlyArray<WireMessage>): Wi
 
 function parseSseData(line: string): Record<string, unknown> | null {
   if (!line.startsWith('data:')) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        if (parsed.error || parsed.code !== undefined) {
+          return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
     return null;
   }
   const payload = line.slice(5).trim();
@@ -357,6 +411,14 @@ export async function* consumeChatStream(
       continue;
     }
 
+    const rawError = evt.error ?? (evt.code && (evt.message || evt.msg) ? evt : undefined);
+    if (rawError && typeof rawError === 'object') {
+      const errObj = rawError as Record<string, unknown>;
+      const errMsg = String(errObj.message || errObj.msg || JSON.stringify(errObj));
+      const errCode = errObj.code ? ` (code ${errObj.code})` : '';
+      throw new Error(`Provider error: ${errMsg}${errCode}`);
+    }
+
     // Anthropic Messages SSE fallback
     if (typeof evt.type === 'string') {
       if (evt.type === 'message_start') {
@@ -423,13 +485,18 @@ export async function* consumeChatStream(
     }
 
     // The final OpenAI usage chunk carries no choices, so read usage before the
-    // choice guard below discards it.
-    const reportedUsage = evt.usage as Record<string, unknown> | undefined;
+    // choice guard below discards it. Support top-level usage, choice-level usage,
+    // and both snake_case and camelCase field names.
+    const reportedUsage = (
+      evt.usage
+      ?? (evt.choices as Array<Record<string, unknown>> | undefined)?.[0]?.usage
+      ?? (evt.meta as Record<string, unknown> | undefined)?.usage
+    ) as Record<string, unknown> | undefined;
     if (reportedUsage) {
       noteUsage({
-        inputTokens: readNumber(reportedUsage, 'prompt_tokens'),
-        outputTokens: readNumber(reportedUsage, 'completion_tokens'),
-        totalTokens: readNumber(reportedUsage, 'total_tokens')
+        inputTokens: readNumber(reportedUsage, 'prompt_tokens') ?? readNumber(reportedUsage, 'promptTokens') ?? readNumber(reportedUsage, 'input_tokens'),
+        outputTokens: readNumber(reportedUsage, 'completion_tokens') ?? readNumber(reportedUsage, 'completionTokens') ?? readNumber(reportedUsage, 'output_tokens'),
+        totalTokens: readNumber(reportedUsage, 'total_tokens') ?? readNumber(reportedUsage, 'totalTokens')
       });
     }
 
@@ -438,6 +505,14 @@ export async function* consumeChatStream(
     if (!choice) {
       continue;
     }
+    const choiceUsage = choice.usage as Record<string, unknown> | undefined;
+    if (choiceUsage) {
+      noteUsage({
+        inputTokens: readNumber(choiceUsage, 'prompt_tokens') ?? readNumber(choiceUsage, 'promptTokens') ?? readNumber(choiceUsage, 'input_tokens'),
+        outputTokens: readNumber(choiceUsage, 'completion_tokens') ?? readNumber(choiceUsage, 'completionTokens') ?? readNumber(choiceUsage, 'output_tokens'),
+        totalTokens: readNumber(choiceUsage, 'total_tokens') ?? readNumber(choiceUsage, 'totalTokens')
+      });
+    }
     if (typeof choice.finish_reason === 'string' && choice.finish_reason) {
       finishReason = choice.finish_reason;
     }
@@ -445,6 +520,11 @@ export async function* consumeChatStream(
     const delta = choice.delta as Record<string, unknown> | undefined;
     if (!delta) {
       continue;
+    }
+
+    const reasoning = delta.reasoning_content ?? delta.thought;
+    if (typeof reasoning === 'string' && reasoning.length > 0) {
+      yield { type: 'thought_delta', text: reasoning };
     }
 
     const content = delta.content;

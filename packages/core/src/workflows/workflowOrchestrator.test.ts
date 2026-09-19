@@ -7,7 +7,7 @@ import {
   type WorkflowRunPersistence,
   type WorkflowWorkspaceProvider
 } from './workflowOrchestrator';
-import { createWorkflowRun, type WorkflowRun } from './workflowRun';
+import { applyWorkflowRunCommand, createWorkflowRun, type WorkflowRun } from './workflowRun';
 import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition } from './workflowTypes';
 
 let clock = 0;
@@ -239,6 +239,39 @@ test('a run of checks reaches awaiting-approval with no manual advancement', asy
   assert.deepEqual(fake.started, ['implement', 'qa', 'security']);
   assert.equal(run.nodes.gates.outcome, 'succeeded', 'the join converged on its own');
   assert.equal(run.nodes.approve.outcome, 'pending', 'approval waits for a person');
+});
+
+test('a new implementation snapshot automatically requeues prior downstream evidence', async () => {
+  const runs = memoryRuns();
+  const def = definition();
+  seed(runs, def);
+  const fake = fakeDispatcher(nodeId => ({
+    status: 'succeeded',
+    artifacts: outputsFor(def, nodeId),
+    ...(nodeId === 'implement' ? { snapshotRef: fake.started.filter(id => id === 'implement').length === 1 ? 'sha-1' : 'sha-2' } : {})
+  }));
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+
+  await orchestrator.step('run-1');
+  await settleAll();
+  const first = runs.get('run-1')!;
+  // Simulate the implementer reporting that it needs another attempt after
+  // editing the worktree; the prior review evidence is still present.
+  const failedImplementation = {
+    ...first,
+    status: 'running' as const,
+    nodes: { ...first.nodes, implement: { ...first.nodes.implement, outcome: 'failed' as const } }
+  };
+  await runs.save(applyWorkflowRunCommand(failedImplementation, { kind: 'node-retry', nodeId: 'implement', at: now() }));
+  await orchestrator.step('run-1');
+  await settleAll();
+
+  const refreshed = runs.get('run-1')!;
+  assert.equal(refreshed.nodes.implement.snapshotRef, 'sha-2');
+  assert.equal(refreshed.nodes.qa.outcome, 'succeeded', 'requeued checks complete again after the new revision');
+  assert.equal(refreshed.nodes.security.outcome, 'succeeded');
+  assert.equal(refreshed.nodes.implement.attempts.length, 2);
+  assert.ok(refreshed.events.some(event => event.kind === 'node-reworked'));
 });
 
 test('a failing check records its exit code and stops the branch', async () => {

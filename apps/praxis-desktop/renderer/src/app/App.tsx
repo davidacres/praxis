@@ -1081,22 +1081,22 @@ export function App() {
    * applying it through the same IPC the "Change Status" command uses.
    */
   const onIssueMove = useCallback(
-    (issueKey: string, targetStatus: string, moveConnectionId: string | undefined) => {
-      getMoveTransition(issueKey, moveConnectionId, targetStatus)
-        .then(transition => {
-          if (!transition) {
-            console.warn(
-              `[board] no workflow transition matches target status "${targetStatus}" for ${issueKey}`
-            );
-            return;
-          }
-          return window.praxis.issue
-            .transition(issueKey, transition.id, moveConnectionId)
-            .then(() => refreshBoardDetails());
-        })
-        .catch(error => {
-          console.error(`[board] failed to move ${issueKey} to "${targetStatus}"`, error);
-        });
+    async (issueKey: string, targetStatus: string, moveConnectionId: string | undefined): Promise<boolean> => {
+      try {
+        const transition = await getMoveTransition(issueKey, moveConnectionId, targetStatus);
+        if (!transition) {
+          console.warn(
+            `[board] no workflow transition matches target status "${targetStatus}" for ${issueKey}`
+          );
+          return false;
+        }
+        await window.praxis.issue.transition(issueKey, transition.id, moveConnectionId);
+        await refreshBoardDetails();
+        return true;
+      } catch (error) {
+        console.error(`[board] failed to move ${issueKey} to "${targetStatus}"`, error);
+        return false;
+      }
     },
     [getMoveTransition, refreshBoardDetails]
   );

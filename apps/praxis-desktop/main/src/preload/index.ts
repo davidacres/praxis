@@ -8,6 +8,7 @@ import type {
   AiHandoverInput,
   AiConversationMessageInput,
   AiStartConversationInput,
+  WireImageAttachment,
   AiProvider,
   AiReviewProgress,
   AppSettings,
@@ -210,6 +211,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:listApiModelOptions', provider, forceRefresh),
     setProviderApiKey: (provider: AiProvider, value: string) =>
       ipcRenderer.invoke('ai:setProviderApiKey', provider, value),
+    testProviderApiKey: (provider: AiProvider) =>
+      ipcRenderer.invoke('ai:testProviderApiKey', provider),
     resetProviderApiKeys: () => ipcRenderer.invoke('ai:resetProviderApiKeys'),
     listSessions: () => ipcRenderer.invoke('ai:listSessions'),
     loadImagePreview: (issueKey: string, filePath: string) =>
@@ -219,8 +222,8 @@ const praxis: PraxisIpc = {
     deleteSession: (issueKey: string) => ipcRenderer.invoke('ai:deleteSession', issueKey),
     delegate: (input: AiDelegateInput) => ipcRenderer.invoke('ai:delegate', input),
     abort: (issueKey: string) => ipcRenderer.invoke('ai:abort', issueKey),
-    continueSession: (issueKey: string, message: string) =>
-      ipcRenderer.invoke('ai:continueSession', issueKey, message),
+    continueSession: (issueKey: string, message: string, images?: WireImageAttachment[]) =>
+      ipcRenderer.invoke('ai:continueSession', issueKey, message, images),
     updateSessionModel: (issueKey: string, model: string) =>
       ipcRenderer.invoke('ai:updateSessionModel', issueKey, model),
     handoverSession: (issueKey: string, input: AiHandoverInput) =>
@@ -340,11 +343,15 @@ const praxis: PraxisIpc = {
     get: (projectId: string, workflowId: string) => ipcRenderer.invoke('workflows:get', projectId, workflowId),
     instantiate: (projectId: string, templateId: string, name?: string) =>
       ipcRenderer.invoke('workflows:instantiate', projectId, templateId, name),
+    promotePack: (projectId: string, packId: string, binding: { agentId: string; profileId?: string; hostId?: string }) =>
+      ipcRenderer.invoke('workflows:promotePack', projectId, packId, binding),
     save: (projectId: string, definition: WorkflowDefinition) =>
       ipcRenderer.invoke('workflows:save', projectId, definition),
     remove: (projectId: string, workflowId: string) => ipcRenderer.invoke('workflows:remove', projectId, workflowId),
     validate: (projectId: string, definition: WorkflowDefinition) =>
       ipcRenderer.invoke('workflows:validate', projectId, definition),
+    assistant: (projectId: string, definition: WorkflowDefinition, message: string, history?: readonly { role: 'user' | 'assistant'; text: string }[]) =>
+      ipcRenderer.invoke('workflows:assistant', projectId, definition, message, history),
     effectivePolicy: (projectId: string) => ipcRenderer.invoke('workflows:effectivePolicy', projectId),
     listPolicies: () => ipcRenderer.invoke('workflows:listPolicies'),
     savePolicy: (profile: WorkflowPolicyProfile) => ipcRenderer.invoke('workflows:savePolicy', profile),

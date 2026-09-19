@@ -3,6 +3,7 @@ import { useDialogs } from '../ui/dialogs';
 import { createPortal } from 'react-dom';
 import type {
   AgentRuntimeSnapshot,
+  AgentWorkflowReference,
   ProjectRecord,
   WorkflowDefinition,
   WorkflowEdgeOutcome,
@@ -15,6 +16,7 @@ import { API_MODEL_PROVIDERS } from '../ai/modelProviders';
 import { Icon } from '../ui/Icon';
 import { WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
 import { WorkflowValidationDialog } from './WorkflowValidationDialog';
+import { WorkflowAssistantPopover } from './WorkflowAssistantPopover';
 import {
   addNode,
   bucketFeedback,
@@ -166,9 +168,11 @@ export function WorkflowDesignerPage({
   // sessions. `undefined` is "still checking", not "unconfigured" — see
   // `AgentStageFields`'s use of this for why that third state matters.
   const [recommendationAvailable, setRecommendationAvailable] = useState<boolean | undefined>(undefined);
+  const [packs, setPacks] = useState<AgentWorkflowReference[]>([]);
 
   useEffect(() => {
     void window.praxis.agentRuntime.list().then(setCatalog);
+    void window.praxis.ai.listWorkflowPacks().then(setPacks).catch(() => setPacks([]));
     void window.praxis.workflows.effectivePolicy(project.id).then(setPolicy);
     void window.praxis.ai
       .listProviderStatuses()
@@ -354,6 +358,34 @@ export function WorkflowDesignerPage({
     },
     [definition, catalog, mutate, selectStage, selectedAgentStage]
   );
+
+  const promotePack = useCallback(async (pack: AgentWorkflowReference) => {
+    const fallbackProfile = catalog?.profiles?.find(profile => profile.trusted);
+    const selected = selectedAgentStage?.type === 'agent-task' ? selectedAgentStage.agent : undefined;
+    const agentId = selected?.agentId || (fallbackProfile && (profileHostId(catalog, fallbackProfile.profile.id) ?? fallbackProfile.profile.id));
+    if (!agentId) {
+      setError('Add or trust an agent first, then promote this workflow pack.');
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      await window.praxis.workflows.promotePack(project.id, pack.id, {
+        agentId,
+        ...(selected?.profileId || fallbackProfile?.profile.id
+          ? { profileId: selected?.profileId ?? fallbackProfile?.profile.id }
+          : {}),
+        ...(selected?.hostId || (fallbackProfile && profileHostId(catalog, fallbackProfile.profile.id))
+          ? { hostId: selected?.hostId ?? profileHostId(catalog, fallbackProfile!.profile.id) }
+          : {})
+      });
+      onSaved?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [catalog, onSaved, project.id, selectedAgentStage]);
 
   if (notFound) {
     return (
@@ -671,6 +703,33 @@ export function WorkflowDesignerPage({
                     )}
                   </div>
                 </div>
+
+                {packs.length > 0 && (
+                  <div className="wf-toolbox-section" data-testid="wf-pack-palette">
+                    <div className="wf-section-header">
+                      <span>Workflow packs</span>
+                      <span className="wf-section-count">{packs.length}</span>
+                    </div>
+                    <div className="wf-palette-group" role="group" aria-label="Available workflow packs">
+                      {packs.map(pack => (
+                        <button
+                          key={pack.id}
+                          type="button"
+                          className="wf-palette-item wf-palette-item--skill"
+                          disabled={busy}
+                          title="Create a governed workflow from this pack"
+                          onClick={() => void promotePack(pack)}
+                        >
+                          <span className="wf-palette-item-icon"><Icon name="package" size={13} /></span>
+                          <span className="wf-palette-item-content">
+                            <span className="wf-palette-item-title">{pack.name}</span>
+                            <span className="wf-palette-item-desc">Promote to governed workflow</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
             )}
 
@@ -836,6 +895,11 @@ export function WorkflowDesignerPage({
           onRevalidate={() => void runValidation()}
           busy={validating}
         />
+      )}
+
+      {createPortal(
+        <WorkflowAssistantPopover projectId={project.id} definition={definition} onWorkflowChange={mutate} onSaved={onSaved} />,
+        document.body
       )}
 
       {auxSlot ? createPortal(inspector, auxSlot) : null}

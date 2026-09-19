@@ -123,12 +123,11 @@ export interface AiSettings {
   /** Which configured provider new sessions use by default. */
   activeProvider: AiProvider;
   /**
-   * Which `kind: 'api'` provider (Vercel AI Gateway, OpenAI, or Anthropic)
+   * Which provider (direct API or ACP-hosted CLI agent)
    * one-shot AI "recommendation" features (workflow template pick, workflow
    * agent-for-stage pick) use. `undefined` means auto: prefer `activeProvider`
-   * if it qualifies and is configured, else the first configured api provider
-   * — see `resolveRecommendationProvider`. CLI-hosted providers never qualify,
-   * they have no direct completion endpoint to call this way.
+   * if it qualifies and is configured, else the first configured API provider
+   * or available ACP host — see `resolveRecommendationProvider`.
    */
   recommendationProvider?: AiProvider;
   /**
@@ -160,6 +159,7 @@ const KNOWN_AI_PROVIDERS: readonly AiProvider[] = [
   'openai',
   'anthropic',
   'gemini',
+  'z-ai',
   'claude-code-cli',
   'codex-cli',
   'copilot-cli',

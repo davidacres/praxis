@@ -118,6 +118,30 @@ test('a provider reporting only some fields does not invent the others', () => {
   assert.equal(usage?.inputTokens, undefined, 'an unreported input count stays unreported');
 });
 
+test('a priced API provider accumulates an estimated cost across turns', () => {
+  const mgr = new AiSessionManager(
+    storeWith({ 'SESSION-abc': { ...baseRecord('executing'), provider: 'z-ai', model: 'glm-5.3' } })
+  );
+
+  mgr.addAgentTokenUsage('SESSION-abc', { inputTokens: 1_000_000, outputTokens: 1_000_000 });
+  mgr.addAgentTokenUsage('SESSION-abc', { inputTokens: 1_000_000, outputTokens: 0 });
+
+  // GLM-5.3: $1.40/M input, $4.40/M output — two turns of 1M input + one of 1M output.
+  const cost = mgr.getAgentSession('SESSION-abc')?.cost;
+  assert.equal(cost?.currency, 'USD');
+  assert.ok(cost && Math.abs(cost.amount - (1.4 + 4.4 + 1.4)) < 1e-9, `unexpected cost ${cost?.amount}`);
+});
+
+test('an unpriced provider or model leaves cost unset rather than reading as free', () => {
+  const mgr = new AiSessionManager(
+    storeWith({ 'SESSION-abc': { ...baseRecord('executing'), provider: 'openai', model: 'gpt-4o-mini' } })
+  );
+
+  mgr.addAgentTokenUsage('SESSION-abc', { inputTokens: 1000, outputTokens: 1000 });
+
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.cost, undefined);
+});
+
 test('createAgentSession starts a purpose, brief and runtime epoch', () => {
   const mgr = new AiSessionManager(storeWith({}));
   const created = mgr.createAgentSession('SESSION-abc', 's1', {
@@ -216,6 +240,44 @@ test('provider handover clears native ACP state', () => {
   assert.equal(next.events.at(-1)?.type, 'provider_handover');
 });
 
+test('a provider handover clears a stale limit flag from the old provider', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', {
+    kind: 'general', goal: 'do a thing', scope: '', definitionOfDone: ''
+  }, 'openai', 'gpt-4.1');
+  mgr.updateAgentState('SESSION-abc', 'failed', 'You have exceeded your current quota');
+  const failed = mgr.getAgentSession('SESSION-abc');
+  assert.equal(failed?.providerLimitReached, true, 'setup: the old provider should read as limited');
+
+  // Handing over to a fresh provider must not carry the old provider's
+  // limit forward — it hasn't been called yet, so it can't be limited.
+  const next = mgr.transitionAgentRuntime('SESSION-abc', {
+    provider: 'z-ai',
+    model: 'glm-5.3',
+    reason: 'provider_handover',
+    eventSummary: 'Handed over to Z.ai'
+  });
+  assert.equal(next.providerLimitReached, undefined);
+  assert.equal(next.lastError, undefined);
+});
+
+test('changing model on the same provider also clears a stale limit flag', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', {
+    kind: 'general', goal: 'do a thing', scope: '', definitionOfDone: ''
+  }, 'openai', 'gpt-4.1');
+  mgr.updateAgentState('SESSION-abc', 'failed', 'Rate limit reached, please try again later.');
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.providerLimitReached, true);
+
+  const next = mgr.transitionAgentRuntime('SESSION-abc', {
+    model: 'gpt-5',
+    reason: 'model_change',
+    eventSummary: 'Model changed to gpt-5'
+  });
+  assert.equal(next.providerLimitReached, undefined);
+  assert.equal(next.lastError, undefined);
+});
+
 test('a conversation attributes assistant messages and caps sequential turns', () => {
   const mgr = new AiSessionManager(storeWith({}));
   mgr.createAgentSession('SESSION-abc', 's1', {
@@ -280,6 +342,44 @@ test('a human conversation message queues for its chosen participant without dup
   assert.deepEqual(mgr.takeAgentConversationMessage('SESSION-abc'), { participantId: 'guest', message: 'Also compare the proposed fix.' });
   mgr.setAgentConversationSpeaker('SESSION-abc', pending!.participantId);
   assert.equal(mgr.getAgentSession('SESSION-abc')?.conversation?.currentSpeakerId, 'host');
+});
+
+test('a queued conversation message carries its staged images through to the turn', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', {
+    kind: 'general', goal: 'review', scope: '', definitionOfDone: ''
+  }, 'openai', 'gpt-host', { toolMode: 'full' });
+  mgr.updateAgentState('SESSION-abc', 'completed');
+  mgr.startAgentConversation('SESSION-abc', { provider: 'anthropic', model: 'claude-guest', mode: 'consult', turnCap: 3 });
+  const images = [{ mimeType: 'image/png', dataBase64: 'aGVsbG8=' }];
+  mgr.queueAgentConversationMessage('SESSION-abc', 'host', 'What is in this screenshot?', images);
+  const record = mgr.getAgentSession('SESSION-abc')!;
+  assert.deepEqual(record.conversation?.pendingUserMessages?.[0], { participantId: 'host', message: 'What is in this screenshot?', images });
+  const pending = mgr.takeAgentConversationMessage('SESSION-abc');
+  assert.equal(pending?.images?.[0].mimeType, 'image/png');
+  assert.equal(pending?.images?.[0].dataBase64, 'aGVsbG8=');
+});
+
+test('an image-only conversation message queues without a text body', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', {
+    kind: 'general', goal: 'review', scope: '', definitionOfDone: ''
+  }, 'openai', 'gpt-host', { toolMode: 'full' });
+  mgr.updateAgentState('SESSION-abc', 'completed');
+  mgr.startAgentConversation('SESSION-abc', { provider: 'anthropic', model: 'claude-guest', mode: 'consult', turnCap: 3 });
+  const images = [{ mimeType: 'image/jpeg', dataBase64: 'aGVsbG8=' }];
+  mgr.queueAgentConversationMessage('SESSION-abc', 'host', '', images);
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.conversation?.pendingUserMessages?.[0].images?.length, 1);
+});
+
+test('an image-only queue attempt without any attachments is still rejected', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', {
+    kind: 'general', goal: 'review', scope: '', definitionOfDone: ''
+  }, 'openai', 'gpt-host', { toolMode: 'full' });
+  mgr.updateAgentState('SESSION-abc', 'completed');
+  mgr.startAgentConversation('SESSION-abc', { provider: 'anthropic', model: 'claude-guest', mode: 'consult', turnCap: 3 });
+  assert.throws(() => mgr.queueAgentConversationMessage('SESSION-abc', 'host', '', []), /Enter a message/);
 });
 
 test('token usage is attributed to the open epoch', () => {

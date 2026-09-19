@@ -52,6 +52,9 @@ Praxis can plan, launch, observe, hand off, review and recover AI coding session
 | FX-BE-095 | Orchestration runtime, task graph and recovery | Planned | FX-BE-093, FX-BE-094, FX-BF-013 |
 | FX-BE-096 | Session operations and review experience | Planned | FX-BE-095, FX-BE-115, FX-BF-014, FX-BF-015 |
 | FX-BE-122 | Opt-in multi-AI conversation in one session | Complete | FX-BE-115, FX-BE-092, FX-BF-015, FX-BF-017 |
+| FX-BE-130 | Provider extensions and session allowance correctness | Complete | FX-BE-093, FX-BE-115, FX-BF-041 |
+| FX-BE-131 | Image attachments in session chat | Complete | FX-BE-096, FX-BE-122 |
+| FX-BE-132 | Native browser pane geometry at app zoom | Complete | FX-BE-096 |
 
 ## Definition of done
 

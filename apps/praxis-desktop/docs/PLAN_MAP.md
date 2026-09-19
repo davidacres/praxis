@@ -488,3 +488,13 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | FX-BF-041 | Feature | Session usage and provider allowance visibility | Complete | FX-BF-015, FX-BF-035 |
 | FX-BE-129 | Story | Session usage, cost, and provider allowance visibility | Complete | FX-BF-041 |
 | TASK-353 | Task | Implement and verify session usage and provider allowance visibility | Complete | FX-BE-129 |
+| FX-BE-130 | Story | Provider extensions and session allowance correctness | Complete | FX-BE-093, FX-BE-115, FX-BF-041 |
+| TASK-354 | Task | Add Z.ai provider support and pricing-aware usage estimates | Complete | FX-BE-130 |
+| TASK-355 | Task | Verify Z.ai cost and budget reporting boundaries | Complete | TASK-354 |
+| TASK-356 | Task | Clear stale runtime limit state and hide unconfigured providers | Complete | FX-BE-130 |
+| FX-BE-131 | Story | Image attachments in session chat | Complete | FX-BE-096, FX-BE-122 |
+| TASK-357 | Task | Thread image attachments through core, ACP, gateway, and IPC | Complete | FX-BE-131 |
+| TASK-358 | Task | Build image composer and transcript attachment UX | Complete | TASK-357 |
+| TASK-359 | Task | Verify image attachment runtime paths and visual behavior | Complete | TASK-357, TASK-358 |
+| FX-BE-132 | Story | Native browser pane geometry at app zoom | Complete | FX-BE-096 |
+| TASK-360 | Task | Apply and verify zoom-aware native browser bounds | Complete | FX-BE-132 |

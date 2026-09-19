@@ -8,6 +8,7 @@ import type {
   IssueSummary
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { useDialogs } from '../ui/dialogs';
 import { statusTone } from './boardMeta';
 import { PriorityIndicator } from './PriorityIndicator';
 import type { BoardFilterPresentation, BoardFilterValue } from './BoardFilterBar';
@@ -52,7 +53,7 @@ export interface BoardViewProps {
    * transition and persist the move; on rejection it should leave the issue in
    * place — the board view just keeps the card where it was.
    */
-  onIssueMove: (issueKey: string, targetStatus: string, connectionId: string | undefined) => Promise<void> | void;
+  onIssueMove: (issueKey: string, targetStatus: string, connectionId: string | undefined) => Promise<boolean> | boolean;
   /** Opens this board in the Task Designer canvas. */
   onOpenDesigner: () => void;
   openSettings?: boolean;
@@ -277,6 +278,7 @@ export function BoardView({
   onSettingsOpened
 }: BoardViewProps) {
   const boardId = details.board.id;
+  const { confirm } = useDialogs();
   const { settings } = useSettings();
   const showNewIdea = settings?.preview.enableCreateIdea === true;
   // Single dragged key per drag — the dataTransfer is the cross-process source
@@ -772,7 +774,32 @@ export function BoardView({
       }
       event.preventDefault();
       setDropPosition(null);
-      void onIssueMove(key, targetStatus, connectionId);
+      const sourceColumn = effectiveColumns.find(column => column.issues.some(issue => issue.key === key));
+      const draggedIssue = sourceColumn?.issues.find(issue => issue.key === key);
+      const linkedChildren = draggedIssue && sourceColumn
+        ? details.issues.filter(issue =>
+            issue.parentKey === key &&
+            issue.status === sourceColumn.name &&
+            issue.status !== targetStatus
+          )
+        : [];
+
+      void (async () => {
+        let moveChildren = false;
+        if (linkedChildren.length > 0) {
+          moveChildren = await confirm({
+            title: 'Move linked sub-tasks?',
+            message: `${linkedChildren.length} linked sub-task${linkedChildren.length === 1 ? '' : 's'} ${linkedChildren.length === 1 ? 'is' : 'are'} also in ${sourceColumn?.name ?? 'this status'}: ${linkedChildren.map(child => child.key).join(', ')}. Move ${linkedChildren.length === 1 ? 'it' : 'them'} to ${targetStatus} too?`,
+            confirmLabel: 'Move sub-tasks'
+          });
+        }
+
+        const moved = await onIssueMove(key, targetStatus, connectionId);
+        if (!moved || !moveChildren) return;
+        for (const child of linkedChildren) {
+          await onIssueMove(child.key, targetStatus, connectionId);
+        }
+      })();
     }
   });
 

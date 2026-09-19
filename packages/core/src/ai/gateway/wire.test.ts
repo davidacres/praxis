@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compactHistoryForReplay, consumeChatStream, trimToolOutputToBudget, type WireMessage } from './wire';
+import { buildChatRequest, compactHistoryForReplay, consumeChatStream, trimToolOutputToBudget, type WireMessage } from './wire';
 
 test('compactHistoryForReplay strips tool round-trips, keeps the text exchange', () => {
   const history: WireMessage[] = [
@@ -66,6 +66,16 @@ test('reads token usage from an OpenAI-compatible stream', async () => {
 
   assert.equal(result.text, 'hi');
   assert.deepEqual(result.usage, { inputTokens: 120, outputTokens: 34, totalTokens: 154 });
+});
+
+test('reads token usage from choice-level usage or camelCase format', async () => {
+  const result = await runStream([
+    { choices: [{ delta: { content: 'hello' } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop', usage: { promptTokens: 250, completionTokens: 40, totalTokens: 290 } }] }
+  ]);
+
+  assert.equal(result.text, 'hello');
+  assert.deepEqual(result.usage, { inputTokens: 250, outputTokens: 40, totalTokens: 290 });
 });
 
 test('reads token usage across an Anthropic stream, input first then output', async () => {
@@ -137,4 +147,45 @@ test('trimToolOutputToBudget never touches user or assistant turns', () => {
   // Nothing can be freed without losing the thread of the work, so nothing is.
   assert.equal(result.trimmed, 0);
   assert.deepEqual(result.history, history);
+});
+
+test('compactHistoryForReplay keeps user image attachments riding along', () => {
+  const history: WireMessage[] = [
+    { role: 'user', content: 'first turn', images: [{ mimeType: 'image/png', dataBase64: 'aGk=' }] },
+    { role: 'assistant', content: 'noted' },
+    { role: 'user', content: 'second turn', images: [{ mimeType: 'image/jpeg', dataBase64: 'aGk=' }] }
+  ];
+
+  const replay = compactHistoryForReplay(history);
+
+  assert.deepEqual(replay, history, 'user turns keep their images across replay');
+});
+
+test('buildChatRequest serialises user images as OpenAI image_url content parts', () => {
+  const body = buildChatRequest({
+    modelId: 'mock/model',
+    messages: [
+      { role: 'user', content: 'What is in this screenshot?', images: [{ mimeType: 'image/png', dataBase64: 'aGk=' }] }
+    ],
+    stream: false
+  }) as { messages: Array<{ role: string; content: unknown }> };
+
+  const [message] = body.messages;
+  assert.equal(message.role, 'user');
+  assert.deepEqual(message.content, [
+    { type: 'text', text: 'What is in this screenshot?' },
+    { type: 'image_url', image_url: { url: 'data:image/png;base64,aGk=' } }
+  ]);
+});
+
+test('buildChatRequest sends an image-only user turn without a text part', () => {
+  const body = buildChatRequest({
+    modelId: 'mock/model',
+    messages: [{ role: 'user', images: [{ mimeType: 'image/webp', dataBase64: 'aGk=' }] }],
+    stream: false
+  }) as { messages: Array<{ role: string; content: unknown }> };
+
+  assert.deepEqual((body.messages[0] as { content: unknown }).content, [
+    { type: 'image_url', image_url: { url: 'data:image/webp;base64,aGk=' } }
+  ]);
 });

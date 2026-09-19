@@ -3,6 +3,7 @@ import type { AiProvider } from '../../types';
 import { fetchModels, type GatewayOptions, type RawGatewayModel } from '../gateway/gatewayClient';
 import { fetchAnthropicModels } from './anthropicClient';
 import { fetchGeminiModels } from './geminiClient';
+import { getKnownContextLength, getModelPricing, type ModelPriceRates } from './modelPricing';
 
 /**
  * One selectable model, shared by every "model picker" surface — both
@@ -21,6 +22,8 @@ export interface ModelChoice {
    * agents and for gateways that do not publish it.
    */
   contextLength?: number;
+  /** Model rates per million tokens in USD, when known. */
+  pricing?: ModelPriceRates;
 }
 
 export interface ModelOptions {
@@ -70,6 +73,16 @@ function normalize(raw: RawGatewayModel[]): ModelChoice[] {
   return out;
 }
 
+export const KNOWN_Z_AI_MODELS: readonly ModelChoice[] = [
+  { value: 'glm-5.3', name: 'GLM-5.3 (Flagship Coding & Reasoning)', contextLength: 128000, pricing: { inputPerMillionUsd: 1.4, outputPerMillionUsd: 4.4 } },
+  { value: 'glm-5.3-flash', name: 'GLM-5.3 Flash (Fast Coding)', contextLength: 128000, pricing: { inputPerMillionUsd: 0.15, outputPerMillionUsd: 0.5 } },
+  { value: 'glm-4.5', name: 'GLM-4.5', contextLength: 128000, pricing: { inputPerMillionUsd: 0.6, outputPerMillionUsd: 2.2 } },
+  { value: 'glm-4.5-flash', name: 'GLM-4.5 Flash', contextLength: 128000, pricing: { inputPerMillionUsd: 0, outputPerMillionUsd: 0 } },
+  { value: 'glm-4-plus', name: 'GLM-4 Plus', contextLength: 128000 },
+  { value: 'glm-4-flash', name: 'GLM-4 Flash', contextLength: 128000 },
+  { value: 'glm-zero-preview', name: 'GLM Zero Preview', contextLength: 128000 }
+];
+
 /** Fetches (or reuses the cached) model catalog for a `kind: 'api'` provider. */
 export async function listCatalogModels(
   provider: AiProvider,
@@ -90,12 +103,41 @@ export async function listCatalogModels(
   const promise = (async () => {
     // Anthropic's Models API needs `x-api-key`/`anthropic-version` auth, not
     // OpenAI-style Bearer — everything else speaks the same `/v1/models` shape.
-    const raw = provider === 'anthropic'
-      ? await fetchAnthropicModels(opts)
-      : provider === 'gemini'
-        ? await fetchGeminiModels(opts)
-        : await fetchModels(opts);
-    const choices = normalize(raw);
+    let raw: RawGatewayModel[] = [];
+    try {
+      raw = provider === 'anthropic'
+        ? await fetchAnthropicModels(opts)
+        : provider === 'gemini'
+          ? await fetchGeminiModels(opts)
+          : await fetchModels(opts);
+    } catch (err) {
+      if (provider === 'z-ai') {
+        const fallbackChoices = [...KNOWN_Z_AI_MODELS];
+        cache.set(key, { choices: fallbackChoices, fetchedAt: Date.now() });
+        return fallbackChoices;
+      }
+      throw err;
+    }
+    let choices = normalize(raw);
+    choices = choices.map(choice => {
+      const pricing = getModelPricing(provider, choice.value);
+      if (provider === 'z-ai') {
+        const known = KNOWN_Z_AI_MODELS.find(k => k.value === choice.value);
+        return {
+          ...choice,
+          contextLength: (typeof choice.contextLength === 'number' && choice.contextLength > 0)
+            ? choice.contextLength
+            : (known?.contextLength ?? 128000),
+          ...(pricing || known?.pricing ? { pricing: pricing ?? known?.pricing } : {})
+        };
+      }
+      return pricing ? { ...choice, pricing } : choice;
+    });
+    if (provider === 'z-ai' && choices.length === 0) {
+      const fallbackChoices = [...KNOWN_Z_AI_MODELS];
+      cache.set(key, { choices: fallbackChoices, fetchedAt: Date.now() });
+      return fallbackChoices;
+    }
     cache.set(key, { choices, fetchedAt: Date.now() });
     return choices;
   })();

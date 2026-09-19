@@ -15,6 +15,7 @@ export const PROVIDER_LABELS: Record<AiProvider, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
   gemini: 'Google Gemini',
+  'z-ai': 'Z.ai',
   'claude-code-cli': 'Claude Code',
   'codex-cli': 'Codex CLI',
   'copilot-cli': 'GitHub Copilot',
@@ -33,7 +34,7 @@ export const CLI_AGENT_PROVIDERS: ReadonlySet<AiProvider> = new Set(['claude-cod
 export const ACP_PROVIDERS: ReadonlySet<AiProvider> = new Set(['claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli']);
 
 /** `kind: 'api'` providers with a real model-listing endpoint (`ai.listApiModelOptions`). */
-export const API_MODEL_PROVIDERS: ReadonlySet<AiProvider> = new Set(['vercel-gateway', 'openai', 'anthropic', 'gemini']);
+export const API_MODEL_PROVIDERS: ReadonlySet<AiProvider> = new Set(['vercel-gateway', 'openai', 'anthropic', 'gemini', 'z-ai']);
 
 /** Every provider `ai.listCliModelOptions` can answer for — every ACP-hosted agent, each reporting its own `model`-category `session/new` config option. */
 export const CLI_MODEL_LISTING_PROVIDERS: ReadonlySet<AiProvider> = ACP_PROVIDERS;

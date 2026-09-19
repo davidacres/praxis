@@ -592,12 +592,9 @@ test('a completed session can edit its brief, change model, and hand over', asyn
   await win.locator('[data-testid="session-provider"]').click();
   const providerMenu = win.locator('[data-testid="session-provider-menu"]');
   await expect(providerMenu).toBeVisible();
-  const unavailableProvider = providerMenu.locator('[data-testid="session-provider-option-anthropic"]');
-  await expect(unavailableProvider).toBeDisabled();
-  await expect(unavailableProvider).toHaveAttribute('tabindex', '-1');
-  await unavailableProvider.dispatchEvent('click');
-  await expect(providerMenu).toBeVisible();
-  await expect(providerMenu.locator('[data-testid="session-handover-confirmation"]')).toHaveCount(0);
+  // Anthropic has no key configured in this test, so it doesn't appear in
+  // the list at all — not present-but-disabled, per its dead-click history.
+  await expect(providerMenu.locator('[data-testid="session-provider-option-anthropic"]')).toHaveCount(0);
   await providerMenu.locator('[data-testid="session-provider-option-openai"]').click();
   const handoverConfirmation = providerMenu.locator('[data-testid="session-handover-confirmation"]');
   await expect(handoverConfirmation).toContainText('Hand over to OpenAI?');
@@ -719,6 +716,68 @@ test('a human can direct a message to either participant during an AI conversati
   });
 });
 
+test('an image pasted during a conversation rides with the directed message', async () => {
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4z8DAAMQACf4B/4PiLjgAAAAASUVORK5CYII=';
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    responseDelayMs: 3000,
+    models: [{ id: 'mock/model' }, { id: 'mock/other' }]
+  });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-conversation-image-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+  const session = await win.evaluate(async () => window.praxis.ai.delegate({
+    provider: 'vercel-gateway', task: { goal: 'Review this design together.' }
+  }));
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  await win.locator('[data-testid="session-provider"]').click();
+  await win.locator('[data-testid="session-provider-add-vercel-gateway"]').click();
+  const dialog = win.locator('[data-testid="session-conversation-dialog"]');
+  await dialog.locator('[data-testid="session-conversation-provider"]').selectOption('vercel-gateway');
+  await dialog.locator('[data-testid="session-conversation-model"]').selectOption('mock/other');
+  await dialog.locator('[data-testid="session-conversation-turn-cap"]').fill('2');
+  await dialog.locator('[data-testid="session-conversation-confirm"]').click();
+
+  const target = win.locator('[data-testid="session-conversation-target"]');
+  await expect(target).toBeVisible();
+  await target.locator('select').selectOption('host');
+
+  // Paste an image, then send the directed message with it.
+  const input = win.locator('[data-testid="session-follow-up-input"]');
+  await input.evaluate((node, encoded) => {
+    const bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], 'pasted.png', { type: 'image/png' }));
+    (node as HTMLTextAreaElement).focus();
+    node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, PNG);
+  await expect(win.locator('[data-testid="session-image-chip"]')).toBeVisible();
+  await input.fill('Look at this screenshot, host.');
+  await win.locator('[data-testid="session-conversation-send"]').click();
+
+  // The addressed participant's request on the wire carries the image part.
+  await expect.poll(async () => mock!.requests.filter(request => {
+    const body = JSON.parse(request.body) as { messages: Array<{ role: string; content: unknown }> };
+    const lastUser = body.messages.filter(message => message.role === 'user').at(-1) as { content?: unknown } | undefined;
+    return Array.isArray(lastUser?.content)
+      && (lastUser.content as Array<{ type: string }>).some(part => part.type === 'image_url');
+  }).length, { timeout: 15000 }).toBe(1);
+
+  // The turn renders in the transcript with its image thumbnail.
+  await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('Look at this screenshot, host.');
+  await expect(win.locator('[data-testid="session-chat-attachments"]').last().locator('img')).toHaveCount(1);
+
+  // Wind the conversation down so teardown is not blocked by the close guard.
+  await win.evaluate(key => window.praxis.ai.stopConversation(key), session.issueKey);
+  await expect.poll(async () => win.evaluate(key => window.praxis.ai.listSessions().then(records =>
+    records.find(record => record.issueKey === key)?.conversation?.state ?? ''
+  ), session.issueKey), { timeout: 15000 }).toBe('stopped');
+});
+
 test('focus mode presents sessions as tabs and keeps them available while starting a new session', async () => {
   mock = await startMockGatewayServer({ mode: 'complete' });
   app = await launchTestApp(undefined, undefined, {
@@ -773,4 +832,226 @@ test('focus mode presents sessions as tabs and keeps them available while starti
   await win.locator('[data-testid="session-focus-tab"]', { hasText: 'Second focus chat' }).click();
   await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('Second focus chat');
   await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('Second focus-mode conversation.');
+});
+
+test('session failure displays unified error banner above the chat panel and not scattered in chat', async () => {
+  mock = await startMockGatewayServer({ mode: 'error' });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      task: { goal: 'Test error banner display on 429 quota exhaustion.' }
+    });
+  });
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Failed', {
+    timeout: 15000
+  });
+
+  // The unified error banner is visible above the chat panel
+  const errorBanner = win.locator('[data-testid="session-error-banner"]');
+  await expect(errorBanner).toBeVisible();
+  await expect(errorBanner).toContainText('Provider Limit / Quota Exceeded');
+  await expect(errorBanner).toContainText('Insufficient balance or no resource package. Please recharge.');
+  await expect(errorBanner).toContainText('Code 1113 · HTTP 429');
+
+  // No error bubbles or duplicate banners in the chat thread or composer
+  await expect(win.locator('[data-testid="session-chat-error"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-chat-failed-banner"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-composer-failed-banner"]')).toHaveCount(0);
+
+  // Take a visual screenshot for verification
+  const screenshotPath = path.resolve(__dirname, '../../.praxis/session-artifacts/session-error-banner.png');
+  fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+  await win.screenshot({ path: screenshotPath });
+
+  // Position: error banner is located before the chat thread scroll container
+  const positions = await win.evaluate(() => {
+    const banner = document.querySelector('[data-testid="session-error-banner"]');
+    const thread = document.querySelector('[data-testid="session-chat-thread"]');
+    if (!banner || !thread) return null;
+    const bannerRect = banner.getBoundingClientRect();
+    const threadRect = thread.getBoundingClientRect();
+    return {
+      bannerBottom: bannerRect.bottom,
+      threadTop: threadRect.top
+    };
+  });
+  expect(positions).not.toBeNull();
+  expect(positions!.bannerBottom).toBeLessThanOrEqual(positions!.threadTop + 2);
+
+  // Usage displays model name before tokens
+  const usageSummary = win.locator('[data-testid="session-usage-summary"]');
+  await expect(usageSummary).toBeVisible();
+  const usageMeta = usageSummary.locator('.session-usage-summary-meta');
+  await expect(usageMeta).toContainText('anthropic/claude-sonnet-4.6 · ');
+
+  // Dismissing the error banner resets it
+  const dismissBtn = win.locator('[data-testid="session-error-banner-dismiss"]');
+  await expect(dismissBtn).toBeVisible();
+  await dismissBtn.click();
+  await expect(win.locator('[data-testid="session-error-banner"]')).toHaveCount(0);
+});
+
+test('composer paste and drop carries an image to the agent and the transcript', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+
+  // Start a free-form session against the mock gateway.
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      task: { goal: 'Describe the attached screenshot.' }
+    });
+  });
+  await win.locator('[data-testid="nav-sessions"]').click();
+  const input = win.locator('[data-testid="session-follow-up-input"]');
+  await input.waitFor();
+
+  // A real 2x2 red/green PNG (valid CRCs, decodable by the browser's image
+  // decoder — the composer downscales through a canvas before sending).
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4z8DAAMQACf4B/4PiLjgAAAAASUVORK5CYII=';
+  const pngBytes = Buffer.from(pngBase64, 'base64');
+
+  // Paste: dispatch a clipboard event carrying the PNG as a File.
+  await win.evaluate(bytes => {
+    const file = new File([new Uint8Array(bytes)], 'paste.png', { type: 'image/png' });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const input = document.querySelector('[data-testid="session-follow-up-input"]') as HTMLTextAreaElement;
+    input.focus();
+    input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, Array.from(pngBytes));
+
+  const chip = win.locator('[data-testid="session-image-chip"]');
+  await expect(chip).toBeVisible();
+
+  // Drop: dispatch a drop event with a second PNG file.
+  await win.evaluate(bytes => {
+    const file = new File([new Uint8Array(bytes)], 'dropped.png', { type: 'image/png' });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const composer = document.querySelector('.composer.session-follow-up-composer') as HTMLElement;
+    composer.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    composer.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  }, Array.from(pngBytes));
+
+  await expect(chip).toHaveCount(2);
+
+  // Sending delivers both images on the wire and renders them in the transcript.
+  await input.fill('What do you see in these?');
+  await win.locator('[data-testid="session-follow-up-send"]').click();
+
+  await expect.poll(() => mock!.requests.length, { timeout: 15000 }).toBe(2);
+  const followUpBody = JSON.parse(mock.requests[1].body) as {
+    messages: Array<{ role: string; content: unknown }>;
+  };
+  const userTurn = followUpBody.messages.filter(message => message.role === 'user').at(-1) as { content: Array<{ type: string; text?: string; image_url?: { url: string } }> };
+  expect(Array.isArray(userTurn.content)).toBe(true);
+  const imageParts = userTurn.content.filter(part => part.type === 'image_url');
+  expect(imageParts).toHaveLength(2);
+  expect(imageParts[0].image_url?.url.startsWith('data:image/png;base64,')).toBe(true);
+
+  // The staged chips clear and the turn renders in the transcript with thumbnails.
+  await expect(win.locator('[data-testid="session-image-attachments"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('What do you see in these?');
+  await expect(win.locator('[data-testid="session-chat-attachments"]').last().locator('img')).toHaveCount(2);
+
+  // The agent side completes as usual.
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+});
+
+test('a transcript attachment enlarges in a lightbox and closes on click', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      task: { goal: 'Describe the attached screenshot.' }
+    });
+  });
+  await win.locator('[data-testid="nav-sessions"]').click();
+  const input = win.locator('[data-testid="session-follow-up-input"]');
+  await input.waitFor();
+
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4z8DAAMQACf4B/4PiLjgAAAAASUVORK5CYII=';
+  const pngBytes = Buffer.from(pngBase64, 'base64');
+  await win.evaluate(bytes => {
+    const file = new File([new Uint8Array(bytes)], 'paste.png', { type: 'image/png' });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const input = document.querySelector('[data-testid="session-follow-up-input"]') as HTMLTextAreaElement;
+    input.focus();
+    input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, Array.from(pngBytes));
+  await expect(win.locator('[data-testid="session-image-chip"]')).toBeVisible();
+
+  await input.fill('What is this?');
+  await win.locator('[data-testid="session-follow-up-send"]').click();
+  await expect(win.locator('[data-testid="session-chat-attachments"]').last().locator('img')).toHaveCount(1);
+
+  // Click the thumbnail → the lightbox shows the full-size image.
+  await win.locator('[data-testid="session-chat-attachment"]').last().click();
+  const lightbox = win.locator('[data-testid="session-image-lightbox"]');
+  await expect(lightbox).toBeVisible();
+  await expect(lightbox.locator('img')).toHaveCount(1);
+
+  // Click anywhere on the lightbox to dismiss it.
+  await lightbox.click();
+  await expect(lightbox).toHaveCount(0);
+});
+
+test('a file dropped outside the composer never navigates the window', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      task: { goal: 'Describe the attached screenshot.' }
+    });
+  });
+  await win.locator('[data-testid="nav-sessions"]').click();
+  const input = win.locator('[data-testid="session-follow-up-input"]');
+  await input.waitFor();
+
+  // Drop an image onto the page background — away from the composer. The
+  // window-level guard swallows it: the app stays exactly where it is.
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4z8DAAMQACf4B/4PiLjgAAAAASUVORK5CYII=';
+  const pngBytes = Buffer.from(pngBase64, 'base64');
+  await win.evaluate(bytes => {
+    const file = new File([new Uint8Array(bytes)], 'stray.png', { type: 'image/png' });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.body.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    document.body.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  }, Array.from(pngBytes));
+
+  // The session view survived the stray drop — no navigation, no chip staged.
+  await expect(input).toBeVisible();
+  await expect(win.locator('[data-testid="session-image-chip"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-state-badge"]')).toBeVisible();
 });
