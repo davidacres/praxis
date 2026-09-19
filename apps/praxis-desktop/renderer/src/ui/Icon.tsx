@@ -12,6 +12,8 @@ export type IconName =
   | 'sidebar-left'
   | 'sidebar-right'
   | 'panel-bottom'
+  | 'layout-focus'
+  | 'focus'
   | 'arrow-left'
   | 'arrow-right'
   | 'play'
@@ -108,6 +110,14 @@ const PATHS: Record<IconName, string | string[]> = {
   'panel-bottom': [
     'M2.5 3.25h11a1.25 1.25 0 0 1 1.25 1.25v7a1.25 1.25 0 0 1-1.25 1.25h-11A1.25 1.25 0 0 1 1.25 11.5v-7A1.25 1.25 0 0 1 2.5 3.25z',
     'M1.25 10h13.5'
+  ],
+  'layout-focus': [
+    'M2.5 3.25h11a1.25 1.25 0 0 1 1.25 1.25v7a1.25 1.25 0 0 1-1.25 1.25h-11A1.25 1.25 0 0 1 1.25 11.5v-7A1.25 1.25 0 0 1 2.5 3.25z',
+    'M5.75 5.75h4.5v4.5h-4.5z'
+  ],
+  focus: [
+    'M2.5 3.25h11a1.25 1.25 0 0 1 1.25 1.25v7a1.25 1.25 0 0 1-1.25 1.25h-11A1.25 1.25 0 0 1 1.25 11.5v-7A1.25 1.25 0 0 1 2.5 3.25z',
+    'M5.75 5.75h4.5v4.5h-4.5z'
   ],
   'arrow-left': 'M9.6 3.6 5.2 8l4.4 4.4',
   'arrow-right': 'M6.4 3.6 10.8 8l-4.4 4.4',

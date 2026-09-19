@@ -19,15 +19,42 @@ test('groups all layout toggles on the right side of the title bar', async () =>
   await expect(group.getByRole('button', { name: 'Toggle sidebar' })).toBeVisible();
   await expect(group.getByRole('button', { name: 'Toggle panel' })).toBeVisible();
   await expect(group.getByRole('button', { name: 'Toggle secondary sidebar' })).toBeVisible();
-  const labels = await group.locator('button').evaluateAll(buttons => buttons.slice(0, 3).map(button => button.getAttribute('aria-label')));
+  await expect(group.getByRole('button', { name: 'Toggle focus mode' })).toBeVisible();
+  const labels = await group.locator('button').evaluateAll(buttons => buttons.slice(0, 4).map(button => button.getAttribute('aria-label')));
   expect(labels).toEqual([
     'Toggle sidebar',
     'Toggle panel',
-    'Toggle secondary sidebar'
+    'Toggle secondary sidebar',
+    'Toggle focus mode'
   ]);
 
   await group.getByRole('button', { name: 'Toggle sidebar' }).click();
   await expect(window.locator('.pane-sidebar')).toHaveCount(0);
+});
+
+test('focus mode hides left, right and bottom panels and restores them on toggle', async () => {
+  const toggles = window.locator('.titlebar-layout-toggles');
+  const focusBtn = toggles.getByRole('button', { name: 'Toggle focus mode' });
+  await expect(focusBtn).toBeVisible();
+
+  if (await window.locator('.pane-sidebar').count() === 0) {
+    await toggles.getByRole('button', { name: 'Toggle sidebar' }).click();
+  }
+  await expect(window.locator('.pane-sidebar')).toBeVisible();
+
+  if (await window.locator('[data-testid="bottom-panel"]').count() === 0) {
+    await toggles.getByRole('button', { name: 'Toggle panel' }).click();
+  }
+  await expect(window.locator('[data-testid="bottom-panel"]')).toBeVisible();
+
+  await focusBtn.click();
+  await expect(window.locator('.pane-sidebar')).toHaveCount(0);
+  await expect(window.locator('.pane-aux')).toHaveCount(0);
+  await expect(window.locator('[data-testid="bottom-panel"]')).toHaveCount(0);
+
+  await focusBtn.click();
+  await expect(window.locator('.pane-sidebar')).toBeVisible();
+  await expect(window.locator('[data-testid="bottom-panel"]')).toBeVisible();
 });
 
 test('remembers which panels are open across a relaunch', async () => {
