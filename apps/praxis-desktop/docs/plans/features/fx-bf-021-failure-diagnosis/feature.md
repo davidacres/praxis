@@ -62,3 +62,22 @@ Review the complete feature journey and documented support matrix. Follow AGENTS
 ## Comments
 
 
+
+
+**PRAXIS-F21** — 2026-09-20T14:47:31.550Z
+**Workflow run failed: Full SDLC — FX-BF-021: Reproducible failure diagnosis and verification evidence**
+
+Status: Failed · Duration: 8m 41s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Lint: running
+- ⏳ Type check: running
+- ⏳ Unit tests & coverage: running
+- ⏳ SAST scan: running
+- ⏳ Secret scan: running
+- ❌ SCA scan: failed
+- ⏳ Structured code review: running
+- ⏳ Deploy: pending
+
+Required stage "sca" failed.
