@@ -134,13 +134,13 @@ test('TASK-248: builtInWorkflowTemplates only includes default built-ins; full-s
   assert.ok(marketplaceTemplates.every(t => !t.builtIn));
 });
 
-test('assembleTemplateLibrary returns 2 built-in and 4 marketplace templates by default', () => {
+test('assembleTemplateLibrary returns 2 built-in and 8 marketplace templates by default', () => {
   const library = assembleTemplateLibrary();
   const builtIns = library.filter(t => t.source === 'built-in');
   const marketplace = library.filter(t => t.source === 'marketplace');
 
   assert.strictEqual(builtIns.length, 2, 'exactly 2 built-in templates');
-  assert.strictEqual(marketplace.length, 4, 'exactly 4 marketplace templates');
+  assert.strictEqual(marketplace.length, 8, '4 full-sdlc + 4 full-sdlc-loop templates');
 
   assert.deepStrictEqual(builtIns.map(t => t.definition.id), ['governed-delivery', 'quick-change']);
   assert.ok(builtIns.every(t => t.builtIn === true));
@@ -149,7 +149,11 @@ test('assembleTemplateLibrary returns 2 built-in and 4 marketplace templates by 
     'full-sdlc',
     'full-sdlc-dotnet',
     'full-sdlc-python',
-    'full-sdlc-generic'
+    'full-sdlc-generic',
+    'full-sdlc-loop',
+    'full-sdlc-loop-dotnet',
+    'full-sdlc-loop-python',
+    'full-sdlc-loop-generic'
   ]);
   assert.ok(marketplace.every(t => t.builtIn === false));
 });

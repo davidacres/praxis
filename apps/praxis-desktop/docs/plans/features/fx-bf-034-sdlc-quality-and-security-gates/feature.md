@@ -6,8 +6,8 @@ id: FX-BF-034
 title: "Full SDLC quality and security gates"
 status: Done
 slug: sdlc-quality-and-security-gates
-stories: [FX-BE-087, FX-BE-088, FX-BE-089, FX-BE-090, FX-BE-091]
-updated: 2026-09-09
+stories: [FX-BE-087, FX-BE-088, FX-BE-089, FX-BE-090, FX-BE-091, FX-BE-092]
+updated: 2026-09-10
 dependencies: [FX-BE-020, FX-BE-024, FX-BE-033]
 ---
 
@@ -38,6 +38,7 @@ Committed planning scope; implementation remains Planned. Follow the dependency 
 | 3 | [FX-BE-089](stories/fx-be-089-structured-code-review-and-inline-delivery/story.md) | Structured code review with inline delivery and a bounded fix loop |
 | 4 | [FX-BE-090](stories/fx-be-090-bundled-agents-and-full-sdlc-template/story.md) | Bundled trusted agents and a language-agnostic Full SDLC template |
 | 5 | [FX-BE-091](stories/fx-be-091-ingest-ci-security-and-quality-reports/story.md) | Ingest CI security and quality reports as observe-mode gate evidence |
+| 6 | [FX-BE-092](stories/fx-be-092-iterative-sdlc-loop-template/story.md) | Iterative SDLC loop template with BDD and four review stages |
 
 ## Implementation boundaries
 
@@ -63,6 +64,7 @@ Review the complete feature journey: a Full SDLC run on a Node and a .NET fixtur
 | FX-BE-089 | Story | Structured code review with inline delivery and a bounded fix loop | ✅ Complete |
 | FX-BE-090 | Story | Bundled trusted agents and a language-agnostic Full SDLC template | ✅ Complete |
 | FX-BE-091 | Story | Ingest CI security and quality reports as observe-mode gate evidence | ✅ Complete |
+| FX-BE-092 | Story | Iterative SDLC loop template with BDD and four review stages | ✅ Complete |
 
 
 ## Comments

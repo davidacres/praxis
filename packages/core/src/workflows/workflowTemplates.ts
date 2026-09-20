@@ -23,6 +23,7 @@ import {
   AVAILABLE_AGENT_DEFINITIONS,
   AVAILABLE_SKILL_DEFINITIONS
 } from '../ai/agentRuntime/bundledAgents';
+import { sdlcLoopMarketplaceTemplates } from './sdlcLoopTemplates';
 
 export interface WorkflowTemplate {
   definition: WorkflowDefinition;
@@ -515,7 +516,8 @@ export function fullSdlcMarketplaceTemplates(): WorkflowDefinition[] {
     fullSdlcTemplate('node'),
     fullSdlcTemplate('dotnet'),
     fullSdlcTemplate('python'),
-    fullSdlcTemplate('generic')
+    fullSdlcTemplate('generic'),
+    ...sdlcLoopMarketplaceTemplates()
   ];
 }
 
