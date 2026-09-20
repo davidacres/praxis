@@ -393,6 +393,19 @@ export function WorkflowDesignerPage({
         <div className="empty-state">
           <Icon name="split-horizontal" size={28} />
           <span>That workflow no longer exists.</span>
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={async () => {
+                await window.praxis.workflows.remove(project.id, workflowId).catch(() => undefined);
+                onSaved?.();
+                onDeleted?.();
+              }}
+            >
+              Remove from list
+            </button>
+          </div>
         </div>
       </div>
     );

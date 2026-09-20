@@ -2444,6 +2444,15 @@ textarea {
   flex: 1;
 }
 
+/* Hint / validation text below form controls inside the composer */
+.form-hint {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.form-hint.form-hint-error { color: var(--danger); }
+
 /* Raised mode selector that visually grows out of the top edge of the composer. */
 .session-mode-panel {
   display: flex;
@@ -2519,6 +2528,25 @@ textarea {
   background: var(--bg-sunken);
   border-radius: var(--radius-sm);
   line-height: 1.3;
+}
+
+/* ×-button inside a chip (e.g. working folder clear) */
+.composer-chip-clear {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 3px;
+  opacity: 0.55;
+  cursor: pointer;
+}
+.composer-chip-clear:hover { opacity: 1; }
+
+/* Model name span inside a .composer-provider-option row */
+.composer-model-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-model-option-meta {
@@ -7209,6 +7237,16 @@ button.session-telemetry-chip:hover {
   margin-bottom: var(--space-2);
 }
 
+/* Error banner inside the new-session composer (.composer without the
+   session-follow-up-composer modifier): layout is in CSS, not inline styles. */
+.composer > .error-banner:not(.session-follow-up-composer .error-banner) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 12px 0;
+}
+
 .session-follow-up-composer .composer-input:disabled {
   color: var(--text-tertiary);
   cursor: default;
@@ -7513,6 +7551,13 @@ button.session-chat-attachment {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* "from {baseBranch}" suffix inside the worktree chip — dimmed secondary text */
+.session-worktree-base {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  margin-left: 2px;
 }
 
 .event-row {
@@ -10007,6 +10052,11 @@ button.session-chat-attachment {
 .project-workflow-row,
 .project-workflow-child,
 .project-workflow-empty { padding-left: var(--tree-indent-2); }
+.project-workflow-row { display: flex; align-items: center; min-width: 0; }
+.project-workflow-row .board-tree-main { flex: 1; min-width: 0; }
+.project-workflow-delete { opacity: 0; margin-right: 4px; flex-shrink: 0; }
+.project-workflow-row:hover .project-workflow-delete,
+.project-workflow-delete:focus-visible { opacity: 1; }
 .project-workflow-empty { color: var(--text-tertiary); }
 .project-docs-tree { position: relative; padding-bottom: 8px; }
 .project-plans-folder { padding-left: var(--tree-indent-2); }

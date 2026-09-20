@@ -329,6 +329,7 @@ function restoredRouteForWorkspace(
 
 export function App() {
   const { settings } = useSettings();
+  const { confirm } = useDialogs();
   const [appVersion, setAppVersion] = useState<string>();
   const newProjectEnabled = settings?.preview.enableNewProject ?? true;
   useEffect(() => {
@@ -1005,7 +1006,16 @@ export function App() {
         const readiness = await window.praxis.workflows.templateReadiness(id).catch(() => []);
         const readinessById = new Map(readiness.map(item => [item.templateId, item]));
         const projectTemplates = templates.filter(t => t.source === 'project');
-        const sessionOptions: SessionWorkflowOption[] = projectTemplates.map(template => {
+        const seenIds = new Set<string>();
+        const availableTemplates = [
+          ...projectTemplates,
+          ...templates.filter(t => t.source !== 'project')
+        ].filter(t => {
+          if (seenIds.has(t.definition.id)) return false;
+          seenIds.add(t.definition.id);
+          return true;
+        });
+        const sessionOptions: SessionWorkflowOption[] = availableTemplates.map(template => {
           const status = readinessById.get(template.definition.id);
           const blockers = status
             ? Object.values(status.blockingByNode)
@@ -1040,6 +1050,9 @@ export function App() {
   const composerProject = selectedProject
     ?? workspaceProjects.find(project => project.id === activeWorkspace?.defaultProjectId)
     ?? (workspaceProjects.length === 1 ? workspaceProjects[0] : undefined);
+  const activeProjectId = selectedProject?.id
+    ?? (selectedBoard?.connectionId ? projectIdForConnection(selectedBoard.connectionId, connections) : undefined)
+    ?? composerProject?.id;
   const workspaceBoards = activeWorkspace
     ? boards.filter(board => {
         const directProjectId = projectIdForConnection(board.connectionId, connections);
@@ -2027,6 +2040,23 @@ export function App() {
                   onSelectRun={project => navigate({ projectId: project.id, feature: 'run' })}
                   onSelectDeployments={project => navigate({ projectId: project.id, feature: 'deployments' })}
                   onNewWorkflow={project => setNewWorkflowForProject(project.id)}
+                  onDeleteWorkflow={async (project, workflowId) => {
+                    if (
+                      !(await confirm({
+                        title: 'Delete this workflow?',
+                        message: 'Runs already started are kept.',
+                        confirmLabel: 'Delete workflow',
+                        danger: true
+                      }))
+                    ) {
+                      return;
+                    }
+                    await window.praxis.workflows.remove(project.id, workflowId);
+                    setWorkflowsNonce(n => n + 1);
+                    if (route.feature === 'workflows' && route.workflowId === workflowId) {
+                      navigate({ projectId: project.id, feature: 'workflows' });
+                    }
+                  }}
                   onDeleteBoard={board => {
                     if (!board.connectionId) return;
                     const connectionId = board.connectionId;
@@ -2197,6 +2227,8 @@ export function App() {
                     <IssueDetail
                       issueKey={route.issueKey}
                       connectionId={selectedBoard?.connectionId}
+                      projectId={activeProjectId}
+                      workflowOptions={activeProjectId ? sessionWorkflowsByProject[activeProjectId] : undefined}
                       expanded={detailIsExpanded}
                       onToggleExpanded={() => setDetailExpanded(expanded => !expanded)}
                       onClose={() => {

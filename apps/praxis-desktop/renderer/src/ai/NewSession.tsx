@@ -14,12 +14,6 @@ import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName }
 import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
 
-/** Last path segment, for a compact working-folder chip label. */
-function basename(fsPath: string): string {
-  const parts = fsPath.split(/[/\\]+/).filter(Boolean);
-  return parts[parts.length - 1] ?? fsPath;
-}
-
 /** Applies a provider's curated `enabledModelIds` (Settings → AI Provider → Models) to a fetched catalog. */
 function applyEnabledModelCuration(options: ModelOptions, enabledModelIds: string[] | undefined): ModelOptions {
   if (!enabledModelIds) {
@@ -150,15 +144,15 @@ export function NewSession({
   const [toolMode, setToolMode] = useState<AgentToolMode>(defaultToolMode ?? 'full');
   const [mode, setMode] = useState<SessionMode>('chat');
   const [workingDirectory, setWorkingDirectory] = useState<string | undefined>(defaultWorkingDirectory);
-  const [runInWorktree, setRunInWorktree] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
-  const [folderIsRepo, setFolderIsRepo] = useState(false);
-  const folderLocked = Boolean(defaultWorkingDirectory);
   const workflowOptionsForPicker = workflowOptions ?? [];
   const [modelFilter, setModelFilter] = useState('');
   const [modelMenuPos, setModelMenuPos] = useState<{ top: number; left: number } | undefined>();
   const modelChipRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
+  const [workflowMenuPos, setWorkflowMenuPos] = useState<{ bottom: number; left: number } | undefined>();
+  const workflowChipRef = useRef<HTMLButtonElement | null>(null);
+  const workflowMenuRef = useRef<HTMLDivElement | null>(null);
   const noticeVisible = connectionCount === 0 && !dismissed;
   const selectableBoards = boards.filter(board => board.availability !== 'missing');
   const selectedBoard = selectableBoards.find(board => board.id === selectedBoardId);
@@ -182,33 +176,6 @@ export function NewSession({
       setWorkingDirectory(current => current ?? globalDefault);
     }
   }, [defaultWorkingDirectory, liveSettings?.ai.workingDirectory]);
-
-  // Only offer "run in a worktree" when the chosen folder is a git repo.
-  useEffect(() => {
-    setFolderIsRepo(false);
-    if (!workingDirectory) {
-      setRunInWorktree(false);
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      void window.praxis.git
-        .preflight(workingDirectory)
-        .then(result => {
-          if (cancelled) return;
-          const isRepo = result.status === 'repository' || result.status === 'worktree';
-          setFolderIsRepo(isRepo);
-          if (!isRepo) setRunInWorktree(false);
-        })
-        .catch(() => {
-          if (!cancelled) setFolderIsRepo(false);
-        });
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [workingDirectory]);
 
   useEffect(() => {
     if (selectedBoard) {
@@ -371,6 +338,24 @@ export function NewSession({
     };
   }, [selectedProvider, enabledModelKey]);
 
+  useEffect(() => {
+    if (!workflowMenuPos) return;
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (workflowMenuRef.current?.contains(target) || workflowChipRef.current?.contains(target)) return;
+      setWorkflowMenuPos(undefined);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setWorkflowMenuPos(undefined);
+    };
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onDocumentPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [workflowMenuPos]);
+
   /** Bypasses the main process's model-list cache — e.g. the gateway added a model server-side. */
   const refreshModels = () => {
     if (!selectedProvider) {
@@ -420,6 +405,20 @@ export function NewSession({
     }
   };
 
+  const toggleWorkflowMenu = () => {
+    if (workflowMenuPos) {
+      setWorkflowMenuPos(undefined);
+      return;
+    }
+    const rect = workflowChipRef.current?.getBoundingClientRect();
+    if (rect) {
+      setWorkflowMenuPos({
+        bottom: window.innerHeight - rect.top + 6,
+        left: Math.max(8, Math.min(rect.right - 300, window.innerWidth - 308))
+      });
+    }
+  };
+
   const toggleHeadingMenu = (
     kind: 'board' | 'ticket',
     ref: RefObject<HTMLButtonElement | null>
@@ -454,7 +453,6 @@ export function NewSession({
         toolMode,
         mode,
         ...(workingDirectory ? { workingDirectory } : {}),
-        ...(runInWorktree ? { runInWorktree: true } : {}),
         ...(agentContext
           ? {
               agentId: agentContext.agentId,
@@ -471,11 +469,6 @@ export function NewSession({
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const pickFolder = async () => {
-    const picked = await window.praxis.dialog.pickFolder('Select the session working folder');
-    if (picked) setWorkingDirectory(picked);
   };
 
   return (
@@ -679,7 +672,7 @@ export function NewSession({
 
         <div className="composer">
           {error && (
-            <div className="error-banner" data-testid="new-session-error" style={{ margin: '8px 12px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <div className="error-banner" data-testid="new-session-error">
               <span>{error}</span>
               <button
                 type="button"
@@ -734,33 +727,6 @@ export function NewSession({
               }
             }}
           />
-
-          {workflowOptionsForPicker.length > 0 && (
-            <label className="composer-workflow-picker">
-              <span>Workflow</span>
-              <select
-                className="input"
-                value={selectedWorkflowId}
-                data-testid="new-session-workflow-select"
-                onChange={event => setSelectedWorkflowId(event.target.value)}
-              >
-                <option value="">No governed workflow — ordinary session</option>
-                {workflowOptionsForPicker.map(option => (
-                  <option key={option.id} value={option.id}>
-                    {option.name} · v{option.version}{option.ready ? '' : ' — not ready'}
-                  </option>
-                ))}
-              </select>
-              {selectedWorkflowId && (() => {
-                const selected = workflowOptionsForPicker.find(option => option.id === selectedWorkflowId);
-                return selected && !selected.ready ? (
-                  <small className="form-hint form-hint-error">
-                    {selected.blockers?.join(' ') || 'This workflow is not ready to run.'}
-                  </small>
-                ) : selected?.description ? <small className="form-hint">{selected.description}</small> : null;
-              })()}
-            </label>
-          )}
 
           <div className="composer-controls">
             <div className="session-mode-toggle" role="group" aria-label="Session mode">
@@ -920,71 +886,80 @@ export function NewSession({
                 </div>,
                 document.body
               )}
-            <button
-              className="composer-chip"
-              type="button"
-              data-testid="new-session-tool-mode"
-              title={toolMode === 'project-only' ? 'This folderless project exposes project-board tools only' : toolMode === 'full' ? 'Tools can read and change the workspace' : 'Tools can only inspect the workspace'}
-              disabled={toolMode === 'project-only'}
-              onClick={() => setToolMode(current => current === 'full' ? 'read-only' : 'full')}
-            >
-              <Icon name={toolMode === 'full' ? 'tools' : 'search'} size={14} />
-              {toolMode === 'project-only' ? 'Project only' : toolMode === 'full' ? 'Full tools' : 'Read only'}
-            </button>
-            {toolMode !== 'project-only' && (
-              folderLocked && workingDirectory ? (
-                // A project supplies the folder: show it, don't ask for it.
-                <span
-                  className="composer-chip is-readonly"
-                  data-testid="new-session-folder"
-                  title={workingDirectory}
-                >
-                  <Icon name="folder" size={14} />
-                  {basename(workingDirectory)}
-                </span>
-              ) : (
-              <button
-                className="composer-chip"
-                type="button"
-                data-testid="new-session-folder"
-                title={workingDirectory ? workingDirectory : 'Choose the folder the agent works in'}
-                onClick={() => void pickFolder()}
-              >
-                <Icon name="folder" size={14} />
-                {workingDirectory ? basename(workingDirectory) : 'Working folder'}
-                {workingDirectory && (
-                  <span
-                    role="button"
-                    aria-label="Clear working folder"
-                    className="composer-chip-clear"
-                    onClick={event => {
-                      event.stopPropagation();
-                      setWorkingDirectory(undefined);
-                    }}
-                  >
-                    <Icon name="close" size={11} />
-                  </span>
-                )}
-              </button>
-              )
-            )}
-            {toolMode === 'full' && folderIsRepo && (
-              <button
-                className={`composer-chip${runInWorktree ? ' active' : ''}`}
-                type="button"
-                data-testid="new-session-worktree"
-                aria-pressed={runInWorktree}
-                title="Run this session in a dedicated git worktree branched off the folder's current branch"
-                onClick={() => setRunInWorktree(current => !current)}
-              >
-                <Icon name="git-branch" size={14} />
-                Git worktree
-              </button>
-            )}
             <span className="spacer" />
             <button className="composer-chip" aria-label="Dictate">
               <Icon name="mic" size={15} />
             </button>
+            {workflowOptionsForPicker.length > 0 && (
+              <>
+                <button
+                  ref={workflowChipRef}
+                  type="button"
+                  className={`composer-chip session-runtime-chip${workflowMenuPos ? ' active' : ''}`}
+                  data-testid="new-session-workflow-chip"
+                  aria-haspopup="dialog"
+                  aria-expanded={Boolean(workflowMenuPos)}
+                  title="Choose a workflow for this session"
+                  onClick={toggleWorkflowMenu}
+                >
+                  <Icon name="play" size={14} />
+                  <span className="session-runtime-chip-label">
+                    {workflowOptionsForPicker.find(option => option.id === selectedWorkflowId)?.name ?? 'Workflow'}
+                  </span>
+                </button>
+                {workflowMenuPos && createPortal(
+                  <div
+                    ref={workflowMenuRef}
+                    className="composer-provider-menu session-runtime-popover"
+                    role="dialog"
+                    aria-label="Select workflow"
+                    data-testid="new-session-workflow-menu"
+                    style={{ position: 'fixed', bottom: workflowMenuPos.bottom, left: workflowMenuPos.left }}
+                  >
+                    <button
+                      type="button"
+                      className={`composer-provider-option${selectedWorkflowId ? '' : ' active'}`}
+                      role="option"
+                      aria-selected={!selectedWorkflowId}
+                      data-testid="new-session-no-workflow-option"
+                      onClick={() => {
+                        setSelectedWorkflowId('');
+                        setWorkflowMenuPos(undefined);
+                      }}
+                    >
+                      <Icon name="chats" size={14} />
+                      <span className="heading-option-body">
+                        <strong>No workflow</strong>
+                        <small>Start an ordinary session</small>
+                      </span>
+                    </button>
+                    {workflowOptionsForPicker.map(option => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={`composer-provider-option${selectedWorkflowId === option.id ? ' active' : ''}`}
+                        role="option"
+                        aria-selected={selectedWorkflowId === option.id}
+                        data-testid={`new-session-workflow-option-${option.id}`}
+                        disabled={!option.ready}
+                        title={option.ready ? option.description : option.blockers?.join(' ')}
+                        onClick={() => {
+                          setSelectedWorkflowId(option.id);
+                          setWorkflowMenuPos(undefined);
+                        }}
+                      >
+                        <Icon name={selectedWorkflowId === option.id ? 'check' : 'play'} size={14} />
+                        <span className="heading-option-body">
+                          <strong>{option.name}</strong>
+                          <small>{option.ready ? (option.description || `Version ${option.version}`) : (option.blockers?.join(' ') || 'Not ready')}</small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>,
+                  document.body
+                )}
+              </>
+            )}
             <button
               className="composer-send"
               aria-label="Start session"
