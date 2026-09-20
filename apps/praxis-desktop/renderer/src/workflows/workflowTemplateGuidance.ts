@@ -78,6 +78,62 @@ export function getWorkflowTemplateGuidance(definition: WorkflowDefinition): Wor
     };
   }
 
+  if (id === 'full-sdlc-loop' || id === 'full-sdlc-loop-node') {
+    return {
+      bestFor: 'Node.js and TypeScript teams that want the full SDLC plus dedicated BDD, test-review, security-review, and advisory UI/UX review stages.',
+      summary: '16-stage iterative pipeline: BDD scenarios authored before code, then parallel lint, types, unit tests, BDD run, SAST, secrets, SCA, and four review agents.',
+      stack: 'Node.js / TypeScript',
+      highlights: [
+        'BDD scenarios authored from the plan and executed via Cucumber with JUnit reporting',
+        'Separate code review, automated test review, and security review agents over one diff',
+        'Advisory UI/UX review reports findings without blocking delivery',
+        'Every failed stage retries within its budget; thresholds (80% coverage, 0 high findings) hold approval'
+      ]
+    };
+  }
+
+  if (id === 'full-sdlc-loop-dotnet') {
+    return {
+      bestFor: '.NET teams wanting the full SDLC with BDD scenarios, test review, security review, and advisory UX review.',
+      summary: '16-stage pipeline with dotnet format/build/test + coverlet, Semgrep, Gitleaks, Reqnroll/SpecFlow BDD, and four review agents.',
+      stack: '.NET / C#',
+      highlights: [
+        'BDD scenarios authored before code; run step left as a clearly marked placeholder for Reqnroll/SpecFlow',
+        'csharp-dotnet-code-reviewer reviews code; the security analyst reviews what scanners miss',
+        'Advisory UI/UX review that can never false-block a delivery',
+        'Threshold gates enforce 80% line coverage and zero high-or-worse findings'
+      ]
+    };
+  }
+
+  if (id === 'full-sdlc-loop-python') {
+    return {
+      bestFor: 'Python teams wanting the full SDLC with behave BDD scenarios, test review, security review, and advisory UX review.',
+      summary: '16-stage pipeline with Ruff, mypy, pytest coverage, Bandit-era Semgrep SAST, Gitleaks, behave BDD with JUnit output, and four review agents.',
+      stack: 'Python',
+      highlights: [
+        'BDD scenarios authored from the plan, executed with behave --junit',
+        'Automated test review checks scenarios and unit tests for real coverage of behaviour',
+        'Security review agent covers authorization and business-logic risks scanners cannot see',
+        'Failed stages retry within budget; gate thresholds hold approval until clean'
+      ]
+    };
+  }
+
+  if (id === 'full-sdlc-loop-generic') {
+    return {
+      bestFor: 'Polyglot projects wanting the complete iterative SDLC structure with commands left for the team to fill.',
+      summary: 'Language-agnostic 16-stage DAG: BDD authoring, parallel QA/security/review band with four review agents, thresholds, and bounded retry.',
+      stack: 'Generic / Polyglot',
+      highlights: [
+        'Complete iterative DAG ready for custom lint, test, BDD, SAST, and SCA commands',
+        'BDD scenarios authored before implementation, reviewed alongside automated tests',
+        'Advisory UI/UX review included; its findings never block approval',
+        'Iterates by bounded retries plus gate-held approval instead of unbounded loops'
+      ]
+    };
+  }
+
   if (id === 'full-sdlc-generic') {
     return {
       bestFor: 'Polyglot projects or custom toolchains needing a complete 12-stage SDLC quality and security structure.',

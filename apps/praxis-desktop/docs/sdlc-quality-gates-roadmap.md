@@ -149,6 +149,19 @@ the trusted discovery root on first run, not written into a user's project.
   detected commands. The repo's `csharp-dotnet-code-reviewer` agent and
   `dotnet-solid-dry` skill are the .NET review inputs.
 
+### FX-BE-092 — Iterative SDLC loop template
+
+- **TASK-253** Add the `full-sdlc-loop` marketplace template family (Node,
+  .NET, Python, generic): `Plan → Author BDD scenarios → Implement →
+  (Lint ∥ Type-check ∥ Unit tests ∥ BDD run ∥ SAST ∥ Secrets ∥ SCA ∥ Code
+  review ∥ Test review ∥ Security review ∥ UX review (advisory)) → Gates →
+  Approve → Deploy (optional)`. BDD scenarios are authored from the plan before
+  code and consumed by implement, the BDD execution check (JUnit adapter), and
+  the test review. Because the validator rejects cycles, iteration is bounded:
+  per-stage `maxAttempts` retries plus approval `gateThresholds` (coverage ≥ 80,
+  zero high-or-worse findings) hold the run until clean, with retry/rework
+  surfacing in the run monitor.
+
 ### FX-BE-091 — CI report ingestion
 
 - **TASK-250** Read-only providers for GitHub code scanning + Dependabot alerts
