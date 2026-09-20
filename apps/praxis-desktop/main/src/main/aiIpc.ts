@@ -568,6 +568,23 @@ export function registerAiIpc(): void {
       sessionManager.renameAgentSession(issueKey, title)
   );
 
+  // Archive is reversible, so it only needs to keep a still-running task out:
+  // an archived session cannot accept follow-ups while its agent is live, and
+  // the renderer hides archived sessions from the tree that would show its
+  // live state. A terminal session archives and unarchives freely.
+  ipcMain.handle(
+    'ai:archiveSession',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, archived: boolean) => {
+      if (!sessionManager.getAgentSession(issueKey)) {
+        throw new Error(`No agent session found for ${issueKey}.`);
+      }
+      if (archived && hasActiveTask(issueKey)) {
+        throw new Error('Wait for this session to finish before archiving it.');
+      }
+      return sessionManager.setAgentSessionArchived(issueKey, archived);
+    }
+  );
+
   ipcMain.handle('ai:deleteSession', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
     if (!sessionManager.getAgentSession(issueKey)) {
       throw new Error(`No agent session found for ${issueKey}.`);

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import type { AgentSessionRecord, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
-import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
+import { agentStateBadgeClass, isTerminalAgentState } from './aiSessionState';
 import { SessionChanges } from './SessionChanges';
 import { SessionHandoverBrief, SessionPurposeBlock, SessionRuntimeHistory } from './SessionHandover';
 import { SessionTasks } from './SessionTasks';
 import { SessionActivity } from './SessionActivity';
-import { failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, reasoningSnippet, sessionMode } from './sessionNav';
+import { failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, reasoningSnippet, sessionMode, sessionTitle } from './sessionNav';
+import { agentStateLaneClass, agentStateLabel } from './aiSessionState';
 
 /**
  * Sessions runtime panel — the shell's right pane for the `sessions` route.
@@ -36,19 +37,36 @@ import { failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens
 
 export interface SessionInspectorProps {
   session?: AgentSessionRecord;
+  /**
+   * Every known session for the Sessions browser tab — the same list the App
+   * keeps live, so archived sessions stay reachable even though they have
+   * left the sidebar tree and focus tabs.
+   */
+  sessions?: AgentSessionRecord[];
+  /** Opens a session from the browser tab. */
+  onSelectSession?: (issueKey: string) => void;
+  /** Archives or restores a session from the browser tab. */
+  onArchiveSession?: (issueKey: string, archived: boolean) => Promise<void>;
   /** Open this session's durable workflow run in the detailed monitor. */
   onOpenWorkflowRun?: (runId: string) => void;
 }
 
-type InspectorTab = 'summary' | 'activity' | 'changes';
+type InspectorTab = 'summary' | 'activity' | 'changes' | 'sessions';
 
 const TABS: Array<{ id: InspectorTab; label: string }> = [
   { id: 'summary', label: 'Summary' },
   { id: 'activity', label: 'Activity' },
-  { id: 'changes', label: 'Changes' }
+  { id: 'changes', label: 'Changes' },
+  { id: 'sessions', label: 'Sessions' }
 ];
 
-export function SessionInspector({ session, onOpenWorkflowRun }: SessionInspectorProps) {
+export function SessionInspector({
+  session,
+  sessions = [],
+  onSelectSession,
+  onArchiveSession,
+  onOpenWorkflowRun
+}: SessionInspectorProps) {
   const { confirm } = useDialogs();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -59,6 +77,17 @@ export function SessionInspector({ session, onOpenWorkflowRun }: SessionInspecto
   // you on another session's Activity with no idea why you are looking at it.
   const sessionId = session?.sessionId;
   useEffect(() => setTab('summary'), [sessionId]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<{ tab: InspectorTab }>;
+      if (custom.detail?.tab) {
+        setTab(custom.detail.tab);
+      }
+    };
+    window.addEventListener('praxis:session-tab', handler);
+    return () => window.removeEventListener('praxis:session-tab', handler);
+  }, []);
 
   const workflowRunId = session?.workflowRunId;
   useEffect(() => {
@@ -82,6 +111,20 @@ export function SessionInspector({ session, onOpenWorkflowRun }: SessionInspecto
   }, [workflowRunId]);
 
   if (!session) {
+    // With sessions in the workspace but none selected (e.g. every one of
+    // them archived), the browser is the one surface that can reopen one —
+    // it must stay reachable rather than collapsing to a dead empty state.
+    if (sessions.length > 0) {
+      return (
+        <section className="inspector inspector--tabbed session-inspector" aria-label="Sessions" data-testid="session-inspector">
+          <SessionBrowser
+            sessions={sessions}
+            onSelectSession={onSelectSession}
+            onArchiveSession={onArchiveSession}
+          />
+        </section>
+      );
+    }
     return (
       <div className="empty-state" data-testid="session-inspector-empty">
         <Icon name="robot" size={26} />
@@ -99,6 +142,14 @@ export function SessionInspector({ session, onOpenWorkflowRun }: SessionInspecto
   const activity = liveActivity(session);
   const reasoning = reasoningSnippet(session);
   const failedTools = failedToolCount(session.events);
+  const [copiedReasoning, setCopiedReasoning] = useState(false);
+
+  const copyReasoning = () => {
+    if (!reasoning) return;
+    void navigator.clipboard.writeText(reasoning);
+    setCopiedReasoning(true);
+    setTimeout(() => setCopiedReasoning(false), 2000);
+  };
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -165,6 +216,38 @@ export function SessionInspector({ session, onOpenWorkflowRun }: SessionInspecto
       <div className="inspector-body" role="tabpanel" data-testid={`session-panel-${tab}`}>
         {tab === 'summary' && (
           <>
+            {/* Live operations at top so active work and thoughts are immediately visible */}
+            {activity && (
+              <div className="session-activity-status" data-testid="session-live-activity">
+                <span className="session-activity-dot" aria-hidden="true" />
+                <span>{activity}</span>
+              </div>
+            )}
+
+            {reasoning && (
+              <div className="agent-runtime-block session-reasoning" data-testid="session-reasoning">
+                <div className="session-reasoning-header">
+                  <span className="rail-sub">Reasoning</span>
+                  <button
+                    type="button"
+                    className="btn btn-sm session-reasoning-copy"
+                    data-testid="session-reasoning-copy"
+                    onClick={copyReasoning}
+                    title="Copy thought process"
+                  >
+                    <Icon name={copiedReasoning ? 'check' : 'copy'} size={12} />
+                    <span>{copiedReasoning ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                <div className="session-reasoning-scroll">
+                  <pre className="session-summary-text session-reasoning-text session-reasoning-body">{reasoning}</pre>
+                </div>
+              </div>
+            )}
+
+            {/* What the agent says it's doing, live */}
+            <SessionTasks session={session} />
+
             {(session.workflowRunId || session.taskDefinition.workflow) && (
               <div className="agent-runtime-block session-workflow-context" data-testid="session-workflow-context">
                 <span className="rail-sub">Governed workflow</span>
@@ -197,26 +280,6 @@ export function SessionInspector({ session, onOpenWorkflowRun }: SessionInspecto
             <SessionPurposeBlock session={session} />
             <SessionHandoverBrief session={session} />
             <SessionRuntimeHistory session={session} />
-            {/* What the agent says it's doing, live — stays put here while the
-                transcript in the centre pane keeps scrolling past it. */}
-            <SessionTasks session={session} />
-
-            {/* Same "don't scroll away" reasoning as the task list above: the
-                console shows its own copy of the activity line, but that one
-                sits at the bottom of the scrolling transcript. */}
-            {activity && (
-              <div className="session-activity-status" data-testid="session-live-activity">
-                <span className="session-activity-dot" aria-hidden="true" />
-                <span>{activity}</span>
-              </div>
-            )}
-
-            {reasoning && (
-              <div className="agent-runtime-block session-reasoning" data-testid="session-reasoning">
-                <span className="rail-sub">Reasoning</span>
-                <p className="session-summary-text session-reasoning-text">{reasoning}</p>
-              </div>
-            )}
 
             {/* Everything on this tab is live state, so a finished session with
                 no recorded plan has genuinely nothing to show. Saying so beats
@@ -240,6 +303,15 @@ export function SessionInspector({ session, onOpenWorkflowRun }: SessionInspecto
             Renders its own empty state when the folder is not a repository or
             is clean. */}
         {tab === 'changes' && <SessionChanges session={session} />}
+
+        {tab === 'sessions' && (
+          <SessionBrowser
+            sessions={sessions}
+            activeKey={session?.issueKey}
+            onSelectSession={onSelectSession}
+            onArchiveSession={onArchiveSession}
+          />
+        )}
       </div>
 
       <div className="inspector-actions">
@@ -337,6 +409,170 @@ function WorkflowExecutionSummary({
           onClick={() => onOpenRun(run.runId)}
         >
           Open full run
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The Sessions tab of the session inspector: every session in the workspace,
+ * split into active and archived groups. This is the management surface that
+ * keeps archived sessions reachable once they leave the sidebar tree and
+ * focus tabs — archive from a row here (or the sidebar), restore from here.
+ * Rows deliberately mirror the sidebar tree's compact vocabulary (robot mark,
+ * key, title, state dot, per-row actions) so the two read as one list.
+ */
+function SessionBrowser({
+  sessions,
+  activeKey,
+  onSelectSession,
+  onArchiveSession
+}: {
+  sessions: AgentSessionRecord[];
+  activeKey?: string;
+  onSelectSession?: (issueKey: string) => void;
+  onArchiveSession?: (issueKey: string, archived: boolean) => Promise<void>;
+}) {
+  const [busyKey, setBusyKey] = useState<string>();
+  const [error, setError] = useState<string>();
+  // Archived rows start collapsed: archiving exists to get finished work out
+  // of the way, so the default view answers "what is live?" first.
+  const [archivedCollapsed, setArchivedCollapsed] = useState(true);
+
+  const activeSessions = sessions.filter(session => !session.archived);
+  const archivedSessions = sessions.filter(session => session.archived);
+
+  const archive = async (session: AgentSessionRecord, archived: boolean) => {
+    if (!onArchiveSession) return;
+    setBusyKey(session.issueKey);
+    setError(undefined);
+    try {
+      await onArchiveSession(session.issueKey, archived);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusyKey(undefined);
+    }
+  };
+
+  return (
+    <div className="session-browser" data-testid="session-browser">
+      {error && <p className="hint is-danger" data-testid="session-browser-error">{error}</p>}
+      <div className="session-browser-group" data-testid="session-browser-active">
+        <div className="session-browser-heading">
+          <span>Active</span>
+          <span className="session-browser-count">{activeSessions.length}</span>
+        </div>
+        {activeSessions.length === 0 && (
+          <span className="placeholder-text" data-testid="session-browser-active-empty">No active sessions</span>
+        )}
+        {activeSessions.map(session => (
+          <SessionBrowserRow
+            key={session.issueKey}
+            session={session}
+            active={session.issueKey === activeKey}
+            busy={busyKey === session.issueKey}
+            onSelect={onSelectSession}
+            onArchive={onArchiveSession ? () => void archive(session, true) : undefined}
+          />
+        ))}
+      </div>
+      <div className="session-browser-group" data-testid="session-browser-archived">
+        <button
+          type="button"
+          className="session-browser-heading session-browser-heading-toggle"
+          aria-expanded={!archivedCollapsed}
+          data-testid="session-browser-archived-toggle"
+          onClick={() => setArchivedCollapsed(collapsed => !collapsed)}
+        >
+          <span className="tree-section-icon">
+            <Icon name={archivedCollapsed ? 'chevron-right' : 'chevron-down'} size={12} />
+          </span>
+          <span>Archived</span>
+          <span className="session-browser-count">{archivedSessions.length}</span>
+        </button>
+        {!archivedCollapsed && archivedSessions.length === 0 && (
+          <span className="placeholder-text" data-testid="session-browser-archived-empty">
+            Archived sessions are kept here — archive a session from its row to tidy the sidebar.
+          </span>
+        )}
+        {!archivedCollapsed && archivedSessions.map(session => (
+          <SessionBrowserRow
+            key={session.issueKey}
+            session={session}
+            active={session.issueKey === activeKey}
+            busy={busyKey === session.issueKey}
+            onSelect={onSelectSession}
+            onArchive={onArchiveSession ? () => void archive(session, false) : undefined}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** One session row in the browser: select it, or archive/restore it. */
+function SessionBrowserRow({
+  session,
+  active,
+  busy,
+  onSelect,
+  onArchive
+}: {
+  session: AgentSessionRecord;
+  active: boolean;
+  busy: boolean;
+  onSelect?: (issueKey: string) => void;
+  onArchive?: () => void;
+}) {
+  const title = sessionTitle(session);
+  return (
+    <div
+      className={`session-browser-row${active ? ' active' : ''}${session.archived ? ' is-archived' : ''}`}
+      data-testid="session-browser-row"
+      role="button"
+      tabIndex={0}
+      title={title}
+      onClick={() => onSelect?.(session.issueKey)}
+      onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect?.(session.issueKey);
+        }
+      }}
+    >
+      <span className="tree-icon">
+        <Icon name="robot" size={14} />
+      </span>
+      <span className="session-browser-main">
+        <span className="session-browser-title">{title}</span>
+        <span className="session-browser-meta">
+          {session.issueKey} · {agentStateLabel(session.state)}
+        </span>
+      </span>
+      {!session.archived && (
+        <span className={agentStateLaneClass(session.state)} title={agentStateLabel(session.state)}>
+          ●
+        </span>
+      )}
+      {session.archived && (
+        <span className="tree-badge">Archived</span>
+      )}
+      {onArchive && (
+        <button
+          type="button"
+          className="icon-btn icon-btn-sm"
+          aria-label={`${session.archived ? 'Restore' : 'Archive'} session ${title}`}
+          title={session.archived ? 'Restore this session' : 'Archive this session'}
+          data-testid={session.archived ? 'session-restore-btn' : 'session-archive-btn'}
+          disabled={busy}
+          onClick={event => {
+            event.stopPropagation();
+            onArchive();
+          }}
+        >
+          <Icon name={session.archived ? 'refresh' : 'archive'} size={12} />
         </button>
       )}
     </div>

@@ -14,7 +14,7 @@ import {
 } from './agentTypes';
 import { classifyLocalTool, summariseToolArgs } from './toolEventClassify';
 import { listCatalogModels } from './providers/modelCatalog';
-import { getKnownContextLength } from './providers/modelPricing';
+import { estimateTurnCost, getKnownContextLength } from './providers/modelPricing';
 import type { AiSessionManager } from './aiSessionManager';
 import {
   compactHistoryForReplay,
@@ -22,7 +22,8 @@ import {
   resolveGatewayUrlFromEnv,
   toWireModelId,
   type GatewayOptions,
-  type GatewayToolDefinition
+  type GatewayToolDefinition,
+  type TokenUsage
 } from './gateway';
 import { PROVIDER_DESCRIPTORS, resolveProviderAdapter } from './providers/registry';
 import { localToolDefinitionsForMode, LocalToolExecutor, type PermissionDecision } from './tools';
@@ -44,6 +45,10 @@ interface ActiveTask {
   };
   messageBuffer: string;
   reasoningBuffer?: string;
+  turnStartTime: number;
+  turnTools: string[];
+  turnUsage?: TokenUsage;
+  promptChars?: number;
   loopPromise?: Promise<void>;
   ending?: boolean;
   timeoutHandle?: ReturnType<typeof setTimeout>;
@@ -314,6 +319,13 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
         );
         break;
       case 'usage':
+        task.turnUsage = {
+          inputTokens: (task.turnUsage?.inputTokens ?? 0) + (event.usage.inputTokens ?? 0),
+          outputTokens: (task.turnUsage?.outputTokens ?? 0) + (event.usage.outputTokens ?? 0),
+          totalTokens: (task.turnUsage?.totalTokens ?? 0) + (event.usage.totalTokens ?? 0),
+          reasoningTokens: (task.turnUsage?.reasoningTokens ?? 0) + (event.usage.reasoningTokens ?? 0),
+          cachedInputTokens: (task.turnUsage?.cachedInputTokens ?? 0) + (event.usage.cachedInputTokens ?? 0)
+        };
         this.sessionManager.addAgentTokenUsage(issueKey, event.usage);
         break;
       case 'history_trimmed':
@@ -334,8 +346,39 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
           task.messageBuffer.length > 200
             ? `${task.messageBuffer.slice(0, 200)}…`
             : task.messageBuffer || 'Assistant produced an empty message';
-        this.appendEvent(issueKey, evt('message', preview, task.messageBuffer || undefined));
+        const reasoning = task.reasoningBuffer?.trim() || undefined;
+
+        // Compute turn telemetry: duration, token usage, cost, model, tools
+        const durationMs = Math.max(0, Date.now() - task.turnStartTime);
         const record = this.sessionManager.getAgentSession(issueKey);
+        const modelId = record?.model;
+
+        // If provider did not report usage on wire (e.g. Z.ai PaaS endpoint):
+        let tokenUsage = task.turnUsage;
+        if (!tokenUsage) {
+          const estimatedInput = task.promptChars ? Math.ceil(task.promptChars / 3.5) : undefined;
+          const estimatedOutput = task.messageBuffer ? Math.ceil(task.messageBuffer.length / 3.5) : undefined;
+          const totalTokens = (estimatedInput ?? 0) + (estimatedOutput ?? 0);
+          tokenUsage = {
+            inputTokens: estimatedInput,
+            outputTokens: estimatedOutput,
+            totalTokens: totalTokens > 0 ? totalTokens : undefined
+          };
+          this.sessionManager.addAgentTokenUsage(issueKey, tokenUsage);
+        }
+
+        const cost = estimateTurnCost(record?.provider, modelId, tokenUsage ?? {});
+        const toolNames = task.turnTools.length > 0 ? [...task.turnTools] : undefined;
+
+        this.appendEvent(issueKey, {
+          ...evt('message', preview, task.messageBuffer || undefined),
+          ...(reasoning ? { reasoning } : {}),
+          durationMs,
+          tokenUsage,
+          cost,
+          modelId,
+          toolNames
+        });
         if (record?.state === 'planning' && task.messageBuffer) {
           this.sessionManager.setAgentPlan(issueKey, task.messageBuffer);
           this.sessionManager.updateAgentState(issueKey, 'executing');
@@ -343,6 +386,9 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
         break;
       }
       case 'tool_start':
+        if (!task.turnTools.includes(event.name)) {
+          task.turnTools.push(event.name);
+        }
         this.appendEvent(
           issueKey,
           evt('tool_start', `Running tool: ${event.name}`, JSON.stringify(event.arguments, null, 2), {
@@ -418,6 +464,9 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
           : toolExecutor.execute(name, args)
     };
 
+    const knownContext = getKnownContextLength(options.model, options.provider) ?? 128_000;
+    const dynamicBudget = Math.floor(knownContext * 3.5 * 0.8);
+
     const result = await runAgentLoop({
       adapter: resolveProviderAdapter(options.provider),
       gateway: options.gateway,
@@ -428,6 +477,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       history: options.history,
       userPrompt: options.userPrompt,
       userImages: options.userImages,
+      historyBudgetChars: dynamicBudget,
       maxSteps: options.maxSteps,
       timeoutMs: options.timeoutMs,
       signal: task.abortController.signal,
@@ -512,6 +562,9 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       allowPermissionsForTask: false,
       messageBuffer: '',
       reasoningBuffer: '',
+      turnStartTime: Date.now(),
+      turnTools: [],
+      promptChars: systemPrompt.length + userPrompt.length,
       maxSteps
     };
     this.activeTasks.set(issue.key, task);
@@ -613,6 +666,9 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       allowPermissionsForTask: false,
       messageBuffer: followUpMessage?.trim() ? '' : (record.responseText ?? ''),
       reasoningBuffer: '',
+      turnStartTime: Date.now(),
+      turnTools: [],
+      promptChars: systemPrompt.length + (followUpMessage?.length ?? 0),
       maxSteps
     };
     this.activeTasks.set(issueKey, task);
@@ -625,7 +681,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     // turn before publishing the user's follow-up, otherwise the renderer can
     // mistake the previous answer for a new response below that follow-up.
     if (hasFollowUp) {
-      this.sessionManager.updateAgentOutput(issueKey, { responseText: '' });
+      this.sessionManager.updateAgentOutput(issueKey, { responseText: '', reasoningText: '' });
     }
     this.appendEvent(
       issueKey,

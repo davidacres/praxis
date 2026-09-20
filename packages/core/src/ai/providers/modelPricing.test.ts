@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateCostUsd, getKnownContextLength, getModelPricing } from './modelPricing';
+import { estimateCostUsd, estimateTurnCost, getKnownContextLength, getModelPricing } from './modelPricing';
 
 test('a known Z.ai model prices input and output tokens independently', () => {
   const cost = estimateCostUsd('z-ai', 'glm-5.3', { inputTokens: 500_000, outputTokens: 250_000 });
@@ -23,8 +23,13 @@ test('an unknown model for a priced provider returns undefined, not zero', () =>
   assert.equal(estimateCostUsd('z-ai', 'glm-99-nonexistent', { inputTokens: 1000 }), undefined);
 });
 
-test('a provider with no maintained price table returns undefined', () => {
+test('a provider with no maintained price table in estimateCostUsd returns undefined', () => {
   assert.equal(estimateCostUsd('openai', 'gpt-4o-mini', { inputTokens: 1000, outputTokens: 1000 }), undefined);
+});
+
+test('estimateTurnCost prices OpenAI, Anthropic, and other supported providers', () => {
+  const cost = estimateTurnCost('openai', 'gpt-4o-mini', { inputTokens: 1_000_000, outputTokens: 1_000_000 });
+  assert.ok(cost && Math.abs(cost.amount - 0.75) < 1e-9);
 });
 
 test('a missing provider or model returns undefined', () => {

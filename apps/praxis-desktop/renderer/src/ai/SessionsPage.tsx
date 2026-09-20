@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEvent, DragEvent, MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type {
@@ -30,6 +30,7 @@ import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { basename, contextPressure, formatCost, formatContextLength, formatErrorMessage, formatModelCost, getKnownContextLength, getModelPricing, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
+import { LiveTurnActivityIndicator, formatElapsedDuration } from './LiveTurnActivityIndicator';
 import {
   MAX_ATTACHED_IMAGES,
   collectClipboardImages,
@@ -199,6 +200,28 @@ function parseTerminalContext(detail: string | undefined) {
     output: decodeContextText(match[3]),
     message: match[4]
   } : undefined;
+}
+
+function formatMessageTime(isoString?: string): string {
+  if (!isoString) return '';
+  try {
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+function formatFullDateTime(isoString?: string): string {
+  if (!isoString) return '';
+  try {
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'medium' });
+  } catch {
+    return '';
+  }
 }
 
 /** The everyday workflow control for an existing chat. */
@@ -567,6 +590,7 @@ export function SessionsPage({
     previousResponseText: string;
     suppressPreviousResponse: boolean;
     images?: WireImageAttachment[];
+    submittedAt?: number;
   }>();
   const [abortingSession, setAbortingSession] = useState(false);
   /** Key is `${eventTimestamp}|${path}` — the specific edit being undone. */
@@ -606,6 +630,17 @@ export function SessionsPage({
   const browserDismissed = useRef(initialBrowserOpen === false);
   const { settings } = useSettings();
   const eventsRef = useRef<HTMLDivElement>(null);
+  const [copiedMessageKey, setCopiedMessageKey] = useState<string | undefined>();
+
+  const copyMessageText = (key: string, text: string) => {
+    if (!text) return;
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopiedMessageKey(key);
+      setTimeout(() => {
+        setCopiedMessageKey(prev => prev === key ? undefined : prev);
+      }, 2000);
+    }).catch(() => undefined);
+  };
 
   useEffect(() => {
     setBrowserOpen(initialBrowserOpen ?? false);
@@ -720,6 +755,30 @@ export function SessionsPage({
     pending.message === activeSubmittedTurn.message
   ));
   const submittedTurnAnswered = submittedTurnEvents.some(event => event.type === 'message');
+  const isTurnActive = Boolean(
+    selected && (
+      (!isTerminalAgentState(selected.state) && selected.state !== 'awaiting_approval' && selected.state !== 'awaiting_input')
+      || sendingFollowUp
+      || (activeSubmittedTurn && !submittedTurnAnswered)
+    )
+  );
+  const activeTurnStartedAt = useMemo(() => {
+    if (activeSubmittedTurn?.submittedAt) {
+      return activeSubmittedTurn.submittedAt;
+    }
+    if (selected) {
+      for (let i = selected.events.length - 1; i >= 0; i--) {
+        const ev = selected.events[i];
+        if (ev.type === 'user_input_completed') {
+          const t = Date.parse(ev.timestamp);
+          if (!Number.isNaN(t)) return t;
+        }
+      }
+      const started = Date.parse(selected.startedAt);
+      if (!Number.isNaN(started)) return started;
+    }
+    return undefined;
+  }, [activeSubmittedTurn?.submittedAt, selected?.events, selected?.startedAt]);
   const optimisticFollowUp = activeSubmittedTurn && !submittedTurnRecorded && !submittedTurnQueued
     ? activeSubmittedTurn
     : undefined;
@@ -753,13 +812,6 @@ export function SessionsPage({
         && !submittedTurnAnswered
         && selected?.responseText === activeSubmittedTurn.previousResponseText
       )
-  );
-
-  const isReasoningActive = Boolean(
-    selected
-      && !isTerminalAgentState(selected.state)
-      && !visibleResponseText
-      && selected.reasoningText?.trim()
   );
 
   const selectedSessionId = selected?.sessionId;
@@ -1008,7 +1060,8 @@ export function SessionsPage({
         eventCount: selected.events.length,
         previousResponseText: selected.responseText ?? '',
         suppressPreviousResponse: false,
-        images: followUpImages.length ? [...followUpImages] : undefined
+        images: followUpImages.length ? [...followUpImages] : undefined,
+        submittedAt: Date.now()
       });
       setFollowUp('');
       const stagedImages = followUpImages;
@@ -1048,7 +1101,8 @@ export function SessionsPage({
         eventCount: selected.events.length,
         previousResponseText: selected.responseText ?? '',
         suppressPreviousResponse: true,
-        images: followUpImages.length ? [...followUpImages] : undefined
+        images: followUpImages.length ? [...followUpImages] : undefined,
+        submittedAt: Date.now()
       });
       setFollowUp('');
       const stagedImages = followUpImages;
@@ -1394,32 +1448,95 @@ export function SessionsPage({
 
             <div className="session-chat-scroll" ref={eventsRef} data-testid="session-chat-thread">
               <div className="session-chat-message is-user">
-                <div className="session-chat-author">You</div>
+                <div className="session-chat-header">
+                  <div className="session-chat-author">You</div>
+                  <div className="session-chat-header-actions">
+                    {selected.startedAt && (
+                      <span
+                        className="session-chat-timestamp"
+                        title={formatFullDateTime(selected.startedAt)}
+                      >
+                        {formatMessageTime(selected.startedAt)}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn-sm session-chat-copy-btn"
+                      aria-label="Copy message text"
+                      title={copiedMessageKey === 'user-goal' ? 'Copied!' : 'Copy message text'}
+                      onClick={() => copyMessageText('user-goal', selected.taskDefinition.goal)}
+                    >
+                      <Icon name={copiedMessageKey === 'user-goal' ? 'check' : 'copy'} size={12} />
+                    </button>
+                  </div>
+                </div>
                 <div>{selected.taskDefinition.goal}</div>
               </div>
               {conversationEvents.map((event, index) => {
                 const terminalContext = event.type === 'user_input_completed' ? parseTerminalContext(event.detail) : undefined;
+                const messageKey = `event-${event.timestamp}-${index}`;
+                const rawText = event.type === 'message'
+                  ? visibleMessageText(event.detail ?? event.summary ?? '')
+                  : stripGadgetFences(terminalContext?.message ?? event.detail ?? event.summary ?? '');
+                const hasTelemetry = event.type === 'message' && (
+                  event.durationMs !== undefined ||
+                  event.tokenUsage !== undefined ||
+                  event.cost !== undefined ||
+                  event.modelId !== undefined ||
+                  (event.toolNames && event.toolNames.length > 0)
+                );
+
                 return (
                   <div
                     className={`session-chat-message ${event.type === 'message' ? `is-assistant session-chat-participant-${event.speaker?.participantId ?? 'legacy'}${event.speaker ? ` session-chat-provider-${event.speaker.provider}` : ''}` : 'is-user'}`}
                     key={`${event.timestamp}-${index}`}
                     data-testid={event.type === 'message' ? 'session-chat-assistant' : 'session-chat-user'}
                   >
-                    <div className="session-chat-author">{event.type === 'message'
-                      ? event.speaker
-                        ? <><Icon name={providerIconName(event.speaker.provider)} size={13} />{`${PROVIDER_LABELS[event.speaker.provider]}${event.speaker.model ? ` · ${event.speaker.model}` : ''}`}</>
-                        : 'AI agent'
-                      : 'You'}</div>
+                    <div className="session-chat-header">
+                      <div className="session-chat-author">{event.type === 'message'
+                        ? event.speaker
+                          ? <><Icon name={providerIconName(event.speaker.provider)} size={13} />{`${PROVIDER_LABELS[event.speaker.provider]}${event.speaker.model ? ` · ${event.speaker.model}` : ''}`}</>
+                          : 'AI agent'
+                        : 'You'}</div>
+                      <div className="session-chat-header-actions">
+                        {event.timestamp && (
+                          <span
+                            className="session-chat-timestamp"
+                            title={formatFullDateTime(event.timestamp)}
+                          >
+                            {formatMessageTime(event.timestamp)}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn-sm session-chat-copy-btn"
+                          aria-label="Copy message text"
+                          title={copiedMessageKey === messageKey ? 'Copied!' : 'Copy message text'}
+                          onClick={() => copyMessageText(messageKey, rawText)}
+                        >
+                          <Icon name={copiedMessageKey === messageKey ? 'check' : 'copy'} size={12} />
+                        </button>
+                      </div>
+                    </div>
                     {terminalContext && (
                       <details className="session-chat-terminal-context">
                         <summary><Icon name="terminal" size={13} /> Recent terminal output <span>{terminalContext.cwd}</span></summary>
                         <pre>{terminalContext.output}</pre>
                       </details>
                     )}
+                    {event.type === 'message' && event.reasoning && (
+                      <details className="session-chat-thought-disclosure" data-testid="session-thought-disclosure">
+                        <summary>
+                          <Icon name="sparkles" size={12} />
+                          <span>Thought process</span>
+                        </summary>
+                        <div className="session-chat-thought-content">
+                          <Markdown text={event.reasoning} testId="session-thought-markdown" imageSessionId={selected?.issueKey} />
+                        </div>
+                      </details>
+                    )}
                     <Markdown
-                      text={event.type === 'message'
-                        ? visibleMessageText(event.detail ?? event.summary ?? '')
-                        : stripGadgetFences(terminalContext?.message ?? event.detail ?? event.summary ?? '')}
+                      text={rawText}
                       testId="session-chat-markdown"
                       imageSessionId={selected?.issueKey}
                     />
@@ -1432,6 +1549,49 @@ export function SessionsPage({
                       results={gadgetResults}
                       onSubmit={(gadgetId, actionId, value) => void submitGadgetAction(gadgetId, actionId, value)}
                     />
+                    {hasTelemetry && (
+                      <div className="session-chat-telemetry-bar" data-testid="session-chat-telemetry">
+                        {event.durationMs !== undefined && (
+                          <span className="session-telemetry-chip" title={`Turn duration: ${(event.durationMs / 1000).toFixed(1)}s`}>
+                            <Icon name="zap" size={11} />
+                            <span>{formatElapsedDuration(event.durationMs)}</span>
+                          </span>
+                        )}
+                        {event.tokenUsage && (
+                          <span
+                            className="session-telemetry-chip"
+                            title={`Input: ${(event.tokenUsage.inputTokens ?? 0).toLocaleString()} tokens${event.tokenUsage.cachedInputTokens ? ` (${event.tokenUsage.cachedInputTokens.toLocaleString()} cached)` : ''} · Output: ${(event.tokenUsage.outputTokens ?? 0).toLocaleString()} tokens${event.tokenUsage.reasoningTokens ? ` (${event.tokenUsage.reasoningTokens.toLocaleString()} reasoning)` : ''}`}
+                          >
+                            <Icon name="sparkles" size={11} />
+                            <span>{(event.tokenUsage.totalTokens ?? ((event.tokenUsage.inputTokens ?? 0) + (event.tokenUsage.outputTokens ?? 0))).toLocaleString()} tok</span>
+                          </span>
+                        )}
+                        {event.cost && event.cost.amount > 0 && (
+                          <span className="session-telemetry-chip" title="Estimated turn cost">
+                            <span>{formatCost(event.cost) ?? `${event.cost.amount.toFixed(4)} ${event.cost.currency}`}</span>
+                          </span>
+                        )}
+                        {event.modelId && (
+                          <span className="session-telemetry-chip" title={`Model: ${event.modelId}`}>
+                            <Icon name="robot" size={11} />
+                            <span>{event.modelId}</span>
+                          </span>
+                        )}
+                        {event.toolNames && event.toolNames.length > 0 && (
+                          <button
+                            type="button"
+                            className="session-telemetry-chip is-clickable"
+                            title="View tool execution details in Activity tab"
+                            onClick={() => {
+                              window.dispatchEvent(new CustomEvent('praxis:session-tab', { detail: { tab: 'activity' } }));
+                            }}
+                          >
+                            <Icon name="tools" size={11} />
+                            <span>{event.toolNames.length} tool {event.toolNames.length === 1 ? 'call' : 'calls'}</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1441,7 +1601,12 @@ export function SessionsPage({
                   data-testid="session-chat-user"
                   data-pending="true"
                 >
-                  <div className="session-chat-author">You</div>
+                  <div className="session-chat-header">
+                    <div className="session-chat-author">You</div>
+                    <div className="session-chat-header-actions">
+                      <span className="session-chat-timestamp">Just now</span>
+                    </div>
+                  </div>
                   {optimisticTerminalContext && (
                     <details className="session-chat-terminal-context">
                       <summary><Icon name="terminal" size={13} /> Recent terminal output <span>{optimisticTerminalContext.cwd}</span></summary>
@@ -1458,24 +1623,24 @@ export function SessionsPage({
                     : null}
                 </div>
               )}
-              {isReasoningActive && selected?.reasoningText && (
-                <div className="session-chat-message is-assistant session-chat-participant-legacy is-reasoning" data-testid="session-reasoning">
-                  <div className="session-chat-author">
-                    <Icon name="sparkles" size={13} />
-                    {selected.model ? `${selected.model} · Thinking…` : 'Thinking…'}
-                  </div>
-                  <div className="session-reasoning-snippet">
-                    {selected.reasoningText.length > 300
-                      ? `…${selected.reasoningText.slice(-300)}`
-                      : selected.reasoningText}
-                  </div>
-                </div>
-              )}
               {shouldRenderResponseFallback && (
                 <div className="session-chat-message is-assistant session-chat-participant-legacy" data-testid="session-response">
-                  <div className="session-chat-author">{selected?.conversation?.state === 'running'
-                    ? (() => { const speaker = selected.conversation.participants.find(participant => participant.id === selected.conversation?.currentSpeakerId); return speaker ? <><Icon name={providerIconName(speaker.provider)} size={13} />{`${PROVIDER_LABELS[speaker.provider]}${speaker.model ? ` · ${speaker.model}` : ''}`}</> : 'AI agent'; })()
-                    : 'AI agent'}</div>
+                  <div className="session-chat-header">
+                    <div className="session-chat-author">{selected?.conversation?.state === 'running'
+                      ? (() => { const speaker = selected.conversation.participants.find(participant => participant.id === selected.conversation?.currentSpeakerId); return speaker ? <><Icon name={providerIconName(speaker.provider)} size={13} />{`${PROVIDER_LABELS[speaker.provider]}${speaker.model ? ` · ${speaker.model}` : ''}`}</> : 'AI agent'; })()
+                      : 'AI agent'}</div>
+                    <div className="session-chat-header-actions">
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn-sm session-chat-copy-btn"
+                        aria-label="Copy message text"
+                        title={copiedMessageKey === 'fallback-response' ? 'Copied!' : 'Copy message text'}
+                        onClick={() => copyMessageText('fallback-response', visibleResponseText)}
+                      >
+                        <Icon name={copiedMessageKey === 'fallback-response' ? 'check' : 'copy'} size={12} />
+                      </button>
+                    </div>
+                  </div>
                   <Markdown text={visibleResponseText} testId="session-chat-markdown" imageSessionId={selected?.issueKey} />
                 </div>
               )}
@@ -1490,27 +1655,14 @@ export function SessionsPage({
                   <Markdown text={stripGadgetFences(pending.message)} testId="session-chat-markdown" imageSessionId={selected?.issueKey} />
                 </div>
               ))}
-              {/* While the box is collapsed, this same readout moves into the
-                  composer controls (replacing the now-hidden commands/provider/
-                  model chips) instead of doubling up here — see `followUpCollapsed`
-                  above the composer. Still shown here for `conversationRunning`,
-                  where the box stays open (queuing a directed message) and there's
-                  no chip cluster being freed up to hold it instead. */}
-              {liveActivityText && !followUpCollapsed ? (
-                <div className="session-activity-status" data-testid="session-activity-status">
-                  {activityProvider ? (
-                    <Icon
-                      name={providerIconName(activityProvider)}
-                      size={13}
-                      className={`session-activity-icon session-activity-icon-${activityProvider}`}
-                    />
-                  ) : (
-                    <span className="session-activity-dot" aria-hidden="true" />
-                  )}
-                  <span>{liveActivityText}</span>
-                </div>
+              {isTurnActive ? (
+                <LiveTurnActivityIndicator
+                  startedAt={activeTurnStartedAt}
+                  statusText={visibleResponseText ? 'Generating response…' : (liveActivityText ?? 'Thinking…')}
+                  provider={activityProvider}
+                />
               ) : (
-                !liveActivityText && !visibleResponseText && conversationEvents.length === 0 && !isSelectedFailed && (
+                !visibleResponseText && conversationEvents.length === 0 && !isSelectedFailed && (
                   <span className="placeholder-text">Waiting for the agent to respond…</span>
                 )
               )}
@@ -1700,7 +1852,7 @@ export function SessionsPage({
                       requires a live task), so hiding it here would remove
                       the one window it's ever actionable in, not just declutter. */}
                   {followUpCollapsed && liveActivityText && (
-                    <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid="session-activity-status">
+                    <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid="session-composer-activity-chip">
                       {activityProvider ? (
                         <Icon
                           name={providerIconName(activityProvider)}

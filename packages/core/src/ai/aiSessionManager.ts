@@ -305,6 +305,26 @@ export class AiSessionManager {
     return record;
   }
 
+  /**
+   * Archive or restore a session. Organizational only: the record, its
+   * conversation, and every derived field are untouched, so unarchiving is
+   * lossless. The flag is stored as absent-but-false so older persisted
+   * records stay byte-identical to what they were before this field existed.
+   */
+  public setAgentSessionArchived(issueKey: string, archived: boolean): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      throw new Error(`No agent session found for ${issueKey}.`);
+    }
+    if (archived === Boolean(record.archived)) {
+      return record;
+    }
+    record.archived = archived || undefined;
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
   /** Update agent session state and optionally set completedAt and failure reason. */
   public updateAgentState(issueKey: string, state: AgentTaskState, reason?: string): void {
     const record = this.agentSessions.get(issueKey);
