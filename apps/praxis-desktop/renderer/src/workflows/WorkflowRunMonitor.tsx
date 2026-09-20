@@ -370,7 +370,15 @@ export function WorkflowRunMonitor({
                 aria-label="Run ticket"
                 list="wf-runstart-issue-options"
                 value={issueKeyDraft}
-                onChange={e => setIssueKeyDraft(e.target.value)}
+                onChange={e => {
+                  const val = e.target.value;
+                  setIssueKeyDraft(val);
+                  const key = extractIssueKey(val);
+                  const matched = issueOptions.find(option => option.key === key);
+                  if (matched && !taskTitle.trim()) {
+                    setTaskTitle(matched.summary);
+                  }
+                }}
                 placeholder="Write the outcome back as a comment"
                 data-testid="wf-runstart-issue"
               />

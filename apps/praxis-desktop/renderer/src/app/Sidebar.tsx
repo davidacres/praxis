@@ -107,6 +107,7 @@ export interface SidebarProps {
   /** Opens the project's deployment profiles (FX-BE-059 / FX-BE-060). */
   onSelectDeployments: (project: ProjectRecord) => void;
   onNewWorkflow: (project: ProjectRecord) => void;
+  onDeleteWorkflow?: (project: ProjectRecord, workflowId: string) => void;
   onDeleteBoard: (board: Board) => void;
   /**
    * Removes a board from a project's own `linkedBoards` — distinct from
@@ -183,6 +184,7 @@ export function Sidebar({
   onSelectRun,
   onSelectDeployments,
   onNewWorkflow,
+  onDeleteWorkflow,
   onDeleteBoard,
   onUnlinkBoard,
   onConfigureBoard,
@@ -470,12 +472,35 @@ export function Sidebar({
                         </div>
                         {!projectWorkflowsCollapsed && <>
                           {projectWorkflowList.map(workflow => (
-                            <button
+                            <div
                               key={workflow.id}
                               className={`tree-row project-workflow-row${activeFeature === 'workflows' && !activeWorkflowRuns && activeWorkflowId === workflow.id && selectedProjectId === project.id ? ' active' : ''}`}
-                              data-testid="project-workflow-nav-item"
-                              onClick={() => onSelectWorkflow(project, workflow.id)}
-                            ><span className="tree-icon"><Icon name="split-horizontal" size={14} /></span><span className="tree-label">{workflow.name}</span></button>
+                            >
+                              <button
+                                type="button"
+                                className="board-tree-main"
+                                data-testid="project-workflow-nav-item"
+                                onClick={() => onSelectWorkflow(project, workflow.id)}
+                              >
+                                <span className="tree-icon"><Icon name="split-horizontal" size={14} /></span>
+                                <span className="tree-label">{workflow.name}</span>
+                              </button>
+                              {onDeleteWorkflow && (
+                                <button
+                                  type="button"
+                                  className="board-tree-delete project-workflow-delete"
+                                  data-testid={`project-workflow-delete-${workflow.id}`}
+                                  aria-label={`Delete workflow ${workflow.name}`}
+                                  title="Delete this workflow"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    onDeleteWorkflow(project, workflow.id);
+                                  }}
+                                >
+                                  <Icon name="trash" size={12} />
+                                </button>
+                              )}
+                            </div>
                           ))}
                           {projectWorkflowList.length === 0 && (
                             <button className="tree-row project-workflow-empty" data-testid="project-workflow-empty" onClick={() => onNewWorkflow(project)}>

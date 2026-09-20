@@ -17,6 +17,7 @@ import type {
 import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
 import { WorkflowPicker } from '../ai/WorkflowPicker';
+import type { SessionWorkflowOption } from '../ai/NewSession';
 import {
   agentStateBadgeClass,
   agentStateLabel,
@@ -42,6 +43,8 @@ export type IssueAiView = 'review' | 'lpr';
 interface IssueDetailProps {
   issueKey: string;
   connectionId?: string;
+  projectId?: string;
+  workflowOptions?: SessionWorkflowOption[];
   expanded?: boolean;
   onToggleExpanded?: () => void;
   onClose: () => void;
@@ -70,11 +73,12 @@ interface StartAiSessionDialogProps {
   selectedModel: string;
   onModelChange: (model: string) => void;
   modelsLoading: boolean;
+  governedWorkflows?: SessionWorkflowOption[];
   workflows: AgentWorkflowReference[];
   assignedWorkflow?: AgentWorkflowReference;
   onClose: () => void;
   onViewExisting?: () => void;
-  onStart: (task: AgentTaskDefinition) => Promise<void>;
+  onStart: (task: AgentTaskDefinition, governedWorkflowId?: string) => Promise<void>;
 }
 
 function StartAiSessionDialog({
@@ -87,6 +91,7 @@ function StartAiSessionDialog({
   selectedModel,
   onModelChange,
   modelsLoading,
+  governedWorkflows = [],
   workflows,
   assignedWorkflow,
   onClose,
@@ -101,31 +106,42 @@ function StartAiSessionDialog({
   const [definitionOfDone, setDefinitionOfDone] = useState(
     previous?.definitionOfDone ?? 'All acceptance criteria met, code compiles, tests pass'
   );
+  const [governedWorkflowId, setGovernedWorkflowId] = useState(
+    existingSession?.workflowId ?? ''
+  );
   const initialWorkflow = previous?.workflow ?? assignedWorkflow;
-  const [workflowId, setWorkflowId] = useState(initialWorkflow?.id ?? '');
+  const [workflowPackId, setWorkflowPackId] = useState(initialWorkflow?.id ?? '');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | undefined>();
   const configuredProviders = providerStatuses.filter(status => status.configured);
   const selectedStatus = providerStatuses.find(status => status.provider === selectedProvider);
-  const workflowOptions = initialWorkflow && !workflows.some(workflow => workflow.id === initialWorkflow.id)
+  const workflowPackOptions = initialWorkflow && !workflows.some(workflow => workflow.id === initialWorkflow.id)
     ? [initialWorkflow, ...workflows]
     : workflows;
+  const selectedGovernedWorkflow = governedWorkflows.find(option => option.id === governedWorkflowId);
 
   const submit = async () => {
     if (!goal.trim() || !scope.trim() || !definitionOfDone.trim() || !selectedProvider) {
       return;
     }
+    if (selectedGovernedWorkflow && !selectedGovernedWorkflow.ready) {
+      setStartError(selectedGovernedWorkflow.blockers?.join(' ') || 'This workflow is not ready to run.');
+      return;
+    }
     setStarting(true);
     setStartError(undefined);
     try {
-      const workflow = workflowOptions.find(option => option.id === workflowId);
-      await onStart({
-        kind: 'general',
-        goal: goal.trim(),
-        scope: scope.trim(),
-        definitionOfDone: definitionOfDone.trim(),
-        ...(workflow ? { workflow } : {})
-      });
+      const workflowPack = workflowPackOptions.find(option => option.id === workflowPackId);
+      await onStart(
+        {
+          kind: 'general',
+          goal: goal.trim(),
+          scope: scope.trim(),
+          definitionOfDone: definitionOfDone.trim(),
+          ...(workflowPack ? { workflow: workflowPack } : {})
+        },
+        governedWorkflowId || undefined
+      );
     } catch (error) {
       setStartError(error instanceof Error ? error.message : String(error));
       setStarting(false);
@@ -225,21 +241,51 @@ function StartAiSessionDialog({
             </label>
           </div>
 
-          <label className="session-setup-field">
-            <span>Workflow pack</span>
-            <select
-              className="select"
-              data-testid="issue-session-workflow"
-              value={workflowId}
-              disabled={starting}
-              onChange={event => setWorkflowId(event.target.value)}
-            >
-              <option value="">No workflow pack</option>
-              {workflowOptions.map(workflow => (
-                <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
-              ))}
-            </select>
-          </label>
+          {governedWorkflows.length > 0 && (
+            <label className="session-setup-field">
+              <span>Governed workflow</span>
+              <select
+                className="select"
+                data-testid="issue-session-workflow"
+                value={governedWorkflowId}
+                disabled={starting}
+                onChange={event => setGovernedWorkflowId(event.target.value)}
+              >
+                <option value="">No governed workflow — ordinary session</option>
+                {governedWorkflows.map(workflow => (
+                  <option key={workflow.id} value={workflow.id}>
+                    {workflow.name} · v{workflow.version}{workflow.ready ? '' : ' — not ready'}
+                  </option>
+                ))}
+              </select>
+              {governedWorkflowId && (() => {
+                const selected = governedWorkflows.find(option => option.id === governedWorkflowId);
+                return selected && !selected.ready ? (
+                  <small className="form-hint form-hint-error">
+                    {selected.blockers?.join(' ') || 'This workflow is not ready to run.'}
+                  </small>
+                ) : selected?.description ? <small className="form-hint">{selected.description}</small> : null;
+              })()}
+            </label>
+          )}
+
+          {workflows.length > 0 && (
+            <label className="session-setup-field">
+              <span>Workflow pack</span>
+              <select
+                className="select"
+                data-testid="issue-session-workflow-pack"
+                value={workflowPackId}
+                disabled={starting}
+                onChange={event => setWorkflowPackId(event.target.value)}
+              >
+                <option value="">No workflow pack</option>
+                {workflowPackOptions.map(workflow => (
+                  <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {selectedProvider && (
             <p className="detail-ai-provider-hint">
@@ -261,7 +307,8 @@ function StartAiSessionDialog({
               !selectedStatus?.configured ||
               !goal.trim() ||
               !scope.trim() ||
-              !definitionOfDone.trim()
+              !definitionOfDone.trim() ||
+              (selectedGovernedWorkflow !== undefined && !selectedGovernedWorkflow.ready)
             }
             onClick={() => void submit()}
           >
@@ -483,6 +530,8 @@ function buildChangedIssuePatch(
 export function IssueDetail({
   issueKey,
   connectionId,
+  projectId,
+  workflowOptions,
   expanded = false,
   onToggleExpanded,
   onClose,
@@ -493,6 +542,80 @@ export function IssueDetail({
   onOpenAiSettings
 }: IssueDetailProps) {
   const { confirm } = useDialogs();
+  const [discoveredProjectId, setDiscoveredProjectId] = useState<string | undefined>();
+  const effectiveProjectId = projectId ?? discoveredProjectId;
+
+  useEffect(() => {
+    if (projectId) return;
+    if (connectionId?.startsWith('project:')) {
+      setDiscoveredProjectId(connectionId.slice('project:'.length));
+      return;
+    }
+    let cancelled = false;
+    window.praxis.connection.list().then(connections => {
+      if (cancelled) return;
+      if (connectionId) {
+        const foundId = connections.find(c => c.id === connectionId)?.settings?.projectId;
+        if (typeof foundId === 'string' && foundId.length > 0) {
+          setDiscoveredProjectId(foundId);
+          return;
+        }
+      }
+      return window.praxis.projects.list().then(projects => {
+        if (cancelled) return;
+        if (projects.length === 1) {
+          setDiscoveredProjectId(projects[0].id);
+        }
+      });
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [projectId, connectionId]);
+
+  const [loadedWorkflows, setLoadedWorkflows] = useState<SessionWorkflowOption[]>([]);
+  const effectiveWorkflows = (workflowOptions && workflowOptions.length > 0)
+    ? workflowOptions
+    : loadedWorkflows;
+
+  useEffect(() => {
+    if (!effectiveProjectId || (workflowOptions && workflowOptions.length > 0)) {
+      return;
+    }
+    let cancelled = false;
+    Promise.all([
+      window.praxis.workflows.listTemplates(effectiveProjectId).catch(() => []),
+      window.praxis.workflows.templateReadiness(effectiveProjectId).catch(() => [])
+    ]).then(([templates, readiness]) => {
+      if (cancelled) return;
+      const readinessById = new Map(readiness.map(item => [item.templateId, item]));
+      const seenIds = new Set<string>();
+      const availableTemplates = [
+        ...templates.filter(t => t.source === 'project'),
+        ...templates.filter(t => t.source !== 'project')
+      ].filter(t => {
+        if (seenIds.has(t.definition.id)) return false;
+        seenIds.add(t.definition.id);
+        return true;
+      });
+      const options: SessionWorkflowOption[] = availableTemplates.map(template => {
+        const status = readinessById.get(template.definition.id);
+        const blockers = status
+          ? Object.values(status.blockingByNode)
+          : ['Live workflow readiness could not be checked.'];
+        return {
+          id: template.definition.id,
+          name: template.definition.name,
+          ...(template.definition.description ? { description: template.definition.description } : {}),
+          version: template.definition.version,
+          ready: !!status?.structureOk && !!status?.agentsOk,
+          ...(blockers.length > 0 ? { blockers } : {})
+        };
+      });
+      setLoadedWorkflows(options);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveProjectId, workflowOptions]);
   const [issue, setIssue] = useState<IssueDetails | undefined>();
   const [commentBody, setCommentBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -893,14 +1016,33 @@ export function IssueDetail({
     setShowSessionSetup(true);
   };
 
-  const startAiSession = async (task: AgentTaskDefinition) => {
+  const startAiSession = async (task: AgentTaskDefinition, chosenWorkflowId?: string) => {
     const record = await window.praxis.ai.delegate({
       issueKey,
       connectionId,
+      ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}),
       task,
       provider: selectedProvider,
       model: selectedRuntimeModel || undefined
     });
+    if (chosenWorkflowId) {
+      if (!effectiveProjectId) {
+        await window.praxis.ai.deleteSession(record.issueKey);
+        throw new Error('A project is required to run a governed workflow.');
+      }
+      try {
+        await window.praxis.workflows.startRun(
+          effectiveProjectId,
+          chosenWorkflowId,
+          issue?.summary || task.goal,
+          { issueKey, connectionId },
+          { sessionKey: record.issueKey, sessionId: record.sessionId }
+        );
+      } catch (error) {
+        await window.praxis.ai.deleteSession(record.issueKey).catch(() => undefined);
+        throw error;
+      }
+    }
     setAgentSession(record);
     setShowSessionSetup(false);
     onOpenSession?.(record.issueKey);
@@ -1817,6 +1959,7 @@ export function IssueDetail({
                 selectedModel={selectedRuntimeModel}
                 onModelChange={setSelectedRuntimeModel}
                 modelsLoading={modelsLoading}
+                governedWorkflows={effectiveWorkflows}
                 workflows={availableWorkflows}
                 assignedWorkflow={workflowAssignment?.workflow}
                 onClose={() => setShowSessionSetup(false)}
