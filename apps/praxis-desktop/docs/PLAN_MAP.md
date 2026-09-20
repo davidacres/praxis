@@ -498,3 +498,21 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | TASK-359 | Task | Verify image attachment runtime paths and visual behavior | Complete | TASK-357, TASK-358 |
 | FX-BE-132 | Story | Native browser pane geometry at app zoom | Complete | FX-BE-096 |
 | TASK-360 | Task | Apply and verify zoom-aware native browser bounds | Complete | FX-BE-132 |
+
+## Chat turn telemetry, live AI activity, and reasoning UX
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| FX-BF-042 | Feature | Chat turn telemetry, live AI activity, and reasoning UX | Complete | FX-BF-015, FX-BF-035, FX-BF-041 |
+| FX-BE-133 | Story | Live AI activity telemetry and reasoning inspector streaming | Complete | FX-BF-015, FX-BF-035, FX-BF-041 |
+| TASK-361 | Task | Remove misplaced chat reasoning bubble and fix stream lifecycle | Complete | FX-BE-133 |
+| TASK-362 | Task | Implement live chat activity indicator with elapsed turn timer and active action telemetry | Complete | FX-BE-133 |
+| TASK-363 | Task | Fix Details pane reasoning display truncation, stream layout, and anti-bloat streamlining | Complete | FX-BE-133 |
+| FX-BE-134 | Story | Per-message turn metrics, duration, token usage, and cost attribution | Complete | FX-BE-133 |
+| TASK-364 | Task | Define turn duration and message-level token/cost telemetry contracts in core | Complete | FX-BE-134 |
+| TASK-365 | Task | Capture and thread turn duration, token usage, cost, model attribution, and dynamic context budget through session runtime | Complete | FX-BE-134 |
+| TASK-366 | Task | Render message timestamp, duration, token/cost chips, and model attribution in chat UI | Complete | FX-BE-134 |
+| FX-BE-135 | Story | Chat usability enhancements, tool execution summary, and message actions | Complete | FX-BE-134 |
+| TASK-367 | Task | Add tool execution summary chip to assistant messages with activity tab navigation | Complete | FX-BE-135 |
+| TASK-368 | Task | Add one-click copy message button with clipboard feedback | Complete | FX-BE-135 |
+| TASK-369 | Task | Verification, theming compatibility across surface packs, and accessibility/keyboard focus testing | Complete | FX-BE-135 |

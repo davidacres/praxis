@@ -515,18 +515,26 @@ export function App() {
     if (startupResolved && !gettingStarted) { try { localStorage.setItem(ONBOARDED_KEY, '1'); } catch { /* private mode */ } }
   }, [startupResolved, gettingStarted]);
 
+  // Active (non-archived) sessions — the sidebar tree, focus tabs, and
+  // implicit selection all speak this list; archived sessions stay reachable
+  // only through the inspector's Sessions browser tab.
+  const activeSessions = agentSessions.filter(session => !session.archived);
+
   // The sessions view selects its newest session when no explicit selection was
   // routed to it. Make that implicit selection durable too, so a restart opens
   // the same conversation rather than merely the sessions list.
   useEffect(() => {
-    if (!startupResolved || route.feature !== 'sessions' || route.sessionKey || !agentSessions[0]) return;
+    if (!startupResolved || route.feature !== 'sessions' || route.sessionKey || !activeSessions[0]) return;
     setNav(current => {
       const currentRoute = current.entries[current.index];
       if (currentRoute.feature !== 'sessions' || currentRoute.sessionKey) return current;
       const entries = [...current.entries];
-      entries[current.index] = { ...currentRoute, sessionKey: agentSessions[0].issueKey };
+      entries[current.index] = { ...currentRoute, sessionKey: activeSessions[0].issueKey };
       return { ...current, entries };
     });
+    // `agentSessions` drives the dep list (activeSessions is a fresh array per
+    // render); the body reads the filtered [0] so an archived newest session
+    // is skipped rather than silently re-opened.
   }, [agentSessions, route.feature, route.sessionKey, startupResolved]);
 
   useEffect(() => {
@@ -1451,7 +1459,7 @@ export function App() {
           <div className="sessions-focus-new-layout">
             <div className="session-console-header session-focus-header session-focus-new-header">
               <SessionFocusTabs
-                sessions={agentSessions}
+                sessions={activeSessions}
                 newSessionActive
                 onSelectSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
                 onNewSession={() => undefined}
@@ -1563,7 +1571,7 @@ export function App() {
       // No view-scroll wrapper: the sessions list and console own their scrolling.
       return (
         <SessionsPage
-          sessions={agentSessions}
+          sessions={activeSessions}
           selectedKey={route.sessionKey}
           workflowOptions={selectedAgentSession
             ? sessionWorkflowsByProject[
@@ -1960,13 +1968,19 @@ export function App() {
                   mode={mode}
                   onModeChange={setMode}
                   activeFeature={route.feature}
-                  sessions={agentSessions}
+                  sessions={activeSessions}
                   {...(route.feature === 'sessions' && route.sessionKey
                     ? { activeSessionKey: route.sessionKey }
                     : {})}
                   onSelectSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
                   onRenameSession={async (issueKey, title) => {
                     await window.praxis.ai.renameSession(issueKey, title);
+                  }}
+                  onArchiveSession={async (issueKey, archived) => {
+                    await window.praxis.ai.archiveSession(issueKey, archived);
+                    if (archived && route.feature === 'sessions' && route.sessionKey === issueKey) {
+                      navigate({ feature: 'sessions' });
+                    }
                   }}
                   onDeleteSession={async issueKey => {
                     await window.praxis.ai.deleteSession(issueKey);
@@ -2093,6 +2107,17 @@ export function App() {
                   {route.feature === 'sessions' ? (
                     <SessionInspector
                       session={selectedAgentSession}
+                      sessions={agentSessions}
+                      onSelectSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
+                      onArchiveSession={async (issueKey, archived) => {
+                        await window.praxis.ai.archiveSession(issueKey, archived);
+                        // Archiving the open conversation would leave the
+                        // console showing a session the tree no longer lists;
+                        // fall back to the newest remaining active session.
+                        if (archived && route.sessionKey === issueKey) {
+                          navigate({ feature: 'sessions' });
+                        }
+                      }}
                       onOpenWorkflowRun={runId => {
                         // Sessions intentionally do not duplicate project identity: the
                         // durable run is the authority. Resolve it across this workspace

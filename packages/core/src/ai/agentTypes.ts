@@ -215,6 +215,18 @@ export interface AgentEventSummary {
   speaker?: AgentConversationSpeaker;
   /** Images pasted/dropped into a `user_input_completed` turn, for the chat transcript to redisplay. */
   attachments?: WireImageAttachment[];
+  /** Model reasoning/thinking generated during this turn. */
+  reasoning?: string;
+  /** Duration of the turn execution in milliseconds. */
+  durationMs?: number;
+  /** Token usage for this specific turn (input, output, reasoning/cache). */
+  tokenUsage?: TokenUsage;
+  /** Estimated cost of this specific turn. */
+  cost?: { currency: string; amount: number };
+  /** Model identifier that produced this event/turn. */
+  modelId?: string;
+  /** Unique names of tools executed during this turn. */
+  toolNames?: string[];
 }
 
 export type AgentEventType =
@@ -507,6 +519,14 @@ export interface AgentSessionRecord {
    */
   acpCurrentModeId?: string;
   acpAvailableModes?: AgentModeOption[];
+  /**
+   * Set when the user has archived this session. Archiving is organizational
+   * only — the recorded conversation, usage, and worktree metadata are all
+   * kept, and unarchiving restores the session exactly. Archived sessions
+   * leave the active sidebar tree and focus tabs but remain listed (and
+   * openable) from the sessions browser in the right sidebar.
+   */
+  archived?: boolean;
   /** Last failure message or abort reason recorded for this session. */
   lastError?: string;
   /** True when the failure was caused by a provider credit, rate, session, or usage limit. */

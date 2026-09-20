@@ -295,3 +295,25 @@ export function estimateCostUsd(
     ((usage.outputTokens ?? 0) / 1_000_000) * rates.outputPerMillionUsd;
   return { amount, currency: 'USD' };
 }
+
+/**
+ * Estimated USD cost of a turn using rates across all supported providers
+ * (OpenAI, Anthropic, Gemini, Z.ai, Vercel AI Gateway).
+ */
+export function estimateTurnCost(
+  provider: AiProvider | undefined,
+  model: string | undefined,
+  usage: TokenUsage
+): { amount: number; currency: string } | undefined {
+  if (!model) {
+    return undefined;
+  }
+  const rates = getModelPricing(provider, model);
+  if (!rates) {
+    return undefined;
+  }
+  const amount =
+    ((usage.inputTokens ?? 0) / 1_000_000) * rates.inputPerMillionUsd +
+    ((usage.outputTokens ?? 0) / 1_000_000) * rates.outputPerMillionUsd;
+  return { amount, currency: 'USD' };
+}

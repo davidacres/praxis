@@ -61,6 +61,8 @@ export interface TokenUsage {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
 }
 
 /** Fills in a total when the provider reported only the parts. */
@@ -287,8 +289,14 @@ export function compactHistoryForReplay(history: ReadonlyArray<WireMessage>): Wi
   for (const message of history) {
     if (message.role === 'tool') continue;
     if (message.role === 'assistant' && message.tool_calls?.length) {
-      const text = (message.content ?? '').trim();
+      let text = (message.content ?? '').trim();
+      text = text.replace(/<thought[\s\S]*?<\/thought>/gi, '').replace(/<thinking[\s\S]*?<\/thinking>/gi, '').trim();
       if (text) out.push({ role: 'assistant', content: text });
+      continue;
+    }
+    if (message.role === 'assistant' && message.content) {
+      const text = message.content.replace(/<thought[\s\S]*?<\/thought>/gi, '').replace(/<thinking[\s\S]*?<\/thinking>/gi, '').trim();
+      out.push({ ...message, content: text });
       continue;
     }
     out.push(message);

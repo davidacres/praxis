@@ -720,6 +720,13 @@ export interface AiIpc {
   renameSession(issueKey: string, title: string): Promise<AgentSessionRecord>;
   /** Aborts a running session if needed, then permanently removes its saved conversation. */
   deleteSession(issueKey: string): Promise<void>;
+  /**
+   * Archives or restores a saved session. Reversible and non-destructive —
+   * unlike `deleteSession`, the recorded conversation is kept; archived
+   * sessions leave the active session tree but remain listed in the sessions
+   * browser. Archiving a session whose task is still running is refused.
+   */
+  archiveSession(issueKey: string, archived: boolean): Promise<AgentSessionRecord>;
   /** Starts a general agent task for an issue; resolves with the new session record. */
   delegate(input: AiDelegateInput): Promise<AgentSessionRecord>;
   /** Aborts the running task for an issue (no-op when none is active). */

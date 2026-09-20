@@ -448,9 +448,11 @@ test('the inspector is tabbed state, not a second copy of the conversation', asy
   await expect(win.locator('[data-testid="session-brief-progress"]')).toContainText('Here is a table');
   await expect(win.locator('[data-testid="session-summary-idle"]')).toHaveCount(0);
 
-  // Three tabs, with real tab semantics.
+  // Four tabs, with real tab semantics — Summary/Activity/Changes for the
+  // selected session, plus the Sessions browser that keeps archived sessions
+  // reachable.
   const tabs = inspector.getByRole('tab');
-  await expect(tabs).toHaveCount(3);
+  await expect(tabs).toHaveCount(4);
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
 
   await win.locator('[data-testid="session-tab-changes"]').click();
@@ -1054,4 +1056,89 @@ test('a file dropped outside the composer never navigates the window', async () 
   await expect(input).toBeVisible();
   await expect(win.locator('[data-testid="session-image-chip"]')).toHaveCount(0);
   await expect(win.locator('[data-testid="session-state-badge"]')).toBeVisible();
+});
+
+test('a session can be archived from its row and restored from the inspector browser', async () => {
+  // 'complete' — archiving is refused while a task is still running, so the
+  // sessions must settle before the row icon is exercised.
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+
+  // Start two free-form sessions and let the mock complete both.
+  const first = await win.evaluate(async () => window.praxis.ai.delegate({
+    provider: 'vercel-gateway',
+    task: { goal: 'First archive-flow session.' }
+  }));
+  const second = await win.evaluate(async () => window.praxis.ai.delegate({
+    provider: 'vercel-gateway',
+    task: { goal: 'Second archive-flow session.' }
+  }));
+  await expect.poll(() => win.evaluate(async () =>
+    window.praxis.ai.listSessions().then(records =>
+      records.filter(record => ['completed', 'failed', 'aborted'].includes(record.state)).length
+    )
+  )).toBe(2);
+
+  // Both rows show in the sidebar tree.
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(2);
+
+  // The inspector's Sessions tab lists every session under Active.
+  await win.locator('[data-testid="session-tab-sessions"]').click();
+  const browser = win.locator('[data-testid="session-browser"]');
+  await expect(browser).toBeVisible();
+  await expect(browser.locator('[data-testid="session-browser-active"] [data-testid="session-browser-row"]')).toHaveCount(2);
+  await expect(browser.locator('[data-testid="session-browser-archived-toggle"]')).toContainText('0');
+
+  // Archive the first session from the sidebar row icon.
+  // Free-form sessions get synthesized keys the row deliberately hides, so
+  // match on the goal-derived title instead.
+  const firstRow = win.locator('[data-testid="session-list-row"]', { hasText: 'First archive-flow session' });
+  await firstRow.locator('[data-testid="session-archive-btn"]').click();
+
+  // It leaves the sidebar tree but stays listed — now under Archived.
+  await win.screenshot({ path: 'output/playwright/session-archived-in-browser.png', fullPage: true });
+  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(1);
+  await expect(win.locator('[data-testid="session-list-row"]', { hasText: first.issueKey })).toHaveCount(0);
+  await expect(browser.locator('[data-testid="session-browser-archived-toggle"]')).toContainText('1');
+
+  // Archiving is persisted on the record and reversible.
+  await expect.poll(() => win.evaluate(key =>
+    window.praxis.ai.listSessions().then(records => records.find(record => record.issueKey === key)?.archived)
+  , first.issueKey)).toBe(true);
+
+  // Expand Archived and restore it.
+  await browser.locator('[data-testid="session-browser-archived-toggle"]').click();
+  const archivedRow = browser.locator('[data-testid="session-browser-row"]', { hasText: first.issueKey });
+  await expect(archivedRow).toBeVisible();
+  await expect(archivedRow).toContainText('Archived');
+  await archivedRow.locator('[data-testid="session-restore-btn"]').click();
+
+  // Back in the tree, flag cleared.
+  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(2);
+  await expect.poll(() => win.evaluate(key =>
+    window.praxis.ai.listSessions().then(records => records.find(record => record.issueKey === key)?.archived)
+  , first.issueKey)).toBe(undefined);
+
+  // The other session was never touched.
+  await expect.poll(() => win.evaluate(key =>
+    window.praxis.ai.listSessions().then(records => records.find(record => record.issueKey === key)?.archived)
+  , second.issueKey)).toBe(undefined);
+
+  // Archiving every session must not orphan the restore path: with none left
+  // active, the inspector itself becomes the browser.
+  await win.evaluate(async keys => {
+    for (const key of keys) await window.praxis.ai.archiveSession(key, true);
+  }, [first.issueKey, second.issueKey]);
+  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-browser"]')).toBeVisible();
+  const restoreAll = win.locator('[data-testid="session-restore-btn"]');
+  await expect(restoreAll).toHaveCount(2);
+  await restoreAll.first().click();
+  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(1);
 });
