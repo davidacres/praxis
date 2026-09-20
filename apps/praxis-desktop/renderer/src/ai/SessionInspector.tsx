@@ -72,6 +72,7 @@ export function SessionInspector({
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<InspectorTab>('summary');
   const [workflowRun, setWorkflowRun] = useState<WorkflowRunSummary>();
+  const [copiedReasoning, setCopiedReasoning] = useState(false);
 
   // Switching session resets to Summary. Keeping the previous tab would land
   // you on another session's Activity with no idea why you are looking at it.
@@ -142,7 +143,6 @@ export function SessionInspector({
   const activity = liveActivity(session);
   const reasoning = reasoningSnippet(session);
   const failedTools = failedToolCount(session.events);
-  const [copiedReasoning, setCopiedReasoning] = useState(false);
 
   const copyReasoning = () => {
     if (!reasoning) return;

@@ -112,10 +112,8 @@ test('composer selects a board and open ticket, names the session, and streams t
   await win.locator('[data-testid="new-session-title-input"]').fill('Operations follow-up');
   await win.locator('[data-testid="new-session-title-input"]').press('Enter');
   await composer.locator('textarea').fill('Refactor the demo board store');
-  const toolMode = win.locator('[data-testid="new-session-tool-mode"]');
-  await expect(toolMode).toContainText('Full tools');
-  await toolMode.click();
-  await expect(toolMode).toContainText('Read only');
+  await expect(win.locator('[data-testid="new-session-tool-mode"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="new-session-folder"]')).toHaveCount(0);
   await win.locator('[data-testid="new-session-submit"]').click();
 
   // Lands on the Sessions view with the new session selected.
@@ -129,7 +127,7 @@ test('composer selects a board and open ticket, names the session, and streams t
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
     timeout: 15000
   });
-  await expect(win.locator('[data-testid="session-tool-mode"]')).toContainText('Read only');
+  await expect(win.locator('[data-testid="session-tool-mode"]')).toContainText('Full tools');
   await win.screenshot({ path: 'output/playwright/sessions-shell.png', fullPage: true });
   const firstRequest = JSON.parse(mock.requests[0].body) as {
     tools: Array<{ function: { name: string } }>;
@@ -139,9 +137,7 @@ test('composer selects a board and open ticket, names the session, and streams t
     'read_file',
     'list_dir',
     'tracker_get_ticket',
-    'tracker_list_transitions'
-  ]));
-  expect(toolNames).not.toEqual(expect.arrayContaining([
+    'tracker_list_transitions',
     'write_file',
     'run_shell',
     'tracker_update_ticket',
@@ -191,7 +187,6 @@ test('composer selects a board and open ticket, names the session, and streams t
   expect(mock.requests[1].body).toContain('SESSION_TERMINAL_CONTEXT');
   expect(mock.requests[1].body).toContain('<terminal_context');
   expect(mock.requests[1].body).toContain('tracker_get_ticket');
-  expect(mock.requests[1].body).not.toContain('tracker_update_ticket');
   expect(JSON.parse(mock.requests[1].body).model).toBe(JSON.parse(mock.requests[0].body).model);
   await win.locator('[data-testid="session-tab-activity"]').click();
   // Provider lifecycle/reasoning/completion events remain persisted, but the
@@ -534,7 +529,9 @@ test('change model and handover stay unreachable while a turn is running', async
   // now, rather than showing them disabled — see `followUpCollapsed` in
   // SessionsPage.tsx. Still the same guarantee this test exists to prove:
   // you cannot reach model/provider changes while a turn is running.
-  await expect(win.locator('[data-testid="session-activity-status"]')).toBeVisible();
+  // The turn is running (Abort is offered); the thinking indicator itself is
+  // hidden once response text starts streaming.
+  await expect(win.locator('[data-testid="session-abort-btn"]')).toBeVisible();
   await expect(win.locator('[data-testid="session-model"]')).toHaveCount(0);
   await expect(win.locator('[data-testid="session-provider"]')).toHaveCount(0);
   await win.evaluate(async () => {
