@@ -81,8 +81,8 @@ export const BUNDLED_AGENT_DEFINITIONS: Record<string, BundledAgentDefinition> =
       schemaVersion: 1,
       id: 'praxis-planner',
       name: 'Praxis Planner',
-      type: 'acp',
-      entry: 'praxis-planner'
+      type: 'gateway',
+      entry: 'gateway'
     },
     brief: `# Praxis Planner
 
@@ -97,8 +97,8 @@ Follow repository planning conventions and output markdown plan specifications.`
       schemaVersion: 1,
       id: 'praxis-implementer',
       name: 'Praxis Implementer',
-      type: 'acp',
-      entry: 'praxis-implementer'
+      type: 'gateway',
+      entry: 'gateway'
     },
     brief: `# Praxis Implementer
 
@@ -113,8 +113,8 @@ Output clean git commit changesets with descriptive commit messages.`
       schemaVersion: 1,
       id: 'praxis-reviewer',
       name: 'Praxis Reviewer',
-      type: 'acp',
-      entry: 'praxis-reviewer'
+      type: 'gateway',
+      entry: 'gateway'
     },
     brief: STRUCTURED_CODE_REVIEW_SYSTEM_PROMPT
   },
@@ -124,8 +124,8 @@ Output clean git commit changesets with descriptive commit messages.`
       schemaVersion: 1,
       id: 'praxis-security-analyst',
       name: 'Praxis Security Analyst',
-      type: 'acp',
-      entry: 'praxis-security-analyst'
+      type: 'gateway',
+      entry: 'gateway'
     },
     brief: STRUCTURED_SECURITY_REVIEW_SYSTEM_PROMPT
   },
@@ -135,8 +135,8 @@ Output clean git commit changesets with descriptive commit messages.`
       schemaVersion: 1,
       id: 'praxis-addon-builder',
       name: 'Praxis Add-on Builder',
-      type: 'acp',
-      entry: 'praxis-addon-builder'
+      type: 'gateway',
+      entry: 'gateway'
     },
     brief: `# Praxis Add-on Builder
 
@@ -194,8 +194,8 @@ export const AVAILABLE_AGENT_DEFINITIONS: Record<string, BundledAgentDefinition>
       schemaVersion: 1,
       id: 'csharp-dotnet-code-reviewer',
       name: 'C# .NET Code Reviewer',
-      type: 'acp',
-      entry: 'praxis-reviewer'
+      type: 'gateway',
+      entry: 'gateway'
     },
     brief: CSHARP_CODE_REVIEW_SYSTEM_PROMPT
   }
@@ -298,8 +298,8 @@ export async function mirrorBundledAgents(targetDir: string): Promise<string[]> 
       let shouldWriteManifest = true;
       try {
         const existing = await readFile(manifestFile, 'utf8');
-        const parsed = JSON.parse(existing) as { id?: string };
-        if (parsed.id === id) {
+        const parsed = JSON.parse(existing) as { id?: string; type?: string };
+        if (parsed.id === id && parsed.type === def.manifest.type) {
           shouldWriteManifest = false;
         }
       } catch {
