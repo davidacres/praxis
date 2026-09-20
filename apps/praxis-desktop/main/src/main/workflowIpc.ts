@@ -615,7 +615,21 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       controller?: { sessionKey: string; sessionId: string },
       planInput?: WorkflowPlanInput
     ): Promise<WorkflowRunSummary> => {
-      const definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
+      let definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
+      if (!definition) {
+        const templates = await resolveTemplateLibrary(projectId);
+        const template = templates.find(candidate => candidate.definition.id === workflowId);
+        if (template) {
+          await ensureWorkflowDependenciesInstalled(template.definition);
+          definition = instantiateTemplateForProject({
+            template: template.definition,
+            projectId,
+            at: new Date().toISOString(),
+            newId: template.definition.id
+          });
+          await persistProjectWorkflow(projectId, definition);
+        }
+      }
       if (!definition) throw new Error(`Workflow ${workflowId} was not found for this project.`);
 
       if (definition.trigger === 'ticket' && !issue?.issueKey?.trim()) {
