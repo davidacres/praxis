@@ -65,7 +65,7 @@ test('the Agent Hub and Workflow designer sit inside the normal app shell', asyn
   await page.getByTestId('nav-agents-new').click();
   await page.getByTestId('rescan-agents').click();
   const tree = page.getByRole('navigation', { name: 'Workspace' });
-  await tree.getByTestId('agent-nav-item').filter({ hasText: 'Praxis Reviewer' }).click();
+  await tree.getByTestId('profile-nav-item').filter({ hasText: 'Praxis Reviewer' }).click();
   await expect(page.getByRole('main').getByRole('heading', { name: 'Praxis Reviewer', level: 1 })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Agent runtime' })).toBeVisible();
   // The rescan the sidebar triggered above repopulates its own agent list
