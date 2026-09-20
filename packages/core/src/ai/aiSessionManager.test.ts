@@ -390,3 +390,34 @@ test('token usage is attributed to the open epoch', () => {
   mgr.addAgentTokenUsage('SESSION-abc', { inputTokens: 10, outputTokens: 2, totalTokens: 12 });
   assert.equal(mgr.getAgentSession('SESSION-abc')?.runtimeEpochs?.[0].tokenUsage?.totalTokens, 12);
 });
+
+test('setAgentSessionArchived toggles and clears, leaving the record otherwise untouched', () => {
+  const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('completed') }));
+  const before = mgr.getAgentSession('SESSION-abc');
+  assert.equal(before?.archived, undefined);
+
+  const archived = mgr.setAgentSessionArchived('SESSION-abc', true);
+  assert.equal(archived.archived, true);
+  const persisted = mgr.getAgentSession('SESSION-abc');
+  assert.equal(persisted?.archived, true);
+  assert.equal(persisted?.state, 'completed');
+  assert.equal(persisted?.events.length, before?.events.length, 'archiving must not append events');
+
+  const restored = mgr.setAgentSessionArchived('SESSION-abc', false);
+  assert.equal(restored.archived, undefined, 'unarchive deletes the flag so old records stay byte-identical');
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.archived, undefined);
+});
+
+test('setAgentSessionArchived throws for an unknown session', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  assert.throws(() => mgr.setAgentSessionArchived('SESSION-missing', true), /No agent session found/);
+});
+
+test('setAgentSessionArchived fires the session-changed event', () =>  {
+  const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('completed') }));
+  const seen: Array<Record<string, unknown>> = [];
+  mgr.onDidChangeAgentSession(record => seen.push(record as unknown as Record<string, unknown>));
+  mgr.setAgentSessionArchived('SESSION-abc', true);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]?.archived, true);
+});

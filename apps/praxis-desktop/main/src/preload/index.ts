@@ -220,6 +220,8 @@ const praxis: PraxisIpc = {
     renameSession: (issueKey: string, title: string) =>
       ipcRenderer.invoke('ai:renameSession', issueKey, title),
     deleteSession: (issueKey: string) => ipcRenderer.invoke('ai:deleteSession', issueKey),
+    archiveSession: (issueKey: string, archived: boolean) =>
+      ipcRenderer.invoke('ai:archiveSession', issueKey, archived),
     delegate: (input: AiDelegateInput) => ipcRenderer.invoke('ai:delegate', input),
     abort: (issueKey: string) => ipcRenderer.invoke('ai:abort', issueKey),
     continueSession: (issueKey: string, message: string, images?: WireImageAttachment[]) =>

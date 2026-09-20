@@ -83,6 +83,8 @@ export interface SidebarProps {
   onSelectSession: (issueKey: string) => void;
   onRenameSession: (issueKey: string, title: string) => Promise<void>;
   onDeleteSession: (issueKey: string) => Promise<void>;
+  /** Archives or restores a session; archived sessions leave the active tree. */
+  onArchiveSession: (issueKey: string, archived: boolean) => Promise<void>;
   /** The discovered agent/skill catalog, rendered as children of the Agents row. */
   agentCatalog?: AgentRuntimeSnapshot;
   activeAgentId?: string;
@@ -154,6 +156,7 @@ export function Sidebar({
   onSelectSession,
   onRenameSession,
   onDeleteSession,
+  onArchiveSession,
   featureCounts,
   onNewSession,
   onNewProject,
@@ -633,6 +636,7 @@ export function Sidebar({
                 onNewSession={onNewSession}
                 onRenameSession={onRenameSession}
                 onDeleteSession={onDeleteSession}
+                onArchiveSession={onArchiveSession}
               />
             ) : feature.id === 'agents' ? (
               <AgentsNav
@@ -696,7 +700,8 @@ function SessionsNav({
   onSelectSession,
   onNewSession,
   onRenameSession,
-  onDeleteSession
+  onDeleteSession,
+  onArchiveSession
 }: {
   icon: IconName;
   label: string;
@@ -711,6 +716,7 @@ function SessionsNav({
   onNewSession: () => void;
   onRenameSession: (issueKey: string, title: string) => Promise<void>;
   onDeleteSession: (issueKey: string) => Promise<void>;
+  onArchiveSession: (issueKey: string, archived: boolean) => Promise<void>;
 }) {
   const [editingKey, setEditingKey] = useState<string>();
   const [draft, setDraft] = useState('');
@@ -730,6 +736,18 @@ function SessionsNav({
     setError(undefined);
     try {
       await onRenameSession(session.issueKey, next);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setMutatingKey(undefined);
+    }
+  };
+
+  const archive = async (session: AgentSessionRecord, archived: boolean) => {
+    setMutatingKey(session.issueKey);
+    setError(undefined);
+    try {
+      await onArchiveSession(session.issueKey, archived);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -866,6 +884,19 @@ function SessionsNav({
                       }}
                     >
                       <Icon name="pencil" size={12} />
+                    </button>
+                    <button
+                      className="icon-btn icon-btn-sm"
+                      aria-label={`Archive session ${title}`}
+                      title="Archive session"
+                      data-testid="session-archive-btn"
+                      disabled={mutating}
+                      onClick={event => {
+                        event.stopPropagation();
+                        void archive(session, true);
+                      }}
+                    >
+                      <Icon name="archive" size={12} />
                     </button>
                     <button
                       className="icon-btn icon-btn-sm"

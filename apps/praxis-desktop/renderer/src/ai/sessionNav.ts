@@ -457,9 +457,9 @@ export function formatCost(cost: AgentSessionRecord['cost']): string | undefined
     const formatter = new Intl.NumberFormat(undefined, {
       style: 'currency',
       currency: cost.currency,
-      // Below a cent, two decimals renders "$0.00"; give those three so a
+      // Below a cent, two decimals renders "$0.00"; give three or four so a
       // cheap-but-not-free turn still reads as costing something.
-      maximumFractionDigits: cost.amount < 0.01 ? 3 : 2
+      maximumFractionDigits: cost.amount < 0.001 ? 4 : cost.amount < 0.01 ? 3 : 2
     });
     return formatter.format(cost.amount);
   } catch {
@@ -514,14 +514,22 @@ export function failedToolCount(events: readonly AgentEventSummary[]): number {
 }
 
 /**
- * A short excerpt of the agent's current reasoning stream, for providers that
- * send one. Only while the session is still active — reasoning from a
- * finished turn is stale by the time anyone would read it here.
+ * The agent's reasoning stream for providers that output thinking chunks.
+ * In an active turn, this reads the live stream. In a completed session,
+ * it retains the latest turn's thought process for inspection.
  */
 export function reasoningSnippet(session: AgentSessionRecord): string | undefined {
-  if (isTerminalAgentState(session.state)) return undefined;
-  const text = session.reasoningText?.trim();
-  return text ? truncate(text) : undefined;
+  const activeText = session.reasoningText?.trim();
+  if (activeText) return activeText;
+  if (session.events?.length) {
+    for (let i = session.events.length - 1; i >= 0; i--) {
+      const ev = session.events[i];
+      if (ev.type === 'message' && ev.reasoning?.trim()) {
+        return ev.reasoning.trim();
+      }
+    }
+  }
+  return undefined;
 }
 
 export interface SpendSummary {
