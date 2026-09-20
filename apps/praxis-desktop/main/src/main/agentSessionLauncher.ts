@@ -89,11 +89,22 @@ async function isScaffoldHost(rootPath: string): Promise<boolean> {
   }
 }
 
+export function isBundledAgentHost(hostId: string): boolean {
+  return hostId.startsWith('praxis-') || hostId === 'csharp-dotnet-code-reviewer';
+}
+
 /** Compiles a discovered manifest into an explicit, supported session adapter. */
 export async function compileAgentHostLaunch(
   host: { manifest: { id: string; type: string; entry: string | { command?: string; args?: string[] }; }; rootPath: string },
   provider: AiProvider
 ): Promise<AgentHostLaunchPlan> {
+  if (isBundledAgentHost(host.manifest.id)) {
+    if (PROVIDER_DESCRIPTORS[provider].kind === 'api') {
+      return { state: 'gateway', hostId: host.manifest.id };
+    }
+    return { state: 'acp', hostId: host.manifest.id, ...resolveAcpStartOptions(provider) };
+  }
+
   if (host.manifest.type === 'acp') {
     if (await isScaffoldHost(host.rootPath)) {
       return {
