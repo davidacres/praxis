@@ -1655,10 +1655,10 @@ export function SessionsPage({
                   <Markdown text={stripGadgetFences(pending.message)} testId="session-chat-markdown" imageSessionId={selected?.issueKey} />
                 </div>
               ))}
-              {isTurnActive ? (
+              {isTurnActive && !visibleResponseText ? (
                 <LiveTurnActivityIndicator
                   startedAt={activeTurnStartedAt}
-                  statusText={visibleResponseText ? 'Generating response…' : (liveActivityText ?? 'Thinking…')}
+                  statusText={liveActivityText ?? 'Thinking…'}
                   provider={activityProvider}
                 />
               ) : (
@@ -1959,8 +1959,10 @@ export function SessionsPage({
                       {PROVIDER_LABELS[selected.provider]}
                     </button>
                   )}
-                  {!followUpCollapsed && selected.model && (() => {
-                    const contextLimit = selected.contextLimit ?? getKnownContextLength(selected.model, selected.provider);
+                  {!followUpCollapsed && selected.provider && (() => {
+                    const contextLimit = selected.model
+                      ? selected.contextLimit ?? getKnownContextLength(selected.model, selected.provider)
+                      : undefined;
                     const contextSize = formatContextLength(contextLimit);
                     const pricing = getModelPricing(selected.provider, selected.model);
                     const cost = formatModelCost(pricing);
@@ -1984,7 +1986,7 @@ export function SessionsPage({
                         }}
                       >
                         <Icon name="sparkles" size={14} />
-                        <span>{selected.model}</span>
+                        <span>{selected.model ?? 'Model'}</span>
                         {contextSize && <span className="composer-chip-meta">{contextSize}</span>}
                         {cost && <span className="composer-chip-meta">{cost}</span>}
                       </button>
