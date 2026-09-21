@@ -183,8 +183,7 @@ test('a genuine audit finding still fails the run, and the sibling it left runni
   expect(security.lane).toBe('failed');
 
   // QA was still running when the run failed: stopped and recorded — not left "running".
-  const qa = await stage(page, run.runId, 'qa');
-  expect(qa.outcome).toBe('cancelled');
+  await expect.poll(async () => (await stage(page, run.runId, 'qa')).outcome).toBe('cancelled');
   const stuck = await page.evaluate(async id => {
     const summary = await window.praxis.workflows.getRun(id);
     return summary?.stages.filter(row => row.outcome === 'running').map(row => row.nodeId);

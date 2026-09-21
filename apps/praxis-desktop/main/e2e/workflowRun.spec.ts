@@ -773,6 +773,11 @@ test('a run started against a ticket writes its outcome back as a comment once i
     return { projectId: project.id, workflowId, connectionId, ticketKey: ticket.key };
   }, repo);
 
+  // Folder-backed tickets are repository data. A governed run deliberately refuses to branch while
+  // they are uncommitted because its worktree would otherwise omit the ticket it was asked to run.
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-m', 'seed ticket for governed run'], { cwd: repo });
+
   await page.reload();
   await startRun(page, 'Ship it', { ticket: seeded.ticketKey });
 

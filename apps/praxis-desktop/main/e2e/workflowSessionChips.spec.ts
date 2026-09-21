@@ -58,7 +58,9 @@ test('an existing project session selects and starts governed workflows from one
   await expect(add).toBeEnabled();
   await add.click();
   await expect(page.getByTestId('session-workflow-menu')).toBeVisible();
-  await page.getByTestId('session-workflow-menu').getByRole('button', { name: /Quick change/ }).click();
+  const startOptions = page.getByTestId('session-workflow-menu').locator('[aria-label="Start workflow"]');
+  await expect(startOptions.getByRole('button', { name: /Quick change/ })).toHaveCount(1);
+  await startOptions.getByRole('button', { name: /Quick change/ }).click();
 
   await expect.poll(async () => page.evaluate(async key => {
     const session = (await window.praxis.ai.listSessions()).find(candidate => candidate.issueKey === key);
