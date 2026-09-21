@@ -1,12 +1,12 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.264Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-287
 title: "Connect gadgets to run monitor, changes and deployment decisions"
-status: In Progress
+status: Done
 story: FX-BE-100
 feature: FX-BF-036
 updated: 2026-09-21
