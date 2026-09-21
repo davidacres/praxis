@@ -1,7 +1,18 @@
 import { useEffect, useState } from 'react';
-import type { Connection, IssueFilters, ProjectRecord, WorkflowPlanInput, WorkflowRunSummary } from '@praxis/core';
+import type {
+  AiProvider,
+  AiProviderStatus,
+  Connection,
+  IssueFilters,
+  ModelOptions,
+  ProjectRecord,
+  WorkflowPlanInput,
+  WorkflowRunSummary
+} from '@praxis/core';
 import { isIssueDone } from '../board/boardMeta';
 import { Icon } from '../ui/Icon';
+import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS } from '../ai/modelProviders';
+import { isProviderUsable } from '../ai/providerAvailability';
 
 /** "KEY — Summary", the same picker convention IssueDetail's parent-issue field uses. */
 const ISSUE_OPTION_SEPARATOR = '—';
@@ -56,6 +67,74 @@ export function StartRunDialog({
   const [busy, setBusy] = useState(false);
   // Asking is the default every time: auto-approve is a deliberate, per-run choice.
   const [permissionMode, setPermissionMode] = useState<'ask' | 'auto'>('ask');
+  const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<AiProvider | undefined>();
+  const [modelOptions, setModelOptions] = useState<ModelOptions | undefined>();
+  const [selectedModel, setSelectedModel] = useState('');
+  const [modelsLoading, setModelsLoading] = useState(false);
+
+  // Load provider statuses and default to active provider
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      window.praxis.ai.listProviderStatuses(),
+      window.praxis.settings.get()
+    ])
+      .then(([statuses, settings]) => {
+        if (cancelled) return;
+        setProviderStatuses(statuses);
+        setSelectedProvider(current => {
+          if (current && statuses.some(s => s.provider === current && isProviderUsable(s))) {
+            return current;
+          }
+          const active = statuses.find(s => s.provider === settings.ai.activeProvider && isProviderUsable(s));
+          return active?.provider ?? statuses.find(isProviderUsable)?.provider ?? settings.ai.activeProvider;
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setProviderStatuses([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Update model options when selectedProvider changes
+  useEffect(() => {
+    setModelOptions(undefined);
+    setSelectedModel('');
+    if (!selectedProvider || !MODEL_PROVIDERS.has(selectedProvider)) {
+      return;
+    }
+    let cancelled = false;
+    setModelsLoading(true);
+    Promise.all([
+      fetchModelOptions(selectedProvider, false),
+      window.praxis.settings.get()
+    ])
+      .then(([options, settings]) => {
+        if (cancelled || !options) return;
+        const enabled = settings.ai.providers[selectedProvider]?.enabledModelIds;
+        const filtered = enabled
+          ? { ...options, options: options.options.filter(option => enabled.includes(option.value)) }
+          : options;
+        setModelOptions(filtered);
+        const defaultChoice =
+          filtered.currentValue && filtered.options.some(option => option.value === filtered.currentValue)
+            ? filtered.currentValue
+            : (filtered.options[0]?.value ?? '');
+        setSelectedModel(defaultChoice);
+      })
+      .catch(() => {
+        if (!cancelled) setModelOptions(undefined);
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProvider]);
 
   // Preselect the only workflow, so a project with one goes straight to "Task".
   useEffect(() => {
@@ -140,7 +219,11 @@ export function StartRunDialog({
         matchedIssue ? { issueKey: matchedIssue.key, connectionId: matchedIssue.connectionId } : undefined,
         undefined,
         planInput,
-        { permissionMode }
+        {
+          permissionMode,
+          aiProvider: selectedProvider,
+          aiModel: selectedModel.trim() || undefined
+        }
       );
       onStarted(run);
     } catch (cause) {
@@ -148,6 +231,15 @@ export function StartRunDialog({
       setBusy(false);
     }
   };
+
+  const usableStatuses = providerStatuses.filter(isProviderUsable);
+  const baseStatuses = usableStatuses.length > 0 ? usableStatuses : providerStatuses;
+  const availableProviderOptions: Array<{ provider: AiProvider }> = baseStatuses.map(s => ({ provider: s.provider }));
+  if (selectedProvider && !availableProviderOptions.some(s => s.provider === selectedProvider)) {
+    availableProviderOptions.unshift({
+      provider: selectedProvider
+    });
+  }
 
   return (
     <div
@@ -235,6 +327,50 @@ export function StartRunDialog({
                 ))}
               </datalist>
             </label>
+          )}
+          {availableProviderOptions.length > 0 && (
+            <div
+              className="wf-runstart-row"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: modelOptions && modelOptions.options.length > 0 ? '1fr 1fr' : '1fr',
+                gap: 'var(--space-2)'
+              }}
+            >
+              <label>
+                <span>AI Provider</span>
+                <select
+                  aria-label="Run AI provider"
+                  value={selectedProvider ?? ''}
+                  onChange={e => setSelectedProvider(e.target.value as AiProvider)}
+                  data-testid="wf-runstart-provider"
+                >
+                  {availableProviderOptions.map(status => (
+                    <option key={status.provider} value={status.provider}>
+                      {PROVIDER_LABELS[status.provider] ?? status.provider}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {modelOptions && modelOptions.options.length > 0 && (
+                <label>
+                  <span>Model</span>
+                  <select
+                    aria-label="Run AI model"
+                    value={selectedModel}
+                    onChange={e => setSelectedModel(e.target.value)}
+                    data-testid="wf-runstart-model"
+                    disabled={modelsLoading}
+                  >
+                    {modelOptions.options.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.name || opt.value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
           )}
           <fieldset className="wf-runstart-mode" data-testid="wf-runstart-mode">
             <legend>Tool permissions</legend>

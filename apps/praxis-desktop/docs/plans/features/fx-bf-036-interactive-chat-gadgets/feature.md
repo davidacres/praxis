@@ -201,3 +201,19 @@ Status: Failed · Duration: 4m 25s
 - ⏳ Security scan: pending
 
 Required stage "implement" failed.
+
+**PRAXIS-F36** — 2026-09-21T09:57:35.305Z
+**Workflow run cancelled: Governed delivery — FX-BF-036: Interactive chat gadgets and response surfaces**
+
+Status: Cancelled · Duration: 5m 23s
+
+- ❌ Plan: failed
+- ⏭️ Implement: cancelled
+- ⏭️ Praxis Test contracts: cancelled
+- ⏭️ Review: cancelled
+- ⏭️ Install dependencies: cancelled
+- ⏭️ Build: cancelled
+- ⏭️ QA: cancelled
+- ⏭️ Security scan: cancelled
+
+Deleted by the user.

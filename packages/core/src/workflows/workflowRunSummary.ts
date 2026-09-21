@@ -28,6 +28,7 @@ import {
 } from './workflowRun';
 import { deriveRunStatus, scheduleWorkflowRun } from './workflowScheduler';
 import { nextActions, outstandingNodes, type WorkflowNextAction } from './workflowRecovery';
+import type { AiProvider } from '../types';
 import { approvalReadiness, type GateStatus } from './workflowGates';
 import { stageSessionKey } from './workflowStageTask';
 import type { WorkflowPolicyProfile } from './workflowTypes';
@@ -97,6 +98,8 @@ export interface WorkflowRunSummary {
   planInput?: WorkflowPlanInput;
   /** How this run's stage sessions handle tool-permission prompts. */
   permissionMode: 'ask' | 'auto';
+  aiProvider?: AiProvider;
+  aiModel?: string;
 }
 
 function laneFor(
@@ -216,6 +219,8 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     ...(run.controllerSessionKey ? { controllerSessionKey: run.controllerSessionKey } : {}),
     ...(run.controllerSessionId ? { controllerSessionId: run.controllerSessionId } : {}),
     ...(run.planInput ? { planInput: run.planInput } : {}),
+    ...(run.aiProvider ? { aiProvider: run.aiProvider } : {}),
+    ...(run.aiModel ? { aiModel: run.aiModel } : {}),
     permissionMode: run.permissionMode === 'auto' ? 'auto' : 'ask'
   };
 }

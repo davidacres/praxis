@@ -11240,7 +11240,7 @@ button.session-chat-attachment {
 .wf-runstart-mode-option span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .wf-runstart-mode-option strong { font-size: var(--text-md); }
 .wf-runstart-mode-option em { font-style: normal; font-size: var(--text-sm); color: var(--text-tertiary); }
-.wf-run-mode { margin: 0; display: flex; align-items: center; gap: var(--space-1); }
+.wf-run-mode, .wf-run-provider { margin: 0; display: flex; align-items: center; gap: var(--space-1); }
 
 /* Vertical pipeline (right pane). Progress reads down the list; parallel steps
    share a bracket. Colour is always paired with the glyph. */

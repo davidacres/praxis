@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from 'react-dom';
 import type { WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { PROVIDER_LABELS, providerIconName } from '../ai/modelProviders';
 import { useDeleteRun } from './useDeleteRun';
 import { WorkflowPipelineVertical } from './WorkflowPipelineVertical';
 
@@ -392,6 +393,22 @@ export function WorkflowRunPage({
                   <Icon name={run.permissionMode === 'auto' ? 'zap' : 'shield'} size={12} />
                   {run.permissionMode === 'auto' ? 'Auto-approve tool requests' : 'Asks before tool requests'}
                 </p>
+
+                {(run.aiProvider || run.aiModel) && (
+                  <p
+                    className="wf-run-provider rail-sub"
+                    data-testid="wf-run-provider"
+                    title={
+                      run.aiProvider
+                        ? `Configured with ${PROVIDER_LABELS[run.aiProvider] ?? run.aiProvider}${run.aiModel ? ` · ${run.aiModel}` : ''}`
+                        : `Configured with model ${run.aiModel}`
+                    }
+                  >
+                    <Icon name={run.aiProvider ? providerIconName(run.aiProvider) : 'robot'} size={12} />
+                    {run.aiProvider ? (PROVIDER_LABELS[run.aiProvider] ?? run.aiProvider) : 'AI'}
+                    {run.aiModel ? ` · ${run.aiModel}` : ''}
+                  </p>
+                )}
 
                 <div className="wf-board-actions">
                   {run.controllerSessionKey && onOpenSession && (

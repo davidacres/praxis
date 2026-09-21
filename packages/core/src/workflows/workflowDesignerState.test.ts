@@ -140,10 +140,10 @@ test('removing a node drops every edge that touched it', () => {
 
 test('removing a node clears now-dangling inputs on the survivors', () => {
   const template = governedDeliveryTemplate();
-  // review, qa, security all consume change-diff, which implement produces.
+  // implement produces change-diff, which test-contracts consumes.
   const next = removeNode(template, 'implement');
-  const review = next.nodes.find(node => node.id === 'review');
-  assert.deepEqual(review?.inputs, [], 'the change-diff input is gone with its producer');
+  const contracts = next.nodes.find(node => node.id === 'test-contracts');
+  assert.deepEqual(contracts?.inputs, [], 'the change-diff input is gone with its producer');
 });
 
 test('removing the entry node promotes a node with no inbound edge', () => {
