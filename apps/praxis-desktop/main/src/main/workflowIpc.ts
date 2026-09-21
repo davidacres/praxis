@@ -82,7 +82,7 @@ import { getSettingsBackend } from './settingsBackendInstance';
 import { getAiUsageLog } from './aiUsageLogInstance';
 import { getWorkflowRecommendationCache } from './workflowRecommendationCacheInstance';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
-import { assertWorkflowBaseReady } from './workflowWorkspace';
+import { assertWorkflowBaseReady, workflowBlockingFiles } from './workflowWorkspace';
 import {
   getWorkflowPolicyStore,
   getWorkflowStore,
@@ -608,6 +608,10 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
     }
   );
 
+  ipcMain.handle('workflows:checkRunBase', async (_event, projectId: string): Promise<{ blockingFiles: string[] }> => {
+    return { blockingFiles: await workflowBlockingFiles(projectId) };
+  });
+
   ipcMain.handle('workflows:listPolicies', async (): Promise<WorkflowPolicyProfile[]> => {
     return getWorkflowPolicyStore().list();
   });
@@ -635,7 +639,7 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       issue?: { issueKey: string; connectionId?: string },
       controller?: { sessionKey: string; sessionId: string },
       planInput?: WorkflowPlanInput,
-      options?: { permissionMode?: unknown; aiProvider?: unknown; aiModel?: unknown }
+      options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown }
     ): Promise<WorkflowRunSummary> => {
       let definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
       if (!definition) {
@@ -689,7 +693,11 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
 
       // A run branches from committed HEAD. Check before persisting the run/controller linkage so a
       // dirty checkout cannot produce a live-looking run whose worktree silently lacks current code.
-      await assertWorkflowBaseReady(projectId);
+      const uncommittedChanges =
+        options?.uncommittedChanges === 'include' || options?.uncommittedChanges === 'omit'
+          ? options.uncommittedChanges
+          : undefined;
+      if (!uncommittedChanges) await assertWorkflowBaseReady(projectId);
 
       const run = createWorkflowRun({
         runId: randomUUID(),
@@ -703,6 +711,7 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
         ...(planInput ? { planInput } : {}),
         // Anything but an explicit 'auto' asks: the safe default cannot be reached by a malformed call.
         ...(options?.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
+        ...(uncommittedChanges ? { uncommittedChanges } : {}),
         ...(aiProvider ? { aiProvider } : {}),
         ...(aiModel ? { aiModel } : {})
       });

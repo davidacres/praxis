@@ -310,6 +310,62 @@ test('the start-run dialog opens from a workflow row with that workflow preselec
   await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(1);
 });
 
+const gitOut = (cwd: string, ...args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' });
+
+async function startFromDirtyCheckout(choice: 'uncommitted-base-include' | 'uncommitted-base-omit'): Promise<{ page: Page; repo: string; runId: string }> {
+  const { page, seeded } = await launch(true);
+  const project = await page.evaluate(() => window.praxis.projects.list().then(list => list[0]));
+  const repo = project.workspaceFolder as string;
+  fs.writeFileSync(path.join(repo, 'unsaved.ts'), 'export const draft = 1;\n');
+  fs.appendFileSync(path.join(repo, 'README.md'), 'local edit\n');
+  await page.reload();
+
+  await page.getByTestId('project-workflow-nav-item').hover();
+  await page.getByTestId(`project-workflow-run-${seeded.workflowId}`).click();
+  const dialog = page.getByTestId('wf-runstart-dialog');
+  await dialog.getByLabel('Run task').fill('Start with local edits');
+  await dialog.getByRole('button', { name: 'Start', exact: true }).click();
+
+  const notice = dialog.getByTestId('uncommitted-base-notice');
+  await expect(notice).toContainText('2 uncommitted files in this checkout');
+  await expect(notice).toContainText('unsaved.ts');
+  await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(0);
+
+  await dialog.getByTestId(choice).click();
+  await expect(page.getByTestId('wf-run-panel')).toBeVisible();
+  await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(1);
+  const run = await page.evaluate(id => window.praxis.workflows.listRuns(id).then(runs => runs[0]), project.id);
+  return { page, repo, runId: (run as { runId: string }).runId };
+}
+
+/** The run's checkout: the only directory under the repo's `.worktrees`. */
+const runWorktree = (repo: string): string | undefined => {
+  const root = path.join(repo, '.worktrees');
+  const [name] = fs.existsSync(root) ? fs.readdirSync(root) : [];
+  return name ? path.join(root, name) : undefined;
+};
+
+test('a dirty checkout offers to include its changes: the run sees them, the checkout is untouched', async () => {
+  const { repo } = await startFromDirtyCheckout('uncommitted-base-include');
+  await expect.poll(() => runWorktree(repo)).toBeTruthy();
+  const worktree = runWorktree(repo) as string;
+  expect(fs.readFileSync(path.join(worktree, 'unsaved.ts'), 'utf8')).toContain('draft = 1');
+  expect(fs.readFileSync(path.join(worktree, 'README.md'), 'utf8')).toContain('local edit');
+  expect(gitOut(worktree, 'log', '-1', '--format=%s')).toMatch(/^WIP snapshot: uncommitted changes/);
+  // The user's own checkout keeps its edits as uncommitted and unstaged: nothing was committed or staged.
+  expect(gitOut(repo, 'status', '--porcelain')).toContain('?? unsaved.ts');
+  expect(gitOut(repo, 'diff', '--cached', '--name-only').trim()).toBe('');
+  expect(gitOut(repo, 'log', '-1', '--format=%s').trim()).toBe('initial');
+});
+
+test('a dirty checkout can instead start from the last commit without its changes', async () => {
+  const { repo } = await startFromDirtyCheckout('uncommitted-base-omit');
+  await expect.poll(() => runWorktree(repo)).toBeTruthy();
+  const worktree = runWorktree(repo) as string;
+  expect(fs.existsSync(path.join(worktree, 'unsaved.ts'))).toBe(false);
+  expect(fs.readFileSync(path.join(worktree, 'README.md'), 'utf8')).not.toContain('local edit');
+});
+
 test('an out-of-credits provider pauses the run instead of failing it, and resumes once credits are back', async () => {
   // Every chat request is answered "Insufficient balance … Please recharge."
   const { page, seeded } = await launch(false, 'error');
