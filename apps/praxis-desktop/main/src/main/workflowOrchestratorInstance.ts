@@ -18,6 +18,7 @@ import { canDispatchAgentStage, cancelWorkflowAgentStage, runWorkflowAgentStage 
 import { createWorkflowWorkspaceProvider } from './workflowWorkspace';
 import { getServiceForConnection } from './serviceRegistry';
 import { workflowLogSink } from './workflowLogSink';
+import { syncApprovalGadgets } from './workflowApprovalGadgetSync';
 
 /**
  * The desktop app's workflow orchestrator (FX-BE-024).
@@ -166,6 +167,7 @@ export function getWorkflowOrchestrator(): WorkflowOrchestrator {
         // A stage may have just gone `running`; make sure the tick is armed.
         if (Object.values(run.nodes).some(state => state.outcome === 'running')) ensureTimeoutTick();
         if (isRunSettled(run)) void writeBackToIssue(run);
+        syncApprovalGadgets(run);
       }
     });
   }
