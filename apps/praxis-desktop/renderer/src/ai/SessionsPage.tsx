@@ -1775,6 +1775,18 @@ export function SessionsPage({
                     <div className="session-permission-heading">
                       <Icon name="shield" size={14} />
                       <span data-testid="session-permission-summary">{pendingPermission.summary}</span>
+                      {pendingPermission.data?.toolName && (
+                        <span
+                          className="session-permission-tool"
+                          role="img"
+                          tabIndex={0}
+                          aria-label={`Tool: ${pendingPermission.data.toolName}`}
+                          data-tooltip={`Tool: ${pendingPermission.data.toolName}`}
+                          data-testid="session-permission-tool"
+                        >
+                          <Icon name="info" size={13} />
+                        </span>
+                      )}
                     </div>
                     {pendingPermission.detail && (
                       <div className="session-permission-detail">{pendingPermission.detail}</div>
