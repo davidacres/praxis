@@ -109,6 +109,9 @@ function WindowCloseGuard() {
 interface Route {
   /** Durable selection of the empty New Session surface (never its draft text). */
   newSession?: boolean;
+  /** Title-bar quick-session handoff: pre-selects the project's quick-change
+   *  workflow and focuses the goal. Transient, not persisted. */
+  quickSession?: boolean;
   projectId?: string;
   feature?: FeatureId;
   boardId?: string;
@@ -166,6 +169,10 @@ const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
 const lastRouteKey = (workspaceId: string) => `${LAST_WORKSPACE_ROUTE_KEY}:${workspaceId}`;
 const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const RECENT_WORKSPACES_KEY = 'praxis-recent-workspaces';
+
+/** The built-in quick-change workflow's template id (instantiated per project as
+ *  `${id}-${projectId}` — see `workflowTemplates` / `workflows:startRun`). */
+const QUICK_CHANGE_TEMPLATE_ID = 'quick-change';
 
 /** Project ownership is carried by the connection record, never inferred from its id. */
 function projectIdForConnection(connectionId: string | undefined, connections: readonly Connection[]): string | undefined {
@@ -1062,6 +1069,17 @@ export function App() {
   const composerProject = selectedProject
     ?? workspaceProjects.find(project => project.id === activeWorkspace?.defaultProjectId)
     ?? (workspaceProjects.length === 1 ? workspaceProjects[0] : undefined);
+  /** The workflow a quick session starts under: the project's quick-change
+   *  template (already instantiated or not), only when it is actually ready. */
+  const quickSessionWorkflowId = composerProject
+    ? (sessionWorkflowsByProject[composerProject.id] ?? []).find(option => option.ready && (
+        option.id === QUICK_CHANGE_TEMPLATE_ID
+        || option.id === `${QUICK_CHANGE_TEMPLATE_ID}-${composerProject.id}`
+      ))?.id
+    : undefined;
+  const openQuickSession = useCallback(() => {
+    navigate({ newSession: true, quickSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) });
+  }, [composerProject, navigate]);
   const activeProjectId = selectedProject?.id
     ?? (selectedBoard?.connectionId ? projectIdForConnection(selectedBoard.connectionId, connections) : undefined)
     ?? composerProject?.id;
@@ -1162,6 +1180,11 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'n') {
+        event.preventDefault();
+        openQuickSession();
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
         event.preventDefault();
         navigate({});
@@ -1173,7 +1196,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [navigate]);
+  }, [navigate, openQuickSession]);
 
   const featureCounts = useMemo<Partial<Record<FeatureId, number>>>(
     () => ({
@@ -1263,6 +1286,7 @@ export function App() {
       });
     });
     entries.push({ id: 'action:new-session', label: 'New session', group: 'Go to', icon: 'plus', keywords: 'start agent', run: () => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) }) });
+    entries.push({ id: 'action:quick-session', label: 'Quick session', group: 'Go to', icon: 'zap', keywords: 'quick change workflow fast immediate', run: openQuickSession });
     entries.push({ id: 'action:new-project', label: 'New project', group: 'Go to', icon: 'plus', run: () => requestProjectWizard('create') });
     entries.push({ id: 'action:add-existing-project', label: 'Add project from folder', group: 'Go to', icon: 'folder-open', keywords: 'existing repository import scan', run: () => requestProjectWizard('existing') });
     if (inSession) {
@@ -1428,6 +1452,8 @@ export function App() {
     <NewSession
       boards={workspaceBoards}
       workflowOptions={composerProject ? sessionWorkflowsByProject[composerProject.id] ?? [] : []}
+      initialWorkflowId={route.quickSession ? quickSessionWorkflowId : undefined}
+      autoFocusGoal={route.quickSession}
       onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree, agentId, profileId, hostId, skillNames, workflowId }) => {
         const projectId = projectIdForConnection(board?.connectionId, connections);
         const project = projectId
@@ -1912,6 +1938,7 @@ export function App() {
         onOpenWorkspace={openWorkspaceFromFile}
         onCloseWorkspace={closeWorkspace}
         onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
+        onQuickSession={openQuickSession}
         onNewProject={() => requestProjectWizard('create')}
         onAddExistingProject={() => requestProjectWizard('existing')}
         onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
