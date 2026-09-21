@@ -93,8 +93,8 @@ test('the sidebar tree lists agent profiles and skills only; a profile shows its
   // Broken Agent and Live Agent are launch bindings with no profile, so they
   // stay out of primary nav (Settings -> Agent Runtime only). Seeded Praxis
   // Reviewer shares its id with a bundled profile, so it merges into that
-  // one row rather than adding a second. 5 bundled profiles total.
-  await expect(tree.getByTestId('profile-nav-item')).toHaveCount(5);
+  // one row rather than adding a second. 6 bundled profiles total.
+  await expect(tree.getByTestId('profile-nav-item')).toHaveCount(6);
   await expect(tree.getByTestId('agent-nav-item')).toHaveCount(0);
   await expect(tree.getByTestId('skill-nav-item')).toHaveCount(1);
 
