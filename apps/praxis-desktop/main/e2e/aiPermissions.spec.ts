@@ -63,8 +63,8 @@ test('allowing a pending permission lets the session continue to completion', as
 
   const card = win.locator('[data-testid="session-permission-card"]');
   await expect(card).toBeVisible();
-  await expect(card).toContainText('Approval needed: read a file or project resource');
-  await expect(card).toContainText('requesting permission to read a file or project resource');
+  await expect(card).toContainText('Approval needed: read_file');
+  await expect(card).toContainText('requesting permission to read a file or project resource using read_file');
   await expect(card).not.toContainText('permission-request-7e4a9f2c1d8b6e5a');
   // Opened deliberately: these are negative assertions, and against a closed
   // tab they would pass without the log ever being rendered.

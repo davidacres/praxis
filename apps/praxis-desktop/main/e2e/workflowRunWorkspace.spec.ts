@@ -466,3 +466,54 @@ test('auto-approve does not widen a stage: a read-only stage still cannot write'
   const exists = outcome.cwd ? fs.existsSync(path.join(outcome.cwd, 'note.txt')) : false;
   expect(exists).toBe(false);
 });
+
+test('a terminal run can be archived, removing it from the sidebar and listing it in the workflow runs browser', async () => {
+  const { page, seeded } = await launch();
+  const run = await page.evaluate(
+    async ids =>
+      window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Archive test run'),
+    seeded
+  );
+  await expect.poll(() => runStatus(page, run.runId), { timeout: 30000 }).toBe('awaiting-approval');
+
+  // Cancel the run so it is terminal
+  await page.evaluate(async id => window.praxis.workflows.cancelRun(id, 'cancel for test'), run.runId);
+  await expect.poll(() => runStatus(page, run.runId)).toBe('cancelled');
+
+  await page.reload();
+
+  // Open the Workflows > Runs tree in the sidebar
+  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
+  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
+  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
+  await expect(runRow).toHaveCount(1);
+
+  // Archive button on the sidebar run row
+  await runRow.hover();
+  const archiveBtn = page.getByTestId(`project-run-archive-${run.runId}`);
+  await expect(archiveBtn).toBeVisible();
+  await archiveBtn.click();
+
+  // It is now removed from the active runs tree
+  await expect(runRow).toHaveCount(0);
+
+  // Clicking the Runs header opens the workflow runs browser
+  await runsGroup.click();
+  await expect(page.getByTestId('wf-runs-browser')).toBeVisible();
+
+  // In the runs browser, toggle open the Archived group
+  const archivedToggle = page.getByTestId('wf-runs-archived-toggle');
+  await expect(archivedToggle).toBeVisible();
+  await archivedToggle.click();
+
+  const archivedCard = page.getByTestId(`wf-run-card-${run.runId}`);
+  await expect(archivedCard).toBeVisible();
+
+  // Unarchive / restore the run
+  const restoreBtn = page.getByTestId(`wf-run-restore-${run.runId}`);
+  await expect(restoreBtn).toBeVisible();
+  await restoreBtn.click();
+
+  // The run appears back in the active list and sidebar tree
+  await expect(page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ })).toHaveCount(1);
+});

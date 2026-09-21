@@ -570,6 +570,27 @@ export class WorkflowRunStore {
     if (next.length === runs.length) throw new Error(`Run ${runId} was not found.`);
     await this.state.update(RUNS_KEY, next);
   }
+
+  /**
+   * Sets whether a run is archived. Live runs cannot be archived.
+   */
+  public async setArchived(runId: string, archived: boolean): Promise<WorkflowRun> {
+    const run = this.get(runId);
+    if (!run) throw new Error(`Run ${runId} was not found.`);
+    if (archived && (run.status === 'running' || run.status === 'awaiting-approval')) {
+      throw new Error('Wait for this run to finish before archiving it.');
+    }
+    const updated: WorkflowRun = {
+      ...run,
+      ...(archived ? { archived: true, archivedAt: new Date().toISOString() } : {})
+    };
+    if (!archived) {
+      delete (updated as Partial<WorkflowRun>).archived;
+      delete (updated as Partial<WorkflowRun>).archivedAt;
+    }
+    await this.save(updated);
+    return updated;
+  }
 }
 
 function describe(issues: WorkflowIssue[]): string {

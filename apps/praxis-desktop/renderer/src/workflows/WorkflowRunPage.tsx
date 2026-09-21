@@ -5,6 +5,7 @@ import { Icon } from '../ui/Icon';
 import { PROVIDER_LABELS, providerIconName } from '../ai/modelProviders';
 import { useDeleteRun } from './useDeleteRun';
 import { WorkflowPipelineVertical } from './WorkflowPipelineVertical';
+import { WorkflowRunsBrowser } from './WorkflowRunsBrowser';
 
 /**
  * The run workspace (replaces the old run monitor and its Runs list page).
@@ -77,6 +78,11 @@ export function activeStageOf(summary: Pick<WorkflowRunSummary, 'stages'>): Stag
 
 export interface WorkflowRunPageProps {
   runId?: string;
+  runs?: WorkflowRunSummary[];
+  onSelectRun?: (runId: string) => void;
+  onArchiveRun?: (runId: string, archived: boolean) => Promise<void>;
+  onCancelRun?: (runId: string) => Promise<void>;
+  onDeleteRun?: (run: WorkflowRunSummary) => void;
   /** The shell's right-pane element the run panel portals into. */
   auxSlot: HTMLElement | null;
   /** Ask the shell to reveal the right pane. */
@@ -96,6 +102,11 @@ export interface WorkflowRunPageProps {
 
 export function WorkflowRunPage({
   runId,
+  runs,
+  onSelectRun,
+  onArchiveRun,
+  onCancelRun,
+  onDeleteRun,
   auxSlot,
   onRequireAux,
   onOpenSession,
@@ -252,6 +263,19 @@ export function WorkflowRunPage({
 
   const centre = (() => {
     if (!runId || (loaded && !run)) {
+      if (runs && onSelectRun) {
+        return (
+          <WorkflowRunsBrowser
+            runs={runs}
+            selectedRunId={runId}
+            onSelectRun={onSelectRun}
+            onStartRun={onStartRun}
+            onArchiveRun={onArchiveRun}
+            onCancelRun={onCancelRun}
+            onDeleteRun={onDeleteRun}
+          />
+        );
+      }
       return (
         <div className="empty-state" data-testid="wf-run-empty">
           <Icon name="play" size={26} />
@@ -268,8 +292,21 @@ export function WorkflowRunPage({
     return (
       <>
         <header className="wf-run-bar" data-testid="wf-run-bar">
+          {onSelectRun && (
+            <button
+              type="button"
+              className="btn btn-compact btn-quiet wf-run-bar-back"
+              onClick={() => onSelectRun('')}
+              title="Back to all runs"
+              data-testid="wf-run-back"
+            >
+              <Icon name="arrow-left" size={13} />
+              <span>Runs</span>
+            </button>
+          )}
           <span className={`lane ${run.paused ? 'lane--awaiting' : STATUS_TONE[run.status]}`} aria-hidden>●</span>
           <strong className="wf-run-bar-name" title={run.workflowName}>{run.workflowName}</strong>
+          {run.archived && <span className="tree-badge">Archived</span>}
           <span className="wf-run-bar-status">{run.paused ? 'paused' : run.status.replace('-', ' ')}</span>
           {stage && (
             <span className="wf-run-bar-stage" data-testid="wf-run-bar-stage">
@@ -336,6 +373,7 @@ export function WorkflowRunPage({
                   <div>
                     <strong>
                       {run.paused ? 'paused' : run.status.replace('-', ' ')}
+                      {run.archived && <span className="tree-badge">Archived</span>}
                       {run.issueKey && (
                         <span className="wf-board-issue-key" data-testid="wf-board-issue-key">
                           {' '}
@@ -462,6 +500,20 @@ export function WorkflowRunPage({
                   >
                     Cancel run
                   </button>
+                  {!canCancel && onArchiveRun && (
+                    <button
+                      type="button"
+                      className="btn btn-compact"
+                      data-testid={run.archived ? 'wf-restore-run' : 'wf-archive-run'}
+                      onClick={async () => {
+                        await onArchiveRun(run.runId, !run.archived);
+                        setRun(current => (current ? { ...current, archived: !current.archived } : undefined));
+                      }}
+                    >
+                      <Icon name={run.archived ? 'refresh' : 'archive'} size={12} />
+                      <span>{run.archived ? 'Restore run' : 'Archive run'}</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-compact btn-danger"

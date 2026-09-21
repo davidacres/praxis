@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import {
   PROJECT_WORKFLOWS_DIR,
   WorkflowPolicyStore,
+  WorkflowRunStore,
   WorkflowStore,
   composeWorkflowPolicies,
   deleteProjectWorkflow,
@@ -367,3 +368,58 @@ test('an attempt cap below one is refused', async () => {
   const store = new WorkflowPolicyStore(memoryStore());
   await assert.rejects(() => store.save(policy('bad', { maxAttemptsPerNode: 0 })), /1 or greater/);
 });
+
+// ── WorkflowRunStore archiving ───────────────────────────────────────────
+
+test('WorkflowRunStore.setArchived archives and restores a finished run', async () => {
+  const store = new WorkflowRunStore(memoryStore());
+  const run: any = {
+    schemaVersion: 1,
+    runId: 'r1',
+    workflowId: 'w1',
+    workflowVersion: 1,
+    projectId: 'p1',
+    status: 'succeeded',
+    definition: minimal('w1'),
+    nodes: {},
+    events: [],
+    gateDecisions: [],
+    startedAt: '2026-09-20T10:00:00.000Z',
+    endedAt: '2026-09-20T10:05:00.000Z'
+  };
+  await store.save(run);
+
+  const archived = await store.setArchived('r1', true);
+  assert.equal(archived.archived, true);
+  assert.ok(archived.archivedAt);
+  assert.equal(store.get('r1')?.archived, true);
+
+  const restored = await store.setArchived('r1', false);
+  assert.equal(restored.archived, undefined);
+  assert.equal(restored.archivedAt, undefined);
+  assert.equal(store.get('r1')?.archived, undefined);
+});
+
+test('WorkflowRunStore.setArchived refuses to archive a running or awaiting run', async () => {
+  const store = new WorkflowRunStore(memoryStore());
+  const runningRun: any = {
+    schemaVersion: 1,
+    runId: 'r-live',
+    workflowId: 'w1',
+    workflowVersion: 1,
+    projectId: 'p1',
+    status: 'running',
+    definition: minimal('w1'),
+    nodes: {},
+    events: [],
+    gateDecisions: [],
+    startedAt: '2026-09-20T10:00:00.000Z'
+  };
+  await store.save(runningRun);
+  await assert.rejects(() => store.setArchived('r-live', true), /Wait for this run to finish before archiving it/);
+
+  const awaitingRun: any = { ...runningRun, runId: 'r-awaiting', status: 'awaiting-approval' };
+  await store.save(awaitingRun);
+  await assert.rejects(() => store.setArchived('r-awaiting', true), /Wait for this run to finish before archiving it/);
+});
+
