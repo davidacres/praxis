@@ -47,6 +47,8 @@ test('an existing project session selects and starts governed workflows from one
   });
   const page = app.window;
   const sessionKey = await seedProjectSession(page);
+  const artifacts = path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
 
   // Reload so the shell refreshes project workflow readiness, then open the
   // existing session rather than starting through New Session.
@@ -67,6 +69,17 @@ test('an existing project session selects and starts governed workflows from one
     return session?.workflowRunIds?.length ?? 0;
   }, sessionKey)).toBe(1);
   await expect(page.getByTestId('session-workflow-add')).toContainText('Quick change');
+  await expect(page.getByTestId('session-workflow-runtime')).toContainText('Workflow managed');
+  await expect(page.getByTestId('session-provider')).toHaveCount(0);
+  await expect(page.getByTestId('session-model')).toHaveCount(0);
+  await page.getByTestId('session-workflow-runtime').click();
+  const runtime = page.getByTestId('session-workflow-runtime-popover');
+  await expect(runtime).toBeVisible();
+  await expect(runtime).toContainText('Quick change');
+  await expect(runtime).toContainText('Active stage');
+  await page.screenshot({ path: path.join(artifacts, 'session-workflow-runtime.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await expect(runtime).toBeHidden();
 
   // Adding again preserves the first durable run; selecting its chip changes
   // only the active context, not either run's immutable history.
@@ -81,8 +94,6 @@ test('an existing project session selects and starts governed workflows from one
     return session?.workflowRunIds ?? [];
   }, sessionKey);
   await add.click();
-  const artifacts = path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts');
-  fs.mkdirSync(artifacts, { recursive: true });
   await page.screenshot({ path: path.join(artifacts, 'session-workflow-selector.png'), fullPage: true });
   await page.getByTestId(`session-workflow-chip-${ids[0]}`).click();
   await expect.poll(async () => page.evaluate(async key => {
@@ -117,4 +128,7 @@ test('an existing project session selects and starts governed workflows from one
     return session?.workflowRunId;
   }, sessionKey)).toBeUndefined();
   await expect(page.getByTestId('session-workflow-add')).toContainText('Workflow');
+  await expect(page.getByTestId('session-workflow-runtime')).toHaveCount(0);
+  await expect(page.getByTestId('session-provider')).toBeVisible();
+  await expect(page.getByTestId('session-model')).toBeVisible();
 });

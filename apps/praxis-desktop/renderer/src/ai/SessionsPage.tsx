@@ -224,35 +224,16 @@ function formatFullDateTime(isoString?: string): string {
   }
 }
 
-/** The everyday workflow control for an existing chat. */
-function SessionWorkflowControl({
-  session,
-  options,
-  onStartWorkflow,
-  onSelectWorkflowRun,
-  onRemoveWorkflowRun,
-  onError
-}: {
-  session: AgentSessionRecord;
-  options: SessionWorkflowOption[];
-  onStartWorkflow?: (session: AgentSessionRecord, workflowId: string) => Promise<void>;
-  onSelectWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
-  onRemoveWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
-  onError: (message: string | undefined) => void;
-}) {
+function useSessionWorkflowRuns(session: AgentSessionRecord | undefined): WorkflowRunSummary[] {
   const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState<ComposerPopoverPosition>();
-  const [busy, setBusy] = useState<string>();
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const runIds = [...new Set([
-    ...(session.workflowRunIds ?? []),
-    ...(session.workflowRunId ? [session.workflowRunId] : [])
-  ])];
-  const runKey = runIds.join('|');
+  const runKey = [...new Set([
+    ...(session?.workflowRunIds ?? []),
+    ...(session?.workflowRunId ? [session.workflowRunId] : [])
+  ])].join('|');
 
   useEffect(() => {
     let active = true;
+    const runIds = runKey ? runKey.split('|') : [];
     const refresh = () => {
       if (runIds.length === 0) {
         if (active) setRuns([]);
@@ -274,8 +255,108 @@ function SessionWorkflowControl({
       active = false;
       unsubscribe();
     };
-  }, [runKey, session.issueKey]);
+  }, [runKey, session?.issueKey]);
 
+  return runs;
+}
+
+function WorkflowManagedRuntimeChip({
+  run,
+  stage,
+  stageSession
+}: {
+  run: WorkflowRunSummary;
+  stage?: WorkflowRunSummary['stages'][number];
+  stageSession?: AgentSessionRecord;
+}) {
+  const [position, setPosition] = useState<ComposerPopoverPosition>();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!position) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPosition(undefined);
+    };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [position]);
+
+  const runtime = stageSession?.provider
+    ? `${PROVIDER_LABELS[stageSession.provider]}${stageSession.model ? ` · ${stageSession.model}` : ''}`
+    : stage?.type === 'agent-task'
+      ? 'Resolved when the stage starts'
+      : stage
+        ? 'Automated workflow step'
+        : 'Waiting for the next stage';
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`composer-chip session-runtime-chip${position ? ' active' : ''}`}
+        data-testid="session-workflow-runtime"
+        title="Provider and model are controlled by this workflow while it is active"
+        aria-haspopup="dialog"
+        aria-expanded={Boolean(position)}
+        onClick={() => {
+          if (position) {
+            setPosition(undefined);
+            return;
+          }
+          const rect = triggerRef.current?.getBoundingClientRect();
+          if (rect) setPosition({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+        }}
+      >
+        <Icon name="sparkles" size={14} />
+        <span className="session-runtime-chip-label">Workflow managed</span>
+      </button>
+      {position && createPortal(
+        <div
+          className="composer-provider-menu session-runtime-popover session-workflow-runtime-popover"
+          role="dialog"
+          aria-label="Workflow-managed runtime"
+          data-testid="session-workflow-runtime-popover"
+          style={{ position: 'fixed', bottom: position.bottom, left: position.left }}
+        >
+          <div className="popover-label">Workflow-managed runtime</div>
+          <dl className="session-workflow-runtime-details">
+            <div><dt>Workflow</dt><dd>{run.workflowName}</dd></div>
+            <div><dt>Active stage</dt><dd>{stage?.name ?? 'Preparing'}</dd></div>
+            <div><dt>Runtime</dt><dd>{runtime}</dd></div>
+          </dl>
+          <p className="session-workflow-runtime-note">
+            Provider and model are fixed by the workflow stage. Open its stage session for full runtime provenance.
+          </p>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+/** The everyday workflow control for an existing chat. */
+function SessionWorkflowControl({
+  session,
+  runs,
+  options,
+  onStartWorkflow,
+  onSelectWorkflowRun,
+  onRemoveWorkflowRun,
+  onError
+}: {
+  session: AgentSessionRecord;
+  runs: WorkflowRunSummary[];
+  options: SessionWorkflowOption[];
+  onStartWorkflow?: (session: AgentSessionRecord, workflowId: string) => Promise<void>;
+  onSelectWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
+  onRemoveWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
+  onError: (message: string | undefined) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<ComposerPopoverPosition>();
+  const [busy, setBusy] = useState<string>();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const select = async (runId: string) => {
     if (!onSelectWorkflowRun || runId === session.workflowRunId) return;
     setBusy(runId);
@@ -692,6 +773,17 @@ export function SessionsPage({
   }, []);
 
   const selected = sessions.find(session => session.issueKey === selectedKey) ?? sessions[0];
+  const selectedWorkflowRuns = useSessionWorkflowRuns(selected);
+  const activeWorkflowRun = selectedWorkflowRuns.find(run => run.runId === selected?.workflowRunId);
+  const workflowOwnsRuntime = selected?.workflowRole === 'controller'
+    && (activeWorkflowRun?.status === 'running' || activeWorkflowRun?.status === 'awaiting-approval');
+  const activeWorkflowStage = activeWorkflowRun?.stages.find(stage => stage.lane === 'running')
+    ?? activeWorkflowRun?.stages.find(stage => stage.lane === 'paused')
+    ?? activeWorkflowRun?.stages.find(stage => stage.lane === 'awaiting')
+    ?? activeWorkflowRun?.stages.find(stage => stage.lane === 'ready');
+  const activeWorkflowStageSession = activeWorkflowStage?.sessionKey
+    ? sessions.find(session => session.issueKey === activeWorkflowStage.sessionKey)
+    : undefined;
   const conversationRunning = selected?.conversation?.state === 'running';
   const contextCompactionCommand = selected?.acpAvailableCommands?.find(command =>
     command.name.replace(/^\/+/, '').trim().toLowerCase() === 'compact'
@@ -1936,15 +2028,40 @@ export function SessionsPage({
                       <span className="terminal-context-dot" aria-hidden="true" />
                     </button>
                   )}
-                  {!followUpCollapsed && selected.provider && (
-                    <button 
+                  <SessionWorkflowControl
+                    session={selected}
+                    runs={selectedWorkflowRuns}
+                    options={workflowOptions}
+                    onStartWorkflow={onStartWorkflow}
+                    onSelectWorkflowRun={onSelectWorkflowRun}
+                    onRemoveWorkflowRun={onRemoveWorkflowRun}
+                    onError={setFollowUpError}
+                  />
+                  {!followUpCollapsed && workflowOwnsRuntime && activeWorkflowRun && (
+                    <WorkflowManagedRuntimeChip
+                      run={activeWorkflowRun}
+                      stage={activeWorkflowStage}
+                      stageSession={activeWorkflowStageSession}
+                    />
+                  )}
+                  {!followUpCollapsed && !workflowOwnsRuntime && selected.provider && (selected.workflowRole === 'stage' ? (
+                    <span
+                      className="composer-chip session-runtime-chip is-readonly"
+                      data-testid="session-provider"
+                      title="This workflow stage's AI provider is fixed"
+                    >
+                      <Icon name={providerIconName(selected.provider)} size={14} />
+                      {PROVIDER_LABELS[selected.provider]}
+                    </span>
+                  ) : (
+                    <button
                       type="button"
                       className={`composer-chip session-runtime-chip${transitionPopover?.open === 'handover' ? ' active' : ''}`}
-                      data-testid="session-provider" 
+                      data-testid="session-provider"
                       title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Choose an AI provider' : "This session's AI provider"}
                       aria-haspopup="listbox"
                       aria-expanded={transitionPopover?.open === 'handover'}
-                      disabled={!conversationRunning && !canChangeSessionRuntime(selected)}
+                      disabled={conversationRunning || !canChangeSessionRuntime(selected)}
                       onClick={event => {
                         if (transitionPopover?.open === 'handover') {
                           setTransitionPopover(undefined);
@@ -1958,15 +2075,26 @@ export function SessionsPage({
                       <Icon name={providerIconName(selected.provider)} size={14} />
                       {PROVIDER_LABELS[selected.provider]}
                     </button>
-                  )}
-                  {!followUpCollapsed && selected.provider && (() => {
+                  ))}
+                  {!followUpCollapsed && !workflowOwnsRuntime && selected.provider && (() => {
                     const contextLimit = selected.model
                       ? selected.contextLimit ?? getKnownContextLength(selected.model, selected.provider)
                       : undefined;
                     const contextSize = formatContextLength(contextLimit);
                     const pricing = getModelPricing(selected.provider, selected.model);
                     const cost = formatModelCost(pricing);
-                    return (
+                    return selected.workflowRole === 'stage' ? (
+                      <span
+                        className="composer-chip session-runtime-chip is-readonly"
+                        data-testid="session-model"
+                        title="This workflow stage's AI model is fixed"
+                      >
+                        <Icon name="sparkles" size={14} />
+                        <span>{selected.model ?? 'Provider default'}</span>
+                        {contextSize && <span className="composer-chip-meta">{contextSize}</span>}
+                        {cost && <span className="composer-chip-meta">{cost}</span>}
+                      </span>
+                    ) : (
                       <button
                         type="button"
                         className={`composer-chip session-runtime-chip${transitionPopover?.open === 'model' ? ' active' : ''}`}
@@ -2066,15 +2194,6 @@ export function SessionsPage({
                       </div>,
                       document.body
                     )}
-                  {/* Read back from the session state; interactive when idle to allow runtime changes. */}
-                  <SessionWorkflowControl
-                    session={selected}
-                    options={workflowOptions}
-                    onStartWorkflow={onStartWorkflow}
-                    onSelectWorkflowRun={onSelectWorkflowRun}
-                    onRemoveWorkflowRun={onRemoveWorkflowRun}
-                    onError={setFollowUpError}
-                  />
                   {context && (
                     <button
                       ref={contextChipRef}

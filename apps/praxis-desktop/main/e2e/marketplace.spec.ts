@@ -236,6 +236,9 @@ test('Agent Runtime panel: an agent installs untrusted and only runs after trust
 
   const installedRow = window.locator('[data-testid="agent-marketplace-installed-tidy-bot"]');
   await expect(installedRow).toContainText('installed but not trusted');
+  // The clicked Install control becomes Remove in place. Move the pointer away
+  // so the snapshot records its resting state rather than a stale hover state.
+  await window.mouse.move(0, 0);
   await expect(window.locator('[data-testid="agent-runtime-marketplace"]')).toHaveScreenshot('agents-marketplace.png');
 
   await installedRow.getByRole('button', { name: 'Trust' }).click();
@@ -303,10 +306,15 @@ test('Themes marketplace filter toggle shows All and Installed views with screen
   // settles from its own IPC-backed refresh, which otherwise still had a
   // pending re-render at the exact moment `toHaveScreenshot` fired.
   await window.waitForTimeout(300);
+  // Filtering shrinks the page beneath the current scroll offset. Normalize
+  // the scroll position so this remains a screenshot of the Installed view,
+  // not whichever lower viewport Chromium happened to preserve.
+  await window.locator('.settings-content').evaluate(element => { element.scrollTop = 0; });
   await expect(window).toHaveScreenshot('marketplace-filter-installed-view.png');
 
   // Screenshot 3: Switch back to "All" view
   await marketplace.locator('[data-testid="theme-marketplace-filter-all"]').click();
+  await window.locator('.settings-content').evaluate(element => { element.scrollTop = 0; });
   await expect(window).toHaveScreenshot('marketplace-filter-back-to-all-view.png');
 });
 
@@ -342,4 +350,3 @@ test('Marketplace loads real GitHub packages with token configured', async () =>
   const themeCards = marketplace.locator('[data-testid^="theme-card-"]');
   await expect(themeCards.first()).toBeVisible({ timeout: 10000 });
 });
-
