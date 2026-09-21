@@ -435,3 +435,24 @@ test('an approval gadget may offer a decline, but must offer an approval', () =>
   assert.equal(declineOnly.code, 'schema-invalid');
   assert.match(declineOnly.message, /at least one approval action/);
 });
+
+test('an approval gadget carries the workflow node it settles, for a real run', () => {
+  const envelopeWithNode = expectOk(
+    envelope(
+      'approval',
+      { title: 'Ship it?', summary: 'All checks passed.', gate: 'review', nodeId: 'approve-a' },
+      { actions: [{ actionId: 'approve', label: 'Approve', effect: 'approval', gate: 'review' }] }
+    )
+  );
+  assert.equal((envelopeWithNode.payload as { nodeId?: string }).nodeId, 'approve-a');
+
+  // A fixture or standalone approval never issued against a run has no node to name.
+  const withoutNode = expectOk(
+    envelope(
+      'approval',
+      { title: 'Ship it?', summary: 'All checks passed.', gate: 'deployment.staging' },
+      { actions: [{ actionId: 'approve', label: 'Approve', effect: 'approval', gate: 'deployment.staging' }] }
+    )
+  );
+  assert.equal((withoutNode.payload as { nodeId?: string }).nodeId, undefined);
+});

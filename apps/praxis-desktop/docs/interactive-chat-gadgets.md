@@ -71,7 +71,12 @@ which the host derives when the producer omits it.
 
 A `mutating` or `approval` action that names no gate is refused at validation.
 A gadget cannot grant itself authority, and the gate is checked against the
-service that already owns it — a gadget is never a second approval path.
+service that already owns it — a gadget is never a second approval path. For a
+real workflow run this is concrete: a run's controller session is offered an
+`approval` gadget for each node awaiting a person (`syncApprovalGadgets`,
+`packages/core/src/workflows/workflowApprovalGadgets.ts`), and confirming it
+calls the same `approveStage` the run monitor's own Approve button uses — a
+stale or already-settled node is refused rather than approved blind.
 
 An `informational` action on a `choice` gadget is the one case where the
 recorded answer is also reported to the agent: the desktop renderer sends it

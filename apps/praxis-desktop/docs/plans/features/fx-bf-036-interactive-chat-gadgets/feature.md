@@ -60,13 +60,25 @@ Outstanding, and why:
 - **TASK-285** (stage/session *expected response* declarations) — needs the
   workflow orchestrator to pause and resume on a declared response, which is a
   change to run state, not to the gadget contract.
-- **TASK-287** (run monitor, changes and deployment decisions) — the executor
-  deliberately only records decisions today. Wiring a gadget action to actually
-  advance a run or deploy means calling through the services that own those
-  gates, and is the next increment.
+- **TASK-287** (run monitor, changes and deployment decisions) — gate approval
+  is now wired (2026-09-21, below); progress, test results, diffs and
+  deployment detail beyond a plain gate are still unaddressed.
 - **TASK-290** (mobile half) — the contract is browser-safe and the renderers
   are responsive, with a narrow-viewport rule set and touch-target floors, but
   `apps/praxis-mobile` has no gadget host yet, so the mobile journey is unproven.
+
+## Delivery note (2026-09-21)
+
+TASK-287, first slice: an approval gadget answered in chat now settles a real
+workflow gate instead of only recording a confirmation. When a run reaches a
+node awaiting approval and has a controller session, `syncApprovalGadgets`
+publishes an `approval` gadget carrying the node id; confirming its approval
+action calls the same `approveStage` the run monitor's Approve button uses, so
+a gadget is never a second, weaker approval path — a stale or already-settled
+node is refused exactly as `workflows:approveRun` would refuse it. The gadget
+is withdrawn once its node stops awaiting a person, unless it already carries
+the recorded answer. See TASK-287's own notes for what is still outside this
+slice (progress, test results, diffs, deployment detail).
 
 ## Definition of done
 

@@ -318,6 +318,11 @@ export interface ApprovalGadgetPayload {
   evidence?: { label: string; value: string }[];
   /** Rendered prominently — the user is told exactly what approving unblocks. */
   effect?: string;
+  /**
+   * The workflow run node this approval settles, when it was issued for a real
+   * run rather than a fixture. Absent for a synthetic or standalone approval.
+   */
+  nodeId?: string;
 }
 
 export interface GadgetPayloadMap {
