@@ -114,10 +114,12 @@ export interface SidebarProps {
   activeWorkflowPolicies?: boolean;
   onSelectWorkflow: (project: ProjectRecord, workflowId: string) => void;
   onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
+  onSelectWorkflowRuns?: (project: ProjectRecord) => void;
   /** Opens the start-run dialog, optionally preselecting a workflow. */
   onStartWorkflowRun: (project: ProjectRecord, workflowId?: string) => void;
   onCancelWorkflowRun: (runId: string) => void | Promise<void>;
   onDeleteWorkflowRun: (project: ProjectRecord, run: WorkflowRunSummary) => void;
+  onArchiveWorkflowRun?: (runId: string, archived: boolean) => Promise<void>;
   onSelectWorkflowPolicies: (project: ProjectRecord) => void;
   /** Opens the project's Run profile editor (FX-BE-054). */
   onSelectRun: (project: ProjectRecord) => void;
@@ -198,9 +200,11 @@ export function Sidebar({
   activeWorkflowPolicies,
   onSelectWorkflow,
   onSelectWorkflowRun,
+  onSelectWorkflowRuns,
   onStartWorkflowRun,
   onCancelWorkflowRun,
   onDeleteWorkflowRun,
+  onArchiveWorkflowRun,
   onSelectWorkflowPolicies,
   onSelectRun,
   onSelectDeployments,
@@ -375,7 +379,8 @@ export function Sidebar({
                     const projectWorkflowsCollapsed = collapsed[`project:${project.id}:workflows`] ?? false;
                     const projectWorkflowList = projectWorkflows[project.id] ?? [];
                     const projectRuns = runsByProjectId[project.id] ?? [];
-                    const projectRunCount = projectRuns.filter(run => run.status === 'running' || run.status === 'awaiting-approval').length;
+                    const activeProjectRuns = projectRuns.filter(run => !run.archived);
+                    const projectRunCount = activeProjectRuns.filter(run => run.status === 'running' || run.status === 'awaiting-approval').length;
                     const projectRunsCollapsed = collapsed[`project:${project.id}:runs`] ?? false;
                     const projectDocsCollapsed = collapsed[`project:${project.id}:docs`] ?? false;
                     const projectPlansCollapsed = collapsed[`project:${project.id}:plans`] ?? false;
@@ -521,15 +526,26 @@ export function Sidebar({
                               <span className="tree-icon"><Icon name="plus" size={13} /></span><span className="tree-label">New workflow…</span>
                             </button>
                           )}
-                          <div className="tree-row project-workflow-child project-runs-header">
+                          <div className={`tree-row project-workflow-child project-runs-header${activeFeature === 'workflows' && !activeWorkflowRunId && !activeWorkflowPolicies && !activeWorkflowId && selectedProjectId === project.id ? ' active' : ''}`}>
                             <button
                               type="button"
                               className="board-tree-main"
                               aria-expanded={!projectRunsCollapsed}
                               data-testid="project-workflow-runs-nav-item"
-                              onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:runs`]: !projectRunsCollapsed }))}
+                              onClick={() => {
+                                if (onSelectWorkflowRuns) onSelectWorkflowRuns(project);
+                                else setCollapsed(current => ({ ...current, [`project:${project.id}:runs`]: !projectRunsCollapsed }));
+                              }}
                             >
-                              <span className="tree-icon"><Icon name={projectRunsCollapsed ? 'chevron-right' : 'chevron-down'} size={14} /></span>
+                              <span
+                                className="tree-icon"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setCollapsed(current => ({ ...current, [`project:${project.id}:runs`]: !projectRunsCollapsed }));
+                                }}
+                              >
+                                <Icon name={projectRunsCollapsed ? 'chevron-right' : 'chevron-down'} size={14} />
+                              </span>
                               <span className="tree-label">Runs</span>
                               {projectRunCount > 0 && <span className="tree-badge" title={`${projectRunCount} run${projectRunCount === 1 ? '' : 's'} in flight`}>{projectRunCount}</span>}
                             </button>
@@ -541,7 +557,7 @@ export function Sidebar({
                               onClick={() => onStartWorkflowRun(project)}
                             ><Icon name="plus" size={13} /></button>
                           </div>
-                          {!projectRunsCollapsed && projectRuns.map(run => {
+                          {!projectRunsCollapsed && activeProjectRuns.map(run => {
                             const live = run.status === 'running' || run.status === 'awaiting-approval';
                             return (
                               <div
@@ -574,6 +590,21 @@ export function Sidebar({
                                     <Icon name="close" size={12} />
                                   </button>
                                 )}
+                                {!live && onArchiveWorkflowRun && (
+                                  <button
+                                    type="button"
+                                    className="board-tree-configure project-run-action"
+                                    data-testid={`project-run-archive-${run.runId}`}
+                                    aria-label={`Archive run ${run.workflowName}`}
+                                    title="Archive this run"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      void onArchiveWorkflowRun(run.runId, true);
+                                    }}
+                                  >
+                                    <Icon name="archive" size={12} />
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   className="board-tree-delete project-run-action"
@@ -590,7 +621,7 @@ export function Sidebar({
                               </div>
                             );
                           })}
-                          {!projectRunsCollapsed && projectRuns.length === 0 && (
+                          {!projectRunsCollapsed && activeProjectRuns.length === 0 && (
                             <span className="sidebar-empty-hint project-runs-empty" data-testid="project-workflow-runs-empty">No runs yet</span>
                           )}
                           <button

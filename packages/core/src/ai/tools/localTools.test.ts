@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { LocalToolExecutor } from './localTools';
+import { LocalToolExecutor, type ToolPermissionRequest } from './localTools';
 
 async function withTempDir(run: (dir: string) => Promise<void>): Promise<void> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-localtools-'));
@@ -57,5 +57,29 @@ test('run_shell reports stdout and exit code in data', async () => {
     assert.equal(result.data?.kind, 'shell');
     assert.equal(result.data?.exitCode, 0);
     assert.match(result.data?.output ?? '', /praxis-ok/);
+  });
+});
+
+test('permission prompts identify the tool without exposing its path or command', async () => {
+  await withTempDir(async dir => {
+    const requests: ToolPermissionRequest[] = [];
+    const localTools = new LocalToolExecutor({
+      workingDirectory: dir,
+      toolMode: 'full',
+      requestPermission: async request => {
+        requests.push(request);
+        return 'deny';
+      }
+    });
+
+    const result = await localTools.execute('run_shell', { command: 'npm test -- --runInBand' });
+
+    assert.equal(result.ok, false);
+    assert.equal(requests[0]?.toolName, 'run_shell');
+    assert.equal(requests[0]?.description, 'Permission requested: run_shell');
+    assert.equal(requests[0]?.detail, 'The agent wants to execute a shell command in the project workspace.');
+    assert.equal(requests[0]?.permissionKey, 'npm test -- --runInBand');
+    assert.doesNotMatch(requests[0]?.description ?? '', /npm test|\//);
+    assert.doesNotMatch(requests[0]?.detail ?? '', /npm test|\//);
   });
 });

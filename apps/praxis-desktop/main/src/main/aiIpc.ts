@@ -242,8 +242,8 @@ function trackerToolExtension(
         }
         const allowed = await requestPermission({
           kind: 'tracker-write',
-          description: `Permission requested: ${name} on ${issueKey}`,
-          detail: JSON.stringify(args, null, 2)
+          description: `Permission requested: ${name}`,
+          detail: `The agent wants to use ${name} on ticket ${issueKey}.`
         });
         if (allowed === 'deny') return { ok: false, content: `Permission denied for ${name}.` };
         if (name === 'tracker_add_comment') {

@@ -185,6 +185,9 @@ export interface WorkflowRun {
    * command, and never read by anything in this file.
    */
   issueWriteBackAt?: string;
+  /** Whether this run has been archived by the user to tidy the sidebar. */
+  archived?: boolean;
+  archivedAt?: string;
 }
 
 export interface WorkflowPlanInput {
@@ -857,7 +860,9 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),
     ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
-    ...(typeof raw.issueWriteBackAt === 'string' ? { issueWriteBackAt: raw.issueWriteBackAt } : {})
+    ...(typeof raw.issueWriteBackAt === 'string' ? { issueWriteBackAt: raw.issueWriteBackAt } : {}),
+    ...(raw.archived === true ? { archived: true } : {}),
+    ...(typeof raw.archivedAt === 'string' ? { archivedAt: raw.archivedAt } : {})
   };
 }
 

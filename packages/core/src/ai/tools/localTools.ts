@@ -12,6 +12,8 @@ export interface ToolPermissionRequest {
   kind: 'read' | 'write' | 'shell' | 'list';
   description: string;
   detail?: string;
+  /** Internal scope used for an Allow always decision; never shown in the UI. */
+  permissionKey?: string;
   toolName: string;
 }
 
@@ -104,7 +106,7 @@ async function ensurePermission(
   request: ToolPermissionRequest,
   alwaysAllowed: Set<string>
 ): Promise<boolean> {
-  const key = `${request.kind}:${request.detail ?? request.description}`;
+  const key = `${request.kind}:${request.permissionKey ?? request.detail ?? request.description}`;
   if (alwaysAllowed.has(key) || ctx.shouldAutoAllow?.(request)) {
     return true;
   }
@@ -157,8 +159,9 @@ export class LocalToolExecutor {
       {
         kind: 'read',
         toolName: 'read_file',
-        detail: inputPath,
-        description: `Permission requested: read ${inputPath}`
+        permissionKey: inputPath,
+        description: 'Permission requested: read_file',
+        detail: 'The agent wants to read a file in the project workspace.'
       },
       this.alwaysAllowed
     );
@@ -190,8 +193,9 @@ export class LocalToolExecutor {
       {
         kind: 'write',
         toolName: 'write_file',
-        detail: inputPath,
-        description: `Permission requested: write ${inputPath}`
+        permissionKey: inputPath,
+        description: 'Permission requested: write_file',
+        detail: 'The agent wants to write a file in the project workspace.'
       },
       this.alwaysAllowed
     );
@@ -221,8 +225,9 @@ export class LocalToolExecutor {
       {
         kind: 'list',
         toolName: 'list_dir',
-        detail: inputPath || '.',
-        description: `Permission requested: list ${inputPath || '.'}`
+        permissionKey: inputPath || '.',
+        description: 'Permission requested: list_dir',
+        detail: 'The agent wants to list a project directory.'
       },
       this.alwaysAllowed
     );
@@ -250,8 +255,9 @@ export class LocalToolExecutor {
       {
         kind: 'shell',
         toolName: 'run_shell',
-        detail: command,
-        description: `Permission requested: shell ${command}`
+        permissionKey: command,
+        description: 'Permission requested: run_shell',
+        detail: 'The agent wants to execute a shell command in the project workspace.'
       },
       this.alwaysAllowed
     );

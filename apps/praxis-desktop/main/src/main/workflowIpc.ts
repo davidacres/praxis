@@ -947,6 +947,19 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
     }
   });
 
+  ipcMain.handle('workflows:archiveRun', async (_event, runId: string, archived: boolean): Promise<WorkflowRunSummary> => {
+    const run = runStore().get(runId);
+    if (!run) throw new Error(`Run ${runId} was not found.`);
+    if (archived && (run.status === 'running' || run.status === 'awaiting-approval')) {
+      throw new Error('Wait for this run to finish before archiving it.');
+    }
+    const updated = await runStore().setArchived(runId, archived);
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('workflows:runChanged', runId);
+    }
+    return summarize(updated);
+  });
+
   ipcMain.handle(
     'workflows:getRecommendation',
     async (

@@ -100,6 +100,9 @@ export interface WorkflowRunSummary {
   permissionMode: 'ask' | 'auto';
   aiProvider?: AiProvider;
   aiModel?: string;
+  /** Whether this run is archived by the user. */
+  archived?: boolean;
+  archivedAt?: string;
 }
 
 function laneFor(
@@ -221,6 +224,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     ...(run.planInput ? { planInput: run.planInput } : {}),
     ...(run.aiProvider ? { aiProvider: run.aiProvider } : {}),
     ...(run.aiModel ? { aiModel: run.aiModel } : {}),
+    ...(run.archived ? { archived: true, archivedAt: run.archivedAt } : {}),
     permissionMode: run.permissionMode === 'auto' ? 'auto' : 'ask'
   };
 }
