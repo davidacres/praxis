@@ -63,3 +63,33 @@ test('prepareDeliveryWorktree creates a branch and checkout, then removeDelivery
     await fs.rm(repo, { recursive: true, force: true });
   }
 });
+
+test('prepareDeliveryWorktree refuses to omit a dirty base when a governed run requires a clean snapshot', async t => {
+  let repo: string;
+  try {
+    repo = await initRepo();
+  } catch {
+    t.skip('git not available');
+    return;
+  }
+  try {
+    await fs.writeFile(path.join(repo, 'README.md'), '# uncommitted change\n', 'utf8');
+    const manager = new GitWorktreeManager(silentLogger);
+
+    await assert.rejects(
+      () => manager.prepareDeliveryWorktree(
+        { key: 'WF-DIRTY', summary: 'governed delivery', branch: undefined },
+        'main',
+        repo,
+        { requireCleanBase: true }
+      ),
+      /Workflow worktrees branch from committed HEAD.*Commit or stash/s
+    );
+
+    const worktreeRoot = resolveRepoWorktreeRoot(repo);
+    const entries = await fs.readdir(worktreeRoot).catch(() => []);
+    assert.deepEqual(entries, []);
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true });
+  }
+});

@@ -77,6 +77,7 @@ import { getSettingsBackend } from './settingsBackendInstance';
 import { getAiUsageLog } from './aiUsageLogInstance';
 import { getWorkflowRecommendationCache } from './workflowRecommendationCacheInstance';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
+import { assertWorkflowBaseReady } from './workflowWorkspace';
 import {
   getWorkflowPolicyStore,
   getWorkflowStore,
@@ -655,6 +656,10 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
           throw new Error('The workflow controller session was not found or has changed. Start the session again.');
         }
       }
+
+      // A run branches from committed HEAD. Check before persisting the run/controller linkage so a
+      // dirty checkout cannot produce a live-looking run whose worktree silently lacks current code.
+      await assertWorkflowBaseReady(projectId);
 
       const run = createWorkflowRun({
         runId: randomUUID(),

@@ -1,5 +1,10 @@
-import { GitWorktreeManager, type WorkflowRun, type WorkflowWorkspaceProvider } from '@praxis/core';
-import { getCurrentBranch } from './gitService';
+import {
+  GitWorktreeManager,
+  type GitChangedFile,
+  type WorkflowRun,
+  type WorkflowWorkspaceProvider
+} from '@praxis/core';
+import { getCurrentBranch, getGitStatus } from './gitService';
 import { getProjectStore } from './projectStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 
@@ -20,6 +25,38 @@ const logger = { appendLine: (message: string): void => console.log(`[workflow] 
 /** Stable per-run name, so re-attaching after a restart lands on the same tree. */
 function worktreeKeyFor(run: WorkflowRun): string {
   return `WF-${run.runId.slice(0, 8).toUpperCase()}`;
+}
+
+/** App-owned metadata can be dirty without changing the product snapshot a run builds and tests. */
+function isWorkflowMetadataPath(value: string): boolean {
+  const filePath = value.replaceAll('\\', '/');
+  return filePath === 'project.praxis.md'
+    || filePath === 'board.praxis.json'
+    || filePath.endsWith('.workspace.praxis.json')
+    || filePath.startsWith('.praxis/');
+}
+
+export function workflowBaseBlockingPaths(files: readonly Pick<GitChangedFile, 'path'>[]): string[] {
+  return files.map(file => file.path).filter(filePath => !isWorkflowMetadataPath(filePath));
+}
+
+/**
+ * A linked worktree is created from committed HEAD. Refuse to start when that would silently omit
+ * product changes which the user can currently see and may already have verified in the main app.
+ */
+export async function assertWorkflowBaseReady(projectId: string): Promise<void> {
+  const project = getProjectStore().get(projectId);
+  const folder = project?.workspaceFolder?.trim();
+  if (!folder) return;
+  const blocking = workflowBaseBlockingPaths((await getGitStatus(folder)).files);
+  if (blocking.length === 0) return;
+  const examples = blocking.slice(0, 3).join(', ');
+  throw new Error(
+    `Cannot start a governed workflow while ${blocking.length} uncommitted ` +
+      `${blocking.length === 1 ? 'file is' : 'files are'} outside Praxis metadata` +
+      `${examples ? ` (${examples}${blocking.length > 3 ? ', …' : ''})` : ''}. ` +
+      'The workflow worktree branches from committed HEAD and would test older code. Commit or stash these changes, then start the run again.'
+  );
 }
 
 export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
@@ -47,7 +84,13 @@ export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
         >[0],
         baseBranch,
         folder,
-        { forceClean: false }
+        {
+          forceClean: false,
+          // A Git worktree starts from a commit, not from the files currently visible in the main
+          // checkout. Silently dropping those files makes workflow QA test an older product than the
+          // one the user just ran. Refuse that ambiguous base and tell them how to make it durable.
+          requireCleanBase: true
+        }
       );
       return prepared.worktreePath;
     },
