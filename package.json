@@ -12,7 +12,7 @@
   "scripts": {
     "check-types": "npm run check-types --workspaces --if-present",
     "build": "npm run build:core && npm run build:mobile-protocol && npm run build:renderer && npm run desktop:copy-renderer && npm run build:desktop",
-    "test": "npm run test:core && npm run test:mobile-protocol && npm run test:mobile && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop:mobile && npm run test:desktop && npm run test:desktop:themes",
+    "test": "npm run test:core && npm run test:praxis-contracts && npm run test:mobile-protocol && npm run test:mobile && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop:mobile && npm run test:desktop && npm run test:desktop:themes",
     "build:core": "npm run compile --workspace=@praxis/core",
     "test:core": "npm test --workspace=@praxis/core",
     "build:mobile-protocol": "npm run compile --workspace=@praxis/mobile-protocol",
@@ -27,6 +27,7 @@
     "desktop:copy-renderer": "npm run copy-renderer --workspace=@praxis/desktop-main",
     "build:desktop": "npm run compile --workspace=@praxis/desktop-main",
     "test:desktop": "npm run test:e2e --workspace=@praxis/desktop-main -- --project=functional",
+    "test:praxis-contracts": "node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
     "test:desktop:themes": "npm run test:e2e --workspace=@praxis/desktop-main -- --project=themes --project=theme-regressions",
     "test:desktop:all": "npm run test:e2e --workspace=@praxis/desktop-main -- --project=functional --project=themes --project=theme-regressions",
     "reset:workspace-data": "node scripts/reset-praxis-workspace-data.mjs",

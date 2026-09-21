@@ -69,6 +69,21 @@ test('workflow checks preserve an explicit worker choice', async () => {
   }
 });
 
+test('workflow checks stream complete output lines for live QA progress', async () => {
+  const lines: string[] = [];
+  const result = await spawnCheck(
+    check("process.stdout.write('✔ 1 [functional] › e2e/example.spec.ts:10 › opens the board\\n304 passed (5.7m)\\n')"),
+    tmpdir(),
+    undefined,
+    line => lines.push(line)
+  );
+  assert.equal(result.code, 0);
+  assert.deepEqual(lines, [
+    '✔ 1 [functional] › e2e/example.spec.ts:10 › opens the board',
+    '304 passed (5.7m)'
+  ]);
+});
+
 test('cancellation terminates an active check that ignores SIGTERM', { timeout: 10_000 }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'praxis-check-'));
   const controller = new AbortController();

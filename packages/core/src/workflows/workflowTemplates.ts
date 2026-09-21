@@ -126,7 +126,7 @@ function buildNode(x: number, y: number): WorkflowCheckNode {
 }
 
 /**
- * Plan → Implement → (Review ∥ Security ∥ Install → Build → QA) → Gates → Approve.
+ * Plan → Implement → Praxis Tests → (Review ∥ Security ∥ Install → Build → QA) → Gates → Approve.
  *
  * The agent ids (`praxis-planner`, `praxis-implementer`, `praxis-reviewer`) are
  * conventional: a project points them at real Agent Hub agents, or the designer
@@ -173,26 +173,39 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
       },
       {
         type: 'agent-task',
+        id: 'test-contracts',
+        name: 'Praxis Test contracts',
+        x: 360,
+        y: 160,
+        inputs: ['change-diff'],
+        agent: { agentId: 'praxis-test-author', profileId: 'praxis-test-author', hostId: 'praxis-test-author', scope: 'global', toolMode: 'project-only', skillNames: ['praxis-test-contracts'] },
+        instructions: 'Inventory the automated QA tests, author or update the structured English Praxis Test catalog, and run its deterministic validator. Report the exact test count, coverage links, and any stale or ambiguous contracts.',
+        outputs: [{ id: 'test-contracts', kind: 'report', required: true, description: 'The validated Praxis Test catalog and coverage report.' }],
+        mutatesWorktree: true,
+        maxAttempts: 2
+      },
+      {
+        type: 'agent-task',
         id: 'review',
         name: 'Review',
-        x: 480,
+        x: 600,
         y: 0,
-        inputs: ['change-diff'],
+        inputs: ['change-diff', 'test-contracts'],
         agent: { agentId: 'praxis-reviewer', profileId: 'praxis-reviewer', hostId: 'praxis-reviewer', scope: 'global', toolMode: 'read-only' },
         instructions: 'Review the implementation snapshot for correctness and quality.',
         outputs: [{ id: 'review-report', kind: 'report', required: true }],
         mutatesWorktree: false,
         satisfiesGate: 'review'
       },
-      installDependenciesNode(480, 240),
-      buildNode(720, 240),
+      installDependenciesNode(600, 240),
+      buildNode(840, 240),
       {
         type: 'check',
         id: 'qa',
         name: 'QA',
-        x: 960,
+        x: 1080,
         y: 240,
-        inputs: ['change-diff', 'install-log'],
+        inputs: ['change-diff', 'test-contracts', 'install-log'],
         command: 'npm',
         args: ['test'],
         successExitCodes: [0],
@@ -203,7 +216,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         type: 'check',
         id: 'security',
         name: 'Security scan',
-        x: 480,
+        x: 600,
         y: 400,
         inputs: ['change-diff'],
         command: 'npm',
@@ -224,7 +237,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         name: 'Approve',
         x: 1440,
         y: 160,
-        inputs: ['review-report', 'qa-results', 'security-report'],
+        inputs: ['review-report', 'test-contracts', 'qa-results', 'security-report'],
         prompt: 'Review, QA, and security have passed. Approve this change for delivery?',
         requiredGates: ['review', 'qa', 'security'],
         allowBypass: false
@@ -232,11 +245,12 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
     ],
     edges: [
       { id: 'e-plan-impl', from: 'plan', to: 'implement', on: 'success', required: true },
-      { id: 'e-impl-review', from: 'implement', to: 'review', on: 'success', required: true },
-      { id: 'e-impl-install', from: 'implement', to: 'install', on: 'success', required: true },
+      { id: 'e-impl-tests', from: 'implement', to: 'test-contracts', on: 'success', required: true },
+      { id: 'e-tests-review', from: 'test-contracts', to: 'review', on: 'success', required: true },
+      { id: 'e-tests-install', from: 'test-contracts', to: 'install', on: 'success', required: true },
       { id: 'e-install-build', from: 'install', to: 'build', on: 'success', required: true },
       { id: 'e-build-qa', from: 'build', to: 'qa', on: 'success', required: true },
-      { id: 'e-impl-sec', from: 'implement', to: 'security', on: 'success', required: true },
+      { id: 'e-tests-sec', from: 'test-contracts', to: 'security', on: 'success', required: true },
       { id: 'e-review-gates', from: 'review', to: 'gates', on: 'success', required: true },
       { id: 'e-qa-gates', from: 'qa', to: 'gates', on: 'success', required: true },
       { id: 'e-sec-gates', from: 'security', to: 'gates', on: 'success', required: true },

@@ -230,7 +230,7 @@ export type WorkflowRunCommand =
   | { kind: 'node-retry'; nodeId: string; at: string }
   | { kind: 'node-interrupted'; nodeId: string; at: string }
   /** Reports a sub-phase of an in-flight attempt; see `WorkflowNodeState.phase`. */
-  | { kind: 'node-progress'; nodeId: string; at: string; phase: string }
+  | { kind: 'node-progress'; nodeId: string; at: string; phase: string; message?: string }
   | { kind: 'gate-decided'; at: string; decision: WorkflowGateDecision }
   | { kind: 'cancel'; at: string; reason?: string };
 
@@ -325,7 +325,7 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
     case 'node-interrupted':
       return interruptNode(run, command.nodeId, command.at);
     case 'node-progress':
-      return progressNode(run, command.nodeId, command.at, command.phase);
+      return progressNode(run, command.nodeId, command.at, command.phase, command.message);
     case 'gate-decided':
       return recordGate(run, command.at, command.decision);
     case 'cancel':
@@ -612,17 +612,19 @@ function interruptNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRu
  * already announced (recovery replay, a retried notification) does not
  * double-log an event.
  */
-function progressNode(run: WorkflowRun, nodeId: string, at: string, phase: string): WorkflowRun {
+function progressNode(run: WorkflowRun, nodeId: string, at: string, phase: string, message?: string): WorkflowRun {
   const state = run.nodes[nodeId];
   if (!state || state.outcome !== 'running') return run;
-  if (state.phase === phase) return run;
+  const eventMessage = message?.trim() || `${label(run, nodeId)} entered phase "${phase}".`;
+  const previous = run.events[run.events.length - 1];
+  if (state.phase === phase && previous?.kind === 'node-progress' && previous.message === eventMessage) return run;
 
   const next = withNode(run, { ...state, phase });
   return append(next, {
     at,
     kind: 'node-progress',
     nodeId,
-    message: `${label(run, nodeId)} entered phase "${phase}".`
+    message: eventMessage
   });
 }
 
