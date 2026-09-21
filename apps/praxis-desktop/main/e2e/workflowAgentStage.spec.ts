@@ -153,6 +153,8 @@ test('an agent stage runs a real session and produces its declared artifact', as
       artifacts: stage?.artifacts.map(a => a.contractId),
       gate: summary?.gates.find(g => g.gate === 'qa')?.state,
       sessionState: stageSession?.state,
+      sessionProvider: stageSession?.provider,
+      sessionModel: stageSession?.model,
       sessionWorktree: stageSession?.worktreePath ?? stageSession?.workingDirectory
     };
   }, started.runId);
@@ -165,7 +167,19 @@ test('an agent stage runs a real session and produces its declared artifact', as
 
   // A real, attributed agent session exists and finished against the mock.
   expect(detail.sessionState).toBe('completed');
+  expect(detail.sessionProvider).toBe('vercel-gateway');
+  expect(detail.sessionModel).toBeTruthy();
   expect(detail.sessionWorktree).toBeTruthy();
+
+  // Workflow stage runtime provenance stays visible, but cannot be changed
+  // independently of the stage that owns it.
+  await page.getByTestId('nav-sessions').click();
+  const providerChip = page.getByTestId('session-provider');
+  const modelChip = page.getByTestId('session-model');
+  await expect(providerChip).toContainText('Vercel AI Gateway');
+  await expect(modelChip).toContainText(detail.sessionModel as string);
+  expect(await providerChip.evaluate(element => element.tagName)).toBe('SPAN');
+  expect(await modelChip.evaluate(element => element.tagName)).toBe('SPAN');
 
   // The mock gateway actually received the chat request — proof the real
   // provider path executed, not a stub.

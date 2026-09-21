@@ -1,5 +1,11 @@
 import { defineConfig } from '@playwright/test';
 
+function configuredWorkers(): number {
+  const explicit = Number.parseInt(process.env.PRAXIS_E2E_WORKERS ?? '', 10);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  return process.env.CI ? 1 : 4;
+}
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 30000,
@@ -13,8 +19,10 @@ export default defineConfig({
    * leave headroom rather than thrash.
    */
   // Concurrent Electron launches on macOS CI eventually fail its framework
-  // signature validation, so CI runs desktop suites serially.
-  workers: process.env.CI ? 1 : 4,
+  // signature validation, so CI runs desktop suites serially. A local governed
+  // workflow still sets CI for unattended test-runner behaviour, but supplies
+  // PRAXIS_E2E_WORKERS explicitly so its isolated Electron tests stay parallel.
+  workers: configuredWorkers(),
   reporter: 'list',
   projects: [
     {
