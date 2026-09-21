@@ -83,6 +83,10 @@ export interface NewSessionProps {
   onNewProject?: () => void;
   toolModeForBoard?: (board: Board) => AgentToolMode | undefined;
   onSelectedBoardChange?: (board: Board | undefined) => void;
+  /** Pre-selects a workflow (e.g. the title-bar quick session's quick-change). */
+  initialWorkflowId?: string;
+  /** Focuses the goal textarea on mount — the "ready to go" part of a quick session. */
+  autoFocusGoal?: boolean;
 }
 
 export interface SessionWorkflowOption {
@@ -111,6 +115,8 @@ export function NewSession({
   workflowOptions,
   toolModeForBoard,
   onSelectedBoardChange,
+  initialWorkflowId,
+  autoFocusGoal,
   agentContext,
   defaultWorkingDirectory,
   scopeLabel,
@@ -196,6 +202,31 @@ export function NewSession({
       setSelectedWorkflowId('');
     }
   }, [selectedWorkflowId, workflowOptionsForPicker]);
+  // A quick session mounts with its composer already meaning something — focus
+  // the goal so the user can just start typing. `autoFocus` would only fire on
+  // the very first mount, which races the route change that opened this view.
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    if (autoFocusGoal) {
+      composerInputRef.current?.focus();
+    }
+  }, [autoFocusGoal]);
+
+  // The caller's pre-selection arrives before the workflow options resolve over
+  // IPC, so it cannot seed state directly — the guard above would clear it on
+  // the first, empty render. Apply it once the option list actually has it
+  // (and it is ready), then never again: a later reload of the options must not
+  // override a workflow the user deliberately changed or cleared.
+  const appliedInitialWorkflowRef = useRef(false);
+  useEffect(() => {
+    if (appliedInitialWorkflowRef.current || !initialWorkflowId) {
+      return;
+    }
+    if (workflowOptionsForPicker.some(option => option.id === initialWorkflowId && option.ready)) {
+      setSelectedWorkflowId(initialWorkflowId);
+      appliedInitialWorkflowRef.current = true;
+    }
+  }, [initialWorkflowId, workflowOptionsForPicker]);
 
   useEffect(() => {
     setOpenTickets([]);
@@ -713,6 +744,7 @@ export function NewSession({
           )}
 
           <textarea
+            ref={composerInputRef}
             className="composer-input"
             placeholder="What's the goal?"
             value={goal}

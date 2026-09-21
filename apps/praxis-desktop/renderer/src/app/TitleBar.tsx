@@ -28,6 +28,8 @@ export interface TitleBarProps {
   onOpenWorkspace?: () => void;
   onCloseWorkspace?: () => void;
   onNewSession?: () => void;
+  /** Opens a session composer pre-set for a quick, workflow-driven session. */
+  onQuickSession?: () => void;
   onNewProject?: () => void;
   onAddExistingProject?: () => void;
   onImportProjects?: () => void;
@@ -74,6 +76,7 @@ export function TitleBar({
   onOpenWorkspace,
   onCloseWorkspace,
   onNewSession,
+  onQuickSession,
   onNewProject,
   onAddExistingProject,
   onImportProjects,
@@ -334,6 +337,18 @@ export function TitleBar({
             </div>
           )}
         </div>
+
+        {onQuickSession && (
+          <button
+            className="new-pill new-pill-icon"
+            aria-label="Quick session"
+            title="Quick session (Ctrl+Shift+N)"
+            data-testid="quick-session"
+            onClick={onQuickSession}
+          >
+            <Icon name="zap" size={13} />
+          </button>
+        )}
 
         <button
           className="icon-btn icon-btn-sm"
