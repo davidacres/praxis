@@ -14,6 +14,7 @@
  */
 
 import type { AgentTaskDefinition } from '../ai/agentTypes';
+import { isProviderLimitError, extractProviderLimitMessage } from '../ai/providerLimitError';
 import { nodeOutputs, type WorkflowAgentTaskNode, type WorkflowArtifactKind } from './workflowTypes';
 import type { StageOutcome } from './workflowOrchestrator';
 import type { WorkflowStageContext } from './workflowStageSession';
@@ -107,11 +108,25 @@ export function stageOutcomeFromSession(
   session: FinishedStageSession
 ): StageOutcome {
   if (session.state !== 'completed') {
-    if (session.providerLimitReached) {
+    const limitCandidate = (session.lastError && isProviderLimitError(session.lastError))
+      ? session.lastError
+      : (session.responseText && isProviderLimitError(session.responseText))
+        ? session.responseText
+        : undefined;
+    if (session.providerLimitReached || limitCandidate) {
+      const detail = limitCandidate
+        ? extractProviderLimitMessage(limitCandidate)
+        : (session.lastError && !/^(?:the stage session failed:\s*)?(?:internal error|internal failure)$/i.test(session.lastError.trim())
+            ? session.lastError
+            : undefined);
       return {
         status: 'failed',
         pause: 'provider-limit',
-        error: `The AI provider's credits or usage limit were reached${session.lastError ? `: ${firstLine(session.lastError)}` : '.'}`
+        error: detail
+          ? (detail.startsWith("The AI provider's") || detail.startsWith('Provider limit reached')
+              ? detail
+              : `The AI provider's credits or usage limit were reached: ${firstLine(detail)}`)
+          : "The AI provider's credits or usage limit were reached."
       };
     }
     const detail = session.lastError || (session.responseText ? firstLine(session.responseText) : undefined);

@@ -609,8 +609,13 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       this.logger.appendLine(`[VercelAgent] Session failed for ${issue.key}: ${message}`);
       const record = this.sessionManager.getAgentSession(issue.key);
       if (record && !this.isTerminalState(record.state)) {
-        const isLimit = isProviderLimitError(error);
-        const limitNotice = isLimit ? extractProviderLimitMessage(error) : undefined;
+        const limitCandidate = isProviderLimitError(error)
+          ? error
+          : (record.responseText && isProviderLimitError(record.responseText))
+            ? record.responseText
+            : undefined;
+        const isLimit = Boolean(limitCandidate);
+        const limitNotice = limitCandidate ? extractProviderLimitMessage(limitCandidate) : undefined;
         this.sessionManager.updateAgentState(issue.key, 'failed', limitNotice ?? message);
         this.appendEvent(issue.key, evt('error', limitNotice ?? message));
       }
@@ -728,8 +733,13 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       this.logger.appendLine(`[VercelAgent] Resume failed for ${issueKey}: ${message}`);
       const current = this.sessionManager.getAgentSession(issueKey);
       if (current && !this.isTerminalState(current.state)) {
-        const isLimit = isProviderLimitError(error);
-        const limitNotice = isLimit ? extractProviderLimitMessage(error) : undefined;
+        const limitCandidate = isProviderLimitError(error)
+          ? error
+          : (current.responseText && isProviderLimitError(current.responseText))
+            ? current.responseText
+            : undefined;
+        const isLimit = Boolean(limitCandidate);
+        const limitNotice = limitCandidate ? extractProviderLimitMessage(limitCandidate) : undefined;
         this.sessionManager.updateAgentState(issueKey, 'failed', limitNotice ?? message);
         this.appendEvent(issueKey, evt('error', limitNotice ?? message));
       }
