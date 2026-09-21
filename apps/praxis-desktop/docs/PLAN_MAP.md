@@ -372,12 +372,12 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 
 | Ref | Type | Name | Status | Depends on |
 | --- | --- | --- | --- | --- |
-| FX-BF-036 | Feature | Interactive chat gadgets and response surfaces | In progress | FX-BF-014, FX-BF-015, FX-BF-035 |
+| FX-BF-036 | Feature | Interactive chat gadgets and response surfaces | Complete | FX-BF-014, FX-BF-015, FX-BF-035 |
 | FX-BE-097 | Story | Versioned gadget and action contracts | Done | FX-BF-014, FX-BF-015 |
 | FX-BE-098 | Story | Renderer registry and core chat surfaces | Done | FX-BE-097 |
 | FX-BE-099 | Story | Safe action lifecycle, scope and stale-state handling | Done | FX-BE-097, FX-BF-013 |
-| FX-BE-100 | Story | Workflow, agent and orchestration integration | In progress | FX-BE-099, FX-BF-035 |
-| FX-BE-101 | Story | Accessibility, mobile, fixtures and end-to-end proof | In progress | FX-BE-098, FX-BE-100 |
+| FX-BE-100 | Story | Workflow, agent and orchestration integration | Done | FX-BE-099, FX-BF-035 |
+| FX-BE-101 | Story | Accessibility, mobile, fixtures and end-to-end proof | Done | FX-BE-098, FX-BE-100 |
 | TASK-276 | Task | Define ChatBlock, GadgetEnvelope and GadgetScope contracts | Done | FX-BE-097 |
 | TASK-277 | Task | Define GadgetAction, result and fallback contracts | Done | TASK-276 |
 | TASK-278 | Task | Validate payload size, schema, capability and safety policy | Done | TASK-277 |
@@ -387,12 +387,12 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | TASK-282 | Task | Route gadget actions through the command ledger | Done | FX-BE-099 |
 | TASK-283 | Task | Enforce scope, authorization and policy boundaries | Done | TASK-282 |
 | TASK-284 | Task | Handle expiry, supersession, reconnect and duplicate submission | Done | TASK-283 |
-| TASK-285 | Task | Add expected-response declarations to workflows and sessions | Planned | FX-BE-100 |
+| TASK-285 | Task | Add expected-response declarations to workflows and sessions | Done | FX-BE-100 |
 | TASK-286 | Task | Integrate provider responses and multi-AI handoffs | Done | TASK-285 |
-| TASK-287 | Task | Connect gadgets to run monitor, changes and deployment decisions | Planned | TASK-286 |
+| TASK-287 | Task | Connect gadgets to run monitor, changes and deployment decisions | Done | TASK-286 |
 | TASK-288 | Task | Add accessibility and responsive visual verification | Done | FX-BE-101 |
 | TASK-289 | Task | Create deterministic gadget fixture workflows and contract tests | Done | TASK-288 |
-| TASK-290 | Task | Prove desktop/mobile end-to-end journeys and document operations | Planned | TASK-289 |
+| TASK-290 | Task | Prove desktop/mobile end-to-end journeys and document operations | Done | TASK-289 |
 
 | FX-BF-037 | Feature | Rearrangeable panel layout | Proposed | FX-BF-005, FX-BF-008, FX-BF-017 |
 | FX-BE-102 | Story | Panel and layout region model | Proposed | FX-BF-005 |
