@@ -60,7 +60,7 @@ const FEATURES: FeatureDef[] = [
   { id: 'overview', label: 'Overview', icon: 'home' },
   { id: 'sessions', label: 'Sessions', icon: 'robot' },
   { id: 'connections', label: 'Connections', icon: 'plug' },
-  { id: 'agents', label: 'Agents', icon: 'zap' },
+  { id: 'agents', label: 'Agent Hub', icon: 'zap' },
 ];
 
 export interface SidebarProps {
@@ -262,7 +262,6 @@ export function Sidebar({
   const [documentsByProjectId, setDocumentsByProjectId] = useState<Record<string, { exists: boolean; documents: ProjectDocument[] }>>({});
 
   const activeWorkspace = workspaces?.find(workspace => workspace.id === activeWorkspaceId);
-  const projectNameForScope = projects.find(project => project.id === selectedProjectId)?.name;
   // The switcher scopes the Projects tree to the active workspace; with no
   // workspace selected every project shows.
   const visibleProjects = activeWorkspace
@@ -456,7 +455,7 @@ export function Sidebar({
                         ><span className="tree-icon"><Icon name="git-branch" size={14} /></span><span className="tree-label">Graph</span><span className="tree-badge">{project.workspaceFolder ? 'Git' : 'Setup'}</span></button>}
                         {!projectGitCollapsed && project.workspaceFolder && <button className={`tree-row project-git-child${activeFeature === 'git' && activeGitView === 'changes' && selectedProjectId === project.id ? ' active' : ''}`} data-testid="project-git-changes-nav-item" onClick={() => onSelectGit(project, 'changes')}><span className="tree-icon"><Icon name="file" size={14} /></span><span className="tree-label">Changes</span></button>}
                         <button
-                          className={`tree-row project-run-row${activeFeature === 'run' && selectedProjectId === project.id ? ' active' : ''}`}
+                          className={`tree-row project-service-run-row${activeFeature === 'run' && selectedProjectId === project.id ? ' active' : ''}`}
                           data-testid="project-run-nav-item"
                           onClick={() => onSelectRun(project)}
                         ><span className="tree-icon"><Icon name="server" size={14} /></span><span className="tree-label">Run</span></button>
@@ -766,6 +765,11 @@ export function Sidebar({
                   setCollapsed(current => ({ ...current, 'feature:sessions': !(current['feature:sessions'] ?? false) }))
                 }
                 sessions={sessions}
+                runNames={Object.fromEntries(
+                  Object.values(runsByProjectId)
+                    .flat()
+                    .map(run => [run.runId, run.workflowName])
+                )}
                 activeSessionKey={activeSessionKey}
                 runningCount={featureCounts.sessions ?? 0}
                 onSelectFeature={() => onSelectFeature('sessions')}
@@ -789,7 +793,6 @@ export function Sidebar({
                 activeAgentId={activeAgentId}
                 activeAgentProfileId={activeAgentProfileId}
                 activeSkillName={activeSkillName}
-                projectName={projectNameForScope}
                 onSelectFeature={() => onSelectFeature('agents')}
                 onSelectAgent={onSelectAgent}
                 onSelectAgentProfile={onSelectAgentProfile}
@@ -831,6 +834,7 @@ function SessionsNav({
   collapsed,
   onToggleCollapsed,
   sessions,
+  runNames,
   activeSessionKey,
   runningCount,
   onSelectFeature,
@@ -840,6 +844,8 @@ function SessionsNav({
   onDeleteSession,
   onArchiveSession
 }: {
+  /** Workflow run id → its workflow's name, for the header over a run's stage sessions. */
+  runNames: Record<string, string>;
   icon: IconName;
   label: string;
   active: boolean;
@@ -935,6 +941,48 @@ function SessionsNav({
     }
   };
 
+  // A run header stands for all of its stage sessions, so archiving or deleting it does exactly what
+  // doing the same to a parent session does: it takes every session under it along (a stage's own
+  // children first, then the stage). The run itself is not touched — it stays under Workflows → Runs.
+  const runSessions = (members: AgentSessionRecord[]): AgentSessionRecord[] =>
+    members.flatMap(member => [...descendantsOf(member)].reverse().concat(member));
+
+  const archiveRun = async (runId: string, members: AgentSessionRecord[]) => {
+    setMutatingKey(`run:${runId}`);
+    setError(undefined);
+    try {
+      for (const session of runSessions(members)) await onArchiveSession(session.issueKey, true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setMutatingKey(undefined);
+    }
+  };
+
+  const removeRun = async (runId: string, label: string, members: AgentSessionRecord[]) => {
+    const all = runSessions(members);
+    const live = all.filter(session => !isTerminalAgentState(session.state)).length;
+    if (
+      !(await confirm({
+        title: 'Delete this run\u2019s sessions?',
+        message: `It deletes all ${all.length} session${all.length === 1 ? '' : 's'} of \u201c${label}\u201d${live > 0 ? `, ${live} of them still working` : ''}. The run itself stays under Workflows \u2192 Runs.`,
+        confirmLabel: 'Delete sessions',
+        danger: true
+      }))
+    ) {
+      return;
+    }
+    setMutatingKey(`run:${runId}`);
+    setError(undefined);
+    try {
+      for (const session of all) await onDeleteSession(session.issueKey);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setMutatingKey(undefined);
+    }
+  };
+
   // A session that spawned others (a workflow controller's stage sessions)
   // nests them beneath it. A child whose parent is not in the list — archived,
   // or in another workspace — stays a top-level row rather than vanishing.
@@ -953,6 +1001,33 @@ function SessionsNav({
     return { childrenOf: children, roots: top };
   }, [sessions]);
   const [collapsedParents, setCollapsedParents] = useState<Record<string, boolean>>({});
+  const [collapsedRuns, setCollapsedRuns] = useState<Record<string, boolean>>({});
+
+  // Stage sessions of one run that no controller adopted would otherwise be a screenful of sibling
+  // rows. Two or more from the same run gather under one run header; a lone one stays a plain row.
+  const rootItems = useMemo(() => {
+    const byRun = new Map<string, AgentSessionRecord[]>();
+    for (const session of roots) {
+      if (isWorkflowStageSession(session) && session.workflowRunId) {
+        byRun.set(session.workflowRunId, [...(byRun.get(session.workflowRunId) ?? []), session]);
+      }
+    }
+    const items: Array<{ kind: 'session'; session: AgentSessionRecord } | { kind: 'run'; runId: string; members: AgentSessionRecord[] }> = [];
+    const emitted = new Set<string>();
+    for (const session of roots) {
+      const runId = isWorkflowStageSession(session) ? session.workflowRunId : undefined;
+      const members = runId ? byRun.get(runId) : undefined;
+      if (runId && members && members.length > 1) {
+        if (!emitted.has(runId)) {
+          emitted.add(runId);
+          items.push({ kind: 'run', runId, members });
+        }
+      } else {
+        items.push({ kind: 'session', session });
+      }
+    }
+    return items;
+  }, [roots]);
 
   const renderNode = (session: AgentSessionRecord, depth: number): ReactNode => {
       const editing = editingKey === session.issueKey;
@@ -1128,7 +1203,61 @@ function SessionsNav({
       {!collapsed && sessions.length === 0 && (
         <span className="sidebar-empty-hint" data-testid="sessions-nav-empty">No AI sessions yet</span>
       )}
-      {!collapsed && roots.map(session => renderNode(session, 0))}
+      {!collapsed &&
+        rootItems.map(item => {
+          if (item.kind === 'session') return renderNode(item.session, 0);
+          const runCollapsed = collapsedRuns[item.runId] ?? false;
+          const live = item.members.filter(member => !isTerminalAgentState(member.state)).length;
+          const label = runNames[item.runId] || 'Workflow run';
+          const runMutating = mutatingKey === `run:${item.runId}`;
+          return (
+            <Fragment key={`run:${item.runId}`}>
+              <div className="tree-row session-nav-row session-nav-run" data-testid="session-run-group" data-run-id={item.runId}>
+                <span className="tree-icon">
+                  <Icon name="graph" size={14} />
+                </span>
+                <span className="tree-label" title={label}>
+                  {label}
+                </span>
+                <span className="session-nav-childcount" title={`${item.members.length} stage sessions${live ? `, ${live} still working` : ''}`}>
+                  {live > 0 ? `${live}/${item.members.length}` : item.members.length}
+                </span>
+                <button
+                  className="icon-btn icon-btn-sm session-nav-toggle"
+                  aria-label={`${runCollapsed ? 'Expand' : 'Collapse'} ${label} stage sessions`}
+                  aria-expanded={!runCollapsed}
+                  data-testid="session-run-toggle"
+                  onClick={() => setCollapsedRuns(current => ({ ...current, [item.runId]: !runCollapsed }))}
+                >
+                  <Icon name={runCollapsed ? 'chevron-right' : 'chevron-down'} size={11} />
+                </button>
+                <span className="session-nav-actions">
+                  <button
+                    className="icon-btn icon-btn-sm"
+                    aria-label={`Archive all sessions of ${label}`}
+                    title="Archive these sessions"
+                    data-testid="session-run-archive-btn"
+                    disabled={runMutating}
+                    onClick={() => void archiveRun(item.runId, item.members)}
+                  >
+                    <Icon name="archive" size={12} />
+                  </button>
+                  <button
+                    className="icon-btn icon-btn-sm"
+                    aria-label={`Delete all sessions of ${label}`}
+                    title="Delete these sessions"
+                    data-testid="session-run-delete-btn"
+                    disabled={runMutating}
+                    onClick={() => void removeRun(item.runId, label, item.members)}
+                  >
+                    <Icon name="trash" size={12} />
+                  </button>
+                </span>
+              </div>
+              {!runCollapsed && item.members.map(member => renderNode(member, 1))}
+            </Fragment>
+          );
+        })}
     </>
   );
 }
@@ -1148,7 +1277,6 @@ function AgentsNav({
   activeAgentId,
   activeAgentProfileId,
   activeSkillName,
-  projectName,
   onSelectFeature,
   onSelectAgent,
   onSelectAgentProfile,
@@ -1164,7 +1292,6 @@ function AgentsNav({
   activeAgentId?: string;
   activeAgentProfileId?: string;
   activeSkillName?: string;
-  projectName?: string;
   onSelectFeature: () => void;
   onSelectAgent: (agentId: string) => void;
   onSelectAgentProfile: (profileId: string) => void;
@@ -1172,23 +1299,21 @@ function AgentsNav({
   onNewAgentItem: (kind: 'agent' | 'profile' | 'skill' | 'import' | 'rescan') => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const scopes: Array<'global' | 'project'> = ['global', 'project'];
-  const groups = scopes
-    .map(scope => ({
-      scope,
-      label: scope === 'global' ? 'Global' : projectName ?? 'This project',
-      // Agents are their profile — the primary-nav identity is AGENT.md, not
-      // the launch binding that runs it. A binding with no AGENT.md gets an
-      // auto-synthesized placeholder profile so it still has *a* profile
-      // record; that placeholder is advanced/diagnostic-only and lives in
-      // Settings -> Agent Runtime instead of cluttering this tree with raw,
-      // uncurated entries. (profile.legacy alone isn't enough here — it's
-      // also true for a genuine old brief.md profile, which does belong.)
-      profiles: (catalog?.profiles ?? []).filter(profile => profile.scope === scope && !isHostShimProfile(profile)),
-      skills: (catalog?.skills ?? []).filter(skill => skill.scope === scope)
-    }))
-    .filter(group => group.profiles.length > 0 || group.skills.length > 0);
-  const total = groups.reduce((count, group) => count + group.profiles.length + group.skills.length, 0);
+  // Which of the Agents / Skills sub-headers are folded.
+  const [collapsedKinds, setCollapsedKinds] = useState<Record<string, boolean>>({});
+  // Agents are their profile — the primary-nav identity is AGENT.md, not the launch binding that runs
+  // it. A binding with no AGENT.md gets an auto-synthesized placeholder profile so it still has *a*
+  // profile record; that placeholder is advanced/diagnostic-only and lives in Settings -> Agent
+  // Runtime instead of cluttering this tree with raw, uncurated entries. (profile.legacy alone isn't
+  // enough here — it's also true for a genuine old brief.md profile, which does belong.)
+  //
+  // Where an item comes from is row metadata, not a tree level: the project's own sort first and carry a
+  // "project" tag; everything else (yours, built-in) is untagged.
+  const projectFirst = <T extends { scope: string }>(items: T[]): T[] =>
+    [...items].sort((left, right) => Number(right.scope === 'project') - Number(left.scope === 'project'));
+  const profiles = projectFirst((catalog?.profiles ?? []).filter(profile => !isHostShimProfile(profile)));
+  const skills = projectFirst(catalog?.skills ?? []);
+  const total = profiles.length + skills.length;
 
   return (
     <>
@@ -1244,43 +1369,68 @@ function AgentsNav({
           )}
         </div>
       </div>
-      {!collapsed && groups.length === 0 && catalog && (
+      {!collapsed && total === 0 && catalog && (
         <span className="sidebar-empty-hint">No agents or skills yet</span>
       )}
       {!collapsed &&
-        groups.map(group => (
-          <div key={group.scope} className="agent-nav-group">
-            <div className="agent-nav-scope">{group.label}</div>
-            {group.profiles.map(profile => (
-              <button
-                key={`p:${profile.profile.id}`}
-                className={`tree-row agent-nav-row${active && activeAgentProfileId === profile.profile.id ? ' active' : ''}`}
-                data-testid="profile-nav-item"
-                onClick={() => onSelectAgentProfile(profile.profile.id)}
-              >
-                <span className="tree-icon"><Icon name="robot" size={14} /></span>
-                <span className="tree-label">{profile.profile.name}</span>
-                {profile.error ? <span className="tree-badge" title="Invalid profile">⚠</span> : profile.legacy ? <span className="tree-badge">legacy</span> : null}
-              </button>
-            ))}
-            {group.skills.map(skill => (
-              <button
-                key={`s:${skill.metadata.name}`}
-                className={`tree-row agent-nav-row${active && activeSkillName === skill.metadata.name ? ' active' : ''}`}
-                data-testid="skill-nav-item"
-                onClick={() => onSelectSkill(skill.metadata.name)}
-              >
-                <span className="tree-icon"><Icon name="sparkles" size={14} /></span>
-                <span className="tree-label">{skill.metadata.name}</span>
-                {skill.error ? (
-                  <span className="tree-badge" title="Invalid skill">⚠</span>
-                ) : !skill.trusted ? (
-                  <span className="tree-badge">approval</span>
-                ) : null}
-              </button>
-            ))}
-          </div>
-        ))}
+        (
+          [
+            { id: 'agents', label: 'Agents', count: profiles.length },
+            { id: 'skills', label: 'Skills', count: skills.length }
+          ] as const
+        )
+          .filter(kind => kind.count > 0)
+          .map(kind => {
+            const isCollapsed = collapsedKinds[kind.id] ?? false;
+            return (
+              <div key={kind.id} className="agent-nav-group">
+                <button
+                  className="agent-nav-kind"
+                  aria-expanded={!isCollapsed}
+                  data-testid={`agent-nav-kind-${kind.id}`}
+                  onClick={() => setCollapsedKinds(current => ({ ...current, [kind.id]: !isCollapsed }))}
+                >
+                  <span className="tree-section-icon"><Icon name={isCollapsed ? 'chevron-right' : 'chevron-down'} size={10} /></span>
+                  <span>{kind.label}</span>
+                  <span className="tree-meta">{kind.count}</span>
+                </button>
+                {!isCollapsed && kind.id === 'agents' && profiles.map(profile => (
+                  <button
+                    key={`p:${profile.profile.id}`}
+                    className={`tree-row agent-nav-row${active && activeAgentProfileId === profile.profile.id ? ' active' : ''}`}
+                    data-testid="profile-nav-item"
+                    onClick={() => onSelectAgentProfile(profile.profile.id)}
+                  >
+                    <span className="tree-icon"><Icon name="robot" size={14} /></span>
+                    <span className="tree-label">{profile.profile.name}</span>
+                    <span className="agent-nav-badges">
+                      {profile.scope === 'project' && <span className="agent-nav-project" title="Defined by this project" aria-label="Project" data-testid="agent-nav-project-tag"><Icon name="folder" size={12} /></span>}
+                      {profile.error ? <span className="tree-badge" title="Invalid profile">⚠</span> : profile.legacy ? <span className="tree-badge">legacy</span> : null}
+                    </span>
+                  </button>
+                ))}
+                {!isCollapsed && kind.id === 'skills' && skills.map(skill => (
+                  <button
+                    key={`s:${skill.scope}:${skill.metadata.name}`}
+                    className={`tree-row agent-nav-row${active && activeSkillName === skill.metadata.name ? ' active' : ''}`}
+                    data-testid="skill-nav-item"
+                    onClick={() => onSelectSkill(skill.metadata.name)}
+                  >
+                    <span className="tree-icon"><Icon name="sparkles" size={14} /></span>
+                    <span className="tree-label">{skill.metadata.name}</span>
+                    <span className="agent-nav-badges">
+                      {skill.scope === 'project' && <span className="agent-nav-project" title="Defined by this project" aria-label="Project" data-testid="agent-nav-project-tag"><Icon name="folder" size={12} /></span>}
+                      {skill.error ? (
+                        <span className="tree-badge" title="Invalid skill">⚠</span>
+                      ) : !skill.trusted ? (
+                        <span className="tree-badge">approval</span>
+                      ) : null}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
     </>
   );
 }

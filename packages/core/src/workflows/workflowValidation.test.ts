@@ -480,3 +480,22 @@ test('a deployment node missing its deploymentProfileId and outputs normalizes t
   assert.equal(node.type === 'deployment' && node.deploymentProfileId, '');
   assert.deepEqual(node.type === 'deployment' ? node.outputs : undefined, []);
 });
+
+test('normalizeWorkflow keeps a stage\'s model choice and drops an unreadable one', () => {
+  const stage = (extra: Record<string, unknown>) => ({
+    type: 'agent-task', id: 'a', name: 'A', x: 0, y: 0, inputs: [], agent: { agentId: 'x', scope: 'global', toolMode: 'read-only' },
+    instructions: '', outputs: [], mutatesWorktree: false, ...extra
+  });
+  const nodeOf = (extra: Record<string, unknown>) =>
+    normalizeWorkflow({ id: 'w', name: 'W', entryNodeId: 'a', nodes: [stage(extra)], edges: [] }).nodes[0] as {
+      model?: string; modelTier?: string; escalateOnRetry?: boolean;
+    };
+  assert.deepEqual(
+    (({ model, modelTier, escalateOnRetry }) => ({ model, modelTier, escalateOnRetry }))(nodeOf({ model: ' x/y ', modelTier: 'strong', escalateOnRetry: false })),
+    { model: 'x/y', modelTier: 'strong', escalateOnRetry: false }
+  );
+  const bad = nodeOf({ model: '  ', modelTier: 'ultra', escalateOnRetry: 'no' });
+  assert.equal(bad.model, undefined);
+  assert.equal(bad.modelTier, undefined, 'an unreadable tier is dropped, never turned into another one');
+  assert.equal(bad.escalateOnRetry, undefined);
+});

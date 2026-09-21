@@ -171,3 +171,35 @@ function firstLine(text: string): string {
   const line = text.trim().split('\n')[0] ?? '';
   return line.length > 200 ? `${line.slice(0, 200)}…` : line;
 }
+
+/** An upstream stage's written report, as the session that produced it left it. */
+export interface UpstreamReport {
+  contractId: string;
+  /** The producing stage's display name. */
+  stageName: string;
+  text: string;
+}
+
+/** Enough for a reviewer to work from, small enough not to become the prompt. */
+export const UPSTREAM_REPORT_MAX_CHARS = 6000;
+
+/**
+ * The upstream reports a stage is handed inline, so it starts from what the previous stages concluded
+ * rather than re-deriving it. A report artifact carries no file (its text only ever lived on the
+ * producing session), so without this a downstream stage is told a report exists and cannot read it.
+ * Each report is capped, keeping its head and its tail — a report's verdict is usually at the end —
+ * and the cap is announced so a stage knows to ask if it needs more.
+ */
+export function formatUpstreamReports(reports: readonly UpstreamReport[], maxChars = UPSTREAM_REPORT_MAX_CHARS): string | undefined {
+  const usable = reports.filter(report => report.text.trim());
+  if (usable.length === 0) return undefined;
+  const blocks = usable.map(report => {
+    const text = report.text.trim();
+    const shown =
+      text.length <= maxChars
+        ? text
+        : `${text.slice(0, Math.floor(maxChars / 2)).trimEnd()}\n\n[… ${text.length - maxChars} characters omitted …]\n\n${text.slice(text.length - Math.floor(maxChars / 2)).trimStart()}`;
+    return `### "${report.contractId}" from ${report.stageName}\n${shown}`;
+  });
+  return `Reports from earlier stages (use these rather than re-deriving them):\n\n${blocks.join('\n\n')}`;
+}

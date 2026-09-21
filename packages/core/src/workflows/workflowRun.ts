@@ -315,8 +315,13 @@ export function createWorkflowRun(input: {
  */
 export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCommand): WorkflowRun {
   // A settled run absorbs nothing further. Recovery may replay commands that
-  // raced the run ending; they must not resurrect it.
-  if (isRunSettled(run) && command.kind !== 'gate-decided' && command.kind !== 'node-stopped') return run;
+  // raced the run ending; they must not resurrect it. The one deliberate
+  // exception is a person retrying a stage of a *failed* run: that reopens it.
+  // A cancelled run stays cancelled, and a succeeded one has nothing to retry.
+  const reopensFailedRun = command.kind === 'node-retry' && run.status === 'failed';
+  if (isRunSettled(run) && command.kind !== 'gate-decided' && command.kind !== 'node-stopped' && !reopensFailedRun) {
+    return run;
+  }
 
   switch (command.kind) {
     case 'node-started':
@@ -577,20 +582,31 @@ function retryNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRun {
   const state = run.nodes[nodeId];
   if (!state || state.outcome !== 'failed') return run;
 
-  const node = findNode(run, nodeId);
+  // `maxAttempts` bounds how far the run keeps going on its own (see `canRetry`);
+  // it does not stop a person deciding to try again. A failed run is reopened.
   const maxAttempts =
-    (isAgentTaskNode(node!) || isCheckNode(node!) || isDeploymentNode(node!) ? node!.maxAttempts : undefined) ?? 1;
-  if (attemptsSpent(state) >= maxAttempts) return run;
+    (isAgentTaskNode(findNode(run, nodeId)!) || isCheckNode(findNode(run, nodeId)!) || isDeploymentNode(findNode(run, nodeId)!)
+      ? (findNode(run, nodeId) as { maxAttempts?: number }).maxAttempts
+      : undefined) ?? 1;
+  const spent = attemptsSpent(state);
+  let base = run;
+  if (isRunSettled(run)) {
+    // Siblings stopped because this failure ended the run were interrupted, not
+    // judged, so they go back in the queue with it.
+    for (const other of Object.values(run.nodes)) {
+      if (other.outcome === 'cancelled') base = withNode(base, { ...other, outcome: 'pending' });
+    }
+  }
 
   // Returning to pending lets the scheduler pick the node up again under the
   // same readiness rules as the first time — including worktree serialisation.
-  const next = withNode(run, { ...state, outcome: 'pending' });
+  const next = withNode(base, { ...base.nodes[nodeId], outcome: 'pending' });
   return append({ ...next, status: 'running', endedAt: undefined, endedReason: undefined }, {
     at,
     kind: 'node-retried',
     nodeId,
     attempt: state.attempts.length,
-    message: `${label(run, nodeId)} queued for retry (attempt ${attemptsSpent(state) + 1} of ${maxAttempts}).`
+    message: `${label(run, nodeId)} queued for retry (attempt ${spent + 1}${spent < maxAttempts ? ` of ${maxAttempts}` : ''}).`
   });
 }
 

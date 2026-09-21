@@ -188,6 +188,15 @@ interface WorkflowNodeBase {
   enabled?: boolean;
 }
 
+/**
+ * How much model a stage needs, independent of provider. What each tier means
+ * for a given provider is the user's mapping (`ai.modelTiers`), because model
+ * ids are provider-specific and there is no honest universal ranking.
+ */
+export type WorkflowModelTier = 'fast' | 'standard' | 'strong';
+
+export const WORKFLOW_MODEL_TIERS: readonly WorkflowModelTier[] = ['fast', 'standard', 'strong'];
+
 /** A stage run by an agent session through the Agent Hub/runtime boundary. */
 export interface WorkflowAgentTaskNode extends WorkflowNodeBase {
   type: 'agent-task';
@@ -207,6 +216,12 @@ export interface WorkflowAgentTaskNode extends WorkflowNodeBase {
   satisfiesGate?: WorkflowGateKind;
   timeoutMs?: number;
   maxAttempts?: number;
+  /** An exact model id for this stage. Wins over `modelTier` and the run's model. */
+  model?: string;
+  /** The tier of model this stage needs; resolved per provider. Absent means the run's model. */
+  modelTier?: WorkflowModelTier;
+  /** Move up a tier on each retry (fast → standard → strong). Defaults to on when a tier is set. */
+  escalateOnRetry?: boolean;
 }
 
 /**

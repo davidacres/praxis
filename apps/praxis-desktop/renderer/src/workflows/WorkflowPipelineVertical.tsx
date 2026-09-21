@@ -102,9 +102,11 @@ export interface WorkflowPipelineVerticalProps {
   /** The stage currently doing the work, marked so a viewer can find it at a glance. */
   activeNodeId?: string;
   onSelectNode: (nodeId: string) => void;
+  /** Retries a failed step. The icon button appears only on steps the run offers a retry for. */
+  onRetryNode?: (nodeId: string) => void;
 }
 
-export function WorkflowPipelineVertical({ summary, selectedNodeId, activeNodeId, onSelectNode }: WorkflowPipelineVerticalProps) {
+export function WorkflowPipelineVertical({ summary, selectedNodeId, activeNodeId, onSelectNode, onRetryNode }: WorkflowPipelineVerticalProps) {
   const levels = useMemo(() => pipelineLevels(summary), [summary]);
   const done = summary.stages.filter(stage => stage.lane === 'done' || stage.lane === 'skipped').length;
 
@@ -123,8 +125,10 @@ export function WorkflowPipelineVertical({ summary, selectedNodeId, activeNodeId
             <ul>
               {stages.map(stage => {
                 const phase = phaseLabel(stage);
+                const canRetry =
+                  !!onRetryNode && summary.actions.some(a => a.kind === 'retry-stage' && a.nodeId === stage.nodeId);
                 return (
-                  <li key={stage.nodeId}>
+                  <li key={stage.nodeId} className={canRetry ? 'has-retry' : undefined}>
                     <button
                       type="button"
                       className={`wf-vpipe-step is-${stage.lane}${stage.nodeId === selectedNodeId ? ' is-selected' : ''}${stage.nodeId === activeNodeId ? ' is-active' : ''}`}
@@ -150,6 +154,18 @@ export function WorkflowPipelineVertical({ summary, selectedNodeId, activeNodeId
                         <Icon name={stage.sessionKey ? 'robot' : TYPE_ICON[stage.type]} size={13} />
                       </span>
                     </button>
+                    {canRetry && (
+                      <button
+                        type="button"
+                        className="wf-vpipe-retry"
+                        aria-label={`Retry ${stage.name}`}
+                        title={`Retry ${stage.name}`}
+                        data-testid={`wf-vpipe-retry-${stage.nodeId}`}
+                        onClick={() => onRetryNode(stage.nodeId)}
+                      >
+                        <Icon name="refresh" size={13} />
+                      </button>
+                    )}
                   </li>
                 );
               })}

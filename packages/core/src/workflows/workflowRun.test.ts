@@ -373,16 +373,54 @@ test('a failed stage within its attempt budget is retryable and keeps its histor
   assert.equal(run.nodes.implement.attempts[0].error, 'flaky');
 });
 
-test('retry past the attempt budget is refused', () => {
+test('a person can retry a failed stage after its attempt budget is spent, which reopens the failed run', () => {
   let run = succeed(newRun(), 'plan', 1);
   for (const minute of [3, 6]) {
     run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'implement', at: T(minute) });
     run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'implement', at: T(minute + 1), error: 'again' });
-    run = applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId: 'implement', at: T(minute + 2) });
+    if (minute === 3) run = applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId: 'implement', at: T(minute + 2) });
   }
   assert.equal(run.nodes.implement.attempts.length, 2);
-  assert.equal(canRetry(run, 'implement'), false);
+  assert.equal(canRetry(run, 'implement'), false, 'the budget still bounds the run continuing on its own');
   assert.equal(run.status, 'failed');
+  assert.ok(
+    nextActions(run).some(action => action.kind === 'retry-stage' && action.nodeId === 'implement'),
+    'a failed run still offers a retry'
+  );
+
+  run = applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId: 'implement', at: T(9) });
+  assert.equal(run.status, 'running');
+  assert.equal(run.endedAt, undefined);
+  assert.equal(run.endedReason, undefined);
+  assert.equal(run.nodes.implement.attempts.length, 2, 'earlier attempts stay on the record');
+  assert.deepEqual(scheduleWorkflowRun(run).ready, ['implement']);
+  assert.match(run.events.at(-1)?.message ?? '', /attempt 3/);
+});
+
+test('retrying a failed run requeues siblings that were stopped when it ended', () => {
+  let run = succeed(newRun(), 'plan', 1);
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'implement', at: T(3) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'implement', at: T(4), error: 'boom' });
+  run = applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId: 'implement', at: T(5) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'implement', at: T(6) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'implement', at: T(7), error: 'boom' });
+  assert.equal(run.status, 'failed');
+
+  // Simulate a sibling the orchestrator stopped when the run failed.
+  run = { ...run, nodes: { ...run.nodes, qa: { ...run.nodes.qa, outcome: 'cancelled' } } };
+  run = applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId: 'implement', at: T(8) });
+  assert.equal(run.nodes.qa.outcome, 'pending');
+});
+
+test('a cancelled run cannot be reopened by a retry', () => {
+  let run = succeed(newRun(), 'plan', 1);
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'implement', at: T(3) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'implement', at: T(4), error: 'boom' });
+  run = applyWorkflowRunCommand(run, { kind: 'cancel', at: T(5) });
+  assert.equal(run.status, 'cancelled');
+  const after = applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId: 'implement', at: T(6) });
+  assert.equal(after, run);
+  assert.equal(nextActions(run).some(action => action.kind === 'retry-stage'), false);
 });
 
 test('a retryable QA failure keeps the run open for a QA-only retry', () => {

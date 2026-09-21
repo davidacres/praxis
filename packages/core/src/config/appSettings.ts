@@ -139,6 +139,12 @@ export interface AiSettings {
    */
   recommendationProvider?: AiProvider;
   /**
+   * What each model tier (`fast` / `standard` / `strong`) means per provider, as model ids. A workflow
+   * stage names a tier, not a model, so the same workflow runs on whichever provider is active. A tier
+   * left unmapped makes a stage fall back to the run's model — see `chooseStageModel`.
+   */
+  modelTiers?: Record<string, { fast?: string; standard?: string; strong?: string }>;
+  /**
    * Per-provider non-secret config, keyed by provider id. `vercel-gateway`'s
    * effective config stays on the top-level `gatewayUrl`/`defaultModel`
    * fields above for backward compatibility — this map is for the other
@@ -907,6 +913,22 @@ function readOptionalAiProvider(value: unknown): AiProvider | undefined {
     : undefined;
 }
 
+/** Provider → tier → model id; anything that is not a non-empty string is dropped. */
+function readModelTiers(value: unknown): NonNullable<AiSettings['modelTiers']> {
+  const result: NonNullable<AiSettings['modelTiers']> = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
+  for (const [provider, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const entry: { fast?: string; standard?: string; strong?: string } = {};
+    for (const tier of ['fast', 'standard', 'strong'] as const) {
+      const model = (raw as Record<string, unknown>)[tier];
+      if (typeof model === 'string' && model.trim()) entry[tier] = model.trim();
+    }
+    if (Object.keys(entry).length > 0) result[provider] = entry;
+  }
+  return result;
+}
+
 function readAiProviderConfigs(value: unknown): Partial<Record<AiProvider, AiProviderConfig>> {
   if (!isRecord(value)) {
     return {};
@@ -995,6 +1017,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ),
         activeProvider: readAiProvider(raw.ai.activeProvider, DEFAULT_APP_SETTINGS.ai.activeProvider),
         recommendationProvider: readOptionalAiProvider(raw.ai.recommendationProvider),
+        modelTiers: readModelTiers(raw.ai.modelTiers),
         providers: readAiProviderConfigs(raw.ai.providers),
         browserTools: readBrowserTools(raw.ai.browserTools)
       }
