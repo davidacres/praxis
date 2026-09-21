@@ -17,6 +17,7 @@ import type { AgentCatalogSnapshot } from './workflowPreflight';
 import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition } from './workflowTypes';
 import type { DiscoveredAgent } from '../ai/agentRuntime/manifest';
 import type { DiscoveredAgentProfile } from '../ai/agentRuntime/profileRegistry';
+import type { DiscoveredSkill } from '../ai/agentRuntime/skillRegistry';
 import type { AgentWorkflowReference } from '../ai/agentTypes';
 
 const T = '2026-09-02T10:00:00.000Z';
@@ -44,10 +45,21 @@ function profile(id: string): DiscoveredAgentProfile {
   };
 }
 
+function skill(name: string): DiscoveredSkill {
+  return {
+    metadata: { name, description: name, triggers: [] },
+    skillPath: `/skills/${name}`,
+    instructionsPath: `/skills/${name}/SKILL.md`,
+    fingerprint: name,
+    scope: 'global',
+    trusted: true
+  };
+}
+
 const fullCatalog: AgentCatalogSnapshot = {
-  agents: [agent('praxis-planner'), agent('praxis-implementer'), agent('praxis-reviewer')],
-  profiles: [profile('praxis-planner'), profile('praxis-implementer'), profile('praxis-reviewer')],
-  skills: [],
+  agents: [agent('praxis-planner'), agent('praxis-implementer'), agent('praxis-reviewer'), agent('praxis-test-author')],
+  profiles: [profile('praxis-planner'), profile('praxis-implementer'), profile('praxis-reviewer'), profile('praxis-test-author')],
+  skills: [skill('praxis-test-contracts')],
   capabilities: {}
 };
 
@@ -185,6 +197,7 @@ test('a missing Agent Hub reference is named per node before any run', () => {
   assert.equal(readiness.agentsOk, false);
   assert.ok('implement' in readiness.blockingByNode);
   assert.ok('review' in readiness.blockingByNode);
+  assert.ok('test-contracts' in readiness.blockingByNode);
   assert.match(readiness.blockingByNode.implement, /praxis-implementer/);
   // The stage whose agent does resolve is not flagged.
   assert.equal('plan' in readiness.blockingByNode, false);
@@ -229,7 +242,7 @@ test('governed delivery installs dependencies and builds before QA, and validate
   assert.equal(install.satisfiesGate, undefined);
 
   const parents = (id: string) => template.edges.filter(edge => edge.to === id).map(edge => edge.from);
-  assert.deepEqual(parents('install'), ['implement']);
+  assert.deepEqual(parents('install'), ['test-contracts']);
 
   // A run worktree has no build output either (gitignored), so anything that runs the built product —
   // a desktop app's e2e suite opens a blank window — fails for a reason that looks nothing like "build".
@@ -243,6 +256,6 @@ test('governed delivery installs dependencies and builds before QA, and validate
 
   // QA waits for the build; the security scan reads the lockfile and does not.
   assert.deepEqual(parents('qa'), ['build']);
-  assert.deepEqual(parents('security'), ['implement']);
-  assert.deepEqual(parents('review'), ['implement']);
+  assert.deepEqual(parents('security'), ['test-contracts']);
+  assert.deepEqual(parents('review'), ['test-contracts']);
 });

@@ -12,7 +12,7 @@ import { discoverAgents } from './discovery';
 
 test('TASK-247: getBundledAgentManifests returns trusted global agents', () => {
   const bundled = getBundledAgentManifests();
-  assert.strictEqual(bundled.length, 5);
+  assert.strictEqual(bundled.length, 6);
 
   const ids = bundled.map(a => a.manifest.id).sort();
   assert.deepStrictEqual(ids, [
@@ -20,7 +20,8 @@ test('TASK-247: getBundledAgentManifests returns trusted global agents', () => {
     'praxis-implementer',
     'praxis-planner',
     'praxis-reviewer',
-    'praxis-security-analyst'
+    'praxis-security-analyst',
+    'praxis-test-author'
   ]);
 
   for (const agent of bundled) {

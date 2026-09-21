@@ -56,7 +56,10 @@ export async function runWorkflowCheck(
 
   const successCodes = node.successExitCodes?.length ? node.successExitCodes : [0];
   const capturedAt = new Date().toISOString();
-  const result = await spawnCheck(node, cwd, context.signal);
+  const result = await spawnCheck(node, cwd, context.signal, line => {
+    const progress = checkProgressLine(line);
+    if (progress) context.reportProgress?.(progress);
+  });
 
   const key: WorkflowEvidenceBundleKey = {
     projectId: context.run.projectId,
@@ -206,4 +209,28 @@ async function resolveEvidenceSource(cwd: string): Promise<WorkflowEvidenceSourc
 
 function tail(output: string): string {
   return output.length > OUTPUT_TAIL ? `…${output.slice(-OUTPUT_TAIL)}` : output;
+}
+
+/**
+ * Extracts stable milestones from common test-runner output without making a
+ * QA result depend on one runner. Playwright's list reporter emits one line
+ * per completed test and a final `passed/failed` summary; other tools simply
+ * continue to report their normal evidence log.
+ */
+function checkProgressLine(line: string): string | undefined {
+  const normalized = line.replace(/\u001b\[[0-9;]*m/g, '').trim();
+  if (!normalized) return undefined;
+
+  const testResult = normalized.match(/^[✓✔✘✗×]\s+(?:\d+\s+)?(.+?)(?:\s+\([^)]*\))?$/);
+  if (testResult) {
+    const symbol = normalized[0] === '✓' || normalized[0] === '✔' ? 'passed' : 'failed';
+    return `QA test ${symbol}: ${testResult[1].trim()}`;
+  }
+
+  if (/\b\d+\s+(?:passed|failed|skipped|flaky|timed out|tests?|pass|fail)\b/i.test(normalized)
+    && /\b(?:passed|failed|skipped|flaky|timed out|tests?|pass|fail)\b/i.test(normalized)) {
+    return `QA summary: ${normalized}`;
+  }
+
+  return undefined;
 }
