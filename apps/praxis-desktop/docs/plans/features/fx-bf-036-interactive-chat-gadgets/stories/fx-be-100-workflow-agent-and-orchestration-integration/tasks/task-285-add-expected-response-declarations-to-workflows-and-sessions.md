@@ -1,15 +1,15 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.264Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-285
 title: "Add expected-response declarations to workflows and sessions"
-status: To Do
+status: Done
 story: FX-BE-100
 feature: FX-BF-036
-updated: 2026-09-10
+updated: 2026-09-21
 dependencies: [FX-BE-100]
 ---
 

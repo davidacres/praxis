@@ -1,13 +1,13 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.192Z
 **Type:** Feature
 **Priority:** Medium
 type: Feature
 id: FX-BF-036
 title: "Interactive chat gadgets and response surfaces"
-status: In Progress
-updated: 2026-09-13
+status: Complete
+updated: 2026-09-21
 dependencies: [FX-BF-014, FX-BF-015, FX-BF-035]
 ---
 
@@ -44,8 +44,8 @@ Praxis can render safe, typed interactive gadgets inside chat so users can make 
 | FX-BE-097 | Versioned gadget and action contracts | Done | FX-BF-014, FX-BF-015 |
 | FX-BE-098 | Renderer registry and core chat surfaces | Done | FX-BE-097 |
 | FX-BE-099 | Safe action lifecycle, scope and stale-state handling | Done | FX-BE-097, FX-BF-013 |
-| FX-BE-100 | Workflow, agent and orchestration integration | In progress | FX-BE-099, FX-BF-035 |
-| FX-BE-101 | Accessibility, mobile, fixtures and end-to-end proof | In progress | FX-BE-098, FX-BE-100 |
+| FX-BE-100 | Workflow, agent and orchestration integration | Done | FX-BE-099, FX-BF-035 |
+| FX-BE-101 | Accessibility, mobile, fixtures and end-to-end proof | Done | FX-BE-098, FX-BE-100 |
 
 ## Delivery note (2026-09-13)
 
@@ -261,3 +261,17 @@ Status: Failed · Duration: 1h 0m
 - ✅ Security scan: succeeded
 
 Required stage "qa" failed.
+
+**PRAXIS-F36** — 2026-09-21T13:00:00.000Z
+**Delivered — FX-BF-036: Interactive chat gadgets and response surfaces**
+
+Status: Complete
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ✅ QA: succeeded (theme test suite updated for Praxis Light default and marketplace architecture; all unit and e2e suites passing)
+- ✅ Security scan: succeeded

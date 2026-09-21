@@ -1,14 +1,14 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.261Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-100
 title: "Workflow, agent and orchestration integration"
-status: In Progress
+status: Done
 feature: FX-BF-036
-updated: 2026-09-13
+updated: 2026-09-21
 dependencies: [FX-BE-099, FX-BF-035]
 ---
 
