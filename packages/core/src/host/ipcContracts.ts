@@ -1166,8 +1166,12 @@ export interface WorkflowsIpc {
     issue?: { issueKey: string; connectionId?: string },
     controller?: { sessionKey: string; sessionId: string },
     planInput?: WorkflowPlanInput,
-    /** `permissionMode: 'auto'` lets stage sessions allow their own tool requests; the default asks. Fixed for the life of the run. */
-    options?: { permissionMode?: WorkflowPermissionMode }
+    /** Options for the run: permissionMode, AI provider and AI model. */
+    options?: {
+      permissionMode?: WorkflowPermissionMode;
+      aiProvider?: AiProvider;
+      aiModel?: string;
+    }
   ): Promise<WorkflowRunSummary>;
   /** Makes one of this session's controller runs its active workflow context. */
   selectControllerRun(sessionKey: string, runId: string): Promise<WorkflowRunSummary>;

@@ -142,11 +142,11 @@ export async function runWorkflowAgentStage(
   const issueKey = stageSessionKey(workflowRun.runId, node.id);
   const sessions = getAiSessionManager();
   const settings = getSettingsBackend().read();
-  const provider = settings.ai.activeProvider;
+  const provider = workflowRun.aiProvider || settings.ai.activeProvider;
   if (preflight.binding.providerId && preflight.binding.providerId !== provider) {
     return {
       status: 'failed',
-      error: `Stage requires provider "${preflight.binding.providerId}" but "${provider}" is active.`
+      error: `Stage requires provider "${preflight.binding.providerId}" but "${provider}" is selected.`
     };
   }
   const taskDefinition = buildStageTaskDefinition(stageContext);
@@ -180,6 +180,7 @@ export async function runWorkflowAgentStage(
       issue,
       taskDefinition,
       provider,
+      ...(workflowRun.aiModel ? { model: workflowRun.aiModel } : {}),
       workingDirectory: worktreePath,
       toolMode,
       autoApprovePermissions: workflowRun.permissionMode === 'auto'

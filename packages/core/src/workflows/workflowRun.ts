@@ -33,6 +33,7 @@ import {
   type WorkflowNode,
   type WorkflowNodeOutcome
 } from './workflowTypes';
+import type { AiProvider } from '../types';
 import { findSnapshot } from './workflowStageSession';
 
 /**
@@ -157,6 +158,10 @@ export interface WorkflowRun {
   planInput?: WorkflowPlanInput;
   /** How stage sessions handle tool-permission prompts. Absent means `ask`. */
   permissionMode?: WorkflowPermissionMode;
+  /** AI provider override for stages in this run. If omitted, uses the active provider. */
+  aiProvider?: AiProvider;
+  /** Model override for stages in this run. If omitted, uses the provider's default model. */
+  aiModel?: string;
   /**
    * The git worktree this run's stages execute in, once acquired. Recorded on
    * the run so a restart re-attaches to the same tree instead of branching a
@@ -247,6 +252,8 @@ export function createWorkflowRun(input: {
   controllerSessionId?: string;
   planInput?: WorkflowPlanInput;
   permissionMode?: WorkflowPermissionMode;
+  aiProvider?: AiProvider;
+  aiModel?: string;
 }): WorkflowRun {
   const nodes: Record<string, WorkflowNodeState> = {};
   for (const node of input.definition.nodes) {
@@ -270,7 +277,9 @@ export function createWorkflowRun(input: {
     ...(input.controllerSessionKey ? { controllerSessionKey: input.controllerSessionKey } : {}),
     ...(input.controllerSessionId ? { controllerSessionId: input.controllerSessionId } : {}),
     ...(input.planInput ? { planInput: input.planInput } : {}),
-    ...(input.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {})
+    ...(input.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
+    ...(input.aiProvider ? { aiProvider: input.aiProvider } : {}),
+    ...(input.aiModel ? { aiModel: input.aiModel } : {})
   };
 
   return append(run, {
@@ -843,6 +852,8 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     ...(typeof raw.controllerSessionId === 'string' ? { controllerSessionId: raw.controllerSessionId } : {}),
     ...(raw.planInput && typeof raw.planInput === 'object' ? { planInput: raw.planInput as WorkflowPlanInput } : {}),
     ...(raw.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
+    ...(typeof raw.aiProvider === 'string' ? { aiProvider: raw.aiProvider as AiProvider } : {}),
+    ...(typeof raw.aiModel === 'string' ? { aiModel: raw.aiModel } : {}),
     ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),
     ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
