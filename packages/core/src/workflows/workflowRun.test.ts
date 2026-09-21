@@ -385,6 +385,20 @@ test('retry past the attempt budget is refused', () => {
   assert.equal(run.status, 'failed');
 });
 
+test('a retryable QA failure keeps the run open for a QA-only retry', () => {
+  const base = definition();
+  const retryable: WorkflowDefinition = {
+    ...base,
+    nodes: base.nodes.map(node => node.id === 'qa' && node.type === 'check' ? { ...node, maxAttempts: 2 } : node)
+  };
+  let run = succeed(newRun(retryable), 'plan', 1);
+  run = succeed(run, 'implement', 3);
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'qa', at: T(5) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'qa', at: T(6), error: 'test failure' });
+  assert.equal(run.status, 'running');
+  assert.ok(nextActions(run).some(action => action.kind === 'retry-stage' && action.nodeId === 'qa'));
+});
+
 // ── Timeout ──────────────────────────────────────────────────────────────
 
 test('a stage past its timeout is reported, and only that stage', () => {
