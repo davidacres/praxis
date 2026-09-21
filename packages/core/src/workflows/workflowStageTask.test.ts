@@ -122,6 +122,38 @@ test('an aborted or failed session fails the stage', () => {
   assert.doesNotMatch(failed.error ?? '', /more/, 'only the first line is quoted');
 });
 
+test('a failed session with provider limit or budget exhaustion pauses with provider-limit', () => {
+  // Case 1: Generic Internal error in lastError, but responseText indicates usage limit
+  const codexLimit = stageOutcomeFromSession(reviewNode(), {
+    state: 'failed',
+    lastError: 'Internal error',
+    responseText: "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 12:24 PM.\n\n"
+  });
+  assert.equal(codexLimit.status, 'failed');
+  assert.equal(codexLimit.pause, 'provider-limit');
+  assert.match(codexLimit.error ?? '', /usage limit/);
+  assert.doesNotMatch(codexLimit.error ?? '', /Internal error/);
+
+  // Case 2: Budget limit in lastError
+  const budgetLimit = stageOutcomeFromSession(reviewNode(), {
+    state: 'failed',
+    lastError: 'The AI has exceeded its budget'
+  });
+  assert.equal(budgetLimit.status, 'failed');
+  assert.equal(budgetLimit.pause, 'provider-limit');
+  assert.match(budgetLimit.error ?? '', /budget/);
+
+  // Case 3: providerLimitReached set, with generic lastError
+  const flaggedLimit = stageOutcomeFromSession(reviewNode(), {
+    state: 'failed',
+    providerLimitReached: true,
+    lastError: 'The stage session failed: Internal error'
+  });
+  assert.equal(flaggedLimit.status, 'failed');
+  assert.equal(flaggedLimit.pause, 'provider-limit');
+  assert.doesNotMatch(flaggedLimit.error ?? '', /Internal error/);
+});
+
 test('a report artifact is claimed when the session actually said something', () => {
   const outcome = stageOutcomeFromSession(reviewNode(), { state: 'completed', responseText: 'Looks correct.' });
   assert.equal(outcome.status, 'succeeded');

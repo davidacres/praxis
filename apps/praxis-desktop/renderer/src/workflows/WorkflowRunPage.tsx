@@ -474,7 +474,13 @@ export function WorkflowRunPage({
                       {stage.maxAttempts && stage.attempts > 0 ? ` (${stage.attempts}/${stage.maxAttempts})` : ''}
                     </p>
 
-                    {stage.lastError && <p className="wf-stage-error">{stage.lastError}</p>}
+                    {stage.lastError && (
+                      <p className="wf-stage-error">
+                        {stage.pause === 'provider-limit' && /^(?:the stage session failed:\s*)?(?:internal error|internal failure)$/i.test(stage.lastError.trim())
+                          ? "The AI provider's credits, budget, or usage limit were reached."
+                          : stage.lastError}
+                      </p>
+                    )}
 
                     {stage.snapshotRef && (
                       <p>

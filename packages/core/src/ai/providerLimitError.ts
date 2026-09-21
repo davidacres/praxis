@@ -7,9 +7,9 @@
  * - GitHub Copilot CLI / Codex CLI: "rate limit reached", "usage limit reached"
  */
 const LIMIT_REGEX =
-  /(?:weekly|monthly|daily|hourly|session|usage|rate|spending|billing|plan|tier)[_ -]?limit|hit (?:your )?(?:\w+ )?limit|reached (?:your )?(?:\w+ )?limit|exceeded (?:your )?(?:\w+ )?limit|quota|insufficient[_ -]?(?:quota|balance|funds|credits?)|out of quota|too many requests|resource[_ -]?exhausted|credits?[_ -]?(?:exhausted|depleted|empty|expired|zero|insufficient|out)|out of credits?|no credits? remaining|run out of credits?|credit balance (?:is )?too low|balance (?:is )?too low|no resource package|please recharge|\b1113\b|rate[_ -]?limit|rate[_ -]?limited/i;
+  /(?:weekly|monthly|daily|hourly|session|usage|rate|spending|billing|plan|tier|budget)[_ -]?limit|(?:hit|reached|exceeded) (?:your |its |the )?(?:\w+ )?(?:limit|budget|quota)|quota|insufficient[_ -]?(?:quota|balance|funds|credits?|budget)|out of quota|too many requests|resource[_ -]?exhausted|(?:credits?|budget)[_ -]?(?:exhausted|depleted|empty|expired|zero|insufficient|out|exceeded)|out of (?:credits?|budget)|no (?:credits?|budget) remaining|run out of (?:credits?|budget)|\bover[_ -]?budget\b|credit balance (?:is )?too low|balance (?:is )?too low|no resource package|please recharge|\b1113\b|rate[_ -]?limit|rate[_ -]?limited/i;
 
-/** True when an error or message indicates a rate, usage, session, credit, or quota limit. */
+/** True when an error or message indicates a rate, usage, session, credit, quota, or budget limit. */
 export function isProviderLimitError(errorOrMessage: unknown): boolean {
   if (!errorOrMessage) return false;
   if (typeof errorOrMessage === 'string') {
@@ -19,8 +19,18 @@ export function isProviderLimitError(errorOrMessage: unknown): boolean {
     const obj = errorOrMessage as Record<string, unknown>;
     // Check ACP RequestError data (e.g. { errorKind: 'rate_limit' })
     const data = obj.data as Record<string, unknown> | undefined;
-    if (data && typeof data.errorKind === 'string' && /rate_limit|quota|usage_limit/i.test(data.errorKind)) {
+    if (data && typeof data.errorKind === 'string' && /rate_limit|quota|usage_limit|budget/i.test(data.errorKind)) {
       return true;
+    }
+    // Check nested error object
+    const errObj = obj.error as Record<string, unknown> | undefined;
+    if (errObj && typeof errObj === 'object') {
+      if (typeof errObj.message === 'string' && LIMIT_REGEX.test(errObj.message)) {
+        return true;
+      }
+      if (typeof errObj.code === 'string' || typeof errObj.code === 'number') {
+        if (errObj.code === 429 || errObj.code === 1113 || String(errObj.code) === '1113') return true;
+      }
     }
     // Check HTTP status or API error codes
     if (
@@ -40,7 +50,7 @@ export function isProviderLimitError(errorOrMessage: unknown): boolean {
   return false;
 }
 
-/** Extracts a user-facing limit message explaining the quota or credit exhaustion. */
+/** Extracts a user-facing limit message explaining the quota, credit, or budget exhaustion. */
 export function extractProviderLimitMessage(errorOrMessage: unknown): string {
   let raw = '';
   if (typeof errorOrMessage === 'string') {
@@ -54,8 +64,8 @@ export function extractProviderLimitMessage(errorOrMessage: unknown): string {
     }
   }
 
-  // Strip generic transport/RPC wrappers like "Gateway returned 429: " or "Internal error: "
-  let cleaned = raw.replace(/^(?:RequestError:\s*)?(?:Internal error:\s*)?(?:Gateway returned \d+:\s*)?/i, '').trim();
+  // Strip generic transport/RPC wrappers like "The stage session failed: ", "RequestError: ", "Internal error: "
+  let cleaned = raw.replace(/^(?:The stage session failed:\s*)?(?:RequestError:\s*)?(?:Internal error:\s*)?(?:Provider error:\s*)?(?:Gateway returned \d+:\s*)?/i, '').trim();
 
   // If cleaned is or contains JSON, extract the inner message
   try {
@@ -74,5 +84,5 @@ export function extractProviderLimitMessage(errorOrMessage: unknown): string {
     return `Provider limit reached: ${cleaned}`;
   }
 
-  return 'Provider usage limit or credits exhausted. The session was halted and will not retry automatically.';
+  return 'Provider usage limit, budget, or credits exhausted. The session was halted and will not retry automatically.';
 }

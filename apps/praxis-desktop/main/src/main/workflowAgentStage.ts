@@ -7,6 +7,7 @@ import {
   buildStageContext,
   buildStageTaskDefinition,
   discoverWorkspaceAgentWorkflows,
+  extractProviderLimitMessage,
   isProviderLimitError,
   preflightStage,
   stageOutcomeFromSession,
@@ -186,12 +187,16 @@ export async function runWorkflowAgentStage(
     skillActivations = prepared.skillActivations;
   } catch (error) {
     settled.cancel();
-    // A launch refused for credits/quota is the account's problem, not the stage's:
+    // A launch refused for credits/quota/budget is the account's problem, not the stage's:
     // pause the run rather than spend the stage's attempt on it.
+    const isLimit = isProviderLimitError(error);
+    const errorMessage = isLimit
+      ? extractProviderLimitMessage(error)
+      : error instanceof Error ? error.message : String(error);
     return {
       status: 'failed',
-      error: error instanceof Error ? error.message : String(error),
-      ...(isProviderLimitError(error) ? { pause: 'provider-limit' as const } : {})
+      error: errorMessage,
+      ...(isLimit ? { pause: 'provider-limit' as const } : {})
     };
   }
 
@@ -245,11 +250,20 @@ function waitForSession(issueKey: string): { promise: Promise<FinishedStageSessi
     const settle = (state: FinishedStageSession['state']): void => {
       const record = sessions.getAgentSession(issueKey);
       dispose?.();
+      const limitCandidate = (record?.lastError && isProviderLimitError(record.lastError))
+        ? record.lastError
+        : (record?.responseText && isProviderLimitError(record.responseText))
+          ? record.responseText
+          : undefined;
+      const isLimit = Boolean(record?.providerLimitReached || limitCandidate);
+      const effectiveLastError = limitCandidate
+        ? extractProviderLimitMessage(limitCandidate)
+        : record?.lastError;
       resolve({
         state,
         ...(record?.responseText ? { responseText: record.responseText } : {}),
-        ...(record?.lastError ? { lastError: record.lastError } : {}),
-        ...(record?.providerLimitReached ? { providerLimitReached: true } : {})
+        ...(effectiveLastError ? { lastError: effectiveLastError } : {}),
+        ...(isLimit ? { providerLimitReached: true } : {})
       });
     };
 

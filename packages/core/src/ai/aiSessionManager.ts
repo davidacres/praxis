@@ -31,7 +31,7 @@ import {
   nativeRuntimeClearedPatch,
   purposeFromTask
 } from './sessionHandover';
-import { isProviderLimitError } from './providerLimitError';
+import { isProviderLimitError, extractProviderLimitMessage } from './providerLimitError';
 import { estimateCostUsd } from './providers/modelPricing';
 
 const STORAGE_KEY = 'praxis.aiSessions';
@@ -342,11 +342,16 @@ export class AiSessionManager {
       record.providerLimitReached = undefined;
     } else if (state === 'failed' || state === 'aborted') {
       this.updateSessionStatus(issueKey, 'failed');
-      if (reason) {
+      const limitCandidate = (reason && isProviderLimitError(reason))
+        ? reason
+        : (record.responseText && isProviderLimitError(record.responseText))
+          ? record.responseText
+          : undefined;
+      if (limitCandidate) {
+        record.providerLimitReached = true;
+        record.lastError = extractProviderLimitMessage(limitCandidate);
+      } else if (reason) {
         record.lastError = reason;
-        if (isProviderLimitError(reason)) {
-          record.providerLimitReached = true;
-        }
       }
     } else {
       this.updateSessionStatus(issueKey, 'active');
@@ -376,8 +381,8 @@ export class AiSessionManager {
     for (const event of events) {
       if (event.type === 'error' && isProviderLimitError(event.summary || event.detail)) {
         record.providerLimitReached = true;
-        if (!record.lastError) {
-          record.lastError = event.summary || event.detail;
+        if (!record.lastError || !isProviderLimitError(record.lastError)) {
+          record.lastError = extractProviderLimitMessage(event.summary || event.detail);
         }
       }
     }
