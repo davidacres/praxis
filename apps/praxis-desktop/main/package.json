@@ -11,6 +11,7 @@
     "check-types": "tsc --noEmit -p .",
     "compile": "tsc -p .",
     "copy-renderer": "node scripts/copy-renderer.cjs",
+    "postinstall": "node scripts/fixNodePtyPermissions.cjs",
     "dist": "electron-builder --publish never",
     "dist:mac": "electron-builder --mac dmg --publish never",
     "dist:mac:publish": "electron-builder --mac dmg --publish always",
@@ -23,7 +24,7 @@
     "rebuild-terminal": "npm rebuild node-pty --build-from-source",
     "start": "npm run compile && electron .",
     "test:e2e": "npm run compile && npx playwright test",
-    "test:workflows": "npm run compile && node --test out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js",
+    "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js",
     "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/projectSnapshot.test.js out/main/adapters/jsonKeyValueStore.test.js",
     "test:mobile": "npm run compile && node --test out/main/mobileHostServices.test.js out/main/mobileAccessLifecycle.test.js out/main/mobileLanServer.test.js"
   },

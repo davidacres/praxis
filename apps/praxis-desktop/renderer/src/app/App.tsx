@@ -1012,10 +1012,16 @@ export function App() {
         const readiness = await window.praxis.workflows.templateReadiness(id).catch(() => []);
         const readinessById = new Map(readiness.map(item => [item.templateId, item]));
         const projectTemplates = templates.filter(t => t.source === 'project');
+        const instantiatedTemplateIds = new Set(
+          templates
+            .filter(t => t.source !== 'project')
+            .filter(t => projectTemplates.some(project => project.definition.id === `${t.definition.id}-${id}`))
+            .map(t => t.definition.id)
+        );
         const seenIds = new Set<string>();
         const availableTemplates = [
           ...projectTemplates,
-          ...templates.filter(t => t.source !== 'project')
+          ...templates.filter(t => t.source !== 'project' && !instantiatedTemplateIds.has(t.definition.id))
         ].filter(t => {
           if (seenIds.has(t.definition.id)) return false;
           seenIds.add(t.definition.id);
