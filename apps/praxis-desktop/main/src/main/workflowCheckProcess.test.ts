@@ -18,6 +18,32 @@ test('an already cancelled check never launches', async () => {
   assert.equal(result.output, '');
 });
 
+test('workflow checks use unattended CI semantics by default', async () => {
+  const previous = process.env.CI;
+  delete process.env.CI;
+  try {
+    const result = await spawnCheck(check("process.stdout.write(process.env.CI || '')"), tmpdir());
+    assert.equal(result.code, 0);
+    assert.equal(result.output, '1');
+  } finally {
+    if (previous === undefined) delete process.env.CI;
+    else process.env.CI = previous;
+  }
+});
+
+test('workflow checks preserve an explicit host CI value', async () => {
+  const previous = process.env.CI;
+  process.env.CI = 'custom-ci';
+  try {
+    const result = await spawnCheck(check("process.stdout.write(process.env.CI || '')"), tmpdir());
+    assert.equal(result.code, 0);
+    assert.equal(result.output, 'custom-ci');
+  } finally {
+    if (previous === undefined) delete process.env.CI;
+    else process.env.CI = previous;
+  }
+});
+
 test('cancellation terminates an active check that ignores SIGTERM', { timeout: 10_000 }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'praxis-check-'));
   const controller = new AbortController();

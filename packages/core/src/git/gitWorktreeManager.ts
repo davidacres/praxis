@@ -78,11 +78,36 @@ export class GitWorktreeManager {
     issue: Pick<IssueDetails, 'key' | 'summary' | 'branch'>,
     baseBranch: string,
     workspacePath: string,
-    options?: { forceClean?: boolean }
+    options?: { forceClean?: boolean; requireCleanBase?: boolean }
   ): Promise<PreparedWorktree> {
     const repoRoot = await readStdout('git', ['rev-parse', '--show-toplevel'], workspacePath);
     if (!repoRoot) {
       throw new Error('Could not resolve the git repository root for the active workspace.');
+    }
+
+    if (options?.requireCleanBase) {
+      const status = await readStdout(
+        'git',
+        [
+          'status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.',
+          // Praxis metadata is configuration/evidence for the app, not product source. Creating a
+          // project or workflow can legitimately write these before the first run; the run embeds
+          // its workflow definition and does not need them copied into the delivery worktree.
+          ':(exclude).praxis/**',
+          ':(exclude)project.praxis.md',
+          ':(exclude)board.praxis.json',
+          ':(exclude,glob)**/*.workspace.praxis.json'
+        ],
+        repoRoot
+      );
+      const changedFiles = status.split('\0').filter(Boolean).length;
+      if (changedFiles > 0) {
+        throw new Error(
+          `Cannot start a governed workflow from a checkout with ${changedFiles} uncommitted ` +
+            `${changedFiles === 1 ? 'file' : 'files'}. Workflow worktrees branch from committed HEAD, ` +
+            'so those changes would be omitted from implementation and QA. Commit or stash them, then start the run again.'
+        );
+      }
     }
 
     const worktreeName = buildWorktreeName(issue);
