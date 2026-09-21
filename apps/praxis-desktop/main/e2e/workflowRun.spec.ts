@@ -111,9 +111,10 @@ test('runs the governed pipeline: parallel branches converge, then approval unlo
   const gatesNode = runDetail.getByRole('button', { name: /^Gates / });
   await expect(runDetail.getByRole('status')).toContainText(/waiting for the next stage|Stage in progress|Plan/i);
 
-  // Plan → Implement are serial (Implement writes the worktree).
+  // Plan → Implement → Praxis Test contracts are serial (Implement writes the worktree).
   await markDone(page, 'Plan');
   await markDone(page, 'Implement');
+  await markDone(page, 'Praxis Test contracts');
 
   // Review and Security are ready at once; QA waits for the dependencies to be installed and built.
   await markDone(page, 'Install dependencies');
