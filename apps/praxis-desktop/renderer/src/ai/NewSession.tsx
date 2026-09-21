@@ -143,7 +143,7 @@ export function NewSession({
   const [dismissed, setDismissed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const [uncommittedFiles, setUncommittedFiles] = useState<readonly string[] | undefined>();
+  const [uncommittedFiles, setUncommittedFiles] = useState<UncommittedBaseError | undefined>();
   const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<AiProvider | undefined>();
   const [providerMenuPos, setProviderMenuPos] = useState<{ top: number; left: number } | undefined>();
@@ -504,7 +504,7 @@ export function NewSession({
       setGoal('');
     } catch (err) {
       if (err instanceof UncommittedBaseError) {
-        setUncommittedFiles(err.files);
+        setUncommittedFiles(err);
         return;
       }
       setError(err instanceof Error ? err.message : String(err));
@@ -715,9 +715,11 @@ export function NewSession({
         <div className="composer">
           {uncommittedFiles && (
             <UncommittedBaseNotice
-              files={uncommittedFiles}
+              files={uncommittedFiles.files}
+              projectId={uncommittedFiles.projectId}
               busy={submitting}
               onChoose={choice => void submit(choice)}
+              onCommitted={() => void submit()}
               onDismiss={() => setUncommittedFiles(undefined)}
             />
           )}

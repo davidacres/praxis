@@ -1,6 +1,7 @@
 {
-  "projectKey": "PRAXIS",
-  "projectName": "praxis",
+  "projectKey": "PRX",
+  "projectName": "Praxis Desktop",
+  "allowIssueCreation": true,
   "workflow": [
     {
       "id": "stage-backlog",

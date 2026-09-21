@@ -48,6 +48,8 @@ test('Session Modes advertised at start switch over the live connection and upda
   await win.locator('[data-testid="nav-sessions"]').click();
   await win.locator('[data-testid="session-list-row"]', { hasText: 'HANG_UNTIL_CANCELLED please' }).click();
 
+  await win.getByTestId('session-composer-ask-btn').click();
+
   const modeChip = win.getByTestId('session-acp-mode');
   await expect(modeChip).toBeVisible();
   await expect(modeChip).toContainText('Ask');

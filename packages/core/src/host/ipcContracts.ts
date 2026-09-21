@@ -1180,6 +1180,8 @@ export interface WorkflowsIpc {
    * (Praxis metadata excluded). Empty means a run can start; use it to warn before creating anything.
    */
   checkRunBase(projectId: string): Promise<{ blockingFiles: string[] }>;
+  /** Commits exactly the files `checkRunBase` reports, so the run can start from a clean checkout. */
+  commitRunBase(projectId: string, message: string): Promise<void>;
   /** Makes one of this session's controller runs its active workflow context. */
   selectControllerRun(sessionKey: string, runId: string): Promise<WorkflowRunSummary>;
   /**

@@ -312,7 +312,7 @@ test('the start-run dialog opens from a workflow row with that workflow preselec
 
 const gitOut = (cwd: string, ...args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' });
 
-async function startFromDirtyCheckout(choice: 'uncommitted-base-include' | 'uncommitted-base-omit'): Promise<{ page: Page; repo: string; runId: string }> {
+async function startFromDirtyCheckout(choice: 'uncommitted-base-include' | 'uncommitted-base-omit' | 'uncommitted-base-commit'): Promise<{ page: Page; repo: string; runId: string }> {
   const { page, seeded } = await launch(true);
   const project = await page.evaluate(() => window.praxis.projects.list().then(list => list[0]));
   const repo = project.workspaceFolder as string;
@@ -364,6 +364,16 @@ test('a dirty checkout can instead start from the last commit without its change
   const worktree = runWorktree(repo) as string;
   expect(fs.existsSync(path.join(worktree, 'unsaved.ts'))).toBe(false);
   expect(fs.readFileSync(path.join(worktree, 'README.md'), 'utf8')).not.toContain('local edit');
+});
+
+test('a dirty checkout can commit its changes, then the run starts from that commit', async () => {
+  const { repo } = await startFromDirtyCheckout('uncommitted-base-commit');
+  await expect.poll(() => runWorktree(repo)).toBeTruthy();
+  const worktree = runWorktree(repo) as string;
+  expect(fs.readFileSync(path.join(worktree, 'unsaved.ts'), 'utf8')).toContain('draft = 1');
+  // The changes are now a real commit in the user's checkout, which is left clean.
+  expect(gitOut(repo, 'log', '-1', '--format=%s').trim()).toMatch(/^WIP: save changes/);
+  expect(gitOut(repo, 'status', '--porcelain', '--', 'unsaved.ts', 'README.md').trim()).toBe('');
 });
 
 test('an out-of-credits provider pauses the run instead of failing it, and resumes once credits are back', async () => {

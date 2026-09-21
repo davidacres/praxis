@@ -61,7 +61,7 @@ export function StartRunDialog({
   onStarted
 }: StartRunDialogProps) {
   const [taskTitle, setTaskTitle] = useState('');
-  const [uncommittedFiles, setUncommittedFiles] = useState<readonly string[] | undefined>();
+  const [uncommittedFiles, setUncommittedFiles] = useState<UncommittedBaseError | undefined>();
   const [startWorkflowId, setStartWorkflowId] = useState(initialWorkflowId ?? '');
   const [issueOptions, setIssueOptions] = useState<IssueOption[]>([]);
   const [issueKeyDraft, setIssueKeyDraft] = useState('');
@@ -232,7 +232,7 @@ export function StartRunDialog({
       );
       onStarted(run);
     } catch (cause) {
-      if (cause instanceof UncommittedBaseError) setUncommittedFiles(cause.files);
+      if (cause instanceof UncommittedBaseError) setUncommittedFiles(cause);
       else setError(cause instanceof Error ? cause.message : String(cause));
       setBusy(false);
     }
@@ -414,9 +414,11 @@ export function StartRunDialog({
           </fieldset>
           {uncommittedFiles && (
             <UncommittedBaseNotice
-              files={uncommittedFiles}
+              files={uncommittedFiles.files}
+              projectId={uncommittedFiles.projectId}
               busy={busy}
               onChoose={choice => void submit(choice)}
+              onCommitted={() => void submit()}
               onDismiss={() => setUncommittedFiles(undefined)}
             />
           )}

@@ -12,6 +12,7 @@ import type {
   WorkflowNodeType,
   WorkflowPolicyProfile
 } from '@praxis/core';
+import { isHostShimProfile } from '../agents/agentCatalog';
 import { API_MODEL_PROVIDERS } from '../ai/modelProviders';
 import { Icon } from '../ui/Icon';
 import { WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
@@ -279,7 +280,10 @@ export function WorkflowDesignerPage({
   }, [project.id, workflowId, onSaved, onDeleted, confirm]);
 
   const selectedNode = definition?.nodes.find(node => node.id === selectedNodeId);
-  const profiles = catalog?.profiles ?? [];
+  const profiles = useMemo(
+    () => (catalog?.profiles ?? []).filter(profile => !isHostShimProfile(profile)),
+    [catalog?.profiles]
+  );
   const skills = catalog?.skills ?? [];
   const selectedAgentStage = selectedNode?.type === 'agent-task' ? selectedNode : undefined;
   const presentations = useMemo(
@@ -361,7 +365,7 @@ export function WorkflowDesignerPage({
   );
 
   const promotePack = useCallback(async (pack: AgentWorkflowReference) => {
-    const fallbackProfile = catalog?.profiles?.find(profile => profile.trusted);
+    const fallbackProfile = profiles.find(profile => profile.trusted);
     const selected = selectedAgentStage?.type === 'agent-task' ? selectedAgentStage.agent : undefined;
     const agentId = selected?.agentId || (fallbackProfile && (profileHostId(catalog, fallbackProfile.profile.id) ?? fallbackProfile.profile.id));
     if (!agentId) {
@@ -649,11 +653,18 @@ export function WorkflowDesignerPage({
                                 <span className="wf-palette-item-desc">{profile.profile.description}</span>
                               )}
                             </div>
-                            {blocked && (
-                              <span className="wf-palette-badge is-warn">
-                                {profile.error ? 'needs repair' : 'needs trust'}
-                              </span>
-                            )}
+                            <div className="wf-palette-item-badges" style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+                              {profile.scope === 'project' && (
+                                <span className="wf-palette-badge chip-muted" title="Project-scoped agent">
+                                  project
+                                </span>
+                              )}
+                              {blocked && (
+                                <span className="wf-palette-badge is-warn">
+                                  {profile.error ? 'needs repair' : 'needs trust'}
+                                </span>
+                              )}
+                            </div>
                           </button>
                         );
                       })
@@ -1142,7 +1153,10 @@ function AgentStageFields({
   set: (patch: Partial<WorkflowNode>) => void;
 }) {
   const agents = catalog?.runtimeHosts ?? catalog?.agents ?? [];
-  const profiles = catalog?.profiles ?? [];
+  const profiles = useMemo(
+    () => (catalog?.profiles ?? []).filter(profile => !isHostShimProfile(profile)),
+    [catalog?.profiles]
+  );
   const skills = catalog?.skills ?? [];
   const requireTrust = policy?.requireTrustedAgents ?? true;
 
@@ -1312,7 +1326,7 @@ function AgentStageFields({
             <option value="">— choose a profile —</option>
             {profiles.map(profile => (
               <option key={profile.profile.id} value={profile.profile.id}>
-                {profile.profile.name}{profile.legacy ? ' (legacy brief)' : ''}{profile.trusted ? '' : ' (untrusted)'}
+                {profile.profile.name}{profile.scope === 'project' ? ' (project)' : ''}{profile.legacy ? ' (legacy brief)' : ''}{profile.trusted ? '' : ' (untrusted)'}
               </option>
             ))}
           </select>

@@ -713,6 +713,31 @@ the next gap is found by reading it rather than by assuming.
   task list, the changeset, and terminal actions (abort, remove worktree) —
   things to watch or act on for the session as a whole, not facts read once
   before typing a message.
+- **In-flight single-agent composer: minimized by default with Ask & Queue.** While a
+  single-agent turn is executing, the follow-up composer remains collapsed to a compact bar
+  showing only the live tool activity, an `Ask` button (`.session-ask-button`), and the
+  `Stop` button (`composer-send-cancel`). Irrelevant controls (such as the workflow selector
+  or ACP mode chips) are hidden to keep the view clean. Clicking `Ask` smoothly expands
+  the textarea (`placeholder="Queue follow-up (sends automatically when done)…"`) and presents
+  both the `Stop` button (to abort the running turn) and a `Queue` button. Submitting enqueues
+  the follow-up message into `queuedFollowUpsBySession`, collapses the input, and displays
+  a queued pill (`.session-runtime-chip.is-queued`) allowing cancellation or editing. As soon
+  as the active turn reaches a terminal state, the queued prompt is auto-dispatched to
+  `continueSession`. If the user clears their draft or presses `Escape`, the expanded composer
+  automatically collapses back to the minimized bar.
+- **Session usage summary: hideable bar with composer restoration & smooth closing animation.**
+  `SessionUsageSummary` carries a close button on the right edge of its `<summary>` (`.session-usage-hide-btn`).
+  When hidden, preference is saved in `localStorage` (`praxis:session-usage-hidden`) and a
+  restoration chip (`.session-restore-usage-btn`, graph icon + "Usage") renders on the right
+  side of the session composer directly to the left of the tools button (`session-tool-mode` in
+  `.session-mode-panel-meta`). Clicking this chip restores the usage bar above the composer.
+  Closing the usage panel (whether hiding the bar via `.session-usage-hide-btn`, collapsing the
+  expanded metrics via `<summary>`, clicking anywhere outside the open panel, or pressing `Escape`)
+  smoothly animates closed from top to bottom via `.session-usage-wrapper` and
+  `.session-usage-details-content` using `clip-path`, `transform`, `opacity`, and `max-height` transitions.
+- **Session composer horizontal rule matches border-strong.** The horizontal line separating
+  `.session-mode-panel` from the textarea inside the composer uses `border-bottom: 1px solid var(--border-strong)`
+  so it seamlessly matches the composer card's resting border color when unselected.
 - **`.session-mode-toggle` is one shared style for the Chat/Analysis/Review
   control, used both when a session starts (`NewSession`) and to re-run a
   finished one (`SessionsPage`'s composer).** It used to be two near-identical
