@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEvent, DragEvent, MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type {
@@ -513,15 +513,50 @@ function SessionWorkflowControl({
 function SessionUsageSummary({
   session,
   sessions,
-  spendLimit
+  spendLimit,
+  onHide
 }: {
   session: AgentSessionRecord;
   sessions: AgentSessionRecord[];
   spendLimit: number;
+  onHide?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [detailsClosing, setDetailsClosing] = useState(false);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
   const [windows, setWindows] = useState<Record<string, UsageBucket | undefined>>({});
   const [provider, setProvider] = useState<ProviderUsageSnapshot | undefined>();
+
+  const closeDetails = useCallback(() => {
+    if (!open || detailsClosing) return;
+    setDetailsClosing(true);
+    window.setTimeout(() => {
+      setOpen(false);
+      setDetailsClosing(false);
+    }, 240);
+  }, [open, detailsClosing]);
+
+  useEffect(() => {
+    if (!open || detailsClosing) return;
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || !detailsRef.current) return;
+      if (!detailsRef.current.contains(target)) {
+        closeDetails();
+      }
+    };
+    const onDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeDetails();
+      }
+    };
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+    document.addEventListener('keydown', onDocumentKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onDocumentPointerDown);
+      document.removeEventListener('keydown', onDocumentKeyDown);
+    };
+  }, [open, detailsClosing, closeDetails]);
 
   useEffect(() => {
     let cancelled = false;
@@ -561,8 +596,25 @@ function SessionUsageSummary({
   const spendRatio = spendLimit > 0 ? localCost / spendLimit : undefined;
 
   return (
-    <details className="session-usage-summary" open={open} onToggle={event => setOpen(event.currentTarget.open)} data-testid="session-usage-summary">
-      <summary>
+    <details
+      ref={detailsRef}
+      className="session-usage-summary"
+      open={open || detailsClosing}
+      onToggle={event => {
+        if (!detailsClosing) {
+          setOpen(event.currentTarget.open);
+        }
+      }}
+      data-testid="session-usage-summary"
+    >
+      <summary
+        onClick={event => {
+          if (open && !detailsClosing) {
+            event.preventDefault();
+            closeDetails();
+          }
+        }}
+      >
         <Icon name="graph" size={14} />
         <span>Usage</span>
         <span className="session-usage-summary-meta">
@@ -575,52 +627,72 @@ function SessionUsageSummary({
             {isLimit || providerWarning.usedPercent === 100 ? (providerWarning.label && providerWarning.label !== 'Limit reached' ? providerWarning.label : 'Provider limit reached') : 'Approaching provider limit'}
           </span>
         )}
+        {onHide && (
+          <button
+            type="button"
+            className="icon-btn icon-btn-sm session-usage-hide-btn"
+            aria-label="Hide usage bar"
+            title="Hide usage bar"
+            data-testid="session-usage-hide-btn"
+            onClick={event => {
+              event.preventDefault();
+              event.stopPropagation();
+              onHide();
+            }}
+          >
+            <Icon name="close" size={12} />
+          </button>
+        )}
       </summary>
-      <div className="session-usage-grid">
-        <div className="session-usage-card">
-          <span className="session-usage-label">This session</span>
-          <strong>
-            {session.model ? `${session.model} · ` : ''}
-            {sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : isLimit ? 'Limit reached' : 'Not reported'}
-          </strong>
-          <small>{isLimit ? (session.lastError ?? 'Provider limit reached') : session.cost ? formatCost(session.cost) : 'Cost not reported by provider'}</small>
-        </div>
-        {(['hour', 'day', 'week', 'month'] as const).map(period => (
-          <div className="session-usage-card" key={period}>
-            <span className="session-usage-label">Last {period}</span>
-            <strong>{formatWindow(windows[period])}</strong>
-            <small>{windows[period]?.costByCurrency.map(cost => `${cost.amount.toFixed(2)} ${cost.currency}`).join(', ') || 'Cost unavailable'}</small>
-          </div>
-        ))}
-      </div>
-      {spendRatio !== undefined && spendRatio >= 0.8 && (
-        <div className={`session-usage-warning-banner${spendRatio >= 1 ? ' is-critical' : ''}`}>
-          <Icon name={spendRatio >= 1 ? 'warning' : 'zap'} size={13} />
-          {spendRatio >= 1 ? 'Your Praxis spend limit has been exceeded.' : 'You are approaching your Praxis spend limit.'}
-        </div>
-      )}
-      <div className="session-usage-models">
-        <span className="session-usage-label">By model</span>
-        {[...modelTotals.entries()].sort((a, b) => b[1].tokens - a[1].tokens).slice(0, 6).map(([model, row]) => (
-          <div className="session-usage-model-row" key={model}>
-            <span>{model}</span>
-            <span>{row.tokens ? `${Math.round(row.tokens).toLocaleString()} tokens` : '—'}{row.costs.length > 0 ? ` · ${row.costs.map(cost => formatCost(cost)).join(', ')}` : ''}</span>
-          </div>
-        ))}
-      </div>
-      <div className="session-usage-provider">
-        <span className="session-usage-label">{session.provider ? `${PROVIDER_LABELS[session.provider]} account` : 'Provider account'}</span>
-        {provider?.totalTokens ? <span>{Math.round(provider.totalTokens).toLocaleString()} cumulative tokens</span> : provider?.credits ? <span>{provider.credits.remaining.toFixed(2)} {provider.credits.currency} remaining</span> : <span>{provider?.unavailableReason ?? 'Credits and account limits are not exposed by this provider.'}</span>}
-      </div>
-      {provider && provider.windows.length > 0 && (
-        <div className="session-usage-provider-windows">
-          {provider.windows.map(window => (
-            <div className="session-usage-card" key={`${window.period}-${window.label ?? ''}`}>
-              <span className="session-usage-label">{window.label ?? `Provider ${window.period}`}</span>
-              <strong>{typeof window.usedPercent === 'number' ? `${window.usedPercent}% used` : 'Usage reported'}</strong>
-              <small>{window.resetsAt ? `Resets ${new Date(window.resetsAt).toLocaleString()}` : 'Reset time unavailable'}</small>
+      {(open || detailsClosing) && (
+        <div className={`session-usage-details-content${detailsClosing ? ' is-closing' : ''}`}>
+          <div className="session-usage-grid">
+            <div className="session-usage-card">
+              <span className="session-usage-label">This session</span>
+              <strong>
+                {session.model ? `${session.model} · ` : ''}
+                {sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : isLimit ? 'Limit reached' : 'Not reported'}
+              </strong>
+              <small>{isLimit ? (session.lastError ?? 'Provider limit reached') : session.cost ? formatCost(session.cost) : 'Cost not reported by provider'}</small>
             </div>
-          ))}
+            {(['hour', 'day', 'week', 'month'] as const).map(period => (
+              <div className="session-usage-card" key={period}>
+                <span className="session-usage-label">Last {period}</span>
+                <strong>{formatWindow(windows[period])}</strong>
+                <small>{windows[period]?.costByCurrency.map(cost => `${cost.amount.toFixed(2)} ${cost.currency}`).join(', ') || 'Cost unavailable'}</small>
+              </div>
+            ))}
+          </div>
+          {spendRatio !== undefined && spendRatio >= 0.8 && (
+            <div className={`session-usage-warning-banner${spendRatio >= 1 ? ' is-critical' : ''}`}>
+              <Icon name={spendRatio >= 1 ? 'warning' : 'zap'} size={13} />
+              {spendRatio >= 1 ? 'Your Praxis spend limit has been exceeded.' : 'You are approaching your Praxis spend limit.'}
+            </div>
+          )}
+          <div className="session-usage-models">
+            <span className="session-usage-label">By model</span>
+            {[...modelTotals.entries()].sort((a, b) => b[1].tokens - a[1].tokens).slice(0, 6).map(([model, row]) => (
+              <div className="session-usage-model-row" key={model}>
+                <span>{model}</span>
+                <span>{row.tokens ? `${Math.round(row.tokens).toLocaleString()} tokens` : '—'}{row.costs.length > 0 ? ` · ${row.costs.map(cost => formatCost(cost)).join(', ')}` : ''}</span>
+              </div>
+            ))}
+          </div>
+          <div className="session-usage-provider">
+            <span className="session-usage-label">{session.provider ? `${PROVIDER_LABELS[session.provider]} account` : 'Provider account'}</span>
+            {provider?.totalTokens ? <span>{Math.round(provider.totalTokens).toLocaleString()} cumulative tokens</span> : provider?.credits ? <span>{provider.credits.remaining.toFixed(2)} {provider.credits.currency} remaining</span> : <span>{provider?.unavailableReason ?? 'Credits and account limits are not exposed by this provider.'}</span>}
+          </div>
+          {provider && provider.windows.length > 0 && (
+            <div className="session-usage-provider-windows">
+              {provider.windows.map(window => (
+                <div className="session-usage-card" key={`${window.period}-${window.label ?? ''}`}>
+                  <span className="session-usage-label">{window.label ?? `Provider ${window.period}`}</span>
+                  <strong>{typeof window.usedPercent === 'number' ? `${window.usedPercent}% used` : 'Usage reported'}</strong>
+                  <small>{window.resetsAt ? `Resets ${new Date(window.resetsAt).toLocaleString()}` : 'Reset time unavailable'}</small>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </details>
@@ -673,7 +745,36 @@ export function SessionsPage({
     images?: WireImageAttachment[];
     submittedAt?: number;
   }>();
+  /** When true, expands the in-flight composer so the user can queue a follow-up. */
+  const [inflightComposerExpanded, setInflightComposerExpanded] = useState(false);
+  /** Queued follow-up messages per session, automatically dispatched when the session's active turn finishes. */
+  const [queuedFollowUpsBySession, setQueuedFollowUpsBySession] = useState<Record<string, { message: string; images?: WireImageAttachment[] }>>({});
+  const hadTypedInInflightComposerRef = useRef(false);
   const [abortingSession, setAbortingSession] = useState(false);
+  const [usageHidden, setUsageHidden] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('praxis:session-usage-hidden') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [usageClosing, setUsageClosing] = useState(false);
+  const toggleUsageHidden = (hidden: boolean) => {
+    setUsageHidden(hidden);
+    try {
+      localStorage.setItem('praxis:session-usage-hidden', hidden ? 'true' : 'false');
+    } catch {
+      // ignore storage failure
+    }
+  };
+  const handleHideUsage = () => {
+    if (usageClosing) return;
+    setUsageClosing(true);
+    window.setTimeout(() => {
+      toggleUsageHidden(true);
+      setUsageClosing(false);
+    }, 260);
+  };
   /** Key is `${eventTimestamp}|${path}` — the specific edit being undone. */
   const [switchingMode, setSwitchingMode] = useState(false);
   /** ACP's own Session Mode (e.g. "ask"/"architect"/"code") — see `setAcpMode` below. Unrelated to `switchingMode`/chat-analysis-review above. */
@@ -1024,20 +1125,63 @@ export function SessionsPage({
     : undefined;
   const activityProvider = activitySpeaker?.provider ?? selected?.provider;
 
-  // Same condition as the textarea's own `disabled` below: a single-agent
-  // turn is in flight and there's no conversation to queue a directed message
-  // into, so the box has nothing useful to do — collapse it down to the
-  // controls row instead of sitting there disabled and empty.
-  const followUpCollapsed = !!selected && !isTerminalAgentState(selected.state) && !conversationRunning;
+  // A single-agent turn is in flight (not in a multi-AI conversation).
+  const isSingleAgentRunning = !!selected && !isTerminalAgentState(selected.state) && !conversationRunning;
+  // Kept minimized by default while running unless the user explicitly expanded it via "Ask".
+  const followUpCollapsed = isSingleAgentRunning && !inflightComposerExpanded;
+  const activeQueuedMessage = selected ? queuedFollowUpsBySession[selected.issueKey] : undefined;
+
+  useEffect(() => {
+    setInflightComposerExpanded(false);
+    hadTypedInInflightComposerRef.current = false;
+  }, [selected?.issueKey]);
+
+  // Auto-dispatch queued follow-up as soon as the session finishes its active turn.
+  useEffect(() => {
+    if (!selected || !isTerminalAgentState(selected.state) || sendingFollowUp) return;
+    const queued = queuedFollowUpsBySession[selected.issueKey];
+    if (!queued) return;
+
+    setQueuedFollowUpsBySession(prev => {
+      const next = { ...prev };
+      delete next[selected.issueKey];
+      return next;
+    });
+
+    void (async () => {
+      setSendingFollowUp(true);
+      setFollowUpError(undefined);
+      setDismissedError(undefined);
+      try {
+        setSubmittedTurn({
+          issueKey: selected.issueKey,
+          message: queued.message,
+          eventCount: selected.events.length,
+          previousResponseText: selected.responseText ?? '',
+          suppressPreviousResponse: true,
+          images: queued.images?.length ? [...queued.images] : undefined,
+          submittedAt: Date.now()
+        });
+        await window.praxis.ai.continueSession(selected.issueKey, queued.message, queued.images);
+      } catch (error) {
+        setSubmittedTurn(undefined);
+        setFollowUp(current => current || queued.message);
+        if (queued.images?.length) setFollowUpImages(queued.images);
+        setFollowUpError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setSendingFollowUp(false);
+      }
+    })();
+  }, [selected?.issueKey, selected?.state, sendingFollowUp, queuedFollowUpsBySession]);
 
   // The follow-up box starts at one line and grows with content, instead of
   // reserving two rows' worth of empty space for the common case of a short
   // reply. Reset to 'auto' first so a deletion shrinks the box back down —
   // `scrollHeight` only ever reports the content's current natural height,
   // never shrinks a box that's already taller than it needs to be. While a
-  // turn is running it collapses to 0 instead (the `.is-collapsed` CSS class
-  // zeroes its padding/min-height too, so this is the actual rendered height,
-  // not just clamped back up by the min-height floor); `theme.css` puts a
+  // turn is running and minimized it collapses to 0 instead (the `.is-collapsed`
+  // CSS class zeroes its padding/min-height too, so this is the actual rendered
+  // height, not just clamped back up by the min-height floor); `theme.css` puts a
   // `transition: height` on `.session-follow-up-input` so both directions
   // animate rather than snapping.
   useEffect(() => {
@@ -1175,6 +1319,34 @@ export function SessionsPage({
       } finally {
         setSendingFollowUp(false);
       }
+      return;
+    }
+    if (isSingleAgentRunning) {
+      let message = followUp.trim();
+      if (attachTerminalContext && terminalForContext) {
+        try {
+          const context = await window.praxis.terminal.getContext(terminalForContext.id);
+          if (context.output) {
+            const escapeContext = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            message = `<terminal_context cwd="${escapeContext(context.cwd)}" captured_at="${context.capturedAt}">\n${escapeContext(context.output)}\n</terminal_context>\n\n${message}`;
+          }
+        } catch {
+          // ignore terminal context error and proceed to queue
+        }
+      }
+      const stagedImages = followUpImages;
+      setQueuedFollowUpsBySession(prev => ({
+        ...prev,
+        [selected.issueKey]: {
+          message,
+          images: stagedImages.length ? [...stagedImages] : undefined
+        }
+      }));
+      setFollowUp('');
+      setFollowUpImages([]);
+      setAttachTerminalContext(false);
+      setInflightComposerExpanded(false);
+      hadTypedInInflightComposerRef.current = false;
       return;
     }
     if (!isTerminalAgentState(selected.state)) return;
@@ -1823,11 +1995,19 @@ export function SessionsPage({
             )}
 
             <div className="session-chat-composer">
-              <SessionUsageSummary
-                session={selected}
-                sessions={sessions}
-                spendLimit={settings?.ai.spendLimit ?? 0}
-              />
+              {(!usageHidden || usageClosing) && (
+                <div
+                  className={`session-usage-wrapper${usageClosing ? ' is-closing' : ''}`}
+                  data-testid="session-usage-wrapper"
+                >
+                  <SessionUsageSummary
+                    session={selected}
+                    sessions={sessions}
+                    spendLimit={settings?.ai.spendLimit ?? 0}
+                    onHide={handleHideUsage}
+                  />
+                </div>
+              )}
               {spend && spend.level !== 'ok' && (
                 <div className={`composer-context-banner is-${spend.level}`} data-testid="session-spend">
                   <div className="composer-context-heading">
@@ -1903,6 +2083,18 @@ export function SessionsPage({
                       ))}
                     </div>
                     <div className="session-mode-panel-meta">
+                      {usageHidden && (
+                        <button
+                          type="button"
+                          className="composer-chip session-runtime-chip session-restore-usage-btn"
+                          data-testid="session-restore-usage-btn"
+                          title="Show usage bar"
+                          onClick={() => toggleUsageHidden(false)}
+                        >
+                          <Icon name="graph" size={14} />
+                          <span className="session-runtime-chip-label">Usage</span>
+                        </button>
+                      )}
                       <span className="composer-chip session-runtime-chip is-readonly" data-testid="session-tool-mode" title="Tool access for this session — fixed when it started">
                         <Icon name={selected.toolMode === 'full' ? 'tools' : 'search'} size={14} />
                         <span className="session-runtime-chip-label">
@@ -1938,13 +2130,32 @@ export function SessionsPage({
                   placeholder={
                     conversationRunning
                       ? 'Message the selected AI…'
-                      : isTerminalAgentState(selected.state) ? 'Ask the agent to clarify, change, or continue…' : 'The agent is working…'
+                      : isSingleAgentRunning
+                        ? 'Queue follow-up (sends automatically when done)…'
+                        : isTerminalAgentState(selected.state)
+                          ? 'Ask the agent to clarify, change, or continue…'
+                          : 'The agent is working…'
                   }
                   onChange={event => {
-                    setFollowUp(event.target.value);
+                    const val = event.target.value;
+                    setFollowUp(val);
                     if (followUpError) setFollowUpError(undefined);
+                    if (isSingleAgentRunning && inflightComposerExpanded) {
+                      if (!val.trim() && followUpImages.length === 0 && hadTypedInInflightComposerRef.current) {
+                        setInflightComposerExpanded(false);
+                        hadTypedInInflightComposerRef.current = false;
+                      } else if (val.trim()) {
+                        hadTypedInInflightComposerRef.current = true;
+                      }
+                    }
                   }}
                   onKeyDown={event => {
+                    if (event.key === 'Escape' && isSingleAgentRunning && inflightComposerExpanded) {
+                      event.preventDefault();
+                      setInflightComposerExpanded(false);
+                      hadTypedInInflightComposerRef.current = false;
+                      return;
+                    }
                     if (event.key === 'Enter' && !event.shiftKey && (followUp.trim() || followUpImages.length > 0)) {
                       event.preventDefault();
                       void sendFollowUp();
@@ -1952,339 +2163,437 @@ export function SessionsPage({
                   }}
                 />
               <div className="composer-controls">
-                  {/* While the box is collapsed (a single-agent turn running,
-                      see `followUpCollapsed`), the commands/provider/model
-                      chips below have nothing to do — none are actionable
-                      mid-turn — so this takes their place with the same
-                      "what's happening now" readout the transcript used to
-                      show on its own line. The Session Mode chip is left
-                      alone: unlike the others it's genuinely only usable
-                      while a turn is running (`AcpAgentHost.setAcpMode`
-                      requires a live task), so hiding it here would remove
-                      the one window it's ever actionable in, not just declutter. */}
-                  {followUpCollapsed && liveActivityText && (
-                    <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid="session-composer-activity-chip">
-                      {activityProvider ? (
-                        <Icon
-                          name={providerIconName(activityProvider)}
-                          size={13}
-                          className={`session-activity-icon session-activity-icon-${activityProvider}`}
-                        />
-                      ) : (
-                        <span className="session-activity-dot" aria-hidden="true" />
+                {isSingleAgentRunning ? (
+                  followUpCollapsed ? (
+                    <>
+                      {liveActivityText && (
+                        <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid="session-composer-activity-chip">
+                          {activityProvider ? (
+                            <Icon
+                              name={providerIconName(activityProvider)}
+                              size={13}
+                              className={`session-activity-icon session-activity-icon-${activityProvider}`}
+                            />
+                          ) : (
+                            <span className="session-activity-dot" aria-hidden="true" />
+                          )}
+                          {liveActivityText}
+                        </span>
                       )}
-                      {liveActivityText}
-                    </span>
-                  )}
-                  {/* ACP's own Session Mode — only meaningful while the agent's
-                      connection is live (`AcpAgentHost.setAcpMode` requires an
-                      active task), so this is the opposite condition from the
-                      chat/analysis/review toggle above, which only appears once
-                      terminal. Entirely distinct from that toggle. */}
-                  {!isTerminalAgentState(selected.state) &&
-                    selected.acpAvailableModes &&
-                    selected.acpAvailableModes.length > 0 && (
+                      <span className="spacer" />
+                      {activeQueuedMessage ? (
+                        <span
+                          className="composer-chip session-runtime-chip is-queued"
+                          data-testid="session-queued-pill"
+                          title="Click to edit or cancel queued message"
+                        >
+                          <Icon name="sparkles" size={13} />
+                          <span
+                            className="session-runtime-chip-label"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => {
+                              setFollowUp(activeQueuedMessage.message);
+                              if (activeQueuedMessage.images?.length) {
+                                setFollowUpImages(activeQueuedMessage.images);
+                              }
+                              setQueuedFollowUpsBySession(prev => {
+                                const next = { ...prev };
+                                delete next[selected.issueKey];
+                                return next;
+                              });
+                              setInflightComposerExpanded(true);
+                              hadTypedInInflightComposerRef.current = true;
+                              setTimeout(() => followUpTextareaRef.current?.focus(), 50);
+                            }}
+                          >
+                            Queued: {activeQueuedMessage.message.length > 32 ? `${activeQueuedMessage.message.slice(0, 32)}…` : activeQueuedMessage.message}
+                          </span>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-sm"
+                            style={{ marginLeft: 3 }}
+                            aria-label="Cancel queued message"
+                            title="Cancel queued message"
+                            onClick={e => {
+                              e.stopPropagation();
+                              setQueuedFollowUpsBySession(prev => {
+                                const next = { ...prev };
+                                delete next[selected.issueKey];
+                                return next;
+                              });
+                            }}
+                          >
+                            <Icon name="close" size={11} />
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="composer-chip session-ask-button"
+                          data-testid="session-composer-ask-btn"
+                          title="Queue a follow-up message while the agent is working"
+                          onClick={() => {
+                            setInflightComposerExpanded(true);
+                            hadTypedInInflightComposerRef.current = false;
+                            setTimeout(() => followUpTextareaRef.current?.focus(), 50);
+                          }}
+                        >
+                          <Icon name="chats" size={13} />
+                          <span>Ask</span>
+                        </button>
+                      )}
                       <button
-                        ref={acpModeChipRef}
-                        className={`composer-chip${acpModeMenuPos ? ' active' : ''}`}
-                        type="button"
-                        aria-haspopup="listbox"
-                        aria-expanded={!!acpModeMenuPos}
-                        disabled={settingAcpMode}
-                        title="The agent's own operating mode"
-                        data-testid="session-acp-mode"
-                        onClick={() => {
-                          if (acpModeMenuPos) {
-                            setAcpModeMenuPos(undefined);
-                            return;
-                          }
-                          const rect = acpModeChipRef.current?.getBoundingClientRect();
-                          if (rect) setAcpModeMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
-                        }}
+                        className="composer-send composer-send-cancel"
+                        aria-label="Cancel response"
+                        title={abortingSession ? 'Cancelling…' : 'Cancel response'}
+                        data-testid="session-follow-up-send"
+                        disabled={abortingSession}
+                        onClick={() => void abortSession()}
                       >
-                        <Icon name="sliders" size={14} />
-                        {selected.acpAvailableModes.find(mode => mode.id === selected.acpCurrentModeId)?.name ?? 'Mode'}
+                        <Icon name="close" size={15} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {liveActivityText && (
+                        <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid="session-composer-activity-chip">
+                          {activityProvider ? (
+                            <Icon
+                              name={providerIconName(activityProvider)}
+                              size={13}
+                              className={`session-activity-icon session-activity-icon-${activityProvider}`}
+                            />
+                          ) : (
+                            <span className="session-activity-dot" aria-hidden="true" />
+                          )}
+                          {liveActivityText}
+                        </span>
+                      )}
+                      {selected.acpAvailableModes && selected.acpAvailableModes.length > 0 && (
+                        <button
+                          ref={acpModeChipRef}
+                          className={`composer-chip${acpModeMenuPos ? ' active' : ''}`}
+                          type="button"
+                          aria-haspopup="listbox"
+                          aria-expanded={!!acpModeMenuPos}
+                          disabled={settingAcpMode}
+                          title="The agent's own operating mode"
+                          data-testid="session-acp-mode"
+                          onClick={() => {
+                            if (acpModeMenuPos) {
+                              setAcpModeMenuPos(undefined);
+                              return;
+                            }
+                            const rect = acpModeChipRef.current?.getBoundingClientRect();
+                            if (rect) setAcpModeMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+                          }}
+                        >
+                          <Icon name="sliders" size={14} />
+                          {selected.acpAvailableModes.find(mode => mode.id === selected.acpCurrentModeId)?.name ?? 'Mode'}
+                        </button>
+                      )}
+                      {acpModeMenuPos &&
+                        selected.acpAvailableModes &&
+                        createPortal(
+                          <div
+                            ref={acpModeMenuRef}
+                            className="composer-provider-menu"
+                            role="listbox"
+                            aria-label="Agent mode"
+                            style={{ position: 'fixed', bottom: acpModeMenuPos.bottom, left: acpModeMenuPos.left }}
+                          >
+                            {selected.acpAvailableModes.map(mode => (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                className={`composer-provider-option${mode.id === selected.acpCurrentModeId ? ' active' : ''}`}
+                                role="option"
+                                aria-selected={mode.id === selected.acpCurrentModeId}
+                                title={mode.description}
+                                data-testid={`session-acp-mode-option-${mode.id}`}
+                                onClick={() => void setAcpMode(mode.id)}
+                              >
+                                {mode.name}
+                              </button>
+                            ))}
+                          </div>,
+                          document.body
+                        )}
+                      <span className="spacer" />
+                      <button
+                        className="composer-send composer-send-cancel"
+                        aria-label="Cancel response"
+                        title={abortingSession ? 'Cancelling…' : 'Cancel response'}
+                        data-testid="session-follow-up-cancel"
+                        disabled={abortingSession}
+                        onClick={() => void abortSession()}
+                      >
+                        <Icon name="close" size={15} />
+                      </button>
+                      <button
+                        className="composer-send"
+                        aria-label="Queue follow-up"
+                        title="Queue next message (sends automatically when done)"
+                        data-testid="session-follow-up-send"
+                        disabled={abortingSession || sendingFollowUp || (!followUp.trim() && followUpImages.length === 0)}
+                        onClick={() => void sendFollowUp()}
+                      >
+                        <Icon name="arrow-up" size={15} />
+                      </button>
+                    </>
+                  )
+                ) : (
+                  <>
+                    {terminalForContext && (
+                      <button
+                        className={`composer-chip terminal-context-button${attachTerminalContext ? ' active' : ''}`}
+                        type="button"
+                        aria-pressed={attachTerminalContext}
+                        title={attachTerminalContext ? 'Remove terminal output from this message' : 'Attach recent terminal output'}
+                        data-testid="attach-terminal-context"
+                        onClick={() => setAttachTerminalContext(value => !value)}
+                      >
+                        <Icon name="terminal" size={14} />
+                        Terminal
+                        <span className="terminal-context-dot" aria-hidden="true" />
                       </button>
                     )}
-                  {acpModeMenuPos &&
-                    selected.acpAvailableModes &&
-                    createPortal(
-                      <div
-                        ref={acpModeMenuRef}
-                        className="composer-provider-menu"
-                        role="listbox"
-                        aria-label="Agent mode"
-                        style={{ position: 'fixed', bottom: acpModeMenuPos.bottom, left: acpModeMenuPos.left }}
-                      >
-                        {selected.acpAvailableModes.map(mode => (
-                          <button
-                            key={mode.id}
-                            type="button"
-                            className={`composer-provider-option${mode.id === selected.acpCurrentModeId ? ' active' : ''}`}
-                            role="option"
-                            aria-selected={mode.id === selected.acpCurrentModeId}
-                            title={mode.description}
-                            data-testid={`session-acp-mode-option-${mode.id}`}
-                            onClick={() => void setAcpMode(mode.id)}
-                          >
-                            {mode.name}
-                          </button>
-                        ))}
-                      </div>,
-                      document.body
+                    {workflowOwnsRuntime && activeWorkflowRun && (
+                      <WorkflowManagedRuntimeChip
+                        run={activeWorkflowRun}
+                        stage={activeWorkflowStage}
+                        stageSession={activeWorkflowStageSession}
+                      />
                     )}
-                  {terminalForContext && (
-                    <button
-                      className={`composer-chip terminal-context-button${attachTerminalContext ? ' active' : ''}`}
-                      type="button"
-                      aria-pressed={attachTerminalContext}
-                      title={attachTerminalContext ? 'Remove terminal output from this message' : 'Attach recent terminal output'}
-                      data-testid="attach-terminal-context"
-                      onClick={() => setAttachTerminalContext(value => !value)}
-                    >
-                      <Icon name="terminal" size={14} />
-                      Terminal
-                      <span className="terminal-context-dot" aria-hidden="true" />
-                    </button>
-                  )}
-                  <SessionWorkflowControl
-                    session={selected}
-                    runs={selectedWorkflowRuns}
-                    options={workflowOptions}
-                    onStartWorkflow={onStartWorkflow}
-                    onSelectWorkflowRun={onSelectWorkflowRun}
-                    onRemoveWorkflowRun={onRemoveWorkflowRun}
-                    onError={setFollowUpError}
-                  />
-                  {!followUpCollapsed && workflowOwnsRuntime && activeWorkflowRun && (
-                    <WorkflowManagedRuntimeChip
-                      run={activeWorkflowRun}
-                      stage={activeWorkflowStage}
-                      stageSession={activeWorkflowStageSession}
-                    />
-                  )}
-                  {!followUpCollapsed && !workflowOwnsRuntime && selected.provider && (selected.workflowRole === 'stage' ? (
-                    <span
-                      className="composer-chip session-runtime-chip is-readonly"
-                      data-testid="session-provider"
-                      title="This workflow stage's AI provider is fixed"
-                    >
-                      <Icon name={providerIconName(selected.provider)} size={14} />
-                      {PROVIDER_LABELS[selected.provider]}
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className={`composer-chip session-runtime-chip${transitionPopover?.open === 'handover' ? ' active' : ''}`}
-                      data-testid="session-provider"
-                      title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Choose an AI provider' : "This session's AI provider"}
-                      aria-haspopup="listbox"
-                      aria-expanded={transitionPopover?.open === 'handover'}
-                      disabled={conversationRunning || !canChangeSessionRuntime(selected)}
-                      onClick={event => {
-                        if (transitionPopover?.open === 'handover') {
-                          setTransitionPopover(undefined);
-                          return;
-                        }
-                        const rect = event.currentTarget.getBoundingClientRect();
-                        setConversationPopoverPosition(undefined);
-                        setTransitionPopover({ open: 'handover', position: { bottom: window.innerHeight - rect.top + 6, left: rect.left } });
-                      }}
-                    >
-                      <Icon name={providerIconName(selected.provider)} size={14} />
-                      {PROVIDER_LABELS[selected.provider]}
-                    </button>
-                  ))}
-                  {!followUpCollapsed && !workflowOwnsRuntime && selected.provider && (() => {
-                    const contextLimit = selected.model
-                      ? selected.contextLimit ?? getKnownContextLength(selected.model, selected.provider)
-                      : undefined;
-                    const contextSize = formatContextLength(contextLimit);
-                    const pricing = getModelPricing(selected.provider, selected.model);
-                    const cost = formatModelCost(pricing);
-                    return selected.workflowRole === 'stage' ? (
+                    {!workflowOwnsRuntime && selected.provider && (selected.workflowRole === 'stage' ? (
                       <span
                         className="composer-chip session-runtime-chip is-readonly"
-                        data-testid="session-model"
-                        title="This workflow stage's AI model is fixed"
+                        data-testid="session-provider"
+                        title="This workflow stage's AI provider is fixed"
                       >
-                        <Icon name="sparkles" size={14} />
-                        <span>{selected.model ?? 'Provider default'}</span>
-                        {contextSize && <span className="composer-chip-meta">{contextSize}</span>}
-                        {cost && <span className="composer-chip-meta">{cost}</span>}
+                        <Icon name={providerIconName(selected.provider)} size={14} />
+                        {PROVIDER_LABELS[selected.provider]}
                       </span>
                     ) : (
                       <button
                         type="button"
-                        className={`composer-chip session-runtime-chip${transitionPopover?.open === 'model' ? ' active' : ''}`}
-                        data-testid="session-model"
-                        title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Change the model for the next turn' : "This session's AI model"}
+                        className={`composer-chip session-runtime-chip${transitionPopover?.open === 'handover' ? ' active' : ''}`}
+                        data-testid="session-provider"
+                        title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Choose an AI provider' : "This session's AI provider"}
                         aria-haspopup="listbox"
-                        aria-expanded={transitionPopover?.open === 'model'}
-                        disabled={conversationRunning || !canChangeSessionRuntime(selected)}
+                        aria-expanded={transitionPopover?.open === 'handover'}
+                        disabled={!conversationRunning && !canChangeSessionRuntime(selected)}
                         onClick={event => {
-                          if (transitionPopover?.open === 'model') {
+                          if (transitionPopover?.open === 'handover') {
                             setTransitionPopover(undefined);
                             return;
                           }
                           const rect = event.currentTarget.getBoundingClientRect();
                           setConversationPopoverPosition(undefined);
-                          setTransitionPopover({ open: 'model', position: { bottom: window.innerHeight - rect.top + 6, left: rect.left } });
+                          setTransitionPopover({ open: 'handover', position: { bottom: window.innerHeight - rect.top + 6, left: rect.left } });
                         }}
                       >
-                        <Icon name="sparkles" size={14} />
-                        <span>{selected.model ?? 'Model'}</span>
-                        {contextSize && <span className="composer-chip-meta">{contextSize}</span>}
-                        {cost && <span className="composer-chip-meta">{cost}</span>}
+                        <Icon name={providerIconName(selected.provider)} size={14} />
+                        {PROVIDER_LABELS[selected.provider]}
                       </button>
-                    );
-                  })()}
-                  <SessionConversationActions
-                    session={selected}
-                    onStop={() => void stopConversation()}
-                    onToolOwner={participantId => void setConversationToolOwner(participantId)}
-                    targetId={conversationTargetId}
-                    onTargetChange={setConversationTargetId}
-                  />
-                  {selected.worktreeBranch && (
-                    <span
-                      className="composer-chip session-runtime-chip is-readonly"
-                      data-testid="session-worktree"
-                      title={selected.worktreePath}
-                    >
-                      <Icon name="git-branch" size={14} />
-                      {selected.worktreeBranch}
-                      {selected.worktreeBaseBranch && (
-                        <span className="session-worktree-base"> from {selected.worktreeBaseBranch}</span>
-                      )}
-                    </span>
-                  )}
-                  <span className="spacer" />
-                  {/* Keep the agent's slash commands beside the context ring in
-                      the right-side action group. They insert `/name ` into the
-                      draft; the menu remains a portal so it is not clipped by
-                      the composer. */}
-                  {!followUpCollapsed && selected.acpAvailableCommands && selected.acpAvailableCommands.length > 0 && (
-                    <button
-                      ref={acpCommandChipRef}
-                      className={`composer-chip${acpCommandMenuPos ? ' active' : ''}`}
-                      type="button"
-                      aria-haspopup="listbox"
-                      aria-expanded={!!acpCommandMenuPos}
-                      disabled={!isTerminalAgentState(selected.state) || sendingFollowUp}
-                      title="The agent's own slash commands"
-                      data-testid="session-acp-commands"
-                      onClick={() => {
-                        if (acpCommandMenuPos) {
-                          setAcpCommandMenuPos(undefined);
-                          return;
-                        }
-                        const rect = acpCommandChipRef.current?.getBoundingClientRect();
-                        if (rect) setAcpCommandMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
-                      }}
-                    >
-                      <Icon name="terminal" size={14} />
-                      Commands
-                    </button>
-                  )}
-                  {acpCommandMenuPos &&
-                    selected.acpAvailableCommands &&
-                    createPortal(
-                      <div
-                        ref={acpCommandMenuRef}
-                        className="composer-provider-menu"
-                        role="listbox"
-                        aria-label="Agent commands"
-                        style={{ position: 'fixed', bottom: acpCommandMenuPos.bottom, left: acpCommandMenuPos.left }}
+                    ))}
+                    {!workflowOwnsRuntime && selected.provider && (() => {
+                      const contextLimit = selected.model
+                        ? selected.contextLimit ?? getKnownContextLength(selected.model, selected.provider)
+                        : undefined;
+                      const contextSize = formatContextLength(contextLimit);
+                      const pricing = getModelPricing(selected.provider, selected.model);
+                      const cost = formatModelCost(pricing);
+                      return selected.workflowRole === 'stage' ? (
+                        <span
+                          className="composer-chip session-runtime-chip is-readonly"
+                          data-testid="session-model"
+                          title="This workflow stage's AI model is fixed"
+                        >
+                          <Icon name="sparkles" size={14} />
+                          <span>{selected.model ?? 'Provider default'}</span>
+                          {contextSize && <span className="composer-chip-meta">{contextSize}</span>}
+                          {cost && <span className="composer-chip-meta">{cost}</span>}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className={`composer-chip session-runtime-chip${transitionPopover?.open === 'model' ? ' active' : ''}`}
+                          data-testid="session-model"
+                          title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Change the model for the next turn' : "This session's AI model"}
+                          aria-haspopup="listbox"
+                          aria-expanded={transitionPopover?.open === 'model'}
+                          disabled={conversationRunning || !canChangeSessionRuntime(selected)}
+                          onClick={event => {
+                            if (transitionPopover?.open === 'model') {
+                              setTransitionPopover(undefined);
+                              return;
+                            }
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            setConversationPopoverPosition(undefined);
+                            setTransitionPopover({ open: 'model', position: { bottom: window.innerHeight - rect.top + 6, left: rect.left } });
+                          }}
+                        >
+                          <Icon name="sparkles" size={14} />
+                          <span>{selected.model ?? 'Model'}</span>
+                          {contextSize && <span className="composer-chip-meta">{contextSize}</span>}
+                          {cost && <span className="composer-chip-meta">{cost}</span>}
+                        </button>
+                      );
+                    })()}
+                    <SessionConversationActions
+                      session={selected}
+                      onStop={() => void stopConversation()}
+                      onToolOwner={participantId => void setConversationToolOwner(participantId)}
+                      targetId={conversationTargetId}
+                      onTargetChange={setConversationTargetId}
+                    />
+                    {selected.worktreeBranch && (
+                      <span
+                        className="composer-chip session-runtime-chip is-readonly"
+                        data-testid="session-worktree"
+                        title={selected.worktreePath}
                       >
-                        {selected.acpAvailableCommands.map(command => (
-                          <button
-                            key={command.name}
-                            type="button"
-                            className="composer-provider-option"
-                            role="option"
-                            title={command.inputHint ? `${command.description} (${command.inputHint})` : command.description}
-                            data-testid={`session-acp-command-option-${command.name}`}
-                            onClick={() => insertAcpCommand(command.name)}
-                          >
-                            /{command.name}
-                          </button>
-                        ))}
-                      </div>,
-                      document.body
+                        <Icon name="git-branch" size={14} />
+                        {selected.worktreeBranch}
+                        {selected.worktreeBaseBranch && (
+                          <span className="session-worktree-base"> from {selected.worktreeBaseBranch}</span>
+                        )}
+                      </span>
                     )}
-                  {context && (
+                    <span className="spacer" />
+                    {selected.acpAvailableCommands && selected.acpAvailableCommands.length > 0 && (
+                      <button
+                        ref={acpCommandChipRef}
+                        className={`composer-chip${acpCommandMenuPos ? ' active' : ''}`}
+                        type="button"
+                        aria-haspopup="listbox"
+                        aria-expanded={!!acpCommandMenuPos}
+                        disabled={!isTerminalAgentState(selected.state) || sendingFollowUp}
+                        title="The agent's own slash commands"
+                        data-testid="session-acp-commands"
+                        onClick={() => {
+                          if (acpCommandMenuPos) {
+                            setAcpCommandMenuPos(undefined);
+                            return;
+                          }
+                          const rect = acpCommandChipRef.current?.getBoundingClientRect();
+                          if (rect) setAcpCommandMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+                        }}
+                      >
+                        <Icon name="terminal" size={14} />
+                        Commands
+                      </button>
+                    )}
+                    {acpCommandMenuPos &&
+                      selected.acpAvailableCommands &&
+                      createPortal(
+                        <div
+                          ref={acpCommandMenuRef}
+                          className="composer-provider-menu"
+                          role="listbox"
+                          aria-label="Agent commands"
+                          style={{ position: 'fixed', bottom: acpCommandMenuPos.bottom, left: acpCommandMenuPos.left }}
+                        >
+                          {selected.acpAvailableCommands.map(command => (
+                            <button
+                              key={command.name}
+                              type="button"
+                              className="composer-provider-option"
+                              role="option"
+                              title={command.inputHint ? `${command.description} (${command.inputHint})` : command.description}
+                              data-testid={`session-acp-command-option-${command.name}`}
+                              onClick={() => insertAcpCommand(command.name)}
+                            >
+                              /{command.name}
+                            </button>
+                          ))}
+                        </div>,
+                        document.body
+                      )}
+                    <SessionWorkflowControl
+                      session={selected}
+                      runs={selectedWorkflowRuns}
+                      options={workflowOptions}
+                      onStartWorkflow={onStartWorkflow}
+                      onSelectWorkflowRun={onSelectWorkflowRun}
+                      onRemoveWorkflowRun={onRemoveWorkflowRun}
+                      onError={setFollowUpError}
+                    />
+                    {context && (
+                      <button
+                        ref={contextChipRef}
+                        type="button"
+                        className={`session-context-chip is-${context.level}${contextPopoverPosition ? ' active' : ''}`}
+                        aria-label={`Context usage: ${context.percent}% used`}
+                        aria-haspopup="dialog"
+                        aria-expanded={Boolean(contextPopoverPosition)}
+                        aria-controls="session-context-popover"
+                        title={`${context.percent}% of context used`}
+                        data-testid="session-context-chip"
+                        onClick={() => {
+                          if (contextPopoverPosition) {
+                            setContextPopoverPosition(undefined);
+                            return;
+                          }
+                          const rect = contextChipRef.current?.getBoundingClientRect();
+                          if (rect) {
+                            setTransitionPopover(undefined);
+                            setConversationPopoverPosition(undefined);
+                            setContextPopoverPosition({
+                              bottom: window.innerHeight - rect.top + 6,
+                              left: rect.right - 300
+                            });
+                          }
+                        }}
+                      >
+                        <svg viewBox="0 0 20 20" aria-hidden="true">
+                          <circle className="session-context-ring-track" cx="10" cy="10" r="7.5" />
+                          <circle
+                            className="session-context-ring-value"
+                            cx="10"
+                            cy="10"
+                            r="7.5"
+                            pathLength="100"
+                            strokeDasharray={`${context.percent} ${100 - context.percent}`}
+                          />
+                        </svg>
+                      </button>
+                    )}
                     <button
-                      ref={contextChipRef}
-                      type="button"
-                      className={`session-context-chip is-${context.level}${contextPopoverPosition ? ' active' : ''}`}
-                      aria-label={`Context usage: ${context.percent}% used`}
-                      aria-haspopup="dialog"
-                      aria-expanded={Boolean(contextPopoverPosition)}
-                      aria-controls="session-context-popover"
-                      title={`${context.percent}% of context used`}
-                      data-testid="session-context-chip"
+                      className={`composer-send${!isTerminalAgentState(selected.state) ? ' composer-send-cancel' : ''}`}
+                      aria-label={conversationRunning ? 'Stop conversation' : !isTerminalAgentState(selected.state) ? 'Cancel response' : sendingFollowUp ? 'Sending message' : 'Send message'}
+                      title={conversationRunning ? (abortingSession ? 'Stopping…' : 'Stop conversation') : !isTerminalAgentState(selected.state) ? (abortingSession ? 'Cancelling…' : 'Cancel response') : sendingFollowUp ? 'Sending…' : 'Send message'}
+                      data-testid="session-follow-up-send"
+                      disabled={abortingSession || (!conversationRunning && isTerminalAgentState(selected.state) && (sendingFollowUp || (!followUp.trim() && followUpImages.length === 0)))}
                       onClick={() => {
-                        if (contextPopoverPosition) {
-                          setContextPopoverPosition(undefined);
-                          return;
-                        }
-                        const rect = contextChipRef.current?.getBoundingClientRect();
-                        if (rect) {
-                          setTransitionPopover(undefined);
-                          setConversationPopoverPosition(undefined);
-                          setContextPopoverPosition({
-                            bottom: window.innerHeight - rect.top + 6,
-                            left: rect.right - 300
-                          });
+                        if (conversationRunning) {
+                          void stopConversation();
+                        } else if (!isTerminalAgentState(selected.state)) {
+                          void abortSession();
+                        } else {
+                          void sendFollowUp();
                         }
                       }}
                     >
-                      <svg viewBox="0 0 20 20" aria-hidden="true">
-                        <circle className="session-context-ring-track" cx="10" cy="10" r="7.5" />
-                        <circle
-                          className="session-context-ring-value"
-                          cx="10"
-                          cy="10"
-                          r="7.5"
-                          pathLength="100"
-                          strokeDasharray={`${context.percent} ${100 - context.percent}`}
-                        />
-                      </svg>
+                      <Icon name={conversationRunning || !isTerminalAgentState(selected.state) ? 'close' : 'arrow-up'} size={15} />
                     </button>
-                  )}
-                  <button
-                    className={`composer-send${!isTerminalAgentState(selected.state) ? ' composer-send-cancel' : ''}`}
-                    aria-label={conversationRunning ? 'Stop conversation' : !isTerminalAgentState(selected.state) ? 'Cancel response' : sendingFollowUp ? 'Sending message' : 'Send message'}
-                    title={conversationRunning ? (abortingSession ? 'Stopping…' : 'Stop conversation') : !isTerminalAgentState(selected.state) ? (abortingSession ? 'Cancelling…' : 'Cancel response') : sendingFollowUp ? 'Sending…' : 'Send message'}
-                    data-testid="session-follow-up-send"
-                    disabled={abortingSession || (!conversationRunning && isTerminalAgentState(selected.state) && (sendingFollowUp || (!followUp.trim() && followUpImages.length === 0)))}
-                    onClick={() => {
-                      if (conversationRunning) {
-                        void stopConversation();
-                      } else if (!isTerminalAgentState(selected.state)) {
-                        void abortSession();
-                      } else {
-                        void sendFollowUp();
-                      }
-                    }}
-                  >
-                    <Icon name={conversationRunning || !isTerminalAgentState(selected.state) ? 'close' : 'arrow-up'} size={15} />
-                  </button>
-                  {conversationRunning && (
-                    <button
-                      type="button"
-                      className="composer-send composer-send-directed"
-                      aria-label="Send message to selected AI"
-                      title="Send this message to the selected AI"
-                      data-testid="session-conversation-send"
-                      disabled={abortingSession || sendingFollowUp || (!followUp.trim() && followUpImages.length === 0)}
-                      onClick={() => void sendFollowUp()}
-                    >
-                      <Icon name="arrow-up" size={15} />
-                    </button>
-                  )}
-                </div>
+                    {conversationRunning && (
+                      <button
+                        type="button"
+                        className="composer-send composer-send-directed"
+                        aria-label="Send message to selected AI"
+                        title="Send this message to the selected AI"
+                        data-testid="session-conversation-send"
+                        disabled={abortingSession || sendingFollowUp || (!followUp.trim() && followUpImages.length === 0)}
+                        onClick={() => void sendFollowUp()}
+                      >
+                        <Icon name="arrow-up" size={15} />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
               </div>
               {context && contextPopoverPosition && createPortal(
                 <div

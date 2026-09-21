@@ -221,6 +221,16 @@ export async function commitGit(input: string, message: string): Promise<GitRepo
   return mutate(input, ['commit', '-m', cleanMessage]);
 }
 
+/** Stages and commits exactly these paths, leaving anything else already staged out of the commit. */
+export async function commitPathsGit(input: string, paths: string[], message: string): Promise<void> {
+  const cleanMessage = message.trim();
+  if (!cleanMessage) throw new Error('Enter a commit message before committing.');
+  if (paths.length === 0) return;
+  const repositoryPath = await resolveRepository(input);
+  await git(['add', '--', ...paths], repositoryPath);
+  await git(['commit', '-m', cleanMessage, '--only', '--', ...paths], repositoryPath);
+}
+
 export async function createBranchGit(input: string, name: string, startPoint?: string): Promise<GitRepositorySnapshot> {
   const repositoryPath = await resolveRepository(input);
   const cleanName = await validateBranchName(repositoryPath, name);

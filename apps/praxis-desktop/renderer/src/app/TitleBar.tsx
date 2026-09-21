@@ -33,8 +33,6 @@ export interface TitleBarProps {
   onNewProject?: () => void;
   onAddExistingProject?: () => void;
   onImportProjects?: () => void;
-  searching?: boolean;
-  onToggleSearch?: () => void;
   mode?: SidebarMode;
   onToggleMode?: () => void;
   onModeChange?: (mode: SidebarMode) => void;
@@ -80,8 +78,6 @@ export function TitleBar({
   onNewProject,
   onAddExistingProject,
   onImportProjects,
-  searching,
-  onToggleSearch,
   mode = 'classic',
   onToggleMode,
   onModeChange,
@@ -364,16 +360,6 @@ export function TitleBar({
           data-testid={mode === 'classic' ? 'mode-work' : 'mode-classic'}
         >
           <Icon name={mode === 'classic' ? 'columns' : 'robot'} size={14} />
-        </button>
-
-        <button
-          className={`icon-btn icon-btn-sm${searching ? ' active' : ''}`}
-          aria-label="Search boards"
-          onClick={() => {
-            onToggleSearch?.();
-          }}
-        >
-          <Icon name="search" size={14} />
         </button>
       </div>
 

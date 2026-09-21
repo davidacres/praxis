@@ -1972,12 +1972,6 @@ export function App() {
         onNewProject={() => requestProjectWizard('create')}
         onAddExistingProject={() => requestProjectWizard('existing')}
         onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
-        searching={sidebarSearching}
-        onToggleSearch={() => {
-          setSidebarSearching(open => !open);
-          setSidebarSearchQuery('');
-          if (!sidebarVisible) setSidebarVisible(true);
-        }}
         mode={mode}
         onToggleMode={() => setMode(m => m === 'classic' ? 'work' : 'classic')}
         onModeChange={setMode}
