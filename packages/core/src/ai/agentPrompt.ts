@@ -218,4 +218,5 @@ export interface PermissionInfo {
   description: string;
   kind: string;
   detail?: string;
+  toolName?: string;
 }

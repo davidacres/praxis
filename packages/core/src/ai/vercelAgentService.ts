@@ -37,6 +37,7 @@ interface ActiveTask {
     description: string;
     kind: string;
     detail?: string;
+    toolName?: string;
     resolve: (result: PermissionDecision) => void;
   }>;
   allowPermissionsForTask: boolean;
@@ -97,7 +98,7 @@ export interface VercelAgentStartOptions {
     execute(
       name: string,
       args: Record<string, unknown>,
-      requestPermission: (request: { kind: string; description: string; detail?: string }) => Promise<PermissionDecision>
+      requestPermission: (request: { kind: string; description: string; detail?: string; toolName?: string }) => Promise<PermissionDecision>
     ): Promise<{ ok: boolean; content: string }>;
   };
   /** A host-scheduled AI-to-AI turn; its routing instruction is not a human chat message. */
@@ -274,6 +275,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       kind: string;
       description: string;
       detail?: string;
+      toolName?: string;
     }
   ): Promise<PermissionDecision> {
     const task = this.activeTasks.get(issueKey);
@@ -289,12 +291,18 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
         description: request.description,
         kind: request.kind,
         detail: request.detail,
+        toolName: request.toolName,
         resolve
       });
       this.sessionManager.updateAgentState(issueKey, 'awaiting_approval');
       this.appendEvent(
         issueKey,
-        evt('permission_requested', request.description, request.detail)
+        evt(
+          'permission_requested',
+          request.description,
+          request.detail,
+          request.toolName ? { toolName: request.toolName } : undefined
+        )
       );
     });
   }
@@ -812,7 +820,8 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     return task.pendingPermissions.map(request => ({
       description: request.description,
       kind: request.kind,
-      detail: request.detail
+      detail: request.detail,
+      ...(request.toolName ? { toolName: request.toolName } : {})
     }));
   }
 
