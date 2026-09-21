@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import MarkdownIt from 'markdown-it';
+import { normalizeStructuredReviewMarkdown } from './structuredReviewMarkdown';
 
 // Keep this list deliberately raster-only. A response can name an arbitrary
 // path, but the host will only turn a bounded image file inside the session's
@@ -90,7 +91,7 @@ export function Markdown({
   imageSessionId?: string;
 }) {
   const normalizedText = useMemo(
-    () => normalizeImageReferences(text || '', Boolean(imageSessionId)),
+    () => normalizeImageReferences(normalizeStructuredReviewMarkdown(text || ''), Boolean(imageSessionId)),
     [imageSessionId, text]
   );
   const localImageReferences = useMemo(() => {
