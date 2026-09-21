@@ -5312,6 +5312,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .ai-provider-head:hover { background: var(--bg-hover); }
 .ai-provider-chevron { display: inline-flex; flex-shrink: 0; color: var(--text-tertiary); }
 .ai-provider-text { min-width: 0; }
+.ai-provider-head .spacer { flex: 1 1 auto; min-width: var(--space-2); }
 .ai-provider-name { display: flex; align-items: center; gap: var(--space-2); font-weight: 600; }
 .ai-provider-row.is-off .ai-provider-name { color: var(--text-tertiary); }
 .ai-provider-meta { color: var(--text-tertiary); font-size: var(--text-sm); }
@@ -5395,7 +5396,8 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 }
 
 .settings-field-label {
-  flex: 0 0 200px;
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--text-md);
   color: var(--text);
 }
@@ -5407,10 +5409,19 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 }
 
 .settings-field-control {
-  flex: 1;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+/* Form fields need the remaining row width; action-only rows keep their
+   controls at the far edge so marketplace installs, runtime actions, and
+   gadget rows share the same full-width rhythm. */
+.settings-field-control--field {
+  flex: 1 1 0;
 }
 
 /* A wrapping cluster of controls (inputs + buttons) inside a settings row —
