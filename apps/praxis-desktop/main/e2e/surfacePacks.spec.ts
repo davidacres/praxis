@@ -62,7 +62,7 @@ async function watermarkLoads(): Promise<string> {
 
 test('ships default-on with the Parchment surface over the Praxis theme', async () => {
   await expect(window.locator('html')).toHaveAttribute('data-surface', 'parchment');
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
+  await expect(window.locator('html')).toHaveAttribute('data-theme', DEFAULT_APP_SETTINGS.appearance.themeId);
 
   // The pack drives a real texture layer on the panel shells.
   const textureOpacity = await window.locator('.pane-main').evaluate(el =>
@@ -136,8 +136,8 @@ test('the watermark is tinted from the live theme and re-bakes when the palette 
 
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await window.locator('[data-testid="theme-card-github-dark"]').click();
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'github-dark');
+  await window.locator('[data-testid="theme-card-tm-default-2"]').click();
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'tm-default-2');
   await expect.poll(inkOf).not.toBe(praxisInk);
 });
 
@@ -265,8 +265,8 @@ test('the letterpress outline is opt-in and draws a second offset line', async (
 
   await window.locator('[data-testid="motif-outline"]').fill('70');
   await expect.poll(tile).toContain('<g transform="translate');
-  // On a dark theme the offset line is a highlight, drawn behind the main ink.
-  expect(await tile()).toContain('rgba(255,255,255,0.9)');
+  // On a light theme the offset line is a shadow (rgba(0,0,0,0.85)); on a dark theme it is a highlight (rgba(255,255,255,0.9)).
+  expect(await tile()).toMatch(/rgba\((0,0,0,0\.85|255,255,255,0\.9)\)/);
 
   await window.locator('[data-testid="motif-outline"]').fill('0');
   await expect.poll(tile).not.toContain('<g transform="translate');
@@ -276,6 +276,11 @@ test('motif strength is normalised so one value reads the same on every palette'
   // A fixed opacity does not mean a fixed *perceived* strength: it depends on
   // how far the ink sits from the panel. Praxis Dark is the reference pairing,
   // so it keeps its declared value; higher-contrast palettes must come down.
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
+  await window.locator('[data-testid="theme-card-praxis-dark"]').click();
+  await window.keyboard.press('Escape');
+
   const strength = () => window.evaluate(() =>
     Number(getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-opacity')));
 
@@ -285,7 +290,7 @@ test('motif strength is normalised so one value reads the same on every palette'
 
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  for (const theme of ['catppuccin-mocha', 'github-light', 'nord-dark']) {
+  for (const theme of ['praxis-light', 'tm-default-1', 'tm-default-2']) {
     await window.locator(`[data-testid="theme-card-${theme}"]`).click();
     await expect(window.locator('html')).toHaveAttribute('data-theme', theme);
     const scaled = await strength();
@@ -482,7 +487,7 @@ test('switches surface pack, composing over the current theme, and persists it',
   await expect(window.locator('html')).toHaveAttribute('data-surface', 'graphite');
   await expect(window.locator('[data-testid="surface-card-graphite"]')).toHaveAttribute('aria-pressed', 'true');
   // The theme axis is untouched.
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
+  await expect(window.locator('html')).toHaveAttribute('data-theme', DEFAULT_APP_SETTINGS.appearance.themeId);
 
   await window.reload();
   await expect(window.locator('html')).toHaveAttribute('data-surface', 'graphite');
@@ -552,6 +557,9 @@ test('contrast guard: no pack pushes its watermark past a readable ceiling', asy
   // the motif's *strongest* point — a `corner` motif fades away from there, so
   // it can carry a higher peak than wall-to-wall tiling.
   const CEILING = 0.4;
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
+  await window.locator('[data-testid="theme-card-praxis-dark"]').click();
   await openSurface();
   for (const pack of ['flat', 'parchment', 'graphite', 'aurora-glass', 'noir']) {
     await window.locator(`[data-testid="surface-card-${pack}"]`).click();
@@ -619,6 +627,10 @@ test('Aurora Glass frosts the sidebar and the translucency dial collapses it', a
 });
 
 test('Noir is offered under a dark theme and hidden under a light one', async () => {
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
+  await window.locator('[data-testid="theme-card-praxis-dark"]').click();
+
   await openSurface();
   await expect(window.locator('[data-testid="surface-card-noir"]')).toBeVisible();
 

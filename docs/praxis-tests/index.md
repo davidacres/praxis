@@ -124,15 +124,15 @@ This catalogue describes **378 Playwright tests** under `apps/praxis-desktop/mai
 | PT-CD88DD8E19 | app | navigating to Connections shows the connection management screen | `apps/praxis-desktop/main/e2e/app.spec.ts:184` |
 | PT-9C84544990 | app | adding and removing a connection updates the list | `apps/praxis-desktop/main/e2e/app.spec.ts:191` |
 | PT-BBA9C83046 | app | a returning user gets the brief splash, not the full crawl | `apps/praxis-desktop/main/e2e/app.spec.ts:216` |
-| PT-0C494CCBEC | appearance Settings | opens Settings from the title bar as a dismissible popover dialog | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:31` |
-| PT-554DF61623 | appearance Settings | theme gallery previews and persists the selected complete palette | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:42` |
-| PT-E7281D960A | appearance Settings | persists the selected theme and mode through app settings | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:68` |
-| PT-7FCBAD6580 | appearance Settings | startup splash inherits the saved app theme | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:81` |
-| PT-77C9928C26 | appearance Settings | installs a marketplace theme and makes it available on reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:151` |
-| PT-33995E247F | appearance Settings | creates a custom theme with editable colors and persists it | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:162` |
-| PT-D0CA7FE649 | appearance Settings | gradient priorities expose a picker per stop plus a direction control | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:177` |
-| PT-AD98619129 | appearance Settings | terminal settings expose detected profiles and persist appearance preferences | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:190` |
-| PT-AC8A2AC5A6 | appearance Settings | solid and gradient round trip through the mode toggle and survive a reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:209` |
+| PT-0C494CCBEC | appearance Settings | opens Settings from the title bar as a dismissible popover dialog | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:32` |
+| PT-554DF61623 | appearance Settings | theme gallery previews and persists the selected complete palette | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:43` |
+| PT-E7281D960A | appearance Settings | persists the selected theme and mode through app settings | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:69` |
+| PT-7FCBAD6580 | appearance Settings | startup splash inherits the saved app theme | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:82` |
+| PT-77C9928C26 | appearance Settings | installs a marketplace theme and makes it available on reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:152` |
+| PT-33995E247F | appearance Settings | creates a custom theme with editable colors and persists it | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:224` |
+| PT-D0CA7FE649 | appearance Settings | gradient priorities expose a picker per stop plus a direction control | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:239` |
+| PT-AD98619129 | appearance Settings | terminal settings expose detected profiles and persist appearance preferences | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:252` |
+| PT-AC8A2AC5A6 | appearance Settings | solid and gradient round trip through the mode toggle and survive a reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:271` |
 | PT-5FBF86763F | app Shell | the Agent Hub and Workflow designer sit inside the normal app shell | `apps/praxis-desktop/main/e2e/appShell.spec.ts:59` |
 | PT-F380FCD2FD | app Zoom | whole-window zoom scales the Praxis shell and supports VS Code shortcuts | `apps/praxis-desktop/main/e2e/appZoom.spec.ts:14` |
 | PT-A9888638A2 | board Filters | load-more fetches the next ten for a busy status without starving the other lanes | `apps/praxis-desktop/main/e2e/boardFilters.spec.ts:31` |
@@ -289,25 +289,25 @@ This catalogue describes **378 Playwright tests** under `apps/praxis-desktop/mai
 | PT-AE3511C1BB | surface Packs | solid cells scatter through a super-tile rather than repeating in step | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:234` |
 | PT-70E51BE580 | surface Packs | the letterpress outline is opt-in and draws a second offset line | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:258` |
 | PT-38F6482663 | surface Packs | motif strength is normalised so one value reads the same on every palette | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:275` |
-| PT-FADD47BAE7 | surface Packs | the startup splash carries the same watermark as the panes | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:299` |
-| PT-2B568CA335 | surface Packs | the Mandelbrot motif paints as real geometry and its tile actually loads | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:332` |
-| PT-C67A595CDB | surface Packs | with animation off the motif is baked complete, with no keyframes at all | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:347` |
-| PT-139EBECEEC | surface Packs | Draw bakes the reveal into the motif SVG and rests on the complete mark | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:371` |
-| PT-0D46EB5152 | surface Packs | Repeat is what turns a one-shot reveal into a loop | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:389` |
-| PT-B23F337F10 | surface Packs | layer-family styles drive CSS and leave the motif SVG untouched | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:402` |
-| PT-66D5C443AB | surface Packs | an animated motif never raises the declared strength past the contrast ceiling | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:427` |
-| PT-1935F3B61F | surface Packs | the master switch stops every motif animation, whatever the style says | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:443` |
-| PT-5C13E30EE9 | surface Packs | the motif rides over any pack, and animation rides over any motif | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:460` |
-| PT-7F7BEA8A08 | surface Packs | switches surface pack, composing over the current theme, and persists it | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:477` |
-| PT-1D825C6EA3 | surface Packs | the Intensity dial scales the texture and is disabled for Flat | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:491` |
-| PT-421C9A899C | surface Packs | contrast guard: flat is inert and every pack keeps a readable panel ground | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:511` |
-| PT-D670937702 | surface Packs | contrast guard: no pack pushes its watermark past a readable ceiling | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:547` |
-| PT-0ABEA3D057 | surface Packs | Aurora Glass frosts the sidebar and the translucency dial collapses it | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:577` |
-| PT-6BEBA0C5C1 | surface Packs | Noir is offered under a dark theme and hidden under a light one | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:621` |
-| PT-9D9EE14B14 | surface Packs | a custom surface pack can be created, applied, and survives a reload | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:634` |
-| PT-4D94D83CA7 | surface Packs | a user can swap the material by picking a pattern — no code, no new CSS | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:653` |
-| PT-1046026F79 | surface Packs | the Window-blur toggle is present on a vibrancy-capable OS and persists | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:678` |
-| PT-C8E9630E66 | surface Packs | the Texture toggle gates the grain layer without changing the pack | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:693` |
+| PT-FADD47BAE7 | surface Packs | the startup splash carries the same watermark as the panes | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:304` |
+| PT-2B568CA335 | surface Packs | the Mandelbrot motif paints as real geometry and its tile actually loads | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:337` |
+| PT-C67A595CDB | surface Packs | with animation off the motif is baked complete, with no keyframes at all | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:352` |
+| PT-139EBECEEC | surface Packs | Draw bakes the reveal into the motif SVG and rests on the complete mark | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:376` |
+| PT-0D46EB5152 | surface Packs | Repeat is what turns a one-shot reveal into a loop | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:394` |
+| PT-B23F337F10 | surface Packs | layer-family styles drive CSS and leave the motif SVG untouched | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:407` |
+| PT-66D5C443AB | surface Packs | an animated motif never raises the declared strength past the contrast ceiling | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:432` |
+| PT-1935F3B61F | surface Packs | the master switch stops every motif animation, whatever the style says | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:448` |
+| PT-5C13E30EE9 | surface Packs | the motif rides over any pack, and animation rides over any motif | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:465` |
+| PT-7F7BEA8A08 | surface Packs | switches surface pack, composing over the current theme, and persists it | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:482` |
+| PT-1D825C6EA3 | surface Packs | the Intensity dial scales the texture and is disabled for Flat | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:496` |
+| PT-421C9A899C | surface Packs | contrast guard: flat is inert and every pack keeps a readable panel ground | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:516` |
+| PT-D670937702 | surface Packs | contrast guard: no pack pushes its watermark past a readable ceiling | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:552` |
+| PT-0ABEA3D057 | surface Packs | Aurora Glass frosts the sidebar and the translucency dial collapses it | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:585` |
+| PT-6BEBA0C5C1 | surface Packs | Noir is offered under a dark theme and hidden under a light one | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:629` |
+| PT-9D9EE14B14 | surface Packs | a custom surface pack can be created, applied, and survives a reload | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:646` |
+| PT-4D94D83CA7 | surface Packs | a user can swap the material by picking a pattern — no code, no new CSS | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:665` |
+| PT-1046026F79 | surface Packs | the Window-blur toggle is present on a vibrancy-capable OS and persists | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:690` |
+| PT-C8E9630E66 | surface Packs | the Texture toggle gates the grain layer without changing the pack | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:705` |
 | PT-5590097221 | task Designer | designer canvas round-trips nodes, a link and zoom across view close and app relaunch | `apps/praxis-desktop/main/e2e/taskDesigner.spec.ts:79` |
 | PT-05D9C84B86 | task Designer | link mode connects two items by selecting source then target | `apps/praxis-desktop/main/e2e/taskDesigner.spec.ts:162` |
 | PT-2CB761CD9E | task Designer | note resize adorner sits on the item corner and resizes the outer node | `apps/praxis-desktop/main/e2e/taskDesigner.spec.ts:190` |
@@ -357,18 +357,18 @@ This catalogue describes **378 Playwright tests** under `apps/praxis-desktop/mai
 | PT-B0842DA89F | workflow Policy | creating a project policy from the sidebar persists it and composes it into the effective policy | `apps/praxis-desktop/main/e2e/workflowPolicy.spec.ts:50` |
 | PT-9BA804745D | workflow Policy | a global policy composes strictest-wins with a project policy | `apps/praxis-desktop/main/e2e/workflowPolicy.spec.ts:77` |
 | PT-5E977102C0 | workflow Run | runs the governed pipeline: parallel branches converge, then approval unlocks | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:101` |
-| PT-9FE32CECFE | workflow Run | a run can be cancelled from the monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:143` |
-| PT-5A88D7A45B | workflow Run | completed stages are not re-run after an app restart | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:155` |
-| PT-9E73225070 | workflow Run | a deterministic check runs on its own in the run worktree and unblocks approval | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:193` |
-| PT-354EF7395F | workflow Run | a gate the workflow allows bypassing, but no policy has granted, explains why in the run monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:281` |
-| PT-0BDE1D2468 | workflow Run | approving one of two simultaneously-awaiting approval nodes never touches the other | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:396` |
-| PT-5421ABC27D | workflow Run | the run monitor shows one Approve button per simultaneously-awaiting approval node, each targeting its own | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:504` |
-| PT-AA73D62E79 | workflow Run | the run monitor reflects an unattended run as the orchestrator drives it | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:675` |
-| PT-8EEB06754D | workflow Run | a run started against a ticket writes its outcome back as a comment once it settles | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:697` |
-| PT-7CC1A86833 | workflow Run | a write-back that fails is visible in the Output tab, not just the main-process console | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:818` |
-| PT-519C8E31CC | workflow Run | a check that outruns its timeout is failed with a stated reason | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:850` |
-| PT-897905ACD7 | workflow Run | the stage detail panel opens a failed check’s retained log, reachable by keyboard, with an echoed secret redacted | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:869` |
-| PT-718FF673F2 | workflow Run | the stage detail panel shows the empty state for a check that produced no output | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:907` |
+| PT-9FE32CECFE | workflow Run | a run can be cancelled from the monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:144` |
+| PT-5A88D7A45B | workflow Run | completed stages are not re-run after an app restart | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:156` |
+| PT-9E73225070 | workflow Run | a deterministic check runs on its own in the run worktree and unblocks approval | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:194` |
+| PT-354EF7395F | workflow Run | a gate the workflow allows bypassing, but no policy has granted, explains why in the run monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:282` |
+| PT-0BDE1D2468 | workflow Run | approving one of two simultaneously-awaiting approval nodes never touches the other | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:397` |
+| PT-5421ABC27D | workflow Run | the run monitor shows one Approve button per simultaneously-awaiting approval node, each targeting its own | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:505` |
+| PT-AA73D62E79 | workflow Run | the run monitor reflects an unattended run as the orchestrator drives it | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:676` |
+| PT-8EEB06754D | workflow Run | a run started against a ticket writes its outcome back as a comment once it settles | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:698` |
+| PT-7CC1A86833 | workflow Run | a write-back that fails is visible in the Output tab, not just the main-process console | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:819` |
+| PT-519C8E31CC | workflow Run | a check that outruns its timeout is failed with a stated reason | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:851` |
+| PT-897905ACD7 | workflow Run | the stage detail panel opens a failed check’s retained log, reachable by keyboard, with an echoed secret redacted | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:870` |
+| PT-718FF673F2 | workflow Run | the stage detail panel shows the empty state for a check that produced no output | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:908` |
 | PT-13ACC04A37 | workflow Run Work | the delete confirm says what work the run has, and deleting the run keeps its branch by default | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:102` |
 | PT-5CE920C30E | workflow Run Work | ticking the option deletes the run's branch and worktree too — and only those | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:137` |
 | PT-4F95DF8F4A | workflow Run Work | cancelling the confirm deletes nothing | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:158` |
