@@ -67,6 +67,8 @@ export interface StageDispatchContext {
   signal?: AbortSignal;
   /** The run's worktree, when one was acquired. */
   worktreePath?: string;
+  /** Reports a bounded human-readable milestone while the stage is running. */
+  reportProgress?: (message: string) => void;
 }
 
 /**
@@ -294,7 +296,10 @@ export class WorkflowOrchestrator {
     const context: StageDispatchContext = {
       run,
       signal: controller.signal,
-      ...(run.worktreePath ? { worktreePath: run.worktreePath } : {})
+      ...(run.worktreePath ? { worktreePath: run.worktreePath } : {}),
+      reportProgress: message => {
+        void this.recordProgress(runId, node.id, message);
+      }
     };
 
     const completion = Promise.resolve().then(() => isCheckNode(node)
@@ -339,6 +344,27 @@ export class WorkflowOrchestrator {
         await this.persist({ ...run, nodes: { ...run.nodes, [nodeId]: { ...state, attempts } } });
       },
       'session attribution'
+    );
+  }
+
+  /** Persists live check milestones in the same durable event stream as stage outcomes. */
+  private recordProgress(runId: string, nodeId: string, message: string): Promise<void> {
+    const trimmed = message.trim();
+    if (!trimmed) return Promise.resolve();
+    return this.enqueue(
+      runId,
+      async () => {
+        const run = this.options.runs.get(runId);
+        if (!run) return;
+        await this.persist(applyWorkflowRunCommand(run, {
+          kind: 'node-progress',
+          nodeId,
+          at: this.now,
+          phase: 'testing',
+          message: trimmed
+        }));
+      },
+      'stage progress'
     );
   }
 

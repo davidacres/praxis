@@ -6,6 +6,7 @@
  * - praxis-implementer
  * - praxis-reviewer
  * - praxis-security-analyst
+ * - praxis-test-author
  *
  * Marked trusted because they ship with the app, mirrored into the user's
  * trusted discovery root on first run, and never written into project folders.
@@ -130,6 +131,22 @@ Output clean git commit changesets with descriptive commit messages.`
     brief: STRUCTURED_SECURITY_REVIEW_SYSTEM_PROMPT
   },
 
+  'praxis-test-author': {
+    manifest: {
+      schemaVersion: 1,
+      id: 'praxis-test-author',
+      name: 'Praxis Test Author',
+      type: 'gateway',
+      entry: 'gateway'
+    },
+    brief: `# Praxis Test Author
+
+You are the Praxis test-contract agent.
+Maintain the repository's Praxis Test catalog: structured English contracts that explain what an automated test proves.
+Inspect the existing test suite and its generated catalog before editing it. Add or update the smallest useful contract, keep the automation link exact, and preserve stable test identifiers.
+Use the repository's validator/generator when available. Never claim coverage that the automated test does not exercise, and report uncovered or ambiguous journeys as findings rather than inventing evidence.`
+  },
+
   'praxis-addon-builder': {
     manifest: {
       schemaVersion: 1,
@@ -214,6 +231,35 @@ export interface AvailableSkillDefinition {
  * into the skills registry when a workflow requiring them is instantiated.
  */
 export const AVAILABLE_SKILL_DEFINITIONS: Record<string, AvailableSkillDefinition> = {
+  'praxis-test-contracts': {
+    name: 'praxis-test-contracts',
+    description: 'Author, validate, and review structured English Praxis Test contracts linked to automated tests.',
+    triggers: ['praxis test', 'test contract', 'qa catalog', 'e2e coverage', 'test coverage'],
+    version: '1.0.0',
+    instructions: `---
+name: praxis-test-contracts
+description: "Author, validate, and review structured English Praxis Test contracts linked to automated tests."
+triggers: praxis test, test contract, qa catalog, e2e coverage, test coverage
+version: 1.0.0
+---
+
+# Praxis Test Contracts
+
+A Praxis Test is the human-readable contract for an automated test. It answers three questions:
+
+- **Given**: the meaningful starting state and fixtures.
+- **When**: the user journey or system action being exercised.
+- **Then**: the observable result that proves the journey.
+
+Rules:
+1. Link every contract to an exact automated source (runner, file, line, and title).
+2. Use a stable generated id; do not renumber existing tests because files moved or tests were added.
+3. Keep contracts focused on user-visible behaviour. Several low-level tests may support one journey, but do not hide an uncovered journey behind a vague title.
+4. Run the repository's Praxis Test catalog validator after editing. A clean validator result is required evidence; prose alone is not coverage.
+5. Report stale links, duplicate ids, missing tests, and ambiguous assertions as findings.
+
+The catalog is an index of the complete automated suite. Curated contracts may add richer context, but generated inventory entries must remain deterministic so QA can report the exact count and result set.`
+  },
   'dotnet-solid-dry': {
     name: 'dotnet-solid-dry',
     description: 'C# and .NET code review principles focusing on SOLID design and DRY architecture.',

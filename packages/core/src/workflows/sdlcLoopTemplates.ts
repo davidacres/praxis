@@ -149,9 +149,9 @@ export function sdlcLoopTemplate(variant: SdlcLoopStackVariant = 'node'): Workfl
         x: 180,
         y: 40,
         inputs: ['plan-doc'],
-        agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'project-only' },
+        agent: { agentId: 'praxis-test-author', profileId: 'praxis-test-author', hostId: 'praxis-test-author', scope: 'global', toolMode: 'project-only', skillNames: ['praxis-test-contracts'] },
         instructions:
-          'Turn the plan into executable Gherkin: write .feature files under features/ (or the project\'s BDD convention) with one scenario per acceptance rule, matching the plan. Do not implement step definitions or product code.',
+          'Turn the plan into executable acceptance coverage: write the project\'s BDD scenarios where that convention exists and author/update the structured English Praxis Test catalog with one contract per acceptance rule. Do not implement step definitions or product code.',
         outputs: [{ id: 'bdd-scenarios', kind: 'report', required: true, description: 'The authored .feature scenarios.' }],
         mutatesWorktree: true,
         maxAttempts: 2
@@ -281,7 +281,7 @@ export function sdlcLoopTemplate(variant: SdlcLoopStackVariant = 'node'): Workfl
         x: 600,
         y: 280,
         inputs: ['change-diff'],
-        agent: reviewer,
+        agent: { ...reviewer, skillNames: [...(reviewer.skillNames ?? []), 'praxis-test-contracts'] },
         instructions: REVIEW_FINDINGS_INSTRUCTIONS,
         outputs: [{ id: 'review-findings', kind: 'findings', required: true }],
         mutatesWorktree: false,

@@ -9,7 +9,12 @@ export interface CheckProcessResult {
 }
 
 /** Own the process tree until it has stopped, including on cancellation. */
-export function spawnCheck(node: WorkflowCheckNode, cwd: string, signal?: AbortSignal): Promise<CheckProcessResult> {
+export function spawnCheck(
+  node: WorkflowCheckNode,
+  cwd: string,
+  signal?: AbortSignal,
+  onLine?: (line: string) => void
+): Promise<CheckProcessResult> {
   if (signal?.aborted) return Promise.resolve({ code: null, output: '', timedOut: false, error: 'Check cancelled.' });
   return new Promise(resolve => {
     let output = '';
@@ -49,7 +54,16 @@ export function spawnCheck(node: WorkflowCheckNode, cwd: string, signal?: AbortS
     };
     const timer = node.timeoutMs ? setTimeout(() => { timedOut = true; stop(); }, node.timeoutMs) : undefined;
     signal?.addEventListener('abort', stop, { once: true });
-    const collect = (chunk: Buffer): void => { output = (output + chunk.toString()).slice(-200_000); };
+    let pendingLine = '';
+    const collect = (chunk: Buffer): void => {
+      const text = chunk.toString();
+      output = (output + text).slice(-200_000);
+      if (!onLine) return;
+      pendingLine += text;
+      const lines = pendingLine.split(/\r?\n/);
+      pendingLine = lines.pop() ?? '';
+      for (const line of lines) onLine(line);
+    };
     child.stdout?.on('data', collect);
     child.stderr?.on('data', collect);
     const cleanup = (): void => {
@@ -60,10 +74,12 @@ export function spawnCheck(node: WorkflowCheckNode, cwd: string, signal?: AbortS
       if (stopping) killTree(true);
     };
     child.on('error', error => {
+      if (onLine && pendingLine) onLine(pendingLine);
       cleanup();
       resolve({ code: null, output, timedOut, error: `Could not run ${node.command}: ${error.message}` });
     });
     child.on('close', code => {
+      if (onLine && pendingLine) onLine(pendingLine);
       cleanup();
       resolve({ code, output, timedOut, ...(signal?.aborted ? { error: 'Check cancelled.' } : {}) });
     });
