@@ -13811,3 +13811,10 @@ button.session-chat-attachment {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.uncommitted-base-notice { align-items: flex-start; }
+.uncommitted-base-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.uncommitted-base-body p { margin: 0; }
+.uncommitted-base-body ul { margin: 0; padding-left: 18px; }
+.uncommitted-base-body code { overflow-wrap: anywhere; }
+.uncommitted-base-actions { display: flex; gap: 8px; }

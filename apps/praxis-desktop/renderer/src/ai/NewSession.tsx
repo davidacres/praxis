@@ -10,6 +10,7 @@ import type {
   SessionMode
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
@@ -57,6 +58,8 @@ export interface NewSessionProps {
     hostId?: string;
     skillNames?: string[];
     workflowId?: string;
+    /** How to proceed when the checkout has uncommitted files. */
+    uncommittedChanges?: UncommittedChoice;
   }) => Promise<void>;
   /** Pre-attributes the composer to a profile/host binding from the Agent Hub. */
   agentContext?: { agentId: string; profileId?: string; hostId?: string; skillNames: string[] };
@@ -140,6 +143,7 @@ export function NewSession({
   const [dismissed, setDismissed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [uncommittedFiles, setUncommittedFiles] = useState<readonly string[] | undefined>();
   const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<AiProvider | undefined>();
   const [providerMenuPos, setProviderMenuPos] = useState<{ top: number; left: number } | undefined>();
@@ -466,7 +470,7 @@ export function NewSession({
     else setTicketMenuPos(position);
   };
 
-  const submit = async () => {
+  const submit = async (uncommittedChanges?: UncommittedChoice) => {
     const trimmed = goal.trim();
     const title = sessionTitle.trim();
     if (!title || !trimmed || submitting) {
@@ -474,6 +478,7 @@ export function NewSession({
     }
     setSubmitting(true);
     setError(undefined);
+    setUncommittedFiles(undefined);
     try {
       await onSubmit({
         ...(selectedBoard ? { board: selectedBoard } : {}),
@@ -493,10 +498,15 @@ export function NewSession({
               ...(agentContext.skillNames.length ? { skillNames: agentContext.skillNames } : {})
             }
           : {}),
-        ...(selectedWorkflowId ? { workflowId: selectedWorkflowId } : {})
+        ...(selectedWorkflowId ? { workflowId: selectedWorkflowId } : {}),
+        ...(uncommittedChanges ? { uncommittedChanges } : {})
       });
       setGoal('');
     } catch (err) {
+      if (err instanceof UncommittedBaseError) {
+        setUncommittedFiles(err.files);
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
@@ -703,6 +713,14 @@ export function NewSession({
         </div>
 
         <div className="composer">
+          {uncommittedFiles && (
+            <UncommittedBaseNotice
+              files={uncommittedFiles}
+              busy={submitting}
+              onChoose={choice => void submit(choice)}
+              onDismiss={() => setUncommittedFiles(undefined)}
+            />
+          )}
           {error && (
             <div className="error-banner" data-testid="new-session-error">
               <span>{error}</span>

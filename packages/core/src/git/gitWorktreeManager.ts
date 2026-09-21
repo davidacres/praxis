@@ -40,6 +40,18 @@ async function readStdout(command: string, args: string[], cwd: string): Promise
   return stdout.trim();
 }
 
+/**
+ * Praxis metadata is configuration/evidence for the app, not product source. Creating a project or
+ * workflow can legitimately write these before the first run; the run embeds its workflow definition
+ * and does not need them copied into the delivery worktree.
+ */
+const PRAXIS_METADATA_EXCLUDES = [
+  ':(exclude).praxis/**',
+  ':(exclude)project.praxis.md',
+  ':(exclude)board.praxis.json',
+  ':(exclude,glob)**/*.workspace.praxis.json'
+];
+
 async function readOptionalStdout(command: string, args: string[], cwd: string): Promise<string | undefined> {
   try {
     return await readStdout(command, args, cwd);
@@ -74,11 +86,48 @@ export class GitWorktreeManager {
     });
   }
 
+  /**
+   * Commits the checkout's uncommitted work (tracked edits, deletions, and untracked files that are
+   * not ignored) on top of HEAD without touching the working tree, the index, or any branch: it is
+   * built in a throwaway index. Returns undefined when there is nothing to include.
+   */
+  private async snapshotUncommittedWork(repoRoot: string, label: string): Promise<string | undefined> {
+    const gitDir = path.resolve(repoRoot, await readStdout('git', ['rev-parse', '--git-dir'], repoRoot));
+    const tempIndex = path.join(gitDir, `praxis-snapshot-${process.pid}-${Date.now()}.index`);
+    const identity = (await readOptionalStdout('git', ['config', 'user.email'], repoRoot))
+      ? {}
+      : {
+          GIT_AUTHOR_NAME: 'Praxis', GIT_AUTHOR_EMAIL: 'praxis@localhost',
+          GIT_COMMITTER_NAME: 'Praxis', GIT_COMMITTER_EMAIL: 'praxis@localhost'
+        };
+    const env = { ...process.env, ...identity, GIT_INDEX_FILE: tempIndex };
+    const git = async (args: string[]): Promise<string> =>
+      (await execFile('git', args, { cwd: repoRoot, env, windowsHide: true })).stdout.trim();
+    try {
+      const head = await git(['rev-parse', 'HEAD']);
+      await git(['read-tree', head]);
+      await git(['add', '-A', '--', '.', ...PRAXIS_METADATA_EXCLUDES]);
+      const tree = await git(['write-tree']);
+      if (tree === (await git(['rev-parse', `${head}^{tree}`]))) return undefined;
+      return await git([
+        'commit-tree', tree, '-p', head,
+        '-m', `WIP snapshot: uncommitted changes when ${label} started`
+      ]);
+    } finally {
+      await fs.rm(tempIndex, { force: true });
+    }
+  }
+
   public async prepareDeliveryWorktree(
     issue: Pick<IssueDetails, 'key' | 'summary' | 'branch'>,
     baseBranch: string,
     workspacePath: string,
-    options?: { forceClean?: boolean; requireCleanBase?: boolean }
+    options?: {
+      forceClean?: boolean;
+      requireCleanBase?: boolean;
+      /** Branch from a snapshot of the checkout's uncommitted work instead of committed HEAD alone. */
+      includeUncommitted?: boolean;
+    }
   ): Promise<PreparedWorktree> {
     const repoRoot = await readStdout('git', ['rev-parse', '--show-toplevel'], workspacePath);
     if (!repoRoot) {
@@ -88,16 +137,7 @@ export class GitWorktreeManager {
     if (options?.requireCleanBase) {
       const status = await readStdout(
         'git',
-        [
-          'status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.',
-          // Praxis metadata is configuration/evidence for the app, not product source. Creating a
-          // project or workflow can legitimately write these before the first run; the run embeds
-          // its workflow definition and does not need them copied into the delivery worktree.
-          ':(exclude).praxis/**',
-          ':(exclude)project.praxis.md',
-          ':(exclude)board.praxis.json',
-          ':(exclude,glob)**/*.workspace.praxis.json'
-        ],
+        ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.', ...PRAXIS_METADATA_EXCLUDES],
         repoRoot
       );
       const changedFiles = status.split('\0').filter(Boolean).length;
@@ -140,9 +180,18 @@ export class GitWorktreeManager {
       throw new Error(`Base branch ${baseBranch} was not found locally or on origin.`);
     }
 
+    let startPoint = branchRef;
+    if (options?.includeUncommitted) {
+      const snapshot = await this.snapshotUncommittedWork(repoRoot, worktreeName);
+      if (snapshot) {
+        this.output.appendLine(`[Delivery] Including uncommitted changes from the checkout as ${snapshot.slice(0, 8)}.`);
+        startPoint = snapshot;
+      }
+    }
+
     await this.ensureSymlinkSupport(repoRoot);
     this.output.appendLine(`[Delivery] Creating worktree ${worktreeName} from ${baseBranch}.`);
-    await execFile('git', ['-c', 'core.symlinks=true', 'worktree', 'add', '-b', worktreeName, worktreePath, branchRef], {
+    await execFile('git', ['-c', 'core.symlinks=true', 'worktree', 'add', '-b', worktreeName, worktreePath, startPoint], {
       cwd: repoRoot,
       windowsHide: true
     });

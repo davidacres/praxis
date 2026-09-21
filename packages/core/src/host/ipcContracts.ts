@@ -104,7 +104,7 @@ import type { WorkflowValidationResult } from '../workflows/workflowValidation';
 import type { WorkflowCatalog } from '../workflows/workflowStore';
 import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
-import type { WorkflowPermissionMode, WorkflowPlanInput } from '../workflows/workflowRun';
+import type { WorkflowPermissionMode, WorkflowPlanInput, WorkflowUncommittedChanges } from '../workflows/workflowRun';
 import type { WorkflowEvidenceEntry } from '../workflows/workflowEvidence';
 import type { CreateDiagnosisSessionResult } from '../ai/diagnosisBrief';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileContent, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
@@ -1171,8 +1171,15 @@ export interface WorkflowsIpc {
       permissionMode?: WorkflowPermissionMode;
       aiProvider?: AiProvider;
       aiModel?: string;
+      /** Proceed although the checkout has uncommitted product changes: include them, or omit them. */
+      uncommittedChanges?: WorkflowUncommittedChanges;
     }
   ): Promise<WorkflowRunSummary>;
+  /**
+   * Product files with uncommitted changes that a new run's worktree would silently omit
+   * (Praxis metadata excluded). Empty means a run can start; use it to warn before creating anything.
+   */
+  checkRunBase(projectId: string): Promise<{ blockingFiles: string[] }>;
   /** Makes one of this session's controller runs its active workflow context. */
   selectControllerRun(sessionKey: string, runId: string): Promise<WorkflowRunSummary>;
   /**

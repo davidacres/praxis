@@ -45,6 +45,12 @@ import { findSnapshot } from './workflowStageSession';
 export type WorkflowPermissionMode = 'ask' | 'auto';
 
 /**
+ * What a run does about uncommitted product changes in the checkout it starts from: `include` them
+ * via a snapshot commit on the run's branch, or `omit` them and work from the last commit.
+ */
+export type WorkflowUncommittedChanges = 'include' | 'omit';
+
+/**
  * Why a stage attempt stopped without a verdict, so the run waits for the user
  * instead of failing:
  * - `provider-limit` — the AI provider's credits, quota or rate limit ran out.
@@ -158,6 +164,11 @@ export interface WorkflowRun {
   planInput?: WorkflowPlanInput;
   /** How stage sessions handle tool-permission prompts. Absent means `ask`. */
   permissionMode?: WorkflowPermissionMode;
+  /**
+   * The user's answer when the checkout had uncommitted product changes at start. Absent means the
+   * checkout had to be clean.
+   */
+  uncommittedChanges?: WorkflowUncommittedChanges;
   /** AI provider override for stages in this run. If omitted, uses the active provider. */
   aiProvider?: AiProvider;
   /** Model override for stages in this run. If omitted, uses the provider's default model. */
@@ -255,6 +266,7 @@ export function createWorkflowRun(input: {
   controllerSessionId?: string;
   planInput?: WorkflowPlanInput;
   permissionMode?: WorkflowPermissionMode;
+  uncommittedChanges?: WorkflowUncommittedChanges;
   aiProvider?: AiProvider;
   aiModel?: string;
 }): WorkflowRun {
@@ -281,6 +293,7 @@ export function createWorkflowRun(input: {
     ...(input.controllerSessionId ? { controllerSessionId: input.controllerSessionId } : {}),
     ...(input.planInput ? { planInput: input.planInput } : {}),
     ...(input.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
+    ...(input.uncommittedChanges ? { uncommittedChanges: input.uncommittedChanges } : {}),
     ...(input.aiProvider ? { aiProvider: input.aiProvider } : {}),
     ...(input.aiModel ? { aiModel: input.aiModel } : {})
   };
@@ -855,6 +868,9 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     ...(typeof raw.controllerSessionId === 'string' ? { controllerSessionId: raw.controllerSessionId } : {}),
     ...(raw.planInput && typeof raw.planInput === 'object' ? { planInput: raw.planInput as WorkflowPlanInput } : {}),
     ...(raw.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
+    ...(raw.uncommittedChanges === 'include' || raw.uncommittedChanges === 'omit'
+      ? { uncommittedChanges: raw.uncommittedChanges }
+      : {}),
     ...(typeof raw.aiProvider === 'string' ? { aiProvider: raw.aiProvider as AiProvider } : {}),
     ...(typeof raw.aiModel === 'string' ? { aiModel: raw.aiModel } : {}),
     ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),

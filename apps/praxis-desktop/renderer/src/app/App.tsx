@@ -57,6 +57,7 @@ import { GitChangesPage } from '../git/GitChangesPage';
 import { WorkflowDesignerPage } from '../workflows/WorkflowDesignerPage';
 import { WorkflowRunPage } from '../workflows/WorkflowRunPage';
 import { StartRunDialog } from '../workflows/StartRunDialog';
+import { assertRunBaseOrThrow } from '../workflows/UncommittedBaseNotice';
 import { useDeleteRun } from '../workflows/useDeleteRun';
 import { WorkflowPolicyPage } from '../workflows/WorkflowPolicyPage';
 import { NewWorkflowDialog } from '../workflows/NewWorkflowDialog';
@@ -1455,11 +1456,13 @@ export function App() {
       workflowOptions={composerProject ? sessionWorkflowsByProject[composerProject.id] ?? [] : []}
       initialWorkflowId={route.quickSession ? quickSessionWorkflowId : undefined}
       autoFocusGoal={route.quickSession}
-      onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree, agentId, profileId, hostId, skillNames, workflowId }) => {
+      onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree, agentId, profileId, hostId, skillNames, workflowId, uncommittedChanges }) => {
         const projectId = projectIdForConnection(board?.connectionId, connections);
         const project = projectId
           ? workspaceProjects.find(item => item.id === projectId)
           : composerProject;
+        // Before any session exists, so a dirty checkout costs nothing to back out of.
+        if (workflowId && project) await assertRunBaseOrThrow(project.id, uncommittedChanges);
         const record = await window.praxis.ai.delegate({
           ...(issueKey ? { issueKey } : {}),
           mode,
@@ -1488,7 +1491,9 @@ export function App() {
               workflowId,
               title || goal,
               issueKey ? { issueKey, connectionId: board?.connectionId } : undefined,
-              { sessionKey: record.issueKey, sessionId: record.sessionId }
+              { sessionKey: record.issueKey, sessionId: record.sessionId },
+              undefined,
+              uncommittedChanges ? { uncommittedChanges } : undefined
             );
           } catch (error) {
             await window.praxis.ai.deleteSession(record.issueKey).catch(() => undefined);

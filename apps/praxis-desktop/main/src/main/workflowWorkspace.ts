@@ -45,18 +45,22 @@ export function workflowBaseBlockingPaths(files: readonly Pick<GitChangedFile, '
  * A linked worktree is created from committed HEAD. Refuse to start when that would silently omit
  * product changes which the user can currently see and may already have verified in the main app.
  */
+export async function workflowBlockingFiles(projectId: string): Promise<string[]> {
+  const folder = getProjectStore().get(projectId)?.workspaceFolder?.trim();
+  if (!folder) return [];
+  return workflowBaseBlockingPaths((await getGitStatus(folder)).files);
+}
+
 export async function assertWorkflowBaseReady(projectId: string): Promise<void> {
-  const project = getProjectStore().get(projectId);
-  const folder = project?.workspaceFolder?.trim();
-  if (!folder) return;
-  const blocking = workflowBaseBlockingPaths((await getGitStatus(folder)).files);
+  const blocking = await workflowBlockingFiles(projectId);
   if (blocking.length === 0) return;
   const examples = blocking.slice(0, 3).join(', ');
   throw new Error(
-    `Cannot start a governed workflow while ${blocking.length} uncommitted ` +
-      `${blocking.length === 1 ? 'file is' : 'files are'} outside Praxis metadata` +
-      `${examples ? ` (${examples}${blocking.length > 3 ? ', …' : ''})` : ''}. ` +
-      'The workflow worktree branches from committed HEAD and would test older code. Commit or stash these changes, then start the run again.'
+    `${blocking.length} uncommitted ${blocking.length === 1 ? 'file' : 'files'} in this project ` +
+      `${blocking.length === 1 ? 'is' : 'are'} not in the last commit` +
+      `${examples ? ` (${examples}${blocking.length > 3 ? ', …' : ''})` : ''}, ` +
+      'and a workflow run works from a copy of that commit. Commit or stash them and try again, ' +
+      'or choose to include them or start without them.'
   );
 }
 
@@ -90,7 +94,8 @@ export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
           // A Git worktree starts from a commit, not from the files currently visible in the main
           // checkout. Silently dropping those files makes workflow QA test an older product than the
           // one the user just ran. Refuse that ambiguous base and tell them how to make it durable.
-          requireCleanBase: true
+          requireCleanBase: !run.uncommittedChanges,
+          includeUncommitted: run.uncommittedChanges === 'include'
         }
       );
       return prepared.worktreePath;
