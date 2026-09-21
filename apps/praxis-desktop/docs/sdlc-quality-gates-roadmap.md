@@ -13,7 +13,7 @@ audited bypass. What it does **not** yet have is a quality and security bar that
 stands next to CodeRabbit, SonarQube or Aikido:
 
 - The built-in `governed-delivery` template is npm/JavaScript-only. QA is
-  `npm test`; security is `npm audit --audit-level=high`. Both are pass/fail
+  `npm test`; security is `npm audit --audit-level=high` (against the public registry). Both are pass/fail
   exit codes.
 - The `review` gate is an opaque agent (`praxis-reviewer`) that produces a
   free-text `report`. The engine guarantees the stage ran and returned the

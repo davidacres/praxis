@@ -158,3 +158,5 @@ export * from './host/mobileReconnect';
 export * from './host/mobileLanOnly';
 export * from './host/mobileHostApplication';
 export * from './host/mobileHostListener';
+
+export * from './workflows/checkEnvironmentFailure';

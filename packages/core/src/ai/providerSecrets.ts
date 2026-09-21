@@ -126,6 +126,11 @@ export async function resolveRecommendationProvider(
   const explicit = ai.recommendationProvider;
   if (explicit) {
     const descriptor = PROVIDER_DESCRIPTORS[explicit];
+    if (ai.providers[explicit]?.enabled === false) {
+      throw new Error(
+        `${descriptor.label} is turned off — enable it in Settings → AI Provider, or change the Recommendations provider setting.`
+      );
+    }
     if (descriptor.kind === 'cli-agent') {
       const command = ai.providers[explicit]?.cliPath?.trim() || descriptor.defaultCommand;
       if (!command || !(await isExecutableAvailable(command))) {
@@ -146,6 +151,9 @@ export async function resolveRecommendationProvider(
 
   const tried = new Set<AiProvider>();
   const ordered = [ai.activeProvider, ...RECOMMENDATION_CANDIDATE_PROVIDERS].filter(provider => {
+    if (ai.providers[provider]?.enabled === false) {
+      return false;
+    }
     if (!RECOMMENDATION_CANDIDATE_PROVIDERS.includes(provider) || tried.has(provider)) {
       return false;
     }

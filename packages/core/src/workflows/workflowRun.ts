@@ -35,6 +35,25 @@ import {
 } from './workflowTypes';
 import { findSnapshot } from './workflowStageSession';
 
+/**
+ * How a run's stage sessions handle their own tool-permission requests.
+ * `ask` (the default) stops the session for Allow / Deny; `auto` allows them.
+ * It never widens what a stage may do — each stage's tool access still applies —
+ * and it never touches the human approval gate, which needs a person either way.
+ */
+export type WorkflowPermissionMode = 'ask' | 'auto';
+
+/**
+ * Why a stage attempt stopped without a verdict, so the run waits for the user
+ * instead of failing:
+ * - `provider-limit` — the AI provider's credits, quota or rate limit ran out.
+ * - `environment` — the tool the stage runs could not do its job (a registry that
+ *   does not serve the request, a missing command, no network), as opposed to the
+ *   thing it checks being wrong.
+ * Either way the stage did not get to judge the work, so the attempt is free.
+ */
+export type WorkflowPauseReason = 'provider-limit' | 'environment';
+
 export type WorkflowRunStatus =
   | 'running'
   | 'awaiting-approval'
@@ -81,6 +100,12 @@ export interface WorkflowNodeAttempt {
   /** Process exit code, for check stages. */
   exitCode?: number;
   error?: string;
+  /**
+   * The attempt stopped for a reason that says nothing about the work (see
+   * `WorkflowPauseReason`). Such an attempt pauses the stage (`pauseReasonOf`)
+   * and does not spend its retry budget.
+   */
+  pause?: WorkflowPauseReason;
 }
 
 export interface WorkflowNodeState {
@@ -130,6 +155,8 @@ export interface WorkflowRun {
   controllerSessionId?: string;
   /** Explicit plan artifact handed off from Task Designer into this run. */
   planInput?: WorkflowPlanInput;
+  /** How stage sessions handle tool-permission prompts. Absent means `ask`. */
+  permissionMode?: WorkflowPermissionMode;
   /**
    * The git worktree this run's stages execute in, once acquired. Recorded on
    * the run so a restart re-attaches to the same tree instead of branching a
@@ -181,7 +208,23 @@ export type WorkflowRunCommand =
       assessedSnapshotRef?: string;
       findings?: CheckFindings;
     }
-  | { kind: 'node-failed'; nodeId: string; at: string; error: string; exitCode?: number; findings?: CheckFindings }
+  | {
+      kind: 'node-failed';
+      nodeId: string;
+      at: string;
+      error: string;
+      exitCode?: number;
+      findings?: CheckFindings;
+      /** The attempt stopped without a verdict; see `WorkflowNodeAttempt.pause`. */
+      pause?: WorkflowPauseReason;
+    }
+  /**
+   * Closes a stage that was still running when its run ended (a sibling of the
+   * stage that failed the run, or one orphaned by an earlier build). The only
+   * command besides `gate-decided` that a settled run absorbs, because leaving
+   * the stage "running" inside a finished run is simply wrong.
+   */
+  | { kind: 'node-stopped'; nodeId: string; at: string; reason?: string }
   | { kind: 'node-timed-out'; nodeId: string; at: string }
   | { kind: 'node-skipped'; nodeId: string; at: string; reason: string }
   | { kind: 'node-retry'; nodeId: string; at: string }
@@ -203,6 +246,7 @@ export function createWorkflowRun(input: {
   controllerSessionKey?: string;
   controllerSessionId?: string;
   planInput?: WorkflowPlanInput;
+  permissionMode?: WorkflowPermissionMode;
 }): WorkflowRun {
   const nodes: Record<string, WorkflowNodeState> = {};
   for (const node of input.definition.nodes) {
@@ -225,10 +269,18 @@ export function createWorkflowRun(input: {
     ...(input.issueConnectionId ? { issueConnectionId: input.issueConnectionId } : {}),
     ...(input.controllerSessionKey ? { controllerSessionKey: input.controllerSessionKey } : {}),
     ...(input.controllerSessionId ? { controllerSessionId: input.controllerSessionId } : {}),
-    ...(input.planInput ? { planInput: input.planInput } : {})
+    ...(input.planInput ? { planInput: input.planInput } : {}),
+    ...(input.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {})
   };
 
-  return append(run, { at: input.at, kind: 'run-started', message: `Run started for ${input.definition.name}.` });
+  return append(run, {
+    at: input.at,
+    kind: 'run-started',
+    message:
+      input.permissionMode === 'auto'
+        ? `Run started for ${input.definition.name} (stage tool permissions are auto-approved).`
+        : `Run started for ${input.definition.name}.`
+  });
 }
 
 /**
@@ -239,7 +291,7 @@ export function createWorkflowRun(input: {
 export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCommand): WorkflowRun {
   // A settled run absorbs nothing further. Recovery may replay commands that
   // raced the run ending; they must not resurrect it.
-  if (isRunSettled(run) && command.kind !== 'gate-decided') return run;
+  if (isRunSettled(run) && command.kind !== 'gate-decided' && command.kind !== 'node-stopped') return run;
 
   switch (command.kind) {
     case 'node-started':
@@ -256,8 +308,11 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
       return settleNode(run, command.nodeId, 'failed', command.at, {
         error: command.error,
         exitCode: command.exitCode,
-        findings: command.findings
+        findings: command.findings,
+        pause: command.pause
       });
+    case 'node-stopped':
+      return stopNode(run, command.nodeId, command.at, command.reason);
     case 'node-timed-out':
       return settleNode(run, command.nodeId, 'failed', command.at, {
         error: 'Stage exceeded its timeout.',
@@ -385,6 +440,7 @@ function settleNode(
     error?: string;
     exitCode?: number;
     timedOut?: boolean;
+    pause?: WorkflowPauseReason;
     snapshotRef?: string;
     assessedSnapshotRef?: string;
     artifacts?: Extract<WorkflowRunCommand, { kind: 'node-succeeded' }>['artifacts'];
@@ -434,7 +490,8 @@ function settleNode(
     outcome: effective,
     endedAt: at,
     ...(detail.exitCode !== undefined ? { exitCode: detail.exitCode } : {}),
-    ...(error ? { error } : {})
+    ...(error ? { error } : {}),
+    ...(effective === 'failed' && detail.pause ? { pause: detail.pause } : {})
   };
 
   let next = withNode(run, {
@@ -455,7 +512,11 @@ function settleNode(
     message:
       effective === 'succeeded'
         ? `${label(run, nodeId)} succeeded.`
-        : `${label(run, nodeId)} failed: ${error ?? 'no reason given'}`
+        : detail.pause === 'provider-limit'
+          ? `${label(run, nodeId)} paused: the AI provider's credits or usage limit were reached. Restore them, then retry — this did not use an attempt.`
+          : detail.pause === 'environment'
+            ? `${label(run, nodeId)} paused: it could not run in this environment (${firstLine(error ?? 'no detail')}). Fix that, then retry — this did not use an attempt.`
+            : `${label(run, nodeId)} failed: ${error ?? 'no reason given'}`
   });
 
   for (const artifact of artifacts) {
@@ -494,7 +555,7 @@ function retryNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRun {
   const node = findNode(run, nodeId);
   const maxAttempts =
     (isAgentTaskNode(node!) || isCheckNode(node!) || isDeploymentNode(node!) ? node!.maxAttempts : undefined) ?? 1;
-  if (state.attempts.length >= maxAttempts) return run;
+  if (attemptsSpent(state) >= maxAttempts) return run;
 
   // Returning to pending lets the scheduler pick the node up again under the
   // same readiness rules as the first time — including worktree serialisation.
@@ -504,7 +565,7 @@ function retryNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRun {
     kind: 'node-retried',
     nodeId,
     attempt: state.attempts.length,
-    message: `${label(run, nodeId)} queued for retry (attempt ${state.attempts.length + 1} of ${maxAttempts}).`
+    message: `${label(run, nodeId)} queued for retry (attempt ${attemptsSpent(state) + 1} of ${maxAttempts}).`
   });
 }
 
@@ -616,6 +677,11 @@ export function isRunSettled(run: WorkflowRun): boolean {
 function settleRunIfDone(run: WorkflowRun, at: string): WorkflowRun {
   const states = Object.values(run.nodes);
 
+  // A paused stage is waiting on the user, not finished: settling here would
+  // fail the run, release its worktree and write a "failed" comment to the
+  // ticket for something a top-up or a registry fix resolves.
+  if (states.some(state => isPausedNode(state))) return run;
+
   const requiredFailure = states.find(state => {
     if (state.outcome !== 'failed') return false;
     if (!isRequiredNode(run, state.nodeId)) return false;
@@ -661,7 +727,53 @@ export function canRetry(run: WorkflowRun, nodeId: string): boolean {
   if (!state || !node || state.outcome !== 'failed') return false;
   const maxAttempts =
     (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) ? node.maxAttempts : undefined) ?? 1;
-  return state.attempts.length < maxAttempts;
+  return attemptsSpent(state) < maxAttempts;
+}
+
+/**
+ * Attempts counted against a node's `maxAttempts`. An attempt cut short by the
+ * AI provider's limit is the environment's failure, not the stage's, so it is
+ * free — otherwise one empty account would leave a `maxAttempts: 1` stage with
+ * no retry and no way to continue the run.
+ */
+export function attemptsSpent(state: Pick<WorkflowNodeState, 'attempts'>): number {
+  return state.attempts.filter(attempt => !attempt.pause).length;
+}
+
+/** Why a failed node is waiting on the user rather than failed, if it is. */
+export function pauseReasonOf(state: Pick<WorkflowNodeState, 'outcome' | 'attempts'>): WorkflowPauseReason | undefined {
+  return state.outcome === 'failed' ? state.attempts[state.attempts.length - 1]?.pause : undefined;
+}
+
+/** A failed node whose latest attempt stopped without a verdict (provider limit or environment). */
+export function isPausedNode(state: Pick<WorkflowNodeState, 'outcome' | 'attempts'>): boolean {
+  return pauseReasonOf(state) !== undefined;
+}
+
+function firstLine(text: string): string {
+  const line = text.trim().split('\n')[0] ?? '';
+  return line.length > 160 ? `${line.slice(0, 160)}…` : line;
+}
+
+/** Closes a stage left "running" inside a run that has already ended. */
+function stopNode(run: WorkflowRun, nodeId: string, at: string, reason?: string): WorkflowRun {
+  const state = run.nodes[nodeId];
+  if (!state || state.outcome !== 'running') return run;
+  const attempts = [...state.attempts];
+  if (attempts.length > 0) {
+    attempts[attempts.length - 1] = {
+      ...attempts[attempts.length - 1],
+      outcome: 'cancelled',
+      endedAt: at,
+      error: reason ?? 'Stopped: the run ended before this stage finished.'
+    };
+  }
+  return append(withNode(run, { ...clearPhase(state), outcome: 'cancelled', attempts }), {
+    at,
+    kind: 'node-cancelled',
+    nodeId,
+    message: `${label(run, nodeId)} stopped: ${reason ?? 'the run ended before it finished.'}`
+  });
 }
 
 /**
@@ -728,6 +840,7 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     ...(typeof raw.controllerSessionKey === 'string' ? { controllerSessionKey: raw.controllerSessionKey } : {}),
     ...(typeof raw.controllerSessionId === 'string' ? { controllerSessionId: raw.controllerSessionId } : {}),
     ...(raw.planInput && typeof raw.planInput === 'object' ? { planInput: raw.planInput as WorkflowPlanInput } : {}),
+    ...(raw.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
     ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),
     ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),

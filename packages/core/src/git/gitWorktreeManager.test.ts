@@ -93,3 +93,37 @@ test('prepareDeliveryWorktree refuses to omit a dirty base when a governed run r
     await fs.rm(repo, { recursive: true, force: true });
   }
 });
+
+test('removeDeliveryWorktree with keepBranch removes the checkout but leaves the branch and its commits', async t => {
+  let repo: string;
+  try {
+    repo = await initRepo();
+  } catch {
+    t.skip('git not available');
+    return;
+  }
+  try {
+    const manager = new GitWorktreeManager(silentLogger);
+    const prepared = await manager.prepareDeliveryWorktree(
+      { key: 'WF-83CE6324', summary: 'governed delivery', branch: undefined }, 'main', repo
+    );
+    const git = (cwd: string, args: string[]) => execFile('git', args, { cwd, windowsHide: true });
+    await fs.writeFile(path.join(prepared.worktreePath, 'work.txt'), 'the run\'s work\n', 'utf8');
+    await git(prepared.worktreePath, ['add', '.']);
+    await git(prepared.worktreePath, ['commit', '-m', 'feat: the work']);
+
+    // The branch name is `<key>-<slug>`, so a caller that only knows the key would not even match it —
+    // and one that did match would take the commits with it. keepBranch makes "checkout only" explicit.
+    await manager.removeDeliveryWorktree(
+      repo,
+      { worktreePath: prepared.worktreePath, branchName: prepared.branchName },
+      { keepBranch: true }
+    );
+    await assert.rejects(() => fs.stat(prepared.worktreePath));
+    const branches = (await git(repo, ['branch', '--format=%(refname:short)'])).stdout.split('\n').filter(Boolean);
+    assert.ok(branches.includes(prepared.branchName), 'the branch survives');
+    assert.match((await git(repo, ['log', '-1', '--format=%s', prepared.branchName])).stdout, /feat: the work/);
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true });
+  }
+});

@@ -11,8 +11,7 @@ import type {
   IssueSummary,
   TaskDesignerCanvasNode,
   TaskDesignerTicketNode
-  , ProjectRecord, ProjectDocument, WorkspaceRecord, WorkflowPlanInput
-} from '@praxis/core';
+  , ProjectRecord, ProjectDocument, WorkspaceRecord, WorkflowPlanInput, WorkflowRunSummary } from '@praxis/core';
 import { IssueDetail } from '../issues/IssueDetail';
 import { Connections } from '../connections/Connections';
 import { SettingsPage, type SettingsCategory } from '../settings/SettingsPage';
@@ -56,7 +55,9 @@ import {
 import { GitGraphPage } from '../git/GitGraphPage';
 import { GitChangesPage } from '../git/GitChangesPage';
 import { WorkflowDesignerPage } from '../workflows/WorkflowDesignerPage';
-import { WorkflowRunMonitor } from '../workflows/WorkflowRunMonitor';
+import { WorkflowRunPage } from '../workflows/WorkflowRunPage';
+import { StartRunDialog } from '../workflows/StartRunDialog';
+import { useDeleteRun } from '../workflows/useDeleteRun';
 import { WorkflowPolicyPage } from '../workflows/WorkflowPolicyPage';
 import { NewWorkflowDialog } from '../workflows/NewWorkflowDialog';
 import { RunProfileEditor } from '../projects/RunProfileEditor';
@@ -236,6 +237,7 @@ function readLastWorkspaceRoute(workspaceId: string): Route {
       ...(gitView ? { gitView } : {}),
       ...(typeof stored.workflowId === 'string' ? { workflowId: stored.workflowId } : {}),
       ...(stored.workflowView === 'runs' || stored.workflowView === 'policies' ? { workflowView: stored.workflowView } : {}),
+      ...(typeof stored.workflowRunId === 'string' ? { workflowRunId: stored.workflowRunId } : {}),
       ...(typeof stored.agentId === 'string' ? { agentId: stored.agentId } : {}),
       ...(typeof stored.agentProfileId === 'string' ? { agentProfileId: stored.agentProfileId } : {}),
       ...(typeof stored.skillName === 'string' ? { skillName: stored.skillName } : {})
@@ -258,6 +260,7 @@ function writeLastWorkspaceRoute(workspaceId: string, route: Route): void {
     ...(route.gitView ? { gitView: route.gitView } : {}),
     ...(route.feature === 'workflows' && route.workflowView ? { workflowView: route.workflowView } : {}),
     ...(route.feature === 'workflows' && route.workflowId ? { workflowId: route.workflowId } : {}),
+    ...(route.feature === 'workflows' && route.workflowRunId ? { workflowRunId: route.workflowRunId } : {}),
     ...(route.feature === 'agents' && route.agentId ? { agentId: route.agentId } : {}),
     ...(route.feature === 'agents' && route.agentProfileId ? { agentProfileId: route.agentProfileId } : {}),
     ...(route.feature === 'agents' && route.skillName ? { skillName: route.skillName } : {})
@@ -330,6 +333,7 @@ function restoredRouteForWorkspace(
 export function App() {
   const { settings } = useSettings();
   const { confirm } = useDialogs();
+  const deleteRunFlow = useDeleteRun();
   const [appVersion, setAppVersion] = useState<string>();
   const newProjectEnabled = settings?.preview.enableNewProject ?? true;
   useEffect(() => {
@@ -411,6 +415,8 @@ export function App() {
   const [sessionWorkflowsByProject, setSessionWorkflowsByProject] = useState<Record<string, SessionWorkflowOption[]>>({});
   const [workflowsNonce, setWorkflowsNonce] = useState(0);
   const [pendingWorkflowPlan, setPendingWorkflowPlan] = useState<WorkflowPlanInput>();
+  /** The start-run dialog, optionally preselecting a workflow. */
+  const [startRunDialog, setStartRunDialog] = useState<{ projectId: string; workflowId?: string }>();
   const bumpWorkflows = useCallback(() => setWorkflowsNonce(n => n + 1), []);
   const [newWorkflowForProject, setNewWorkflowForProject] = useState<string>();
   /** The Agent Hub catalog. App owns it so the sidebar tree, the centre record,
@@ -1221,6 +1227,24 @@ export function App() {
   /** One flat index for ⌘K — see CommandPalette. Rebuilt when the underlying
    *  collections change; the run callbacks reuse the same navigation the
    *  sidebar and dialogs already use. */
+  // Every project's runs, newest first. They are the children of a project's
+  // Runs node in the sidebar and entries in the command palette; refreshed
+  // whenever the orchestrator advances (or deletes) any run.
+  const [runsByProjectId, setRunsByProjectId] = useState<Record<string, WorkflowRunSummary[]>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      void Promise.all(
+        workspaceProjects.map(async project => [project.id, await window.praxis.workflows.listRuns(project.id).catch(() => [])] as const)
+      )
+        .then(entries => { if (!cancelled) setRunsByProjectId(Object.fromEntries(entries)); })
+        .catch(error => console.error('Failed to load workflow runs:', error));
+    };
+    load();
+    const unsubscribe = window.praxis.workflows.onRunChanged(() => load());
+    return () => { cancelled = true; unsubscribe(); };
+  }, [projects, activeWorkspaceId]);
+
   const paletteEntries = useMemo<CommandEntry[]>(() => {
     const entries: CommandEntry[] = [];
     (Object.keys(FEATURE_TITLES) as FeatureId[]).forEach(feature => {
@@ -1243,6 +1267,9 @@ export function App() {
       entries.push({ id: `project-git:${project.id}`, label: `${project.name}: Git graph`, hint: project.key, group: 'Projects', icon: 'git-branch', keywords: 'repository history commits', run: () => navigate({ projectId: project.id, feature: 'git' }) });
       entries.push({ id: `project-run:${project.id}`, label: `${project.name}: Run`, hint: project.key, group: 'Projects', icon: 'server', keywords: 'run profile services launch', run: () => navigate({ projectId: project.id, feature: 'run' }) });
       entries.push({ id: `project-deployments:${project.id}`, label: `${project.name}: Deployments`, hint: project.key, group: 'Projects', icon: 'rocket', keywords: 'deploy deployment profile target executor', run: () => navigate({ projectId: project.id, feature: 'deployments' }) });
+      (runsByProjectId[project.id] ?? []).forEach(run => {
+        entries.push({ id: `run:${run.runId}`, label: run.workflowName, hint: `${project.name} · run · ${run.status}`, group: 'Workflows', icon: 'play', keywords: 'workflow run pipeline', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: run.runId }) });
+      });
       (workflowsByProject[project.id] ?? []).forEach(workflow => {
         entries.push({ id: `workflow:${workflow.id}`, label: workflow.name, hint: `${project.name} · workflow`, group: 'Workflows', icon: 'graph', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowId: workflow.id }) });
       });
@@ -1280,7 +1307,7 @@ export function App() {
       entries.push({ id: `settings:${id}`, label, hint: 'Settings', group: 'Settings', icon: 'gear', run: () => setSettingsDialogCategory(id) });
     });
     return entries;
-  }, [workspaceProjects, workspaceBoards, workflowsByProject, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestProjectWizard, toggleFocusMode, inSession]);
+  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestProjectWizard, toggleFocusMode, inSession]);
 
   /** Four stops over controls the shell already renders — see Walkthrough. */
   const walkthroughStops = useMemo<WalkthroughStop[]>(() => [
@@ -1463,6 +1490,85 @@ export function App() {
     />
   );
 
+  /** The session console for one session key — shared by the Sessions route and a workflow run's centre pane. */
+  const renderSessionsPage = (sessionKey: string | undefined) => {
+    const targetSession = agentSessions.find(session => session.issueKey === sessionKey) ?? agentSessions[0];
+    return (
+      <SessionsPage
+        sessions={activeSessions}
+        selectedKey={sessionKey}
+        workflowOptions={targetSession
+          ? sessionWorkflowsByProject[
+            targetSession.projectId
+              ?? projectIdForConnection(targetSession.connectionId, connections)
+              ?? composerProject?.id
+              ?? ''
+          ] ?? []
+          : []}
+        onStartWorkflow={async (session, workflowId) => {
+          const projectId = session.projectId ?? projectIdForConnection(session.connectionId, connections) ?? composerProject?.id;
+          if (!projectId) {
+            throw new Error('This session is not associated with a project. Open it from a project workspace before adding a workflow.');
+          }
+          await window.praxis.workflows.startRun(
+            projectId,
+            workflowId,
+            session.title ?? session.taskDefinition.goal,
+            session.connectionId ? { issueKey: session.issueKey, connectionId: session.connectionId } : undefined,
+            { sessionKey: session.issueKey, sessionId: session.sessionId }
+          );
+        }}
+        onSelectWorkflowRun={async (session, runId) => {
+          await window.praxis.workflows.selectControllerRun(session.issueKey, runId);
+        }}
+        onRemoveWorkflowRun={async (session, runId) => {
+          await window.praxis.workflows.removeControllerRun(session.issueKey, runId);
+        }}
+        onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
+        onSelectSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
+        onOpenAiSettings={() => setSettingsDialogCategory('ai')}
+        focusMode={!sidebarVisible && !auxVisible}
+        initialBrowserOpen={route.browserOpen}
+        initialBrowserUrl={route.browserUrl}
+        onBrowserOpenChange={handleBrowserOpenChange}
+        onBrowserUrlChange={handleBrowserUrlChange}
+        browserSuspended={nativeOverlayOpen}
+      />
+    );
+  };
+
+  /** The right-pane inspector for one session — shared by the Sessions route and a workflow run's session details. */
+  const renderSessionInspector = (inspectedSession: AgentSessionRecord | undefined) => (
+    <SessionInspector
+      session={inspectedSession}
+      sessions={agentSessions}
+      onSelectSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
+      onArchiveSession={async (issueKey, archived) => {
+        await window.praxis.ai.archiveSession(issueKey, archived);
+        // Archiving the open conversation would leave the
+        // console showing a session the tree no longer lists;
+        // fall back to the newest remaining active session.
+        if (archived && route.sessionKey === issueKey) {
+          navigate({ feature: 'sessions' });
+        }
+      }}
+      onOpenWorkflowRun={runId => {
+        // Sessions intentionally do not duplicate project identity: the
+        // durable run is the authority. Resolve it across this workspace
+        // before navigating so this works from the global Sessions view.
+        void Promise.all(
+          workspaceProjects.map(async project => ({
+            projectId: project.id,
+            runs: await window.praxis.workflows.listRuns(project.id)
+          }))
+        ).then(projectRuns => {
+          const owner = projectRuns.find(item => item.runs.some(run => run.runId === runId));
+          if (owner) navigate({ projectId: owner.projectId, feature: 'workflows', workflowView: 'runs', workflowRunId: runId });
+        });
+      }}
+    />
+  );
+
   const centre = () => {
     // A workspace-level session ("Sessions → New session"): the composer, not a
     // board or the project dashboard, even when a project is on the route.
@@ -1490,25 +1596,18 @@ export function App() {
       }
       if (route.workflowView === 'runs') {
         return (
-          <div className="view-scroll wf-page">
-            <header className="wf-header">
-              <h1>Runs</h1>
-              <span className="wf-header-sub">{selectedProject.name}</span>
-            </header>
-            <WorkflowRunMonitor
-              project={selectedProject}
-              connections={connections}
-              runnableWorkflows={workflowsByProject[selectedProject.id] ?? []}
-              auxSlot={auxSlotEl}
-              onRequireAux={requireAux}
-              onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
-              onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })}
-              onOpenPolicies={() => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'policies' })}
-              initialRunId={route.workflowRunId}
-              initialPlanInput={pendingWorkflowPlan}
-              onPlanInputConsumed={() => setPendingWorkflowPlan(undefined)}
-            />
-          </div>
+          <WorkflowRunPage
+            key={route.workflowRunId ?? 'none'}
+            runId={route.workflowRunId}
+            auxSlot={auxSlotEl}
+            onRequireAux={requireAux}
+            onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
+            onOpenPolicies={() => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'policies' })}
+            onStartRun={() => setStartRunDialog({ projectId: selectedProject.id })}
+            onRunGone={() => navigate({ projectId: selectedProject.id, feature: 'workflows' })}
+            renderSession={renderSessionsPage}
+            renderSessionInspector={sessionKey => renderSessionInspector(agentSessions.find(session => session.issueKey === sessionKey))}
+          />
         );
       }
       if (route.workflowId) {
@@ -1582,48 +1681,7 @@ export function App() {
     }
     if (route.feature === 'sessions') {
       // No view-scroll wrapper: the sessions list and console own their scrolling.
-      return (
-        <SessionsPage
-          sessions={activeSessions}
-          selectedKey={route.sessionKey}
-          workflowOptions={selectedAgentSession
-            ? sessionWorkflowsByProject[
-              selectedAgentSession.projectId
-                ?? projectIdForConnection(selectedAgentSession.connectionId, connections)
-                ?? composerProject?.id
-                ?? ''
-            ] ?? []
-            : []}
-          onStartWorkflow={async (session, workflowId) => {
-            const projectId = session.projectId ?? projectIdForConnection(session.connectionId, connections) ?? composerProject?.id;
-            if (!projectId) {
-              throw new Error('This session is not associated with a project. Open it from a project workspace before adding a workflow.');
-            }
-            await window.praxis.workflows.startRun(
-              projectId,
-              workflowId,
-              session.title ?? session.taskDefinition.goal,
-              session.connectionId ? { issueKey: session.issueKey, connectionId: session.connectionId } : undefined,
-              { sessionKey: session.issueKey, sessionId: session.sessionId }
-            );
-          }}
-          onSelectWorkflowRun={async (session, runId) => {
-            await window.praxis.workflows.selectControllerRun(session.issueKey, runId);
-          }}
-          onRemoveWorkflowRun={async (session, runId) => {
-            await window.praxis.workflows.removeControllerRun(session.issueKey, runId);
-          }}
-          onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
-          onSelectSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
-          onOpenAiSettings={() => setSettingsDialogCategory('ai')}
-          focusMode={!sidebarVisible && !auxVisible}
-          initialBrowserOpen={route.browserOpen}
-          initialBrowserUrl={route.browserUrl}
-          onBrowserOpenChange={handleBrowserOpenChange}
-          onBrowserUrlChange={handleBrowserUrlChange}
-          browserSuspended={nativeOverlayOpen}
-        />
-      );
+      return renderSessionsPage(route.sessionKey);
     }
     if (route.feature === 'git') {
       if (route.gitView === 'changes') {
@@ -1714,7 +1772,7 @@ export function App() {
               generatedFeatureCount: result.generatedFeatureCount,
               generatedStoryCount: result.generatedStoryCount
             });
-            navigate({ projectId, feature: 'workflows', workflowView: 'runs' });
+            setStartRunDialog({ projectId });
           }}
           externalSelectionId={
             selectedDesignerNode?.id.startsWith('board-ticket:')
@@ -2032,10 +2090,27 @@ export function App() {
                   onNewAgentItem={kind => (kind === 'rescan' ? void loadAgents(true) : setAgentDialog(kind))}
                   projectWorkflows={workflowsByProject}
                   activeWorkflowId={route.feature === 'workflows' && !route.workflowView ? route.workflowId : undefined}
-                  activeWorkflowRuns={route.feature === 'workflows' && route.workflowView === 'runs'}
+                  runsByProjectId={runsByProjectId}
+                  activeWorkflowRunId={route.feature === 'workflows' && route.workflowView === 'runs' ? route.workflowRunId : undefined}
                   activeWorkflowPolicies={route.feature === 'workflows' && route.workflowView === 'policies'}
                   onSelectWorkflow={(project, workflowId) => navigate({ projectId: project.id, feature: 'workflows', workflowId })}
-                  onSelectWorkflowRuns={project => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs' })}
+                  onSelectWorkflowRun={(project, runId) => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: runId })}
+                  onStartWorkflowRun={(project, workflowId) => setStartRunDialog({ projectId: project.id, ...(workflowId ? { workflowId } : {}) })}
+                  onCancelWorkflowRun={async runId => {
+                    try {
+                      await window.praxis.workflows.cancelRun(runId, 'cancelled from the sidebar');
+                    } catch (cause) {
+                      console.error('Failed to cancel workflow run:', cause);
+                    }
+                  }}
+                  onDeleteWorkflowRun={async (project, run) => {
+                    const result = await deleteRunFlow(run);
+                    if (result.error) {
+                      await confirm({ title: 'Could not delete the run', message: result.error, confirmLabel: 'OK' });
+                    } else if (result.deleted && route.feature === 'workflows' && route.workflowRunId === run.runId) {
+                      navigate({ projectId: project.id, feature: 'workflows' });
+                    }
+                  }}
                   onSelectWorkflowPolicies={project => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'policies' })}
                   onSelectRun={project => navigate({ projectId: project.id, feature: 'run' })}
                   onSelectDeployments={project => navigate({ projectId: project.id, feature: 'deployments' })}
@@ -2135,34 +2210,7 @@ export function App() {
                   style={detailIsExpanded ? undefined : { width: aux.size }}
                 >
                   {route.feature === 'sessions' ? (
-                    <SessionInspector
-                      session={selectedAgentSession}
-                      sessions={agentSessions}
-                      onSelectSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
-                      onArchiveSession={async (issueKey, archived) => {
-                        await window.praxis.ai.archiveSession(issueKey, archived);
-                        // Archiving the open conversation would leave the
-                        // console showing a session the tree no longer lists;
-                        // fall back to the newest remaining active session.
-                        if (archived && route.sessionKey === issueKey) {
-                          navigate({ feature: 'sessions' });
-                        }
-                      }}
-                      onOpenWorkflowRun={runId => {
-                        // Sessions intentionally do not duplicate project identity: the
-                        // durable run is the authority. Resolve it across this workspace
-                        // before navigating so this works from the global Sessions view.
-                        void Promise.all(
-                          workspaceProjects.map(async project => ({
-                            projectId: project.id,
-                            runs: await window.praxis.workflows.listRuns(project.id)
-                          }))
-                        ).then(projectRuns => {
-                          const owner = projectRuns.find(item => item.runs.some(run => run.runId === runId));
-                          if (owner) navigate({ projectId: owner.projectId, feature: 'workflows', workflowView: 'runs', workflowRunId: runId });
-                        });
-                      }}
-                    />
+                    renderSessionInspector(selectedAgentSession)
                   ) : route.feature === 'git' ? (
                     <div ref={setAuxSlotEl} className="aux-slot" data-testid="git-aux-slot" />
                   ) : route.feature === 'agents' ? (
@@ -2421,6 +2469,28 @@ export function App() {
       {workspaceDialogOpen && (
         <WorkspaceDialog onCancel={() => setWorkspaceDialogOpen(false)} onCreate={saveNewWorkspace} />
       )}
+      {startRunDialog && (() => {
+        const project = projects.find(candidate => candidate.id === startRunDialog.projectId);
+        if (!project) return null;
+        return (
+          <StartRunDialog
+            project={project}
+            connections={connections}
+            runnableWorkflows={workflowsByProject[project.id] ?? []}
+            initialWorkflowId={startRunDialog.workflowId}
+            planInput={pendingWorkflowPlan}
+            onClose={() => {
+              setStartRunDialog(undefined);
+              setPendingWorkflowPlan(undefined);
+            }}
+            onStarted={run => {
+              setStartRunDialog(undefined);
+              setPendingWorkflowPlan(undefined);
+              navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: run.runId });
+            }}
+          />
+        );
+      })()}
       {newWorkflowForProject && (
         <NewWorkflowDialog
           projectId={newWorkflowForProject}

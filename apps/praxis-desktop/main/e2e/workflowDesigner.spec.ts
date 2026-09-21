@@ -158,8 +158,10 @@ test('nudging a stage past the canvas edge clamps its position instead of losing
   const qaCard = canvas.getByRole('button', { name: /^QA \(check\)/ });
   await qaCard.focus();
 
-  for (let i = 0; i < 30; i += 1) await qaCard.press('Shift+ArrowLeft');
-  for (let i = 0; i < 15; i += 1) await qaCard.press('Shift+ArrowUp');
+  // Far more nudges than the stage can possibly have room for (20px each), so the test keeps holding
+  // however the template lays the stage out — it is the clamp being tested, not the distance.
+  for (let i = 0; i < 80; i += 1) await qaCard.press('Shift+ArrowLeft');
+  for (let i = 0; i < 40; i += 1) await qaCard.press('Shift+ArrowUp');
 
   await expect.poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.left)).toBe('0px');
   await expect.poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.top)).toBe('0px');

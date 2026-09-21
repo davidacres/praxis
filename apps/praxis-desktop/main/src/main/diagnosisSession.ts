@@ -27,7 +27,7 @@ import { evidenceStorageRoot } from './workflowEvidenceStorage';
  * does for workflow stages — it is attributed to a synthetic issue keyed by
  * run/node/attempt rather than forced through the real per-project issue list.
  * `diagnosisSessionKey` is that key; the Diagnose action in the run monitor
- * (TASK-137) opens a session by this key the same way `WorkflowRunMonitor`
+ * (TASK-137) opens a session by this key the same way the run workspace
  * already opens a stage's session by `stageSessionKey`.
  */
 export function diagnosisSessionKey(key: WorkflowEvidenceBundleKey): string {

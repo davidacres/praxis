@@ -36,6 +36,7 @@ import {
   PROVIDER_LABELS,
   providerIconName
 } from '../ai/modelProviders';
+import { isProviderUsable } from '../ai/providerAvailability';
 
 /** Centre-pane AI tooling views the detail panel can hand off to. */
 export type IssueAiView = 'review' | 'lpr';
@@ -113,7 +114,7 @@ function StartAiSessionDialog({
   const [workflowPackId, setWorkflowPackId] = useState(initialWorkflow?.id ?? '');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | undefined>();
-  const configuredProviders = providerStatuses.filter(status => status.configured);
+  const configuredProviders = providerStatuses.filter(isProviderUsable);
   const selectedStatus = providerStatuses.find(status => status.provider === selectedProvider);
   const workflowPackOptions = initialWorkflow && !workflows.some(workflow => workflow.id === initialWorkflow.id)
     ? [initialWorkflow, ...workflows]
@@ -717,16 +718,16 @@ export function IssueDetail({
         setSelectedProvider(current => {
           if (
             current &&
-            statuses.some(status => status.provider === current && status.configured)
+            statuses.some(status => status.provider === current && isProviderUsable(status))
           ) {
             return current;
           }
           const active = statuses.find(
             status =>
               status.provider === settings.ai.activeProvider &&
-              status.configured
+              isProviderUsable(status)
           );
-          return active?.provider ?? statuses.find(status => status.configured)?.provider;
+          return active?.provider ?? statuses.find(isProviderUsable)?.provider;
         });
       })
       .catch(() => {
@@ -823,7 +824,7 @@ export function IssueDetail({
   const isFeatureRequest = issue?.description?.trim().toLowerCase().includes('feature request') ?? false;
   const analysisRequired = analysisGateEnabled && !analysisConfirmed;
   const selectedProviderStatus = providerStatuses.find(status => status.provider === selectedProvider);
-  const configuredProviders = providerStatuses.filter(status => status.configured);
+  const configuredProviders = providerStatuses.filter(isProviderUsable);
   const workflowActionsReady =
     workingDirectoryConfigured && (!analysisGateEnabled || analysisConfirmed);
 

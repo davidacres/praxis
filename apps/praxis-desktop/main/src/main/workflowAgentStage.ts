@@ -7,6 +7,7 @@ import {
   buildStageContext,
   buildStageTaskDefinition,
   discoverWorkspaceAgentWorkflows,
+  isProviderLimitError,
   preflightStage,
   stageOutcomeFromSession,
   stageSessionKey,
@@ -179,12 +180,19 @@ export async function runWorkflowAgentStage(
       taskDefinition,
       provider,
       workingDirectory: worktreePath,
-      toolMode
+      toolMode,
+      autoApprovePermissions: workflowRun.permissionMode === 'auto'
     });
     skillActivations = prepared.skillActivations;
   } catch (error) {
     settled.cancel();
-    return { status: 'failed', error: error instanceof Error ? error.message : String(error) };
+    // A launch refused for credits/quota is the account's problem, not the stage's:
+    // pause the run rather than spend the stage's attempt on it.
+    return {
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+      ...(isProviderLimitError(error) ? { pause: 'provider-limit' as const } : {})
+    };
   }
 
   // Cancellation can arrive while the provider is still starting its task.
@@ -203,6 +211,7 @@ export async function runWorkflowAgentStage(
       workflowId: workflowRun.workflowId,
       workflowVersion: workflowRun.workflowVersion,
       workflowRole: 'stage',
+      ...(workflowRun.controllerSessionKey ? { parentSessionKey: workflowRun.controllerSessionKey } : {}),
       agentId: preflight.binding.hostId,
       profileId: preflight.binding.profileId,
       hostId: preflight.binding.hostId,
@@ -239,7 +248,8 @@ function waitForSession(issueKey: string): { promise: Promise<FinishedStageSessi
       resolve({
         state,
         ...(record?.responseText ? { responseText: record.responseText } : {}),
-        ...(record?.lastError ? { lastError: record.lastError } : {})
+        ...(record?.lastError ? { lastError: record.lastError } : {}),
+        ...(record?.providerLimitReached ? { providerLimitReached: true } : {})
       });
     };
 

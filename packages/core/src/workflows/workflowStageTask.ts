@@ -90,6 +90,8 @@ export interface FinishedStageSession {
   artifactPaths?: Record<string, string>;
   /** Failure or limit reason recorded when the stage session ended. */
   lastError?: string;
+  /** The session stopped because the AI provider's credits, quota or rate limit ran out. */
+  providerLimitReached?: boolean;
 }
 
 /**
@@ -105,6 +107,13 @@ export function stageOutcomeFromSession(
   session: FinishedStageSession
 ): StageOutcome {
   if (session.state !== 'completed') {
+    if (session.providerLimitReached) {
+      return {
+        status: 'failed',
+        pause: 'provider-limit',
+        error: `The AI provider's credits or usage limit were reached${session.lastError ? `: ${firstLine(session.lastError)}` : '.'}`
+      };
+    }
     const detail = session.lastError || (session.responseText ? firstLine(session.responseText) : undefined);
     return {
       status: 'failed',

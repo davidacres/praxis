@@ -104,7 +104,7 @@ import type { WorkflowValidationResult } from '../workflows/workflowValidation';
 import type { WorkflowCatalog } from '../workflows/workflowStore';
 import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
-import type { WorkflowPlanInput } from '../workflows/workflowRun';
+import type { WorkflowPermissionMode, WorkflowPlanInput } from '../workflows/workflowRun';
 import type { WorkflowEvidenceEntry } from '../workflows/workflowEvidence';
 import type { CreateDiagnosisSessionResult } from '../ai/diagnosisBrief';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileContent, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
@@ -597,10 +597,31 @@ export interface AiAnalysisState {
 /** Where the effective Vercel gateway API key came from. */
 export type AiKeySource = 'secret' | 'env' | 'none';
 
+/** What a workflow run has left in the repository (see `inspectRunWork`). */
+export interface WorkflowRunWorkInfo {
+  /** The run's branch, when it exists. */
+  branch?: string;
+  /** Commits on it that exist on no other branch — what deleting the branch would lose. */
+  commitCount: number;
+  /** Newest first, at most five. */
+  commits: Array<{ sha: string; subject: string }>;
+  /** The run's live worktree, when it still exists on disk. */
+  worktreePath?: string;
+  /** Files with uncommitted changes in that worktree. */
+  uncommittedFiles: number;
+  /** Anything a person would want warning about: commits only on the branch, or uncommitted files. */
+  hasWork: boolean;
+}
+
 export interface AiProviderStatus {
   provider: AiProvider;
   /** True when a usable API key exists (secret store or, for vercel-gateway, env fallback). */
   configured: boolean;
+  /**
+   * The user has not turned this provider off (`ai.providers[id].enabled !== false`).
+   * A provider is offered for new sessions only when it is both `configured` and `enabled`.
+   */
+  enabled: boolean;
   keySource: AiKeySource;
   /** Effective base URL — the configured value or the provider's shipped default. */
   gatewayUrl: string;
@@ -1144,7 +1165,9 @@ export interface WorkflowsIpc {
     taskTitle: string,
     issue?: { issueKey: string; connectionId?: string },
     controller?: { sessionKey: string; sessionId: string },
-    planInput?: WorkflowPlanInput
+    planInput?: WorkflowPlanInput,
+    /** `permissionMode: 'auto'` lets stage sessions allow their own tool requests; the default asks. Fixed for the life of the run. */
+    options?: { permissionMode?: WorkflowPermissionMode }
   ): Promise<WorkflowRunSummary>;
   /** Makes one of this session's controller runs its active workflow context. */
   selectControllerRun(sessionKey: string, runId: string): Promise<WorkflowRunSummary>;
@@ -1189,6 +1212,20 @@ export interface WorkflowsIpc {
   reworkStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
   /** Cancels a run. */
   cancelRun(runId: string, reason?: string): Promise<WorkflowRunSummary>;
+  /**
+   * What a run has left in the repository — its branch and any live worktree — i.e. what deleting
+   * the run's *work* would lose. Read-only; call it before offering a delete.
+   */
+  inspectRunWork(runId: string): Promise<WorkflowRunWorkInfo>;
+  /**
+   * Deletes a run: cancels it first if still live, then removes the run, its
+   * stage sessions, and its link from the controller session.
+   *
+   * The run's branch is **kept** unless `deleteWork` is true — the branch is where the work is, and
+   * deleting a record must not decide that silently. Uncommitted changes in a live worktree are
+   * kept as a commit on the branch. With `deleteWork` the worktree and branch are removed too.
+   */
+  deleteRun(runId: string, options?: { deleteWork?: boolean }): Promise<void>;
   /**
    * Fires with a run id after every persisted transition — the orchestrator
    * advancing a stage in the background included. Returns an unsubscribe.

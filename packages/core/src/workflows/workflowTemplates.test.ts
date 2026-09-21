@@ -204,3 +204,45 @@ test('built-ins declare the current schema version', () => {
     assert.equal(template.schemaVersion, WORKFLOW_SCHEMA_VERSION);
   }
 });
+
+test('the governed-delivery security scan audits against the public registry, so a private default registry cannot fail it', () => {
+  const template = builtInWorkflowTemplates().find(candidate => candidate.id === 'governed-delivery');
+  const security = template?.nodes.find(node => node.id === 'security');
+  assert.ok(security && security.type === 'check');
+  assert.equal(security.command, 'npm');
+  assert.deepEqual(security.args, ['audit', '--audit-level=high', '--registry=https://registry.npmjs.org/']);
+});
+
+test('governed delivery installs dependencies and builds before QA, and validates', () => {
+  const template = builtInWorkflowTemplates().find(candidate => candidate.id === 'governed-delivery');
+  assert.ok(template);
+  assert.equal(validateWorkflow(template).valid, true);
+
+  const install = template.nodes.find(node => node.id === 'install');
+  assert.ok(install && install.type === 'check');
+  assert.equal(install.name, 'Install dependencies');
+  // Public registry: a private default registry 404s on the lockfile's registry.npmjs.org tarballs.
+  assert.deepEqual(install.args, ['ci', '--registry=https://registry.npmjs.org/']);
+  assert.ok((install.timeoutMs ?? 0) >= 300000, 'a cold install of a workspace takes minutes');
+  assert.ok((install.maxAttempts ?? 1) >= 2);
+  // Not a gate: it produces no verdict, it prepares the tree.
+  assert.equal(install.satisfiesGate, undefined);
+
+  const parents = (id: string) => template.edges.filter(edge => edge.to === id).map(edge => edge.from);
+  assert.deepEqual(parents('install'), ['implement']);
+
+  // A run worktree has no build output either (gitignored), so anything that runs the built product —
+  // a desktop app's e2e suite opens a blank window — fails for a reason that looks nothing like "build".
+  const build = template.nodes.find(node => node.id === 'build');
+  assert.ok(build && build.type === 'check');
+  assert.deepEqual(build.args, ['run', 'build', '--if-present']);
+  // `--if-present` is a silent no-op without a build script, so an empty log must not fail the stage.
+  assert.equal(build.outputs.every(output => output.required === false), true);
+  assert.equal(build.satisfiesGate, undefined);
+  assert.deepEqual(parents('build'), ['install']);
+
+  // QA waits for the build; the security scan reads the lockfile and does not.
+  assert.deepEqual(parents('qa'), ['build']);
+  assert.deepEqual(parents('security'), ['implement']);
+  assert.deepEqual(parents('review'), ['implement']);
+});

@@ -5288,6 +5288,29 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   color: var(--text-tertiary);
 }
 
+/* Settings tabs (AI Provider): the same segmented look as the inspector tabs,
+   sized to content so a page with four of them does not stretch a bar edge to edge. */
+.settings-tabs { display: flex; flex-shrink: 0; gap: var(--space-1); width: fit-content; max-width: 100%; margin-bottom: var(--space-3); padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-sunken); overflow-x: auto; }
+.settings-tabs button { padding: 4px var(--space-3); border: 1px solid transparent; border-radius: calc(var(--radius-md) - 2px); background: transparent; color: var(--text-tertiary); font: inherit; font-size: var(--text-md); white-space: nowrap; cursor: pointer; }
+.settings-tabs button:hover { color: var(--text); }
+.settings-tabs button.active { border-color: var(--accent); background: var(--bg-active); color: var(--text); }
+
+/* AI providers: one row each — name, status, default, on/off — with its
+   connection details opening beneath the row that is selected. */
+.ai-provider-list { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.ai-provider-row { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-elevated); overflow: hidden; }
+.ai-provider-row.is-open { border-color: var(--accent-border, var(--accent)); }
+.ai-provider-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); cursor: pointer; }
+.ai-provider-head:hover { background: var(--bg-hover); }
+.ai-provider-chevron { display: inline-flex; flex-shrink: 0; color: var(--text-tertiary); }
+.ai-provider-text { min-width: 0; }
+.ai-provider-name { display: flex; align-items: center; gap: var(--space-2); font-weight: 600; }
+.ai-provider-row.is-off .ai-provider-name { color: var(--text-tertiary); }
+.ai-provider-meta { color: var(--text-tertiary); font-size: var(--text-sm); }
+.ai-provider-default { padding-block: 0; font-size: var(--text-xs); font-weight: 500; line-height: 1.6; }
+.ai-provider-head .switch { flex-shrink: 0; }
+.ai-provider-body { padding: var(--space-1) var(--space-3) var(--space-3); border-top: 1px solid var(--border); background: var(--bg); }
+
 .settings-section-description {
   margin: 0 0 var(--space-2);
   font-size: var(--text-sm);
@@ -6328,6 +6351,13 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-item-key { flex-shrink: 0; color: var(--text-tertiary); font-size: var(--text-xs); font-weight: 600; }
 .session-nav-actions { display: inline-flex; align-items: center; flex-shrink: 0; gap: 1px; }
 .session-nav-row .session-title-input { flex: 1; min-width: 0; }
+/* A session nested beneath the one that spawned it — one level inside a
+   top-level session row, so --tree-indent-3. The parent's expand toggle sits on
+   the trailing side, so a parent's icon stays aligned with its siblings, and a
+   collapsed parent shows how many children are still working. */
+.session-nav-row--child { padding-left: var(--tree-indent-3); }
+.session-nav-toggle { flex-shrink: 0; }
+.session-nav-childcount { flex-shrink: 0; min-width: 16px; padding: 0 5px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-tertiary); font-size: var(--text-xs); text-align: center; }
 
 /* Transparent shell: the header and composer keep their own solid fills, and
    the transcript (`.session-chat-scroll`) is the part that goes see-through so
@@ -8058,6 +8088,12 @@ button.session-chat-attachment {
 .modal-card.app-dialog { width: min(420px, 90vw); }
 .app-dialog-body { padding: var(--space-3); gap: var(--space-3); }
 .app-dialog-message { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; white-space: pre-wrap; }
+/* What a confirm affects, line by line, and an opt-in for a further destructive step. */
+.app-dialog-details { margin: 0; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.app-dialog-option { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--danger); border-radius: var(--radius-md); cursor: pointer; }
+.app-dialog-option span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.app-dialog-option strong { font-size: var(--text-md); overflow-wrap: anywhere; }
+.app-dialog-option em { font-style: normal; font-size: var(--text-sm); color: var(--text-tertiary); }
 .app-dialog-field { display: flex; flex-direction: column; gap: var(--space-1); }
 .app-dialog-field > span:first-child { color: var(--text-secondary); font-size: var(--text-xs); font-weight: 600; }
 .app-dialog-field input { padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); font: inherit; font-size: var(--text-sm); }
@@ -10058,6 +10094,24 @@ button.session-chat-attachment {
 .project-workflow-row:hover .project-workflow-delete,
 .project-workflow-delete:focus-visible { opacity: 1; }
 .project-workflow-empty { color: var(--text-tertiary); }
+/* A workflow row's Run button reveals on hover/focus like its delete button. */
+.project-workflow-run { opacity: 0; flex-shrink: 0; }
+.project-workflow-row:hover .project-workflow-run,
+.project-workflow-run:focus-visible { opacity: 1; }
+/* Runs node: the header sits with the workflow rows (--tree-indent-2); each run
+   is one level inside it (--tree-indent-3). Cancel / delete reveal on hover or
+   focus, like a workflow row's actions. */
+.project-runs-header { display: flex; align-items: center; min-width: 0; }
+.project-runs-header .board-tree-main { flex: 1; min-width: 0; }
+.project-runs-header .sidebar-section-add { flex-shrink: 0; margin-right: 8px; }
+.project-run-row { display: flex; align-items: center; min-width: 0; padding-left: var(--tree-indent-3); }
+.project-run-row .board-tree-main { flex: 1; min-width: 0; }
+.project-run-row .lane { flex-shrink: 0; font-size: var(--text-xs); margin-right: 6px; }
+.project-run-action { opacity: 0; flex-shrink: 0; margin-right: 2px; }
+.project-run-row:hover .project-run-action,
+.project-run-row:focus-within .project-run-action,
+.project-run-action:focus-visible { opacity: 1; }
+.project-runs-empty { padding-left: var(--tree-indent-3); }
 .project-docs-tree { position: relative; padding-bottom: 8px; }
 .project-plans-folder { padding-left: var(--tree-indent-2); }
 .project-document-group-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 10px 4px var(--tree-indent-3); border: 0; color: var(--text-tertiary); background: transparent; font-size: var(--text-xs); font-weight: 650; text-align: left; text-transform: uppercase; cursor: pointer; }
@@ -10403,12 +10457,12 @@ button.session-chat-attachment {
   backdrop-filter: var(--surface-backdrop);
 }
 
-/* The designer and monitor use bare form controls; give them the same themed
+/* The designer and start-run dialog use bare form controls; give them the same themed
    surface the rest of the app gets from `.input` / `.select` / `.textarea`,
    so their text stays legible on every palette. Checkboxes keep their native look. */
 .wf-designer :where(select, textarea, input:not([type='checkbox']):not([type='radio'])),
 .inspector :where(select, textarea, input:not([type='checkbox']):not([type='radio'])),
-.wf-runs :where(select, textarea, input:not([type='checkbox']):not([type='radio'])) {
+.wf-runstart :where(select, textarea, input:not([type='checkbox']):not([type='radio'])) {
   min-height: 28px;
   padding: 0 var(--space-2);
   border: 1px solid var(--border-strong);
@@ -10420,10 +10474,10 @@ button.session-chat-attachment {
 }
 .wf-designer :where(textarea),
 .inspector :where(textarea),
-.wf-runs :where(textarea) { height: auto; padding: var(--space-2); resize: vertical; }
+.wf-runstart :where(textarea) { height: auto; padding: var(--space-2); resize: vertical; }
 .wf-designer :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus,
 .inspector :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus,
-.wf-runs :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus { border-color: var(--accent); }
+.wf-runstart :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus { border-color: var(--accent); }
 
 .wf-page { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-3); }
 .wf-header { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
@@ -11129,40 +11183,97 @@ button.session-chat-attachment {
   cursor: crosshair;
 }
 
-/* Run monitor — run rail + board. Stage detail lives in the shell's right pane. */
-.wf-runs {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+/* Run workspace. Centre: a slim run bar over the session doing the work. Right
+   pane: the run's status and controls, its pipeline top to bottom, and the
+   selected stage's evidence. */
+.wf-run-page { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; height: 100%; }
+.wf-run-bar {
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
-  align-items: stretch;
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-size: var(--text-md);
 }
-@media (max-width: 1200px) { .wf-runs { grid-template-columns: 210px minmax(0, 1fr); } }
-.wf-runs .rail { width: auto; }
-.wf-runstart { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); }
-.wf-runstart strong { font-size: var(--text-md); }
-.wf-runstart label { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); color: var(--text-tertiary); }
-.wf-runstart .btn { width: 100%; }
-.rail-empty { color: var(--text-tertiary); font-size: var(--text-md); padding: var(--space-2); }
+.wf-run-bar-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-run-bar-status { color: var(--text-tertiary); font-size: var(--text-sm); text-transform: capitalize; }
+.wf-run-bar-stage { margin-left: auto; color: var(--text-secondary); font-size: var(--text-sm); white-space: nowrap; }
+.wf-run-bar-stage + .btn { flex-shrink: 0; }
+.wf-run-body { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.wf-run-session { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.wf-run-body > .empty-state { margin: auto; text-align: center; padding: var(--space-4); }
+.wf-run-panel { display: flex; flex-direction: column; gap: var(--space-3); overflow-y: auto; }
+.wf-run-inspector > summary { cursor: pointer; font-size: var(--text-md); color: var(--text-secondary); padding-bottom: var(--space-2); }
 
-.wf-board { display: flex; flex-direction: column; gap: var(--space-4); min-height: 0; overflow-y: auto; }
 .wf-board-status { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); }
 .wf-board-status > div:nth-child(2) { flex: 1; min-width: 0; }
 .wf-board-status strong { text-transform: capitalize; }
 .wf-board-status p { margin: 2px 0 0; font-size: var(--text-md); color: var(--text-secondary); }
-.wf-board-actions { display: flex; gap: var(--space-2); flex-shrink: 0; }
+.wf-board-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* Run paused on the AI provider's credit/quota limit: amber like an approval
+   wait, because it is waiting on the person, not broken. */
+.wf-run-limit { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--lane-awaiting); border-radius: var(--radius-lg); background: var(--bg-elevated); font-size: var(--text-md); }
+.wf-run-limit p { margin: 0; color: var(--text-secondary); }
 
-.wf-pipeline { display: flex; flex-direction: column; gap: var(--space-2); }
-.wf-pipeline-bar { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-tertiary); }
-.wf-pipeline-bar > span:first-child { flex: 1; font-weight: 600; color: var(--text-secondary); }
-.wf-pipeline-surface { min-height: 200px; max-height: 420px; overflow: auto; }
-.wf-pipeline-world { position: relative; }
-.wf-pipeline-world > svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
-.wf-pipeline-node { cursor: pointer; font: inherit; text-align: left; }
-.wf-pipeline-node.wf-node { border-left-color: var(--lane-color, var(--wf-node-accent)); }
-.wf-pipeline-node-name { display: flex; align-items: center; gap: var(--space-1); font-weight: 600; font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wf-pipeline-glyph { color: var(--lane-color); }
+/* Start-run dialog. */
+.wf-runstart-card { width: min(460px, calc(100vw - 32px)); padding: var(--space-4); }
+.wf-runstart { display: flex; flex-direction: column; gap: var(--space-3); }
+.wf-runstart-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.wf-runstart-head h3 { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-lg); }
+.wf-runstart label { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); color: var(--text-tertiary); }
+.wf-runstart-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+/* Run mode choice: two radio rows, each a title over a one-line consequence. */
+.wf-runstart-mode { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; border: 0; min-width: 0; }
+.wf-runstart-mode legend { padding: 0; margin-bottom: var(--space-1); font-size: var(--text-sm); color: var(--text-tertiary); }
+.wf-runstart .wf-runstart-mode-option { flex-direction: row; align-items: flex-start; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); cursor: pointer; }
+.wf-runstart-mode-option:has(input:checked) { border-color: var(--accent); }
+.wf-runstart-mode-option span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wf-runstart-mode-option strong { font-size: var(--text-md); }
+.wf-runstart-mode-option em { font-style: normal; font-size: var(--text-sm); color: var(--text-tertiary); }
+.wf-run-mode { margin: 0; display: flex; align-items: center; gap: var(--space-1); }
+
+/* Vertical pipeline (right pane). Progress reads down the list; parallel steps
+   share a bracket. Colour is always paired with the glyph. */
+.wf-vpipe { display: flex; flex-direction: column; gap: var(--space-2); }
+.wf-vpipe-head { display: flex; align-items: center; justify-content: space-between; font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary); }
+.wf-vpipe-count { color: var(--text-tertiary); font-weight: 500; }
+.wf-vpipe-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.wf-vpipe-level ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.wf-vpipe-level.is-parallel { border-left: 2px solid var(--border-strong); padding-left: var(--space-2); }
+.wf-vpipe-parallel-tag { display: block; margin-bottom: 2px; color: var(--text-tertiary); font-size: var(--text-xs); letter-spacing: .04em; text-transform: uppercase; }
+.wf-vpipe-step {
+  --lane-color: var(--lane-idle);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--lane-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wf-vpipe-step:hover { background: var(--bg-hover); }
+.wf-vpipe-step.is-selected { border-color: var(--accent); border-left-color: var(--lane-color); box-shadow: 0 0 0 1px var(--accent); }
+.wf-vpipe-step.is-idle { --lane-color: var(--lane-idle); }
+.wf-vpipe-step.is-ready { --lane-color: var(--lane-ready); }
+.wf-vpipe-step.is-running { --lane-color: var(--lane-running); }
+.wf-vpipe-step.is-done { --lane-color: var(--lane-done); }
+.wf-vpipe-step.is-failed { --lane-color: var(--lane-failed); }
+.wf-vpipe-step.is-skipped { --lane-color: var(--lane-skipped); }
+.wf-vpipe-step.is-awaiting { --lane-color: var(--lane-awaiting); }
+.wf-vpipe-step.is-paused { --lane-color: var(--lane-awaiting); }
+.wf-vpipe-glyph { flex-shrink: 0; width: 1.2em; text-align: center; color: var(--lane-color); }
+.wf-vpipe-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wf-vpipe-name { font-weight: 600; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-vpipe-sub { color: var(--text-tertiary); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-vpipe-type { flex-shrink: 0; color: var(--text-tertiary); }
 
 .wf-gates { width: 100%; border-collapse: collapse; font-size: var(--text-md); }
 .wf-gates caption { text-align: left; font-weight: 600; color: var(--text-secondary); padding-bottom: var(--space-2); }
