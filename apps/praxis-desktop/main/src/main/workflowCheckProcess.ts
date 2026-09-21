@@ -16,7 +16,15 @@ export function spawnCheck(node: WorkflowCheckNode, cwd: string, signal?: AbortS
     let timedOut = false;
     let stopping = false;
     let forceTimer: NodeJS.Timeout | undefined;
-    const child = spawn(node.command, node.args ?? [], { cwd, shell: false, detached: process.platform !== 'win32' });
+    const child = spawn(node.command, node.args ?? [], {
+      cwd,
+      shell: false,
+      detached: process.platform !== 'win32',
+      // Workflow checks are unattended quality gates. CI semantics keep test runners non-interactive
+      // and, for Praxis Playwright on macOS, select the deliberately serial Electron configuration.
+      // Preserve an explicit host value for callers that already define their own CI environment.
+      env: { ...process.env, CI: process.env.CI ?? '1' }
+    });
     const killTree = (force: boolean): void => {
       if (!child.pid) return;
       if (process.platform === 'win32') {
