@@ -123,6 +123,15 @@ exactly what lets any pack compose with any palette.
   the shell's border *colour* or its literal elevation shadow — swapping those to
   `--surface-panel-border-color` shifted the default look and isn't required for theming.
 
+## The centre pane is an inset card
+
+`.pane-main` floats: `--pane-main-inset` (4px, on `:root` in `theme.css`) of margin on every side, a full
+border, and all four corners rounded. The sidebar and the right pane are still docked flush and top-rounded,
+so the right pane's top edge sits that much above the card's. Change the gap in the token, not on the rule.
+`e2e/paneInset.spec.ts` measures it. Because the card is smaller by twice the inset in each direction, any
+`toHaveScreenshot` of the pane (or the whole page) moves with it — resize failures of exactly `2 × inset` are
+this, not a layout bug; open the `-actual.png` before re-baselining.
+
 ## Renderer CSP
 
 `apps/praxis-desktop/renderer/index.html` carries the CSP, and it **must** keep `img-src 'self' data:`.
