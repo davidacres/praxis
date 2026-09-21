@@ -1515,7 +1515,11 @@ export function SessionsPage({
                 <div className="session-error-banner-content">
                   <div className="session-error-banner-header">
                     <strong className="session-error-banner-title">
-                      {isLimit ? 'Provider Limit / Budget Exceeded' : (isSelectedFailed ? 'Session Failed' : 'Error')}
+                      {isLimit
+                        ? (activeErrorMessage.toLowerCase().includes('budget') || activeErrorMessage.toLowerCase().includes('spending')
+                            ? 'Provider Limit / Budget Exceeded'
+                            : 'Provider Limit / Quota Exceeded')
+                        : (isSelectedFailed ? 'Session Failed' : 'Error')}
                     </strong>
                     {isLimit && <span className="badge badge-blocked" style={{ fontSize: '10px' }}>Limit reached</span>}
                   </div>
