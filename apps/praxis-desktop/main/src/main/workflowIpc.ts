@@ -44,6 +44,7 @@ import {
   recommendAgentForStage,
   recommendTemplateForProject,
   resolveRecommendationProvider,
+  type AiProvider,
   type AgentCatalogSnapshot,
   type AgentRecommendationCandidate,
   type AgentRecommendationResult,
@@ -634,7 +635,7 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       issue?: { issueKey: string; connectionId?: string },
       controller?: { sessionKey: string; sessionId: string },
       planInput?: WorkflowPlanInput,
-      options?: { permissionMode?: unknown }
+      options?: { permissionMode?: unknown; aiProvider?: unknown; aiModel?: unknown }
     ): Promise<WorkflowRunSummary> => {
       let definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
       if (!definition) {
@@ -670,10 +671,19 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
         throw new Error(`Cannot start workflow until its Agent Hub bindings are ready: ${blockers.join(' ')}`);
       }
 
+      let aiProvider = typeof options?.aiProvider === 'string' && options.aiProvider ? (options.aiProvider as AiProvider) : undefined;
+      let aiModel = typeof options?.aiModel === 'string' && options.aiModel.trim().length > 0 ? options.aiModel.trim() : undefined;
+
       if (controller) {
         const session = getAiSessionManager().getAgentSession(controller.sessionKey);
         if (!session || session.sessionId !== controller.sessionId) {
           throw new Error('The workflow controller session was not found or has changed. Start the session again.');
+        }
+        if (!aiProvider && session.provider) {
+          aiProvider = session.provider;
+        }
+        if (!aiModel && session.model) {
+          aiModel = session.model;
         }
       }
 
@@ -692,7 +702,9 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
           : {}),
         ...(planInput ? { planInput } : {}),
         // Anything but an explicit 'auto' asks: the safe default cannot be reached by a malformed call.
-        ...(options?.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {})
+        ...(options?.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
+        ...(aiProvider ? { aiProvider } : {}),
+        ...(aiModel ? { aiModel } : {})
       });
       await saveRun(run);
       if (controller) {

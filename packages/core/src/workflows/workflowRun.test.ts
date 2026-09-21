@@ -476,6 +476,23 @@ test('a run survives a JSON round-trip with its history intact', () => {
   assert.ok((restored?.events.length ?? 0) > 0);
 });
 
+test('a run preserves aiProvider and aiModel across normalize round-trip', () => {
+  const run = createWorkflowRun({
+    runId: 'r-custom-ai',
+    projectId: 'p1',
+    definition: definition(),
+    at: T(0),
+    aiProvider: 'claude-code-cli',
+    aiModel: 'claude-sonnet-4'
+  });
+  assert.equal(run.aiProvider, 'claude-code-cli');
+  assert.equal(run.aiModel, 'claude-sonnet-4');
+
+  const normalized = normalizeWorkflowRun(JSON.parse(JSON.stringify(run)));
+  assert.equal(normalized?.aiProvider, 'claude-code-cli');
+  assert.equal(normalized?.aiModel, 'claude-sonnet-4');
+});
+
 test('a run record missing its node map rebuilds it as pending without losing events', () => {
   const run = succeed(newRun(), 'plan', 1);
   const damaged = { ...JSON.parse(JSON.stringify(run)), nodes: undefined };

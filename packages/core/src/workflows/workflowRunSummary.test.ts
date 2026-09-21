@@ -50,6 +50,7 @@ test('a running stage is named in the explanation', () => {
 test('review, QA, and security show as one branch group that converges at the join', () => {
   let r = succeed(run(), 'plan', 1, 'sha-1');
   r = succeed(r, 'implement', 3, 'sha-2');
+  r = succeed(r, 'test-contracts', 4, 'sha-2');
   let summary = summarizeWorkflowRun(r);
 
   assert.equal(summary.branchGroups.length, 1);
@@ -62,9 +63,9 @@ test('review, QA, and security show as one branch group that converges at the jo
 
   // QA cannot start until the dependencies are installed; review and security do not wait for it.
   assert.equal(summary.stages.find(stage => stage.nodeId === 'qa')?.lane, 'idle');
-  r = succeed(r, 'install', 4);
-  r = succeed(r, 'build', 4);
-  r = succeed(r, 'review', 5);
+  r = succeed(r, 'install', 5);
+  r = succeed(r, 'build', 5);
+  r = succeed(r, 'review', 6);
   r = succeed(r, 'qa', 7);
   r = succeed(r, 'security', 9);
   summary = summarizeWorkflowRun(r);
@@ -190,9 +191,10 @@ test('artifacts and the implementation snapshot ref surface on the stage row', (
 test('a completed run explains itself and offers no further action', () => {
   let r = succeed(run(), 'plan', 1, 'sha-1');
   r = succeed(r, 'implement', 3, 'sha-2');
-  r = succeed(r, 'install', 4);
-  r = succeed(r, 'build', 4);
-  r = succeed(r, 'review', 5);
+  r = succeed(r, 'test-contracts', 4, 'sha-2');
+  r = succeed(r, 'install', 5);
+  r = succeed(r, 'build', 5);
+  r = succeed(r, 'review', 6);
   r = succeed(r, 'qa', 7);
   r = succeed(r, 'security', 9);
   const approved = approveStage(r, 'approve', { actor: 'dave', at: T(11) });
@@ -203,6 +205,21 @@ test('a completed run explains itself and offers no further action', () => {
   assert.match(summary.explanation, /completed: every required stage passed/);
   assert.deepEqual(summary.actions.map(action => action.kind), ['none']);
   assert.deepEqual(summary.outstanding, []);
+});
+
+test('a run summary preserves aiProvider and aiModel', () => {
+  const base = run();
+  const configured = createWorkflowRun({
+    runId: 'r-ai',
+    projectId: 'p1',
+    definition: base.definition,
+    at: T(0),
+    aiProvider: 'codex-cli',
+    aiModel: 'gpt-5-turbo'
+  });
+  const summary = summarizeWorkflowRun(configured);
+  assert.equal(summary.aiProvider, 'codex-cli');
+  assert.equal(summary.aiModel, 'gpt-5-turbo');
 });
 
 test('a cancelled run reports why', () => {
