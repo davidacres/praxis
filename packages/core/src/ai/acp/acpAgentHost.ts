@@ -140,6 +140,14 @@ function isOpaquePermissionLabel(value: string, toolCallId: string): boolean {
     || /^[a-z0-9_-]{20,}$/i.test(normalized);
 }
 
+function permissionToolName(value: string | undefined, toolCallId: string): string | undefined {
+  const normalized = value?.trim() ?? '';
+  if (!normalized || isOpaquePermissionLabel(normalized, toolCallId) || /[\\/]/.test(normalized) || /^[.~]/.test(normalized) || /^[A-Za-z]:/.test(normalized)) {
+    return undefined;
+  }
+  return normalized;
+}
+
 function permissionAction(request: AcpPermissionRequest): string {
   const kind = request.kind?.toLowerCase();
   switch (kind) {
@@ -157,18 +165,12 @@ function permissionAction(request: AcpPermissionRequest): string {
 }
 
 function permissionDescription(request: AcpPermissionRequest): { summary: string; detail: string } {
-  const title = request.title.trim();
   const action = permissionAction(request);
-  if (!isOpaquePermissionLabel(title, request.toolCallId)) {
-    return {
-      summary: `Approval needed: ${title}`,
-      detail: `The agent is requesting permission to ${action}.`
-    };
-  }
+  const toolName = permissionToolName(request.name, request.toolCallId);
   return {
-    summary: `Approval needed: ${action}`,
-    detail: request.name?.trim()
-      ? `The agent is requesting permission to ${action} (${request.name.trim()}).`
+    summary: `Approval needed: ${toolName ?? action}`,
+    detail: toolName
+      ? `The agent is requesting permission to ${action} using ${toolName}.`
       : `The agent is requesting permission to ${action}.`
   };
 }

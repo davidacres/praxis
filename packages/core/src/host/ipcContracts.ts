@@ -1231,6 +1231,10 @@ export interface WorkflowsIpc {
    */
   deleteRun(runId: string, options?: { deleteWork?: boolean }): Promise<void>;
   /**
+   * Archives or restores a workflow run. Live runs cannot be archived.
+   */
+  archiveRun(runId: string, archived: boolean): Promise<WorkflowRunSummary>;
+  /**
    * Fires with a run id after every persisted transition — the orchestrator
    * advancing a stage in the background included. Returns an unsubscribe.
    */

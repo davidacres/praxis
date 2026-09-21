@@ -381,6 +381,7 @@ const praxis: PraxisIpc = {
     cancelRun: (runId: string, reason?: string) => ipcRenderer.invoke('workflows:cancelRun', runId, reason),
     inspectRunWork: (runId: string) => ipcRenderer.invoke('workflows:inspectRunWork', runId),
     deleteRun: (runId: string, options?: { deleteWork?: boolean }) => ipcRenderer.invoke('workflows:deleteRun', runId, options),
+    archiveRun: (runId: string, archived: boolean) => ipcRenderer.invoke('workflows:archiveRun', runId, archived),
     onRunChanged: (listener: (runId: string) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, runId: string) => listener(runId);
       ipcRenderer.on('workflows:runChanged', handler);

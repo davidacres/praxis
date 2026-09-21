@@ -1297,7 +1297,8 @@ export function App() {
       entries.push({ id: `project-git:${project.id}`, label: `${project.name}: Git graph`, hint: project.key, group: 'Projects', icon: 'git-branch', keywords: 'repository history commits', run: () => navigate({ projectId: project.id, feature: 'git' }) });
       entries.push({ id: `project-run:${project.id}`, label: `${project.name}: Run`, hint: project.key, group: 'Projects', icon: 'server', keywords: 'run profile services launch', run: () => navigate({ projectId: project.id, feature: 'run' }) });
       entries.push({ id: `project-deployments:${project.id}`, label: `${project.name}: Deployments`, hint: project.key, group: 'Projects', icon: 'rocket', keywords: 'deploy deployment profile target executor', run: () => navigate({ projectId: project.id, feature: 'deployments' }) });
-      (runsByProjectId[project.id] ?? []).forEach(run => {
+      entries.push({ id: `runs:${project.id}`, label: `${project.name} · Workflow runs`, hint: 'Browse runs and history', group: 'Workflows', icon: 'play', keywords: 'runs history list workflow archive', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined }) });
+      (runsByProjectId[project.id] ?? []).filter(run => !run.archived).forEach(run => {
         entries.push({ id: `run:${run.runId}`, label: run.workflowName, hint: `${project.name} · run · ${run.status}`, group: 'Workflows', icon: 'play', keywords: 'workflow run pipeline', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: run.runId }) });
       });
       (workflowsByProject[project.id] ?? []).forEach(workflow => {
@@ -1631,12 +1632,36 @@ export function App() {
           <WorkflowRunPage
             key={route.workflowRunId ?? 'none'}
             runId={route.workflowRunId}
+            runs={runsByProjectId[selectedProject.id] ?? []}
             auxSlot={auxSlotEl}
             onRequireAux={requireAux}
             onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
             onOpenPolicies={() => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'policies' })}
             onStartRun={() => setStartRunDialog({ projectId: selectedProject.id })}
             onRunGone={() => navigate({ projectId: selectedProject.id, feature: 'workflows' })}
+            onSelectRun={runId => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'runs', workflowRunId: runId || undefined })}
+            onArchiveRun={async (runId, archived) => {
+              try {
+                await window.praxis.workflows.archiveRun(runId, archived);
+              } catch (cause) {
+                console.error('Failed to archive workflow run:', cause);
+              }
+            }}
+            onCancelRun={async runId => {
+              try {
+                await window.praxis.workflows.cancelRun(runId, 'cancelled from runs browser');
+              } catch (cause) {
+                console.error('Failed to cancel workflow run:', cause);
+              }
+            }}
+            onDeleteRun={async run => {
+              const result = await deleteRunFlow(run);
+              if (result.error) {
+                await confirm({ title: 'Could not delete the run', message: result.error, confirmLabel: 'OK' });
+              } else if (result.deleted && route.feature === 'workflows' && route.workflowRunId === run.runId) {
+                navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined });
+              }
+            }}
             renderSession={renderSessionsPage}
             renderSessionInspector={sessionKey => renderSessionInspector(agentSessions.find(session => session.issueKey === sessionKey))}
           />
@@ -2127,8 +2152,16 @@ export function App() {
                   activeWorkflowRunId={route.feature === 'workflows' && route.workflowView === 'runs' ? route.workflowRunId : undefined}
                   activeWorkflowPolicies={route.feature === 'workflows' && route.workflowView === 'policies'}
                   onSelectWorkflow={(project, workflowId) => navigate({ projectId: project.id, feature: 'workflows', workflowId })}
+                  onSelectWorkflowRuns={project => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined })}
                   onSelectWorkflowRun={(project, runId) => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: runId })}
                   onStartWorkflowRun={(project, workflowId) => setStartRunDialog({ projectId: project.id, ...(workflowId ? { workflowId } : {}) })}
+                  onArchiveWorkflowRun={async (runId, archived) => {
+                    try {
+                      await window.praxis.workflows.archiveRun(runId, archived);
+                    } catch (cause) {
+                      console.error('Failed to archive workflow run:', cause);
+                    }
+                  }}
                   onCancelWorkflowRun={async runId => {
                     try {
                       await window.praxis.workflows.cancelRun(runId, 'cancelled from the sidebar');
