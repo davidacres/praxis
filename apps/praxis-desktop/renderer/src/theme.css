@@ -692,11 +692,12 @@ textarea {
   background-color: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity) * 100%), transparent);
   background-image: var(--surface-panel-tint-layer);
   box-shadow: var(--surface-accent-glow);
-  /* The reference rounds the top corners of every editor-level surface, so the
-     pane reads as a card docked to the bottom of the window. */
+  /* The centre pane floats as an inset card: a small margin all round so the shell canvas shows
+     between it and its neighbours, a full border, and every corner rounded. (The sidebar and the
+     right pane are still docked, top-rounded.) */
+  margin: var(--pane-main-inset);
   border: 1px solid var(--surface-panel-border-color);
-  border-bottom: none;
-  border-radius: calc(var(--radius-md) + var(--surface-radius-boost)) calc(var(--radius-md) + var(--surface-radius-boost)) 0 0;
+  border-radius: calc(var(--radius-md) + var(--surface-radius-boost));
   overflow: hidden;
 }
 
@@ -1425,6 +1426,8 @@ textarea {
  * one-off indent — match the icon size to the row's role, not a guess.
  */
 :root {
+  /* The gap around the centre pane (`.pane-main`), so it reads as an inset card. */
+  --pane-main-inset: 4px;
   --tree-indent-1: 18px;
   --tree-indent-2: 30px;
   --tree-indent-3: 42px;
