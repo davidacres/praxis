@@ -30,6 +30,7 @@ import {
   updateNode,
   type BucketedFeedback
 } from './workflowEdits';
+import { isProviderUsable } from '../ai/providerAvailability';
 
 /**
  * Visual workflow designer (FX-BE-021 / FX-BF-014).
@@ -176,7 +177,7 @@ export function WorkflowDesignerPage({
     void window.praxis.workflows.effectivePolicy(project.id).then(setPolicy);
     void window.praxis.ai
       .listProviderStatuses()
-      .then(statuses => setRecommendationAvailable(statuses.some(status => API_MODEL_PROVIDERS.has(status.provider) && status.configured)))
+      .then(statuses => setRecommendationAvailable(statuses.some(status => API_MODEL_PROVIDERS.has(status.provider) && isProviderUsable(status))))
       .catch(() => setRecommendationAvailable(false));
   }, [project.id]);
 

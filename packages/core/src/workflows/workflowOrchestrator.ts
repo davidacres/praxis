@@ -36,6 +36,7 @@ import {
   downstreamNodeIds,
   isRunSettled,
   reworkWorkflowRun,
+  type WorkflowPauseReason,
   type WorkflowRun
 } from './workflowRun';
 import { advanceJoins, scheduleWorkflowRun } from './workflowScheduler';
@@ -52,6 +53,12 @@ export interface StageOutcome {
   assessedSnapshotRef?: string;
   artifacts?: Array<{ contractId: string; kind: WorkflowArtifactKind; path?: string }>;
   findings?: CheckFindings;
+  /**
+   * A `failed` outcome that says nothing about the work — the AI provider's
+   * credit/quota/rate limit, or the stage's tooling being unable to run. The run
+   * pauses on it instead of failing. See `WorkflowPauseReason`.
+   */
+  pause?: WorkflowPauseReason;
 }
 
 export interface StageDispatchContext {
@@ -367,7 +374,8 @@ export class WorkflowOrchestrator {
                   at,
                   error: result.outcome.error ?? 'Stage failed.',
                   ...(result.outcome.exitCode !== undefined ? { exitCode: result.outcome.exitCode } : {}),
-                  ...(result.outcome.findings ? { findings: result.outcome.findings } : {})
+                  ...(result.outcome.findings ? { findings: result.outcome.findings } : {}),
+                  ...(result.outcome.pause ? { pause: result.outcome.pause } : {})
                 });
         if (next !== run) {
           const stage = next.definition.nodes.find(candidate => candidate.id === nodeId);
@@ -389,11 +397,35 @@ export class WorkflowOrchestrator {
               return;
             }
           }
-          await this.persist(next);
+          const saved = await this.persist(next);
+          // A run that just ended (a required stage failed) has no use for
+          // siblings still working: stop them and record how they ended rather
+          // than letting their results fall on a finished run and vanish.
+          if (isRunSettled(saved)) await this.stopInFlight(saved);
         }
       },
       `settling ${nodeId}`
     );
+  }
+
+  /**
+   * Stops every stage still running in a run that has ended, then closes each as
+   * `cancelled`. Runs on the run's chain, so it sees the record the settle wrote.
+   */
+  private async stopInFlight(run: WorkflowRun): Promise<void> {
+    const running = Object.values(run.nodes)
+      .filter(state => state.outcome === 'running')
+      .map(state => state.nodeId);
+    if (running.length === 0) return;
+    await Promise.allSettled(
+      running.filter(nodeId => this.executions.has(this.key(run.runId, nodeId))).map(nodeId => this.stopStage(run, nodeId))
+    );
+    let current = this.options.runs.get(run.runId) ?? run;
+    const reason = `the run ended (${run.endedReason ?? run.status}).`;
+    for (const nodeId of running) {
+      current = applyWorkflowRunCommand(current, { kind: 'node-stopped', nodeId, at: this.now, reason });
+    }
+    if (current !== run) await this.persist(current);
   }
 
   // ── Workspace ──────────────────────────────────────────────────────────

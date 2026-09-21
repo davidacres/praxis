@@ -16,6 +16,7 @@
 import { isAgentTaskNode, isCheckNode, isDeploymentNode, isTerminalOutcome } from './workflowTypes';
 import {
   applyWorkflowRunCommand,
+  attemptsSpent,
   canRetry,
   isRunSettled,
   type WorkflowRun
@@ -35,7 +36,22 @@ export interface WorkflowRecoveryResult {
  * restarted. Completed nodes are left exactly as they are.
  */
 export function recoverWorkflowRun(run: WorkflowRun, at: string): WorkflowRecoveryResult {
-  if (isRunSettled(run)) return { run, interrupted: [] };
+  if (isRunSettled(run)) {
+    // A run that ended with stages still marked running (an older build let a
+    // failed run drop its siblings' results) is repaired rather than left
+    // showing spinners on a finished run.
+    let repaired = run;
+    for (const state of Object.values(run.nodes)) {
+      if (state.outcome !== 'running') continue;
+      repaired = applyWorkflowRunCommand(repaired, {
+        kind: 'node-stopped',
+        nodeId: state.nodeId,
+        at,
+        reason: 'the run had already ended.'
+      });
+    }
+    return { run: repaired, interrupted: [] };
+  }
 
   const interrupted = Object.values(run.nodes)
     .filter(state => state.outcome === 'running')
@@ -114,7 +130,7 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
       kind: 'retry-stage',
       nodeId: state.nodeId,
       label: `Retry ${label(state.nodeId)}`,
-      attemptsUsed: state.attempts.length,
+      attemptsUsed: attemptsSpent(state),
       maxAttempts
     });
   }

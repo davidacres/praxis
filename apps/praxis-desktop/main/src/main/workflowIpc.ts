@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -27,6 +27,7 @@ import {
   recoverWorkflowRun,
   reworkWorkflowRun,
   resolveWorkflowCatalog,
+  stageSessionKey,
   summarizeWorkflowRun,
   validateWorkflow,
   preflightWorkflow,
@@ -59,6 +60,7 @@ import {
   type WorkflowRun,
   type WorkflowPlanInput,
   type WorkflowRunSummary,
+  type WorkflowRunWorkInfo,
   type WorkflowTemplate,
   type WorkflowValidationResult,
   type WorkflowAssistantMessage,
@@ -70,6 +72,8 @@ import { getAgentRuntimeManager, getAgentRuntimeRoots } from './agentRuntimeInst
 import { getAiSessionManager, getAcpAgentHost, resolveAcpStartOptions } from './aiInstance';
 import { marketplaceWorkflowTemplates } from './marketplaceInstance';
 import { getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
+import { deleteAgentSession } from './deleteAgentSession';
+import { deleteRunWork, inspectRunWork, repositoryRoot } from './runWork';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
 import { startDiagnosisSessionFromEvidence } from './diagnosisSession';
 import { getSecretsStore } from './connectionStoreInstance';
@@ -191,9 +195,24 @@ async function withRun(runId: string, apply: (run: WorkflowRun) => WorkflowRun):
 export async function recoverWorkflowRunsOnStartup(): Promise<void> {
   const store = runStore();
   const now = new Date().toISOString();
+  const sessions = getAiSessionManager();
   for (const run of store.list()) {
+    // Backfill: stage sessions written before `parentSessionKey` existed nest
+    // under the controller that started their run.
+    if (run.controllerSessionKey && sessions.getAgentSession(run.controllerSessionKey)) {
+      for (const node of run.definition.nodes) {
+        const key = stageSessionKey(run.runId, node.id);
+        if (sessions.getAgentSession(key) && !sessions.getAgentSession(key)?.parentSessionKey) {
+          sessions.updateAgentRuntime(key, { parentSessionKey: run.controllerSessionKey });
+        }
+      }
+    }
     const recovered = recoverWorkflowRun(run, now);
     if (recovered.interrupted.length > 0) await saveRun(recovered.run);
+    // A finished run that still showed stages as running (an older build) is repaired in
+    // place. Saved directly, not through `saveRun`, so repairing history never re-posts a
+    // ticket comment.
+    else if (recovered.run !== run) await store.save(recovered.run);
     // Re-enter the loop so anything still runnable is picked back up. The
     // orchestrator holds no state of its own, so this is all recovery needs.
     if (!isRunSettled(recovered.run) || recovered.run.worktreePath) void getWorkflowOrchestrator().step(run.runId);
@@ -614,7 +633,8 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       taskTitle: string,
       issue?: { issueKey: string; connectionId?: string },
       controller?: { sessionKey: string; sessionId: string },
-      planInput?: WorkflowPlanInput
+      planInput?: WorkflowPlanInput,
+      options?: { permissionMode?: unknown }
     ): Promise<WorkflowRunSummary> => {
       let definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
       if (!definition) {
@@ -670,7 +690,9 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
         ...(controller
           ? { controllerSessionKey: controller.sessionKey, controllerSessionId: controller.sessionId }
           : {}),
-        ...(planInput ? { planInput } : {})
+        ...(planInput ? { planInput } : {}),
+        // Anything but an explicit 'auto' asks: the safe default cannot be reached by a malformed call.
+        ...(options?.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {})
       });
       await saveRun(run);
       if (controller) {
@@ -858,6 +880,59 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
     const run = runStore().get(runId);
     if (!run) throw new Error(`Run ${runId} was not found.`);
     return summarize(run);
+  });
+
+  // What a run left in the repository, so the delete confirm can say what would be lost.
+  ipcMain.handle('workflows:inspectRunWork', async (_event, runId: string): Promise<WorkflowRunWorkInfo> => {
+    const run = runStore().get(runId);
+    if (!run) throw new Error(`Run ${runId} was not found.`);
+    const empty: WorkflowRunWorkInfo = { commitCount: 0, commits: [], uncommittedFiles: 0, hasWork: false };
+    const folder = getProjectStore().get(run.projectId)?.workspaceFolder?.trim();
+    const root = folder ? await repositoryRoot(folder) : undefined;
+    if (!root) return empty;
+    const info = await inspectRunWork(root, run.runId, run.worktreePath);
+    return { ...info, hasWork: info.commitCount > 0 || info.uncommittedFiles > 0 };
+  });
+
+  // Deleting a run cancels it first when it is still live, then removes the run, its
+  // stage sessions (their transcripts belong to the run), and its link from the controller
+  // session that started it. The run's branch is the work itself: it stays unless the caller
+  // asked for it to go (`deleteWork`), and uncommitted changes are kept as a commit first.
+  ipcMain.handle('workflows:deleteRun', async (_event, runId: string, options?: { deleteWork?: boolean }): Promise<void> => {
+    const run = runStore().get(runId);
+    if (!run) throw new Error(`Run ${runId} was not found.`);
+    if (!isRunSettled(run)) {
+      await getWorkflowOrchestrator().cancel(runId, 'Deleted by the user.');
+    }
+    // Before anything is removed, so a refusal (branch checked out) leaves the run intact to retry.
+    if (options?.deleteWork === true) {
+      const folder = getProjectStore().get(run.projectId)?.workspaceFolder?.trim();
+      const root = folder ? await repositoryRoot(folder) : undefined;
+      if (root) await deleteRunWork(root, run.runId, runStore().get(runId)?.worktreePath ?? run.worktreePath);
+    }
+    const sessions = getAiSessionManager();
+    for (const node of run.definition.nodes) {
+      const key = stageSessionKey(run.runId, node.id);
+      if (sessions.getAgentSession(key)) await deleteAgentSession(key);
+    }
+    if (run.controllerSessionKey && sessions.getAgentSession(run.controllerSessionKey)) {
+      const controller = sessions.getAgentSession(run.controllerSessionKey);
+      const existing = controller?.workflowRunIds ?? (controller?.workflowRunId ? [controller.workflowRunId] : []);
+      const remaining = existing.filter(id => id !== runId);
+      const nextRunId = remaining[remaining.length - 1];
+      const nextRun = nextRunId ? runStore().get(nextRunId) : undefined;
+      sessions.updateAgentRuntime(run.controllerSessionKey, {
+        workflowRunId: nextRunId ?? '',
+        workflowRunIds: remaining,
+        workflowNodeId: '',
+        workflowId: nextRun?.workflowId ?? '',
+        ...(nextRun ? { workflowVersion: nextRun.workflowVersion, workflowRole: 'controller' as const } : {})
+      });
+    }
+    await runStore().remove(runId);
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('workflows:runChanged', runId);
+    }
   });
 
   ipcMain.handle(

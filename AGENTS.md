@@ -196,7 +196,11 @@ bare pixel value:
   exactly where the dash stops — no gap, no overlap. Moving the dash's
   position later means moving this token to match, not the other way round.
 - `--tree-indent-3` (42px) — a document-type group header one level inside
-  `docs > plans` (`.project-document-group-toggle`, e.g. "STORY").
+  `docs > plans` (`.project-document-group-toggle`, e.g. "STORY"); a workflow
+  **run node** one level inside the `Runs` group (`.project-run-row`, whose
+  header sits at `--tree-indent-2` beside its workflow rows); and a **session
+  nested beneath the session that spawned it** in the Sessions tree
+  (`.session-nav-row--child`).
 - `--tree-indent-4` (48px) — a document itself, one level inside a
   `--tree-indent-3` group (`.project-document-row`).
 
@@ -216,6 +220,110 @@ two, or three levels inside one), set `padding-left` to the matching token,
 and size its icon by role as above. If a genuinely new fifth depth is needed,
 give it its own named token the same way rather than a bare number — the
 whole point is that no row's indent is ever a number typed at the call site.
+
+## Workflow runs: tree nodes and the run workspace
+
+There is **no Runs page**. A project's runs are child nodes under `Workflows > Runs`
+in the sidebar (`Sidebar.tsx`; the list is `runsByProjectId`, lifted into `App` so the
+command palette shares it). A node carries hover-revealed **cancel** (live runs only)
+and **delete**; `+` on the group and a workflow row's play button open
+`workflows/StartRunDialog.tsx`. Opening a node routes to
+`workflows` / `workflowView: 'runs'` / `workflowRunId` and renders
+`workflows/WorkflowRunPage.tsx`:
+
+- **Centre** — the session doing the work: the running stage's, else the last stage
+  that has one (so a run waiting on a person still shows the conversation behind it).
+  It is `App`'s own `renderSessionsPage(sessionKey)`, the same console the Sessions
+  route uses — do not fork `SessionsPage` for it. A stage with no session (check,
+  approval, deployment, or not started) shows a short explanation instead.
+  Picking a step in the pipeline pins it; "Follow live" un-pins.
+- **Right pane** — `WorkflowPipelineVertical` (steps top to bottom, parallel steps
+  bracketed), then status/controls, the selected stage's findings and evidence, gates,
+  timeline, and the stage session's inspector under "Session details". It portals into
+  `auxSlot` like the designer does. Step buttons keep the `Name (type): lane`
+  `aria-label` the specs select by.
+
+**Deleting a run** (`workflows:deleteRun`) cancels it first if it is live, then removes
+the run, its stage sessions (`stageSessionKey`), and its entry in the controller's
+`workflowRunIds`. It shares `deleteAgentSession` with `ai:deleteSession` — do not
+re-implement session teardown. `removeControllerRun` only *detaches* a run from a
+session; it is not delete.
+
+**Run permission mode.** `WorkflowRun.permissionMode` (`'ask'` default | `'auto'`) is chosen
+in the start-run dialog and **fixed for the life of the run**. `auto` makes each stage
+session start with `allowPermissionsForTask` on (`autoApprovePermissions` through
+`launchAgentTask` to both hosts) and is recorded on the session record so follow-up turns
+keep it. It sits *behind* the tool-access checks — a read-only/project-only stage is still
+denied writes and commands first — and it never touches the human approval gate, which
+needs a person in either mode. Anything other than an explicit `'auto'` is treated as ask.
+
+**A stage that could not judge is paused, not failed.** An attempt can stop for a reason that
+says nothing about the work: `WorkflowNodeAttempt.pause` is `'provider-limit'` (the AI account
+ran out of credit/quota — see `isProviderLimitError`) or `'environment'` (the stage's tooling
+could not run). A paused stage keeps the run open and its worktree, does not spend
+`maxAttempts` (`attemptsSpent`), takes none of its failure/always edges, leaves its gate
+`pending` rather than `failed`, and is resumed with Retry. `classifyCheckEnvironmentFailure`
+(core, used by `workflowCheckRunner`) decides `environment`, and it is **deliberately narrow**:
+only a missing command, or a package manager doing *registry work* (audit/install/ci/view/…)
+with a specific registry/network/auth/TLS signature. `npm test`, `npm run …` and every other
+command run user code and are never second-guessed — a false "environment" hides a real failure
+behind a pause, which is worse than a false failure. Add a signature with a fixture of real
+output and a negative case in `checkEnvironmentFailure.test.ts`. (Real example: `npm audit`
+against a default registry with no audit endpoint, e.g. GitHub Packages, exits 1 having checked
+nothing; the Governed delivery template now audits against `registry.npmjs.org` for that reason.)
+
+**A run's worktree starts with no dependencies, so the template installs them.** `node_modules` is
+gitignored, so a fresh worktree has none; tools only appear to work when something up the tree
+supplies them (the parent checkout's root `node_modules`), and a workspace package with its own
+nested dependencies fails with `Cannot find module` — which is how QA failed FX-BF-036 with every
+real test green. The Governed delivery and Full SDLC (node) templates therefore have an `Install
+dependencies` stage (`installDependenciesNode`) that runs `npm ci` after Implement; only the stages
+that need `node_modules` wait for it. Two decisions worth not undoing: it **installs** rather than
+symlinking the main checkout's `node_modules` (a link is shared mutable state — an agent's
+`npm install` would write into the user's real checkout — and goes stale when a stage changes the
+lockfile), and it passes **`--registry=https://registry.npmjs.org/`** (with a private default
+registry npm rewrites the lockfile's `registry.npmjs.org` tarball URLs to it and every public
+package 404s on a cold cache — verify with `npm ci --cache=<empty dir>`, since a warm cache hides
+it). `workflowInstallDeps.spec.ts` proves both halves on a real repository with a local tarball.
+The same goes for **build output**: `dist/`, `out/` and a copied renderer are gitignored too, so a `Build`
+stage (`npm run build --if-present`, optional log) runs before QA. Without it an Electron/Playwright
+suite that loads a pre-built renderer opens a **blank window** in the run worktree (the FX-BF-036 QA
+symptom) — nothing about the failure says "build". `--if-present` keeps it a silent no-op for projects
+with no build script, which is why its log is `required: false` (a required log with no output fails the
+stage for having nothing to say). `workflowBuildStage.spec.ts` covers it, including the no-script case.
+Note `npm run build` here does not compile `@praxis/mobile-protocol`; a full `npm test` does that before
+the desktop e2e step, so the order QA runs them in matters.
+
+**A finished run leaves nothing running.** When a required stage fails the run, the orchestrator
+stops every sibling still in flight and records it `cancelled` (`stopInFlight`, the post-settle
+`node-stopped` command — the only command besides `gate-decided` a settled run absorbs). Recovery
+repairs older records that still show stages `running` in a finished run. Do not let results fall
+on a settled run and vanish.
+
+**A run's work is its branch, and deleting the run does not decide its fate.** A governed run's
+output is commits on `WF-<run8>-<slug>` (found by its `WF-<run8>` prefix — `runWork.ts`),
+checked out in a worktree while the run is live. Three rules, each pinned by a test:
+- **Releasing a worktree never deletes the branch** (`removeDeliveryWorktree(…, { keepBranch: true })`).
+  The old release passed `WF-<run8>` to `git branch -D`, which only failed to match the real
+  `WF-<run8>-<slug>` name by luck — one naming change from deleting a finished run's delivered work.
+- **Uncommitted changes are kept, not discarded.** `git worktree remove --force` throws them away, so
+  `release` first commits them to the branch (`preserveUncommittedWork`); if that fails, release throws
+  and the worktree is left in place.
+- **Deleting a run asks.** `workflows:inspectRunWork` reports the branch, the commits that exist on *no
+  other* branch (`--not --exclude=<bare name> --branches --remotes` — give `--exclude` the bare branch
+  name, not `refs/heads/…`, or it silently excludes nothing and reports 0 at risk), and uncommitted
+  files. `useDeleteRun` (shared by the sidebar node and the run panel) shows them and offers an
+  **unchecked** "Also delete branch" option; only `deleteRun(runId, { deleteWork: true })` removes
+  the worktree and branch, and never a branch checked out in the main working tree.
+
+**Session hierarchy.** `AgentSessionRecord.parentSessionKey` is the session that spawned
+this one. It is set when a stage session is created (from `run.controllerSessionKey`)
+and back-filled for older records in `recoverWorkflowRunsOnStartup`. `SessionsNav`
+nests children under a parent that is in the list; a child whose parent is missing
+(archived, other workspace) stays a top-level row rather than vanishing. Archiving or
+deleting a parent cascades to its children (delete asks first). A run started with no
+controller has no parent, so its stage sessions stay top-level in Sessions — the run
+workspace's pipeline is where they are grouped.
 
 ## Onboarding and the walkthrough
 
@@ -250,6 +358,25 @@ control — the dashed style and the off-palette hue are both asserted.
 - Anything from settings that ends up baked into CSS (a colour, a blend mode) must be
   validated to a strict literal in core — a hex, or a keyword from a fixed set. Never pass
   user text through into a stylesheet.
+
+## AI provider settings (`SettingsPage.tsx` → `AiSection`)
+
+Settings → AI Provider is four tabs — **Providers · Defaults · Spend · Tools** — and each
+provider is **one row**: name, status, "Make default", and an on/off switch, with its
+connection details (key, URL, model, CLI path, models) opening under the selected row.
+Add a provider by adding to `AI_PROVIDERS`; add a setting to the tab it belongs to rather
+than the top of the page.
+
+`ai.providers[id].enabled` is stored only when set; **undefined means enabled**. A provider
+is *usable* only when it is also `configured` (key present / CLI found), so leaving it unset
+changes nothing for an existing setup, and only an explicit `false` turns one off. Every
+picker applies the same rule through `ai/providerAvailability.ts`'s `isProviderUsable`
+(`AiProviderStatus.configured && .enabled`) — do not filter on `configured` alone in a new
+picker. The default provider's switch is locked on (choose another default first), and an
+unconfigured provider's switch is disabled with the reason in its tooltip. Main enforces it
+too: `ai:delegate` refuses a provider that is turned off, and the recommendation-provider
+resolver skips it. Turning a provider off never touches its stored key or config, and
+sessions already running on it are unaffected.
 
 ## Workspace / project / connection model
 

@@ -32,6 +32,8 @@ export interface MockGatewayServer {
   requests: MockGatewayRequest[];
   /** Number of `GET /v1/models` hits — lets a test assert the model catalog cache is actually being reused. */
   modelsRequestCount: number;
+  /** Switches how chat requests are answered from now on — e.g. `error` → `complete` to simulate a credit top-up. */
+  setMode(mode: 'complete' | 'hang' | 'error'): void;
   close(): Promise<void>;
 }
 
@@ -63,6 +65,7 @@ export async function startMockGatewayServer(options: {
 }): Promise<MockGatewayServer> {
   const reply = options.reply ?? COMPLETE_REPLY;
   const models = options.models ?? [{ id: 'mock/model' }];
+  let currentMode = options.mode;
   const requests: MockGatewayRequest[] = [];
   const openResponses = new Set<http.ServerResponse>();
   let modelsRequestCount = 0;
@@ -76,7 +79,7 @@ export async function startMockGatewayServer(options: {
       req.on('end', () => {
         requests.push({ authorization: req.headers.authorization, body });
 
-        if (options.mode === 'error') {
+        if (currentMode === 'error') {
           res.writeHead(options.errorStatus ?? 429, { 'Content-Type': 'application/json' });
           res.end(options.errorBody ?? JSON.stringify({
             error: {
@@ -117,7 +120,7 @@ export async function startMockGatewayServer(options: {
           }]
         }));
 
-        if (options.mode === 'complete') {
+        if (currentMode === 'complete') {
           res.write(
             sseChunk({
               id: 'chatcmpl-mock',
@@ -175,6 +178,9 @@ export async function startMockGatewayServer(options: {
     requests,
     get modelsRequestCount() {
       return modelsRequestCount;
+    },
+    setMode(mode) {
+      currentMode = mode;
     },
     close: () =>
       new Promise<void>(resolve => {

@@ -427,6 +427,14 @@ export interface AgentSessionRecord {
   workflowVersion?: number;
   workflowRole?: WorkflowSessionRole;
   /**
+   * The session that spawned this one. Set on a workflow stage session to the
+   * controller session that started its run, so the Sessions tree can nest
+   * stage sessions beneath it. Absent for top-level sessions — including a
+   * stage of a run started with no controller, which nests under its run in
+   * the Workflows tree instead.
+   */
+  parentSessionKey?: string;
+  /**
    * Set when this session was launched from the Agent Hub (FX-BF-011): the
    * discovered runtime agent it is attributed to, and the skills that were
    * active at launch. Attribution only — the conversation still runs on the
@@ -531,6 +539,13 @@ export interface AgentSessionRecord {
   lastError?: string;
   /** True when the failure was caused by a provider credit, rate, session, or usage limit. */
   providerLimitReached?: boolean;
+  /**
+   * Tool-permission requests are allowed without asking. Set for a stage
+   * session of a run started in auto-approve mode, and re-applied on every
+   * follow-up turn. It sits behind `toolMode`: a read-only or project-only
+   * session is still denied writes and commands before this is consulted.
+   */
+  autoApprovePermissions?: boolean;
 }
 
 /** One slash command the agent advertised via `available_commands_update`. */

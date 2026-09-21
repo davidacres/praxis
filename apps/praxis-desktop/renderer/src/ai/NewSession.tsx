@@ -13,6 +13,7 @@ import { Icon } from '../ui/Icon';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
+import { isProviderUsable } from './providerAvailability';
 
 /** Applies a provider's curated `enabledModelIds` (Settings → AI Provider → Models) to a fetched catalog. */
 function applyEnabledModelCuration(options: ModelOptions, enabledModelIds: string[] | undefined): ModelOptions {
@@ -261,7 +262,7 @@ export function NewSession({
     Promise.all([window.praxis.ai.listProviderStatuses(), window.praxis.settings.get()])
       .then(([statuses, settings]) => {
         setProviderStatuses(statuses);
-        const active = statuses.find(status => status.provider === settings.ai.activeProvider && status.configured);
+        const active = statuses.find(status => status.provider === settings.ai.activeProvider && isProviderUsable(status));
         setSelectedProvider(current => current ?? active?.provider);
       })
       .catch(() => setProviderStatuses([]));
@@ -381,7 +382,7 @@ export function NewSession({
     return !query || option.name.toLowerCase().includes(query) || option.value.toLowerCase().includes(query);
   });
 
-  const configuredProviderStatuses = providerStatuses.filter(status => status.configured);
+  const configuredProviderStatuses = providerStatuses.filter(isProviderUsable);
 
   const toggleModelMenu = () => {
     if (modelMenuPos) {

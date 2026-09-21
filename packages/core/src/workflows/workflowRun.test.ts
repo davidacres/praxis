@@ -11,6 +11,8 @@ import {
 import { advanceJoins, deriveRunStatus, scheduleWorkflowRun } from './workflowScheduler';
 import { findTimedOutNodes, nextActions, recoverWorkflowRun } from './workflowRecovery';
 import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition } from './workflowTypes';
+import { summarizeWorkflowRun } from './workflowRunSummary';
+import { stageOutcomeFromSession } from './workflowStageTask';
 
 const T = (minutes: number): string => new Date(Date.UTC(2026, 8, 2, 9, minutes)).toISOString();
 
@@ -585,4 +587,232 @@ test('an explicit Task Designer plan input survives run creation and restart nor
   });
   const restored = normalizeWorkflowRun(JSON.parse(JSON.stringify(run)));
   assert.deepEqual(restored?.planInput, planInput);
+});
+
+// ── AI provider limit (credits / quota / rate) ───────────────────────────
+
+/** review → (on failure) fix, with the default one-attempt budget on both. */
+function limitDefinition(): WorkflowDefinition {
+  return {
+    schemaVersion: WORKFLOW_SCHEMA_VERSION,
+    id: 'limit',
+    name: 'Limit',
+    scope: 'global',
+    version: 1,
+    entryNodeId: 'review',
+    createdAt: T(0),
+    updatedAt: T(0),
+    nodes: [
+      {
+        type: 'agent-task', id: 'review', name: 'Review', x: 0, y: 0, inputs: [],
+        agent: { agentId: 'reviewer', scope: 'global', toolMode: 'read-only' },
+        instructions: 'Review it.', outputs: [{ id: 'review-report', kind: 'report', required: true }],
+        mutatesWorktree: false
+      },
+      {
+        type: 'agent-task', id: 'fix', name: 'Fix', x: 0, y: 0, inputs: [],
+        agent: { agentId: 'coder', scope: 'global', toolMode: 'full' },
+        instructions: 'Fix it.', outputs: [{ id: 'fix-report', kind: 'report', required: true }],
+        mutatesWorktree: false
+      }
+    ],
+    edges: [{ id: 'e1', from: 'review', to: 'fix', on: 'failure', required: false }]
+  };
+}
+
+function startedLimitRun(): WorkflowRun {
+  const run = createWorkflowRun({ runId: 'run-limit', projectId: 'p', definition: limitDefinition(), at: T(0) });
+  return applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'review', at: T(1) });
+}
+
+test('a provider-limit failure pauses the run instead of failing it', () => {
+  const run = applyWorkflowRunCommand(startedLimitRun(), {
+    kind: 'node-failed', nodeId: 'review', at: T(2), error: 'credit balance is too low', pause: 'provider-limit'
+  });
+
+  assert.equal(run.nodes.review.outcome, 'failed');
+  assert.equal(run.nodes.review.attempts[0].pause, 'provider-limit');
+  // The run is still open: not failed, not ended, no failed-run event.
+  assert.equal(run.status, 'running');
+  assert.equal(run.endedAt, undefined);
+  assert.equal(run.events.some(event => event.kind === 'run-failed'), false);
+  assert.equal(run.events.at(-1)?.kind, 'node-failed');
+  assert.match(run.events.at(-1)?.message ?? '', /paused/i);
+});
+
+test('a provider-limit failure does not spend the stage its only attempt', () => {
+  const paused = applyWorkflowRunCommand(startedLimitRun(), {
+    kind: 'node-failed', nodeId: 'review', at: T(2), error: 'quota', pause: 'provider-limit'
+  });
+
+  // maxAttempts defaults to 1, yet the stage is still retryable.
+  assert.equal(canRetry(paused, 'review'), true);
+  assert.ok(nextActions(paused).some(action => action.kind === 'retry-stage' && action.nodeId === 'review'));
+
+  const retried = applyWorkflowRunCommand(paused, { kind: 'node-retry', nodeId: 'review', at: T(3) });
+  assert.equal(retried.nodes.review.outcome, 'pending');
+  assert.equal(retried.status, 'running');
+  assert.match(retried.events.at(-1)?.message ?? '', /attempt 1 of 1/);
+
+  // A genuine failure still spends the attempt: no retry left, and now the
+  // failure edge is taken into the fix stage.
+  const again = applyWorkflowRunCommand(retried, { kind: 'node-started', nodeId: 'review', at: T(4) });
+  const failed = applyWorkflowRunCommand(again, { kind: 'node-failed', nodeId: 'review', at: T(5), error: 'wrong answer' });
+  assert.equal(canRetry(failed, 'review'), false);
+  assert.ok(scheduleWorkflowRun(failed).ready.includes('fix'));
+});
+
+test('a provider-limit failure does not route into failure-edge stages', () => {
+  const paused = applyWorkflowRunCommand(startedLimitRun(), {
+    kind: 'node-failed', nodeId: 'review', at: T(2), error: 'quota', pause: 'provider-limit'
+  });
+  const schedule = scheduleWorkflowRun(paused);
+  assert.equal(schedule.ready.includes('fix'), false);
+  assert.equal(schedule.autoAdvance.includes('fix'), false);
+
+  // Contrast: the same failure without the limit flag does take the edge.
+  const genuine = applyWorkflowRunCommand(startedLimitRun(), {
+    kind: 'node-failed', nodeId: 'review', at: T(2), error: 'review found problems'
+  });
+  assert.ok(scheduleWorkflowRun(genuine).ready.includes('fix'));
+});
+
+test('a paused run reports itself as paused, not failed, and names the limit', () => {
+  const paused = applyWorkflowRunCommand(startedLimitRun(), {
+    kind: 'node-failed', nodeId: 'review', at: T(2), error: 'quota', pause: 'provider-limit'
+  });
+  const summary = summarizeWorkflowRun(paused);
+  assert.equal(summary.status, 'running');
+  assert.equal(summary.paused, true);
+  assert.equal(summary.stages.find(stage => stage.nodeId === 'review')?.lane, 'paused');
+  assert.equal(summary.stages.find(stage => stage.nodeId === 'review')?.pause, 'provider-limit');
+  assert.match(summary.explanation, /credits or usage limit/);
+  assert.match(summary.explanation, /Review/);
+});
+
+test('a session that stopped on a provider limit maps to a limit outcome, not a plain failure', () => {
+  const node = limitDefinition().nodes[0] as never;
+  const limited = stageOutcomeFromSession(node, {
+    state: 'failed', lastError: 'Your credit balance is too low to continue.\nSee billing.', providerLimitReached: true
+  });
+  assert.equal(limited.status, 'failed');
+  assert.equal(limited.pause, 'provider-limit');
+  assert.match(limited.error ?? '', /credit balance is too low/);
+
+  const plain = stageOutcomeFromSession(node, { state: 'failed', lastError: 'tool crashed' });
+  assert.equal(plain.pause, undefined);
+});
+
+// ── Run permission mode (ask / auto-approve) ─────────────────────────────
+
+test('a run asks for tool permissions unless started in auto-approve mode', () => {
+  const ask = createWorkflowRun({ runId: 'a', projectId: 'p', definition: limitDefinition(), at: T(0) });
+  assert.equal(ask.permissionMode, undefined);
+  assert.equal(summarizeWorkflowRun(ask).permissionMode, 'ask');
+
+  const auto = createWorkflowRun({ runId: 'b', projectId: 'p', definition: limitDefinition(), at: T(0), permissionMode: 'auto' });
+  assert.equal(auto.permissionMode, 'auto');
+  assert.equal(summarizeWorkflowRun(auto).permissionMode, 'auto');
+  assert.match(auto.events[0].message, /auto-approved/);
+
+  // Anything that is not exactly 'auto' is treated as ask.
+  const odd = createWorkflowRun({ runId: 'c', projectId: 'p', definition: limitDefinition(), at: T(0), permissionMode: 'yolo' as never });
+  assert.equal(odd.permissionMode, undefined);
+});
+
+test('the permission mode survives a save/reload round trip', () => {
+  const auto = createWorkflowRun({ runId: 'b', projectId: 'p', definition: limitDefinition(), at: T(0), permissionMode: 'auto' });
+  const reloaded = normalizeWorkflowRun(JSON.parse(JSON.stringify(auto)));
+  assert.equal(reloaded?.permissionMode, 'auto');
+
+  const forged = normalizeWorkflowRun({ ...JSON.parse(JSON.stringify(auto)), permissionMode: 'always' });
+  assert.equal(forged?.permissionMode, undefined);
+});
+
+// ── Environment pause, and closing stages a finished run left running ────
+
+test('an environment failure pauses the run and is free, exactly like a provider limit', () => {
+  const run = applyWorkflowRunCommand(startedLimitRun(), {
+    kind: 'node-failed', nodeId: 'review', at: T(2), error: 'npm exited 1: audit endpoint returned an error', pause: 'environment'
+  });
+  assert.equal(run.status, 'running');
+  assert.equal(run.nodes.review.attempts[0].pause, 'environment');
+  assert.equal(canRetry(run, 'review'), true);
+  assert.equal(scheduleWorkflowRun(run).ready.includes('fix'), false);
+  assert.match(run.events.at(-1)?.message ?? '', /could not run in this environment/);
+
+  const summary = summarizeWorkflowRun(run);
+  assert.equal(summary.paused, true);
+  assert.equal(summary.pauseReason, 'environment');
+  assert.equal(summary.stages.find(stage => stage.nodeId === 'review')?.pause, 'environment');
+  assert.match(summary.explanation, /environment/);
+  assert.doesNotMatch(summary.explanation, /credits/);
+});
+
+test('a settled run closes a stage it left running, and only that', () => {
+  // review failed (required, no retry left) while a second stage was still running.
+  const base = createWorkflowRun({ runId: 'r', projectId: 'p', definition: {
+    ...limitDefinition(),
+    edges: [] // both stages independent
+  }, at: T(0) });
+  let run = applyWorkflowRunCommand(base, { kind: 'node-started', nodeId: 'review', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'fix', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'review', at: T(2), error: 'wrong' });
+  assert.equal(run.status, 'failed');
+  assert.equal(run.nodes.fix.outcome, 'running', 'a settled run does not close it by itself');
+
+  // Ordinary commands are still absorbed …
+  assert.equal(applyWorkflowRunCommand(run, { kind: 'node-succeeded', nodeId: 'fix', at: T(3) }), run);
+
+  // … but stopping the orphan is allowed, and touches nothing else.
+  const stopped = applyWorkflowRunCommand(run, { kind: 'node-stopped', nodeId: 'fix', at: T(3), reason: 'the run ended.' });
+  assert.equal(stopped.nodes.fix.outcome, 'cancelled');
+  assert.equal(stopped.nodes.fix.attempts.at(-1)?.outcome, 'cancelled');
+  assert.equal(stopped.nodes.review.outcome, 'failed');
+  assert.equal(stopped.status, 'failed');
+  // A node that is not running is left alone (idempotent).
+  assert.equal(applyWorkflowRunCommand(stopped, { kind: 'node-stopped', nodeId: 'fix', at: T(4) }), stopped);
+  assert.equal(applyWorkflowRunCommand(stopped, { kind: 'node-stopped', nodeId: 'review', at: T(4) }), stopped);
+});
+
+test('recovery repairs a finished run that still shows stages as running', () => {
+  const base = createWorkflowRun({ runId: 'r', projectId: 'p', definition: { ...limitDefinition(), edges: [] }, at: T(0) });
+  let run = applyWorkflowRunCommand(base, { kind: 'node-started', nodeId: 'review', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'fix', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'review', at: T(2), error: 'wrong' });
+
+  const recovered = recoverWorkflowRun(run, T(9));
+  assert.equal(recovered.run.nodes.fix.outcome, 'cancelled');
+  assert.equal(recovered.run.status, 'failed');
+  assert.deepEqual(recovered.interrupted, []);
+  // Nothing to repair: the same object comes back, so nothing is re-saved.
+  assert.equal(recoverWorkflowRun(recovered.run, T(10)).run, recovered.run);
+});
+
+test('a gate whose owning stage is paused is pending, not failed', () => {
+  const definition: WorkflowDefinition = {
+    ...limitDefinition(),
+    nodes: [
+      { ...limitDefinition().nodes[0], satisfiesGate: 'security' } as never,
+      limitDefinition().nodes[1],
+      {
+        type: 'approval', id: 'approve', name: 'Approve', x: 0, y: 0, inputs: [],
+        prompt: 'Ship?', requiredGates: ['security'], allowBypass: false
+      }
+    ],
+    edges: [{ id: 'e1', from: 'review', to: 'approve', on: 'success', required: true }]
+  };
+  let run = createWorkflowRun({ runId: 'g', projectId: 'p', definition, at: T(0) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'review', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'review', at: T(2), error: 'audit endpoint returned an error', pause: 'environment' });
+
+  const gate = summarizeWorkflowRun(run).gates.find(row => row.gate === 'security');
+  assert.equal(gate?.state, 'pending');
+  assert.match(gate?.detail ?? '', /could not run in this environment/);
+
+  // The same failure without the pause is a real failed gate.
+  let genuine = createWorkflowRun({ runId: 'g2', projectId: 'p', definition, at: T(0) });
+  genuine = applyWorkflowRunCommand(genuine, { kind: 'node-started', nodeId: 'review', at: T(1) });
+  genuine = applyWorkflowRunCommand(genuine, { kind: 'node-failed', nodeId: 'review', at: T(2), error: 'found vulnerabilities' });
+  assert.equal(summarizeWorkflowRun(genuine).gates.find(row => row.gate === 'security')?.state, 'failed');
 });

@@ -15,6 +15,13 @@ import { Icon } from './Icon';
 interface ConfirmOptions {
   title: string;
   message?: string;
+  /** Short lines listed under the message — what exactly is affected. */
+  details?: string[];
+  /**
+   * An opt-in checkbox for a *further, more destructive* action (unchecked every time). Only
+   * `confirmWithOption` returns its state; the plain `confirm` ignores it.
+   */
+  option?: { label: string; hint?: string };
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
@@ -34,27 +41,36 @@ interface PromptOptions {
 
 interface DialogsApi {
   confirm: (options: ConfirmOptions) => Promise<boolean>;
+  /** Like `confirm`, but also reports whether the `option` checkbox was ticked. Cancelling reports `checked: false`. */
+  confirmWithOption: (options: ConfirmOptions) => Promise<{ confirmed: boolean; checked: boolean }>;
   prompt: (options: PromptOptions) => Promise<string | null>;
 }
 
 const DialogsContext = createContext<DialogsApi | null>(null);
 
 type ActiveDialog =
-  | { kind: 'confirm'; options: ConfirmOptions; resolve: (value: boolean) => void }
+  | { kind: 'confirm'; options: ConfirmOptions; resolve: (confirmed: boolean, checked: boolean) => void }
   | { kind: 'prompt'; options: PromptOptions; resolve: (value: string | null) => void };
 
 export function DialogHost({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState<ActiveDialog>();
   const [draft, setDraft] = useState('');
   const [validationError, setValidationError] = useState<string>();
+  const [optionChecked, setOptionChecked] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const confirm = useCallback(
+  const confirmWithOption = useCallback(
     (options: ConfirmOptions) =>
-      new Promise<boolean>(resolve => {
-        setActive({ kind: 'confirm', options, resolve });
+      new Promise<{ confirmed: boolean; checked: boolean }>(resolve => {
+        setOptionChecked(false);
+        setActive({ kind: 'confirm', options, resolve: (confirmed, checked) => resolve({ confirmed, checked }) });
       }),
     []
+  );
+
+  const confirm = useCallback(
+    (options: ConfirmOptions) => confirmWithOption(options).then(result => result.confirmed),
+    [confirmWithOption]
   );
 
   const prompt = useCallback(
@@ -72,7 +88,7 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const api = useMemo<DialogsApi>(() => ({ confirm, prompt }), [confirm, prompt]);
+  const api = useMemo<DialogsApi>(() => ({ confirm, confirmWithOption, prompt }), [confirm, confirmWithOption, prompt]);
 
   const close = (settle: () => void) => {
     settle();
@@ -81,13 +97,13 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
 
   const cancel = () => {
     if (!active) return;
-    close(() => (active.kind === 'confirm' ? active.resolve(false) : active.resolve(null)));
+    close(() => (active.kind === 'confirm' ? active.resolve(false, false) : active.resolve(null)));
   };
 
   const accept = () => {
     if (!active) return;
     if (active.kind === 'confirm') {
-      close(() => active.resolve(true));
+      close(() => active.resolve(true, optionChecked));
       return;
     }
     const value = draft.trim();
@@ -132,6 +148,26 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
             </div>
             <div className="modal-body app-dialog-body">
               {active.options.message && <p className="app-dialog-message">{active.options.message}</p>}
+              {active.kind === 'confirm' && active.options.details && active.options.details.length > 0 && (
+                <ul className="app-dialog-details" data-testid="app-dialog-details">
+                  {active.options.details.map(line => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              )}
+              {active.kind === 'confirm' && active.options.option && (
+                <label className="app-dialog-option" data-testid="app-dialog-option">
+                  <input
+                    type="checkbox"
+                    checked={optionChecked}
+                    onChange={event => setOptionChecked(event.target.checked)}
+                  />
+                  <span>
+                    <strong>{active.options.option.label}</strong>
+                    {active.options.option.hint && <em>{active.options.option.hint}</em>}
+                  </span>
+                </label>
+              )}
               {active.kind === 'prompt' && (
                 <label className="app-dialog-field">
                   <span>{active.options.label}</span>

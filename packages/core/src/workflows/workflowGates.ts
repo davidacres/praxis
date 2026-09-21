@@ -32,7 +32,7 @@ import {
   type WorkflowGateKind,
   type WorkflowPolicyProfile
 } from './workflowTypes';
-import { applyWorkflowRunCommand, type WorkflowRun } from './workflowRun';
+import { applyWorkflowRunCommand, pauseReasonOf, type WorkflowRun } from './workflowRun';
 import { filterUnwaivedFindings } from './waiverRegister';
 import { findSnapshot } from './workflowStageSession';
 import { scheduleWorkflowRun } from './workflowScheduler';
@@ -214,6 +214,21 @@ export function evaluateGates(
         };
       }
 
+      // A paused owner never got to judge the work, so the gate has no verdict yet — reporting it as
+      // failed would tell the user their code failed a check that never ran.
+      if (pauseReasonOf(state)) {
+        return {
+          gate,
+          nodeId: owner.id,
+          state: 'pending' as const,
+          deterministic,
+          detail:
+            pauseReasonOf(state) === 'environment'
+              ? `${owner.name} could not run in this environment; it has not checked anything yet.`
+              : `${owner.name} is paused on the AI provider's limit; it has not finished.`
+        };
+      }
+
       if (state.outcome === 'failed' || state.outcome === 'cancelled' || state.outcome === 'skipped') {
         return {
           gate,
@@ -317,7 +332,7 @@ export function evaluateGates(
 
     const failedOwners = enabledOwners.filter(o => {
       const st = run.nodes[o.id];
-      return st?.outcome === 'failed' || st?.outcome === 'cancelled';
+      return (st?.outcome === 'failed' && !pauseReasonOf(st)) || st?.outcome === 'cancelled';
     });
     if (failedOwners.length > 0) {
       return {
@@ -330,7 +345,7 @@ export function evaluateGates(
 
     const pendingOwners = enabledOwners.filter(o => {
       const st = run.nodes[o.id];
-      return !st || st.outcome === 'pending' || st.outcome === 'ready' || st.outcome === 'running';
+      return !st || st.outcome === 'pending' || st.outcome === 'ready' || st.outcome === 'running' || !!pauseReasonOf(st);
     });
     if (pendingOwners.length > 0) {
       return {

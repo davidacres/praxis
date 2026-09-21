@@ -278,6 +278,7 @@ async function buildProviderStatus(provider: AiProvider): Promise<AiProviderStat
     return {
       provider,
       configured,
+      enabled: settings.ai.providers[provider]?.enabled !== false,
       keySource: 'none',
       gatewayUrl: command || 'bundled runtime',
       defaultModel: '',
@@ -303,6 +304,7 @@ async function buildProviderStatus(provider: AiProvider): Promise<AiProviderStat
   return {
     provider,
     configured: keySource !== 'none',
+    enabled: settings.ai.providers[provider]?.enabled !== false,
     keySource,
     gatewayUrl,
     defaultModel,

@@ -83,12 +83,12 @@ test('the designer and run monitor hold up on a dark theme', async () => {
   await expect(inspector).toHaveScreenshot('workflow-themes-connections-dark.png');
   await inspector.getByRole('tab', { name: 'Stage' }).click();
 
-  // Save, then cross to the run monitor via the sidebar Runs node.
+  // Save, then open the start-run dialog from the sidebar Runs node.
   await canvas.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
   await page.getByLabel('Name').fill('Plan the work');
   await page.getByRole('button', { name: 'Save workflow' }).click();
   await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
-  await page.getByTestId('project-workflow-runs-nav-item').click();
-  await expect(page.getByRole('region', { name: 'Run detail' })).toBeVisible();
-  await expect(page.getByRole('main')).toHaveScreenshot('workflow-themes-monitor-dark.png');
+  await page.getByTestId('project-workflow-run-new').click();
+  await expect(page.getByTestId('wf-runstart-dialog')).toBeVisible();
+  await expect(page.getByTestId('wf-runstart-dialog')).toHaveScreenshot('workflow-themes-start-run-dark.png');
 });

@@ -50,27 +50,48 @@ async function seedProject(page: Page): Promise<void> {
   await page.reload();
 }
 
-async function openRunsTab(page: Page): Promise<void> {
-  await page.getByTestId('project-workflow-runs-nav-item').click();
-  await expect(page.getByRole('region', { name: 'Run detail' })).toBeVisible();
+/** The run workspace's right pane: status, pipeline, stage detail, gates, timeline. */
+function runPanel(page: Page) {
+  return page.getByTestId('wf-run-panel');
 }
 
-/** Selects a stage in the pipeline diagram, then marks it done from its detail. */
+/** Starts a run from the sidebar's Runs "+" and lands on its workspace. */
+async function startRun(page: Page, task: string, options: { ticket?: string } = {}): Promise<void> {
+  await page.getByTestId('project-workflow-run-new').click();
+  const dialog = page.getByTestId('wf-runstart-dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Run task').fill(task);
+  if (options.ticket) {
+    const ticketField = page.getByTestId('wf-runstart-issue');
+    await expect(ticketField).toBeVisible({ timeout: 10000 });
+    await ticketField.fill(options.ticket);
+  }
+  await dialog.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(runPanel(page)).toBeVisible();
+}
+
+/** Opens an existing run from its node under the sidebar's Runs group. */
+async function openRun(page: Page, name: RegExp = /./): Promise<void> {
+  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
+  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
+  await page.getByTestId('project-workflow-run-row').filter({ hasText: name }).first().getByRole('button').first().click();
+  await expect(runPanel(page)).toBeVisible();
+}
+
+/** Selects a stage in the pipeline, then marks it done from its detail. */
 async function markDone(page: Page, stageName: string): Promise<void> {
-  await page
-    .getByRole('region', { name: 'Run detail' })
+  await runPanel(page)
     .getByRole('button', { name: new RegExp(`^${stageName} `) })
     .click();
-  await page.getByRole('complementary', { name: 'Stage detail' }).getByRole('button', { name: 'Mark done' }).click();
+  await runPanel(page).getByRole('button', { name: 'Mark done' }).click();
 }
 
 /** The detail text for a stage, selected via the pipeline. */
 async function stageDetail(page: Page, stageName: string) {
-  await page
-    .getByRole('region', { name: 'Run detail' })
+  await runPanel(page)
     .getByRole('button', { name: new RegExp(`^${stageName} `) })
     .click();
-  return page.getByRole('complementary', { name: 'Stage detail' });
+  return runPanel(page);
 }
 
 test.afterEach(async () => {
@@ -81,13 +102,11 @@ test('runs the governed pipeline: parallel branches converge, then approval unlo
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const page = app.window;
   await seedProject(page);
-  await openRunsTab(page);
 
   // Start a run of the project's Governed delivery workflow.
-  await page.getByLabel('Run task').fill('Ship the widget');
-  await page.getByRole('button', { name: 'Start' }).click();
+  await startRun(page, 'Ship the widget');
 
-  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  const runDetail = runPanel(page);
   const approve = page.getByRole('button', { name: 'Approve', exact: true });
   const gatesNode = runDetail.getByRole('button', { name: /^Gates / });
   await expect(runDetail.getByRole('status')).toContainText(/waiting for the next stage|Stage in progress|Plan/i);
@@ -96,7 +115,9 @@ test('runs the governed pipeline: parallel branches converge, then approval unlo
   await markDone(page, 'Plan');
   await markDone(page, 'Implement');
 
-  // Review / QA / Security are now all ready in parallel.
+  // Review and Security are ready at once; QA waits for the dependencies to be installed and built.
+  await markDone(page, 'Install dependencies');
+  await markDone(page, 'Build');
   await markDone(page, 'Review');
   await markDone(page, 'QA');
 
@@ -105,7 +126,7 @@ test('runs the governed pipeline: parallel branches converge, then approval unlo
   await expect(runDetail.getByRole('button', { name: /^Security scan / })).toBeVisible();
   await expect(gatesNode).not.toHaveAttribute('aria-label', /done/);
 
-  await expect(page.getByRole('region', { name: 'Run detail' })).toHaveScreenshot('workflow-run-monitor.png');
+  await expect(runPanel(page)).toHaveScreenshot('workflow-run-panel.png');
 
   await markDone(page, 'Security scan');
 
@@ -123,25 +144,19 @@ test('a run can be cancelled from the monitor', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const page = app.window;
   await seedProject(page);
-  await openRunsTab(page);
-
-  await page.getByLabel('Run task').fill('Abandon this one');
-  await page.getByRole('button', { name: 'Start' }).click();
+  await startRun(page, 'Abandon this one');
 
   await markDone(page, 'Plan');
   await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
 
-  await expect(page.getByRole('region', { name: 'Run detail' }).getByRole('status')).toContainText('cancelled');
+  await expect(runPanel(page).getByRole('status')).toContainText('cancelled');
 });
 
 test('completed stages are not re-run after an app restart', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   let page = app.window;
   await seedProject(page);
-  await openRunsTab(page);
-
-  await page.getByLabel('Run task').fill('Survive a restart');
-  await page.getByRole('button', { name: 'Start' }).click();
+  await startRun(page, 'Survive a restart');
   await markDone(page, 'Plan');
   await markDone(page, 'Implement');
 
@@ -152,8 +167,7 @@ test('completed stages are not re-run after an app restart', async () => {
   await app.electronApp.close();
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
   page = app.window;
-  await openRunsTab(page);
-  await page.getByRole('navigation', { name: 'Runs' }).getByRole('button', { name: /Governed delivery/ }).first().click();
+  await openRun(page, /Governed delivery/);
 
   // The two completed stages are still done, each with a single attempt.
   const restoredImplement = await stageDetail(page, 'Implement');
@@ -333,10 +347,9 @@ test('a gate the workflow allows bypassing, but no policy has granted, explains 
     .toBe('awaiting-approval');
 
   await page.reload();
-  await openRunsTab(page);
-  await page.getByRole('navigation', { name: 'Runs' }).getByRole('button', { name: /Bypassable delivery/ }).first().click();
+  await openRun(page, /Bypassable delivery/);
 
-  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  const runDetail = runPanel(page);
   // No policy exists in this profile, so the workflow's own permission is
   // not enough — the button must not appear, and the reason must be stated
   // rather than the option silently missing.
@@ -372,9 +385,8 @@ test('a gate the workflow allows bypassing, but no policy has granted, explains 
   }, started.projectId);
 
   await page.reload();
-  await openRunsTab(page);
-  await page.getByRole('navigation', { name: 'Runs' }).getByRole('button', { name: /Bypassable delivery/ }).first().click();
-  const runDetailAfterPolicy = page.getByRole('region', { name: 'Run detail' });
+  await openRun(page, /Bypassable delivery/);
+  const runDetailAfterPolicy = runPanel(page);
   await expect(runDetailAfterPolicy.getByTestId('wf-bypass-qa')).toBeVisible();
   await expect(runDetailAfterPolicy.getByTestId('wf-bypass-blocked-qa')).toHaveCount(0);
 
@@ -566,10 +578,9 @@ test('the run monitor shows one Approve button per simultaneously-awaiting appro
     .toBe(2);
 
   await page.reload();
-  await openRunsTab(page);
-  await page.getByRole('navigation', { name: 'Runs' }).getByRole('button', { name: /Dual approval UI/ }).first().click();
+  await openRun(page, /Dual approval UI/);
 
-  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  const runDetail = runPanel(page);
   const securityApprove = runDetail.getByRole('button', { name: /Approve at Security approval/ });
   const releaseApprove = runDetail.getByRole('button', { name: /Approve at Release approval/ });
   await expect(securityApprove).toBeVisible();
@@ -668,12 +679,9 @@ test('the run monitor reflects an unattended run as the orchestrator drives it',
 
   const seeded = await seedCheckWorkflow(page, repo, { command: 'git', args: ['--version'] });
   await page.reload();
-  await openRunsTab(page);
+  await startRun(page, 'Hands off');
 
-  await page.getByLabel('Run task').fill('Hands off');
-  await page.getByRole('button', { name: 'Start' }).click();
-
-  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  const runDetail = runPanel(page);
   // No Mark done anywhere: the check runs and the status region updates itself.
   await expect(runDetail.getByRole('status')).toContainText('waiting for a human approval', { timeout: 20000 });
   await expect(await stageDetail(page, 'Verify')).toContainText('succeeded');
@@ -766,20 +774,14 @@ test('a run started against a ticket writes its outcome back as a comment once i
   }, repo);
 
   await page.reload();
-  await openRunsTab(page);
-
-  await page.getByLabel('Run task').fill('Ship it');
-  const ticketField = page.getByTestId('wf-runstart-issue');
-  await expect(ticketField).toBeVisible({ timeout: 10000 });
-  await ticketField.fill(seeded.ticketKey);
-  await page.getByRole('button', { name: 'Start' }).click();
+  await startRun(page, 'Ship it', { ticket: seeded.ticketKey });
 
   // The run picked up the ticket — the board shows it linked immediately,
   // before the run has even settled.
   await expect(page.getByTestId('wf-board-issue-key')).toContainText(seeded.ticketKey);
   await page.screenshot({ path: 'output/playwright/workflow-run-linked-ticket.png' });
 
-  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  const runDetail = runPanel(page);
   await expect(runDetail.getByRole('status')).toContainText('waiting for a human approval', { timeout: 20000 });
   await page.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(runDetail.getByRole('status')).toContainText('completed');
@@ -824,9 +826,9 @@ test('a write-back that fails is visible in the Output tab, not just the main-pr
     seeded
   );
   await page.reload();
-  await openRunsTab(page);
+  await openRun(page);
 
-  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  const runDetail = runPanel(page);
   await expect(runDetail.getByRole('status')).toContainText('waiting for a human approval', { timeout: 20000 });
   await page.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(runDetail.getByRole('status')).toContainText('completed');
@@ -848,18 +850,13 @@ test('a check that outruns its timeout is failed with a stated reason', async ()
   // `sleep 30` will be killed by the 1s timeout long before it exits.
   await seedCheckWorkflow(page, repo, { command: 'sleep', args: ['30'], timeoutMs: 1000 });
   await page.reload();
-  await openRunsTab(page);
+  await startRun(page, 'Too slow');
 
-  await page.getByLabel('Run task').fill('Too slow');
-  await page.getByRole('button', { name: 'Start' }).click();
-
-  const verifyNode = page
-    .getByRole('region', { name: 'Run detail' })
-    .getByRole('button', { name: /^Verify / });
+  const verifyNode = runPanel(page).getByRole('button', { name: /^Verify / });
   await expect(verifyNode).toHaveAttribute('aria-label', /failed/, { timeout: 20000 });
   await verifyNode.click();
-  await expect(page.getByRole('complementary', { name: 'Stage detail' })).toContainText(/timed out/i);
-  await expect(page.getByRole('region', { name: 'Run detail' })).toContainText(/failed|retried/);
+  await expect(runPanel(page)).toContainText(/timed out/i);
+  await expect(runPanel(page)).toContainText(/failed|retried/);
 
   fs.rmSync(repo, { recursive: true, force: true });
 });
@@ -874,16 +871,13 @@ test('the stage detail panel opens a failed check’s retained log, reachable by
     args: ['-e', "console.error('missing dependency left-pad, API_KEY=sk_live_abcdef1234567890'); process.exit(1);"]
   });
   await page.reload();
-  await openRunsTab(page);
+  await startRun(page, 'Broken build');
 
-  await page.getByLabel('Run task').fill('Broken build');
-  await page.getByRole('button', { name: 'Start' }).click();
-
-  const verifyNode = page.getByRole('region', { name: 'Run detail' }).getByRole('button', { name: /^Verify / });
+  const verifyNode = runPanel(page).getByRole('button', { name: /^Verify / });
   await expect(verifyNode).toHaveAttribute('aria-label', /failed/, { timeout: 20000 });
   await verifyNode.click();
 
-  const stageDetail = page.getByRole('complementary', { name: 'Stage detail' });
+  const stageDetail = runPanel(page);
   const viewLogButton = stageDetail.getByRole('button', { name: 'View log' });
   await expect(viewLogButton).toBeVisible();
 
@@ -914,15 +908,12 @@ test('the stage detail panel shows the empty state for a check that produced no 
   // a real "ran, produced nothing" case, not a stand-in for a spawn failure.
   await seedCheckWorkflow(page, repo, { command: 'sleep', args: ['30'], timeoutMs: 1000 });
   await page.reload();
-  await openRunsTab(page);
+  await startRun(page, 'Too slow');
 
-  await page.getByLabel('Run task').fill('Too slow');
-  await page.getByRole('button', { name: 'Start' }).click();
-
-  const verifyNode = page.getByRole('region', { name: 'Run detail' }).getByRole('button', { name: /^Verify / });
+  const verifyNode = runPanel(page).getByRole('button', { name: /^Verify / });
   await expect(verifyNode).toHaveAttribute('aria-label', /failed/, { timeout: 20000 });
   await verifyNode.click();
-  await page.getByRole('complementary', { name: 'Stage detail' }).getByRole('button', { name: 'View log' }).click();
+  await runPanel(page).getByRole('button', { name: 'View log' }).click();
 
   await expect(page.getByTestId('wf-evidence-panel')).toContainText(/produced no output/i);
 

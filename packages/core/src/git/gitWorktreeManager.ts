@@ -167,7 +167,8 @@ export class GitWorktreeManager {
    */
   public async removeDeliveryWorktree(
     contextPath: string,
-    worktree: { worktreePath: string; branchName: string }
+    worktree: { worktreePath: string; branchName: string },
+    options?: { keepBranch?: boolean }
   ): Promise<void> {
     const commonDir = await readStdout(
       'git',
@@ -175,7 +176,7 @@ export class GitWorktreeManager {
       contextPath
     ).catch(() => '');
     const mainRoot = commonDir ? path.dirname(commonDir) : path.dirname(path.dirname(worktree.worktreePath));
-    await this.removeWorktree(mainRoot, worktree.worktreePath, worktree.branchName);
+    await this.removeWorktree(mainRoot, worktree.worktreePath, worktree.branchName, options);
   }
 
   /**
@@ -400,7 +401,12 @@ export class GitWorktreeManager {
   /**
    * Removes an existing worktree and its branch so a fresh one can be created.
    */
-  private async removeWorktree(repoRoot: string, worktreePath: string, branchName: string): Promise<void> {
+  private async removeWorktree(
+    repoRoot: string,
+    worktreePath: string,
+    branchName: string,
+    options?: { keepBranch?: boolean }
+  ): Promise<void> {
     try {
       await execFile('git', ['worktree', 'remove', worktreePath, '--force'], {
         cwd: repoRoot,
@@ -413,6 +419,9 @@ export class GitWorktreeManager {
       } catch { /* best effort */ }
       await execFile('git', ['worktree', 'prune'], { cwd: repoRoot, windowsHide: true }).catch(() => {});
     }
+    // `keepBranch`: the branch is where the work lives. A caller that only wants the checkout gone
+    // (a finished workflow run) must not take the commits with it.
+    if (options?.keepBranch) return;
     // Delete the branch so `worktree add -b` can recreate it
     try {
       await execFile('git', ['branch', '-D', branchName], {

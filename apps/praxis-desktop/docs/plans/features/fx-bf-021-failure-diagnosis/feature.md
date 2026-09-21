@@ -81,3 +81,16 @@ Status: Failed · Duration: 8m 41s
 - ⏳ Deploy: pending
 
 Required stage "sca" failed.
+
+**PRAXIS-F21** — 2026-09-20T16:12:31.175Z
+**Workflow run cancelled: Governed delivery — FX-BF-021: Reproducible failure diagnosis and verification evidence**
+
+Status: Cancelled · Duration: 5m 24s
+
+- ✅ Plan: succeeded
+- ⏭️ Implement: cancelled
+- ⏭️ Review: cancelled
+- ⏭️ QA: cancelled
+- ⏭️ Security scan: cancelled
+
+cancelled from the monitor

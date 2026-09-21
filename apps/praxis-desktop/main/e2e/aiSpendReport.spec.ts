@@ -48,6 +48,7 @@ async function openAiProviderSettings(win: TestApp['window']): Promise<void> {
   await palette.getByRole('textbox').fill('ai provider');
   await palette.getByRole('option', { name: /AI Provider/ }).first().click();
   await expect(win.getByRole('dialog', { name: 'Settings' })).toBeVisible();
+  await win.getByTestId('ai-tab-spend').click();
   await expect(win.getByTestId('ai-spend-report')).toBeVisible();
 }
 

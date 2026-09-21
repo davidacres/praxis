@@ -3,6 +3,7 @@ import type { StoredTemplateRecommendation, TemplateReadiness, WorkflowDefinitio
 import { API_MODEL_PROVIDERS } from '../ai/modelProviders';
 import { Icon } from '../ui/Icon';
 import { getWorkflowTemplateGuidance, getWorkflowStageSequence } from './workflowTemplateGuidance';
+import { isProviderUsable } from '../ai/providerAvailability';
 
 /**
  * New Workflow Dialog (FX-BF-014 / FX-BF-034).
@@ -67,7 +68,7 @@ export function NewWorkflowDialog({
     void window.praxis.workflows.getRecommendedTemplate(projectId).then(setRecommendation);
     void window.praxis.ai
       .listProviderStatuses()
-      .then(statuses => setRecommendationAvailable(statuses.some(status => API_MODEL_PROVIDERS.has(status.provider) && status.configured)))
+      .then(statuses => setRecommendationAvailable(statuses.some(status => API_MODEL_PROVIDERS.has(status.provider) && isProviderUsable(status))))
       .catch(() => setRecommendationAvailable(false));
   }, [projectId]);
 

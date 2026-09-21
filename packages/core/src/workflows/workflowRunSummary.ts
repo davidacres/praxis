@@ -18,9 +18,12 @@ import {
   type WorkflowNode
 } from './workflowTypes';
 import {
+  isPausedNode,
+  pauseReasonOf,
   isRunSettled,
   type WorkflowNodeState,
   type WorkflowRun,
+  type WorkflowPauseReason,
   type WorkflowRunEvent
 } from './workflowRun';
 import { deriveRunStatus, scheduleWorkflowRun } from './workflowScheduler';
@@ -36,7 +39,7 @@ export interface StageRow {
   type: WorkflowNode['type'];
   outcome: WorkflowNodeState['outcome'];
   /** 'running' | 'ready' | 'blocked' | 'skipped' | 'done' — for the monitor's dot. */
-  lane: 'idle' | 'ready' | 'running' | 'done' | 'failed' | 'skipped' | 'awaiting';
+  lane: 'idle' | 'ready' | 'running' | 'done' | 'failed' | 'skipped' | 'awaiting' | 'paused';
   attempts: number;
   maxAttempts?: number;
   sessionId?: string;
@@ -46,6 +49,8 @@ export interface StageRow {
   gate?: WorkflowGateKind;
   artifacts: Array<{ contractId: string; kind: string; path?: string }>;
   lastError?: string;
+  /** The last attempt stopped without a verdict (AI provider limit, or the stage's tooling could not run); retrying does not spend an attempt. */
+  pause?: WorkflowPauseReason;
   /** The in-flight attempt's reported sub-phase, e.g. a deployment stage's `'deploying'`/`'verifying'` — see `WorkflowNodeState.phase`. */
   phase?: string;
   findings?: CheckFindings;
@@ -71,6 +76,15 @@ export interface WorkflowRunSummary {
   gates: GateStatus[];
   branchGroups: BranchGroup[];
   actions: WorkflowNextAction[];
+  /**
+   * The run is stopped without a verdict — on the AI provider's credit/quota/rate
+   * limit, or because a stage's tooling could not run — and is waiting for the
+   * user to fix that and retry. It is not failed: the run is still open and keeps
+   * its worktree. `pauseReason` says which; `environment` wins when both apply,
+   * since that is the one only the user can diagnose.
+   */
+  paused?: boolean;
+  pauseReason?: WorkflowPauseReason;
   outstanding: string[];
   /** Newest last. */
   events: WorkflowRunEvent[];
@@ -81,6 +95,8 @@ export interface WorkflowRunSummary {
   controllerSessionKey?: string;
   controllerSessionId?: string;
   planInput?: WorkflowPlanInput;
+  /** How this run's stage sessions handle tool-permission prompts. */
+  permissionMode: 'ask' | 'auto';
 }
 
 function laneFor(
@@ -91,6 +107,7 @@ function laneFor(
 ): StageRow['lane'] {
   const outcome = run.nodes[nodeId]?.outcome ?? 'pending';
   if (outcome === 'running') return 'running';
+  if (run.nodes[nodeId] && isPausedNode(run.nodes[nodeId])) return 'paused';
   if (outcome === 'succeeded') return 'done';
   if (outcome === 'failed') return 'failed';
   if (outcome === 'skipped' || outcome === 'cancelled') return 'skipped';
@@ -133,6 +150,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
         ...(artifact.path ? { path: artifact.path } : {})
       })),
       ...(lastAttempt?.error ? { lastError: lastAttempt.error } : {}),
+      ...(state && pauseReasonOf(state) ? { pause: pauseReasonOf(state) } : {}),
       ...(state?.phase ? { phase: state.phase } : {}),
       ...(state?.findings ? { findings: state.findings } : {})
     };
@@ -184,6 +202,12 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     gates,
     branchGroups: branchGroups(run),
     actions: nextActions(run),
+    ...(status === 'running' && stages.some(stage => stage.lane === 'paused') && !stages.some(stage => stage.lane === 'running')
+      ? {
+          paused: true,
+          pauseReason: stages.some(stage => stage.pause === 'environment') ? ('environment' as const) : ('provider-limit' as const)
+        }
+      : {}),
     outstanding: outstandingNodes(run),
     events: run.events,
     startedAt: run.startedAt,
@@ -191,7 +215,8 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     ...(run.issueKey ? { issueKey: run.issueKey } : {}),
     ...(run.controllerSessionKey ? { controllerSessionKey: run.controllerSessionKey } : {}),
     ...(run.controllerSessionId ? { controllerSessionId: run.controllerSessionId } : {}),
-    ...(run.planInput ? { planInput: run.planInput } : {})
+    ...(run.planInput ? { planInput: run.planInput } : {}),
+    permissionMode: run.permissionMode === 'auto' ? 'auto' : 'ask'
   };
 }
 
@@ -231,6 +256,16 @@ function explainRun(run: WorkflowRun, status: WorkflowRun['status'], blocked: st
 
   if (status === 'awaiting-approval') {
     return 'Every required gate has resolved; the run is waiting for a human approval.';
+  }
+
+  const paused = Object.values(run.nodes).filter(state => isPausedNode(state));
+  if (paused.length > 0) {
+    const names = paused
+      .map(state => run.definition.nodes.find(node => node.id === state.nodeId)?.name ?? state.nodeId)
+      .sort();
+    return paused.some(state => pauseReasonOf(state) === 'environment')
+      ? `${names.join(', ')} could not run in this environment — for example a registry that does not serve the request, a missing command, or no network. Fix that, then retry; nothing is lost and no attempt was used.`
+      : `The AI provider's credits or usage limit were reached at ${names.join(', ')}. Restore them (or switch that stage's agent), then retry — nothing is lost and no attempt was used.`;
   }
 
   // A retryable failure is described by stage name before falling back to the

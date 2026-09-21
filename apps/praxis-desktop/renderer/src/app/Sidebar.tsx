@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type {
   AgentRuntimeSnapshot,
   AgentSessionRecord,
@@ -8,11 +8,12 @@ import type {
   ConnectionCheck,
   ProjectDocument,
   ProjectRecord,
+  WorkflowRunSummary,
   WorkspaceRecord
 } from '@praxis/core';
-import { agentStateLabel, agentStateLaneClass } from '../ai/aiSessionState';
+import { agentStateLabel, agentStateLaneClass, isTerminalAgentState } from '../ai/aiSessionState';
 import { isHostShimProfile } from '../agents/agentCatalog';
-import { isSynthesizedKey, sessionTitle } from '../ai/sessionNav';
+import { isSynthesizedKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
 import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
 import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
@@ -20,10 +21,19 @@ import { Icon, type IconName } from '../ui/Icon';
 import { IssuePeek } from '../issues/IssuePeek';
 import { projectColorValue } from '../projects/projectColors';
 import { useSettings } from '../settings/useSettings';
+import { useDialogs } from '../ui/dialogs';
 import { useResizable } from './useResizable';
 import { WorkModeView } from '../projects/WorkModeView';
 
 export type SidebarMode = 'classic' | 'work';
+
+const RUN_STATUS_TONE: Record<WorkflowRunSummary['status'], string> = {
+  running: 'lane--running',
+  'awaiting-approval': 'lane--awaiting',
+  succeeded: 'lane--done',
+  failed: 'lane--failed',
+  cancelled: 'lane--skipped'
+};
 
 export type FeatureId =
   | 'overview'
@@ -97,10 +107,17 @@ export interface SidebarProps {
   /** Saved workflows per project id, for the Workflows tree section. */
   projectWorkflows: Record<string, Array<{ id: string; name: string }>>;
   activeWorkflowId?: string;
-  activeWorkflowRuns?: boolean;
+  /** Each project's runs, newest first — the children of its Runs node. */
+  runsByProjectId: Record<string, WorkflowRunSummary[]>;
+  /** The run open in the run workspace, highlighted in the tree. */
+  activeWorkflowRunId?: string;
   activeWorkflowPolicies?: boolean;
   onSelectWorkflow: (project: ProjectRecord, workflowId: string) => void;
-  onSelectWorkflowRuns: (project: ProjectRecord) => void;
+  onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
+  /** Opens the start-run dialog, optionally preselecting a workflow. */
+  onStartWorkflowRun: (project: ProjectRecord, workflowId?: string) => void;
+  onCancelWorkflowRun: (runId: string) => void | Promise<void>;
+  onDeleteWorkflowRun: (project: ProjectRecord, run: WorkflowRunSummary) => void;
   onSelectWorkflowPolicies: (project: ProjectRecord) => void;
   /** Opens the project's Run profile editor (FX-BE-054). */
   onSelectRun: (project: ProjectRecord) => void;
@@ -176,10 +193,14 @@ export function Sidebar({
   onNewAgentItem,
   projectWorkflows,
   activeWorkflowId,
-  activeWorkflowRuns,
+  runsByProjectId,
+  activeWorkflowRunId,
   activeWorkflowPolicies,
   onSelectWorkflow,
-  onSelectWorkflowRuns,
+  onSelectWorkflowRun,
+  onStartWorkflowRun,
+  onCancelWorkflowRun,
+  onDeleteWorkflowRun,
   onSelectWorkflowPolicies,
   onSelectRun,
   onSelectDeployments,
@@ -250,28 +271,6 @@ export function Sidebar({
       .then(entries => { if (!cancelled) setDocumentsByProjectId(Object.fromEntries(entries)); })
       .catch(error => console.error('Failed to load project documents:', error));
     return () => { cancelled = true; };
-  }, [projects, activeWorkspaceId]);
-
-  // Live count of runs still in flight per project, so the Workflows row can
-  // show a badge without opening the monitor. Refreshed whenever the
-  // orchestrator advances any run.
-  const [activeRunsByProjectId, setActiveRunsByProjectId] = useState<Record<string, number>>({});
-  useEffect(() => {
-    let cancelled = false;
-    const load = () => {
-      void Promise.all(
-        visibleProjects.map(async project => {
-          const runs = await window.praxis.workflows.listRuns(project.id).catch(() => []);
-          const active = runs.filter(run => run.status === 'running' || run.status === 'awaiting-approval').length;
-          return [project.id, active] as const;
-        })
-      )
-        .then(entries => { if (!cancelled) setActiveRunsByProjectId(Object.fromEntries(entries)); })
-        .catch(error => console.error('Failed to load workflow runs:', error));
-    };
-    load();
-    const unsubscribe = window.praxis.workflows.onRunChanged(() => load());
-    return () => { cancelled = true; unsubscribe(); };
   }, [projects, activeWorkspaceId]);
 
   const projectEntries = useMemo(() => {
@@ -375,7 +374,9 @@ export function Sidebar({
                     const projectGitCollapsed = collapsed[`project:${project.id}:git`] ?? false;
                     const projectWorkflowsCollapsed = collapsed[`project:${project.id}:workflows`] ?? false;
                     const projectWorkflowList = projectWorkflows[project.id] ?? [];
-                    const projectRunCount = activeRunsByProjectId[project.id] ?? 0;
+                    const projectRuns = runsByProjectId[project.id] ?? [];
+                    const projectRunCount = projectRuns.filter(run => run.status === 'running' || run.status === 'awaiting-approval').length;
+                    const projectRunsCollapsed = collapsed[`project:${project.id}:runs`] ?? false;
                     const projectDocsCollapsed = collapsed[`project:${project.id}:docs`] ?? false;
                     const projectPlansCollapsed = collapsed[`project:${project.id}:plans`] ?? false;
                     const projectDocuments = documentsByProjectId[project.id];
@@ -474,7 +475,7 @@ export function Sidebar({
                           {projectWorkflowList.map(workflow => (
                             <div
                               key={workflow.id}
-                              className={`tree-row project-workflow-row${activeFeature === 'workflows' && !activeWorkflowRuns && activeWorkflowId === workflow.id && selectedProjectId === project.id ? ' active' : ''}`}
+                              className={`tree-row project-workflow-row${activeFeature === 'workflows' && activeWorkflowId === workflow.id && selectedProjectId === project.id ? ' active' : ''}`}
                             >
                               <button
                                 type="button"
@@ -484,6 +485,19 @@ export function Sidebar({
                               >
                                 <span className="tree-icon"><Icon name="split-horizontal" size={14} /></span>
                                 <span className="tree-label">{workflow.name}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="board-tree-configure project-workflow-run"
+                                data-testid={`project-workflow-run-${workflow.id}`}
+                                aria-label={`Start a run of ${workflow.name}`}
+                                title="Start a run of this workflow"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  onStartWorkflowRun(project, workflow.id);
+                                }}
+                              >
+                                <Icon name="play" size={12} />
                               </button>
                               {onDeleteWorkflow && (
                                 <button
@@ -507,11 +521,78 @@ export function Sidebar({
                               <span className="tree-icon"><Icon name="plus" size={13} /></span><span className="tree-label">New workflow…</span>
                             </button>
                           )}
-                          <button
-                            className={`tree-row project-workflow-child${activeFeature === 'workflows' && activeWorkflowRuns && selectedProjectId === project.id ? ' active' : ''}`}
-                            data-testid="project-workflow-runs-nav-item"
-                            onClick={() => onSelectWorkflowRuns(project)}
-                          ><span className="tree-icon"><Icon name="play" size={14} /></span><span className="tree-label">Runs</span>{projectRunCount > 0 && <span className="tree-badge" title={`${projectRunCount} run${projectRunCount === 1 ? '' : 's'} in flight`}>{projectRunCount}</span>}</button>
+                          <div className="tree-row project-workflow-child project-runs-header">
+                            <button
+                              type="button"
+                              className="board-tree-main"
+                              aria-expanded={!projectRunsCollapsed}
+                              data-testid="project-workflow-runs-nav-item"
+                              onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:runs`]: !projectRunsCollapsed }))}
+                            >
+                              <span className="tree-icon"><Icon name={projectRunsCollapsed ? 'chevron-right' : 'chevron-down'} size={14} /></span>
+                              <span className="tree-label">Runs</span>
+                              {projectRunCount > 0 && <span className="tree-badge" title={`${projectRunCount} run${projectRunCount === 1 ? '' : 's'} in flight`}>{projectRunCount}</span>}
+                            </button>
+                            <button
+                              type="button"
+                              className="sidebar-section-add"
+                              aria-label={`Start a run in ${project.name}`}
+                              data-testid="project-workflow-run-new"
+                              onClick={() => onStartWorkflowRun(project)}
+                            ><Icon name="plus" size={13} /></button>
+                          </div>
+                          {!projectRunsCollapsed && projectRuns.map(run => {
+                            const live = run.status === 'running' || run.status === 'awaiting-approval';
+                            return (
+                              <div
+                                key={run.runId}
+                                className={`tree-row project-run-row${activeFeature === 'workflows' && activeWorkflowRunId === run.runId ? ' active' : ''}`}
+                                data-testid="project-workflow-run-row"
+                                data-run-status={run.paused ? 'paused' : run.status}
+                              >
+                                <button
+                                  type="button"
+                                  className="board-tree-main"
+                                  aria-label={`${run.workflowName}, ${run.paused ? 'paused' : run.status}`}
+                                  onClick={() => onSelectWorkflowRun(project, run.runId)}
+                                >
+                                  <span className={`lane ${run.paused ? 'lane--awaiting' : RUN_STATUS_TONE[run.status]}`} aria-hidden>●</span>
+                                  <span className="tree-label" title={`${run.workflowName} · ${run.paused ? (run.pauseReason === 'environment' ? 'paused — a step could not run' : 'paused — AI provider limit reached') : run.status}`}>{run.workflowName}</span>
+                                </button>
+                                {live && (
+                                  <button
+                                    type="button"
+                                    className="board-tree-configure project-run-action"
+                                    data-testid={`project-run-cancel-${run.runId}`}
+                                    aria-label={`Cancel run ${run.workflowName}`}
+                                    title="Cancel this run"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      void onCancelWorkflowRun(run.runId);
+                                    }}
+                                  >
+                                    <Icon name="close" size={12} />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="board-tree-delete project-run-action"
+                                  data-testid={`project-run-delete-${run.runId}`}
+                                  aria-label={`Delete run ${run.workflowName}`}
+                                  title="Delete this run"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    onDeleteWorkflowRun(project, run);
+                                  }}
+                                >
+                                  <Icon name="trash" size={12} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                          {!projectRunsCollapsed && projectRuns.length === 0 && (
+                            <span className="sidebar-empty-hint project-runs-empty" data-testid="project-workflow-runs-empty">No runs yet</span>
+                          )}
                           <button
                             className={`tree-row project-workflow-child${activeFeature === 'workflows' && activeWorkflowPolicies && selectedProjectId === project.id ? ' active' : ''}`}
                             data-testid="project-workflow-policies-nav-item"
@@ -747,6 +828,20 @@ function SessionsNav({
   const [draft, setDraft] = useState('');
   const [mutatingKey, setMutatingKey] = useState<string>();
   const [error, setError] = useState<string>();
+  const { confirm } = useDialogs();
+
+  /** Every session nested beneath `session`, deepest last. */
+  const descendantsOf = (session: AgentSessionRecord): AgentSessionRecord[] => {
+    const out: AgentSessionRecord[] = [];
+    const walk = (parent: AgentSessionRecord) => {
+      for (const child of childrenOf.get(parent.issueKey) ?? []) {
+        out.push(child);
+        walk(child);
+      }
+    };
+    walk(session);
+    return out;
+  };
 
   const beginRename = (session: AgentSessionRecord) => {
     setEditingKey(session.issueKey);
@@ -772,6 +867,9 @@ function SessionsNav({
     setMutatingKey(session.issueKey);
     setError(undefined);
     try {
+      // Archiving a parent takes the sessions it spawned with it; otherwise
+      // they would pop out to the top level, orphaned.
+      for (const child of descendantsOf(session)) await onArchiveSession(child.issueKey, archived);
       await onArchiveSession(session.issueKey, archived);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -781,9 +879,22 @@ function SessionsNav({
   };
 
   const remove = async (session: AgentSessionRecord) => {
+    const descendants = descendantsOf(session);
+    if (
+      descendants.length > 0 &&
+      !(await confirm({
+        title: 'Delete this session?',
+        message: `It also deletes the ${descendants.length} session${descendants.length === 1 ? '' : 's'} nested beneath it.`,
+        confirmLabel: 'Delete sessions',
+        danger: true
+      }))
+    ) {
+      return;
+    }
     setMutatingKey(session.issueKey);
     setError(undefined);
     try {
+      for (const child of [...descendants].reverse()) await onDeleteSession(child.issueKey);
       await onDeleteSession(session.issueKey);
       setEditingKey(undefined);
     } catch (cause) {
@@ -791,6 +902,158 @@ function SessionsNav({
     } finally {
       setMutatingKey(undefined);
     }
+  };
+
+  // A session that spawned others (a workflow controller's stage sessions)
+  // nests them beneath it. A child whose parent is not in the list — archived,
+  // or in another workspace — stays a top-level row rather than vanishing.
+  const { childrenOf, roots } = useMemo(() => {
+    const known = new Set(sessions.map(session => session.issueKey));
+    const children = new Map<string, AgentSessionRecord[]>();
+    const top: AgentSessionRecord[] = [];
+    for (const session of sessions) {
+      const parent = session.parentSessionKey;
+      if (parent && parent !== session.issueKey && known.has(parent)) {
+        children.set(parent, [...(children.get(parent) ?? []), session]);
+      } else {
+        top.push(session);
+      }
+    }
+    return { childrenOf: children, roots: top };
+  }, [sessions]);
+  const [collapsedParents, setCollapsedParents] = useState<Record<string, boolean>>({});
+
+  const renderNode = (session: AgentSessionRecord, depth: number): ReactNode => {
+      const editing = editingKey === session.issueKey;
+      const kids = childrenOf.get(session.issueKey) ?? [];
+      const childrenCollapsed = collapsedParents[session.issueKey] ?? false;
+      const liveChildCount = kids.filter(child => !isTerminalAgentState(child.state)).length;
+      const mutating = mutatingKey === session.issueKey;
+      const title = sessionTitle(session);
+      return (
+        <Fragment key={session.issueKey}>
+        <div
+          className={`tree-row session-nav-row${depth > 0 ? ' session-nav-row--child' : ''}${active && activeSessionKey === session.issueKey ? ' active' : ''}`}
+          data-parent-session={session.parentSessionKey || undefined}
+          data-testid="session-list-row"
+          role="button"
+          tabIndex={0}
+          onClick={() => !editing && onSelectSession(session.issueKey)}
+          onKeyDown={event => {
+            if (!editing && (event.key === 'Enter' || event.key === ' ')) {
+              event.preventDefault();
+              onSelectSession(session.issueKey);
+            }
+          }}
+        >
+          <span className="tree-icon">
+            <Icon name="robot" size={14} />
+          </span>
+          {!editing && !isSynthesizedKey(session.issueKey) && !isWorkflowStageSession(session) && (
+            <span className="session-item-key">{session.issueKey}</span>
+          )}
+          {editing ? (
+            <input
+              className="session-title-input"
+              data-testid="session-title-input"
+              aria-label={`Session title for ${title}`}
+              value={draft}
+              disabled={mutating}
+              autoFocus
+              onClick={event => event.stopPropagation()}
+              onChange={event => setDraft(event.target.value)}
+              onBlur={() => void commitRename(session)}
+              onKeyDown={event => {
+                event.stopPropagation();
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  setEditingKey(undefined);
+                }
+              }}
+            />
+          ) : (
+            <span className="tree-label" title={title} data-testid="session-title">
+              {title}
+            </span>
+          )}
+          {kids.length > 0 && (
+            <button
+              className="icon-btn icon-btn-sm session-nav-toggle"
+              aria-label={`${childrenCollapsed ? 'Expand' : 'Collapse'} ${title}'s child sessions`}
+              aria-expanded={!childrenCollapsed}
+              data-testid="session-children-toggle"
+              onClick={event => {
+                event.stopPropagation();
+                setCollapsedParents(current => ({ ...current, [session.issueKey]: !childrenCollapsed }));
+              }}
+            >
+              <Icon name={childrenCollapsed ? 'chevron-right' : 'chevron-down'} size={11} />
+            </button>
+          )}
+          {!editing && (
+            <>
+              <span
+                className={agentStateLaneClass(session.state)}
+                title={agentStateLabel(session.state)}
+                data-testid="session-nav-state"
+              >
+                ●
+              </span>
+              {childrenCollapsed && liveChildCount > 0 && (
+                <span className="session-nav-childcount" title={`${liveChildCount} child session${liveChildCount === 1 ? '' : 's'} still working`} data-testid="session-children-live">
+                  {liveChildCount}
+                </span>
+              )}
+              <span className="session-nav-actions">
+                <button
+                  className="icon-btn icon-btn-sm"
+                  aria-label={`Rename session ${title}`}
+                  title="Rename session"
+                  data-testid="session-rename-btn"
+                  disabled={mutating}
+                  onClick={event => {
+                    event.stopPropagation();
+                    beginRename(session);
+                  }}
+                >
+                  <Icon name="pencil" size={12} />
+                </button>
+                <button
+                  className="icon-btn icon-btn-sm"
+                  aria-label={`Archive session ${title}`}
+                  title="Archive session"
+                  data-testid="session-archive-btn"
+                  disabled={mutating}
+                  onClick={event => {
+                    event.stopPropagation();
+                    void archive(session, true);
+                  }}
+                >
+                  <Icon name="archive" size={12} />
+                </button>
+                <button
+                  className="icon-btn icon-btn-sm"
+                  aria-label={`Delete session ${title}`}
+                  title="Delete session"
+                  data-testid="session-delete-btn"
+                  disabled={mutating}
+                  onClick={event => {
+                    event.stopPropagation();
+                    void remove(session);
+                  }}
+                >
+                  <Icon name="trash" size={12} />
+                </button>
+              </span>
+            </>
+          )}
+        </div>
+        {!childrenCollapsed && kids.map(child => renderNode(child, depth + 1))}
+        </Fragment>
+      );
   };
 
   return (
@@ -834,114 +1097,7 @@ function SessionsNav({
       {!collapsed && sessions.length === 0 && (
         <span className="sidebar-empty-hint" data-testid="sessions-nav-empty">No AI sessions yet</span>
       )}
-      {!collapsed &&
-        sessions.map(session => {
-          const editing = editingKey === session.issueKey;
-          const mutating = mutatingKey === session.issueKey;
-          const title = sessionTitle(session);
-          return (
-            <div
-              key={session.issueKey}
-              className={`tree-row session-nav-row${active && activeSessionKey === session.issueKey ? ' active' : ''}`}
-              data-testid="session-list-row"
-              role="button"
-              tabIndex={0}
-              onClick={() => !editing && onSelectSession(session.issueKey)}
-              onKeyDown={event => {
-                if (!editing && (event.key === 'Enter' || event.key === ' ')) {
-                  event.preventDefault();
-                  onSelectSession(session.issueKey);
-                }
-              }}
-            >
-              <span className="tree-icon">
-                <Icon name="robot" size={14} />
-              </span>
-              {!editing && !isSynthesizedKey(session.issueKey) && (
-                <span className="session-item-key">{session.issueKey}</span>
-              )}
-              {editing ? (
-                <input
-                  className="session-title-input"
-                  data-testid="session-title-input"
-                  aria-label={`Session title for ${title}`}
-                  value={draft}
-                  disabled={mutating}
-                  autoFocus
-                  onClick={event => event.stopPropagation()}
-                  onChange={event => setDraft(event.target.value)}
-                  onBlur={() => void commitRename(session)}
-                  onKeyDown={event => {
-                    event.stopPropagation();
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      event.currentTarget.blur();
-                    } else if (event.key === 'Escape') {
-                      event.preventDefault();
-                      setEditingKey(undefined);
-                    }
-                  }}
-                />
-              ) : (
-                <span className="tree-label" title={title} data-testid="session-title">
-                  {title}
-                </span>
-              )}
-              {!editing && (
-                <>
-                  <span
-                    className={agentStateLaneClass(session.state)}
-                    title={agentStateLabel(session.state)}
-                    data-testid="session-nav-state"
-                  >
-                    ●
-                  </span>
-                  <span className="session-nav-actions">
-                    <button
-                      className="icon-btn icon-btn-sm"
-                      aria-label={`Rename session ${title}`}
-                      title="Rename session"
-                      data-testid="session-rename-btn"
-                      disabled={mutating}
-                      onClick={event => {
-                        event.stopPropagation();
-                        beginRename(session);
-                      }}
-                    >
-                      <Icon name="pencil" size={12} />
-                    </button>
-                    <button
-                      className="icon-btn icon-btn-sm"
-                      aria-label={`Archive session ${title}`}
-                      title="Archive session"
-                      data-testid="session-archive-btn"
-                      disabled={mutating}
-                      onClick={event => {
-                        event.stopPropagation();
-                        void archive(session, true);
-                      }}
-                    >
-                      <Icon name="archive" size={12} />
-                    </button>
-                    <button
-                      className="icon-btn icon-btn-sm"
-                      aria-label={`Delete session ${title}`}
-                      title="Delete session"
-                      data-testid="session-delete-btn"
-                      disabled={mutating}
-                      onClick={event => {
-                        event.stopPropagation();
-                        void remove(session);
-                      }}
-                    >
-                      <Icon name="trash" size={12} />
-                    </button>
-                  </span>
-                </>
-              )}
-            </div>
-          );
-        })}
+      {!collapsed && roots.map(session => renderNode(session, 0))}
     </>
   );
 }

@@ -44,6 +44,8 @@ export interface AcpAgentStartOptions {
   /** Model id to select via `session/set_config_option` before prompting; omit to use the agent's own default. */
   model?: string;
   toolMode?: AgentToolMode;
+  /** Allow the agent's own tool-permission requests without asking (still bounded by `toolMode`). */
+  autoApprovePermissions?: boolean;
   runtimeSessionId?: string;
   /**
    * HTTP MCP servers to expose to the agent for this session (e.g. the in-app
@@ -546,7 +548,7 @@ export class AcpAgentHost {
       issueKey: issue.key,
       client,
       pendingPermissions: [],
-      allowPermissionsForTask: false,
+      allowPermissionsForTask: options.autoApprovePermissions === true,
       messageBuffer: ''
     };
     this.activeTasks.set(issue.key, task);
@@ -556,6 +558,7 @@ export class AcpAgentHost {
       workingDirectory,
       toolMode
     });
+    if (options.autoApprovePermissions) this.sessionManager.updateAgentRuntime(issue.key, { autoApprovePermissions: true });
     this.sessionManager.updateAgentState(issue.key, 'planning');
     this.appendEvent(issue.key, evt('session_start', 'CLI agent session started'));
     this.logger.appendLine(
@@ -715,7 +718,8 @@ export class AcpAgentHost {
       issueKey,
       client,
       pendingPermissions: [],
-      allowPermissionsForTask: false,
+      // A follow-up turn keeps the mode the session was started in.
+      allowPermissionsForTask: record.autoApprovePermissions === true,
       messageBuffer: ''
     };
     this.activeTasks.set(issueKey, task);

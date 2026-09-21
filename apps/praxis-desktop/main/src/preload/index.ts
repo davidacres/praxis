@@ -358,8 +358,8 @@ const praxis: PraxisIpc = {
     listPolicies: () => ipcRenderer.invoke('workflows:listPolicies'),
     savePolicy: (profile: WorkflowPolicyProfile) => ipcRenderer.invoke('workflows:savePolicy', profile),
     removePolicy: (profileId: string) => ipcRenderer.invoke('workflows:removePolicy', profileId),
-    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }, controller?: { sessionKey: string; sessionId: string }, planInput?: WorkflowPlanInput) =>
-      ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle, issue, controller, planInput),
+    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }, controller?: { sessionKey: string; sessionId: string }, planInput?: WorkflowPlanInput, options?: { permissionMode?: 'ask' | 'auto' }) =>
+      ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle, issue, controller, planInput, options),
     selectControllerRun: (sessionKey: string, runId: string) =>
       ipcRenderer.invoke('workflows:selectControllerRun', sessionKey, runId),
     removeControllerRun: (sessionKey: string, runId: string, reason?: string) =>
@@ -379,6 +379,8 @@ const praxis: PraxisIpc = {
     retryStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:retryStage', runId, nodeId),
     reworkStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:reworkStage', runId, nodeId),
     cancelRun: (runId: string, reason?: string) => ipcRenderer.invoke('workflows:cancelRun', runId, reason),
+    inspectRunWork: (runId: string) => ipcRenderer.invoke('workflows:inspectRunWork', runId),
+    deleteRun: (runId: string, options?: { deleteWork?: boolean }) => ipcRenderer.invoke('workflows:deleteRun', runId, options),
     onRunChanged: (listener: (runId: string) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, runId: string) => listener(runId);
       ipcRenderer.on('workflows:runChanged', handler);

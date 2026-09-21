@@ -54,7 +54,8 @@ import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { getSecretsStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { AiBrowserBridge } from './aiBrowser';
-import { browserMcpServerForSession, disposeBrowserMcpForSession } from './browserMcp';
+import { browserMcpServerForSession } from './browserMcp';
+import { deleteAgentSession } from './deleteAgentSession';
 import { getServiceForConnection } from './serviceRegistry';
 import { isAnalysisConfirmed } from './aiWorkflowIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
@@ -589,15 +590,7 @@ export function registerAiIpc(): void {
     if (!sessionManager.getAgentSession(issueKey)) {
       throw new Error(`No agent session found for ${issueKey}.`);
     }
-    await abortActiveTask(issueKey);
-    disposeBrowserMcpForSession(issueKey);
-    sessionManager.removeAgentSession(issueKey);
-    sessionManager.removeSession(issueKey);
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send('ai:sessionDeleted', issueKey);
-      }
-    }
+    await deleteAgentSession(issueKey);
   });
 
   ipcMain.handle(
@@ -619,6 +612,9 @@ export function registerAiIpc(): void {
       // its own authentication, so selecting one must not be blocked by an
       // unrelated API-provider setting.
       const hasAgentBinding = !!profileId || !!hostId;
+      if (!hasAgentBinding && settings.ai.providers[provider]?.enabled === false) {
+        throw new Error(`${descriptor.label} is turned off. Enable it under Settings → AI Provider.`);
+      }
       const gateway = !hasAgentBinding && descriptor.kind === 'api'
         ? await resolveConnectionOptions(provider)
         : undefined;
