@@ -358,8 +358,9 @@ const praxis: PraxisIpc = {
     listPolicies: () => ipcRenderer.invoke('workflows:listPolicies'),
     savePolicy: (profile: WorkflowPolicyProfile) => ipcRenderer.invoke('workflows:savePolicy', profile),
     removePolicy: (profileId: string) => ipcRenderer.invoke('workflows:removePolicy', profileId),
-    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }, controller?: { sessionKey: string; sessionId: string }, planInput?: WorkflowPlanInput, options?: { permissionMode?: 'ask' | 'auto' }) =>
+    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }, controller?: { sessionKey: string; sessionId: string }, planInput?: WorkflowPlanInput, options?: { permissionMode?: 'ask' | 'auto'; uncommittedChanges?: 'include' | 'omit' }) =>
       ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle, issue, controller, planInput, options),
+    checkRunBase: (projectId: string) => ipcRenderer.invoke('workflows:checkRunBase', projectId),
     selectControllerRun: (sessionKey: string, runId: string) =>
       ipcRenderer.invoke('workflows:selectControllerRun', sessionKey, runId),
     removeControllerRun: (sessionKey: string, runId: string, reason?: string) =>

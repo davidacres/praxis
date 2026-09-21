@@ -11,6 +11,7 @@ import type {
 } from '@praxis/core';
 import { isIssueDone } from '../board/boardMeta';
 import { Icon } from '../ui/Icon';
+import { assertRunBaseOrThrow, UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from './UncommittedBaseNotice';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS } from '../ai/modelProviders';
 import { isProviderUsable } from '../ai/providerAvailability';
 
@@ -60,6 +61,7 @@ export function StartRunDialog({
   onStarted
 }: StartRunDialogProps) {
   const [taskTitle, setTaskTitle] = useState('');
+  const [uncommittedFiles, setUncommittedFiles] = useState<readonly string[] | undefined>();
   const [startWorkflowId, setStartWorkflowId] = useState(initialWorkflowId ?? '');
   const [issueOptions, setIssueOptions] = useState<IssueOption[]>([]);
   const [issueKeyDraft, setIssueKeyDraft] = useState('');
@@ -201,13 +203,15 @@ export function StartRunDialog({
     };
   }, [project.id, project.linkedBoards, connections]);
 
-  const submit = async () => {
+  const submit = async (uncommittedChanges?: UncommittedChoice) => {
     if (!startWorkflowId || !taskTitle.trim() || busy) return;
     const issueKey = extractIssueKey(issueKeyDraft);
     const matchedIssue = issueKey ? issueOptions.find(option => option.key === issueKey) : undefined;
     setBusy(true);
     setError(undefined);
+    setUncommittedFiles(undefined);
     try {
+      await assertRunBaseOrThrow(project.id, uncommittedChanges);
       // A key that doesn't match any fetched option (typo, or a ticket outside
       // this project's boards) starts an ordinary run rather than guessing at
       // a connection to write back to — same "no invented attribution"
@@ -222,12 +226,14 @@ export function StartRunDialog({
         {
           permissionMode,
           aiProvider: selectedProvider,
-          aiModel: selectedModel.trim() || undefined
+          aiModel: selectedModel.trim() || undefined,
+          ...(uncommittedChanges ? { uncommittedChanges } : {})
         }
       );
       onStarted(run);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      if (cause instanceof UncommittedBaseError) setUncommittedFiles(cause.files);
+      else setError(cause instanceof Error ? cause.message : String(cause));
       setBusy(false);
     }
   };
@@ -406,6 +412,14 @@ export function StartRunDialog({
               </span>
             </label>
           </fieldset>
+          {uncommittedFiles && (
+            <UncommittedBaseNotice
+              files={uncommittedFiles}
+              busy={busy}
+              onChoose={choice => void submit(choice)}
+              onDismiss={() => setUncommittedFiles(undefined)}
+            />
+          )}
           {error && (
             <p role="alert" className="error-banner">
               {error}
