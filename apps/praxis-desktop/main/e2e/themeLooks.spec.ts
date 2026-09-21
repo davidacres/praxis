@@ -126,7 +126,7 @@ test('built-in Looks cannot be renamed or deleted, while custom Looks can', asyn
 
 test('factory appearance reset restores the theme, Look, surface, and libraries', async () => {
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await window.locator('[data-testid="theme-card-humanist-light"]').click();
+  await window.locator('[data-testid="theme-card-praxis-dark"]').click();
   await openSurfaces();
   await window.locator('[data-testid="surface-card-graphite"]').click();
   await window.evaluate(() => window.praxis.settings.set({ appearance: { surface: { motif: { id: 'binary', scale: 80, opacity: 0.4, ink: 'accent' } } } }));
@@ -135,7 +135,7 @@ test('factory appearance reset restores the theme, Look, surface, and libraries'
   await expect(window.getByRole('dialog', { name: 'Reset appearance to factory defaults?' })).toBeVisible();
   await window.locator('[data-testid="reset-confirmation-overlay"]').getByRole('button', { name: 'Reset appearance' }).click();
 
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
+  await expect(window.locator('html')).toHaveAttribute('data-theme', DEFAULT_APP_SETTINGS.appearance.themeId);
   await expect(window.locator('html')).toHaveAttribute('data-surface', 'parchment');
   const appearance = await window.evaluate(() => window.praxis.settings.get().then(settings => settings.appearance));
   expect(appearance.activeLookId).toBe('look-parchment');

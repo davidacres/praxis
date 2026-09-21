@@ -233,3 +233,19 @@ Status: Failed · Duration: 54m 28s
 - ✅ Security scan: succeeded
 
 Required stage "qa" failed.
+
+**PRAXIS-F36** — 2026-09-21T12:19:02.854Z
+**Workflow run failed: Governed delivery — FX-BF-036: Interactive chat gadgets and response surfaces**
+
+Status: Failed · Duration: 1h 0m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.
