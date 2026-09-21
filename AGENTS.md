@@ -285,14 +285,19 @@ lockfile), and it passes **`--registry=https://registry.npmjs.org/`** (with a pr
 registry npm rewrites the lockfile's `registry.npmjs.org` tarball URLs to it and every public
 package 404s on a cold cache — verify with `npm ci --cache=<empty dir>`, since a warm cache hides
 it). `workflowInstallDeps.spec.ts` proves both halves on a real repository with a local tarball.
+Praxis also relies on the desktop package's `postinstall` hook: node-pty 1.1.0's macOS prebuild
+ships `spawn-helper` without an executable bit, so a cold `npm ci` otherwise lets Electron load
+the addon but every terminal creation fails with `posix_spawnp failed`. Keep
+`scripts/fixNodePtyPermissions.cjs` wired into `postinstall`; `--ignore-scripts` is not a valid
+way to prepare a worktree that will run the desktop E2E suite.
 The same goes for **build output**: `dist/`, `out/` and a copied renderer are gitignored too, so a `Build`
 stage (`npm run build --if-present`, optional log) runs before QA. Without it an Electron/Playwright
 suite that loads a pre-built renderer opens a **blank window** in the run worktree (the FX-BF-036 QA
 symptom) — nothing about the failure says "build". `--if-present` keeps it a silent no-op for projects
 with no build script, which is why its log is `required: false` (a required log with no output fails the
 stage for having nothing to say). `workflowBuildStage.spec.ts` covers it, including the no-script case.
-Note `npm run build` here does not compile `@praxis/mobile-protocol`; a full `npm test` does that before
-the desktop e2e step, so the order QA runs them in matters.
+The root `npm run build` compiles `@praxis/mobile-protocol` before desktop main; main imports its types,
+so omitting that workspace makes a genuinely cold Build depend on output left by an earlier command.
 
 **A finished run leaves nothing running.** When a required stage fails the run, the orchestrator
 stops every sibling still in flight and records it `cancelled` (`stopInFlight`, the post-settle

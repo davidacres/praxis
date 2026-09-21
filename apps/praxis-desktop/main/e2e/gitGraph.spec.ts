@@ -158,7 +158,7 @@ test('renders the visual Git graph and commit inspector', async () => {
   await expect(window.locator('.git-lines .git-edge, .git-horizontal-lines .git-edge')).not.toHaveCount(0);
   await window.getByRole('button', { name: '◇ Merges only' }).click();
   await expect(window.getByRole('button', { name: '◇ Merges only' })).toHaveClass(/active/);
-  await window.getByRole('button', { name: 'Zoom in' }).click();
+  await window.getByTestId('git-graph-page').getByRole('button', { name: 'Zoom in' }).click();
   await expect(window.getByRole('region', { name: 'Git Graph' })).toContainText('110%');
   await window.getByRole('button', { name: 'Git settings' }).click();
   await expect(window.getByRole('region', { name: 'Git Graph' })).toContainText('Git Graph settings');

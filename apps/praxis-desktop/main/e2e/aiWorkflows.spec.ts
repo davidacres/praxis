@@ -172,7 +172,7 @@ test('review page streams the review markdown and posts it as a comment', async 
 
   await win.locator('[data-testid="ai-review-post-comment"]').click();
   await expect(win.locator('[data-testid="ai-review-post-comment"]')).toHaveText(
-    'Posted as comment'
+    'Attached to ticket'
   );
 
   // The comment round-trips into the issue's comment list. The aux detail
