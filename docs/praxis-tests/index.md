@@ -357,18 +357,18 @@ This catalogue describes **378 Playwright tests** under `apps/praxis-desktop/mai
 | PT-B0842DA89F | workflow Policy | creating a project policy from the sidebar persists it and composes it into the effective policy | `apps/praxis-desktop/main/e2e/workflowPolicy.spec.ts:50` |
 | PT-9BA804745D | workflow Policy | a global policy composes strictest-wins with a project policy | `apps/praxis-desktop/main/e2e/workflowPolicy.spec.ts:77` |
 | PT-5E977102C0 | workflow Run | runs the governed pipeline: parallel branches converge, then approval unlocks | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:101` |
-| PT-9FE32CECFE | workflow Run | a run can be cancelled from the monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:143` |
-| PT-5A88D7A45B | workflow Run | completed stages are not re-run after an app restart | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:155` |
-| PT-9E73225070 | workflow Run | a deterministic check runs on its own in the run worktree and unblocks approval | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:193` |
-| PT-354EF7395F | workflow Run | a gate the workflow allows bypassing, but no policy has granted, explains why in the run monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:281` |
-| PT-0BDE1D2468 | workflow Run | approving one of two simultaneously-awaiting approval nodes never touches the other | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:396` |
-| PT-5421ABC27D | workflow Run | the run monitor shows one Approve button per simultaneously-awaiting approval node, each targeting its own | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:504` |
-| PT-AA73D62E79 | workflow Run | the run monitor reflects an unattended run as the orchestrator drives it | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:675` |
-| PT-8EEB06754D | workflow Run | a run started against a ticket writes its outcome back as a comment once it settles | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:697` |
-| PT-7CC1A86833 | workflow Run | a write-back that fails is visible in the Output tab, not just the main-process console | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:818` |
-| PT-519C8E31CC | workflow Run | a check that outruns its timeout is failed with a stated reason | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:850` |
-| PT-897905ACD7 | workflow Run | the stage detail panel opens a failed check’s retained log, reachable by keyboard, with an echoed secret redacted | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:869` |
-| PT-718FF673F2 | workflow Run | the stage detail panel shows the empty state for a check that produced no output | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:907` |
+| PT-9FE32CECFE | workflow Run | a run can be cancelled from the monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:144` |
+| PT-5A88D7A45B | workflow Run | completed stages are not re-run after an app restart | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:156` |
+| PT-9E73225070 | workflow Run | a deterministic check runs on its own in the run worktree and unblocks approval | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:194` |
+| PT-354EF7395F | workflow Run | a gate the workflow allows bypassing, but no policy has granted, explains why in the run monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:282` |
+| PT-0BDE1D2468 | workflow Run | approving one of two simultaneously-awaiting approval nodes never touches the other | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:397` |
+| PT-5421ABC27D | workflow Run | the run monitor shows one Approve button per simultaneously-awaiting approval node, each targeting its own | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:505` |
+| PT-AA73D62E79 | workflow Run | the run monitor reflects an unattended run as the orchestrator drives it | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:676` |
+| PT-8EEB06754D | workflow Run | a run started against a ticket writes its outcome back as a comment once it settles | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:698` |
+| PT-7CC1A86833 | workflow Run | a write-back that fails is visible in the Output tab, not just the main-process console | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:819` |
+| PT-519C8E31CC | workflow Run | a check that outruns its timeout is failed with a stated reason | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:851` |
+| PT-897905ACD7 | workflow Run | the stage detail panel opens a failed check’s retained log, reachable by keyboard, with an echoed secret redacted | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:870` |
+| PT-718FF673F2 | workflow Run | the stage detail panel shows the empty state for a check that produced no output | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:908` |
 | PT-13ACC04A37 | workflow Run Work | the delete confirm says what work the run has, and deleting the run keeps its branch by default | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:102` |
 | PT-5CE920C30E | workflow Run Work | ticking the option deletes the run's branch and worktree too — and only those | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:137` |
 | PT-4F95DF8F4A | workflow Run Work | cancelling the confirm deletes nothing | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:158` |
