@@ -6665,11 +6665,61 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 }
 
 .session-permission-heading {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   color: var(--warning);
   font-weight: 600;
+}
+
+.session-permission-tool {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent);
+  border-radius: 50%;
+  color: var(--warning);
+  cursor: help;
+  outline: none;
+}
+
+.session-permission-tool:hover,
+.session-permission-tool:focus-visible {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
+.session-permission-tool::after {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  width: max-content;
+  max-width: 260px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  content: attr(data-tooltip);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: nowrap;
+}
+
+.session-permission-tool:hover::after,
+.session-permission-tool:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .session-permission-detail {

@@ -242,6 +242,7 @@ function trackerToolExtension(
         }
         const allowed = await requestPermission({
           kind: 'tracker-write',
+          toolName: name,
           description: `Permission requested: ${name}`,
           detail: `The agent wants to use ${name} on ticket ${issueKey}.`
         });

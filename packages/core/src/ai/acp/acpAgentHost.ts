@@ -164,14 +164,13 @@ function permissionAction(request: AcpPermissionRequest): string {
   }
 }
 
-function permissionDescription(request: AcpPermissionRequest): { summary: string; detail: string } {
+function permissionDescription(request: AcpPermissionRequest): { summary: string; detail: string; toolName?: string } {
   const action = permissionAction(request);
   const toolName = permissionToolName(request.name, request.toolCallId);
   return {
-    summary: `Approval needed: ${toolName ?? action}`,
-    detail: toolName
-      ? `The agent is requesting permission to ${action} using ${toolName}.`
-      : `The agent is requesting permission to ${action}.`
+    summary: `Approval needed: ${action}`,
+    detail: `The agent is requesting permission to ${action}.`,
+    ...(toolName ? { toolName } : {})
   };
 }
 
@@ -345,7 +344,15 @@ export class AcpAgentHost {
       task.pendingPermissions.push({ request, resolve });
       this.sessionManager.updateAgentState(issueKey, 'awaiting_approval');
       const description = permissionDescription(request);
-      this.appendEvent(issueKey, evt('permission_requested', description.summary, description.detail));
+      this.appendEvent(
+        issueKey,
+        evt(
+          'permission_requested',
+          description.summary,
+          description.detail,
+          description.toolName ? { toolName: description.toolName } : undefined
+        )
+      );
     });
   }
 
