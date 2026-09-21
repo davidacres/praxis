@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { DEFAULT_APP_SETTINGS } from '@praxis/core';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { startMockAddonRegistry } from './mockAddonRegistry';
 
 /**
  * The suite runs fully isolated (see launchTestApp.ts): each test gets its own
@@ -42,40 +43,40 @@ test('opens Settings from the title bar as a dismissible popover dialog', async 
 test('theme gallery previews and persists the selected complete palette', async () => {
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(28);
-  await expect(window.locator('[data-testid="theme-card-praxis-dark"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(4);
+  await expect(window.locator('[data-testid="theme-card-praxis-light"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(window).toHaveScreenshot('theme-gallery.png');
 
-  await window.locator('[data-testid="theme-card-humanist-light"]').click();
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
-  await expect(window.locator('[data-testid="theme-card-humanist-light"]')).toHaveAttribute('aria-pressed', 'true');
+  await window.locator('[data-testid="theme-card-praxis-dark"]').click();
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
+  await expect(window.locator('[data-testid="theme-card-praxis-dark"]')).toHaveAttribute('aria-pressed', 'true');
 
   await window.reload();
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await window.getByRole('searchbox', { name: 'Search themes' }).fill('github');
-  await expect(window.locator('[data-testid^="theme-card-github-"]')).toHaveCount(2);
-  await expect(window.locator('[data-testid^="theme-card-humanist-"]')).toHaveCount(0);
+  await window.getByRole('searchbox', { name: 'Search themes' }).fill('dark');
+  await expect(window.locator('[data-testid="theme-card-praxis-dark"]')).toHaveCount(1);
+  await expect(window.locator('[data-testid="theme-card-praxis-light"]')).toHaveCount(0);
 
-  await window.getByRole('searchbox', { name: 'Search themes' }).fill('jira');
-  const jira = window.locator('[data-testid="theme-card-jira-cloud"]');
-  await expect(jira).toHaveCount(1);
-  await jira.click();
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'jira-cloud');
+  await window.getByRole('searchbox', { name: 'Search themes' }).fill('default');
+  const tmDefault = window.locator('[data-testid="theme-card-tm-default-1"]');
+  await expect(tmDefault).toHaveCount(1);
+  await tmDefault.click();
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'tm-default-1');
 });
 
 test('persists the selected theme and mode through app settings', async () => {
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await window.locator('[data-testid="theme-card-anthropic-dark"]').click();
+  await window.locator('[data-testid="theme-card-praxis-dark"]').click();
   await window.getByRole('button', { name: 'System' }).click();
   await window.waitForTimeout(300);
   const appearance = await window.evaluate(() => window.praxis.settings.get().then(settings => settings.appearance));
-  expect(appearance.themeId).toBe('anthropic-dark');
+  expect(appearance.themeId).toBe('praxis-dark');
   expect(appearance.themeMode).toBe('system');
   await window.reload();
-  await expect(window.locator('html')).toHaveAttribute('data-theme', /anthropic-(light|dark)/);
+  await expect(window.locator('html')).toHaveAttribute('data-theme', /praxis-(light|dark)/);
 });
 
 test('startup splash inherits the saved app theme', async () => {
@@ -83,13 +84,13 @@ test('startup splash inherits the saved app theme', async () => {
   // fresh one back, which is the one these colour assertions read.
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await window.locator('[data-testid="theme-card-humanist-light"]').click();
+  await window.locator('[data-testid="theme-card-praxis-dark"]').click();
   // Clear the "returning user" flag so the reload brings the full splash these
   // colour assertions read, not the brief brand mark.
   await window.evaluate(() => localStorage.removeItem('praxis-onboarded'));
   await window.reload();
 
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
   const colors = await window.locator('[data-testid="startup-splash"]').evaluate(splash => {
     const root = getComputedStyle(document.documentElement);
     const resolveColor = (value: string) => {
@@ -149,14 +150,75 @@ test('startup splash inherits the saved app theme', async () => {
 });
 
 test('installs a marketplace theme and makes it available on reload', async () => {
-  await window.locator('[data-testid="titlebar-settings"]').click();
-  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  const marketplace = window.locator('[data-testid="theme-card-dracula-dark"]');
-  await expect(marketplace).toHaveAttribute('aria-label', /available in marketplace/);
-  await marketplace.click();
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'dracula-dark');
-  await window.reload();
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'dracula-dark');
+  await closeTestApp(app);
+  const registry = await startMockAddonRegistry({
+    owner: 'acme',
+    addons: [{
+      packageName: 'praxis-addon-dracula',
+      version: '1.0.0',
+      manifest: {
+        schemaVersion: 1,
+        kind: 'theme',
+        id: 'dracula-dark',
+        name: 'Dracula',
+        summary: 'A dark gothic theme.',
+        author: 'acme',
+        display: {
+          mode: 'dark',
+          preview: {
+            canvas: '#282a36', panel: '#44475a', raised: '#6272a4', border: '#6272a4',
+            text: '#f8f8f2', muted: '#6272a4', accent: '#bd93f9',
+            success: '#50fa7b', warning: '#f1fa8c', danger: '#ff5555'
+          }
+        }
+      },
+      payload: {
+        'theme.json': {
+          id: 'dracula-dark',
+          name: 'Dracula',
+          mode: 'dark',
+          description: 'A dark gothic theme.',
+          preview: {
+            canvas: '#282a36', panel: '#44475a', raised: '#6272a4', border: '#6272a4',
+            text: '#f8f8f2', muted: '#6272a4', accent: '#bd93f9',
+            success: '#50fa7b', warning: '#f1fa8c', danger: '#ff5555'
+          }
+        }
+      }
+    }]
+  });
+  try {
+    app = await launchTestApp({
+      appearance: DEFAULT_APP_SETTINGS.appearance,
+      marketplace: {
+        enabled: true,
+        owner: 'acme',
+        ownerType: 'user',
+        packageNamePrefix: 'praxis-addon-',
+        apiBaseUrl: registry.baseUrl,
+        registryBaseUrl: registry.baseUrl,
+        checkOnLaunch: false
+      }
+    }, undefined, { PRAXIS_MARKETPLACE_TOKEN: 'e2e-token' });
+    window = app.window;
+
+    await window.locator('[data-testid="titlebar-settings"]').click();
+    await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
+
+    const marketplace = window.locator('[data-testid="theme-marketplace"]');
+    await expect(marketplace).toBeVisible();
+    const card = marketplace.locator('[data-testid="theme-card-dracula-dark"]');
+    await expect(card).toHaveAttribute('aria-label', /available in marketplace/);
+    await card.click();
+    const galleryCard = window.locator('.theme-gallery-section [data-testid="theme-card-dracula-dark"]').first();
+    await expect(galleryCard).toBeVisible();
+    await galleryCard.click();
+    await expect(window.locator('html')).toHaveAttribute('data-theme', 'dracula-dark');
+    await window.reload();
+    await expect(window.locator('html')).toHaveAttribute('data-theme', 'dracula-dark');
+  } finally {
+    await registry.close();
+  }
 });
 
 test('creates a custom theme with editable colors and persists it', async () => {
