@@ -18,8 +18,8 @@ test('renders the workspace overview dashboard', async () => {
   await page.screenshot({ path: 'output/playwright/overview-dashboard.png', fullPage: true });
   await page.locator('[data-testid="titlebar-settings"]').click();
   await page.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await page.locator('[data-testid="theme-card-github-light"]').click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'github-light');
+  await page.locator('[data-testid="theme-card-tm-default-1"]').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'tm-default-1');
   const themed = await page.evaluate(() => ({
     pageBackground: getComputedStyle(document.querySelector('[data-testid="overview-page"]')!).backgroundColor,
     panelBackground: getComputedStyle(document.querySelector('.overview-panel')!).backgroundColor,
@@ -27,7 +27,7 @@ test('renders the workspace overview dashboard', async () => {
   }));
   expect(themed.pageBackground).toMatch(/rgba?\(0, 0, 0, 0\)/);
   expect(themed.panelBackground).not.toBe(themed.pageBackground);
-  expect(themed.accent).toBe('#0969da');
+  expect(themed.accent).toBe('#7c5cff');
   await page.keyboard.press('Escape');
-  await page.screenshot({ path: 'output/playwright/overview-dashboard-github-light.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/overview-dashboard-tm-default-1.png', fullPage: true });
 });

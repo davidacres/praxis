@@ -1931,7 +1931,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 31,
+        "line": 32,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -1947,7 +1947,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 42,
+        "line": 43,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -1963,7 +1963,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 68,
+        "line": 69,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -1979,7 +1979,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 81,
+        "line": 82,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -1995,7 +1995,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 151,
+        "line": 152,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2011,7 +2011,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 162,
+        "line": 224,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2027,7 +2027,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 177,
+        "line": 239,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2043,7 +2043,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 190,
+        "line": 252,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2059,7 +2059,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 209,
+        "line": 271,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -4571,7 +4571,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 299,
+        "line": 304,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4587,7 +4587,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 332,
+        "line": 337,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4603,7 +4603,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 347,
+        "line": 352,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4619,7 +4619,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 371,
+        "line": 376,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4635,7 +4635,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 389,
+        "line": 394,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4651,7 +4651,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 402,
+        "line": 407,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4667,7 +4667,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 427,
+        "line": 432,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4683,7 +4683,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 443,
+        "line": 448,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4699,7 +4699,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 460,
+        "line": 465,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4715,7 +4715,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 477,
+        "line": 482,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4731,7 +4731,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 491,
+        "line": 496,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4747,7 +4747,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 511,
+        "line": 516,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4763,7 +4763,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 547,
+        "line": 552,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4779,7 +4779,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 577,
+        "line": 585,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4795,7 +4795,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 621,
+        "line": 629,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4811,7 +4811,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 634,
+        "line": 646,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4827,7 +4827,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 653,
+        "line": 665,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4843,7 +4843,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 678,
+        "line": 690,
         "project": "functional"
       },
       "area": "surface Packs",
@@ -4859,7 +4859,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/surfacePacks.spec.ts",
-        "line": 693,
+        "line": 705,
         "project": "functional"
       },
       "area": "surface Packs",
