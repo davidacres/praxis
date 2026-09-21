@@ -1,0 +1,468 @@
+import { execFileSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { expect, test, type Page } from '@playwright/test';
+import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
+
+/**
+ * Runs as tree nodes, and the run workspace.
+ *
+ * - Each run is a child node under its project's Workflows > Runs group, with
+ *   cancel and delete on the node.
+ * - Opening a run puts the session doing the work in the centre and the
+ *   pipeline, top to bottom, in the right pane.
+ * - A stage session nests under the controller session that started its run.
+ * - Deleting a run cancels it first if it is live, then removes the run and its
+ *   stage sessions.
+ *
+ * Everything is the production path except the LLM endpoint (the in-process
+ * mock gateway).
+ */
+
+test.slow();
+
+let app: TestApp | undefined;
+let mock: MockGatewayServer | undefined;
+const tempDirs: string[] = [];
+
+test.afterEach(async () => {
+  if (app) await closeTestApp(app);
+  app = undefined;
+  if (mock) await mock.close();
+  mock = undefined;
+  while (tempDirs.length) fs.rmSync(tempDirs.pop() as string, { recursive: true, force: true });
+});
+
+function profileWithAgent(): { userDataDir: string; settingsPath: string } {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-wf-ws-'));
+  tempDirs.push(userDataDir);
+  const agentDir = path.join(userDataDir, 'agents', 'wf-reviewer');
+  fs.mkdirSync(agentDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(agentDir, 'agent.json'),
+    JSON.stringify({ schemaVersion: 1, id: 'wf-reviewer', name: 'Workflow Reviewer', type: 'gateway', entry: 'noop' })
+  );
+  return { userDataDir, settingsPath: path.join(userDataDir, 'test-settings.json') };
+}
+
+function createRepository(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-wf-ws-repo-'));
+  tempDirs.push(root);
+  const git = (...args: string[]): void => execFileSync('git', args, { cwd: root, stdio: 'ignore' });
+  git('init', '--initial-branch=main');
+  git('config', 'user.email', 'e2e@example.com');
+  git('config', 'user.name', 'E2E');
+  fs.writeFileSync(path.join(root, 'README.md'), '# fixture\n');
+  git('add', '.');
+  git('commit', '-m', 'initial');
+  return root;
+}
+
+interface Seeded {
+  projectId: string;
+  workflowId: string;
+}
+
+/** A project with a one-agent-stage workflow (review → approve), or a slow check when `slowCheck` is set. */
+async function seedProject(page: Page, repo: string, slowCheck = false, toolMode: 'read-only' | 'full' = 'read-only'): Promise<Seeded> {
+  return page.evaluate(
+    async ({ repoPath, slow, mode }) => {
+      const workspace = (await window.praxis.workspaces.list())[0];
+      const project = await window.praxis.projects.create(
+        {
+          name: 'Workspace Delivery',
+          key: 'WSD',
+          type: 'software',
+          purpose: '',
+          brief: {},
+          startingPoint: 'existing-folder',
+          folderPath: repoPath,
+          workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }],
+          starterTickets: [{ summary: 'First', description: '', issueType: 'Task', status: 'Backlog' }],
+          defaultAiToolMode: 'read-only'
+        },
+        workspace.id
+      );
+      await window.praxis.agentRuntime.refresh();
+      const now = new Date().toISOString();
+      const workflowId = `ws-${project.id}`;
+      await window.praxis.workflows.save(project.id, {
+        schemaVersion: 1,
+        id: workflowId,
+        name: 'Workspace review',
+        scope: 'project',
+        projectId: project.id,
+        version: 1,
+        entryNodeId: 'review',
+        createdAt: now,
+        updatedAt: now,
+        nodes: [
+          slow
+            ? {
+                type: 'check', id: 'review', name: 'Review', x: 0, y: 0, inputs: [],
+                command: 'sleep', args: ['30'], successExitCodes: [0], timeoutMs: 60000,
+                outputs: [{ id: 'review-report', kind: 'log', required: true }],
+                satisfiesGate: 'qa'
+              }
+            : {
+                type: 'agent-task', id: 'review', name: 'Review', x: 0, y: 0, inputs: [],
+                agent: { agentId: 'wf-reviewer', scope: 'global', toolMode: mode },
+                instructions: 'Review the change for correctness and report your findings.',
+                outputs: [{ id: 'review-report', kind: 'report', required: true }],
+                mutatesWorktree: mode === 'full',
+                satisfiesGate: 'qa'
+              },
+          {
+            type: 'approval', id: 'approve', name: 'Approve', x: 240, y: 0, inputs: ['review-report'],
+            prompt: 'Ship?', requiredGates: ['qa'], allowBypass: false
+          }
+        ],
+        edges: [{ id: 'e1', from: 'review', to: 'approve', on: 'success', required: true }]
+      } as never);
+      localStorage.setItem(
+        `praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`,
+        JSON.stringify({ projectId: project.id, feature: 'workflows' })
+      );
+      return { projectId: project.id, workflowId };
+    },
+    { repoPath: repo, slow: slowCheck, mode: toolMode }
+  );
+}
+
+async function launch(
+  slowCheck = false,
+  mode: 'complete' | 'error' = 'complete',
+  extra: { toolMode?: 'read-only' | 'full'; toolCall?: { name: string; arguments: Record<string, unknown> } } = {}
+): Promise<{ page: Page; seeded: Seeded }> {
+  mock = await startMockGatewayServer({
+    mode,
+    ...(extra.toolCall ? { toolCall: extra.toolCall } : {}),
+    reply: 'Reviewed the implementation snapshot: the change is correct and complete.'
+  });
+  const repo = createRepository();
+  app = await launchTestApp(
+    { ai: { activeProvider: 'vercel-gateway', workingDirectory: repo } },
+    profileWithAgent(),
+    { AI_GATEWAY_API_KEY: 'e2e-key', AI_GATEWAY_URL: mock.baseUrl, VERCEL_AI_GATEWAY_URL: undefined },
+    { openNewSession: false }
+  );
+  const page = app.window;
+  const seeded = await seedProject(page, repo, slowCheck, extra.toolMode);
+  return { page, seeded };
+}
+
+const runStatus = (page: Page, runId: string) =>
+  page.evaluate(id => window.praxis.workflows.getRun(id).then(run => run?.status), runId);
+
+test('a controller session starts a run: the run is a tree node, its stage session nests under the controller and fills the centre', async () => {
+  const { page, seeded } = await launch();
+
+  // A controller chat session, then a run it controls.
+  const controller = await page.evaluate(async projectId => {
+    const created = await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      projectId,
+      toolMode: 'read-only',
+      task: { goal: 'Coordinate the delivery run.' }
+    });
+    const record = (await window.praxis.ai.listSessions()).find(session => session.issueKey === created.issueKey);
+    return { key: created.issueKey, id: record?.sessionId ?? '' };
+  }, seeded.projectId);
+  expect(controller.id).not.toBe('');
+
+  const run = await page.evaluate(
+    async ({ seededIds, ctl }) =>
+      window.praxis.workflows.startRun(seededIds.projectId, seededIds.workflowId, 'Agent-driven', undefined, {
+        sessionKey: ctl.key,
+        sessionId: ctl.id
+      }),
+    { seededIds: seeded, ctl: controller }
+  );
+  await expect.poll(() => runStatus(page, run.runId), { timeout: 30000 }).toBe('awaiting-approval');
+
+  // The stage session records the controller that spawned it.
+  const stageSession = await page.evaluate(async runId => {
+    const found = (await window.praxis.ai.listSessions()).find(
+      session => session.workflowRunId === runId && session.workflowNodeId === 'review'
+    );
+    return found ? { key: found.issueKey, parent: found.parentSessionKey } : undefined;
+  }, run.runId);
+  expect(stageSession?.parent).toBe(controller.key);
+
+  await page.reload();
+
+  // Sessions tree: the stage session is nested under its controller.
+  await page.getByTestId('nav-sessions').click();
+  const childRow = page.locator(`[data-testid="session-list-row"][data-parent-session="${controller.key}"]`);
+  await expect(childRow).toHaveCount(1);
+  await expect(childRow).toHaveClass(/session-nav-row--child/);
+  // Collapsing the controller hides its child; expanding brings it back.
+  const toggle = page.getByTestId('session-children-toggle').first();
+  await toggle.click();
+  await expect(childRow).toHaveCount(0);
+  await toggle.click();
+  await expect(childRow).toHaveCount(1);
+
+  // Workflows tree: the run is a node under Runs; opening it fills the workspace.
+  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
+  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
+  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
+  await expect(runRow).toHaveCount(1);
+  await expect(runRow).toHaveAttribute('data-run-status', 'awaiting-approval');
+  await runRow.getByRole('button').first().click();
+
+  // Centre: the session doing the work. Right pane: the pipeline, vertically.
+  await expect(page.getByTestId('wf-run-session')).toBeVisible();
+  await expect(page.getByTestId('wf-run-session').locator('.session-console')).toBeVisible();
+  const pipeline = page.getByTestId('wf-run-panel').getByTestId('wf-vpipe');
+  await expect(pipeline).toBeVisible();
+  const review = pipeline.getByTestId('wf-vpipe-step-review');
+  const approve = pipeline.getByTestId('wf-vpipe-step-approve');
+  await expect(review).toHaveAttribute('data-lane', 'done');
+  await expect(approve).toHaveAttribute('data-lane', 'awaiting');
+  // Vertical: the second step sits below the first, not beside it.
+  const [reviewBox, approveBox] = [await review.boundingBox(), await approve.boundingBox()];
+  expect(approveBox!.y).toBeGreaterThan(reviewBox!.y + reviewBox!.height - 1);
+  expect(Math.abs(approveBox!.x - reviewBox!.x)).toBeLessThan(4);
+
+  const artifacts = path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await page.screenshot({ path: path.join(artifacts, 'workflow-run-workspace.png'), fullPage: true });
+
+  // The pipeline drives the centre: the approval step has no session.
+  await approve.click();
+  await expect(page.getByTestId('wf-run-nosession')).toBeVisible();
+  await expect(page.getByTestId('wf-run-follow')).toBeVisible();
+  await page.getByTestId('wf-run-follow').click();
+  await expect(page.getByTestId('wf-run-session')).toBeVisible();
+
+  // Cancel from the tree node.
+  await runRow.hover();
+  await page.getByTestId(`project-run-cancel-${run.runId}`).click();
+  await expect.poll(() => runStatus(page, run.runId)).toBe('cancelled');
+  await expect(runRow).toHaveAttribute('data-run-status', 'cancelled');
+  // A settled run offers no cancel.
+  await expect(page.getByTestId(`project-run-cancel-${run.runId}`)).toHaveCount(0);
+
+  // Delete from the tree node: a themed confirm, then the run, its stage
+  // session and its link on the controller are all gone; the controller stays.
+  await runRow.hover();
+  await page.getByTestId(`project-run-delete-${run.runId}`).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete run', exact: true }).click();
+  await expect(runRow).toHaveCount(0);
+  await expect.poll(() => runStatus(page, run.runId)).toBeUndefined();
+  const after = await page.evaluate(async key => {
+    const sessions = await window.praxis.ai.listSessions();
+    return {
+      stageLeft: sessions.filter(session => session.workflowNodeId === 'review').length,
+      controller: sessions.find(session => session.issueKey === key),
+    };
+  }, controller.key);
+  expect(after.stageLeft).toBe(0);
+  expect(after.controller?.workflowRunIds ?? []).toEqual([]);
+  // The workspace for a deleted run does not linger.
+  await expect(page.getByTestId('wf-run-page')).toHaveCount(0);
+});
+
+test('deleting a live run cancels it first, then removes it', async () => {
+  const { page, seeded } = await launch(true);
+
+  const run = await page.evaluate(
+    async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Slow one'),
+    seeded
+  );
+  await expect.poll(() => runStatus(page, run.runId), { timeout: 20000 }).toBe('running');
+
+  await page.reload();
+  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
+  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
+  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
+  await expect(runRow).toHaveAttribute('data-run-status', 'running');
+  await expect(runsGroup).toContainText('1');
+
+  await runRow.hover();
+  await page.getByTestId(`project-run-delete-${run.runId}`).click();
+  // The confirm says the run is live and will be cancelled first.
+  await expect(page.getByRole('dialog')).toContainText(/cancelled first/i);
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete run', exact: true }).click();
+
+  await expect(runRow).toHaveCount(0);
+  await expect.poll(() => runStatus(page, run.runId)).toBeUndefined();
+});
+
+test('the start-run dialog opens from a workflow row with that workflow preselected, and lands on the new run', async () => {
+  const { page, seeded } = await launch(true);
+  await page.reload();
+
+  await page.getByTestId('project-workflow-nav-item').hover();
+  await page.getByTestId(`project-workflow-run-${seeded.workflowId}`).click();
+  const dialog = page.getByTestId('wf-runstart-dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Run task').fill('From the workflow row');
+  await dialog.getByRole('button', { name: 'Start', exact: true }).click();
+
+  await expect(page.getByTestId('wf-run-panel')).toBeVisible();
+  await expect(page.getByTestId('wf-run-bar')).toContainText('Workspace review');
+  // A check stage has no conversation: the centre says so rather than staying blank.
+  await expect(page.getByTestId('wf-run-nosession')).toBeVisible();
+  await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(1);
+});
+
+test('an out-of-credits provider pauses the run instead of failing it, and resumes once credits are back', async () => {
+  // Every chat request is answered "Insufficient balance … Please recharge."
+  const { page, seeded } = await launch(false, 'error');
+
+  const run = await page.evaluate(
+    async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Out of credits'),
+    seeded
+  );
+
+  // The stage's session dies on the limit; the run pauses rather than failing.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async id => {
+          const summary = await window.praxis.workflows.getRun(id);
+          return summary?.stages.find(stage => stage.nodeId === 'review')?.pause === 'provider-limit';
+        }, run.runId),
+      { timeout: 60000 }
+    )
+    .toBe(true);
+
+  const paused = await page.evaluate(async id => {
+    const summary = await window.praxis.workflows.getRun(id);
+    const stage = summary?.stages.find(row => row.nodeId === 'review');
+    return {
+      status: summary?.status,
+      paused: summary?.paused,
+      endedAt: summary?.endedAt,
+      lane: stage?.lane,
+      outcome: stage?.outcome,
+      retry: summary?.actions.some(action => action.kind === 'retry-stage' && action.nodeId === 'review'),
+      explanation: summary?.explanation
+    };
+  }, run.runId);
+  expect(paused.status).toBe('running');
+  expect(paused.paused).toBe(true);
+  expect(paused.endedAt).toBeUndefined();
+  expect(paused.lane).toBe('paused');
+  expect(paused.outcome).toBe('failed');
+  // maxAttempts is 1, yet Retry is still offered — the limit did not spend it.
+  expect(paused.retry).toBe(true);
+  expect(paused.explanation).toMatch(/credits or usage limit/);
+
+  // The UI says paused, not failed, and offers one way forward.
+  await page.reload();
+  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
+  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
+  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
+  await expect(runRow).toHaveAttribute('data-run-status', 'paused');
+  await runRow.getByRole('button').first().click();
+  await expect(page.getByTestId('wf-run-limit')).toBeVisible();
+  await expect(page.getByTestId('wf-vpipe-step-review')).toHaveAttribute('data-lane', 'paused');
+  await expect(page.getByTestId('wf-run-bar')).toContainText('paused');
+  const artifacts = path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await page.screenshot({ path: path.join(artifacts, 'workflow-run-paused-limit.png'), fullPage: true });
+
+  // Credits are back: Resume re-runs the stage and the run carries on.
+  mock!.setMode('complete');
+  await page.getByTestId('wf-run-resume').click();
+  await expect.poll(() => runStatus(page, run.runId), { timeout: 30000 }).toBe('awaiting-approval');
+  await expect(page.getByTestId('wf-run-limit')).toHaveCount(0);
+  await expect(page.getByTestId('wf-vpipe-step-review')).toHaveAttribute('data-lane', 'done');
+});
+
+const WRITE_CALL = { name: 'write_file', arguments: { path: 'note.txt', content: 'written by the stage' } };
+
+test('a run in Ask mode stops the stage for a tool permission; the same run in Auto-approve mode does not', async () => {
+  // ── Ask (the default): the write_file request waits for a person.
+  const asked = await launch(false, 'complete', { toolMode: 'full', toolCall: WRITE_CALL });
+  const askRun = await asked.page.evaluate(
+    async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Ask me'),
+    asked.seeded
+  );
+  expect(askRun.permissionMode).toBe('ask');
+
+  const stageKey = await asked.page.evaluate(async id => {
+    for (let i = 0; i < 100; i += 1) {
+      const found = (await window.praxis.ai.listSessions()).find(
+        session => session.workflowRunId === id && session.workflowNodeId === 'review'
+      );
+      if (found?.state === 'awaiting_approval') return found.issueKey;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    return undefined;
+  }, askRun.runId);
+  expect(stageKey, 'the stage session should be waiting on a permission').toBeDefined();
+  expect(await runStatus(asked.page, askRun.runId)).toBe('running');
+
+  // The run panel says which mode it is in.
+  await asked.page.reload();
+  const runsGroup = asked.page.getByTestId('project-workflow-runs-nav-item');
+  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
+  await asked.page.getByTestId('project-workflow-run-row').first().getByRole('button').first().click();
+  await expect(asked.page.getByTestId('wf-run-mode')).toHaveAttribute('data-mode', 'ask');
+
+  // Allowing it lets the stage finish and the run reach approval.
+  await asked.page.evaluate(key => window.praxis.ai.respondToPermission(key as string, 'allow'), stageKey);
+  await expect.poll(() => runStatus(asked.page, askRun.runId), { timeout: 30000 }).toBe('awaiting-approval');
+  await closeTestApp(app!);
+  await mock!.close();
+  app = undefined;
+  mock = undefined;
+
+  // ── Auto-approve: the same request is allowed without stopping.
+  const auto = await launch(false, 'complete', { toolMode: 'full', toolCall: WRITE_CALL });
+  const autoRun = await auto.page.evaluate(
+    async ids =>
+      window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Do not ask', undefined, undefined, undefined, {
+        permissionMode: 'auto'
+      }),
+    auto.seeded
+  );
+  expect(autoRun.permissionMode).toBe('auto');
+
+  // No one answers anything; the run gets to the human approval on its own.
+  await expect.poll(() => runStatus(auto.page, autoRun.runId), { timeout: 60000 }).toBe('awaiting-approval');
+
+  const record = await auto.page.evaluate(async id => {
+    const session = (await window.praxis.ai.listSessions()).find(
+      candidate => candidate.workflowRunId === id && candidate.workflowNodeId === 'review'
+    );
+    return {
+      autoApprove: session?.autoApprovePermissions,
+      asked: session?.events?.some(event => event.type === 'permission_requested') ?? false
+    };
+  }, autoRun.runId);
+  expect(record.autoApprove).toBe(true);
+  expect(record.asked).toBe(false);
+
+  // Auto-approve never approves the run itself: a person still has to.
+  expect(await runStatus(auto.page, autoRun.runId)).toBe('awaiting-approval');
+});
+
+test('auto-approve does not widen a stage: a read-only stage still cannot write', async () => {
+  const { page, seeded } = await launch(false, 'complete', { toolMode: 'read-only', toolCall: WRITE_CALL });
+  const run = await page.evaluate(
+    async ids =>
+      window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Read only', undefined, undefined, undefined, {
+        permissionMode: 'auto'
+      }),
+    seeded
+  );
+  await expect.poll(() => runStatus(page, run.runId), { timeout: 60000 }).toBe('awaiting-approval');
+
+  const outcome = await page.evaluate(async id => {
+    const session = (await window.praxis.ai.listSessions()).find(
+      candidate => candidate.workflowRunId === id && candidate.workflowNodeId === 'review'
+    );
+    return { toolMode: session?.toolMode, cwd: session?.worktreePath ?? session?.workingDirectory };
+  }, run.runId);
+  expect(outcome.toolMode).toBe('read-only');
+  // The file the model asked to write must not exist in the run's worktree.
+  const exists = outcome.cwd ? fs.existsSync(path.join(outcome.cwd, 'note.txt')) : false;
+  expect(exists).toBe(false);
+});

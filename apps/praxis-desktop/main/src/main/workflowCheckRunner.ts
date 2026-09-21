@@ -4,6 +4,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import {
+  classifyCheckEnvironmentFailure,
   captureEvidenceEntry,
   commitEvidenceSource,
   createEvidenceBundle,
@@ -128,7 +129,13 @@ export async function runWorkflowCheck(
     return { status: 'failed', error: `Check timed out after ${node.timeoutMs}ms.${persistNote}`, artifacts };
   }
   if (spawnFailed) {
-    return { status: 'failed', error: `${entry.missingReason}${persistNote}`, artifacts: [] };
+    const missing = classifyCheckEnvironmentFailure({ command: node.command, args: node.args, output: '', spawnError: `${result.error ?? ''} ${entry.missingReason ?? ''}` });
+    return {
+      status: 'failed',
+      error: `${entry.missingReason}${missing ? ` ${missing.hint}` : ''}${persistNote}`,
+      artifacts: [],
+      ...(missing ? { pause: 'environment' as const } : {})
+    };
   }
   if (result.error) {
     // Cancellation — the process ran and was stopped; whatever it emitted is
@@ -163,14 +170,25 @@ export async function runWorkflowCheck(
     };
   }
 
+  // A non-zero exit is usually the check's verdict. When the output shows the tool itself could not do
+  // its job (the registry has no audit endpoint, no network, the command is missing) it is not — pause
+  // the run on it instead of failing it and spending the stage's attempt.
+  const environment = classifyCheckEnvironmentFailure({
+    command: node.command,
+    args: node.args,
+    exitCode: result.code,
+    output: redactedOutput
+  });
+
   return {
     status: 'failed',
     exitCode: result.code ?? undefined,
     // The tail is what a person needs to act; the whole log is in the artifact.
-    error: `${node.command} exited ${result.code ?? 'without a code'}${
+    error: `${environment ? `${environment.reason} ${environment.hint}\n\n` : ''}${node.command} exited ${result.code ?? 'without a code'}${
       redactedOutput.trim() ? `:\n${tail(redactedOutput)}` : '.'
     }${persistNote}`,
     artifacts,
+    ...(environment ? { pause: 'environment' as const } : {}),
     ...(parsedFindings ? { findings: parsedFindings } : {})
   };
 }

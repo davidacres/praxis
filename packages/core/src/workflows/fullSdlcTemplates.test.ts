@@ -75,9 +75,28 @@ test('TASK-249: all stack variants pass validation and share equivalent DAG stru
     const template = fullSdlcTemplate(variant);
     const result = validateWorkflow(template);
     assert.strictEqual(result.valid, true, `Variant ${variant} failed validation: ${JSON.stringify(result.errors)}`);
-    assert.strictEqual(template.nodes.length, 12);
-    assert.strictEqual(template.edges.length, 17);
+    // Every stack is the same pipeline. Only the Node variant adds install + build stages: it is the one
+    // whose toolchain needs `node_modules` and build output, neither of which a fresh run worktree has.
+    const prepared = variant === 'node';
+    assert.strictEqual(template.nodes.length, prepared ? 14 : 12);
+    assert.strictEqual(template.edges.length, prepared ? 19 : 17);
+    assert.strictEqual(template.nodes.some(node => node.id === 'install'), prepared);
+    assert.strictEqual(template.nodes.some(node => node.id === 'build'), prepared);
   }
+
+  // Node: the toolchain checks wait for the install; the scanners and the reviewer do not.
+  const node = fullSdlcTemplate('node');
+  const install = node.nodes.find(n => n.id === 'install');
+  assert.ok(install && install.type === 'check');
+  assert.strictEqual(install.command, 'npm');
+  assert.deepStrictEqual(install.args, ['ci', '--registry=https://registry.npmjs.org/']);
+  const parentOf = (id: string) => node.edges.filter(edge => edge.to === id).map(edge => edge.from);
+  // Lint and type check need the install; the unit tests run the built product, so they need the build too.
+  for (const id of ['lint', 'typecheck']) assert.deepStrictEqual(parentOf(id), ['install'], id);
+  assert.deepStrictEqual(parentOf('build'), ['install']);
+  assert.deepStrictEqual(parentOf('test'), ['build']);
+  for (const id of ['sast', 'secrets', 'sca', 'review']) assert.deepStrictEqual(parentOf(id), ['implement'], id);
+  assert.deepStrictEqual(parentOf('install'), ['implement']);
 
   // Check specific commands on .NET variant
   const dotnet = fullSdlcTemplate('dotnet');

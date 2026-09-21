@@ -60,3 +60,17 @@ Review the complete feature journey and documented support matrix. Follow AGENTS
 ## Comments
 
 
+
+
+**PRAXIS-F22** — 2026-09-20T18:03:36.403Z
+**Workflow run failed: Governed delivery — FX-BF-022: Managed project runs and diagnostic browser previews**
+
+Status: Failed · Duration: 2m 19s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Review: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "plan" failed.

@@ -1452,6 +1452,8 @@ function JiraSection({
  * it goes straight to the OS-keychain secrets store via `ai:setApiKey` and is
  * never read back over IPC; the status snapshot only reports the key source.
  */
+type AiTab = 'providers' | 'defaults' | 'spend' | 'tools';
+
 interface AiProviderMeta {
   id: AiProvider;
   kind: 'api' | 'cli-agent';
@@ -1618,6 +1620,9 @@ function AiSection({
   const category = CATEGORIES.find(c => c.id === 'ai')!;
   const { confirm } = useDialogs();
   const [statuses, setStatuses] = useState<AiProviderStatus[]>([]);
+  const [tab, setTab] = useState<AiTab>('providers');
+  /** Set when a switch was pressed on a provider that is not set up yet: focus its first setup field once it opens. */
+  const [setupFocus, setSetupFocus] = useState<AiProvider>();
   const [selectedProviderId, setSelectedProviderId] = useState<AiProvider>(settings.ai.activeProvider);
   const [keyDraft, setKeyDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1676,6 +1681,15 @@ function AiSection({
     setError(undefined);
     setTestSuccess(undefined);
   }, [selectedProviderId]);
+
+  useEffect(() => {
+    if (!setupFocus || setupFocus !== selectedProviderId || tab !== 'providers') return;
+    const field = document.querySelector<HTMLElement>(`[data-testid="ai-provider-body-${setupFocus}"] input`);
+    if (field) {
+      field.focus();
+      setSetupFocus(undefined);
+    }
+  }, [setupFocus, selectedProviderId, tab, statuses]);
 
   const selectedMeta = AI_PROVIDERS.find(p => p.id === selectedProviderId)!;
   const selectedStatus = statuses.find(s => s.provider === selectedProviderId);
@@ -1795,6 +1809,13 @@ function AiSection({
     );
   }
 
+  const tabs: Array<{ id: AiTab; label: string }> = [
+    { id: 'providers', label: 'Providers' },
+    { id: 'defaults', label: 'Defaults' },
+    { id: 'spend', label: 'Spend' },
+    { id: 'tools', label: 'Tools' }
+  ];
+
   return (
     <>
       <CategoryHeader category={category} />
@@ -1815,383 +1836,489 @@ function AiSection({
         </div>
       )}
 
-      <div className="settings-list" data-testid="ai-provider-list">
-        {AI_PROVIDERS.map(meta => {
-          const rowStatus = statuses.find(s => s.provider === meta.id);
-          const isActive = settings.ai.activeProvider === meta.id;
-          const isSelected = selectedProviderId === meta.id;
-          return (
-            <div
-              key={meta.id}
-              className={`list-row${isSelected ? ' active' : ''}`}
-              role="button"
-              tabIndex={0}
-              data-testid={`ai-provider-row-${meta.id}`}
-              onClick={() => setSelectedProviderId(meta.id)}
-              onKeyDown={event => {
-                if (event.key === 'Enter') {
-                  setSelectedProviderId(meta.id);
-                }
-              }}
-            >
-              <div>
-                <div className="list-row-title">
-                  {meta.label}
-                  {isActive ? ' · Active' : ''}
-                </div>
-                <div
-                  className="list-row-meta"
-                  data-testid={isSelected ? 'ai-provider-status' : undefined}
-                >
-                  {statusText(rowStatus, meta)}
-                </div>
-              </div>
-              <span className="spacer" />
-              <button
-                type="button"
-                className="btn btn-icon"
-                data-testid={`ai-provider-set-active-${meta.id}`}
-                aria-label={`Use ${meta.label} for new sessions`}
-                disabled={isActive}
-                onClick={event => {
-                  event.stopPropagation();
-                  void update({ ai: { activeProvider: meta.id } });
-                }}
-              >
-                <Icon name={isActive ? 'check' : 'dot'} size={13} />
-              </button>
-            </div>
-          );
-        })}
+
+      <div className="settings-tabs" role="tablist" aria-label="AI provider settings" data-testid="ai-tabs">
+        {tabs.map(entry => (
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            id={`ai-tab-${entry.id}`}
+            aria-selected={tab === entry.id}
+            aria-controls={`ai-tabpanel-${entry.id}`}
+            className={tab === entry.id ? 'active' : ''}
+            data-testid={`ai-tab-${entry.id}`}
+            onClick={() => setTab(entry.id)}
+          >
+            {entry.label}
+          </button>
+        ))}
       </div>
 
-      <FieldRow
-        label="Recommendations provider"
-        description="Which provider lightweight AI recommendations (workflow template pick, workflow agent-for-stage pick) use. Auto prefers the active provider above when configured, else the first configured API provider or available ACP host."
-      >
-        <select
-          className="input"
-          data-testid="ai-recommendation-provider-select"
-          value={settings.ai.recommendationProvider ?? ''}
-          onChange={event => {
-            const value = event.target.value;
-            void update({ ai: { recommendationProvider: value ? (value as AiProvider) : undefined } });
-          }}
-        >
-          <option value="">Auto (first configured provider)</option>
-          {AI_PROVIDERS.filter(meta => meta.kind === 'api' || meta.kind === 'cli-agent').map(meta => (
-            <option key={meta.id} value={meta.id}>
-              {meta.label}
-            </option>
-          ))}
-        </select>
-      </FieldRow>
-
-      {isApi && (
-        <>
-          <FieldRow
-            label="API key"
-            description={`${selectedMeta.keyLabel}. Stored encrypted in the OS keychain; it is never shown again after saving.`}
-          >
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="password"
-                className="input"
-                data-testid="ai-api-key-input"
-                aria-label={selectedMeta.keyLabel}
-                placeholder={selectedStatus?.configured ? '••••••••  (saved)' : 'Paste API key'}
-                value={keyDraft}
-                onChange={event => setKeyDraft(event.target.value)}
-                style={{ flex: 1 }}
-              />
-              <button
-                type="button"
-                className="btn btn-primary"
-                data-testid="ai-api-key-save"
-                disabled={busy || testingKey || !keyDraft.trim()}
-                onClick={() => void applyKey(keyDraft)}
-              >
-                Save key
-              </button>
-              <button
-                type="button"
-                className="btn"
-                data-testid="ai-api-key-test"
-                disabled={busy || testingKey || (!selectedStatus?.configured && !keyDraft.trim())}
-                onClick={() => void testKey()}
-              >
-                {testingKey ? 'Testing…' : 'Test key'}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                data-testid="ai-api-key-clear"
-                disabled={busy || testingKey || !selectedStatus || selectedStatus.keySource !== 'secret'}
-                onClick={() => void applyKey('')}
-              >
-                Clear
-              </button>
+      <div role="tabpanel" id={`ai-tabpanel-${tab}`} aria-labelledby={`ai-tab-${tab}`} data-testid={`ai-tabpanel-${tab}`}>
+        {tab === 'providers' && (
+          <>
+            <p className="settings-hint">
+              Turn on the providers you use. The default one is used for new sessions; each provider&rsquo;s connection details open
+              under its row.
+            </p>
+            <div className="ai-provider-list" data-testid="ai-provider-list">
+              {AI_PROVIDERS.map(meta => {
+                const rowStatus = statuses.find(s => s.provider === meta.id);
+                const isDefault = settings.ai.activeProvider === meta.id;
+                const isOpen = selectedProviderId === meta.id;
+                const configured = rowStatus?.configured === true;
+                const enabled = settings.ai.providers[meta.id]?.enabled !== false;
+                const on = configured && enabled;
+                const switchTitle = !rowStatus
+                  ? 'Checking…'
+                  : !configured
+                    ? meta.kind === 'cli-agent'
+                      ? 'Not installed yet — opens its setup (install the CLI or set its path)'
+                      : 'Not set up yet — opens its setup (add an API key)'
+                    : isDefault
+                      ? 'This is the default provider — choose another default to turn it off'
+                      : on
+                        ? 'Turn off'
+                        : 'Turn on';
+                return (
+                  <div
+                    key={meta.id}
+                    className={`ai-provider-row${isOpen ? ' is-open' : ''}${on ? '' : ' is-off'}`}
+                    data-testid={`ai-provider-row-${meta.id}`}
+                  >
+                    <div
+                      className="ai-provider-head"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isOpen}
+                      onClick={() => setSelectedProviderId(meta.id)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedProviderId(meta.id);
+                        }
+                      }}
+                    >
+                      <span className="ai-provider-chevron" aria-hidden>
+                        <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={13} />
+                      </span>
+                      <div className="ai-provider-text">
+                        <div className="ai-provider-name">
+                          {meta.label}
+                          {isDefault && <span className="chip ai-provider-default" data-testid={`ai-provider-default-${meta.id}`}>Default</span>}
+                        </div>
+                        <div className="ai-provider-meta" data-testid={isOpen ? 'ai-provider-status' : undefined}>
+                          {enabled ? '' : 'Turned off. '}
+                          {statusText(rowStatus, meta)}
+                        </div>
+                      </div>
+                      <span className="spacer" />
+                      {!isDefault && enabled && (
+                        <button
+                          type="button"
+                          className="btn btn-compact"
+                          data-testid={`ai-provider-set-active-${meta.id}`}
+                          aria-label={`Use ${meta.label} for new sessions`}
+                          onClick={event => {
+                            event.stopPropagation();
+                            void update({ ai: { activeProvider: meta.id } });
+                          }}
+                        >
+                          Make default
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={on}
+                        aria-label={`${meta.label} enabled`}
+                        title={switchTitle}
+                        className="switch"
+                        data-testid={`ai-provider-enabled-${meta.id}`}
+                        disabled={!rowStatus || (configured && isDefault)}
+                        onClick={event => {
+                          event.stopPropagation();
+                          if (!configured) {
+                            // Nothing to switch on yet: take the user to the setup instead of a dead control. It turns
+                            // itself on once configured (an unset `enabled` means enabled).
+                            setSelectedProviderId(meta.id);
+                            setSetupFocus(meta.id);
+                            return;
+                          }
+                          void update({
+                            ai: { providers: { [meta.id]: { ...(settings.ai.providers[meta.id] ?? {}), enabled: !on } } }
+                          });
+                        }}
+                      />
+                    </div>
+                    {isOpen && (
+                      <div className="ai-provider-body" data-testid={`ai-provider-body-${meta.id}`}>
+                        {!configured && rowStatus && (
+                          <p className="settings-hint ai-provider-setup-hint" data-testid={`ai-provider-setup-hint-${meta.id}`}>
+                            {meta.kind === 'cli-agent'
+                              ? 'Install the CLI, or set its path below, to turn this provider on. It switches on as soon as it is found.'
+                              : 'Add an API key below to turn this provider on. It switches on as soon as the key is saved.'}
+                          </p>
+                        )}
+              {isApi && (
+                <>
+                  <FieldRow
+                    label="API key"
+                    description={`${selectedMeta.keyLabel}. Stored encrypted in the OS keychain; it is never shown again after saving.`}
+                  >
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="password"
+                        className="input"
+                        data-testid="ai-api-key-input"
+                        aria-label={selectedMeta.keyLabel}
+                        placeholder={selectedStatus?.configured ? '••••••••  (saved)' : 'Paste API key'}
+                        value={keyDraft}
+                        onChange={event => setKeyDraft(event.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        data-testid="ai-api-key-save"
+                        disabled={busy || testingKey || !keyDraft.trim()}
+                        onClick={() => void applyKey(keyDraft)}
+                      >
+                        Save key
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        data-testid="ai-api-key-test"
+                        disabled={busy || testingKey || (!selectedStatus?.configured && !keyDraft.trim())}
+                        onClick={() => void testKey()}
+                      >
+                        {testingKey ? 'Testing…' : 'Test key'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        data-testid="ai-api-key-clear"
+                        disabled={busy || testingKey || !selectedStatus || selectedStatus.keySource !== 'secret'}
+                        onClick={() => void applyKey('')}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    {testSuccess && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          marginTop: 8,
+                          padding: '7px 11px',
+                          borderRadius: 'var(--radius)',
+                          background: 'color-mix(in srgb, var(--success) 12%, var(--bg))',
+                          color: 'var(--success)',
+                          fontSize: 'var(--text-xs)'
+                        }}
+                        data-testid="ai-api-key-success"
+                      >
+                        <Icon name="check" size={13} />
+                        <span>{testSuccess}</span>
+                      </div>
+                    )}
+                  </FieldRow>
+                  {selectedProviderId === 'z-ai' && (
+                    <FieldRow
+                      label="Z.ai plan type"
+                      description="GLM Coding Plan subscribers must use the coding endpoint. Pay-as-you-go subscribers use the general API endpoint."
+                    >
+                      <select
+                        className="input"
+                        data-testid="ai-z-ai-plan-select"
+                        value={
+                          selectedConfig.baseUrl === 'https://api.z.ai/api/paas/v4'
+                            ? 'general'
+                            : selectedConfig.baseUrl === 'https://api.z.ai/api/coding/paas/v4' || !selectedConfig.baseUrl
+                              ? 'coding'
+                              : 'custom'
+                        }
+                        onChange={event => {
+                          const val = event.target.value;
+                          if (val === 'coding') {
+                            void commitUrl('https://api.z.ai/api/coding/paas/v4');
+                          } else if (val === 'general') {
+                            void commitUrl('https://api.z.ai/api/paas/v4');
+                          }
+                        }}
+                      >
+                        <option value="coding">GLM Coding Plan (https://api.z.ai/api/coding/paas/v4) — Recommended</option>
+                        <option value="general">General API / Pay-as-you-go (https://api.z.ai/api/paas/v4)</option>
+                        <option value="custom">Custom base URL (configured below)</option>
+                      </select>
+                    </FieldRow>
+                  )}
+                  {selectedProviderId === 'openai' && (
+                    <FieldRow
+                      label="Usage Admin API key"
+                      description="Optional OpenAI Admin API key for account usage, limits, and cost reporting. Stored encrypted in the OS keychain; it is never used for model requests."
+                    >
+                      <UsageAdminKeyField provider={selectedProviderId} />
+                    </FieldRow>
+                  )}
+                  <FieldRow
+                    label={isVercel ? 'Gateway URL' : `${selectedMeta.label} base URL`}
+                    description="Leave empty to use the default endpoint."
+                  >
+                    <DebouncedTextField
+                      ariaLabel={isVercel ? 'AI gateway URL' : `${selectedMeta.label} base URL`}
+                      value={urlValue}
+                      onCommit={commitUrl}
+                      placeholder={selectedStatus?.gatewayUrl ?? selectedMeta.urlPlaceholder}
+                    />
+                  </FieldRow>
+                  <FieldRow
+                    label={isVercel ? 'Default model' : `${selectedMeta.label} default model`}
+                    description="Model id used for new agent sessions on this provider. Empty means the service default."
+                  >
+                    <DebouncedTextField
+                      ariaLabel={isVercel ? 'AI default model' : `${selectedMeta.label} default model`}
+                      value={modelValue}
+                      onCommit={commitModel}
+                      placeholder={selectedMeta.modelPlaceholder}
+                    />
+                  </FieldRow>
+                </>
+              )}
+              {!isApi && (
+                <FieldRow
+                  label="CLI path"
+                  description={
+                    selectedMeta.cliPathDescription ??
+                    `Executable to spawn — defaults to "${selectedMeta.defaultCommand}" on PATH. Override with an absolute path if it isn't on PATH.`
+                  }
+                >
+                  <DebouncedTextField
+                    ariaLabel={`${selectedMeta.label} CLI path`}
+                    value={selectedConfig.cliPath ?? ''}
+                    onCommit={value =>
+                      update({
+                        ai: { providers: { [selectedProviderId]: { ...selectedConfig, cliPath: value || undefined } } }
+                      })
+                    }
+                    placeholder={selectedMeta.defaultCommand}
+                  />
+                </FieldRow>
+              )}
+              {MODEL_PROVIDERS.has(selectedProviderId) && (
+                <FieldRow
+                  label="Models"
+                  description={
+                    selectedConfig.enabledModelIds
+                      ? `${selectedConfig.enabledModelIds.length} of the fetched catalog selected for the composer's Model picker.`
+                      : "Every fetched model is offered in the composer's Model picker (no curation set)."
+                  }
+                >
+                  <button
+                    type="button"
+                    className="btn"
+                    data-testid="ai-manage-models-btn"
+                    onClick={() => setManagingModels(true)}
+                  >
+                    Manage models…
+                  </button>
+                </FieldRow>
+              )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            {testSuccess && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  marginTop: 8,
-                  padding: '7px 11px',
-                  borderRadius: 'var(--radius)',
-                  background: 'color-mix(in srgb, var(--success) 12%, var(--bg))',
-                  color: 'var(--success)',
-                  fontSize: 'var(--text-xs)'
-                }}
-                data-testid="ai-api-key-success"
-              >
-                <Icon name="check" size={13} />
-                <span>{testSuccess}</span>
-              </div>
-            )}
-          </FieldRow>
-          {selectedProviderId === 'z-ai' && (
+          </>
+        )}
+
+        {tab === 'defaults' && (
+          <>
             <FieldRow
-              label="Z.ai plan type"
-              description="GLM Coding Plan subscribers must use the coding endpoint. Pay-as-you-go subscribers use the general API endpoint."
+              label="Recommendations provider"
+              description="Which provider lightweight AI recommendations (workflow template pick, workflow agent-for-stage pick) use. Auto prefers the active provider above when configured, else the first configured API provider or available ACP host."
             >
               <select
                 className="input"
-                data-testid="ai-z-ai-plan-select"
-                value={
-                  selectedConfig.baseUrl === 'https://api.z.ai/api/paas/v4'
-                    ? 'general'
-                    : selectedConfig.baseUrl === 'https://api.z.ai/api/coding/paas/v4' || !selectedConfig.baseUrl
-                      ? 'coding'
-                      : 'custom'
-                }
+                data-testid="ai-recommendation-provider-select"
+                value={settings.ai.recommendationProvider ?? ''}
                 onChange={event => {
-                  const val = event.target.value;
-                  if (val === 'coding') {
-                    void commitUrl('https://api.z.ai/api/coding/paas/v4');
-                  } else if (val === 'general') {
-                    void commitUrl('https://api.z.ai/api/paas/v4');
-                  }
+                  const value = event.target.value;
+                  void update({ ai: { recommendationProvider: value ? (value as AiProvider) : undefined } });
                 }}
               >
-                <option value="coding">GLM Coding Plan (https://api.z.ai/api/coding/paas/v4) — Recommended</option>
-                <option value="general">General API / Pay-as-you-go (https://api.z.ai/api/paas/v4)</option>
-                <option value="custom">Custom base URL (configured below)</option>
+                <option value="">Auto (first configured provider)</option>
+                {AI_PROVIDERS.filter(
+                  meta =>
+                    (meta.kind === 'api' || meta.kind === 'cli-agent') &&
+                    // A provider that is off is not offered; one that is already chosen stays listed (marked) so the
+                    // select never shows a blank for a value that is really stored.
+                    (settings.ai.providers[meta.id]?.enabled !== false || settings.ai.recommendationProvider === meta.id)
+                ).map(meta => (
+                  <option key={meta.id} value={meta.id}>
+                    {meta.label}
+                    {settings.ai.providers[meta.id]?.enabled === false ? ' (turned off)' : ''}
+                  </option>
+                ))}
               </select>
             </FieldRow>
-          )}
-          {selectedProviderId === 'openai' && (
+
             <FieldRow
-              label="Usage Admin API key"
-              description="Optional OpenAI Admin API key for account usage, limits, and cost reporting. Stored encrypted in the OS keychain; it is never used for model requests."
+              label="Agent display name"
+              description="Used for agent attribution in comments and commits."
             >
-              <UsageAdminKeyField provider={selectedProviderId} />
+              <DebouncedTextField
+                ariaLabel="AI agent display name"
+                value={settings.ai.agentName}
+                onCommit={value => update({ ai: { agentName: value } })}
+                placeholder="e.g. Ticket Agent"
+              />
             </FieldRow>
-          )}
-          <FieldRow
-            label={isVercel ? 'Gateway URL' : `${selectedMeta.label} base URL`}
-            description="Leave empty to use the default endpoint."
-          >
-            <DebouncedTextField
-              ariaLabel={isVercel ? 'AI gateway URL' : `${selectedMeta.label} base URL`}
-              value={urlValue}
-              onCommit={commitUrl}
-              placeholder={selectedStatus?.gatewayUrl ?? selectedMeta.urlPlaceholder}
+            <FieldRow
+              label="Working directory"
+              description="Default working directory for agent sessions and delivery runs; workflow packs are discovered under its .github/skills folder. Empty means the app's own directory."
+            >
+              <DebouncedTextField
+                ariaLabel="AI working directory"
+                value={settings.ai.workingDirectory}
+                onCommit={value => update({ ai: { workingDirectory: value } })}
+                placeholder="e.g. C:\\dev\\my-repo"
+              />
+            </FieldRow>
+            <FieldRow
+              label="Analysis system prompt"
+              description="System prompt used by the issue analysis chat. Empty disables the analysis action."
+            >
+              <DebouncedTextArea
+                ariaLabel="AI analysis system prompt"
+                value={settings.ai.analysisPrompt}
+                onCommit={value => update({ ai: { analysisPrompt: value } })}
+                placeholder="e.g. You are a senior engineer assessing implementation readiness…"
+              />
+            </FieldRow>
+            <Toggle
+              label="Require confirmed analysis"
+              description="When on, an issue must have a confirmed analysis before it can be delegated or delivered."
+              checked={settings.ai.analysisGateEnabled}
+              testId="ai-analysis-gate-toggle"
+              onChange={next => void update({ ai: { analysisGateEnabled: next } })}
             />
-          </FieldRow>
-          <FieldRow
-            label={isVercel ? 'Default model' : `${selectedMeta.label} default model`}
-            description="Model id used for new agent sessions on this provider. Empty means the service default."
-          >
-            <DebouncedTextField
-              ariaLabel={isVercel ? 'AI default model' : `${selectedMeta.label} default model`}
-              value={modelValue}
-              onCommit={commitModel}
-              placeholder={selectedMeta.modelPlaceholder}
-            />
-          </FieldRow>
-        </>
-      )}
-      {!isApi && (
-        <FieldRow
-          label="CLI path"
-          description={
-            selectedMeta.cliPathDescription ??
-            `Executable to spawn — defaults to "${selectedMeta.defaultCommand}" on PATH. Override with an absolute path if it isn't on PATH.`
-          }
-        >
-          <DebouncedTextField
-            ariaLabel={`${selectedMeta.label} CLI path`}
-            value={selectedConfig.cliPath ?? ''}
-            onCommit={value =>
-              update({
-                ai: { providers: { [selectedProviderId]: { ...selectedConfig, cliPath: value || undefined } } }
-              })
-            }
-            placeholder={selectedMeta.defaultCommand}
-          />
-        </FieldRow>
-      )}
-      {MODEL_PROVIDERS.has(selectedProviderId) && (
-        <FieldRow
-          label="Models"
-          description={
-            selectedConfig.enabledModelIds
-              ? `${selectedConfig.enabledModelIds.length} of the fetched catalog selected for the composer's Model picker.`
-              : "Every fetched model is offered in the composer's Model picker (no curation set)."
-          }
-        >
-          <button
-            type="button"
-            className="btn"
-            data-testid="ai-manage-models-btn"
-            onClick={() => setManagingModels(true)}
-          >
-            Manage models…
-          </button>
-        </FieldRow>
-      )}
-      <FieldRow
-        label="Agent display name"
-        description="Used for agent attribution in comments and commits."
-      >
-        <DebouncedTextField
-          ariaLabel="AI agent display name"
-          value={settings.ai.agentName}
-          onCommit={value => update({ ai: { agentName: value } })}
-          placeholder="e.g. Ticket Agent"
-        />
-      </FieldRow>
-      <FieldRow
-        label="Working directory"
-        description="Default working directory for agent sessions and delivery runs; workflow packs are discovered under its .github/skills folder. Empty means the app's own directory."
-      >
-        <DebouncedTextField
-          ariaLabel="AI working directory"
-          value={settings.ai.workingDirectory}
-          onCommit={value => update({ ai: { workingDirectory: value } })}
-          placeholder="e.g. C:\\dev\\my-repo"
-        />
-      </FieldRow>
-      <FieldRow
-        label="Analysis system prompt"
-        description="System prompt used by the issue analysis chat. Empty disables the analysis action."
-      >
-        <DebouncedTextArea
-          ariaLabel="AI analysis system prompt"
-          value={settings.ai.analysisPrompt}
-          onCommit={value => update({ ai: { analysisPrompt: value } })}
-          placeholder="e.g. You are a senior engineer assessing implementation readiness…"
-        />
-      </FieldRow>
-      <Toggle
-        label="Require confirmed analysis"
-        description="When on, an issue must have a confirmed analysis before it can be delegated or delivered."
-        checked={settings.ai.analysisGateEnabled}
-        testId="ai-analysis-gate-toggle"
-        onChange={next => void update({ ai: { analysisGateEnabled: next } })}
-      />
-      <FieldRow
-        label="Spend limit"
-        description="A budget you set, warned against the cost your agent reports. 0 turns it off. This is not an account balance — no provider tells Praxis one, and only CLI agents (Claude Code, Codex) report cost at all."
-      >
-        <DebouncedNumberField
-          ariaLabel="Spend limit"
-          value={settings.ai.spendLimit}
-          min={0}
-          onCommit={value => update({ ai: { spendLimit: value } })}
-        />
-      </FieldRow>
-      <div className="settings-section-block" data-testid="ai-spend-report">
-        <div className="settings-section-subhead">
-          <span>Spend report</span>
-          <div className="chip-row" role="group" aria-label="Spend report time range">
-            {(
-              [
-                { label: 'All time', days: undefined },
-                { label: '30 days', days: 30 },
-                { label: '7 days', days: 7 }
-              ] as const
-            ).map(range => (
-              <button
-                key={range.label}
-                type="button"
-                className={`chip${spendRangeDays === range.days ? ' filter-active' : ''}`}
-                onClick={() => setSpendRangeDays(range.days)}
-                data-testid={`ai-spend-range-${range.days ?? 'all'}`}
-              >
-                {range.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {spendRangeSessions.length === 0 ? (
-          <p className="settings-hint">No sessions in this range.</p>
-        ) : (
+          </>
+        )}
+
+        {tab === 'spend' && (
           <>
-            <div className="list-row is-static">
-              <div>
-                <div className="list-row-title">Total cost</div>
-                <div className="list-row-meta" data-testid="ai-spend-total-cost">
-                  {spendTotals.byCurrency.length === 0
-                    ? 'No session in this range reported a cost.'
-                    : spendTotals.byCurrency
-                        .map(({ currency, amount }) => formatCost({ amount, currency }))
-                        .filter((value): value is string => Boolean(value))
-                        .join(' + ')}
+            <FieldRow
+              label="Spend limit"
+              description="A budget you set, warned against the cost your agent reports. 0 turns it off. This is not an account balance — no provider tells Praxis one, and only CLI agents (Claude Code, Codex) report cost at all."
+            >
+              <DebouncedNumberField
+                ariaLabel="Spend limit"
+                value={settings.ai.spendLimit}
+                min={0}
+                onCommit={value => update({ ai: { spendLimit: value } })}
+              />
+            </FieldRow>
+            <div className="settings-section-block" data-testid="ai-spend-report">
+              <div className="settings-section-subhead">
+                <span>Spend report</span>
+                <div className="chip-row" role="group" aria-label="Spend report time range">
+                  {(
+                    [
+                      { label: 'All time', days: undefined },
+                      { label: '30 days', days: 30 },
+                      { label: '7 days', days: 7 }
+                    ] as const
+                  ).map(range => (
+                    <button
+                      key={range.label}
+                      type="button"
+                      className={`chip${spendRangeDays === range.days ? ' filter-active' : ''}`}
+                      onClick={() => setSpendRangeDays(range.days)}
+                      data-testid={`ai-spend-range-${range.days ?? 'all'}`}
+                    >
+                      {range.label}
+                    </button>
+                  ))}
                 </div>
               </div>
+              {spendRangeSessions.length === 0 ? (
+                <p className="settings-hint">No sessions in this range.</p>
+              ) : (
+                <>
+                  <div className="list-row is-static">
+                    <div>
+                      <div className="list-row-title">Total cost</div>
+                      <div className="list-row-meta" data-testid="ai-spend-total-cost">
+                        {spendTotals.byCurrency.length === 0
+                          ? 'No session in this range reported a cost.'
+                          : spendTotals.byCurrency
+                              .map(({ currency, amount }) => formatCost({ amount, currency }))
+                              .filter((value): value is string => Boolean(value))
+                              .join(' + ')}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="list-row is-static">
+                    <div>
+                      <div className="list-row-title">Sessions reporting cost or tokens</div>
+                      <div className="list-row-meta">
+                        {spendReportingCount} of {spendRangeSessions.length}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="settings-section-subhead"><span>By provider &amp; model</span></div>
+                  {spendByProviderModel.map(row => (
+                    <div className="list-row is-static" key={row.label} data-testid="ai-spend-provider-row">
+                      <div>
+                        <div className="list-row-title">{row.label}</div>
+                        <div className="list-row-meta">{spendGroupMeta(row)}</div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="settings-section-subhead"><span>By connection</span></div>
+                  {spendByConnection.map(row => (
+                    <div className="list-row is-static" key={row.label} data-testid="ai-spend-connection-row">
+                      <div>
+                        <div className="list-row-title">{row.label}</div>
+                        <div className="list-row-meta">{spendGroupMeta(row)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
-            <div className="list-row is-static">
-              <div>
-                <div className="list-row-title">Sessions reporting cost or tokens</div>
-                <div className="list-row-meta">
-                  {spendReportingCount} of {spendRangeSessions.length}
+          </>
+        )}
+
+        {tab === 'tools' && (
+          <>
+            <Toggle
+              label="Let the AI use the in-app browser"
+              description="Full-tools sessions get browser_navigate / browser_read / browser_click / browser_type against a browser docked in the session view. Each navigation to a new host asks first. Loopback and private-network addresses are always blocked."
+              checked={settings.ai.browserTools.enabled}
+              testId="ai-browser-tools-toggle"
+              onChange={next => void update({ ai: { browserTools: { enabled: next } } })}
+            />
+            {settings.ai.browserTools.allowedHosts.length > 0 && (
+              <FieldRow
+                label="Allowed browser hosts"
+                description="Hosts the agent may open without asking (added when you choose “Always allow”). Edit the settings file to remove one."
+              >
+                <div className="ai-allowed-hosts" data-testid="ai-browser-allowed-hosts">
+                  {settings.ai.browserTools.allowedHosts.map(host => (
+                    <span key={host} className="chip">{host}</span>
+                  ))}
                 </div>
-              </div>
-            </div>
-            <div className="settings-section-subhead"><span>By provider &amp; model</span></div>
-            {spendByProviderModel.map(row => (
-              <div className="list-row is-static" key={row.label} data-testid="ai-spend-provider-row">
-                <div>
-                  <div className="list-row-title">{row.label}</div>
-                  <div className="list-row-meta">{spendGroupMeta(row)}</div>
-                </div>
-              </div>
-            ))}
-            <div className="settings-section-subhead"><span>By connection</span></div>
-            {spendByConnection.map(row => (
-              <div className="list-row is-static" key={row.label} data-testid="ai-spend-connection-row">
-                <div>
-                  <div className="list-row-title">{row.label}</div>
-                  <div className="list-row-meta">{spendGroupMeta(row)}</div>
-                </div>
-              </div>
-            ))}
+              </FieldRow>
+            )}
           </>
         )}
       </div>
-      <Toggle
-        label="Let the AI use the in-app browser"
-        description="Full-tools sessions get browser_navigate / browser_read / browser_click / browser_type against a browser docked in the session view. Each navigation to a new host asks first. Loopback and private-network addresses are always blocked."
-        checked={settings.ai.browserTools.enabled}
-        testId="ai-browser-tools-toggle"
-        onChange={next => void update({ ai: { browserTools: { enabled: next } } })}
-      />
-      {settings.ai.browserTools.allowedHosts.length > 0 && (
-        <FieldRow
-          label="Allowed browser hosts"
-          description="Hosts the agent may open without asking (added when you choose “Always allow”). Edit the settings file to remove one."
-        >
-          <div className="ai-allowed-hosts" data-testid="ai-browser-allowed-hosts">
-            {settings.ai.browserTools.allowedHosts.map(host => (
-              <span key={host} className="chip">{host}</span>
-            ))}
-          </div>
-        </FieldRow>
-      )}
     </>
   );
 }

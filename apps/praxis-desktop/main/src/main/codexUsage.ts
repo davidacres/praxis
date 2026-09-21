@@ -19,15 +19,22 @@ function requestCodex(method: string, params: unknown, timeoutMs = 7000): Promis
     let buffer = '';
     let nextId = 1;
     let settled = false;
+    let sendTimer: NodeJS.Timeout | undefined;
     const timer = setTimeout(() => finish(new Error('Codex app-server request timed out.')), timeoutMs);
     const finish = (error?: Error, value?: unknown) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (sendTimer) clearTimeout(sendTimer);
       child.kill();
       if (error) reject(error); else resolve(value);
     };
     child.once('error', error => finish(new Error(`Codex CLI is unavailable: ${error.message}`)));
+    // A CLI that exits early (missing, signed out, no `app-server` command)
+    // closes the pipe under us; without these handlers the write below raises
+    // an uncaught EPIPE in the main process instead of a "usage unavailable".
+    child.stdin.on('error', error => finish(new Error(`Codex app-server closed its input: ${error.message}`)));
+    child.once('exit', code => finish(new Error(`Codex app-server exited before answering (code ${code ?? 'unknown'}).`)));
     child.stdout.on('data', chunk => {
       buffer += chunk.toString('utf8');
       for (;;) {
@@ -43,10 +50,13 @@ function requestCodex(method: string, params: unknown, timeoutMs = 7000): Promis
         else if (message.id === 2) finish(undefined, message.result);
       }
     });
-    const send = (id: number, name: string, body: unknown) => child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method: name, params: body })}\n`);
+    const send = (id: number, name: string, body: unknown) => {
+      if (settled || child.stdin.destroyed || !child.stdin.writable) return;
+      child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method: name, params: body })}\n`);
+    };
     send(1, 'initialize', { clientInfo: { name: 'praxis', version: '1.0.0' }, capabilities: null });
     // The account snapshot is available after initialize and uses no mutating request.
-    setTimeout(() => send(2, method, params), 25);
+    sendTimer = setTimeout(() => send(2, method, params), 25);
   });
 }
 

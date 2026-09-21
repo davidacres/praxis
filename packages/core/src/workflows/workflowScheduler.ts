@@ -27,6 +27,8 @@ import {
 } from './workflowTypes';
 import {
   applyWorkflowRunCommand,
+  isPausedNode,
+  pauseReasonOf,
   isRunSettled,
   type WorkflowRun,
   type WorkflowRunStatus
@@ -218,6 +220,10 @@ function edgeState(run: WorkflowRun, edge: WorkflowEdge): EdgeState {
     case 'succeeded':
       return edge.on === 'success' || edge.on === 'always' ? 'satisfied' : 'dead';
     case 'failed':
+      // Paused (provider limit / environment): the stage has no verdict yet, so
+      // no edge — failure/always included — is taken. Routing into a fix stage
+      // would only spend more effort against the same broken precondition.
+      if (isPausedNode(source)) return 'waiting';
       return edge.on === 'failure' || edge.on === 'always' ? 'satisfied' : 'dead';
     case 'skipped':
     case 'cancelled':
@@ -235,6 +241,14 @@ function edgeState(run: WorkflowRun, edge: WorkflowEdge): EdgeState {
 function describeStall(run: WorkflowRun, readyBeforeAdmission: string[]): string {
   if (readyBeforeAdmission.length > 0) {
     return 'Waiting for the implementation worktree to free up.';
+  }
+
+  const paused = Object.values(run.nodes).filter(state => isPausedNode(state));
+  if (paused.length > 0) {
+    const ids = paused.map(state => state.nodeId).sort().join(', ');
+    return paused.every(state => pauseReasonOf(state) === 'provider-limit')
+      ? `Paused: the AI provider's credits or usage limit were reached at ${ids}. Restore them, then retry.`
+      : `Paused: ${ids} could not run in this environment. Fix that, then retry.`;
   }
 
   const retryable = Object.values(run.nodes).filter(state => state.outcome === 'failed');

@@ -45,6 +45,8 @@ export interface AgentTaskLaunchInput {
   model?: string;
   workingDirectory?: string;
   toolMode: AgentToolMode;
+  /** Allow the agent's own tool-permission requests without asking (still bounded by `toolMode`). */
+  autoApprovePermissions?: boolean;
   mcpServers?: AcpAgentStartOptions['mcpServers'];
   toolExtension?: VercelAgentStartOptions['toolExtension'];
 }
@@ -190,6 +192,7 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
       workingDirectory: input.workingDirectory,
       model: input.model,
       toolMode: input.toolMode,
+      ...(input.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
       ...(input.mcpServers ? { mcpServers: input.mcpServers } : {})
     });
     recordRuntimeLaunch(input.issue.key, prepared, 'acp');
@@ -209,6 +212,7 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
     model: input.model || connection.model,
     provider: input.provider,
     toolMode: input.toolMode,
+    ...(input.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
     ...(input.toolExtension ? { toolExtension: input.toolExtension } : {})
   });
   recordRuntimeLaunch(input.issue.key, prepared, 'gateway');

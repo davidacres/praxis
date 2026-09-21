@@ -65,7 +65,13 @@
       "updatedAt": "2026-09-19T09:23:22.000Z",
       "projectFileStatus": "created",
       "icon": "rocket",
-      "color": "green"
+      "color": "green",
+      "recommendedWorkflowTemplate": {
+        "templateId": "governed-delivery",
+        "rationale": "Praxis Desktop is a substantial software product that benefits from planned implementation, converged review and quality checks, and explicit human approval.",
+        "model": "codex-cli",
+        "computedAt": "2026-09-20T16:00:32.290Z"
+      }
     },
     {
       "id": "project-1789239305854-dg8yni",

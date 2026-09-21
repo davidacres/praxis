@@ -89,6 +89,8 @@ export interface VercelAgentStartOptions {
   provider?: AiProvider;
   /** Host-enforced tool access. */
   toolMode?: AgentToolMode;
+  /** Allow tool-permission requests without asking (still bounded by `toolMode`). */
+  autoApprovePermissions?: boolean;
   /** Host-supplied tools such as the selected issue tracker's capabilities. */
   toolExtension?: {
     definitions: ReadonlyArray<GatewayToolDefinition>;
@@ -559,7 +561,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       issueKey: issue.key,
       abortController: new AbortController(),
       pendingPermissions: [],
-      allowPermissionsForTask: false,
+      allowPermissionsForTask: options.autoApprovePermissions === true,
       messageBuffer: '',
       reasoningBuffer: '',
       turnStartTime: Date.now(),
@@ -574,6 +576,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       workingDirectory,
       toolMode
     });
+    if (options.autoApprovePermissions) this.sessionManager.updateAgentRuntime(issue.key, { autoApprovePermissions: true });
     // After the record exists, so the limit has somewhere to land.
     this.noteContextLimit(issue.key, provider, gateway, model);
     this.sessionManager.updateAgentState(issue.key, 'planning');
@@ -663,7 +666,8 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       issueKey,
       abortController: new AbortController(),
       pendingPermissions: [],
-      allowPermissionsForTask: false,
+      // A follow-up turn keeps the mode the session was started in.
+      allowPermissionsForTask: record.autoApprovePermissions === true,
       messageBuffer: followUpMessage?.trim() ? '' : (record.responseText ?? ''),
       reasoningBuffer: '',
       turnStartTime: Date.now(),

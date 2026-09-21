@@ -7,6 +7,7 @@ import {
 import { getCurrentBranch, getGitStatus } from './gitService';
 import { getProjectStore } from './projectStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
+import { preserveUncommittedWork, runWorktreeKey } from './runWork';
 
 /**
  * Per-run git worktree (FX-BE-024 / TASK-113).
@@ -24,7 +25,7 @@ const logger = { appendLine: (message: string): void => console.log(`[workflow] 
 
 /** Stable per-run name, so re-attaching after a restart lands on the same tree. */
 function worktreeKeyFor(run: WorkflowRun): string {
-  return `WF-${run.runId.slice(0, 8).toUpperCase()}`;
+  return runWorktreeKey(run.runId);
 }
 
 /** App-owned metadata can be dirty without changing the product snapshot a run builds and tests. */
@@ -99,10 +100,21 @@ export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
       const project = getProjectStore().get(run.projectId);
       const folder = project?.workspaceFolder?.trim();
       if (!folder || !run.worktreePath) return;
-      await manager.removeDeliveryWorktree(folder, {
-        worktreePath: run.worktreePath,
-        branchName: worktreeKeyFor(run)
-      });
+      // Removing a checkout with `--force` throws away anything uncommitted — a stage that failed or
+      // was cancelled mid-edit leaves exactly that. Keep it as a commit on the run's branch first; if
+      // it cannot be kept this throws, and the orchestrator leaves the worktree in place to retry.
+      const kept = await preserveUncommittedWork(
+        run.worktreePath,
+        `WIP: changes left uncommitted when the run ended (${run.status})`
+      );
+      if (kept) logger.appendLine(`Kept uncommitted changes from run ${run.runId} as a commit on its branch.`);
+      // The branch is where the run's work lives. Only the checkout goes; deleting the branch is a
+      // choice the user makes when deleting the run (see `workflows:deleteRun`).
+      await manager.removeDeliveryWorktree(
+        folder,
+        { worktreePath: run.worktreePath, branchName: worktreeKeyFor(run) },
+        { keepBranch: true }
+      );
     }
   };
 }

@@ -60,6 +60,10 @@ test('review, QA, and security show as one branch group that converges at the jo
     ['QA', 'Review', 'Security scan']
   );
 
+  // QA cannot start until the dependencies are installed; review and security do not wait for it.
+  assert.equal(summary.stages.find(stage => stage.nodeId === 'qa')?.lane, 'idle');
+  r = succeed(r, 'install', 4);
+  r = succeed(r, 'build', 4);
   r = succeed(r, 'review', 5);
   r = succeed(r, 'qa', 7);
   r = succeed(r, 'security', 9);
@@ -186,6 +190,8 @@ test('artifacts and the implementation snapshot ref surface on the stage row', (
 test('a completed run explains itself and offers no further action', () => {
   let r = succeed(run(), 'plan', 1, 'sha-1');
   r = succeed(r, 'implement', 3, 'sha-2');
+  r = succeed(r, 'install', 4);
+  r = succeed(r, 'build', 4);
   r = succeed(r, 'review', 5);
   r = succeed(r, 'qa', 7);
   r = succeed(r, 'security', 9);

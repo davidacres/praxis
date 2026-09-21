@@ -13,6 +13,7 @@ import type {
 import { Icon } from '../ui/Icon';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName, refreshModelOptions } from './modelProviders';
 import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing } from './sessionNav';
+import { isProviderUsable } from './providerAvailability';
 
 function purposeOf(session: AgentSessionRecord) {
   return session.purpose ?? {
@@ -363,7 +364,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
   };
 
   const providerIsSelectable = (provider: AiProvider) =>
-    provider === session.provider || providerStatuses?.some(status => status.provider === provider && status.configured) === true;
+    provider === session.provider || providerStatuses?.some(status => status.provider === provider && isProviderUsable(status)) === true;
 
   const chooseProvider = (provider: AiProvider) => {
     if (!providerIsSelectable(provider)) return;
@@ -524,7 +525,7 @@ export function SessionConversationDialog({ session, open, position, onClose, in
   // that point reads as "still loading", not "nothing configured".
   const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>();
   const configuredProviders = [...MODEL_PROVIDERS].filter(id =>
-    providerStatuses?.some(status => status.provider === id && status.configured)
+    providerStatuses?.some(status => status.provider === id && isProviderUsable(status))
   );
   const defaultProvider =
     configuredProviders.find(id => id !== session.provider) ?? configuredProviders[0] ?? session.provider ?? 'openai';

@@ -86,3 +86,87 @@ Use stub agents and fixture repositories. Test contract migration, renderer snap
 ## Comments
 
 
+
+
+**PRAXIS-F36** — 2026-09-20T19:26:57.509Z
+**Workflow run failed: Governed delivery — FX-BF-036: Interactive chat gadgets and response surfaces**
+
+Status: Failed · Duration: 9m 10s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Review: running
+- ⏳ QA: running
+- ❌ Security scan: failed
+
+Required stage "security" failed.
+
+**PRAXIS-F36** — 2026-09-20T20:42:39.546Z
+**Workflow run failed: Governed delivery — FX-BF-036: Interactive chat gadgets and response surfaces**
+
+Status: Failed · Duration: 9m 53s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Review: running
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.
+
+**PRAXIS-F36** — 2026-09-20T21:24:05.113Z
+**Workflow run failed: Governed delivery — FX-BF-036: Interactive chat gadgets and response surfaces**
+
+Status: Failed · Duration: 11m 50s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.
+
+**PRAXIS-F36** — 2026-09-20T21:49:17.692Z
+**Workflow run failed: Governed delivery — FX-BF-036: Interactive chat gadgets and response surfaces**
+
+Status: Failed · Duration: 23m 31s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.
+
+**PRAXIS-F36** — 2026-09-20T22:03:04.883Z
+**Workflow run cancelled: Governed delivery — FX-BF-036: Interactive chat gadgets and response surfaces**
+
+Status: Cancelled · Duration: 13m 14s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ⏭️ QA: cancelled
+- ✅ Security scan: succeeded
+
+cancelled from the run view
+
+**PRAXIS-F36** — 2026-09-20T22:28:59.754Z
+**Workflow run failed: Governed delivery — FX-BF-036: Interactive chat gadgets and response surfaces**
+
+Status: Failed · Duration: 12m 36s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.

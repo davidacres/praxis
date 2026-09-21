@@ -13,7 +13,7 @@
  * registers it as the delivery default and adds the run-monitor around it.
  */
 
-import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition } from './workflowTypes';
+import { WORKFLOW_SCHEMA_VERSION, type WorkflowCheckNode, type WorkflowDefinition } from './workflowTypes';
 import type { AgentWorkflowReference } from '../ai/agentTypes';
 import { validateWorkflow } from './workflowValidation';
 import type { AgentCatalogSnapshot } from './workflowPreflight';
@@ -67,7 +67,66 @@ export interface TemplateReadiness {
 const NOW = '2026-09-02T00:00:00.000Z';
 
 /**
- * Plan → Implement → (Review ∥ QA ∥ Security) → Gates → Approve.
+ * The stage that gives a run's worktree its dependencies.
+ *
+ * A run works in a fresh git worktree, and `node_modules` is gitignored, so it starts with none. Tools
+ * only "work" there when something up the directory tree happens to supply them — which is how a
+ * monorepo's tests pass right up until a workspace package with its own nested dependencies
+ * (`packages/x/node_modules`) fails to compile with a missing module. Installing, rather than linking
+ * the main checkout's `node_modules`, keeps the run isolated: a linked directory is shared mutable
+ * state (an agent's `npm install` would write into the user's real checkout) and goes stale when a
+ * stage changes the lockfile.
+ *
+ * `--registry` names the public registry on purpose. With a private default registry (GitHub Packages,
+ * most internal feeds) npm rewrites the lockfile's `registry.npmjs.org` tarball URLs to that registry
+ * and every public package 404s on a cold cache. Scoped registries (`@scope:registry=`) are unaffected.
+ */
+function installDependenciesNode(x: number, y: number): WorkflowCheckNode {
+  return {
+    type: 'check',
+    id: 'install',
+    name: 'Install dependencies',
+    x,
+    y,
+    inputs: ['change-diff'],
+    command: 'npm',
+    args: ['ci', '--registry=https://registry.npmjs.org/'],
+    successExitCodes: [0],
+    // Long on purpose: a cold install of a large workspace is minutes, not seconds.
+    timeoutMs: 600000,
+    maxAttempts: 2,
+    outputs: [{ id: 'install-log', kind: 'log', required: true }]
+  };
+}
+
+/**
+ * The stage that produces the build outputs the tests load.
+ *
+ * Build output (`dist/`, `out/`, a copied renderer …) is gitignored, so — like `node_modules` — a run
+ * worktree has none. Anything that runs the built product against it fails in a way that looks
+ * nothing like "you forgot to build": a desktop app's end-to-end suite opens a window that is simply
+ * blank because the page it loads was never produced. `--if-present` makes this a no-op for a project
+ * with no `build` script, and its log is optional because that no-op prints nothing (a required log
+ * with no output would fail the stage for having nothing to say).
+ */
+function buildNode(x: number, y: number): WorkflowCheckNode {
+  return {
+    type: 'check',
+    id: 'build',
+    name: 'Build',
+    x,
+    y,
+    inputs: ['change-diff'],
+    command: 'npm',
+    args: ['run', 'build', '--if-present'],
+    successExitCodes: [0],
+    timeoutMs: 900000,
+    outputs: [{ id: 'build-log', kind: 'log', required: false }]
+  };
+}
+
+/**
+ * Plan → Implement → (Review ∥ Security ∥ Install → Build → QA) → Gates → Approve.
  *
  * The agent ids (`praxis-planner`, `praxis-implementer`, `praxis-reviewer`) are
  * conventional: a project points them at real Agent Hub agents, or the designer
@@ -125,13 +184,15 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         mutatesWorktree: false,
         satisfiesGate: 'review'
       },
+      installDependenciesNode(480, 240),
+      buildNode(720, 240),
       {
         type: 'check',
         id: 'qa',
         name: 'QA',
-        x: 480,
-        y: 160,
-        inputs: ['change-diff'],
+        x: 960,
+        y: 240,
+        inputs: ['change-diff', 'install-log'],
         command: 'npm',
         args: ['test'],
         successExitCodes: [0],
@@ -143,20 +204,25 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         id: 'security',
         name: 'Security scan',
         x: 480,
-        y: 320,
+        y: 400,
         inputs: ['change-diff'],
         command: 'npm',
-        args: ['audit', '--audit-level=high'],
+        // Audited against the public registry on purpose. `npm audit` asks the *configured* registry
+        // for advisories, and many (GitHub Packages, most private feeds) have no audit endpoint: the
+        // command then exits 1 without having looked at anything and, as a required gate, would end
+        // the run. The public advisory database is the source of truth; private package names simply
+        // have no advisories there.
+        args: ['audit', '--audit-level=high', '--registry=https://registry.npmjs.org/'],
         successExitCodes: [0],
         outputs: [{ id: 'security-report', kind: 'report', required: true }],
         satisfiesGate: 'security'
       },
-      { type: 'join', id: 'gates', name: 'Gates', x: 720, y: 160, inputs: [], mode: 'all' },
+      { type: 'join', id: 'gates', name: 'Gates', x: 1200, y: 160, inputs: [], mode: 'all' },
       {
         type: 'approval',
         id: 'approve',
         name: 'Approve',
-        x: 960,
+        x: 1440,
         y: 160,
         inputs: ['review-report', 'qa-results', 'security-report'],
         prompt: 'Review, QA, and security have passed. Approve this change for delivery?',
@@ -167,7 +233,9 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
     edges: [
       { id: 'e-plan-impl', from: 'plan', to: 'implement', on: 'success', required: true },
       { id: 'e-impl-review', from: 'implement', to: 'review', on: 'success', required: true },
-      { id: 'e-impl-qa', from: 'implement', to: 'qa', on: 'success', required: true },
+      { id: 'e-impl-install', from: 'implement', to: 'install', on: 'success', required: true },
+      { id: 'e-install-build', from: 'install', to: 'build', on: 'success', required: true },
+      { id: 'e-build-qa', from: 'build', to: 'qa', on: 'success', required: true },
       { id: 'e-impl-sec', from: 'implement', to: 'security', on: 'success', required: true },
       { id: 'e-review-gates', from: 'review', to: 'gates', on: 'success', required: true },
       { id: 'e-qa-gates', from: 'qa', to: 'gates', on: 'success', required: true },
@@ -229,6 +297,9 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
   const isDotnet = variant === 'dotnet';
   const isPython = variant === 'python';
   const isGeneric = variant === 'generic';
+  // Lint, type check and unit tests run the project's own toolchain, which needs its dependencies. The
+  // scanners (SAST, secrets, SCA) and the reviewer read the tree and do not, so they do not wait.
+  const needsInstall = variant === 'node';
 
   const id = variant === 'node' ? 'full-sdlc' : `full-sdlc-${variant}`;
   const title =
@@ -324,6 +395,7 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         mutatesWorktree: true,
         maxAttempts: 3
       },
+      ...(needsInstall ? [installDependenciesNode(320, 60), buildNode(440, 130)] : []),
       // QA gate checks
       {
         type: 'check',
@@ -353,7 +425,7 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         type: 'check',
         id: 'test',
         name: 'Unit tests & coverage',
-        x: 440,
+        x: needsInstall ? 560 : 440,
         y: 120,
         inputs: ['change-diff'],
         ...testCmd,
@@ -457,9 +529,13 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
     ],
     edges: [
       { id: 'e-plan-impl', from: 'plan', to: 'implement', on: 'success', required: true },
-      { id: 'e-impl-lint', from: 'implement', to: 'lint', on: 'success', required: false },
-      { id: 'e-impl-typecheck', from: 'implement', to: 'typecheck', on: 'success', required: false },
-      { id: 'e-impl-test', from: 'implement', to: 'test', on: 'success', required: true },
+      // The QA toolchain waits for the install; everything else starts from the implementation directly.
+      ...(needsInstall ? [{ id: 'e-impl-install', from: 'implement', to: 'install', on: 'success' as const, required: true }] : []),
+      { id: 'e-impl-lint', from: needsInstall ? 'install' : 'implement', to: 'lint', on: 'success', required: false },
+      { id: 'e-impl-typecheck', from: needsInstall ? 'install' : 'implement', to: 'typecheck', on: 'success', required: false },
+      // Unit tests run the built product, so they wait for the build; lint and type check do not.
+      ...(needsInstall ? [{ id: 'e-install-build', from: 'install', to: 'build', on: 'success' as const, required: true }] : []),
+      { id: 'e-impl-test', from: needsInstall ? 'build' : 'implement', to: 'test', on: 'success', required: true },
       { id: 'e-impl-sast', from: 'implement', to: 'sast', on: 'success', required: true },
       { id: 'e-impl-sec', from: 'implement', to: 'secrets', on: 'success', required: true },
       { id: 'e-impl-sca', from: 'implement', to: 'sca', on: 'success', required: true },

@@ -618,3 +618,73 @@ test('metadata updates merge after queued cleanup without restoring a stale work
   assert.equal(runs.get('run-1')?.worktreePath, undefined);
   assert.equal(runs.get('run-1')?.issueWriteBackAt, 'sent');
 });
+
+// ── A run that ends, and a run that only pauses ──────────────────────────
+
+/** Runs implement to success and returns with qa and security both dispatched. */
+async function withChecksRunning() {
+  const runs = memoryRuns();
+  const def = definition();
+  seed(runs, def);
+  const fake = fakeDispatcher();
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+  await orchestrator.step('run-1');
+  await settleAll();
+  fake.finish('implement', { status: 'succeeded', artifacts: outputsFor(def, 'implement'), snapshotRef: 'sha-1' });
+  await settleAll();
+  assert.deepEqual(fake.started, ['implement', 'qa', 'security']);
+  return { runs, def, fake, orchestrator };
+}
+
+test('a required stage failing ends the run, stops its running siblings and records them as cancelled', async () => {
+  const { runs, fake } = await withChecksRunning();
+
+  fake.finish('security', { status: 'failed', exitCode: 1, error: 'npm exited 1: found 2 high vulnerabilities' });
+  await settleAll();
+
+  const run = runs.get('run-1')!;
+  assert.equal(run.status, 'failed');
+  // QA was still running: it was stopped, not left "running" inside a finished run.
+  assert.ok(fake.cancelled.includes('qa'));
+  assert.equal(run.nodes.qa.outcome, 'cancelled');
+  assert.equal(run.nodes.qa.attempts.at(-1)?.outcome, 'cancelled');
+  assert.match(run.nodes.qa.attempts.at(-1)?.error ?? '', /the run ended/);
+  assert.equal(Object.values(run.nodes).some(state => state.outcome === 'running'), false);
+});
+
+test('an environment failure pauses the run: siblings keep running, and a retry continues it', async () => {
+  const { runs, def, fake, orchestrator } = await withChecksRunning();
+
+  // The audit could not run (registry has no audit endpoint) — not a finding.
+  fake.finish('security', { status: 'failed', pause: 'environment', error: 'npm exited 1: audit endpoint returned an error' });
+  await settleAll();
+
+  let run = runs.get('run-1')!;
+  assert.equal(run.status, 'running', 'the run did not fail');
+  assert.equal(run.nodes.security.outcome, 'failed');
+  assert.equal(run.nodes.security.attempts.at(-1)?.pause, 'environment');
+  assert.equal(run.nodes.qa.outcome, 'running', 'the sibling was left to finish');
+  assert.deepEqual(fake.cancelled, []);
+
+  // The sibling finishing is recorded; the run still waits on the paused stage.
+  fake.finish('qa', { status: 'succeeded', artifacts: outputsFor(def, 'qa') });
+  await settleAll();
+  run = runs.get('run-1')!;
+  assert.equal(run.nodes.qa.outcome, 'succeeded');
+  assert.equal(run.status, 'running');
+
+  // After the user fixes the environment: retry only the paused stage.
+  await orchestrator.updateRun('run-1', current =>
+    applyWorkflowRunCommand(current, { kind: 'node-retry', nodeId: 'security', at: now() })
+  );
+  await orchestrator.step('run-1');
+  await settleAll();
+  assert.deepEqual(fake.started.filter(id => id === 'security'), ['security', 'security']);
+  fake.finish('security', { status: 'succeeded', artifacts: outputsFor(def, 'security') });
+  await settleAll();
+
+  run = runs.get('run-1')!;
+  assert.equal(run.nodes.security.outcome, 'succeeded');
+  assert.equal(run.nodes.gates.outcome, 'succeeded');
+  assert.equal(run.status, 'running');
+});

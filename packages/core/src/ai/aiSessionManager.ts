@@ -198,6 +198,8 @@ export class AiSessionManager {
         | 'workflowId'
         | 'workflowVersion'
         | 'workflowRole'
+        | 'parentSessionKey'
+        | 'autoApprovePermissions'
         | 'agentId'
         | 'profileId'
         | 'hostId'
@@ -218,6 +220,8 @@ export class AiSessionManager {
       if (open) open.runtimeSessionId = runtime.runtimeSessionId;
     }
     if (runtime.runtimeLaunch !== undefined) record.runtimeLaunch = runtime.runtimeLaunch;
+    if (runtime.autoApprovePermissions !== undefined) record.autoApprovePermissions = runtime.autoApprovePermissions || undefined;
+    if (runtime.parentSessionKey !== undefined) record.parentSessionKey = runtime.parentSessionKey.trim() || undefined;
     if (runtime.connectionId !== undefined) record.connectionId = runtime.connectionId;
     if (runtime.projectId !== undefined) record.projectId = runtime.projectId.trim() || undefined;
     if (runtime.worktreePath !== undefined) record.worktreePath = runtime.worktreePath.trim() || undefined;

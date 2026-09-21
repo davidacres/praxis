@@ -39,9 +39,10 @@ export function getWorkflowTemplateGuidance(definition: WorkflowDefinition): Wor
   if (id === 'full-sdlc' || id === 'full-sdlc-node') {
     return {
       bestFor: 'Production Node.js and TypeScript repositories requiring rigorous quality, security, and supply-chain gates.',
-      summary: '12-stage pipeline with ESLint, TypeScript compiler, Vitest/Jest, Semgrep SAST, Gitleaks, npm audit, and structured review.',
+      summary: '14-stage pipeline: dependency install and build, then ESLint, TypeScript compiler, Vitest/Jest, Semgrep SAST, Gitleaks, npm audit, and structured review.',
       stack: 'Node.js / TypeScript',
       highlights: [
+        'Installs dependencies and builds in the run\'s own worktree first, so tests never run against a missing build',
         'Native Node checks: ESLint, tsc, and Vitest/Jest with coverage reporting',
         'Tri-part security: Semgrep SAST, Gitleaks secret scanning, and npm audit SCA',
         'Automated review-fix loop between reviewer and implementer agents',
@@ -245,5 +246,34 @@ export function getWorkflowStageSequence(definition: WorkflowDefinition): StageF
     }
   }
 
-  return steps;
+  return orderByDependencyLevel(definition, steps);
+}
+
+/**
+ * Lists stages in dependency order: a stage never appears before one it waits on.
+ *
+ * A plain breadth-first walk does not guarantee that. A join is reached as soon as its *shallowest*
+ * branch is, so it was listed ahead of the deeper branches that feed it (Gates before Build and QA).
+ * Each stage is placed at its longest distance from the entry — following success/always edges only,
+ * since failure edges loop back for rework — and ties keep their walk order, so parallel stages stay
+ * in the order the template lays them out.
+ */
+function orderByDependencyLevel(definition: WorkflowDefinition, steps: StageFlowStep[]): StageFlowStep[] {
+  const level = new Map<string, number>(steps.map(step => [step.id, 0]));
+  const forward = definition.edges.filter(edge => edge.on !== 'failure' && level.has(edge.from) && level.has(edge.to));
+  for (let pass = 0; pass < steps.length; pass += 1) {
+    let changed = false;
+    for (const edge of forward) {
+      const next = (level.get(edge.from) ?? 0) + 1;
+      if (next < steps.length && next > (level.get(edge.to) ?? 0)) {
+        level.set(edge.to, next);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return steps
+    .map((step, index) => ({ step, index }))
+    .sort((left, right) => (level.get(left.step.id) ?? 0) - (level.get(right.step.id) ?? 0) || left.index - right.index)
+    .map(entry => entry.step);
 }

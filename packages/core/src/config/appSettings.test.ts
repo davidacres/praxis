@@ -418,3 +418,23 @@ test('a detached profile ignores appearance edits for mirroring', () => {
     base.appearance.looks.map(look => look.surfacePackId)
   );
 });
+
+test('a provider is enabled unless it was explicitly turned off, and the choice round-trips', () => {
+  // Nothing stored: no `enabled` key, so an existing setup behaves exactly as before.
+  const untouched = sanitizeAppSettings({ ai: { providers: { anthropic: { baseUrl: 'https://example.test' } } } });
+  assert.equal(untouched.ai.providers.anthropic?.enabled, undefined);
+
+  const off = sanitizeAppSettings({ ai: { providers: { anthropic: { enabled: false } } } });
+  assert.equal(off.ai.providers.anthropic?.enabled, false);
+
+  // Non-boolean junk is ignored rather than read as "off".
+  const junk = sanitizeAppSettings({ ai: { providers: { anthropic: { enabled: 'no', baseUrl: 'https://x.test' } } } });
+  assert.equal(junk.ai.providers.anthropic?.enabled, undefined);
+
+  // Turning it off keeps the rest of its config; turning it back on is a plain merge.
+  const merged = mergeAppSettings(untouched, { ai: { providers: { anthropic: { baseUrl: 'https://example.test', enabled: false } } } });
+  assert.equal(merged.ai.providers.anthropic?.enabled, false);
+  assert.equal(merged.ai.providers.anthropic?.baseUrl, 'https://example.test');
+  const back = mergeAppSettings(merged, { ai: { providers: { anthropic: { ...merged.ai.providers.anthropic, enabled: true } } } });
+  assert.equal(back.ai.providers.anthropic?.enabled, true);
+});

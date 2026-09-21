@@ -89,6 +89,14 @@ export interface AiProviderConfig {
    * `baseUrl`/`defaultModel`, this field has no legacy top-level equivalent.
    */
   enabledModelIds?: string[];
+  /**
+   * Whether this provider is offered for new sessions (Settings → AI Provider →
+   * Providers). `undefined` means enabled: a provider is only *usable* when it is
+   * also configured (key present / CLI found), so leaving this unset changes
+   * nothing for an existing setup. Only an explicit `false` turns a configured
+   * provider off. Sessions already running on it are unaffected.
+   */
+  enabled?: boolean;
 }
 
 export interface AiSettings {
@@ -924,6 +932,9 @@ function readAiProviderConfigs(value: unknown): Partial<Record<AiProvider, AiPro
     // `[]`, not collapse to "unset".
     if (Array.isArray(raw.enabledModelIds) && raw.enabledModelIds.every(v => typeof v === 'string')) {
       config.enabledModelIds = raw.enabledModelIds as string[];
+    }
+    if (typeof raw.enabled === 'boolean') {
+      config.enabled = raw.enabled;
     }
     if (Object.keys(config).length > 0) {
       out[id] = config;
