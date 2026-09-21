@@ -18,29 +18,54 @@ test('an already cancelled check never launches', async () => {
   assert.equal(result.output, '');
 });
 
-test('workflow checks use unattended CI semantics by default', async () => {
+test('local workflow checks use unattended CI semantics with parallel desktop workers by default', async () => {
   const previous = process.env.CI;
+  const previousWorkers = process.env.PRAXIS_E2E_WORKERS;
   delete process.env.CI;
+  delete process.env.PRAXIS_E2E_WORKERS;
   try {
-    const result = await spawnCheck(check("process.stdout.write(process.env.CI || '')"), tmpdir());
+    const result = await spawnCheck(check("process.stdout.write(JSON.stringify({ ci: process.env.CI, workers: process.env.PRAXIS_E2E_WORKERS }))"), tmpdir());
     assert.equal(result.code, 0);
-    assert.equal(result.output, '1');
+    assert.deepEqual(JSON.parse(result.output), { ci: '1', workers: '4' });
   } finally {
     if (previous === undefined) delete process.env.CI;
     else process.env.CI = previous;
+    if (previousWorkers === undefined) delete process.env.PRAXIS_E2E_WORKERS;
+    else process.env.PRAXIS_E2E_WORKERS = previousWorkers;
   }
 });
 
-test('workflow checks preserve an explicit host CI value', async () => {
+test('workflow checks preserve real CI serial defaults', async () => {
   const previous = process.env.CI;
+  const previousWorkers = process.env.PRAXIS_E2E_WORKERS;
   process.env.CI = 'custom-ci';
+  delete process.env.PRAXIS_E2E_WORKERS;
   try {
-    const result = await spawnCheck(check("process.stdout.write(process.env.CI || '')"), tmpdir());
+    const result = await spawnCheck(check("process.stdout.write(JSON.stringify({ ci: process.env.CI, workers: process.env.PRAXIS_E2E_WORKERS }))"), tmpdir());
     assert.equal(result.code, 0);
-    assert.equal(result.output, 'custom-ci');
+    assert.deepEqual(JSON.parse(result.output), { ci: 'custom-ci' });
   } finally {
     if (previous === undefined) delete process.env.CI;
     else process.env.CI = previous;
+    if (previousWorkers === undefined) delete process.env.PRAXIS_E2E_WORKERS;
+    else process.env.PRAXIS_E2E_WORKERS = previousWorkers;
+  }
+});
+
+test('workflow checks preserve an explicit worker choice', async () => {
+  const previous = process.env.CI;
+  const previousWorkers = process.env.PRAXIS_E2E_WORKERS;
+  delete process.env.CI;
+  process.env.PRAXIS_E2E_WORKERS = '2';
+  try {
+    const result = await spawnCheck(check("process.stdout.write(JSON.stringify({ ci: process.env.CI, workers: process.env.PRAXIS_E2E_WORKERS }))"), tmpdir());
+    assert.equal(result.code, 0);
+    assert.deepEqual(JSON.parse(result.output), { ci: '1', workers: '2' });
+  } finally {
+    if (previous === undefined) delete process.env.CI;
+    else process.env.CI = previous;
+    if (previousWorkers === undefined) delete process.env.PRAXIS_E2E_WORKERS;
+    else process.env.PRAXIS_E2E_WORKERS = previousWorkers;
   }
 });
 
