@@ -13,7 +13,7 @@
  * registers it as the delivery default and adds the run-monitor around it.
  */
 
-import { WORKFLOW_SCHEMA_VERSION, type WorkflowCheckNode, type WorkflowDefinition } from './workflowTypes';
+import { WORKFLOW_SCHEMA_VERSION, isAgentTaskNode, type WorkflowCheckNode, type WorkflowDefinition } from './workflowTypes';
 import type { AgentWorkflowReference } from '../ai/agentTypes';
 import { validateWorkflow } from './workflowValidation';
 import type { AgentCatalogSnapshot } from './workflowPreflight';
@@ -24,6 +24,7 @@ import {
   AVAILABLE_SKILL_DEFINITIONS
 } from '../ai/agentRuntime/bundledAgents';
 import { sdlcLoopMarketplaceTemplates } from './sdlcLoopTemplates';
+import { defaultTierForStage } from './stageModel';
 
 export interface WorkflowTemplate {
   definition: WorkflowDefinition;
@@ -675,8 +676,16 @@ export function instantiateTemplateForProject(input: InstantiateTemplateInput): 
   const clone = JSON.parse(JSON.stringify(input.template)) as WorkflowDefinition;
   const { builtIn: _builtIn, ...rest } = clone;
 
+  // A new workflow starts with a sensible tier on every agent stage that has none, so mapping the
+  // tiers to models in Settings takes effect without editing each stage. An unmapped tier changes
+  // nothing at run time (the run's model is used), and the author can change or clear any of them.
+  const nodes = rest.nodes.map(node =>
+    isAgentTaskNode(node) && !node.model && !node.modelTier ? { ...node, modelTier: defaultTierForStage(node) } : node
+  );
+
   return {
     ...rest,
+    nodes,
     id: input.newId ?? `${input.template.id}-${input.projectId}`,
     name: input.newName ?? input.template.name,
     scope: 'project',

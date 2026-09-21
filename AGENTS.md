@@ -184,13 +184,13 @@ every sidebar tree sets its `padding-left` to one of these four — never a
 bare pixel value:
 
 - `--tree-indent-1` (18px) — a direct child of the tree's root: a collapsible
-  subsection header (`Boards`, `Repository`, `Workflows`, `Docs`; the Agent
-  Hub's `Global`/`Project` scope label) **and** a flat leaf row with no
+  subsection header (`Boards`, `Repository`, `Workflows`, `Docs`) or the Agent Hub
+  row itself **and** a flat leaf row with no
   children of its own, so it never grows a header (`Run`, `Deployments`).
   Both are the same depth — a childless leaf sits where a header would.
 - `--tree-indent-2` (30px) — one level inside a `--tree-indent-1` subsection: a
   board, `Graph`/`Changes`, a workflow and its own `Runs` row, an Agent Hub
-  agent/skill row, a project's `docs > plans` folder header. This value is not
+  Agents / Skills sub-header, a project's `docs > plans` folder header. This value is not
   arbitrary: `.project-tree-children > .tree-row::before`'s connector dash is
   fixed at `left: 17px; width: 13px`, ending at 30px, so a row's icon starts
   exactly where the dash stops — no gap, no overlap. Moving the dash's
@@ -200,9 +200,16 @@ bare pixel value:
   **run node** one level inside the `Runs` group (`.project-run-row`, whose
   header sits at `--tree-indent-2` beside its workflow rows); and a **session
   nested beneath the session that spawned it** in the Sessions tree
-  (`.session-nav-row--child`).
+  (`.session-nav-row--child`); an Agent Hub **agent or skill row** (`.agent-nav-row`).
 - `--tree-indent-4` (48px) — a document itself, one level inside a
   `--tree-indent-3` group (`.project-document-row`).
+
+  **The Agent Hub row's children are Agents and Skills, not scopes.** The root is labelled **Agent Hub**
+  (feature id `agents`, `nav-agents`); under it are two collapsible kinds, and where an item comes from is
+  row metadata rather than a level: a project's own items (scope `project`) sort first and carry a folder
+  icon (`agent-nav-project-tag`), everything else is untagged. There is deliberately no "Global" label — it
+  meant "installed for you, all projects", which is the default and needs no name. The tag is an icon, not
+  a word: a text chip beside an "approval" badge squeezed the name to `pr…` in the 260px sidebar.
 
 Icons follow the same tokens, but by **role**, not by depth — an
 `--tree-indent-2`/`-3` row can be a leaf (`Graph`, a board, a document) or
@@ -213,6 +220,16 @@ down. A header's icon (`.tree-section-icon`, boxed to 18px regardless of the
 glyph) steps down 1px per nesting level instead — 13px at `--tree-indent-1`,
 12px at `--tree-indent-2`, 10px at `--tree-indent-3` — so a deeper group still
 visibly reads as subordinate.
+
+**The alignment is measured, not eyeballed.** `e2e/sidebarTreeAlignment.spec.ts` seeds a project with a
+workflow and runs, then asserts that rows at one depth share an icon column and a label column, that every
+icon sits `.tree-row`'s 6px from its label, and that deeper levels step in. It exists because two rows had
+drifted unnoticed: the project's **Run** (services) row borrowed `.project-run-row` — the class for a
+workflow run *node*, `--tree-indent-3` — and sat 12px too deep (it now has `.project-service-run-row`,
+`--tree-indent-1`, like Deployments); and the workflow rows and the `Runs` header put their icon and label
+inside a `.board-tree-main` button, which lacks `.tree-row`'s gap, so the icon touched the text (they now set
+`gap: 6px`). **Reusing a row class for a different kind of row inherits its indent** — give a new kind of
+row its own class.
 
 **Adding a new row to any sidebar tree**: decide which of the four depths it
 actually sits at (a header/leaf-with-no-children, or something nested one,
@@ -272,6 +289,43 @@ output and a negative case in `checkEnvironmentFailure.test.ts`. (Real example: 
 against a default registry with no audit endpoint, e.g. GitHub Packages, exits 1 having checked
 nothing; the Governed delivery template now audits against `registry.npmjs.org` for that reason.)
 
+**A person can always retry a failed stage; `maxAttempts` only bounds the run continuing alone.**
+`retryNode` no longer checks the attempt budget, and a `node-retry` on a **failed** run reopens it
+(the one command besides `gate-decided`/`node-stopped` a settled run accepts; a `cancelled` run stays
+cancelled). Siblings the orchestrator stopped when the run failed (`cancelled`) go back to `pending`
+with it. `canRetry` is still what `settleRunIfDone` uses to decide whether the run keeps going by
+itself, so it still fails a run whose budget is spent — it just no longer makes that final. Reopening
+re-acquires the worktree, and a released worktree's branch still exists, so
+`prepareDeliveryWorktree` **re-attaches an existing `WF-<run8>-<slug>` branch** (with its commits, and
+without the clean-base check, which only applies when creating the branch) instead of
+`worktree add -b`, which fails on the name. The pipeline's retry icon is a *sibling* of the step
+button (a button cannot nest in a button), shown for any step with a `retry-stage` action.
+
+**A stage names a model tier, not a model.** `WorkflowAgentTaskNode.modelTier` (`fast`/`standard`/
+`strong`), optional `model` (exact id, wins), `escalateOnRetry` (default on). `ai.modelTiers[provider]`
+in settings maps tiers to ids because ids are provider-specific — there is no honest universal
+ranking, so never hard-code one. It is edited **in the provider's own row** (Settings → AI Provider →
+Providers → open a provider → Model tiers, `ProviderModelTiers`) as a pick from that provider's fetched
+models — never free text where a list exists, since a mistyped id fails the launch — and from the
+other side in Manage models, where each model row's tier select writes the same map (a tier holds one
+model, so a model holds at most one tier). `chooseStageModel` (core, `stageModel.ts`) is the only resolver:
+exact model → mapped tier → run model → provider default; **an unmapped tier falls back to the run's
+model rather than guessing an id** (a wrong id fails the launch). Each failed attempt after the first
+moves one tier up; attempts that paused (provider limit / environment) never spent the stage and never
+escalate. `instantiateTemplateForProject` gives every unset agent stage a default tier, so mapping the
+tiers takes effect without editing stages; unmapped, nothing changes. "Suggest model tiers" in the
+designer (`workflows:recommendModelTiers`, sibling of the template recommender) only fills the *unsaved
+draft* for stages with no choice yet. **`normalizeWorkflow` (`workflowValidation.ts`) whitelists node
+fields** — a new node field that is not copied there is silently dropped on save and the feature does
+nothing; that is exactly how `modelTier` first failed, and only an e2e that saved and ran the workflow
+showed it. Add the field to the sanitizer and to its round-trip test.
+
+**A stage starts from what earlier stages concluded.** A report artifact has no file — its text only
+ever lived on the producing stage's session — so a downstream stage used to be told a report existed
+and could not read it. `runWorkflowAgentStage` now appends `formatUpstreamReports` (core, capped at
+6000 chars per report, head and tail kept, the cap announced) to the stage's scope, read from the
+producing session's `responseText`. Artifacts with a path are still referenced by path.
+
 **A run's worktree starts with no dependencies, so the template installs them.** `node_modules` is
 gitignored, so a fresh worktree has none; tools only appear to work when something up the tree
 supplies them (the parent checkout's root `node_modules`), and a workspace package with its own
@@ -327,8 +381,14 @@ and back-filled for older records in `recoverWorkflowRunsOnStartup`. `SessionsNa
 nests children under a parent that is in the list; a child whose parent is missing
 (archived, other workspace) stays a top-level row rather than vanishing. Archiving or
 deleting a parent cascades to its children (delete asks first). A run started with no
-controller has no parent, so its stage sessions stay top-level in Sessions — the run
-workspace's pipeline is where they are grouped.
+controller has no parent, so its stage sessions are top-level rows in Sessions — but two or
+more from the same run gather under one run header (`SessionsNav`'s `rootItems`, labelled from
+the run's workflow name via `runNames`; a lone one stays a plain row). The header is not a
+session: it cannot be selected or renamed and never becomes a `parentSessionKey`. It does carry **archive
+and delete** (`session-run-archive-btn` / `session-run-delete-btn`) that act on the whole group exactly as
+they do on a parent session — every stage session under it, children before their stage, deleting asks
+first and names the count. The *run itself* is untouched (it stays under Workflows → Runs; deleting the
+run is `workflows:deleteRun`), and archived sessions are restored one by one from the Sessions tab.
 
 ## Onboarding and the walkthrough
 

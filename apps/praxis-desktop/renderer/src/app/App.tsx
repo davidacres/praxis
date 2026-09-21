@@ -154,7 +154,7 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   overview: 'Overview',
   sessions: 'Sessions',
   connections: 'Connections',
-  agents: 'Agents',
+  agents: 'Agent Hub',
   workflows: 'Workflows',
   git: 'Git Graph',
   run: 'Run',
@@ -1313,7 +1313,7 @@ export function App() {
       entries.push({ id: `session:${session.issueKey}`, label: session.title || session.issueKey, hint: session.issueKey, group: 'Sessions', icon: 'robot', run: () => navigate({ feature: 'sessions', sessionKey: session.issueKey }) });
     });
     (agentSnapshot?.profiles ?? []).filter(profile => !isHostShimProfile(profile)).forEach(profile => {
-      entries.push({ id: `profile:${profile.profile.id}`, label: profile.profile.name, hint: 'Agent profile', group: 'Agents', icon: 'robot', run: () => navigate({ feature: 'agents', agentProfileId: profile.profile.id }) });
+      entries.push({ id: `profile:${profile.profile.id}`, label: profile.profile.name, hint: 'Agent profile', group: 'Agent Hub', icon: 'robot', run: () => navigate({ feature: 'agents', agentProfileId: profile.profile.id }) });
     });
     // Bindings with no curated AGENT.md profile only — one that already has a
     // real profile shows up as that profile's entry above, and is managed
@@ -1324,10 +1324,10 @@ export function App() {
         return !profile || isHostShimProfile(profile);
       })
       .forEach(host => {
-        entries.push({ id: `host:${host.manifest.id}`, label: host.manifest.name, hint: 'Launch binding (advanced)', group: 'Agents', icon: 'zap', run: () => navigate({ feature: 'agents', agentId: host.manifest.id }) });
+        entries.push({ id: `host:${host.manifest.id}`, label: host.manifest.name, hint: 'Launch binding (advanced)', group: 'Agent Hub', icon: 'zap', run: () => navigate({ feature: 'agents', agentId: host.manifest.id }) });
       });
     (agentSnapshot?.skills ?? []).forEach(skill => {
-      entries.push({ id: `skill:${skill.metadata.name}`, label: skill.metadata.name, hint: 'Skill', group: 'Agents', icon: 'sparkles', run: () => navigate({ feature: 'agents', skillName: skill.metadata.name }) });
+      entries.push({ id: `skill:${skill.metadata.name}`, label: skill.metadata.name, hint: 'Skill', group: 'Agent Hub', icon: 'sparkles', run: () => navigate({ feature: 'agents', skillName: skill.metadata.name }) });
     });
     const settingsPages: Array<[SettingsCategory, string]> = [
       ['overview', 'Settings'], ['startup', 'Startup'], ['appearance', 'Board settings'],

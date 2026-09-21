@@ -532,6 +532,7 @@ export function WorkflowRunPage({
                     setPinnedStageId(nodeId);
                     onRequireAux?.();
                   }}
+                  onRetryNode={nodeId => void act(() => window.praxis.workflows.retryStage(run.runId, nodeId))}
                 />
 
                 {stage && (

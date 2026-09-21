@@ -245,6 +245,42 @@ export function WorkflowDesignerPage({
     }
   }, [definition, project.id]);
 
+  const [suggestingTiers, setSuggestingTiers] = useState(false);
+  const [tierNote, setTierNote] = useState<string | undefined>();
+
+  /**
+   * Asks the AI for a tier per agent stage and applies them to the unsaved draft — the author saves or
+   * discards. A stage that already names a tier or an exact model is the author's choice and is left alone.
+   */
+  const suggestTiers = useCallback(async () => {
+    if (!definition) return;
+    setSuggestingTiers(true);
+    setTierNote(undefined);
+    setError(undefined);
+    try {
+      const result = await window.praxis.workflows.recommendModelTiers(project.id, definition);
+      let applied = 0;
+      const nodes = definition.nodes.map(node => {
+        if (node.type !== 'agent-task' || node.modelTier || node.model) return node;
+        const suggestion = result.stages[node.id];
+        if (!suggestion) return node;
+        applied += 1;
+        return { ...node, modelTier: suggestion.tier };
+      });
+      setDefinition({ ...definition, nodes, updatedAt: new Date().toISOString() });
+      setSavedAt(undefined);
+      setTierNote(
+        applied === 0
+          ? 'Every agent stage already has a model choice, so nothing changed.'
+          : `Suggested a tier for ${applied} stage${applied === 1 ? '' : 's'} (${result.model}). Review them, then save.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSuggestingTiers(false);
+    }
+  }, [definition, project.id]);
+
   const mutate = useCallback((next: WorkflowDefinition) => {
     setDefinition(next);
     setSavedAt(undefined);
@@ -496,6 +532,16 @@ export function WorkflowDesignerPage({
           >
             <Icon name="shield" size={13} /> {validating ? 'Validating…' : 'Validate workflow'}
           </button>
+          <button
+            type="button"
+            className="btn btn-compact"
+            data-testid="wf-suggest-tiers-btn"
+            onClick={() => void suggestTiers()}
+            disabled={suggestingTiers || busy}
+            title="Ask the AI which model tier each agent stage needs. Stages that already have a choice are kept."
+          >
+            <Icon name="sparkles" size={13} /> {suggestingTiers ? 'Suggesting…' : 'Suggest model tiers'}
+          </button>
           <button type="button" className="btn btn-compact wf-header-del" onClick={() => void remove()} disabled={busy}>
             <Icon name="trash" size={13} /> Delete
           </button>
@@ -505,6 +551,11 @@ export function WorkflowDesignerPage({
       {error && (
         <p role="alert" className="error-banner">
           {error}
+        </p>
+      )}
+      {tierNote && (
+        <p className="hint" role="status" data-testid="wf-suggest-tiers-note">
+          {tierNote}
         </p>
       )}
 
@@ -1479,6 +1530,33 @@ function AgentStageFields({
         Writes to the implementation worktree
       </label>
       <GateSelect value={node.satisfiesGate} onChange={gate => set({ satisfiesGate: gate })} />
+      <Field label="Model tier">
+        <select
+          data-testid="wf-node-model-tier"
+          value={node.modelTier ?? ''}
+          onChange={event => set({ modelTier: (event.target.value || undefined) as typeof node.modelTier })}
+        >
+          <option value="">run's model</option>
+          <option value="fast">fast</option>
+          <option value="standard">standard</option>
+          <option value="strong">strong</option>
+        </select>
+        <span className="hint">
+          Which model this stage's session uses. Map each tier to a model per provider in Settings → AI Provider →
+          Providers (open a provider's row); an unmapped tier uses the run's model.
+        </span>
+      </Field>
+      {node.modelTier && (
+        <label className="form-check">
+          <input
+            type="checkbox"
+            data-testid="wf-node-escalate"
+            checked={node.escalateOnRetry !== false}
+            onChange={event => set({ escalateOnRetry: event.target.checked ? undefined : false })}
+          />
+          Move up a tier on each retry
+        </label>
+      )}
     </>
   );
 }

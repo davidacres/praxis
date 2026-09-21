@@ -13,6 +13,7 @@ import type {
   CatalogEntry,
   InstalledAddon,
   MarketplaceStatus,
+  ModelChoice,
   SurfaceMotifSettings,
   BoardsSidebarMode,
   Connection
@@ -26,7 +27,7 @@ import {
 import { Icon, type IconName } from '../ui/Icon';
 import { ModelManagerPanel } from '../ai/ModelManagerPanel';
 import { AiUsageStatsSection } from './AiUsageStatsSection';
-import { MODEL_PROVIDERS } from '../ai/modelProviders';
+import { MODEL_PROVIDERS, fetchModelOptions } from '../ai/modelProviders';
 import {
   formatCost,
   formatTokenCount,
@@ -1180,14 +1181,17 @@ function CategoryHeader({ category, children, actions }: { category: CategoryDef
 function FieldRow({
   label,
   description,
-  children
+  children,
+  stacked
 }: {
   label: string;
   description?: string;
   children: React.ReactNode;
+  /** Label and help above, control below at full width — for a control that needs room (several inputs). */
+  stacked?: boolean;
 }) {
   return (
-    <div className="settings-field-row">
+    <div className={`settings-field-row${stacked ? ' settings-field-row--stacked' : ''}`}>
       <div className="settings-field-label">
         <strong>{label}</strong>
         {description && <div className="settings-field-help">{description}</div>}
@@ -1801,6 +1805,13 @@ function AiSection({
           }
         });
 
+  const saveProviderTiers = (entry: { fast?: string; standard?: string; strong?: string }) => {
+    const next = { ...(settings.ai.modelTiers ?? {}) };
+    if (Object.keys(entry).length > 0) next[selectedProviderId] = entry;
+    else delete next[selectedProviderId];
+    void update({ ai: { modelTiers: next } });
+  };
+
   if (managingModels) {
     return (
       <ModelManagerPanel
@@ -1808,6 +1819,8 @@ function AiSection({
         providerLabel={selectedMeta.label}
         enabledModelIds={selectedConfig.enabledModelIds}
         providerConfig={selectedConfig}
+        tiers={settings.ai.modelTiers?.[selectedProviderId] ?? {}}
+        onTiersChange={saveProviderTiers}
         onBack={() => setManagingModels(false)}
         update={update}
       />
@@ -2136,6 +2149,18 @@ function AiSection({
                   </button>
                 </FieldRow>
               )}
+              <FieldRow
+                label="Model tiers"
+                stacked
+                description={`What fast, standard and strong mean on ${selectedMeta.label}. A workflow stage names a tier, so the same workflow runs on whichever provider is used; a tier left unset uses the run's model. Retrying a stage moves it up a tier.`}
+              >
+                <ProviderModelTiers
+                  key={selectedProviderId}
+                  provider={selectedProviderId}
+                  tiers={settings.ai.modelTiers?.[selectedProviderId] ?? {}}
+                  onChange={saveProviderTiers}
+                />
+              </FieldRow>
                       </div>
                     )}
                   </div>
@@ -4585,6 +4610,112 @@ function DebouncedTextArea({ ariaLabel, value, placeholder, onCommit, delayMs = 
       onChange={event => schedule(event.target.value)}
       style={{ width: '100%' }}
     />
+  );
+}
+
+const MODEL_TIER_NAMES = ['fast', 'standard', 'strong'] as const;
+type ModelTierName = (typeof MODEL_TIER_NAMES)[number];
+const CUSTOM_MODEL = '__custom__';
+
+/**
+ * One provider's model tiers: what fast, standard and strong mean *for this provider*. Each tier is a
+ * pick from the provider's real model list (so an id cannot be mistyped into one that does not exist);
+ * a provider with no list, or a model outside it, falls back to typing an id. A tier left unset makes
+ * a stage use the run's model.
+ */
+function ProviderModelTiers({
+  provider,
+  tiers,
+  onChange
+}: {
+  provider: AiProvider;
+  tiers: { fast?: string; standard?: string; strong?: string };
+  onChange: (next: { fast?: string; standard?: string; strong?: string }) => void;
+}) {
+  const [catalog, setCatalog] = useState<ModelChoice[] | undefined>();
+  const [loading, setLoading] = useState(true);
+  const [customTiers, setCustomTiers] = useState<Partial<Record<ModelTierName, boolean>>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void fetchModelOptions(provider, false)
+      .then(options => {
+        if (!cancelled) setCatalog(options?.options);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalog(undefined);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [provider]);
+
+  const commit = (tier: ModelTierName, value: string) => {
+    const next = { ...tiers, [tier]: value.trim() || undefined };
+    onChange(Object.fromEntries(Object.entries(next).filter(([, model]) => model)) as typeof tiers);
+  };
+
+  return (
+    <div className="model-tiers-field" data-testid={`ai-model-tiers-${provider}`}>
+      {MODEL_TIER_NAMES.map(tier => {
+        const current = tiers[tier] ?? '';
+        const listed = !!catalog?.some(choice => choice.value === current);
+        const typing = !catalog || customTiers[tier] || (!!current && !listed);
+        return (
+          <label key={tier} className="model-tiers-row">
+            <span>{tier}</span>
+            {typing ? (
+              <span className="model-tiers-typed">
+                <DebouncedTextField
+                  ariaLabel={`${tier} tier model`}
+                  value={current}
+                  onCommit={value => commit(tier, value)}
+                  placeholder="model id (blank = the run's model)"
+                />
+                {catalog && (
+                  <button
+                    type="button"
+                    className="btn btn-compact"
+                    onClick={() => {
+                      setCustomTiers(state => ({ ...state, [tier]: false }));
+                      if (current && !listed) commit(tier, '');
+                    }}
+                  >
+                    Pick from list
+                  </button>
+                )}
+              </span>
+            ) : (
+              <select
+                className="input"
+                aria-label={`${tier} tier model`}
+                data-testid={`ai-model-tier-${provider}-${tier}`}
+                value={current}
+                onChange={event => {
+                  if (event.target.value === CUSTOM_MODEL) setCustomTiers(state => ({ ...state, [tier]: true }));
+                  else commit(tier, event.target.value);
+                }}
+              >
+                <option value="">The run's model</option>
+                {catalog!.map(choice => (
+                  <option key={choice.value} value={choice.value}>
+                    {choice.name && choice.name !== choice.value ? `${choice.name} (${choice.value})` : choice.value}
+                  </option>
+                ))}
+                <option value={CUSTOM_MODEL}>Other model id…</option>
+              </select>
+            )}
+          </label>
+        );
+      })}
+      {!loading && !catalog && (
+        <p className="settings-hint">This provider has no model list to pick from, so type the model ids.</p>
+      )}
+    </div>
   );
 }
 

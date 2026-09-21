@@ -89,7 +89,11 @@ test('the sidebar tree lists agent profiles and skills only; a profile shows its
   await openAgents(page);
 
   const tree = page.getByRole('navigation', { name: 'Workspace' });
-  await expect(tree.getByText('Global', { exact: true })).toBeVisible();
+  // Agents and Skills are the two sub-headers under Agent Hub; where an item comes from is a row tag,
+  // not a level, so there is no "Global" label.
+  await expect(tree.getByTestId('agent-nav-kind-agents')).toBeVisible();
+  await expect(tree.getByTestId('agent-nav-kind-skills')).toBeVisible();
+  await expect(tree.getByText('Global', { exact: true })).toHaveCount(0);
   // Broken Agent and Live Agent are launch bindings with no profile, so they
   // stay out of primary nav (Settings -> Agent Runtime only). Seeded Praxis
   // Reviewer shares its id with a bundled profile, so it merges into that
