@@ -1192,7 +1192,7 @@ function FieldRow({
         <strong>{label}</strong>
         {description && <div className="settings-field-help">{description}</div>}
       </div>
-      <div className="settings-field-control">{children}</div>
+      <div className="settings-field-control settings-field-control--field">{children}</div>
     </div>
   );
 }
@@ -1624,6 +1624,7 @@ function AiSection({
   /** Set when a switch was pressed on a provider that is not set up yet: focus its first setup field once it opens. */
   const [setupFocus, setSetupFocus] = useState<AiProvider>();
   const [selectedProviderId, setSelectedProviderId] = useState<AiProvider>(settings.ai.activeProvider);
+  const [expandedProviderId, setExpandedProviderId] = useState<AiProvider | undefined>(settings.ai.activeProvider);
   const [keyDraft, setKeyDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [resettingKeys, setResettingKeys] = useState(false);
@@ -1684,12 +1685,16 @@ function AiSection({
 
   useEffect(() => {
     if (!setupFocus || setupFocus !== selectedProviderId || tab !== 'providers') return;
+    if (expandedProviderId !== setupFocus) {
+      setExpandedProviderId(setupFocus);
+      return;
+    }
     const field = document.querySelector<HTMLElement>(`[data-testid="ai-provider-body-${setupFocus}"] input`);
     if (field) {
       field.focus();
       setSetupFocus(undefined);
     }
-  }, [setupFocus, selectedProviderId, tab, statuses]);
+  }, [setupFocus, selectedProviderId, tab, statuses, expandedProviderId]);
 
   const selectedMeta = AI_PROVIDERS.find(p => p.id === selectedProviderId)!;
   const selectedStatus = statuses.find(s => s.provider === selectedProviderId);
@@ -1866,7 +1871,7 @@ function AiSection({
               {AI_PROVIDERS.map(meta => {
                 const rowStatus = statuses.find(s => s.provider === meta.id);
                 const isDefault = settings.ai.activeProvider === meta.id;
-                const isOpen = selectedProviderId === meta.id;
+                const isOpen = expandedProviderId === meta.id;
                 const configured = rowStatus?.configured === true;
                 const enabled = settings.ai.providers[meta.id]?.enabled !== false;
                 const on = configured && enabled;
@@ -1892,11 +1897,15 @@ function AiSection({
                       role="button"
                       tabIndex={0}
                       aria-expanded={isOpen}
-                      onClick={() => setSelectedProviderId(meta.id)}
+                      onClick={() => {
+                        setSelectedProviderId(meta.id);
+                        setExpandedProviderId(current => current === meta.id ? undefined : meta.id);
+                      }}
                       onKeyDown={event => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
                           setSelectedProviderId(meta.id);
+                          setExpandedProviderId(current => current === meta.id ? undefined : meta.id);
                         }
                       }}
                     >
