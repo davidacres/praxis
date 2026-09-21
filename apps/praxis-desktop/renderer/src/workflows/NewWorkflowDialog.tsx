@@ -488,6 +488,11 @@ export function NewWorkflowDialog({
                                       Skills: {dep.skillNames.join(', ')}
                                     </div>
                                   )}
+                                  {isAvailable && (
+                                    <div className="wf-dep-note" style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                                      Available add-on — will be installed into your global catalog upon instantiation.
+                                    </div>
+                                  )}
                                 </li>
                               );
                             })}

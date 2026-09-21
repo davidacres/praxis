@@ -4,7 +4,7 @@ import {
   type WorkflowRun,
   type WorkflowWorkspaceProvider
 } from '@praxis/core';
-import { getCurrentBranch, getGitStatus } from './gitService';
+import { commitPathsGit, getCurrentBranch, getGitStatus } from './gitService';
 import { getProjectStore } from './projectStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { preserveUncommittedWork, runWorktreeKey } from './runWork';
@@ -49,6 +49,13 @@ export async function workflowBlockingFiles(projectId: string): Promise<string[]
   const folder = getProjectStore().get(projectId)?.workspaceFolder?.trim();
   if (!folder) return [];
   return workflowBaseBlockingPaths((await getGitStatus(folder)).files);
+}
+
+/** Commits the product files that would otherwise be left out of a run, so the run starts from a clean base. */
+export async function commitWorkflowBase(projectId: string, message: string): Promise<void> {
+  const folder = getProjectStore().get(projectId)?.workspaceFolder?.trim();
+  if (!folder) return;
+  await commitPathsGit(folder, await workflowBlockingFiles(projectId), message);
 }
 
 export async function assertWorkflowBaseReady(projectId: string): Promise<void> {

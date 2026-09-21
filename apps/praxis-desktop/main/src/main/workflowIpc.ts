@@ -82,7 +82,7 @@ import { getSettingsBackend } from './settingsBackendInstance';
 import { getAiUsageLog } from './aiUsageLogInstance';
 import { getWorkflowRecommendationCache } from './workflowRecommendationCacheInstance';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
-import { assertWorkflowBaseReady, workflowBlockingFiles } from './workflowWorkspace';
+import { assertWorkflowBaseReady, commitWorkflowBase, workflowBlockingFiles } from './workflowWorkspace';
 import {
   getWorkflowPolicyStore,
   getWorkflowStore,
@@ -610,6 +610,10 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
 
   ipcMain.handle('workflows:checkRunBase', async (_event, projectId: string): Promise<{ blockingFiles: string[] }> => {
     return { blockingFiles: await workflowBlockingFiles(projectId) };
+  });
+
+  ipcMain.handle('workflows:commitRunBase', async (_event, projectId: string, message: string): Promise<void> => {
+    await commitWorkflowBase(projectId, message);
   });
 
   ipcMain.handle('workflows:listPolicies', async (): Promise<WorkflowPolicyProfile[]> => {
