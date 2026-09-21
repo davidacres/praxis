@@ -467,6 +467,7 @@ const PAYLOAD_VALIDATORS: { [K in GadgetKind]: (payload: Record<string, unknown>
       gate: readString(payload, 'gate', 'payload', { required: true, max: 200 }),
       requestedBy: readString(payload, 'requestedBy', 'payload', { max: 200 }),
       effect: readString(payload, 'effect', 'payload'),
+      nodeId: readString(payload, 'nodeId', 'payload', { max: 200 }),
       ...(evidence.length ? { evidence } : {})
     };
   }

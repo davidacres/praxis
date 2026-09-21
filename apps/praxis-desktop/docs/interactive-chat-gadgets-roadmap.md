@@ -32,7 +32,7 @@ Agent/workflow response -> typed chat blocks -> contract and policy validation -
 | 1 | FX-BE-097 | Versioned gadget and action contracts | Done |
 | 2 | FX-BE-098 | Renderer registry and core chat surfaces | Done |
 | 3 | FX-BE-099 | Safe action lifecycle, scope and stale-state handling | Done |
-| 4 | FX-BE-100 | Workflow, agent and orchestration integration | Provider mapping done; workflow + deployment actions outstanding |
+| 4 | FX-BE-100 | Workflow, agent and orchestration integration | Provider mapping and gate approval done; expected-response declarations and deployment/progress detail outstanding |
 | 5 | FX-BE-101 | Accessibility, mobile, fixtures and end-to-end proof | Desktop done; mobile host outstanding |
 
 ## Initial gadget catalogue

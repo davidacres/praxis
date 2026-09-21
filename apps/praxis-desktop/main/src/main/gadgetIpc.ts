@@ -1,19 +1,53 @@
 import { randomUUID } from 'node:crypto';
 import { BrowserWindow, ipcMain } from 'electron';
 import {
+  approveStage,
   isGadgetActionValue,
   parseChatBlocks,
+  resolveApprovalTarget,
+  WorkflowRunStore,
   type GadgetAction,
   type GadgetExecutionContext,
   type GadgetSubmitRequest,
-  type RawChatBlockInput
+  type RawChatBlockInput,
+  type WorkflowPolicyProfile
 } from '@praxis/core';
 import { getGadgetService, resolveSessionScope } from './gadgetInstance';
+import { getWorkflowBackingStore, getWorkflowPolicyStore } from './workflowStoreInstance';
+import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
 
 function broadcast(sessionId: string): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('gadgets:changed', sessionId);
   }
+}
+
+function runStore(): WorkflowRunStore {
+  return new WorkflowRunStore(getWorkflowBackingStore());
+}
+
+function policyFor(projectId: string): WorkflowPolicyProfile | undefined {
+  return getWorkflowPolicyStore().effectiveForProject(projectId)?.profile;
+}
+
+/**
+ * Approving in chat is the same decision as approving in the run monitor
+ * (TASK-287): it goes through the identical `approveStage` the run monitor's
+ * own Approve button calls, against whatever the run's current state actually
+ * is — a stale gadget answered after the run moved on is refused here exactly
+ * as `workflows:approveRun` would refuse it, not applied blind.
+ */
+async function approveWorkflowFromGadget(runId: string, nodeId: string): Promise<{ outcome: unknown; message: string }> {
+  const run = runStore().get(runId);
+  if (!run) throw new Error('That workflow run is no longer open on this host.');
+
+  const approval = resolveApprovalTarget(run, nodeId);
+  const result = approveStage(run, approval.id, { actor: 'desktop-user', at: new Date().toISOString() }, policyFor(run.projectId));
+  if (!result.ok) throw new Error(result.reason ?? 'Approval was refused.');
+
+  await getWorkflowOrchestrator().updateRun(runId, () => result.run);
+  await getWorkflowOrchestrator().step(runId);
+  return { outcome: { confirmed: true, approved: true }, message: `Approved — ${approval.name} will continue.` };
 }
 
 /**
@@ -25,12 +59,24 @@ function broadcast(sessionId: string): void {
  * that already owns it, with its own gate checks — a gadget action that wanted
  * to do those things would have to call through them like any other caller.
  *
- * So the executor's job is to turn the recorded answer into the user-facing
- * confirmation, and let the ledger be the durable evidence.
+ * The one exception is approving a real workflow run: an `approval`-effect
+ * action on an `approval` gadget calls through to the same `approveStage` the
+ * run monitor uses, because that *is* the service that owns the gate — routing
+ * it anywhere else would make the gadget a second, weaker approval path.
+ * Everything else still only turns the recorded answer into the user-facing
+ * confirmation, and lets the ledger be the durable evidence.
  */
 async function executeGadgetAction({ envelope, action, record }: GadgetExecutionContext) {
   const descriptor = envelope.actions.find(candidate => candidate.actionId === action.actionId);
   const label = descriptor?.label ?? action.actionId;
+
+  if (envelope.kind === 'approval' && descriptor?.effect === 'approval' && action.value.kind === 'confirmation') {
+    const { nodeId } = envelope.payload;
+    const runId = envelope.scope.workId;
+    if (action.value.confirmed && runId && nodeId) {
+      return approveWorkflowFromGadget(runId, nodeId);
+    }
+  }
 
   switch (action.value.kind) {
     case 'choice':
