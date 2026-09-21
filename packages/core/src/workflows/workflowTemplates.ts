@@ -210,7 +210,9 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         args: ['test'],
         successExitCodes: [0],
         outputs: [{ id: 'qa-results', kind: 'test-results', required: true }],
-        satisfiesGate: 'qa'
+        satisfiesGate: 'qa',
+        // Keep a failed QA run open so the user can retry QA without rerunning implementation.
+        maxAttempts: 2
       },
       {
         type: 'check',
