@@ -36,6 +36,30 @@ test('isProviderLimitError detects OpenAI and Anthropic quota and credit errors'
   );
 });
 
+test('isProviderLimitError detects budget limits and Codex usage limits', () => {
+  assert.equal(isProviderLimitError('The AI has exceeded its budget'), true);
+  assert.equal(isProviderLimitError('exceeded budget'), true);
+  assert.equal(isProviderLimitError('out of budget'), true);
+  assert.equal(isProviderLimitError('insufficient budget'), true);
+  assert.equal(isProviderLimitError('budget limit reached'), true);
+  assert.equal(isProviderLimitError('budget exhausted'), true);
+  assert.equal(isProviderLimitError('over budget'), true);
+
+  const codexMsg = "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 12:24 PM.\n\n";
+  assert.equal(isProviderLimitError(codexMsg), true);
+  assert.equal(
+    extractProviderLimitMessage(codexMsg),
+    "Provider limit reached: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 12:24 PM."
+  );
+
+  const nested = {
+    error: {
+      message: 'The model has exceeded its budget limit.'
+    }
+  };
+  assert.equal(isProviderLimitError(nested), true);
+});
+
 test('isProviderLimitError returns false for normal failures', () => {
   assert.equal(isProviderLimitError('File not found'), false);
   assert.equal(isProviderLimitError('SyntaxError: Unexpected token'), false);

@@ -631,8 +631,15 @@ export class AcpAgentHost {
         this.logger.appendLine(`[AcpAgent] Session failed for ${issue.key}: ${message}`);
         const record = this.sessionManager.getAgentSession(issue.key);
         if (record && !this.isTerminalState(record.state)) {
-          const isLimit = isProviderLimitError(error);
-          const limitNotice = isLimit ? extractProviderLimitMessage(error) : undefined;
+          const limitCandidate = isProviderLimitError(error)
+            ? error
+            : (task.messageBuffer && isProviderLimitError(task.messageBuffer))
+              ? task.messageBuffer
+              : (record.responseText && isProviderLimitError(record.responseText))
+                ? record.responseText
+                : undefined;
+          const isLimit = Boolean(limitCandidate);
+          const limitNotice = limitCandidate ? extractProviderLimitMessage(limitCandidate) : undefined;
           this.sessionManager.updateAgentState(issue.key, 'failed', limitNotice ?? message);
           this.appendEvent(issue.key, evt('error', limitNotice ?? message));
         }
@@ -769,8 +776,16 @@ export class AcpAgentHost {
     })().catch(error => {
       const text = error instanceof Error ? error.message : String(error);
       this.logger.appendLine(`[AcpAgent] Follow-up failed for ${issueKey}: ${text}`);
-      const isLimit = isProviderLimitError(error);
-      const limitNotice = isLimit ? extractProviderLimitMessage(error) : undefined;
+      const record = this.sessionManager.getAgentSession(issueKey);
+      const limitCandidate = isProviderLimitError(error)
+        ? error
+        : (task.messageBuffer && isProviderLimitError(task.messageBuffer))
+          ? task.messageBuffer
+          : (record?.responseText && isProviderLimitError(record.responseText))
+            ? record.responseText
+            : undefined;
+      const isLimit = Boolean(limitCandidate);
+      const limitNotice = limitCandidate ? extractProviderLimitMessage(limitCandidate) : undefined;
       this.sessionManager.updateAgentState(issueKey, 'failed', limitNotice ?? text);
       this.appendEvent(issueKey, evt('error', limitNotice ?? text));
     }).finally(() => void this.cleanupTask(issueKey));

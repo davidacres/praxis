@@ -915,13 +915,16 @@ export function SessionsPage({
     ? (selected?.lastError || lastErrorFromEvent || 'The agent session encountered an error and could not complete.')
     : undefined;
   const rawActiveError = followUpError || sessionError;
-  const isDismissed = Boolean(dismissedError && rawActiveError === dismissedError);
-  const activeErrorMessage = rawActiveError && !isDismissed ? formatErrorMessage(rawActiveError) : undefined;
+  const limitNotice = sessionLimitNotice(selected);
   const isLimit = Boolean(
     selected?.providerLimitReached
-      || sessionLimitNotice(selected)
+      || limitNotice
       || (rawActiveError && isProviderLimitMessage(rawActiveError))
   );
+  const isDismissed = Boolean(dismissedError && rawActiveError === dismissedError);
+  const activeErrorMessage = !isDismissed
+    ? ((isLimit && limitNotice) ? limitNotice : (rawActiveError ? formatErrorMessage(rawActiveError) : undefined))
+    : undefined;
 
 
   /**
@@ -1512,7 +1515,7 @@ export function SessionsPage({
                 <div className="session-error-banner-content">
                   <div className="session-error-banner-header">
                     <strong className="session-error-banner-title">
-                      {isLimit ? 'Provider Limit / Quota Exceeded' : (isSelectedFailed ? 'Session Failed' : 'Error')}
+                      {isLimit ? 'Provider Limit / Budget Exceeded' : (isSelectedFailed ? 'Session Failed' : 'Error')}
                     </strong>
                     {isLimit && <span className="badge badge-blocked" style={{ fontSize: '10px' }}>Limit reached</span>}
                   </div>

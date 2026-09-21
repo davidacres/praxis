@@ -743,7 +743,7 @@ export function reportedSessionPaths(
 }
 
 const PROVIDER_LIMIT_REGEX =
-  /(?:weekly|monthly|daily|hourly|session|usage|rate|spending|billing|plan|tier)[_ -]?limit|hit (?:your )?(?:\w+ )?limit|reached (?:your )?(?:\w+ )?limit|exceeded (?:your )?(?:\w+ )?limit|quota|insufficient[_ -]?(?:quota|balance|funds|credits?)|out of quota|too many requests|resource[_ -]?exhausted|credits?[_ -]?(?:exhausted|depleted|empty|expired|zero|insufficient|out)|out of credits?|no credits? remaining|run out of credits?|credit balance (?:is )?too low|balance (?:is )?too low|no resource package|please recharge|\b1113\b|rate[_ -]?limit|rate[_ -]?limited/i;
+  /(?:weekly|monthly|daily|hourly|session|usage|rate|spending|billing|plan|tier|budget)[_ -]?limit|(?:hit|reached|exceeded) (?:your |its |the )?(?:\w+ )?(?:limit|budget|quota)|quota|insufficient[_ -]?(?:quota|balance|funds|credits?|budget)|out of quota|too many requests|resource[_ -]?exhausted|(?:credits?|budget)[_ -]?(?:exhausted|depleted|empty|expired|zero|insufficient|out|exceeded)|out of (?:credits?|budget)|no (?:credits?|budget) remaining|run out of (?:credits?|budget)|\bover[_ -]?budget\b|credit balance (?:is )?too low|balance (?:is )?too low|no resource package|please recharge|\b1113\b|rate[_ -]?limit|rate[_ -]?limited/i;
 
 export function isProviderLimitMessage(text?: string): boolean {
   if (!text) return false;
@@ -794,7 +794,7 @@ export function formatErrorMessage(raw?: string): string {
   }
 
   const cleaned = trimmed
-    .replace(/^(?:RequestError:\s*)?(?:Internal error:\s*)?(?:Provider error:\s*)?(?:Gateway returned\s*\d*:\s*)?/i, '')
+    .replace(/^(?:The stage session failed:\s*)?(?:RequestError:\s*)?(?:Internal error:\s*)?(?:Provider error:\s*)?(?:Gateway returned\s*\d*:\s*)?/i, '')
     .trim();
 
   if (status && !cleaned.includes(status)) {
@@ -806,14 +806,17 @@ export function formatErrorMessage(raw?: string): string {
 
 export function sessionLimitNotice(session?: AgentSessionRecord): string | undefined {
   if (!session) return undefined;
-  if (session.providerLimitReached && session.lastError) return formatErrorMessage(session.lastError);
   if (session.lastError && isProviderLimitMessage(session.lastError)) return formatErrorMessage(session.lastError);
+  if (session.responseText && isProviderLimitMessage(session.responseText)) return formatErrorMessage(session.responseText);
   const lastErrorEvent = [...(session.events ?? [])].reverse().find(e => e.type === 'error');
   if (lastErrorEvent && isProviderLimitMessage(lastErrorEvent.summary || lastErrorEvent.detail)) {
     return formatErrorMessage(lastErrorEvent.summary || lastErrorEvent.detail);
   }
   if (session.providerLimitReached) {
-    return 'Provider usage limit or credits exhausted. The session was halted and will not retry automatically.';
+    if (session.lastError && !/^(?:the stage session failed:\s*)?(?:internal error|internal failure)$/i.test(session.lastError.trim())) {
+      return formatErrorMessage(session.lastError);
+    }
+    return 'Provider usage limit, budget, or credits exhausted. The session was halted and will not retry automatically.';
   }
   return undefined;
 }
