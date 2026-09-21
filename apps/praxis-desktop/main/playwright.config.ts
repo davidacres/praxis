@@ -10,6 +10,12 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 30000,
   retries: 0,
+  expect: {
+    toHaveScreenshot: {
+      maxDiffPixelRatio: 0.02,
+      threshold: 0.2
+    }
+  },
   /**
    * Every test launches its own Electron app, and each launch is already fully
    * isolated — a throwaway `--user-data-dir` (which is also what scopes the
