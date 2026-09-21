@@ -83,6 +83,7 @@ test('the governed delivery template converges review, QA, and security before a
   const security = template.nodes.find(node => node.id === 'security');
   assert.equal(qa?.type, 'check');
   assert.equal(security?.type, 'check');
+  assert.equal(qa?.type === 'check' ? qa.maxAttempts : undefined, 2);
 });
 
 test('full SDLC templates are ticket-triggered while ordinary delivery remains on-demand', () => {
