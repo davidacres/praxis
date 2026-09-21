@@ -80,6 +80,81 @@ export function moveNode(definition: WorkflowDefinition, nodeId: string, to: { x
   return touch(definition, nodes, definition.edges);
 }
 
+/**
+ * Lays the workflow out from left to right in dependency order.
+ *
+ * The designer cards are presentation only, so this deliberately changes no
+ * edges or execution fields. A Kahn pass gives every reachable node a stable
+ * column; nodes in the same column get separate rows. If a graph is currently
+ * cyclic or has disconnected nodes, the remaining nodes are still placed in
+ * deterministic columns rather than being left stacked on top of one another.
+ */
+export function autoArrange(definition: WorkflowDefinition): WorkflowDefinition {
+  if (definition.nodes.length < 2) return definition;
+
+  const byId = new Map(definition.nodes.map((node, index) => [node.id, { node, index }]));
+  const outgoing = new Map<string, string[]>();
+  const indegree = new Map<string, number>();
+  for (const node of definition.nodes) {
+    outgoing.set(node.id, []);
+    indegree.set(node.id, 0);
+  }
+  for (const edge of definition.edges) {
+    if (!byId.has(edge.from) || !byId.has(edge.to)) continue;
+    outgoing.get(edge.from)!.push(edge.to);
+    indegree.set(edge.to, (indegree.get(edge.to) ?? 0) + 1);
+  }
+
+  const level = new Map<string, number>();
+  const queue = definition.nodes
+    .filter(node => (indegree.get(node.id) ?? 0) === 0)
+    .map(node => node.id);
+  for (const node of queue) level.set(node, 0);
+
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const from = queue[cursor];
+    const nextLevel = (level.get(from) ?? 0) + 1;
+    for (const to of outgoing.get(from) ?? []) {
+      level.set(to, Math.max(level.get(to) ?? 0, nextLevel));
+      const remaining = (indegree.get(to) ?? 0) - 1;
+      indegree.set(to, remaining);
+      if (remaining === 0) queue.push(to);
+    }
+  }
+
+  // Cycles and disconnected components have no usable topological level.
+  // Put them after the laid-out graph, retaining their original order.
+  const maxLevel = Math.max(-1, ...level.values());
+  let fallbackLevel = maxLevel + 1;
+  for (const node of definition.nodes) {
+    if (!level.has(node.id)) level.set(node.id, fallbackLevel++);
+  }
+
+  const columns = new Map<number, Array<{ node: WorkflowNode; index: number }>>();
+  for (const entry of byId.values()) {
+    const column = level.get(entry.node.id)!;
+    columns.set(column, [...(columns.get(column) ?? []), entry]);
+  }
+  for (const entries of columns.values()) {
+    entries.sort((a, b) => a.node.y - b.node.y || a.node.x - b.node.x || a.index - b.index);
+  }
+
+  const COLUMN_GAP = 70;
+  const ROW_GAP = 48;
+  const NODE_WIDTH = 190;
+  const NODE_HEIGHT = 92;
+  const nodes = definition.nodes.map(node => {
+    const column = level.get(node.id)!;
+    const row = columns.get(column)!.findIndex(entry => entry.node.id === node.id);
+    return {
+      ...node,
+      x: 40 + column * (NODE_WIDTH + COLUMN_GAP),
+      y: 40 + row * (NODE_HEIGHT + ROW_GAP)
+    };
+  });
+  return { ...definition, nodes, updatedAt: new Date().toISOString() };
+}
+
 export function removeNode(definition: WorkflowDefinition, nodeId: string): WorkflowDefinition {
   const nodes = definition.nodes.filter(node => node.id !== nodeId);
   const edges = definition.edges.filter(edge => edge.from !== nodeId && edge.to !== nodeId);

@@ -6,7 +6,7 @@ import {
   resolveConnectorDirections,
   type CanvasBox
 } from '../taskDesigner/taskDesignerState';
-import { connectNodes, disconnect, moveNode, removeNode } from './workflowEdits';
+import { autoArrange, connectNodes, disconnect, moveNode, removeNode } from './workflowEdits';
 import { Icon } from '../ui/Icon';
 
 /**
@@ -230,6 +230,16 @@ export function WorkflowCanvas({
     <div className="wf-canvas">
       <div className="wf-canvas-bar">
         <span>Drag a card to move it, drag from its ▸ handle onto another to connect. Click a connection to delete it. Scroll to zoom.</span>
+        <button
+          type="button"
+          className="btn btn-compact"
+          data-testid="wf-auto-arrange"
+          onClick={() => onChange(autoArrange(definition))}
+          disabled={definition.nodes.length < 2}
+          title="Arrange workflow stages in dependency order without overlap"
+        >
+          <Icon name="layout-focus" size={12} /> Auto arrange
+        </button>
         <button type="button" className="btn btn-compact" onClick={() => setView({ x: 40, y: 40, zoom: 1 })}>
           Reset view
         </button>

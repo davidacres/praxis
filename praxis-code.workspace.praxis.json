@@ -127,6 +127,11 @@
       "connectionId": "project:project-1789239305854-dg8yni",
       "boardId": "folder-pxmob",
       "displayName": "Praxis Mobile"
+    },
+    {
+      "connectionId": "project:project-1788215224012-rap082",
+      "boardId": "folder-prx",
+      "displayName": "Praxis Desktop"
     }
   ]
 }

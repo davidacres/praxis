@@ -150,6 +150,47 @@ test('the canvas moves a stage with the keyboard and stays in sync with the rail
   await expect(canvas.getByRole('button', { name: /^Review \(agent-task\)/ })).toHaveAttribute('aria-pressed', 'true');
 });
 
+test('auto arrange lays out workflow stages in dependency order without overlap', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Governed delivery');
+
+  const canvas = canvasOf(page);
+  const arrange = page.getByTestId('wf-auto-arrange');
+  await expect(arrange).toBeEnabled();
+  await arrange.click();
+
+  const layout = await canvas.locator('[data-node-id]').evaluateAll(elements =>
+    elements.map(element => {
+      const rect = element.getBoundingClientRect();
+      return {
+        id: element.getAttribute('data-node-id'),
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom
+      };
+    })
+  );
+  expect(layout.length).toBeGreaterThan(1);
+  for (let i = 0; i < layout.length; i += 1) {
+    for (let j = i + 1; j < layout.length; j += 1) {
+      const a = layout[i];
+      const b = layout[j];
+      expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(true);
+    }
+  }
+
+  const left = async (name: string) =>
+    Number(await canvas.getByRole('button', { name: new RegExp(`^${name} \\(`) }).evaluate(element => (element as HTMLElement).style.left.replace('px', '')));
+  expect(await left('Plan')).toBeLessThan(await left('Implement'));
+  expect(await left('Implement')).toBeLessThan(await left('QA'));
+  expect(await left('QA')).toBeLessThan(await left('Approve'));
+
+  // Every card is measured after the action, rather than trusting the DOM's
+  // paint order; the persisted coordinate update is what drives this layout.
+  expect(layout.every(node => node.id)).toBe(true);
+});
+
 test('nudging a stage past the canvas edge clamps its position instead of losing it off-screen', async () => {
   const page = app.window;
   await newWorkflow(page, 'Governed delivery');
