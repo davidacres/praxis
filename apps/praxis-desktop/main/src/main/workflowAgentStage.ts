@@ -12,6 +12,8 @@ import {
   preflightStage,
   stageOutcomeFromSession,
   stageSessionKey,
+  chooseStageModel,
+  formatUpstreamReports,
   type FinishedStageSession,
   type IssueDetails,
   type StageDispatchContext,
@@ -151,6 +153,32 @@ export async function runWorkflowAgentStage(
   }
   const taskDefinition = buildStageTaskDefinition(stageContext);
 
+  // Hand the stage what earlier stages concluded, so it does not start cold and re-derive it. A report
+  // artifact has no file; its text is the producing stage session's final response.
+  const upstream = formatUpstreamReports(
+    stageContext.inputs
+      .filter(input => !input.path)
+      .map(input => ({
+        contractId: input.contractId,
+        stageName: workflowRun.definition.nodes.find(candidate => candidate.id === input.nodeId)?.name ?? input.nodeId,
+        text: getAiSessionManager().getAgentSession(stageSessionKey(workflowRun.runId, input.nodeId))?.responseText ?? ''
+      }))
+  );
+  if (upstream) taskDefinition.scope += `\n\n${upstream}`;
+
+  // Attempts that judged the stage and failed. The one launching now is not among them, and one
+  // that stopped without a verdict (provider limit, environment) never spent the stage.
+  const failedAttempts = (workflowRun.nodes[node.id]?.attempts ?? []).filter(
+    attempt => attempt.outcome === 'failed' && !attempt.pause
+  ).length;
+  const modelChoice = chooseStageModel({
+    node,
+    provider,
+    tiers: settings.ai.modelTiers,
+    runModel: workflowRun.aiModel,
+    attemptsSpent: failedAttempts
+  });
+
   // A synthetic issue: the session store is issue-keyed, and a stage is not a
   // ticket, so it carries the run/node key instead.
   const issue = {
@@ -180,7 +208,7 @@ export async function runWorkflowAgentStage(
       issue,
       taskDefinition,
       provider,
-      ...(workflowRun.aiModel ? { model: workflowRun.aiModel } : {}),
+      ...(modelChoice.model ? { model: modelChoice.model } : {}),
       workingDirectory: worktreePath,
       toolMode,
       autoApprovePermissions: workflowRun.permissionMode === 'auto'

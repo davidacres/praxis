@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStageTaskDefinition, stageOutcomeFromSession, stageSessionKey } from './workflowStageTask';
+import { buildStageTaskDefinition, formatUpstreamReports, stageOutcomeFromSession, stageSessionKey } from './workflowStageTask';
 import type { WorkflowStageContext } from './workflowStageSession';
 import type { WorkflowAgentTaskNode } from './workflowTypes';
 
@@ -204,4 +204,22 @@ test('an artifact the node never declared is not invented', () => {
     artifactPaths: { smuggled: '/tmp/x' }
   });
   assert.deepEqual(outcome.artifacts?.map(artifact => artifact.contractId), ['review-report']);
+});
+
+test('formatUpstreamReports inlines each report, capped with head and tail, and says so', () => {
+  const long = `START${'x'.repeat(200)}END`;
+  const out = formatUpstreamReports(
+    [
+      { contractId: 'review-report', stageName: 'Review', text: 'looks fine' },
+      { contractId: 'big', stageName: 'Analyse', text: long },
+      { contractId: 'empty', stageName: 'Skip', text: '   ' }
+    ],
+    100
+  )!;
+  assert.match(out, /"review-report" from Review\nlooks fine/);
+  assert.match(out, /START/);
+  assert.match(out, /END/);
+  assert.match(out, /characters omitted/);
+  assert.doesNotMatch(out, /"empty"/);
+  assert.equal(formatUpstreamReports([{ contractId: 'a', stageName: 'A', text: '' }]), undefined);
 });

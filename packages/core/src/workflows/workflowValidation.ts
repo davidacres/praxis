@@ -11,6 +11,7 @@
  */
 
 import type { AgentToolMode } from '../ai/agentTypes';
+import { isModelTier } from './stageModel';
 import {
   WORKFLOW_SCHEMA_VERSION,
   isAgentTaskNode,
@@ -185,6 +186,11 @@ function normalizeNode(value: unknown): WorkflowNode {
       if (GATE_KINDS.has(raw.satisfiesGate as WorkflowGateKind)) node.satisfiesGate = raw.satisfiesGate as WorkflowGateKind;
       if (typeof raw.timeoutMs === 'number') node.timeoutMs = raw.timeoutMs;
       if (typeof raw.maxAttempts === 'number') node.maxAttempts = raw.maxAttempts;
+      // Model choice. Each is optional and dropped when unreadable — an unreadable tier must not
+      // become some other tier, and a stage with none uses the run's model as before.
+      if (isText(raw.model)) node.model = raw.model.trim();
+      if (isModelTier(raw.modelTier)) node.modelTier = raw.modelTier;
+      if (raw.escalateOnRetry === false) node.escalateOnRetry = false;
       return node;
     }
     case 'check': {

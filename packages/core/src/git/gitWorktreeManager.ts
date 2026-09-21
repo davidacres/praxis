@@ -134,22 +134,6 @@ export class GitWorktreeManager {
       throw new Error('Could not resolve the git repository root for the active workspace.');
     }
 
-    if (options?.requireCleanBase) {
-      const status = await readStdout(
-        'git',
-        ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.', ...PRAXIS_METADATA_EXCLUDES],
-        repoRoot
-      );
-      const changedFiles = status.split('\0').filter(Boolean).length;
-      if (changedFiles > 0) {
-        throw new Error(
-          `Cannot start a governed workflow from a checkout with ${changedFiles} uncommitted ` +
-            `${changedFiles === 1 ? 'file' : 'files'}. Workflow worktrees branch from committed HEAD, ` +
-            'so those changes would be omitted from implementation and QA. Commit or stash them, then start the run again.'
-        );
-      }
-    }
-
     const worktreeName = buildWorktreeName(issue);
     const worktreeRoot = resolveRepoWorktreeRoot(repoRoot);
     const worktreePath = path.join(worktreeRoot, worktreeName);
@@ -170,6 +154,40 @@ export class GitWorktreeManager {
       }
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
+      }
+    }
+
+    // A branch that already exists is a run's earlier work (its worktree was released when the run
+    // settled, the branch kept). Re-attach it rather than branching afresh from the base, which would
+    // fail on the name and, worse, would leave the work behind. The base checkout's state is
+    // irrelevant to a branch that already has its own history, so the clean-base rule does not apply.
+    const branchExists = await readStdout('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${worktreeName}`], repoRoot)
+      .then(out => out.length > 0)
+      .catch(() => false);
+    if (branchExists) {
+      await this.ensureSymlinkSupport(repoRoot);
+      this.output.appendLine(`[Delivery] Re-attaching worktree ${worktreeName} to its existing branch.`);
+      await execFile('git', ['-c', 'core.symlinks=true', 'worktree', 'add', worktreePath, worktreeName], {
+        cwd: repoRoot,
+        windowsHide: true
+      });
+      await this.replicateGithubSymlinks(repoRoot, worktreePath);
+      return { repoRoot, worktreeRoot, worktreePath, worktreeName, branchName: worktreeName, baseBranch };
+    }
+
+    if (options?.requireCleanBase) {
+      const status = await readStdout(
+        'git',
+        ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.', ...PRAXIS_METADATA_EXCLUDES],
+        repoRoot
+      );
+      const changedFiles = status.split('\0').filter(Boolean).length;
+      if (changedFiles > 0) {
+        throw new Error(
+          `Cannot start a governed workflow from a checkout with ${changedFiles} uncommitted ` +
+            `${changedFiles === 1 ? 'file' : 'files'}. Workflow worktrees branch from committed HEAD, ` +
+            'so those changes would be omitted from implementation and QA. Commit or stash them, then start the run again.'
+        );
       }
     }
 

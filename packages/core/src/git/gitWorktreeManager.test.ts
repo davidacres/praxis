@@ -64,6 +64,37 @@ test('prepareDeliveryWorktree creates a branch and checkout, then removeDelivery
   }
 });
 
+test('prepareDeliveryWorktree re-attaches a kept branch with its commits, even over a dirty base', async t => {
+  let repo: string;
+  try {
+    repo = await initRepo();
+  } catch {
+    t.skip('git not available');
+    return;
+  }
+  try {
+    const manager = new GitWorktreeManager(silentLogger);
+    const issue = { key: 'WF-abcd1234-verify', summary: 'verify', branch: undefined };
+    const first = await manager.prepareDeliveryWorktree(issue, 'main', repo);
+    const git = (args: string[]) => execFile('git', args, { cwd: first.worktreePath, windowsHide: true });
+    await git(['config', 'user.email', 'test@example.com']);
+    await git(['config', 'user.name', 'Test']);
+    await fs.writeFile(path.join(first.worktreePath, 'work.txt'), 'earlier work\n', 'utf8');
+    await git(['add', '.']);
+    await git(['commit', '-m', 'earlier work']);
+    // A settled run releases its checkout but keeps the branch.
+    await manager.removeDeliveryWorktree(repo, first, { keepBranch: true });
+
+    // The base checkout is dirty now; that must not block getting the run's own work back.
+    await fs.writeFile(path.join(repo, 'stray.txt'), 'dirty\n', 'utf8');
+    const again = await manager.prepareDeliveryWorktree(issue, 'main', repo, { requireCleanBase: true });
+    assert.equal(again.worktreePath, first.worktreePath);
+    assert.equal(await fs.readFile(path.join(again.worktreePath, 'work.txt'), 'utf8'), 'earlier work\n');
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true });
+  }
+});
+
 test('prepareDeliveryWorktree refuses to omit a dirty base when a governed run requires a clean snapshot', async t => {
   let repo: string;
   try {

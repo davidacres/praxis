@@ -17,7 +17,6 @@ import { isAgentTaskNode, isCheckNode, isDeploymentNode, isTerminalOutcome } fro
 import {
   applyWorkflowRunCommand,
   attemptsSpent,
-  canRetry,
   isRunSettled,
   type WorkflowRun
 } from './workflowRun';
@@ -105,14 +104,36 @@ export type WorkflowNextAction =
  * failed, cancelled, or waiting run never presents as a dead end.
  */
 export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
+  const label = (nodeId: string): string =>
+    run.definition.nodes.find(node => node.id === nodeId)?.name ?? nodeId;
+
+  // A failed stage can always be tried again by a person; `maxAttempts` only
+  // bounds the run continuing on its own. A failed run is reopened by doing so.
+  const retryActions = (): WorkflowNextAction[] =>
+    Object.values(run.nodes)
+      .filter(state => state.outcome === 'failed')
+      .map(state => {
+        const node = run.definition.nodes.find(candidate => candidate.id === state.nodeId);
+        const maxAttempts =
+          (node && (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node)) ? node.maxAttempts : undefined) ?? 1;
+        return {
+          kind: 'retry-stage' as const,
+          nodeId: state.nodeId,
+          label: `Retry ${label(state.nodeId)}`,
+          attemptsUsed: attemptsSpent(state),
+          maxAttempts
+        };
+      });
+
   if (isRunSettled(run)) {
-    return [{ kind: 'none', label: `Run ${run.status}${run.endedReason ? `: ${run.endedReason}` : '.'}` }];
+    return [
+      { kind: 'none', label: `Run ${run.status}${run.endedReason ? `: ${run.endedReason}` : '.'}` },
+      ...(run.status === 'failed' ? retryActions() : [])
+    ];
   }
 
   const schedule = scheduleWorkflowRun(run);
   const actions: WorkflowNextAction[] = [];
-  const label = (nodeId: string): string =>
-    run.definition.nodes.find(node => node.id === nodeId)?.name ?? nodeId;
 
   for (const nodeId of schedule.awaitingApproval) {
     actions.push({ kind: 'approve', nodeId, label: `Approve at ${label(nodeId)}` });
@@ -121,19 +142,7 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
     actions.push({ kind: 'start-stage', nodeId, label: `Start ${label(nodeId)}` });
   }
 
-  for (const state of Object.values(run.nodes)) {
-    if (state.outcome !== 'failed' || !canRetry(run, state.nodeId)) continue;
-    const node = run.definition.nodes.find(candidate => candidate.id === state.nodeId);
-    const maxAttempts =
-      (node && (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node)) ? node.maxAttempts : undefined) ?? 1;
-    actions.push({
-      kind: 'retry-stage',
-      nodeId: state.nodeId,
-      label: `Retry ${label(state.nodeId)}`,
-      attemptsUsed: attemptsSpent(state),
-      maxAttempts
-    });
-  }
+  actions.push(...retryActions());
 
   const reworkSources = new Map<string, string[]>();
   for (const approval of run.definition.nodes.filter(node => node.type === 'approval')) {

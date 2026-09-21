@@ -43,6 +43,8 @@ import {
   computeRecommendationFingerprint,
   recommendAgentForStage,
   recommendTemplateForProject,
+  recommendModelTiers,
+  type ModelTierRecommendationResult,
   resolveRecommendationProvider,
   type AiProvider,
   type AgentCatalogSnapshot,
@@ -369,6 +371,32 @@ export function registerWorkflowIpc(): void {
     });
     return result;
   });
+
+  ipcMain.handle(
+    'workflows:recommendModelTiers',
+    async (_event, projectId: string, definition: WorkflowDefinition): Promise<ModelTierRecommendationResult> => {
+      if (!getProjectStore().get(projectId)) throw new Error(`Project ${projectId} was not found.`);
+      const settings = getSettingsBackend().read();
+      const choice = await resolveRecommendationProvider(getSecretsStore(), settings.ai);
+      const result = await recommendModelTiers(definition, {
+        provider: choice.provider,
+        apiKey: choice.apiKey,
+        baseUrl: choice.baseUrl,
+        model: choice.model,
+        promptRunner: recommendationPromptRunner(choice.provider, choice.model)
+      });
+      const usageEvent = {
+        source: 'workflow-model-recommendation' as const,
+        provider: result.provider,
+        model: result.model,
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+        totalTokens: result.usage?.totalTokens
+      };
+      if (hasReportableUsage(usageEvent)) void getAiUsageLog().record(usageEvent);
+      return result;
+    }
+  );
 
   ipcMain.handle('workflows:templateReadiness', async (_event, projectId: string): Promise<TemplateReadiness[]> => {
     const snapshot = await catalogSnapshot();

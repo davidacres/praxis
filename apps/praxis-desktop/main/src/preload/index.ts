@@ -340,6 +340,8 @@ const praxis: PraxisIpc = {
     listTemplates: (projectId: string) => ipcRenderer.invoke('workflows:listTemplates', projectId),
     getRecommendedTemplate: (projectId: string) => ipcRenderer.invoke('workflows:getRecommendedTemplate', projectId),
     recommendTemplate: (projectId: string) => ipcRenderer.invoke('workflows:recommendTemplate', projectId),
+    recommendModelTiers: (projectId: string, definition: unknown) =>
+      ipcRenderer.invoke('workflows:recommendModelTiers', projectId, definition),
     templateReadiness: (projectId: string) => ipcRenderer.invoke('workflows:templateReadiness', projectId),
     catalog: (projectId: string) => ipcRenderer.invoke('workflows:catalog', projectId),
     get: (projectId: string, workflowId: string) => ipcRenderer.invoke('workflows:get', projectId, workflowId),

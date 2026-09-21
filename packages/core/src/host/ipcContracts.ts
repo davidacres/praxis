@@ -4,6 +4,7 @@ import type { ProviderUsageSnapshot } from '../ai/providerUsage';
 import type { AgentRecommendationCandidate, AgentRecommendationResult } from '../ai/workflowAgentRecommendation';
 import type { StoredAgentRecommendation } from '../ai/workflowRecommendationCache';
 import type { TemplateRecommendationResult } from '../ai/workflowTemplateRecommendation';
+import type { ModelTierRecommendationResult } from '../ai/workflowModelRecommendation';
 import type {
   AiProvider,
   Board,
@@ -1112,6 +1113,12 @@ export interface WorkflowsIpc {
    * usage ledger, tagged `workflow-template-recommendation`.
    */
   recommendTemplate(projectId: string): Promise<TemplateRecommendationResult>;
+  /**
+   * Asks the configured AI which model tier each agent stage of this (possibly unsaved) definition
+   * needs. Read-only: it changes nothing stored — the designer applies the answer to its draft. Every
+   * call is logged to the AI usage ledger, tagged `workflow-model-recommendation`.
+   */
+  recommendModelTiers(projectId: string, definition: WorkflowDefinition): Promise<ModelTierRecommendationResult>;
   /** Per-template readiness against the live Agent Hub catalog. */
   templateReadiness(projectId: string): Promise<TemplateReadiness[]>;
   /** The resolved run catalog for a project, with shadowing and invalid entries. */

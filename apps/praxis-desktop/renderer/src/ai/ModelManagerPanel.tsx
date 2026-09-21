@@ -3,12 +3,17 @@ import type { AiProvider, AiProviderConfig, AppSettingsPatch, ModelOptions } fro
 import { Icon } from '../ui/Icon';
 import { fetchModelOptions } from './modelProviders';
 
+type TierName = 'fast' | 'standard' | 'strong';
+
 export interface ModelManagerPanelProps {
   providerId: AiProvider;
   providerLabel: string;
   /** Undefined means "no curation — every fetched model is offered" (the default). */
   enabledModelIds: string[] | undefined;
   providerConfig: AiProviderConfig;
+  /** This provider's model tiers (tier → model id). Each row shows, and sets, the tier its model holds. */
+  tiers: { fast?: string; standard?: string; strong?: string };
+  onTiersChange: (next: { fast?: string; standard?: string; strong?: string }) => void;
   onBack: () => void;
   update: (patch: AppSettingsPatch) => Promise<void>;
 }
@@ -25,6 +30,8 @@ export function ModelManagerPanel({
   providerLabel,
   enabledModelIds,
   providerConfig,
+  tiers,
+  onTiersChange,
   onBack,
   update
 }: ModelManagerPanelProps) {
@@ -32,6 +39,17 @@ export function ModelManagerPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [filter, setFilter] = useState('');
+
+  // A tier holds one model, so a model holds at most one tier: giving it a tier takes that tier from
+  // whichever model had it, and drops the tier it held before.
+  const tierOf = (modelId: string): TierName | '' =>
+    (['fast', 'standard', 'strong'] as const).find(tier => tiers[tier] === modelId) ?? '';
+  const setTier = (modelId: string, tier: TierName | '') => {
+    const next: typeof tiers = { ...tiers };
+    for (const held of ['fast', 'standard', 'strong'] as const) if (next[held] === modelId) delete next[held];
+    if (tier) next[tier] = modelId;
+    onTiersChange(next);
+  };
   // Local optimistic mirror of the persisted `enabledModelIds` — `update()`
   // doesn't apply its patch optimistically (it waits for the settings
   // broadcaster to echo back), and that round trip is slow enough that two
@@ -178,6 +196,20 @@ export function ModelManagerPanel({
                 />
                 <span className="model-manager-row-name">{option.name}</span>
                 <span className="model-manager-row-id">{option.value}</span>
+                <select
+                  className="input model-manager-tier"
+                  aria-label={`Model tier for ${option.name}`}
+                  title="Which workflow tier this model serves on this provider"
+                  data-testid={`model-manager-tier-${option.value}`}
+                  value={tierOf(option.value)}
+                  onClick={event => event.stopPropagation()}
+                  onChange={event => setTier(option.value, event.target.value as TierName | '')}
+                >
+                  <option value="">No tier</option>
+                  <option value="fast">Fast</option>
+                  <option value="standard">Standard</option>
+                  <option value="strong">Strong</option>
+                </select>
               </label>
             ))}
           </div>
