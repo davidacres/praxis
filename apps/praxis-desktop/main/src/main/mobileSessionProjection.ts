@@ -7,6 +7,20 @@ import type {
   MobileSessionSummary,
 } from '@praxis/core';
 
+const MAX_MOBILE_MESSAGES = 80;
+const MAX_MOBILE_MESSAGE_CHARS = 8_000;
+const MAX_MOBILE_REASONING_CHARS = 4_000;
+const MAX_MOBILE_RESPONSE_CHARS = 12_000;
+
+function boundedText(value: string, limit: number): string {
+  if (value.length <= limit) return value;
+  const marker = '\n\n[…content truncated for mobile…]\n\n';
+  const available = Math.max(0, limit - marker.length);
+  const head = Math.ceil(available * 0.6);
+  const tail = available - head;
+  return `${value.slice(0, head)}${marker}${value.slice(-tail)}`;
+}
+
 function lifecycleFor(record: AgentSessionRecord): MobileSessionLifecycle {
   switch (record.state) {
     case 'planning':
@@ -65,15 +79,15 @@ function persistedMessages(record: AgentSessionRecord): MobileSessionMessage[] {
     messages.push({
       id: `${record.sessionId}:event:${index}`,
       role,
-      text,
+      text: boundedText(text, MAX_MOBILE_MESSAGE_CHARS),
       at: event.timestamp,
       status: event.type === 'error' ? 'failed' : 'complete',
-      ...(event.reasoning ? { reasoning: event.reasoning } : {}),
+      ...(event.reasoning ? { reasoning: boundedText(event.reasoning, MAX_MOBILE_REASONING_CHARS) } : {}),
       ...(event.modelId ? { model: event.modelId } : {}),
       ...(event.toolNames?.length ? { toolNames: event.toolNames } : {}),
     });
   });
-  return messages;
+  return messages.length > MAX_MOBILE_MESSAGES ? messages.slice(-MAX_MOBILE_MESSAGES) : messages;
 }
 
 export function mobileSessionSnapshot(record: AgentSessionRecord, sequence = record.events.length): MobileSessionSnapshot {
@@ -99,20 +113,21 @@ export function mobileSessionSnapshot(record: AgentSessionRecord, sequence = rec
     messages.push({
       id: `${record.sessionId}:active`,
       role: 'assistant',
-      text: responseText,
+      text: boundedText(responseText, MAX_MOBILE_RESPONSE_CHARS),
       at: new Date().toISOString(),
       status: 'streaming',
-      ...(record.reasoningText?.trim() ? { reasoning: record.reasoningText.trim() } : {}),
+      ...(record.reasoningText?.trim() ? { reasoning: boundedText(record.reasoningText.trim(), MAX_MOBILE_REASONING_CHARS) } : {}),
       ...(record.model ? { model: record.model } : {}),
     });
   }
+  if (messages.length > MAX_MOBILE_MESSAGES) messages.splice(0, messages.length - MAX_MOBILE_MESSAGES);
   return {
     ...summary,
     sequence,
     messages,
     pendingPermissions,
-    ...(active && responseText ? { responseText } : {}),
-    ...(active && record.reasoningText?.trim() ? { reasoningText: record.reasoningText.trim() } : {}),
+    ...(active && responseText ? { responseText: boundedText(responseText, MAX_MOBILE_RESPONSE_CHARS) } : {}),
+    ...(active && record.reasoningText?.trim() ? { reasoningText: boundedText(record.reasoningText.trim(), MAX_MOBILE_REASONING_CHARS) } : {}),
     ...(record.tokenUsage ? { tokenUsage: record.tokenUsage } : {}),
     ...(record.contextTokens !== undefined ? { contextTokens: record.contextTokens } : {}),
     ...(record.contextLimit !== undefined ? { contextLimit: record.contextLimit } : {}),

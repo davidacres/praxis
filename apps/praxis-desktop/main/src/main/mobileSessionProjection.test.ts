@@ -37,3 +37,18 @@ test('reopened history does not treat responseText as transcript truth', () => {
   assert.equal(snapshot.canContinue, true);
   assert.equal(snapshot.canCancel, false);
 });
+
+test('bounds large histories so a mobile snapshot stays transportable', () => {
+  const events = Array.from({ length: 120 }, (_, index) => ({
+    timestamp: `2026-09-22T09:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,
+    type: 'message' as const,
+    summary: 'x'.repeat(20_000),
+    reasoning: 'r'.repeat(10_000),
+  }));
+  const snapshot = mobileSessionSnapshot(record({ events, responseText: 'y'.repeat(30_000) }));
+  assert.equal(snapshot.messages.length, 80);
+  assert.ok(snapshot.messages.every(message => message.text.length <= 8_000 || message.status === 'streaming'));
+  assert.ok(snapshot.messages.some(message => message.text.includes('content truncated for mobile')));
+  assert.ok(snapshot.responseText?.includes('content truncated for mobile'));
+  assert.ok(Buffer.byteLength(JSON.stringify(snapshot), 'utf8') < 1_000_000);
+});
