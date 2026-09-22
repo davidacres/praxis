@@ -27,6 +27,7 @@ import {
   DEMO_PROJECT,
   DEMO_TRANSCRIPTS,
   DEMO_WORK,
+  type DemoTranscriptMessage,
   type DemoWorkItem,
 } from './demoData';
 
@@ -47,7 +48,8 @@ interface Store {
   setRoute(primary: MobilePrimaryRoute): void;
   setDetail(detail: MobileDetailTab): void;
   openWork(workId: string | undefined): void;
-  transcriptFor(sessionId: string): string[];
+  startNewChat(): void;
+  transcriptFor(sessionId: string): DemoTranscriptMessage[];
   sendFollowUp(work: DemoWorkItem, text: string): void;
   approve(runId: string): void;
 }
@@ -79,6 +81,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
         setTimeout(() => {
           setWork(DEMO_WORK);
           setAttention(DEMO_ATTENTION);
+          setOpenWorkId(DEMO_WORK[0]?.workId);
           setShell(previous => ({
             ...setMobileShellConnection(previous, 'ready'),
             navigation: { ...previous.navigation, hostId: DEMO_HOST.hostId, projectId: DEMO_PROJECT.projectId },
@@ -94,6 +97,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
       setRoute: primary => nav(state => selectMobileRoute(state, primary)),
       setDetail: detail => nav(state => selectMobileDetail(state, detail)),
       openWork: workId => setOpenWorkId(workId),
+      startNewChat: () => {
+        const id = Date.now().toString(36).toUpperCase();
+        const item: DemoWorkItem = {
+          workId: `CHAT-${id.slice(-6)}`,
+          title: 'New chat',
+          status: 'In Progress',
+          sessionId: `session-${id}`,
+        };
+        setWork(list => [item, ...list]);
+        setOpenWorkId(item.workId);
+        nav(state => selectMobileDetail(selectMobileRoute(state, 'work'), 'chat'));
+      },
       transcriptFor: sessionId => DEMO_TRANSCRIPTS[sessionId] ?? [],
       sendFollowUp: (item, text) => {
         const messageId = `m-${Date.now()}`;

@@ -6,7 +6,7 @@ id: FX-BE-077
 title: "Discovery and resilient local transport"
 status: in-progress
 feature: FX-BF-029
-updated: 2026-09-09
+updated: 2026-09-22
 dependencies: [FX-BE-076]
 ---
 
@@ -17,7 +17,7 @@ dependencies: [FX-BE-076]
 
 ## Outcome
 
-Discovery and resilient local transport delivers the following three ordered, independently verifiable steps.
+Discovery and resilient local transport delivers the following ordered, independently verifiable steps.
 
 ## Scope and implementation entry points
 
@@ -30,6 +30,7 @@ Desktop local discovery/listener; mobile transport adapter.
 | 1 | [TASK-210](tasks/task-210-add-discovery-and-manual-host-resolution.md) | Add discovery and manual host resolution |
 | 2 | [TASK-211](tasks/task-211-implement-encrypted-direct-transport-and-reconnection.md) | Implement encrypted direct transport and reconnection |
 | 3 | [TASK-212](tasks/task-212-prove-lan-only-execution-without-cloud-dependencies.md) | Prove LAN-only execution without cloud dependencies |
+| 4 | [TASK-237](tasks/task-237-connect-native-mobile-client-to-desktop-host.md) | Connect native mobile client to desktop host |
 
 ## Acceptance criteria
 
@@ -61,5 +62,4 @@ Complete this item with GenericSystem, Roleover and Azure unavailable. Implement
 
 
 ## Comments
-
 

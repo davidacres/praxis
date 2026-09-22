@@ -6,7 +6,7 @@ id: FX-BE-083
 title: "Attention and request-specific approvals"
 status: in-progress
 feature: FX-BF-032
-updated: 2026-09-09
+updated: 2026-09-22
 dependencies: [FX-BE-082]
 ---
 
@@ -30,6 +30,8 @@ Mobile Attention UI, host permission/approval services and remote auth checks.
 | 1 | [TASK-228](tasks/task-228-build-actionable-attention-inbox.md) | Build actionable attention inbox |
 | 2 | [TASK-229](tasks/task-229-implement-scoped-decision-commands.md) | Implement scoped decision commands |
 | 3 | [TASK-230](tasks/task-230-verify-full-internet-execution-milestone.md) | Verify full local execution milestone |
+| 4 | [TASK-240](tasks/task-240-enable-request-scoped-mobile-decisions.md) | Enable request-scoped mobile decisions |
+| 5 | [TASK-241](tasks/task-241-prove-live-mobile-desktop-journey.md) | Prove live mobile-desktop journey |
 
 ## Acceptance criteria
 
@@ -64,5 +66,4 @@ Complete this item with GenericSystem, Roleover and Azure unavailable. Implement
 
 
 ## Comments
-
 
