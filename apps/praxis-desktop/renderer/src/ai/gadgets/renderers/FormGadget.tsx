@@ -81,8 +81,9 @@ export function FormGadget({ gadget, actionable, busy, onSubmit }: GadgetRendere
                   ) : field.type === 'textarea' ? (
                     <textarea
                       id={id}
-                      className="input"
-                      rows={3}
+                      className="textarea"
+                      // A whole ticket description is not a three-line note: size the box to what it holds.
+                      rows={Math.min(18, Math.max(3, (typeof current === 'string' ? current.split('\n').length : 1) + 1))}
                       value={typeof current === 'string' ? current : ''}
                       placeholder={field.placeholder}
                       maxLength={field.maxLength}

@@ -836,6 +836,40 @@ spawns the `cliPath` command directly, not via `node`), and it resolves
 `@agentclientprotocol/sdk` from its own location because it is spawned with `cwd` set to
 an arbitrary project folder. `e2e/aiCodingTask.spec.ts` is the worked example.
 
+## Interactive ticket review
+
+"Review ticket" is a real read-only agent session, not a one-shot prompt: only a session has a
+scope for gadgets to be issued against and a conversation for answers to travel back on. The
+agent gives a verdict, then asks what to do about each finding as gadgets (pick findings →
+answer open questions → edit and apply the resulting ticket text). Code: `packages/core/src/ai/ticketReview.ts`
+(key convention, gate, prompt), `main/src/main/ticketReviewIpc.ts` (start/lookup),
+`ticketReviewApply.ts` (the write), `renderer/src/ai/AiReviewPage.tsx`, and the shared
+`renderer/src/ai/gadgets/useSessionGadgets.ts` (also used by `SessionsPage`).
+
+- **The session key is `review~<ticket key>`, never the ticket's own key.** Sessions are stored
+  by issue key, so reusing it would replace the ticket's implementation session. Use
+  `ticketReviewSessionKey` / `reviewedIssueKey`; the renderer mirrors the prefix in `isTicketReviewKey`
+  because it cannot import core values. The prompt builders translate the key back, so the agent
+  is told the ticket's real key (a test asserts `review~…` never reaches the prompt).
+- **One decision gadget per reply.** Every recorded answer to a `choice`, or to a form whose
+  actions are all informational, is sent back to the agent as a follow-up turn. Two decision
+  gadgets in one reply would each start a turn and the agent would jump ahead. The prompt says so;
+  the examples in it are validated against the real gadget schema by `ticketReview.test.ts`.
+- **The apply form is the one gadget with a `mutating` action** (`TICKET_REVIEW_APPLY_GATE`).
+  `gadgetIpc.executeGadgetAction` routes it to `applyTicketReview`, which refuses any session
+  that is not a ticket review. This is the second exception, after workflow approvals, to
+  "a gadget records a decision and never reaches a service": the user's own click on an editable
+  form is the approval, and the agent cannot write to the tracker itself (the session is
+  read-only; CLI agents have no tracker tools at all).
+- **Apply refuses to overwrite an edit made after the review started.** It compares the ticket's
+  description/summary to what the review last read or wrote — not the tracker's `updated`
+  marker, which a comment (including "Post as comment") also bumps.
+- **The apply form's textarea must use the `.textarea` class.** `.input` fixes the height at 28px
+  and collapses a whole ticket description to one line.
+- **e2e:** `e2e/aiTicketReview.spec.ts` drives `e2e/fixtures/ticketReviewAcpAgent.mjs`, a real ACP
+  subprocess with a fixed script — the session, gadget pipeline, follow-up turn and apply are the
+  production path; only the model's words are canned.
+
 ## `docs/plans/` is a Praxis board — keep it parseable
 
 Praxis reads its own plans: the Praxis Desktop project (`praxis-code.workspace.praxis.json`)

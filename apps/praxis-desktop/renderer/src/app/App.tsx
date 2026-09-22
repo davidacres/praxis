@@ -1107,6 +1107,9 @@ export function App() {
     }
   }, [route.view, route.boardId]);
 
+  /** Bumped when something outside the detail pane (an applied AI review) edits the open ticket. */
+  const [issueRefreshToken, setIssueRefreshToken] = useState(0);
+
   const refreshBoardDetails = useCallback(() => {
     if (selectedBoard) {
       void window.praxis.board.get(selectedBoard).then(setBoardDetails);
@@ -1800,6 +1803,12 @@ export function App() {
           provider={route.aiProvider}
           model={route.aiModel}
           onClose={() => navigate({ ...route, view: undefined })}
+          onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
+          onTicketChanged={() => {
+            refreshBoards();
+            refreshBoardDetails();
+            setIssueRefreshToken(token => token + 1);
+          }}
         />
       );
     }
@@ -2349,6 +2358,7 @@ export function App() {
                         navigate({ ...route, issueKey: undefined });
                       }}
                       onChanged={refreshBoardDetails}
+                      refreshToken={issueRefreshToken}
                       onOpenIssue={key => navigate({ ...route, issueKey: key, view: undefined })}
                       onOpenSession={key => navigate({ feature: 'sessions', sessionKey: key })}
                       onOpenAiView={(key, view, runtime) => {

@@ -37,6 +37,7 @@ export * from './ai/toolEventClassify';
 export * from './ai/tools';
 export * from './ai/browserMcpServer';
 export * from './ai/aiReviewService';
+export * from './ai/ticketReview';
 export * from './ai/aiUsageLog';
 export * from './ai/aiUsageStats';
 export * from './ai/providerUsage';
