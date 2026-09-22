@@ -14,6 +14,7 @@ import { getMobileHostId, getMobileHostIdentity, rotateMobileHostIdentity } from
 import { getSettingsBackend } from './settingsBackendInstance';
 import { DEFAULT_MOBILE_LISTENER_PORT } from './mobileAccessLifecycle';
 import { getProjectStore } from './projectStoreInstance';
+import { isMobileDiscoveryAdvertised } from './mobileDiscoveryAdvertiser';
 import { MobileLanServer } from './mobileLanServer';
 
 let registry: MobilePairingRegistry | undefined;
@@ -74,6 +75,10 @@ function emitPairingChanged(): void {
   });
 }
 
+export function notifyMobilePairingChanged(): void {
+  emitPairingChanged();
+}
+
 export function mobileAuthorizePeer(publicKeyHex: string) {
   const device = getMobilePairingRegistry().authorize(publicKeyHex);
   if (!device) return undefined;
@@ -126,7 +131,7 @@ export async function snapshotMobilePairing(): Promise<MobilePairingSnapshot> {
       connectionCount: lanServer?.connectionCount() ?? 0,
       lastError: lanServer?.bindError ?? lastBindError,
       discovery: {
-        advertised: listening,
+        advertised: isMobileDiscoveryAdvertised(),
         hostId,
         displayName: hostName,
         fingerprint: fingerprintMobileHostKey(publicKeyHex),
