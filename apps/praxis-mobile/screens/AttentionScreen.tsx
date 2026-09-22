@@ -5,7 +5,7 @@ import { useStore, useOpenAttention } from '../app/store';
 
 export function AttentionScreen({ onOpenSidebar }: { onOpenSidebar: () => void }): React.JSX.Element {
   const items = useOpenAttention();
-  const { approve, setRoute, openWork } = useStore();
+  const { approve, respondToPermission, setRoute, openWork } = useStore();
 
   return (
     <>
@@ -26,9 +26,10 @@ export function AttentionScreen({ onOpenSidebar }: { onOpenSidebar: () => void }
             {item.kind === 'approval'
               ? 'A run is waiting for your approval.'
               : item.kind === 'permission'
-                ? 'The agent is asking permission to act.'
+                ? (item.summary ?? 'The agent is asking permission to act.')
                 : 'A stage failed and can be retried.'}
           </Body>
+          {item.kind === 'permission' && item.detail ? <Body dim>{item.detail}</Body> : null}
           {item.kind === 'approval' && item.runId && (
             <View style={styles.actions}>
               <Button
@@ -40,6 +41,12 @@ export function AttentionScreen({ onOpenSidebar }: { onOpenSidebar: () => void }
                 }}
               />
               <Button label="Approve" onPress={() => approve(item.runId!)} />
+            </View>
+          )}
+          {item.kind === 'permission' && item.requestId && (
+            <View style={styles.actions}>
+              <Button label="Deny" kind="ghost" onPress={() => void respondToPermission(item.requestId!, 'deny')} />
+              <Button label="Allow once" onPress={() => void respondToPermission(item.requestId!, 'allow')} />
             </View>
           )}
         </Card>

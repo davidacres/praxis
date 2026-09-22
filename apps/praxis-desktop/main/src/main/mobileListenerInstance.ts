@@ -108,7 +108,7 @@ async function refreshDiscoveryAdvertisement(): Promise<void> {
  * binds no socket.
  */
 export async function initMobileHost(): Promise<void> {
-  hostApp = composeDesktopMobileHost();
+  hostApp = composeDesktopMobileHost(await getMobileHostId());
   registerMobileElectronIpc(hostApp);
 
   try {

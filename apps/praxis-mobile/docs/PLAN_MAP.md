@@ -10,32 +10,20 @@ a real LAN listener that authenticates and authorises each peer
 (`mobileLanServer.ts`), plus the composed host bound to the live
 session/workflow/project stores. FX-BF-028 stands.
 
-As of 2026-09-12 there **is** a React Native app (`apps/praxis-mobile`, Expo
-SDK 57) — it builds, boots in `expo start --ios`, and renders (verified in the
-iOS Simulator: Connect → Work list → Work detail with Chat/Progress/Changes →
-Attention, screenshotted). It runs against **canned demo data only**
-(`app/demoData.ts`); it does not yet open a real socket to a desktop host. So
-FX-BF-029/031–033 stay In Progress, not because nothing runs but because the
-runnable app doesn't yet talk to the runnable host. See "Resume here" in
-[development.md](development.md#resume-here-2026-09-12) for the exact next
-steps. `sessions.continue` / `permissions.respond` / `workflowRuns.start`
-remain explicit `MobileHostPendingError`s pending the permission FIFO →
-request-id rework (architecture.md) and FX-BE-082. TASK-237 through TASK-241
-now explicitly own the native connection, live session data, host commands,
-request-scoped decisions, and physical-device integration proof; completed
-helper-level tasks remain historical records rather than evidence that this gap
-is closed.
+As of 2026-09-22 the Expo SDK 57 app has production native adapters for TCP,
+UDP discovery, camera QR scanning and protected key/config storage. It pairs
+against the desktop's explicit confirmation flow, lists and restores scoped
+sessions, creates/continues/cancels turns, consumes pushed transcript snapshots,
+starts/cancels/retries workflows, and handles request-specific permissions and
+workflow approvals. Demo data remains only for isolated fixtures. The remaining
+closure gate is real iOS/Android development/release-build evidence across
+pairing, foreground/background reconnect, revocation and interruption; no
+physical-device evidence is claimed by this source change.
 
-**Open integration ownership (2026-09-22).** These are completion blockers, not
-follow-up polish: TASK-237 owns authenticated paired-device binding, desktop
-Mobile Access/listener lifecycle, OS-protected keys and shipping iOS/Android
-adapters; TASK-238 owns session list/create/get/continue/cancel contracts,
-desktop event publication, scoped replay/snapshot fallback and the live mobile
-repository/UI; TASK-239 removes the production workflow-start placeholder;
-TASK-240 removes the request-specific permission placeholder; TASK-241 proves
-the complete production binaries against each other. FX-BF-029/031–033 cannot
-close from helper predicates, loopback fixtures, static screenshots, or Expo Go
-alone.
+**Open integration ownership (2026-09-22).** TASK-237–240 now have their source
+paths wired end to end. TASK-241 remains the acceptance owner for production
+binaries on physical iOS and Android devices. FX-BF-029/031–033 cannot close
+from helper predicates, loopback fixtures, static screenshots, or Expo Go alone.
 
 | Ref | Type | Name | Status | Depends on |
 | --- | --- | --- | --- | --- |

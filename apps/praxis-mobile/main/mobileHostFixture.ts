@@ -97,13 +97,26 @@ export function createMobileHostFixture(now: () => string = () => new Date().toI
     'work.list': async () => [
       { workId: state.session.workId, title: state.session.title, status: state.session.status, sessionId: state.session.sessionId },
     ],
+    'sessions.list': async () => [{
+      sessionId: state.session.sessionId,
+      sessionKey: state.session.workId,
+      projectId: FIXTURE_PROJECT_ID,
+      workId: state.session.workId,
+      title: state.session.title,
+      lifecycle: state.session.status === 'running' ? 'active' : 'idle',
+      mode: 'chat',
+      archived: false,
+      startedAt: '2026-09-10T09:00:00.000Z',
+    }],
     'sessions.get': async () => ({ ...state.session, transcript: [...state.session.transcript] }),
+    'workflows.list': async () => [{ workflowId: state.run.workflowId, name: 'Governed delivery', trigger: 'manual' }],
     'workflowRuns.get': async () => ({ ...state.run }),
     'changes.get': async () => ({ runId: state.run.runId, files: [{ path: 'apps/praxis-desktop/main/src/main/index.ts', added: 14, removed: 0 }] }),
     'attention.list': async () => state.attention.filter(item => !item.resolved).map(item => ({ ...item })),
   };
 
   const commands: MobileExecutionHandlers = {
+    'sessions.create': async () => ({ sessionId: state.session.sessionId, accepted: true }),
     'sessions.continue': async (command: MobileCommand) => {
       const message = String((command.payload as { message?: unknown } | undefined)?.message ?? '').trim();
       if (!message) throw new Error('sessions.continue requires a message.');
@@ -113,6 +126,11 @@ export function createMobileHostFixture(now: () => string = () => new Date().toI
       state.session.status = 'idle';
       emit({ kind: 'session.idle', sessionId: state.session.sessionId }, { sessionId: state.session.sessionId });
       return { sessionId: state.session.sessionId, accepted: true };
+    },
+    'sessions.cancel': async () => {
+      state.session.status = 'idle';
+      emit({ kind: 'session.stopped', sessionId: state.session.sessionId }, { sessionId: state.session.sessionId });
+      return { sessionId: state.session.sessionId, stopped: true };
     },
     'workflowRuns.start': async () => {
       state.run.status = 'running';

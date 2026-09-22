@@ -6,7 +6,9 @@ import {
 } from './mobileProtocol';
 
 export interface MobileExecutionHandlers {
+  'sessions.create': (command: MobileCommand) => Promise<unknown>;
   'sessions.continue': (command: MobileCommand) => Promise<unknown>;
+  'sessions.cancel': (command: MobileCommand) => Promise<unknown>;
   'workflowRuns.start': (command: MobileCommand) => Promise<unknown>;
   'workflowRuns.cancel': (command: MobileCommand) => Promise<unknown>;
   'workflowRuns.retryStage': (command: MobileCommand) => Promise<unknown>;
