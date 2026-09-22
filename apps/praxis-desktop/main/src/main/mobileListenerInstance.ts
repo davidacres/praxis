@@ -7,7 +7,7 @@
  * change narrows access — mode off, internet → local-only, or any lateral
  * allowlist change — established peers are severed and must re-authenticate.
  */
-import type { MobileListener } from '@praxis/core';
+import type { MobileHostApplication, MobileListener } from '@praxis/core';
 import { getLogBus } from './logBusInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { registerMobileElectronIpc } from './mobileIpc';
@@ -15,9 +15,32 @@ import { composeDesktopMobileHost } from './mobileHostComposition';
 import { getMobileHostIdentity } from './mobileHostIdentity';
 import { MobileLanServer } from './mobileLanServer';
 import { mobileAccessPolicyFromSettings, resolveMobileListenerChange } from './mobileAccessLifecycle';
+import {
+  attachMobileLanServer,
+  mobileAuthorizePeer,
+  mobileOnUnpairedPeer,
+  setMobileBindError,
+} from './mobilePairingInstance';
 
 let current: MobileListener | undefined;
 let lanServer: MobileLanServer | undefined;
+let hostApp: MobileHostApplication | undefined;
+
+async function createLanServer(): Promise<void> {
+  if (!hostApp) return;
+  await lanServer?.stop();
+  const identity = await getMobileHostIdentity();
+  const pairingCode = process.env.PRAXIS_MOBILE_PAIRING_CODE?.trim();
+  lanServer = new MobileLanServer({
+    app: hostApp,
+    hostStaticKey: identity,
+    ...(pairingCode ? { pairingCode } : {}),
+    authorizePeer: mobileAuthorizePeer,
+    onUnpairedPeer: mobileOnUnpairedPeer,
+    onLog: line => getLogBus().appendLine(line),
+  });
+  attachMobileLanServer(lanServer);
+}
 
 async function applyMobileAccessFromSettings(): Promise<void> {
   const settings = getSettingsBackend().read().mobileAccess;
@@ -31,6 +54,7 @@ async function applyMobileAccessFromSettings(): Promise<void> {
   if (!lanServer) return;
   const policy = mobileAccessPolicyFromSettings(settings);
   try {
+    setMobileBindError(undefined);
     if (change.unbind) {
       await lanServer.stop();
     } else if (change.bind && change.listener.port !== undefined) {
@@ -40,7 +64,9 @@ async function applyMobileAccessFromSettings(): Promise<void> {
       lanServer.applyPolicy(policy, change.dropConnections);
     }
   } catch (error) {
-    getLogBus().appendLine(`[mobile] listener change failed: ${error instanceof Error ? error.message : String(error)}`);
+    const message = error instanceof Error ? error.message : String(error);
+    setMobileBindError(message);
+    getLogBus().appendLine(`[mobile] listener change failed: ${message}`);
   }
 }
 
@@ -50,12 +76,11 @@ async function applyMobileAccessFromSettings(): Promise<void> {
  * binds no socket.
  */
 export async function initMobileHost(): Promise<void> {
-  const app = composeDesktopMobileHost();
-  registerMobileElectronIpc(app);
+  hostApp = composeDesktopMobileHost();
+  registerMobileElectronIpc(hostApp);
 
   try {
-    const identity = await getMobileHostIdentity();
-    lanServer = new MobileLanServer({ app, hostStaticKey: identity, onLog: line => getLogBus().appendLine(line) });
+    await createLanServer();
   } catch (error) {
     getLogBus().appendLine(`[mobile] identity unavailable, LAN listener disabled: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -64,6 +89,16 @@ export async function initMobileHost(): Promise<void> {
   getSettingsBackend().onDidChange(() => {
     void applyMobileAccessFromSettings();
   });
+}
+
+export async function restartMobileLanAfterKeyRotation(): Promise<void> {
+  current = undefined;
+  try {
+    await createLanServer();
+  } catch (error) {
+    getLogBus().appendLine(`[mobile] host key rotation failed to rebind: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  await applyMobileAccessFromSettings();
 }
 
 export function currentMobileListener(): MobileListener | undefined {
@@ -77,5 +112,7 @@ export function mobileLanConnectionCount(): number {
 export async function stopMobileHost(): Promise<void> {
   await lanServer?.stop();
   lanServer = undefined;
+  hostApp = undefined;
   current = undefined;
+  attachMobileLanServer(undefined);
 }

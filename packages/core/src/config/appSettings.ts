@@ -584,6 +584,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     hostName: '',
     allowedInterfaces: [],
     allowedSubnets: [],
+    listenPort: 43100,
     remoteSignInRequired: false
   }
 };
@@ -1195,6 +1196,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         hostName: readString(raw.mobileAccess.hostName, DEFAULT_APP_SETTINGS.mobileAccess.hostName),
         allowedInterfaces: readStringList(raw.mobileAccess.allowedInterfaces, DEFAULT_APP_SETTINGS.mobileAccess.allowedInterfaces),
         allowedSubnets: readStringList(raw.mobileAccess.allowedSubnets, DEFAULT_APP_SETTINGS.mobileAccess.allowedSubnets),
+        listenPort: clampNumber(raw.mobileAccess.listenPort, 1024, 65535, DEFAULT_APP_SETTINGS.mobileAccess.listenPort),
         remoteSignInRequired: readBoolean(raw.mobileAccess.remoteSignInRequired, DEFAULT_APP_SETTINGS.mobileAccess.remoteSignInRequired)
       }
     : { ...DEFAULT_APP_SETTINGS.mobileAccess };

@@ -11,13 +11,14 @@
  */
 import {
   DEFAULT_MOBILE_ACCESS_POLICY,
+  DEFAULT_MOBILE_LISTENER_PORT,
   createMobileListener,
   type MobileAccessPolicy,
   type MobileAccessSettings,
   type MobileListener,
 } from '@praxis/core';
 
-export const DEFAULT_MOBILE_LISTENER_PORT = 43100;
+export { DEFAULT_MOBILE_LISTENER_PORT };
 
 export function mobileAccessPolicyFromSettings(settings: MobileAccessSettings): MobileAccessPolicy {
   return {
@@ -53,7 +54,7 @@ export interface MobileListenerChange {
 export function resolveMobileListenerChange(
   previous: MobileListener | undefined,
   settings: MobileAccessSettings,
-  port: number = DEFAULT_MOBILE_LISTENER_PORT,
+  port: number = settings.listenPort || DEFAULT_MOBILE_LISTENER_PORT,
 ): MobileListenerChange {
   const policy = mobileAccessPolicyFromSettings(settings);
   const listener = createMobileListener(policy, port);

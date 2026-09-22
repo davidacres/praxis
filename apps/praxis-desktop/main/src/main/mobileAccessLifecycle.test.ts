@@ -9,6 +9,7 @@ const settings = (over: Partial<MobileAccessSettings> = {}): MobileAccessSetting
   allowedInterfaces: [],
   allowedSubnets: [],
   remoteSignInRequired: false,
+  listenPort: 43100,
   ...over,
 });
 
@@ -59,4 +60,12 @@ test('no change is a no-op', () => {
   assert.equal(change.bind, false);
   assert.equal(change.unbind, false);
   assert.equal(change.dropConnections, false);
+});
+
+test('changing the listen port rebinds and drops peers', () => {
+  const before = resolveMobileListenerChange(undefined, settings({ mode: 'local-only', listenPort: 43100 })).listener;
+  const change = resolveMobileListenerChange(before, settings({ mode: 'local-only', listenPort: 43101 }));
+  assert.equal(change.bind, true);
+  assert.equal(change.dropConnections, true);
+  assert.equal(change.listener.port, 43101);
 });

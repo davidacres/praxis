@@ -157,6 +157,17 @@ const praxis: PraxisIpc = {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch: AppSettingsPatch) => ipcRenderer.invoke('settings:set', patch),
+    getMobileHostInfo: () => ipcRenderer.invoke('settings:getMobileHostInfo'),
+    createMobilePairingInvitation: () => ipcRenderer.invoke('settings:createMobilePairingInvitation'),
+    confirmMobilePairing: (requestId, grant) => ipcRenderer.invoke('settings:confirmMobilePairing', requestId, grant),
+    denyMobilePairing: (requestId) => ipcRenderer.invoke('settings:denyMobilePairing', requestId),
+    revokeMobilePairedDevice: (deviceId) => ipcRenderer.invoke('settings:revokeMobilePairedDevice', deviceId),
+    rotateMobileHostKey: () => ipcRenderer.invoke('settings:rotateMobileHostKey'),
+    onMobilePairingChanged: listener => {
+      const handler = (_event: Electron.IpcRendererEvent, snapshot: Parameters<typeof listener>[0]) => listener(snapshot);
+      ipcRenderer.on('mobile:pairingChanged', handler);
+      return () => ipcRenderer.off('mobile:pairingChanged', handler);
+    },
     clearSessionData: () => ipcRenderer.invoke('settings:clearSessionData'),
     clearProjectWorkspaceBoardData: () => ipcRenderer.invoke('settings:clearProjectWorkspaceBoardData'),
     onChanged: (listener: (settings: AppSettings) => void) => {
