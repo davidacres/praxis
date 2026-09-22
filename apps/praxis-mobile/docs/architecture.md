@@ -75,6 +75,6 @@ GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mo
 
 ## ADR: mobile packaging and build boundary
 
-Decision: use a React DOM renderer with thin native platform adapters for QR scanning, local discovery, secure storage, browser sign-in, and push notifications. Keep `main` platform-owned and `renderer` UI-owned; mobile imports only versioned browser-safe contracts and never Electron or Node desktop modules.
+Decision: use the Expo React Native application in `apps/praxis-mobile` with thin native platform adapters for TCP transport, QR scanning, local discovery, secure storage, browser sign-in, app lifecycle, and push notifications. Native connection/key ownership remains outside screen components; tested renderer helpers remain platform-neutral where useful. Mobile imports only versioned browser-safe contracts and never Electron or Node desktop modules. Expo Go may support UI prototyping, but any feature requiring native adapters is built and verified through iOS/Android development or release builds.
 
 The current monorepo layout is an interim arrangement. The mobile folder is intentionally portable so it can move to its own repository without changing the protocol boundary. iOS/Android distribution and signing remain a later feasibility spike. Local LAN continuation and execution do not require GenericSystem, Roleover, Azure, or internet access.
