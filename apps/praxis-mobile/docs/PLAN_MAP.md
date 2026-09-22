@@ -26,6 +26,17 @@ request-scoped decisions, and physical-device integration proof; completed
 helper-level tasks remain historical records rather than evidence that this gap
 is closed.
 
+**Open integration ownership (2026-09-22).** These are completion blockers, not
+follow-up polish: TASK-237 owns authenticated paired-device binding, desktop
+Mobile Access/listener lifecycle, OS-protected keys and shipping iOS/Android
+adapters; TASK-238 owns session list/create/get/continue/cancel contracts,
+desktop event publication, scoped replay/snapshot fallback and the live mobile
+repository/UI; TASK-239 removes the production workflow-start placeholder;
+TASK-240 removes the request-specific permission placeholder; TASK-241 proves
+the complete production binaries against each other. FX-BF-029/031–033 cannot
+close from helper predicates, loopback fixtures, static screenshots, or Expo Go
+alone.
+
 | Ref | Type | Name | Status | Depends on |
 | --- | --- | --- | --- | --- |
 | [FX-BE-074](plans/features/fx-bf-028-execution-host-and-protocol/stories/fx-be-074-versioned-execution-boundary/story.md) | Story | Versioned execution boundary | Complete | None |

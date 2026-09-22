@@ -35,8 +35,10 @@ Mobile renderer work/session/progress/changes features and client transport.
 ## Acceptance criteria
 
 - Duplicate issue keys across projects stay separate; host switching cannot expose stale data from another host. Empty, loading, denied and offline states are distinct.
+- Session list/create/get/continue/cancel operations and their snapshots/events are versioned protocol contracts implemented by the desktop host and consumed by the production mobile repository; demo state is not a fallback.
 - Desktop → phone → desktop keeps session/run IDs and provider context. Binary/oversized files and unsafe paths are refused or clearly truncated; unsupported continuation is explicit.
 - Responses stream incrementally from the desktop-owned active turn to the phone, including tool/permission activity and terminal state. Reconnect resumes a partial response from the acknowledged cursor without gaps or duplicate transcript entries.
+- Historical transcript truth comes from `AgentSessionRecord.events`; `responseText` is only the active-turn buffer. Snapshot, replay and live pushes are filtered by authenticated host/project/session scope and converge after restart.
 - Work continues while phone is absent; replay has no missing/duplicate accepted messages. Record physical-device evidence for iOS/Android and retained desktop behaviour before declaring the milestone complete.
 
 ## Exclusions

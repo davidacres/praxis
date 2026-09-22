@@ -35,6 +35,8 @@ Desktop local discovery/listener; mobile transport adapter.
 ## Acceptance criteria
 
 - DHCP address changes reconnect to the same host; a different machine at the old IP fails authentication. Blocked discovery still permits manual access on an allowed network.
+- The desktop derives device identity, capabilities, and project scope from the authenticated paired key for every request and pushed event; client-supplied identity or capability claims cannot expand access.
+- Pairing, protected key persistence, desktop confirmation, host-key pinning, device administration, revocation of live sockets, and foreground reconciliation work in shipping iOS and Android builds as well as fixtures.
 - Disconnect during streaming resumes without transcript duplication; cursor eviction triggers a bounded snapshot. IPv4/IPv6, guest-network isolation and host sleep show accurate status.
 - No GenericSystem, Roleover, Azure, VPN or public DNS is needed for the local journey. Local-only cannot be bypassed by retaining a previously authorised relay connection.
 
@@ -62,4 +64,3 @@ Complete this item with GenericSystem, Roleover and Azure unavailable. Implement
 
 
 ## Comments
-
