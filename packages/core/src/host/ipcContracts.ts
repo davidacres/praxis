@@ -58,6 +58,8 @@ import type { RunLogLine, RunServiceStatus } from '../projects/runServiceManager
 import type { BrowserDiagnosticsBundle } from '../projects/browserDiagnostics';
 import type { PreviewVerificationCheck, PreviewVerificationOutcome } from '../projects/previewVerification';
 import type { AppSettings, AppSettingsPatch, MarketplaceSettings } from '../config/appSettings';
+import type { MobilePairingSnapshot } from '../host/mobileAccessAdministration';
+import type { MobileCapability } from '../host/mobileProtocol';
 import type {
   ActiveAppearanceAddons,
   AddonKind,
@@ -246,6 +248,17 @@ export interface SettingsIpc {
    * merged result so the caller can show the new state without an extra `get`.
    */
   set(patch: AppSettingsPatch): Promise<AppSettings>;
+  /** Public host identity and listener status; never includes the host private key or pairing secret. */
+  getMobileHostInfo(): Promise<MobilePairingSnapshot>;
+  createMobilePairingInvitation(): Promise<MobilePairingSnapshot>;
+  confirmMobilePairing(
+    requestId: string,
+    grant: { label?: string; capabilities: readonly MobileCapability[]; projectIds: readonly string[] },
+  ): Promise<MobilePairingSnapshot>;
+  denyMobilePairing(requestId: string): Promise<MobilePairingSnapshot>;
+  revokeMobilePairedDevice(deviceId: string): Promise<MobilePairingSnapshot>;
+  rotateMobileHostKey(): Promise<MobilePairingSnapshot>;
+  onMobilePairingChanged(listener: (snapshot: MobilePairingSnapshot) => void): () => void;
   /** Deletes persisted AI session and issue-analysis records, but not credentials. */
   clearSessionData(): Promise<void>;
   /** Deletes app-owned workspace, project, and board UI data; portable workspace files remain untouched. */

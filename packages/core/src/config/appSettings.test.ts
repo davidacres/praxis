@@ -30,6 +30,9 @@ test('mobile access is off by default and mode is validated to the known set', (
   assert.deepEqual([...trimmed], ['en0']);
   const rejected = sanitizeAppSettings({ mobileAccess: { allowedSubnets: ['10.0.0.', 42] } }).mobileAccess.allowedSubnets;
   assert.deepEqual([...rejected], []);
+  assert.equal(sanitizeAppSettings({}).mobileAccess.listenPort, 43100);
+  assert.equal(sanitizeAppSettings({ mobileAccess: { listenPort: 80 } }).mobileAccess.listenPort, 1024);
+  assert.equal(sanitizeAppSettings({ mobileAccess: { listenPort: 43101 } }).mobileAccess.listenPort, 43101);
 });
 
 test('merge updates mobile access without touching other sections', () => {
