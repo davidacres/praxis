@@ -1,13 +1,14 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Body, Card, H1, Screen } from '../app/ui';
+import { AppHeader, Body, Card, Screen } from '../app/ui';
 import { theme } from '../app/theme';
 import { DEMO_ACTIVITY } from '../app/demoData';
 
-export function ActivityScreen(): React.JSX.Element {
+export function ActivityScreen({ onOpenSidebar }: { onOpenSidebar: () => void }): React.JSX.Element {
   return (
-    <Screen>
-      <H1>Activity</H1>
+    <>
+      <AppHeader title="Activity" onOpenSidebar={onOpenSidebar} />
+      <Screen>
       {DEMO_ACTIVITY.map((entry, index) => (
         <Card key={index}>
           <View style={styles.row}>
@@ -17,7 +18,8 @@ export function ActivityScreen(): React.JSX.Element {
           </View>
         </Card>
       ))}
-    </Screen>
+      </Screen>
+    </>
   );
 }
 

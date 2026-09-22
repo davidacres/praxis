@@ -47,6 +47,33 @@ function text(fields: Record<string, string | number | boolean>, name: (typeof T
 }
 
 /**
+ * What an apply actually did to the ticket fields, versus what the form merely
+ * sent. A description field is required, so a round with nothing new to say
+ * about it still resubmits the current text verbatim — writing that back is
+ * harmless, but the summary shown to the user must say what changed, not what
+ * was merely present in the form, or "updated the description" appears next to
+ * a description that reads identically before and after.
+ *
+ * Pure and exported so the wording is pinned by a unit test without needing
+ * the tracker singletons `applyTicketReview` itself depends on.
+ */
+export function describeAppliedChanges(
+  before: { summary?: string; description?: string },
+  fields: { summary: string; description: string }
+): { changedSummary: boolean; changedDescription: boolean; label: string | undefined } {
+  const changedSummary = Boolean(fields.summary) && normalized(fields.summary) !== normalized(before.summary);
+  const changedDescription = Boolean(fields.description) && normalized(fields.description) !== normalized(before.description);
+  const changed = [changedSummary && 'summary', changedDescription && 'description'].filter(
+    (field): field is string => Boolean(field)
+  );
+  return {
+    changedSummary,
+    changedDescription,
+    label: changed.length > 0 ? `updated the ${changed.join(' and ')}` : undefined
+  };
+}
+
+/**
  * Writes an approved ticket review to the tracker.
  *
  * This is the one place a ticket-review gadget reaches a service that mutates
@@ -74,12 +101,20 @@ export async function applyTicketReview(
   const service = await getServiceForConnection(record.connectionId);
   const changesTicket = Boolean(summary || description);
 
+  // Fetched once, whenever a field might touch the ticket: the conflict check
+  // (against the baseline, when one is known) and the "what actually changed"
+  // wording below both read off the ticket's state immediately before this
+  // write, not off what the form happened to be pre-filled with. A form field
+  // is required and so often resubmits the unchanged current text — writing
+  // that back is harmless, but claiming it as a change is not: the apply
+  // form's own "Got it — description left as-is" reply and the result banner
+  // must agree.
+  const before = changesTicket ? await service.getIssue(issueKey) : undefined;
   const baseline = baselines.get(sessionId);
-  if (changesTicket && baseline) {
-    const current = await service.getIssue(issueKey);
+  if (before && baseline) {
     const edited =
-      (description && normalized(current.description) !== normalized(baseline.description)) ||
-      (summary && normalized(current.summary) !== normalized(baseline.summary));
+      (description && normalized(before.description) !== normalized(baseline.description)) ||
+      (summary && normalized(before.summary) !== normalized(baseline.summary));
     if (edited) {
       throw new Error(
         `${issueKey} was edited after this review started, so applying now would overwrite that edit. Run the review again to work from the current ticket.`
@@ -88,13 +123,21 @@ export async function applyTicketReview(
   }
 
   const applied: string[] = [];
-  if (changesTicket) {
+  if (changesTicket && before) {
+    const { label } = describeAppliedChanges(before, { summary, description });
     const updated = await service.updateIssue(issueKey, {
       ...(summary ? { summary } : {}),
       ...(description ? { description } : {})
     });
     recordTicketReviewBaseline(sessionId, updated);
-    applied.push(`updated the ${[summary && 'summary', description && 'description'].filter(Boolean).join(' and ')}`);
+    if (label) {
+      applied.push(label);
+    } else if (!comment) {
+      // Every field it sent matched what was already there — the review had
+      // nothing left to apply this round, and the user should see that plainly
+      // rather than a claimed update that changed nothing.
+      applied.push('nothing changed — the ticket already matched');
+    }
   }
   if (comment) {
     await service.addComment(issueKey, comment);
