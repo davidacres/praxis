@@ -7,18 +7,25 @@
  * change narrows access — mode off, internet → local-only, or any lateral
  * allowlist change — established peers are severed and must re-authenticate.
  */
-import type { MobileHostApplication, MobileListener } from '@praxis/core';
+import * as os from 'node:os';
+import { fingerprintMobileHostKey, type MobileHostApplication, type MobileListener } from '@praxis/core';
 import { getLogBus } from './logBusInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { registerMobileElectronIpc } from './mobileIpc';
 import { composeDesktopMobileHost } from './mobileHostComposition';
-import { getMobileHostIdentity } from './mobileHostIdentity';
+import { getMobileHostId, getMobileHostIdentity } from './mobileHostIdentity';
 import { MobileLanServer } from './mobileLanServer';
 import { mobileAccessPolicyFromSettings, resolveMobileListenerChange } from './mobileAccessLifecycle';
 import {
+  startMobileDiscoveryAdvertisement,
+  stopMobileDiscoveryAdvertisement,
+} from './mobileDiscoveryAdvertiser';
+import {
   attachMobileLanServer,
+  lanInterfaces,
   mobileAuthorizePeer,
   mobileOnUnpairedPeer,
+  notifyMobilePairingChanged,
   setMobileBindError,
 } from './mobilePairingInstance';
 
@@ -68,6 +75,31 @@ async function applyMobileAccessFromSettings(): Promise<void> {
     setMobileBindError(message);
     getLogBus().appendLine(`[mobile] listener change failed: ${message}`);
   }
+  await refreshDiscoveryAdvertisement();
+  notifyMobilePairingChanged();
+}
+
+async function refreshDiscoveryAdvertisement(): Promise<void> {
+  if (lanServer?.listening !== true) {
+    stopMobileDiscoveryAdvertisement();
+    return;
+  }
+  try {
+    const settings = getSettingsBackend().read().mobileAccess;
+    const [identity, hostId] = await Promise.all([getMobileHostIdentity(), getMobileHostId()]);
+    const publicKeyHex = Buffer.from(identity.publicKey).toString('hex');
+    startMobileDiscoveryAdvertisement({
+      version: 1,
+      hostId,
+      displayName: settings.hostName.trim() || os.hostname() || 'Praxis desktop',
+      fingerprint: fingerprintMobileHostKey(publicKeyHex),
+      port: lanServer.port ?? settings.listenPort,
+      addresses: lanInterfaces().map(item => item.address),
+    });
+  } catch (error) {
+    stopMobileDiscoveryAdvertisement();
+    getLogBus().appendLine(`[mobile] discovery advertisement failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 /**
@@ -110,6 +142,7 @@ export function mobileLanConnectionCount(): number {
 }
 
 export async function stopMobileHost(): Promise<void> {
+  stopMobileDiscoveryAdvertisement();
   await lanServer?.stop();
   lanServer = undefined;
   hostApp = undefined;

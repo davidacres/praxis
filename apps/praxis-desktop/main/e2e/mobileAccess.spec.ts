@@ -25,12 +25,15 @@ test('mobile access pairing controls stay off until the listener is enabled', as
   await expect(window.locator('[data-testid="mobile-access-mode"]')).toHaveValue('off');
   await expect(window.locator('[data-testid="mobile-create-pairing"]')).toBeDisabled();
   await expect(window.locator('[data-testid="mobile-listener-status"]')).toContainText('Not listening');
+  await expect(window.locator('[data-testid="mobile-discovery-status"]')).toContainText('not advertised');
   await expect(window.locator('[data-testid="mobile-paired-devices"]')).toContainText('No paired phones yet.');
 });
 
 test('creating a pairing code shows a single-use token and never a private key', async () => {
   await openMobileAccess();
   await window.locator('[data-testid="mobile-access-mode"]').selectOption('local-only');
+  await expect(window.locator('[data-testid="mobile-listener-status"]')).toContainText('Listening');
+  await expect(window.locator('[data-testid="mobile-discovery-status"]')).toContainText('advertised as');
   await expect(window.locator('[data-testid="mobile-create-pairing"]')).toBeEnabled();
   await window.locator('[data-testid="mobile-create-pairing"]').click();
   const code = window.locator('[data-testid="mobile-pairing-code"]');

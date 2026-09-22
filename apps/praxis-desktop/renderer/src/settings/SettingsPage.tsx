@@ -2518,7 +2518,7 @@ function MobileAccessSection({
             {` · ${listener?.connectionCount ?? 0} connection${listener?.connectionCount === 1 ? '' : 's'}`}
           </div>
           <div className="settings-field-help">Addresses: {listener?.addresses.join(', ') || 'No LAN address'}</div>
-          <div className="settings-field-help">
+          <div className="settings-field-help" data-testid="mobile-discovery-status">
             Discovery: {listener?.discovery.advertised ? `advertised as ${listener.discovery.displayName}` : 'not advertised'}
             {listener ? ` · fingerprint ${listener.discovery.fingerprint}` : ''}
           </div>
