@@ -7,10 +7,6 @@ import type {
   AiAnalysisState,
   AiProvider,
   AiProviderStatus,
-  AnyGadgetEnvelope,
-  ChatBlock,
-  GadgetActionResult,
-  GadgetActionValue,
   PermissionDecision,
   SessionMode,
   TerminalSessionInfo,
@@ -38,7 +34,8 @@ import {
   encodeImageAttachment
 } from './imageAttachments';
 import { GadgetBlockList } from './gadgets';
-import { gadgetMessageKey, groupBlocksByMessage, mayContainGadget, stripGadgetFences, visibleMessageText } from './gadgets/messageText';
+import { useSessionGadgets } from './gadgets/useSessionGadgets';
+import { gadgetMessageKey, stripGadgetFences, visibleMessageText } from './gadgets/messageText';
 import type { SessionWorkflowOption } from './NewSession';
 
 /**
@@ -53,16 +50,6 @@ const MODE_TRANSITION: Record<SessionMode, string> = {
   chat:
     'Switch this conversation into Chat mode. Answer my next requests directly and do not inspect or modify tickets unless I explicitly ask.'
 };
-
-/** Every published gadget block for this session, searched by `gadgetId` — `gadgetBlocks` is keyed by message, not by gadget. */
-function findGadgetEnvelope(blocks: Record<string, ChatBlock[]>, gadgetId: string): AnyGadgetEnvelope | undefined {
-  for (const list of Object.values(blocks)) {
-    for (const block of list) {
-      if (block.type === 'gadget' && block.gadget.gadgetId === gadgetId) return block.gadget;
-    }
-  }
-  return undefined;
-}
 
 /** Image thumbnails for a user turn in the chat transcript; click enlarges. */
 function TranscriptAttachments({ attachments }: { attachments: WireImageAttachment[] | undefined }) {
@@ -96,41 +83,6 @@ function TranscriptAttachments({ attachments }: { attachments: WireImageAttachme
       )}
     </div>
   );
-}
-
-/**
- * Turns a recorded choice/selection answer into the follow-up message that
- * reports it to the agent — the same shape a person would have typed. Scoped
- * to `choice`-kind gadgets only (a genuine open decision with a question and
- * options, e.g. "which direction should we take"), not `confirmation`/`form`,
- * which routinely pair with a `mutating`/`approval` action that already
- * reaches a real service through its own gated executor — piling an automatic
- * follow-up turn onto those would risk a second, uncoordinated way of telling
- * the agent something happened. Only fires for an `informational` action.
- */
-function describeGadgetAnswer(
-  envelope: AnyGadgetEnvelope | undefined,
-  actionId: string,
-  value: GadgetActionValue
-): string | undefined {
-  if (!envelope || envelope.kind !== 'choice') return undefined;
-  const action = envelope.actions.find(candidate => candidate.actionId === actionId);
-  if (action && action.effect !== 'informational') return undefined;
-
-  switch (value.kind) {
-    case 'choice': {
-      const option = envelope.payload.options.find(candidate => candidate.value === value.selected);
-      return `Gadget response — "${envelope.payload.question}": ${option?.label ?? value.selected}.`;
-    }
-    case 'selection': {
-      const labels = value.selected.map(
-        selectedValue => envelope.payload.options.find(candidate => candidate.value === selectedValue)?.label ?? selectedValue
-      );
-      return `Gadget response — "${envelope.payload.question}": ${labels.join(', ')}.`;
-    }
-    default:
-      return undefined;
-  }
 }
 
 export interface SessionsPageProps {
@@ -794,11 +746,6 @@ export function SessionsPage({
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionInfo[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>(() => getActiveTerminalId());
   const [attachTerminalContext, setAttachTerminalContext] = useState(false);
-  // Gadget blocks are keyed by the message that asked for them, so a response
-  // renders its own surfaces inline rather than pooling them all at the bottom.
-  const [gadgetBlocks, setGadgetBlocks] = useState<Record<string, ChatBlock[]>>({});
-  const [gadgetResults, setGadgetResults] = useState<Record<string, GadgetActionResult>>({});
-  const [busyGadgetId, setBusyGadgetId] = useState<string>();
   const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
   const [transitionPopover, setTransitionPopover] = useState<{ open: 'model' | 'handover'; position: ComposerPopoverPosition }>();
   const [conversationPopoverPosition, setConversationPopoverPosition] = useState<ComposerPopoverPosition>();
@@ -1007,7 +954,6 @@ export function SessionsPage({
       )
   );
 
-  const selectedSessionId = selected?.sessionId;
 
   const isSelectedFailed = selected?.state === 'failed';
   const lastEvent = selected?.events[selected.events.length - 1];
@@ -1028,90 +974,7 @@ export function SessionsPage({
     : undefined;
 
 
-  /**
-   * Publish whatever the transcript asked for, then read the session's blocks
-   * back with their lifecycle state resolved by the host.
-   *
-   * Publishing is idempotent — the same message mints the same gadget IDs, and
-   * the host replaces in place — so re-running this on every new event is safe
-   * and is what lets a streaming progress gadget update rather than stack up.
-   */
-  useEffect(() => {
-    if (!selectedSessionId) {
-      setGadgetBlocks({});
-      return;
-    }
-    let cancelled = false;
-
-    const refresh = async () => {
-      const blocks = await window.praxis.gadgets.getBlocks(selectedSessionId);
-      if (!cancelled) setGadgetBlocks(groupBlocksByMessage(blocks));
-    };
-
-    void (async () => {
-      for (const [index, event] of conversationEvents.entries()) {
-        if (event.type !== 'message' || !mayContainGadget(event.detail)) continue;
-        await window.praxis.gadgets.publishFromText(selectedSessionId, gadgetMessageKey(index), event.detail ?? '');
-        if (cancelled) return;
-      }
-      await refresh();
-    })();
-
-    // The host broadcasts after every publish and every submission, so an
-    // action answered elsewhere (or a gadget the host revoked) lands here too.
-    const unsubscribe = window.praxis.gadgets.onChanged(changedSessionId => {
-      if (changedSessionId === selectedSessionId) void refresh();
-    });
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-    // `conversationEvents` is rebuilt every render; its length is what actually
-    // changes when the agent says something new.
-  }, [selectedSessionId, conversationEvents.length]);
-
-  const submitGadgetAction = async (gadgetId: string, actionId: string, value: GadgetActionValue) => {
-    if (!selectedSessionId) return;
-    setBusyGadgetId(gadgetId);
-    try {
-      const result = await window.praxis.gadgets.submit({
-        sessionId: selectedSessionId,
-        gadgetId,
-        actionId,
-        value,
-        // Deterministic, so a double submission of the same decision replays
-        // the recorded outcome instead of applying it twice. A refused
-        // submission never consumes the key, so a corrected retry still works.
-        idempotencyKey: `${selectedSessionId}:${gadgetId}:${actionId}`,
-        correlationId: `${selectedSessionId}:${gadgetId}`
-      });
-      setGadgetResults(current => ({ ...current, [gadgetId]: result }));
-
-      // An `informational` action only records a decision — the ledger and the
-      // UI both know it happened, but the agent that asked never does, because
-      // nothing here is on the conversation path. Reporting the answer back as
-      // a follow-up turn (the same path `sendFollowUp` uses) is what closes the
-      // loop: the choice actually reaches the agent's next turn instead of
-      // silently sitting in `gadgets.json`. Only fires for a genuinely recorded
-      // answer (not `rejected`/`failed`), only once per submission (a replay of
-      // an already-answered gadget must not re-send the same follow-up), and
-      // only while the session can accept one.
-      if (
-        (result.status === 'completed' || result.status === 'accepted') &&
-        !result.replay &&
-        selected &&
-        isTerminalAgentState(selected.state)
-      ) {
-        const summary = describeGadgetAnswer(findGadgetEnvelope(gadgetBlocks, gadgetId), actionId, value);
-        if (summary) {
-          await window.praxis.ai.continueSession(selected.issueKey, summary);
-        }
-      }
-    } finally {
-      setBusyGadgetId(undefined);
-    }
-  };
-
+  const { gadgetBlocks, gadgetResults, busyGadgetId, submitGadgetAction } = useSessionGadgets(selected, conversationEvents);
 
   // One line describing what the agent is doing right now — shown only while a
   // turn is in flight, in place of streaming every tool block. Shared with the

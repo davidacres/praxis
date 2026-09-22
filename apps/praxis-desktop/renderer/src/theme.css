@@ -7798,6 +7798,45 @@ button.session-chat-attachment {
   padding: var(--space-3);
 }
 
+/* Interactive ticket review: the thread is the review session's conversation,
+   so messages read as one flow with their gadgets sitting under the message that
+   asked for them. The follow-up composer is a plain row under the card. */
+.ai-review-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ai-review-message {
+  min-width: 0;
+}
+
+.ai-review-you {
+  align-self: flex-end;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  max-width: 85%;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.ai-review-you-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+/* The shared session composer sits under the thread and never shrinks with it. */
+.ai-tool-page > .composer {
+  flex-shrink: 0;
+}
+
 .markdown-body {
   font-size: var(--text-sm);
   line-height: 1.55;

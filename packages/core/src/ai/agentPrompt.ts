@@ -1,5 +1,6 @@
 import type { IssueDetails } from '../types';
 import type { AgentTaskDefinition } from './agentTypes';
+import { TICKET_REVIEW_SESSION_PROMPT, reviewedIssueKey } from './ticketReview';
 
 const PLANNING_SYSTEM_PROMPT = `You are an autonomous coding agent operating under strict contracts.
 
@@ -172,7 +173,9 @@ export function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails
     ? CHAT_SESSION_SYSTEM_PROMPT
     : task.kind === 'analysis'
       ? ANALYSIS_SESSION_SYSTEM_PROMPT
-      : PLANNING_SYSTEM_PROMPT;
+      : task.kind === 'ticket-review'
+        ? TICKET_REVIEW_SESSION_PROMPT
+        : PLANNING_SYSTEM_PROMPT;
 
   if (task.sessionMode === 'chat') {
     return `${sessionPrompt}
@@ -183,6 +186,26 @@ ${task.goal}
 ## Scope
 ${task.scope}
 ${nonGoals}${completionContract}`;
+  }
+
+  if (task.kind === 'ticket-review') {
+    // A review is not delivery work: no worktree or MSI conventions, and the
+    // ticket is named by its real key, not the internal review session key the
+    // issue object carries.
+    return `${sessionPrompt}
+## Task
+**Goal:** ${task.goal}
+**Scope:** ${task.scope}
+**Definition of Done:** ${task.definitionOfDone}
+${nonGoals}
+${completionContract}
+
+## Issue Context
+- Key: ${reviewedIssueKey(issue.key) ?? issue.key}
+- Summary: ${issue.summary}
+- Type: ${issue.issueType}
+- Status: ${issue.status}
+`;
   }
 
   return `${sessionPrompt}

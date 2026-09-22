@@ -37,6 +37,7 @@ import { registerTerminalIpc } from './terminalIpc';
 import { getTerminalManager } from './terminalManager';
 import { registerAgentRuntimeIpc } from './agentRuntimeIpc';
 import { registerGadgetIpc } from './gadgetIpc';
+import { registerTicketReviewIpc } from './ticketReviewIpc';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { registerMarketplaceIpc } from './marketplaceIpc';
 import { reconcileInstalledOnLaunch } from './marketplaceInstance';
@@ -263,6 +264,7 @@ void app.whenReady().then(async () => {
   registerBrowserIpc();
   registerBoardPrefsIpc();
   registerAiIpc();
+  registerTicketReviewIpc();
   registerAiUsageIpc();
   startAiUsageTracking();
   registerAiWorkflowIpc();

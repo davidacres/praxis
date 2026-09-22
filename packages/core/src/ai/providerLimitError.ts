@@ -50,6 +50,35 @@ export function isProviderLimitError(errorOrMessage: unknown): boolean {
   return false;
 }
 
+/**
+ * A reply this long is prose, not a notice. Real limit notices are one line
+ * ("You've hit your session limit · resets 12:50pm"); the longest seen is a
+ * short JSON error body.
+ */
+const MAX_LIMIT_NOTICE_LENGTH = 500;
+
+/**
+ * True when a *successfully completed* turn's reply is itself a limit notice.
+ *
+ * CLI agents (Claude Code, Codex) report a hit limit as an ordinary assistant
+ * message that ends the turn normally, so the reply text has to be inspected.
+ * But the limit vocabulary ("rate limit", "quota", "plan limit") also appears
+ * in perfectly good answers — a review of a ticket about API rate limits was
+ * once discarded as a provider failure — so the text only counts when it is
+ * short and has no structure a notice never has: a gadget fence or more than
+ * a few lines.
+ *
+ * Use this for a reply that arrived with a normal stop reason. Where the turn
+ * already failed, `isProviderLimitError` on the error and any partial reply is
+ * still the right check.
+ */
+export function isLimitNoticeReply(reply: string | undefined): boolean {
+  const text = reply?.trim();
+  if (!text || text.length > MAX_LIMIT_NOTICE_LENGTH) return false;
+  if (text.includes('```') || text.split(/\r?\n/).length > 4) return false;
+  return isProviderLimitError(text);
+}
+
 /** Extracts a user-facing limit message explaining the quota, credit, or budget exhaustion. */
 export function extractProviderLimitMessage(errorOrMessage: unknown): string {
   let raw = '';

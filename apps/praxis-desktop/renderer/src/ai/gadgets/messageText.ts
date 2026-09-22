@@ -14,7 +14,12 @@ export function mayContainGadget(text: string | undefined): boolean {
   return Boolean(text && text.includes(GADGET_FENCE_LANGUAGE));
 }
 
-const FENCE = /^[ \t]*```[ \t]*praxis-gadget[ \t]*\r?\n[\s\S]*?^[ \t]*```[ \t]*$/gm;
+/**
+ * Mirrors core's fence in `blockParser.ts`: the opening fence may follow prose on
+ * the same line, and the closing one may follow the JSON directly, but it must
+ * end its line. Keep the two in step or a gadget renders *and* its raw JSON shows.
+ */
+const FENCE = /[ \t]*```[ \t]*praxis-gadget[ \t]*\r?\n[\s\S]*?```[ \t]*$/gm;
 const MEMORY_CITATION_BLOCK = /(?:^|\r?\n)[ \t]*<oai-mem-citation\b[^>]*>[\s\S]*?(?:<\/oai-mem-citation>[ \t]*(?=\r?\n|$)|$)/gi;
 
 /**

@@ -4,6 +4,7 @@ import * as nodePath from 'node:path';
 import type { AiProvider, IssueDetails } from '../types';
 import { runAgentLoop, type AgentLoopEvent, type WireImageAttachment, type WireMessage } from './agentRuntime';
 import { BROWSER_TOOLS_PROMPT, buildSystemPrompt, type PermissionInfo } from './agentPrompt';
+import { reviewedIssueKey } from './ticketReview';
 import {
   AGENT_DEFAULTS,
   type AgentEventSummary,
@@ -266,7 +267,7 @@ User request: ${taskDefinition.goal}`;
     }
     return `Execute the task described in the system prompt.
 
-Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
+Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
   }
 
   private requestPermission(

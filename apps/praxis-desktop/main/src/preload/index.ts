@@ -10,7 +10,7 @@ import type {
   AiStartConversationInput,
   WireImageAttachment,
   AiProvider,
-  AiReviewProgress,
+  AiTicketReviewInput,
   AppSettings,
   AppSettingsPatch,
   Board,
@@ -264,19 +264,12 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:getWorkflowAssignment', issueKey),
     setWorkflowAssignment: (issueKey: string, workflow: AgentWorkflowReference | null) =>
       ipcRenderer.invoke('ai:setWorkflowAssignment', issueKey, workflow),
-    reviewIssue: (issueKey: string, connectionId?: string, provider?: AiProvider, model?: string) =>
-      ipcRenderer.invoke('ai:reviewIssue', issueKey, connectionId, provider, model),
-    cancelReview: (issueKey: string) => ipcRenderer.invoke('ai:cancelReview', issueKey),
+    startTicketReview: (input: AiTicketReviewInput) => ipcRenderer.invoke('ai:startTicketReview', input),
+    getTicketReview: (issueKey: string) => ipcRenderer.invoke('ai:getTicketReview', issueKey),
     localPeerReview: (issueKey: string, connectionId?: string, provider?: AiProvider, model?: string) =>
       ipcRenderer.invoke('ai:localPeerReview', issueKey, connectionId, provider, model),
     localPeerReviewFollowUp: (issueKey: string, message: string, connectionId?: string, provider?: AiProvider, model?: string) =>
       ipcRenderer.invoke('ai:localPeerReviewFollowUp', issueKey, message, connectionId, provider, model),
-    onReviewProgress: (listener: (progress: AiReviewProgress) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, progress: AiReviewProgress) =>
-        listener(progress);
-      ipcRenderer.on('ai:reviewProgress', handler);
-      return () => ipcRenderer.off('ai:reviewProgress', handler);
-    },
     getAnalysis: (issueKey: string) => ipcRenderer.invoke('ai:getAnalysis', issueKey),
     submitAnalysis: (
       issueKey: string,

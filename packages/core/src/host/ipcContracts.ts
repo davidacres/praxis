@@ -561,14 +561,13 @@ export interface WorkspacesIpc {
   openFromFile(): Promise<WorkspaceRecord | undefined>;
 }
 
-/** Progress payload streamed on the `ai:reviewProgress` push channel while a review runs. */
-export interface AiReviewProgress {
+/** Starts (or restarts) the interactive review of one ticket. */
+export interface AiTicketReviewInput {
   issueKey: string;
-  /** Full review markdown accumulated so far. */
-  content: string;
-  /** True on the final payload — `error` is set when the review failed or was cancelled. */
-  done: boolean;
-  error?: string;
+  connectionId?: string;
+  /** Provider override; defaults to `settings.ai.activeProvider`. */
+  provider?: AiProvider;
+  model?: string;
 }
 
 /** One chat turn in the per-issue analysis conversation. */
@@ -821,17 +820,15 @@ export interface AiIpc {
   setWorkflowAssignment(issueKey: string, workflow: AgentWorkflowReference | null): Promise<void>;
 
   // ── Ticket review ─────────────────────────────────────────────────────────
-  /** Runs the AI ticket review; streams `ai:reviewProgress` and resolves with the final markdown. */
-  reviewIssue(
-    issueKey: string,
-    connectionId?: string,
-    provider?: AiProvider,
-    model?: string
-  ): Promise<string>;
-  /** Cancels a running review (no-op when none is active). */
-  cancelReview(issueKey: string): Promise<void>;
-  /** Subscribes to review progress; returns an unsubscribe function. */
-  onReviewProgress(listener: (progress: AiReviewProgress) => void): () => void;
+  /**
+   * Starts the interactive review of a ticket as a read-only agent session,
+   * superseding any earlier review of the same ticket. Findings arrive as
+   * gadgets in the session; the record's `issueKey` is the review session's
+   * own key (not the ticket's) and is what `onSessionChanged` reports under.
+   */
+  startTicketReview(input: AiTicketReviewInput): Promise<AgentSessionRecord>;
+  /** The current review session for a ticket, or `undefined` when it has never been reviewed. */
+  getTicketReview(issueKey: string): Promise<AgentSessionRecord | undefined>;
 
   // ── Local peer review ─────────────────────────────────────────────────────
   /**

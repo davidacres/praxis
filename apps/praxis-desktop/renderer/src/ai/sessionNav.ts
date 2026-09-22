@@ -21,7 +21,17 @@ export function sessionTitle(session: AgentSessionRecord): string {
  * issue keeps its key (e.g. `PROJ-123`) on screen.
  */
 export function isSynthesizedKey(issueKey: string): boolean {
-  return /^SESSION-[0-9a-f]{6,}$/i.test(issueKey);
+  return /^SESSION-[0-9a-f]{6,}$/i.test(issueKey) || isTicketReviewKey(issueKey);
+}
+
+/**
+ * A ticket review (interactive AI review) is stored under `review~<ticket key>` so
+ * it never replaces the ticket's own session. That prefix mirrors core's
+ * `TICKET_REVIEW_SESSION_PREFIX` — duplicated because the renderer may not import
+ * values from core. The title ("Review APP-101 — …") is what belongs on screen.
+ */
+export function isTicketReviewKey(issueKey: string): boolean {
+  return issueKey.startsWith('review~');
 }
 
 /**

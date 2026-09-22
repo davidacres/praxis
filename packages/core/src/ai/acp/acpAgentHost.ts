@@ -3,6 +3,7 @@ import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': '
 import type { AiProvider, IssueDetails } from '../../types';
 import type { WireImageAttachment } from '../gateway/wire';
 import { BROWSER_TOOLS_PROMPT, buildSystemPrompt } from '../agentPrompt';
+import { reviewedIssueKey } from '../ticketReview';
 import {
   AGENT_DEFAULTS,
   type AgentEventSummary,
@@ -19,7 +20,7 @@ import type { AiSessionManager } from '../aiSessionManager';
 import type { ModelOptions } from '../providers/modelCatalog';
 import type { PermissionDecision } from '../tools';
 import { AcpClientWrapper, type AcpPermissionRequest } from './acpClient';
-import { isProviderLimitError, extractProviderLimitMessage } from '../providerLimitError';
+import { isProviderLimitError, isLimitNoticeReply, extractProviderLimitMessage } from '../providerLimitError';
 
 /**
  * Phase-2 peer of `VercelAgentService` for `kind: 'cli-agent'` providers —
@@ -533,7 +534,7 @@ export class AcpAgentHost {
     // its own persona, so the task's own instructions travel as one prompt.
     const combinedPrompt = taskDefinition.sessionMode === 'chat'
       ? `${systemPrompt}\n\nRespond directly to the user's request. Do not start a ticket analysis or inspect a ticket unless explicitly asked.`
-      : `${systemPrompt}\n\nExecute the task described above.\n\nIssue: ${issue.key} — ${issue.summary}`;
+      : `${systemPrompt}\n\nExecute the task described above.\n\nIssue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}`;
 
     const client = new AcpClientWrapper({
       command: options.command,
@@ -615,7 +616,7 @@ export class AcpAgentHost {
       if (active.messageBuffer) {
         this.appendEvent(issue.key, evt('message', 'Assistant', active.messageBuffer));
       }
-      const isLimitInBuffer = isProviderLimitError(active.messageBuffer);
+      const isLimitInBuffer = isLimitNoticeReply(active.messageBuffer);
       if (isLimitInBuffer) {
         const limitNotice = extractProviderLimitMessage(active.messageBuffer);
         this.sessionManager.updateAgentState(issue.key, 'failed', limitNotice);
@@ -765,7 +766,7 @@ export class AcpAgentHost {
       if (!active || active.ending) return;
       this.sessionManager.updateAgentOutput(issueKey, { responseText: active.messageBuffer });
       if (active.messageBuffer) this.appendEvent(issueKey, evt('message', 'Assistant', active.messageBuffer));
-      const isLimitInBuffer = isProviderLimitError(active.messageBuffer);
+      const isLimitInBuffer = isLimitNoticeReply(active.messageBuffer);
       if (isLimitInBuffer) {
         const limitNotice = extractProviderLimitMessage(active.messageBuffer);
         this.sessionManager.updateAgentState(issueKey, 'failed', limitNotice);
