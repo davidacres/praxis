@@ -5390,6 +5390,36 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   gap: 2px;
 }
 
+.settings-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.settings-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  color: var(--text);
+}
+
+.mobile-pairing-code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 1.4rem;
+  letter-spacing: 0.12em;
+  color: var(--text);
+}
+
+.mobile-pairing-qr {
+  width: 148px;
+  height: 148px;
+  image-rendering: pixelated;
+  background: #fff;
+  border-radius: 4px;
+}
+
 .settings-field-row {
   display: flex;
   gap: var(--space-3);
@@ -8170,7 +8200,9 @@ button.session-chat-attachment {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /* Above Settings (250) and the project wizard (300) so in-app confirms
+     opened from those shells can actually receive clicks. */
+  z-index: 400;
 }
 
 .modal-card {

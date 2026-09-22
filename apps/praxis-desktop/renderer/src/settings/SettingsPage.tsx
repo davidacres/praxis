@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
 import { useDialogs } from '../ui/dialogs';
+import { QrCodeSvg } from '../ui/qrCodeSvg';
 import type {
   AiProvider,
   AiProviderStatus,
@@ -9,6 +10,9 @@ import type {
   AddonUpdate,
   AppSettings,
   AppSettingsPatch,
+  MobileCapability,
+  MobilePairingInvitation,
+  MobilePairingSnapshot,
   AppearanceLook,
   CatalogEntry,
   InstalledAddon,
@@ -54,6 +58,7 @@ export type SettingsCategory =
   | 'overview'
   | 'startup'
   | 'connections'
+  | 'mobile'
   | 'marketplace'
   | 'jira'
   | 'ai'
@@ -117,7 +122,7 @@ const INTEGRATIONS_GROUP: NavGroupDef = {
   id: 'integrations-group',
   label: 'Integrations & tools',
   icon: 'plug',
-  children: ['connections', 'marketplace', 'jira', 'terminal', 'performance', 'preview']
+  children: ['connections', 'mobile', 'marketplace', 'jira', 'terminal', 'performance', 'preview']
 };
 
 type NavEntry = { type: 'item'; category: SettingsCategory } | { type: 'group'; group: NavGroupDef };
@@ -172,6 +177,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'Connections',
     icon: 'plug',
     description: 'Connection profiles the app reads tickets and issues from.'
+  },
+  {
+    id: 'mobile',
+    label: 'Mobile access',
+    icon: 'server',
+    description: 'Control which phones may connect to this desktop and copy its encrypted connection details.'
   },
   {
     id: 'jira',
@@ -356,6 +367,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'connections' && (
           <ConnectionsSection connections={connections} onOpenConnections={onOpenConnections} />
         )}
+        {active === 'mobile' && <MobileAccessSection settings={settings} update={update} />}
         {active === 'marketplace' && <MarketplaceSection />}
         {active === 'jira' && <JiraSection settings={settings} update={update} />}
         {active === 'ai' && <AiSection settings={settings} update={update} connections={connections} />}
@@ -2385,6 +2397,222 @@ function PerformanceSection({
           onCommit={value => update({ performance: { defaultPageSize: value } })}
         />
       </FieldRow>
+    </>
+  );
+}
+
+function compactMobilePairingPayload(invitation: MobilePairingInvitation): string {
+  const endpoint = invitation.endpoints[0];
+  const host = endpoint ? `${endpoint.address}:${endpoint.port}` : '';
+  return [`P${invitation.version}`, invitation.hostId, invitation.publicKeyHex, host, invitation.tokenId, invitation.expiresAt].join('|');
+}
+
+function MobileAccessSection({
+  settings,
+  update
+}: {
+  settings: AppSettings;
+  update: (patch: AppSettingsPatch) => Promise<void>;
+}) {
+  const category = CATEGORIES.find(c => c.id === 'mobile')!;
+  const { confirm } = useDialogs();
+  const [snapshot, setSnapshot] = useState<MobilePairingSnapshot>();
+  const [copied, setCopied] = useState(false);
+  const [grantApprove, setGrantApprove] = useState(false);
+  const [grantProjects, setGrantProjects] = useState<string[]>([]);
+
+  useEffect(() => {
+    void window.praxis.settings.getMobileHostInfo().then(setSnapshot);
+    return window.praxis.settings.onMobilePairingChanged(setSnapshot);
+  }, []);
+
+  useEffect(() => {
+    void window.praxis.settings.getMobileHostInfo().then(setSnapshot);
+  }, [settings.mobileAccess.mode, settings.mobileAccess.hostName, settings.mobileAccess.listenPort, settings.mobileAccess.allowedInterfaces, settings.mobileAccess.allowedSubnets]);
+
+  const pending = snapshot?.pending[0];
+  const invitation = snapshot?.invitation;
+  const payload = invitation ? compactMobilePairingPayload(invitation) : '';
+  const listener = snapshot?.listener;
+  const internet = settings.mobileAccess.mode === 'internet';
+
+  const copyInvitation = async () => {
+    if (!invitation) return;
+    await navigator.clipboard.writeText(JSON.stringify(invitation));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  const confirmPending = async () => {
+    if (!pending) return;
+    const projectIds = grantProjects.length ? grantProjects : snapshot?.projects.map(project => project.id) ?? [];
+    const capabilities: MobileCapability[] = grantApprove ? ['view', 'execute', 'approve'] : ['view', 'execute'];
+    setSnapshot(await window.praxis.settings.confirmMobilePairing(pending.requestId, { capabilities, projectIds }));
+  };
+
+  const resetKey = async () => {
+    if (!(await confirm({
+      title: 'Reset host key?',
+      message: 'Every paired phone will distrust this desktop and must pair again. The private key never leaves this machine.',
+      danger: true,
+      confirmLabel: 'Reset host key',
+    }))) return;
+    setSnapshot(await window.praxis.settings.rotateMobileHostKey());
+  };
+
+  return (
+    <>
+      <CategoryHeader category={category} />
+      <FieldRow label="Access mode" description="Off binds no listener. Local network accepts direct connections on the selected interfaces and subnets.">
+        <select
+          aria-label="Mobile access mode"
+          data-testid="mobile-access-mode"
+          value={settings.mobileAccess.mode}
+          onChange={event => void update({ mobileAccess: { mode: event.target.value as 'off' | 'local-only' | 'internet' } })}
+        >
+          <option value="off">Off</option>
+          <option value="local-only">Local network</option>
+          <option value="internet">Internet relay</option>
+        </select>
+      </FieldRow>
+      <FieldRow label="Host name" description="The friendly desktop name shown on the phone.">
+        <DebouncedTextField
+          ariaLabel="Mobile host name"
+          value={settings.mobileAccess.hostName}
+          onCommit={value => update({ mobileAccess: { hostName: value } })}
+          placeholder={snapshot?.hostName ?? 'Praxis desktop'}
+        />
+      </FieldRow>
+      <FieldRow label="Listen port" description="TCP port for the local listener. Changing it drops current phone connections.">
+        <input
+          type="number"
+          min={1024}
+          max={65535}
+          aria-label="Mobile listen port"
+          data-testid="mobile-listen-port"
+          value={settings.mobileAccess.listenPort}
+          onChange={event => void update({ mobileAccess: { listenPort: Number(event.target.value) } })}
+        />
+      </FieldRow>
+      <FieldRow label="Allowed interfaces" description="Comma-separated OS interface names (en0, eth0). Empty allows every local interface." stacked>
+        <DebouncedTextField
+          ariaLabel="Allowed mobile interfaces"
+          value={settings.mobileAccess.allowedInterfaces.join(', ')}
+          onCommit={value => update({ mobileAccess: { allowedInterfaces: value.split(',').map(item => item.trim()).filter(Boolean) } })}
+          placeholder={listener?.interfaces.map(item => item.name).join(', ') || 'All local interfaces'}
+        />
+      </FieldRow>
+      <FieldRow label="Allowed subnets" description="Comma-separated prefixes such as 192.168.1. Empty allows every address on those interfaces." stacked>
+        <DebouncedTextField
+          ariaLabel="Allowed mobile subnets"
+          value={settings.mobileAccess.allowedSubnets.join(', ')}
+          onCommit={value => update({ mobileAccess: { allowedSubnets: value.split(',').map(item => item.trim()).filter(Boolean) } })}
+          placeholder="e.g. 192.168.1."
+        />
+      </FieldRow>
+      <FieldRow label="Listener" description="Live bind state. Discovery advertises identity only — never a pairing grant." stacked>
+        <div className="settings-list" data-testid="mobile-listener-status">
+          <div className="settings-field-help">
+            {listener?.listening ? 'Listening' : 'Not listening'}
+            {listener?.port != null ? ` · port ${listener.port}` : ''}
+            {` · ${listener?.connectionCount ?? 0} connection${listener?.connectionCount === 1 ? '' : 's'}`}
+          </div>
+          <div className="settings-field-help">Addresses: {listener?.addresses.join(', ') || 'No LAN address'}</div>
+          <div className="settings-field-help">
+            Discovery: {listener?.discovery.advertised ? `advertised as ${listener.discovery.displayName}` : 'not advertised'}
+            {listener ? ` · fingerprint ${listener.discovery.fingerprint}` : ''}
+          </div>
+          {listener?.lastError ? <div className="settings-field-help">Bind failed: {listener.lastError}</div> : null}
+        </div>
+      </FieldRow>
+      <FieldRow label="Host identity" description="Phones pin this public key. Resetting it revokes every device." stacked>
+        <div className="settings-list">
+          <div className="settings-field-help">Host ID: {snapshot?.hostId ?? 'Loading…'}</div>
+          <code data-testid="mobile-host-fingerprint">{snapshot?.fingerprint ?? '…'}</code>
+          <button type="button" className="btn" data-testid="mobile-reset-host-key" onClick={() => void resetKey()}>Reset host key</button>
+        </div>
+      </FieldRow>
+      <FieldRow label="Pair a phone" description="Creates a single-use code that expires in 10 minutes. The private host key is never shown." stacked>
+        <div className="settings-list">
+          <button
+            type="button"
+            className="btn"
+            data-testid="mobile-create-pairing"
+            disabled={settings.mobileAccess.mode === 'off'}
+            onClick={() => void window.praxis.settings.createMobilePairingInvitation().then(setSnapshot)}
+          >
+            Create pairing code
+          </button>
+          {invitation ? (
+            <>
+              <div className="mobile-pairing-code" data-testid="mobile-pairing-code">{invitation.tokenId}</div>
+              <div className="settings-field-help">Expires {new Date(invitation.expiresAt).toLocaleTimeString()}</div>
+              {payload ? <QrCodeSvg payload={payload} title="Mobile pairing QR code" /> : null}
+              <button type="button" className="btn" data-testid="mobile-copy-invitation" onClick={() => void copyInvitation()}>
+                {copied ? 'Copied' : 'Copy pairing invitation'}
+              </button>
+            </>
+          ) : (
+            <div className="settings-field-help">No active pairing code.</div>
+          )}
+        </div>
+      </FieldRow>
+      {pending ? (
+        <FieldRow label="Confirm device" description="This phone completed the handshake and is waiting for access." stacked>
+          <div className="settings-list" data-testid="mobile-pending-device">
+            <div className="settings-field-help">{pending.deviceLabel} · {pending.deviceId}</div>
+            <label className="settings-check">
+              <input type="checkbox" checked={grantApprove} onChange={event => setGrantApprove(event.target.checked)} />
+              Allow approvals
+            </label>
+            {snapshot?.projects.map(project => (
+              <label key={project.id} className="settings-check">
+                <input
+                  type="checkbox"
+                  checked={grantProjects.includes(project.id)}
+                  onChange={event => setGrantProjects(current => event.target.checked ? [...current, project.id] : current.filter(id => id !== project.id))}
+                />
+                {project.name}
+              </label>
+            ))}
+            <div>
+              <button type="button" className="btn" data-testid="mobile-confirm-device" onClick={() => void confirmPending()}>Confirm</button>
+              {' '}
+              <button type="button" className="btn" onClick={() => void window.praxis.settings.denyMobilePairing(pending.requestId).then(setSnapshot)}>Deny</button>
+            </div>
+          </div>
+        </FieldRow>
+      ) : null}
+      <FieldRow label="Paired devices" description="Revoking a phone closes its open connection immediately." stacked>
+        <div className="settings-list" data-testid="mobile-paired-devices">
+          {(snapshot?.devices.length ?? 0) === 0 ? <div className="settings-field-help">No paired phones yet.</div> : null}
+          {snapshot?.devices.map(device => (
+            <div key={device.deviceId} className="settings-list-row">
+              <div>
+                <strong>{device.label}</strong>
+                <div className="settings-field-help">
+                  {device.revokedAt ? 'Revoked' : 'Trusted'}
+                  {device.projectIds?.length ? ` · ${device.projectIds.length} project${device.projectIds.length === 1 ? '' : 's'}` : ''}
+                </div>
+              </div>
+              {!device.revokedAt ? (
+                <button type="button" className="btn" onClick={() => void window.praxis.settings.revokeMobilePairedDevice(device.deviceId).then(setSnapshot)}>
+                  Revoke
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </FieldRow>
+      <Toggle
+        label="Require sign-in for internet access"
+        description={internet
+          ? 'Internet relay is not available yet. Local pairing still uses the device-to-host encrypted channel.'
+          : 'Local network connections continue to use the device-to-host encrypted channel.'}
+        checked={settings.mobileAccess.remoteSignInRequired}
+        disabled={!internet}
+        onChange={next => void update({ mobileAccess: { remoteSignInRequired: next } })}
+      />
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, app } from 'electron';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { AppSettingsPatch } from '@praxis/core';
+import type { AppSettingsPatch, MobileCapability } from '@praxis/core';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { abortActiveTask, getAllActiveTaskIssueKeys, resetAiStores } from './aiInstance';
 import { resetBoardPreferencesStore } from './boardPreferencesInstance';
@@ -10,6 +10,15 @@ import { resetTaskDesignerStore } from './taskDesignerStoreInstance';
 import { resetWorkspaceStore } from './workspaceStoreInstance';
 import { resetWorkspaceScopes } from './workspaceLocations';
 import { getConnectionStore } from './connectionStoreInstance';
+import {
+  confirmMobilePairing,
+  createMobilePairingInvitation,
+  denyMobilePairing,
+  revokeMobilePairedDevice,
+  rotateMobileHostKey,
+  snapshotMobilePairing,
+} from './mobilePairingInstance';
+import { restartMobileLanAfterKeyRotation } from './mobileListenerInstance';
 
 async function removeUserDataFile(name: string): Promise<void> {
   await fs.rm(path.join(app.getPath('userData'), name), { force: true });
@@ -27,6 +36,19 @@ export function registerSettingsIpc(): void {
   ipcMain.handle('settings:set', async (_event, patch: AppSettingsPatch) =>
     getSettingsBackend().write(patch)
   );
+
+  ipcMain.handle('settings:getMobileHostInfo', async () => snapshotMobilePairing());
+  ipcMain.handle('settings:createMobilePairingInvitation', async () => createMobilePairingInvitation());
+  ipcMain.handle('settings:confirmMobilePairing', async (_event, requestId: string, grant: { label?: string; capabilities: readonly MobileCapability[]; projectIds: readonly string[] }) =>
+    confirmMobilePairing(requestId, grant),
+  );
+  ipcMain.handle('settings:denyMobilePairing', async (_event, requestId: string) => denyMobilePairing(requestId));
+  ipcMain.handle('settings:revokeMobilePairedDevice', async (_event, deviceId: string) => revokeMobilePairedDevice(deviceId));
+  ipcMain.handle('settings:rotateMobileHostKey', async () => {
+    const snapshot = await rotateMobileHostKey();
+    await restartMobileLanAfterKeyRotation();
+    return snapshotMobilePairing().then(next => next ?? snapshot);
+  });
 
   ipcMain.handle('settings:clearSessionData', async () => {
     const activeIssues = getAllActiveTaskIssueKeys();

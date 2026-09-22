@@ -155,6 +155,7 @@ export const DEFAULT_APP_SETTINGS = {
     hostName: '',
     allowedInterfaces: [] as string[],
     allowedSubnets: [] as string[],
+    listenPort: 43100,
     remoteSignInRequired: false
   }
 } as const;
