@@ -14,6 +14,27 @@ export function H1({ children }: { children: React.ReactNode }): React.JSX.Eleme
   return <Text style={styles.h1}>{children}</Text>;
 }
 
+export function AppHeader({ title, onOpenSidebar }: { title: string; onOpenSidebar: () => void }): React.JSX.Element {
+  return (
+    <View style={styles.appHeader}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open navigation"
+        hitSlop={8}
+        onPress={onOpenSidebar}
+        style={({ pressed }) => [styles.menuButton, pressed && styles.buttonPressed]}
+      >
+        <Text style={styles.menuGlyph}>☰</Text>
+      </Pressable>
+      <Text style={styles.appHeaderTitle}>{title}</Text>
+      <View style={styles.connectionState}>
+        <View style={styles.connectionDot} />
+        <Text style={styles.connectionText}>CONNECTED</Text>
+      </View>
+    </View>
+  );
+}
+
 export function Body({ children, dim }: { children: React.ReactNode; dim?: boolean }): React.JSX.Element {
   return <Text style={[styles.body, dim && styles.bodyDim]}>{children}</Text>;
 }
@@ -55,6 +76,31 @@ const styles = StyleSheet.create({
   screenContent: { padding: theme.space, gap: theme.space },
   card: { backgroundColor: theme.surface, borderRadius: theme.radius, borderWidth: 1, borderColor: theme.border, padding: theme.space, gap: 8 },
   h1: { color: theme.text, fontSize: 22, fontWeight: '700' },
+  appHeader: {
+    minHeight: 52,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+    backgroundColor: theme.bgSunken,
+  },
+  menuButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 7,
+    backgroundColor: theme.surface,
+  },
+  menuGlyph: { color: theme.textSecondary, fontSize: 17, lineHeight: 19 },
+  appHeaderTitle: { flex: 1, color: theme.text, fontSize: 15, fontWeight: '700' },
+  connectionState: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  connectionDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.ok },
+  connectionText: { color: theme.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 0.6 },
   body: { color: theme.text, fontSize: 15, lineHeight: 21 },
   bodyDim: { color: theme.textDim },
   pill: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },

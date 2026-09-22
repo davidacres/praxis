@@ -6,7 +6,7 @@ id: FX-BE-081
 title: "Read and continue existing work"
 status: in-progress
 feature: FX-BF-031
-updated: 2026-09-09
+updated: 2026-09-22
 dependencies: [FX-BE-080, FX-BE-077]
 ---
 
@@ -17,7 +17,7 @@ dependencies: [FX-BE-080, FX-BE-077]
 
 ## Outcome
 
-Read and continue existing work delivers the following three ordered, independently verifiable steps.
+Read and continue existing work delivers the following ordered, independently verifiable steps.
 
 ## Scope and implementation entry points
 
@@ -30,11 +30,13 @@ Mobile renderer work/session/progress/changes features and client transport.
 | 1 | [TASK-222](tasks/task-222-implement-work-list-and-session-restoration.md) | Implement work list and session restoration |
 | 2 | [TASK-223](tasks/task-223-implement-conversation-follow-ups-and-result-review.md) | Implement conversation follow-ups and result review |
 | 3 | [TASK-224](tasks/task-224-verify-complete-lan-continuation-milestone.md) | Verify complete LAN continuation milestone |
+| 4 | [TASK-238](tasks/task-238-wire-mobile-sessions-to-live-host-data.md) | Wire mobile sessions to live host data |
 
 ## Acceptance criteria
 
 - Duplicate issue keys across projects stay separate; host switching cannot expose stale data from another host. Empty, loading, denied and offline states are distinct.
 - Desktop → phone → desktop keeps session/run IDs and provider context. Binary/oversized files and unsafe paths are refused or clearly truncated; unsupported continuation is explicit.
+- Responses stream incrementally from the desktop-owned active turn to the phone, including tool/permission activity and terminal state. Reconnect resumes a partial response from the acknowledged cursor without gaps or duplicate transcript entries.
 - Work continues while phone is absent; replay has no missing/duplicate accepted messages. Record physical-device evidence for iOS/Android and retained desktop behaviour before declaring the milestone complete.
 
 ## Exclusions
@@ -62,5 +64,3 @@ Complete this item with GenericSystem, Roleover and Azure unavailable. Implement
 
 
 ## Comments
-
-

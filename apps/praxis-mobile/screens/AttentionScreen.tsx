@@ -1,15 +1,16 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Body, Button, Card, H1, Pill, Screen } from '../app/ui';
+import { AppHeader, Body, Button, Card, Pill, Screen } from '../app/ui';
 import { useStore, useOpenAttention } from '../app/store';
 
-export function AttentionScreen(): React.JSX.Element {
+export function AttentionScreen({ onOpenSidebar }: { onOpenSidebar: () => void }): React.JSX.Element {
   const items = useOpenAttention();
   const { approve, setRoute, openWork } = useStore();
 
   return (
-    <Screen>
-      <H1>Attention</H1>
+    <>
+      <AppHeader title="Attention" onOpenSidebar={onOpenSidebar} />
+      <Screen>
       {items.length === 0 && (
         <Card>
           <Body dim>Nothing needs you right now.</Body>
@@ -43,7 +44,8 @@ export function AttentionScreen(): React.JSX.Element {
           )}
         </Card>
       ))}
-    </Screen>
+      </Screen>
+    </>
   );
 }
 

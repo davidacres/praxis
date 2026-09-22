@@ -6,7 +6,7 @@ id: FX-BE-082
 title: "Start and control existing work"
 status: in-progress
 feature: FX-BF-032
-updated: 2026-09-09
+updated: 2026-09-22
 dependencies: [FX-BE-081]
 ---
 
@@ -17,7 +17,7 @@ dependencies: [FX-BE-081]
 
 ## Outcome
 
-Start and control existing work delivers the following three ordered, independently verifiable steps.
+Start and control existing work delivers the following ordered, independently verifiable steps.
 
 ## Scope and implementation entry points
 
@@ -30,6 +30,7 @@ Mobile Work start form; host execution services and existing agent/workflow cata
 | 1 | [TASK-225](tasks/task-225-expose-runnable-existing-workflow-and-agent-choices.md) | Expose runnable existing workflow and agent choices |
 | 2 | [TASK-226](tasks/task-226-implement-start-retry-and-cancellation-actions.md) | Implement start retry and cancellation actions |
 | 3 | [TASK-227](tasks/task-227-verify-desktop-and-mobile-execution-parity.md) | Verify desktop and mobile execution parity |
+| 4 | [TASK-239](tasks/task-239-enable-live-workflow-execution-commands.md) | Enable live workflow execution commands |
 
 ## Acceptance criteria
 
@@ -61,5 +62,4 @@ Complete this item with GenericSystem, Roleover and Azure unavailable. Implement
 
 
 ## Comments
-
 

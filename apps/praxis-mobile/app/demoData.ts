@@ -18,19 +18,48 @@ export interface DemoWorkItem {
   runId?: string;
 }
 
+export interface DemoTranscriptMessage {
+  id: string;
+  author: 'user' | 'assistant';
+  text: string;
+  at: string;
+}
+
 export const DEMO_WORK: DemoWorkItem[] = [
   { workId: 'FX-BE-081', title: 'Read and continue existing work from the phone', status: 'In Progress', sessionId: 'sess-81', runId: 'run-81' },
   { workId: 'FX-BE-077', title: 'Discovery and resilient local transport', status: 'In Progress', sessionId: 'sess-77' },
   { workId: 'FX-BE-035', title: 'Real GitHub backend, modeled on folder', status: 'Done', sessionId: 'sess-35' },
 ];
 
-export const DEMO_TRANSCRIPTS: Record<string, string[]> = {
+export const DEMO_TRANSCRIPTS: Record<string, DemoTranscriptMessage[]> = {
   'sess-81': [
-    'Planned the work list and session restoration against the host reads.',
-    'Wired the Work screen to the navigation reducer; detail tabs are Chat / Progress / Changes.',
+    {
+      id: 'sess-81-1',
+      author: 'user',
+      text: 'Bring the desktop session experience to mobile. Keep the composer familiar and make it feel native on a phone.',
+      at: '18:41',
+    },
+    {
+      id: 'sess-81-2',
+      author: 'assistant',
+      text: 'I have the desktop session structure and theme tokens. I’ll preserve the conversation hierarchy, controls, and composer states in a phone-sized layout.',
+      at: '18:41',
+    },
+    {
+      id: 'sess-81-3',
+      author: 'user',
+      text: 'Keep Chat, Analysis, and Review directly in the composer.',
+      at: '18:42',
+    },
+    {
+      id: 'sess-81-4',
+      author: 'assistant',
+      text: 'Done — the same session modes, tool context, model identity, workflow controls, usage, and send behavior now stay together at the bottom of the conversation.',
+      at: '18:42',
+    },
   ],
-  'sess-77': ['Noise IK channel validated against the snow vectors; LAN listener authorises each peer.'],
-  'sess-35': ['Shipped GitHubBoardService; columns synthesize from status labels.'],
+  'sess-77': [{ id: 'sess-77-1', author: 'assistant', text: 'Noise IK channel validated against the snow vectors; LAN listener authorises each peer.', at: '17:26' }],
+  'sess-35': [{ id: 'sess-35-1', author: 'assistant', text: 'Shipped GitHubBoardService; columns synthesize from status labels.', at: '16:08' }],
 };
 
 export const DEMO_RUN = {

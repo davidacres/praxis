@@ -2,7 +2,7 @@
 
 Deliver local work execution and release first: FX-BF-028, 029, 031, 032, 033. FX-BF-030 (identity, Azure and cloud notifications) is deferred. No running cloud service is required for the local milestone. IDs remain stable; FX-BE-086 owns the moved optional notification task TASK-232.
 
-**Status reconciliation (2026-09-10, updated 2026-09-12).** The desktop half is
+**Status reconciliation (2026-09-10, updated 2026-09-22).** The desktop half is
 real and tested: the versioned execution boundary and dispatch, the host
 lifecycle and access policy, the Noise `IK` secure transport
 (`@praxis/mobile-protocol`, validated against the canonical `snow` vectors) and
@@ -17,10 +17,14 @@ Attention, screenshotted). It runs against **canned demo data only**
 (`app/demoData.ts`); it does not yet open a real socket to a desktop host. So
 FX-BF-029/031–033 stay In Progress, not because nothing runs but because the
 runnable app doesn't yet talk to the runnable host. See "Resume here" in
-[development.md](../development.md#resume-here-2026-09-12) for the exact next
+[development.md](development.md#resume-here-2026-09-12) for the exact next
 steps. `sessions.continue` / `permissions.respond` / `workflowRuns.start`
 remain explicit `MobileHostPendingError`s pending the permission FIFO →
-request-id rework (architecture.md) and FX-BE-082.
+request-id rework (architecture.md) and FX-BE-082. TASK-237 through TASK-241
+now explicitly own the native connection, live session data, host commands,
+request-scoped decisions, and physical-device integration proof; completed
+helper-level tasks remain historical records rather than evidence that this gap
+is closed.
 
 | Ref | Type | Name | Status | Depends on |
 | --- | --- | --- | --- | --- |
@@ -79,3 +83,8 @@ request-id rework (architecture.md) and FX-BE-082.
 | [TASK-234](plans/features/fx-bf-033-mobile-reliability-and-release/stories/fx-be-085-operational-release-and-repository-extraction/tasks/task-234-prepare-release-operations-and-rollback.md) | Task | Prepare release operations and rollback | Complete | FX-BE-084 |
 | [TASK-235](plans/features/fx-bf-033-mobile-reliability-and-release/stories/fx-be-085-operational-release-and-repository-extraction/tasks/task-235-prove-standalone-repository-portability.md) | Task | Prove standalone repository portability | Complete | TASK-234 |
 | [TASK-236](plans/features/fx-bf-033-mobile-reliability-and-release/stories/fx-be-085-operational-release-and-repository-extraction/tasks/task-236-complete-release-acceptance-and-documentation.md) | Task | Complete release acceptance and documentation | Complete | TASK-235 |
+| [TASK-237](plans/features/fx-bf-029-local-pairing-and-connectivity/stories/fx-be-077-discovery-and-resilient-local-transport/tasks/task-237-connect-native-mobile-client-to-desktop-host.md) | Task | Connect native mobile client to desktop host | Planned | TASK-212 |
+| [TASK-238](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-081-read-and-continue-existing-work/tasks/task-238-wire-mobile-sessions-to-live-host-data.md) | Task | Wire mobile sessions to live host data | Planned | TASK-237 |
+| [TASK-239](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-082-start-and-control-existing-work/tasks/task-239-enable-live-workflow-execution-commands.md) | Task | Enable live workflow execution commands | Planned | TASK-238 |
+| [TASK-240](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-083-attention-and-request-specific-approvals/tasks/task-240-enable-request-scoped-mobile-decisions.md) | Task | Enable request-scoped mobile decisions | Planned | TASK-239 |
+| [TASK-241](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-083-attention-and-request-specific-approvals/tasks/task-241-prove-live-mobile-desktop-journey.md) | Task | Prove live mobile-desktop journey | Planned | TASK-237, TASK-238, TASK-239, TASK-240 |
