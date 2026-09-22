@@ -212,7 +212,7 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
                 </View>
                 {work.map(item => {
                   const active = openWorkId === item.workId;
-                  const live = item.status === 'In Progress';
+                  const live = item.status === 'active' || item.status === 'awaiting-input';
                   return (
                     <NavRow
                       key={item.workId}

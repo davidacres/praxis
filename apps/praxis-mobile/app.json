@@ -6,12 +6,30 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Praxis to scan a pairing code shown by your desktop."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.acresweb.praxis.mobile"
+      "bundleIdentifier": "com.acresweb.praxis.mobile",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Praxis connects to your desktop on the local network to show and control active sessions."
+      }
     },
     "android": {
-      "package": "com.acresweb.praxis.mobile"
+      "package": "com.acresweb.praxis.mobile",
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_MULTICAST_STATE"
+      ]
     }
   }
 }

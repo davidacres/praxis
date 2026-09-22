@@ -216,9 +216,10 @@ export class MobileLanServer {
       if (!socket.destroyed) socket.write(channel.encrypt(encode(frame)));
     };
     const flushEvents = (): void => {
+      if (!peer) return;
       for (const envelope of this.deps.app.ledger.replay(flushed)) {
         flushed = Math.max(flushed, envelope.sequence);
-        if (peer?.projectIds?.length && envelope.target.projectId && !peer.projectIds.includes(envelope.target.projectId)) continue;
+        if (peer.projectIds?.length && (!envelope.target.projectId || !peer.projectIds.includes(envelope.target.projectId))) continue;
         sendSecure({ kind: 'event', envelope });
       }
     };
@@ -240,14 +241,26 @@ export class MobileLanServer {
         if (!peer) throw new Error(pairingHold ? 'This phone is waiting for confirmation on the desktop.' : 'The mobile device is not authenticated.');
         const supplied = request.payload as MobileCommand | MobileReadRequest;
         const projectId = supplied.target?.projectId;
+        if (peer.projectIds?.length && supplied.operation !== 'hosts.list' && supplied.operation !== 'projects.snapshot' && !projectId) {
+          throw new Error('This operation requires an authorised project.');
+        }
         if (projectId && peer.projectIds?.length && !peer.projectIds.includes(projectId)) {
           throw new Error(`The mobile device is not authorised for project ${projectId}.`);
         }
         const authenticated = { ...supplied, caller: peer.caller } as MobileCommand | MobileReadRequest;
-        const value =
+        let value =
           request.kind === 'command'
             ? await handleMobileCommand(this.deps.app, authenticated as MobileCommand)
             : await handleMobileRead(this.deps.app, authenticated as MobileReadRequest);
+        if (
+          supplied.operation === 'projects.snapshot' &&
+          !projectId &&
+          peer.projectIds?.length &&
+          value && typeof value === 'object' && Array.isArray((value as { projects?: unknown }).projects)
+        ) {
+          const projects = (value as { projects: Array<{ projectId?: string }> }).projects;
+          value = { projects: projects.filter(project => project.projectId && peer?.projectIds?.includes(project.projectId)) };
+        }
         return { id: request.id, kind: 'reply', ok: true, value };
       } catch (error) {
         return { id: request.id, kind: 'reply', ok: false, error: error instanceof Error ? error.message : String(error) };

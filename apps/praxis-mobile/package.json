@@ -18,10 +18,14 @@
     "@praxis/core": "*",
     "@praxis/mobile-protocol": "*",
     "expo": "~57.0.21",
+    "expo-camera": "~57.0.5",
+    "expo-secure-store": "~57.0.4",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-safe-area-context": "~5.7.0"
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-tcp-socket": "^6.4.3",
+    "react-native-udp": "^4.1.7"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
