@@ -25,7 +25,6 @@ import {
   type AiStartConversationInput,
   type AiProvider,
   buildHandoverEnvelope,
-  type AiReviewProgress,
   type IssueDetails,
   type IssueTrackerService,
   type PermissionDecision,
@@ -218,7 +217,7 @@ const IMAGE_PREVIEW_TYPES: Record<string, string> = {
 };
 const MAX_IMAGE_PREVIEW_BYTES = 12 * 1024 * 1024;
 
-function trackerToolExtension(
+export function trackerToolExtension(
   service: IssueTrackerService | undefined,
   toolMode: AgentToolMode
 ): VercelAgentStartOptions['toolExtension'] | undefined {
@@ -1085,57 +1084,6 @@ export function registerAiIpc(): void {
       }
     }
   );
-
-  // ── Ticket review ─────────────────────────────────────────────────────────
-
-  const reviewControllers = new Map<string, AbortController>();
-  const sendReviewProgress = (progress: AiReviewProgress): void => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send('ai:reviewProgress', progress);
-      }
-    }
-  };
-
-  ipcMain.handle(
-    'ai:reviewIssue',
-    async (
-      _event: Electron.IpcMainInvokeEvent,
-      issueKey: string,
-      connectionId?: string,
-      requestedProvider?: AiProvider,
-      requestedModel?: string
-    ) => {
-      const issue = await (await getServiceForConnection(connectionId)).getIssue(issueKey);
-      const settings = getSettingsBackend().read();
-      const provider = requestedProvider ?? settings.ai.activeProvider;
-
-      reviewControllers.get(issueKey)?.abort();
-      const controller = new AbortController();
-      reviewControllers.set(issueKey, controller);
-      sendReviewProgress({ issueKey, content: '', done: false });
-      try {
-        const markdown = await reviewIssueWithRuntime(issue, {
-          provider,
-          model: requestedModel,
-          signal: controller.signal,
-          onUpdate: content => sendReviewProgress({ issueKey, content, done: false })
-        });
-        sendReviewProgress({ issueKey, content: markdown, done: true });
-        return markdown;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        sendReviewProgress({ issueKey, content: '', done: true, error: message });
-        throw error;
-      } finally {
-        reviewControllers.delete(issueKey);
-      }
-    }
-  );
-
-  ipcMain.handle('ai:cancelReview', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
-    reviewControllers.get(issueKey)?.abort();
-  });
 
   // ── Local peer review ─────────────────────────────────────────────────────
 

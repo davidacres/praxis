@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { BrowserWindow, ipcMain } from 'electron';
 import {
+  TICKET_REVIEW_APPLY_GATE,
   approveStage,
   isGadgetActionValue,
   parseChatBlocks,
@@ -15,6 +16,7 @@ import {
 import { getGadgetService, resolveSessionScope } from './gadgetInstance';
 import { getWorkflowBackingStore, getWorkflowPolicyStore } from './workflowStoreInstance';
 import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
+import { applyTicketReview } from './ticketReviewApply';
 
 function broadcast(sessionId: string): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -63,6 +65,13 @@ async function approveWorkflowFromGadget(runId: string, nodeId: string): Promise
  * action on an `approval` gadget calls through to the same `approveStage` the
  * run monitor uses, because that *is* the service that owns the gate — routing
  * it anywhere else would make the gadget a second, weaker approval path.
+ *
+ * The second is applying a ticket review: a `mutating` action on the review's
+ * apply form, gated by `TICKET_REVIEW_APPLY_GATE`, writes the text the user
+ * just edited and confirmed through the tracker service (`applyTicketReview`,
+ * which refuses any session that is not a ticket review). The user's own click
+ * on an editable form is the approval; the agent cannot apply anything itself.
+ *
  * Everything else still only turns the recorded answer into the user-facing
  * confirmation, and lets the ledger be the durable evidence.
  */
@@ -76,6 +85,18 @@ async function executeGadgetAction({ envelope, action, record }: GadgetExecution
     if (action.value.confirmed && runId && nodeId) {
       return approveWorkflowFromGadget(runId, nodeId);
     }
+  }
+
+  // The ticket-review apply form: the user has edited and confirmed the text,
+  // and `applyTicketReview` writes it through the tracker service, refusing any
+  // session that is not a ticket review.
+  if (
+    envelope.kind === 'form' &&
+    descriptor?.effect === 'mutating' &&
+    descriptor.gate === TICKET_REVIEW_APPLY_GATE &&
+    action.value.kind === 'form'
+  ) {
+    return applyTicketReview(envelope.scope.sessionId, action.value.fields);
   }
 
   switch (action.value.kind) {

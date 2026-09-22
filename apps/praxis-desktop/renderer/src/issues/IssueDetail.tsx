@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDialogs } from '../ui/dialogs';
 import type {
   AgentSessionRecord,
@@ -50,6 +50,13 @@ interface IssueDetailProps {
   onToggleExpanded?: () => void;
   onClose: () => void;
   onChanged: () => void;
+  /**
+   * Bumped by the shell when something outside this panel (an applied AI review)
+   * changed the ticket. The panel refetches so it neither shows stale text nor
+   * lets a later Save overwrite the change from an out-of-date draft; unsaved
+   * edits in the draft are left alone.
+   */
+  refreshToken?: number;
   /** Navigates the panel to another issue (parent chip, sub-task, linked issue). */
   onOpenIssue?: (issueKey: string) => void;
   /** Opens the Sessions view focused on this issue's agent session. */
@@ -537,6 +544,7 @@ export function IssueDetail({
   onToggleExpanded,
   onClose,
   onChanged,
+  refreshToken,
   onOpenIssue,
   onOpenSession,
   onOpenAiView,
@@ -818,6 +826,21 @@ export function IssueDetail({
     [draft.severity]
   );
   const isDirty = issue ? isDraftDirty(issue, draft, statusTransitionId) : false;
+  const lastRefreshToken = useRef(refreshToken);
+  const isDirtyRef = useRef(false);
+  isDirtyRef.current = isDirty;
+  useEffect(() => {
+    if (refreshToken === lastRefreshToken.current) return;
+    lastRefreshToken.current = refreshToken;
+    void window.praxis.issue
+      .get(issueKey, connectionId)
+      .then(loaded => {
+        setIssue(loaded);
+        if (!isDirtyRef.current) setDraft(draftFromIssue(loaded));
+      })
+      .catch(() => undefined);
+  }, [refreshToken, issueKey, connectionId]);
+
   const isIdeaIssue = isIdeaDraftType(draft.issueType);
   // Keep this renderer-side check aligned with the core decomposition router
   // without importing the Node-oriented core runtime into the browser bundle.
