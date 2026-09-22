@@ -310,6 +310,97 @@ async function resolveTemplateLibrary(projectId: string): Promise<WorkflowTempla
   });
 }
 
+export async function listWorkflowChoices(projectId: string): Promise<Array<{ workflowId: string; name: string; trigger: string }>> {
+  const definitions = await projectDefinitions(projectId);
+  const templates = await resolveTemplateLibrary(projectId);
+  const byId = new Map<string, WorkflowDefinition>();
+  for (const definition of definitions) byId.set(definition.id, definition);
+  for (const template of templates) if (!byId.has(template.definition.id)) byId.set(template.definition.id, template.definition);
+  return [...byId.values()].map(definition => ({ workflowId: definition.id, name: definition.name, trigger: definition.trigger ?? 'on-demand' }));
+}
+
+export async function startWorkflowRun(input: {
+  projectId: string;
+  workflowId: string;
+  taskTitle: string;
+  issue?: { issueKey: string; connectionId?: string };
+  controller?: { sessionKey: string; sessionId: string };
+  planInput?: WorkflowPlanInput;
+  options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown };
+}): Promise<WorkflowRunSummary> {
+  const { projectId, workflowId, taskTitle, issue, controller, planInput, options } = input;
+  let definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
+  if (!definition) {
+    const templates = await resolveTemplateLibrary(projectId);
+    const template = templates.find(candidate => candidate.definition.id === workflowId);
+    if (template) {
+      definition = instantiateTemplateForProject({
+        template: template.definition,
+        projectId,
+        at: new Date().toISOString(),
+        newId: template.definition.id
+      });
+      await persistProjectWorkflow(projectId, definition);
+    }
+  }
+  if (!definition) throw new Error(`Workflow ${workflowId} was not found for this project.`);
+  if (definition.trigger === 'ticket' && !issue?.issueKey?.trim()) {
+    throw new Error(`The ticket-owned workflow "${definition.name}" must be started from a ticket.`);
+  }
+
+  const result = validateWorkflow(definition, policyFor(projectId));
+  if (!result.valid) throw new Error(`Cannot start an invalid workflow: ${result.errors.map(item => item.message).join('; ')}`);
+  const livePreflight = preflightWorkflow(definition.nodes, await catalogSnapshot(), policyFor(projectId));
+  if (!livePreflight.ok) {
+    const blockers = Object.values(livePreflight.byNode).flatMap(stage => stage.failures).map(failure => `${failure.message} ${failure.remediation}`);
+    throw new Error(`Cannot start workflow until its Agent Hub bindings are ready: ${blockers.join(' ')}`);
+  }
+
+  let aiProvider = typeof options?.aiProvider === 'string' && options.aiProvider ? options.aiProvider as AiProvider : undefined;
+  let aiModel = typeof options?.aiModel === 'string' && options.aiModel.trim() ? options.aiModel.trim() : undefined;
+  if (controller) {
+    const session = getAiSessionManager().getAgentSession(controller.sessionKey);
+    if (!session || session.sessionId !== controller.sessionId) throw new Error('The workflow controller session was not found or has changed. Start the session again.');
+    aiProvider ??= session.provider;
+    aiModel ??= session.model;
+  }
+
+  const uncommittedChanges = options?.uncommittedChanges === 'include' || options?.uncommittedChanges === 'omit'
+    ? options.uncommittedChanges
+    : undefined;
+  if (!uncommittedChanges) await assertWorkflowBaseReady(projectId);
+
+  const run = createWorkflowRun({
+    runId: randomUUID(),
+    projectId,
+    definition: { ...definition, name: `${definition.name} — ${taskTitle}`.trim() },
+    at: new Date().toISOString(),
+    ...(issue?.issueKey ? { issueKey: issue.issueKey, issueConnectionId: issue.connectionId } : {}),
+    ...(controller ? { controllerSessionKey: controller.sessionKey, controllerSessionId: controller.sessionId } : {}),
+    ...(planInput ? { planInput } : {}),
+    ...(options?.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
+    ...(uncommittedChanges ? { uncommittedChanges } : {}),
+    ...(aiProvider ? { aiProvider } : {}),
+    ...(aiModel ? { aiModel } : {})
+  });
+  await saveRun(run);
+  if (controller) {
+    const sessions = getAiSessionManager();
+    const current = sessions.getAgentSession(controller.sessionKey);
+    const existingRunIds = current?.workflowRunIds ?? (current?.workflowRunId ? [current.workflowRunId] : []);
+    sessions.updateAgentRuntime(controller.sessionKey, {
+      workflowRunId: run.runId,
+      workflowRunIds: [...existingRunIds, run.runId],
+      workflowNodeId: '',
+      workflowId: run.workflowId,
+      workflowVersion: run.workflowVersion,
+      workflowRole: 'controller'
+    });
+  }
+  void getWorkflowOrchestrator().step(run.runId);
+  return summarize(run);
+}
+
 export function registerWorkflowIpc(): void {
   ipcMain.handle('workflows:listTemplates', async (_event, projectId: string): Promise<WorkflowTemplate[]> =>
     resolveTemplateLibrary(projectId)
@@ -672,99 +763,7 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       controller?: { sessionKey: string; sessionId: string },
       planInput?: WorkflowPlanInput,
       options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown }
-    ): Promise<WorkflowRunSummary> => {
-      let definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
-      if (!definition) {
-        const templates = await resolveTemplateLibrary(projectId);
-        const template = templates.find(candidate => candidate.definition.id === workflowId);
-        if (template) {
-          await ensureWorkflowDependenciesInstalled(template.definition);
-          definition = instantiateTemplateForProject({
-            template: template.definition,
-            projectId,
-            at: new Date().toISOString(),
-            newId: template.definition.id
-          });
-          await persistProjectWorkflow(projectId, definition);
-        }
-      }
-      if (!definition) throw new Error(`Workflow ${workflowId} was not found for this project.`);
-
-      if (definition.trigger === 'ticket' && !issue?.issueKey?.trim()) {
-        throw new Error(`The ticket-owned workflow "${definition.name}" must be started from a ticket.`);
-      }
-
-      const result = validateWorkflow(definition, policyFor(projectId));
-      if (!result.valid) {
-        throw new Error(`Cannot start an invalid workflow: ${result.errors.map(issue => issue.message).join('; ')}`);
-      }
-
-      const livePreflight = preflightWorkflow(definition.nodes, await catalogSnapshot(), policyFor(projectId));
-      if (!livePreflight.ok) {
-        const blockers = Object.values(livePreflight.byNode)
-          .flatMap(stage => stage.failures)
-          .map(failure => `${failure.message} ${failure.remediation}`);
-        throw new Error(`Cannot start workflow until its Agent Hub bindings are ready: ${blockers.join(' ')}`);
-      }
-
-      let aiProvider = typeof options?.aiProvider === 'string' && options.aiProvider ? (options.aiProvider as AiProvider) : undefined;
-      let aiModel = typeof options?.aiModel === 'string' && options.aiModel.trim().length > 0 ? options.aiModel.trim() : undefined;
-
-      if (controller) {
-        const session = getAiSessionManager().getAgentSession(controller.sessionKey);
-        if (!session || session.sessionId !== controller.sessionId) {
-          throw new Error('The workflow controller session was not found or has changed. Start the session again.');
-        }
-        if (!aiProvider && session.provider) {
-          aiProvider = session.provider;
-        }
-        if (!aiModel && session.model) {
-          aiModel = session.model;
-        }
-      }
-
-      // A run branches from committed HEAD. Check before persisting the run/controller linkage so a
-      // dirty checkout cannot produce a live-looking run whose worktree silently lacks current code.
-      const uncommittedChanges =
-        options?.uncommittedChanges === 'include' || options?.uncommittedChanges === 'omit'
-          ? options.uncommittedChanges
-          : undefined;
-      if (!uncommittedChanges) await assertWorkflowBaseReady(projectId);
-
-      const run = createWorkflowRun({
-        runId: randomUUID(),
-        projectId,
-        definition: { ...definition, name: `${definition.name} — ${taskTitle}`.trim() },
-        at: new Date().toISOString(),
-        ...(issue?.issueKey ? { issueKey: issue.issueKey, issueConnectionId: issue.connectionId } : {}),
-        ...(controller
-          ? { controllerSessionKey: controller.sessionKey, controllerSessionId: controller.sessionId }
-          : {}),
-        ...(planInput ? { planInput } : {}),
-        // Anything but an explicit 'auto' asks: the safe default cannot be reached by a malformed call.
-        ...(options?.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
-        ...(uncommittedChanges ? { uncommittedChanges } : {}),
-        ...(aiProvider ? { aiProvider } : {}),
-        ...(aiModel ? { aiModel } : {})
-      });
-      await saveRun(run);
-      if (controller) {
-        const sessions = getAiSessionManager();
-        const current = sessions.getAgentSession(controller.sessionKey);
-        const existingRunIds = current?.workflowRunIds ?? (current?.workflowRunId ? [current.workflowRunId] : []);
-        sessions.updateAgentRuntime(controller.sessionKey, {
-          workflowRunId: run.runId,
-          workflowRunIds: [...existingRunIds, run.runId],
-          workflowNodeId: '',
-          workflowId: run.workflowId,
-          workflowVersion: run.workflowVersion,
-          workflowRole: 'controller'
-        });
-      }
-      // Hand it straight to the orchestrator; deterministic stages start now.
-      void getWorkflowOrchestrator().step(run.runId);
-      return summarize(run);
-    }
+    ): Promise<WorkflowRunSummary> => startWorkflowRun({ projectId, workflowId, taskTitle, issue, controller, planInput, options })
   );
 
   ipcMain.handle(

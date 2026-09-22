@@ -19,7 +19,9 @@ function fixtureApp(onRead?: (request: MobileReadRequest) => void): MobileHostAp
     reads: {
       'projects.snapshot': async request => {
         onRead?.(request);
-        return { projectId: 'p1', name: 'Praxis' };
+        return request.target.projectId
+          ? { projectId: request.target.projectId, name: 'Praxis' }
+          : { projects: [{ projectId: 'p1', name: 'Praxis' }, { projectId: 'p2', name: 'Other' }] };
       },
     },
     commands: {
@@ -40,7 +42,7 @@ function fixtureApp(onRead?: (request: MobileReadRequest) => void): MobileHostAp
 const encode = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value));
 
 /** Minimal client: pin the host key, run the IK handshake, send one framed read, await one framed reply. */
-function callRead(port: number, hostPublicKey: Uint8Array, pairingCode?: string): Promise<{ ok: boolean; value?: unknown; error?: string }> {
+function callRead(port: number, hostPublicKey: Uint8Array, pairingCode?: string, targetProjectId: string | null = 'p1'): Promise<{ ok: boolean; value?: unknown; error?: string }> {
   return new Promise((resolve, reject) => {
     const channel = SecureChannel.initiator({
       staticKeyPair: generateKeyPair(),
@@ -72,7 +74,7 @@ function callRead(port: number, hostPublicKey: Uint8Array, pairingCode?: string)
               protocolVersion: MOBILE_PROTOCOL_VERSION,
               requestId: 'r-1',
               caller,
-              target: { hostId: 'host', projectId: 'p1' },
+              target: { hostId: 'host', ...(targetProjectId ? { projectId: targetProjectId } : {}) },
               operation: 'projects.snapshot',
             };
             socket.write(channel.encrypt(encode({ id: 'f-1', kind: 'read', payload: request })));
@@ -97,6 +99,22 @@ test('serves an encrypted read once the peer completes the IK handshake', async 
     const reply = await callRead(server.port!, hostKey.publicKey);
     assert.equal(reply.ok, true);
     assert.deepEqual(reply.value, { projectId: 'p1', name: 'Praxis' });
+  } finally {
+    await server.stop();
+  }
+});
+
+test('filters project discovery to the authenticated device grant', async () => {
+  const hostKey = generateKeyPair();
+  const server = new MobileLanServer({
+    app: fixtureApp(),
+    hostStaticKey: hostKey,
+    authorizePeer: () => ({ deviceId: 'paired-phone', capabilities: ['view'], projectIds: ['p1'] }),
+  });
+  await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
+  try {
+    const reply = await callRead(server.port!, hostKey.publicKey, undefined, null);
+    assert.deepEqual(reply.value, { projects: [{ projectId: 'p1', name: 'Praxis' }] });
   } finally {
     await server.stop();
   }

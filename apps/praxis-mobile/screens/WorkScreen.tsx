@@ -8,11 +8,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { AppHeader, Body, Button, Card, Pill } from '../app/ui';
+import { AppHeader, Body, Card, Pill } from '../app/ui';
 import { theme } from '../app/theme';
 import { useStore } from '../app/store';
 import type { MobileDetailTab } from '../renderer/mobileNavigation';
-import { DEMO_RUN, type DemoTranscriptMessage } from '../app/demoData';
+import type { DemoTranscriptMessage } from '../app/demoData';
 import { SessionComposer } from './SessionComposer';
 
 const DETAIL_TABS: MobileDetailTab[] = ['chat', 'progress', 'changes'];
@@ -118,12 +118,13 @@ function SessionHeader({
 }
 
 function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: () => void }): React.JSX.Element {
-  const { work, shell, setDetail, transcriptFor, followUps, sendFollowUp, approve } = useStore();
+  const { work, shell, setDetail, transcriptFor, followUps, workflows, runs, sendFollowUp, cancelSession, startWorkflow, loadRun } = useStore();
   const item = work.find(entry => entry.workId === workId)!;
   const detail = shell.navigation.detail;
   const [draft, setDraft] = useState('');
   const transcriptRef = useRef<ScrollView | null>(null);
   const itemFollowUps = followUps.filter(message => message.workId === workId);
+  const run = item.runId ? runs[item.runId] : undefined;
 
   useEffect(() => {
     if (detail !== 'chat') return;
@@ -131,10 +132,17 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
     return () => clearTimeout(timer);
   }, [detail, itemFollowUps.length]);
 
+  useEffect(() => {
+    if (detail === 'chat' || !item.runId) return;
+    void loadRun(item.runId);
+    const timer = setInterval(() => void loadRun(item.runId!), 3_000);
+    return () => clearInterval(timer);
+  }, [detail, item.runId, loadRun]);
+
   const send = (): void => {
     const text = draft.trim();
     if (!text) return;
-    sendFollowUp(item, text);
+    void sendFollowUp(item, text);
     setDraft('');
   };
 
@@ -178,34 +186,40 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
             value={draft}
             onChange={setDraft}
             onSend={send}
-            sending={itemFollowUps.some(message => message.state === 'pending')}
+            onStop={() => void cancelSession(item.sessionId)}
+            sending={item.status === 'active' || itemFollowUps.some(message => message.state === 'pending')}
+            provider={item.provider}
+            model={item.model}
+            workflows={workflows}
+            onStartWorkflow={workflowId => void startWorkflow(workflowId, item.title)}
           />
         </>
       ) : (
         <ScrollView contentContainerStyle={styles.detailContent}>
           {detail === 'progress' && (
             <Card>
-              <Body dim>{DEMO_RUN.workflowName} · {DEMO_RUN.status}</Body>
-              {DEMO_RUN.stages.map(stage => (
+              <Body dim>{run ? `${run.workflowName} · ${run.status}` : item.runId ? 'Loading workflow progress…' : 'No workflow run is attached to this session.'}</Body>
+              {run?.stages.map(stage => (
                 <View key={stage.nodeId} style={styles.rowBetween}>
                   <Body>{stage.name}</Body>
-                  <Pill label={stage.outcome} tone={stage.outcome === 'succeeded' ? 'ok' : stage.outcome === 'awaiting' ? 'warn' : 'neutral'} />
+                  <Pill label={stage.outcome} tone={stage.outcome === 'succeeded' ? 'ok' : stage.lane === 'awaiting' ? 'warn' : 'neutral'} />
                 </View>
               ))}
-              {DEMO_RUN.status === 'awaiting-approval' && item.status !== 'Approved' && (
-                <Button label="Approve" onPress={() => approve(DEMO_RUN.runId)} />
-              )}
+              {run ? <Body dim>{run.explanation}</Body> : null}
             </Card>
           )}
 
           {detail === 'changes' && (
             <Card>
-              {DEMO_RUN.changes.map(file => (
-                <View key={file.path} style={styles.rowBetween}>
-                  <Body>{file.path}</Body>
-                  <Body dim>+{file.added} −{file.removed}</Body>
+              {!item.runId ? <Body dim>No workflow run is attached to this session.</Body> : null}
+              {item.runId && !run ? <Body dim>Loading workflow artifacts…</Body> : null}
+              {run && run.stages.every(stage => stage.artifacts.length === 0) ? <Body dim>No workflow artifacts have been produced yet.</Body> : null}
+              {run?.stages.flatMap(stage => stage.artifacts.map(artifact => (
+                <View key={`${stage.nodeId}:${artifact.contractId}:${artifact.path ?? artifact.kind}`} style={styles.rowBetween}>
+                  <Body>{artifact.path ?? artifact.contractId}</Body>
+                  <Body dim>{artifact.kind}</Body>
                 </View>
-              ))}
+              )))}
             </Card>
           )}
         </ScrollView>

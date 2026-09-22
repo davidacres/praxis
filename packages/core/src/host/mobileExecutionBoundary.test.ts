@@ -15,7 +15,9 @@ const command=createMobileCommand({
 test('dispatches only through the injected execution handler',async()=>{
  let received:string|undefined;
  const result=await dispatchMobileCommand(command,{
+  'sessions.create':async()=>undefined,
   'sessions.continue':async c=>{received=c.target.projectId;return {accepted:true};},
+  'sessions.cancel':async()=>undefined,
   'workflowRuns.start':async()=>undefined,
   'workflowRuns.cancel':async()=>undefined,
   'workflowRuns.retryStage':async()=>undefined,
@@ -28,7 +30,9 @@ test('dispatches only through the injected execution handler',async()=>{
 
 test('returns a typed conflict when the host handler rejects',async()=>{
  const result=await dispatchMobileCommand(command,{
+  'sessions.create':async()=>undefined,
   'sessions.continue':async()=>{throw new Error('session is already running');},
+  'sessions.cancel':async()=>undefined,
   'workflowRuns.start':async()=>undefined,
   'workflowRuns.cancel':async()=>undefined,
   'workflowRuns.retryStage':async()=>undefined,

@@ -2,13 +2,9 @@
  * Supplies the real `MobileHostServiceDeps` from the running desktop stores and
  * assembles the `MobileHostApplication` that `registerMobileElectronIpc` serves.
  *
- * Wired for real now: project and run reads, the attention inbox, and the
- * workflow commands that do not need an agent session (cancel, retry, approve).
- * Deferred with an explicit error: `sessions.continue`, `permissions.respond`
- * and `workflowRuns.start`. The first two need the permission model reworked
- * from a FIFO session key to request-specific ids (architecture.md, FX-BE-081);
- * starting a run from the phone is FX-BE-082. A deferred op fails the command
- * with a stated reason rather than being silently absent.
+ * The same services back Electron IPC and the authenticated LAN transport:
+ * projects, sessions and streamed transcripts, workflow execution, attention,
+ * request-specific permissions, cancellation, retry and approval.
  */
 import * as os from 'node:os';
 import {
@@ -19,6 +15,8 @@ import {
   resolveApprovalTarget,
   summarizeWorkflowRun,
   type MobileCommand,
+  type MobileHostApplication,
+  type MobileSessionEvent,
   type WorkflowPolicyProfile,
   type WorkflowRun,
 } from '@praxis/core';
@@ -33,15 +31,12 @@ import {
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore, getWorkflowPolicyStore } from './workflowStoreInstance';
 import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
-import { getAiSessionManager } from './aiInstance';
+import { getAiSessionManager, hasActiveTask, respondToActivePermission } from './aiInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
-
-export class MobileHostPendingError extends Error {
-  constructor(operation: string, planRef: string) {
-    super(`${operation} is not available from the phone yet (${planRef}).`);
-    this.name = 'MobileHostPendingError';
-  }
-}
+import { cancelMobileInteractiveSession, continueMobileInteractiveSession, createMobileInteractiveSession } from './mobileInteractiveSessions';
+import { mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
+import { pendingMobilePermissions, respondToMobilePermission } from './mobilePermissions';
+import { listWorkflowChoices, startWorkflowRun } from './workflowIpc';
 
 function runStore(): WorkflowRunStore {
   return new WorkflowRunStore(getWorkflowBackingStore());
@@ -65,8 +60,8 @@ function projectSummary(project: { id: string; name: string; workflowStages: Arr
   return { projectId: project.id, name: project.name, workflow: project.workflowStages.map(stage => stage.name).join(' → ') || undefined };
 }
 
-export function createDesktopMobileHostServiceDeps(): MobileHostServiceDeps {
-  const hostId = (os.hostname() || 'praxis-desktop').trim();
+export function createDesktopMobileHostServiceDeps(configuredHostId?: string): MobileHostServiceDeps {
+  const hostId = configuredHostId?.trim() || (os.hostname() || 'praxis-desktop').trim();
 
   return {
     hostId,
@@ -92,19 +87,18 @@ export function createDesktopMobileHostServiceDeps(): MobileHostServiceDeps {
         ...(runsByWork.has(item.key) ? { runId: runsByWork.get(item.key) } : {}),
       }));
     },
+    listSessions: async projectId => [...getAiSessionManager().getAllAgentSessions().values()]
+      .filter(record => !projectId || record.projectId === projectId)
+      .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+      .map(mobileSessionSummary),
     getSession: async sessionId => {
       const record = [...getAiSessionManager().getAllAgentSessions().values()].find(
         candidate => candidate.sessionId === sessionId || candidate.issueKey === sessionId,
       );
       if (!record) return undefined;
-      return {
-        sessionId: record.sessionId,
-        workId: record.issueKey,
-        title: record.title?.trim() || record.issueKey,
-        status: record.mode ?? 'idle',
-        transcript: [],
-      };
+      return mobileSessionSnapshot(record);
     },
+    listWorkflows: async projectId => listWorkflowChoices(projectId),
     getRun: async runId => {
       const run = runStore().get(runId);
       return run ? summarize(run) : undefined;
@@ -115,6 +109,22 @@ export function createDesktopMobileHostServiceDeps(): MobileHostServiceDeps {
     },
     listAttention: async projectId => {
       const items: Array<Record<string, unknown>> = [];
+      for (const request of pendingMobilePermissions(getAiSessionManager().getAllAgentSessions().values())) {
+        if (request.projectId === projectId) {
+          items.push({
+            id: `permission:${request.requestId}`,
+            kind: 'permission',
+            hostId,
+            projectId,
+            sessionId: request.sessionId,
+            requestId: request.requestId,
+            summary: request.summary,
+            detail: request.detail,
+            createdAt: request.createdAt,
+            resolved: false,
+          });
+        }
+      }
       for (const run of runStore().forProject(projectId)) {
         const summary = summarize(run);
         if (summary.status === 'awaiting-approval') {
@@ -129,9 +139,12 @@ export function createDesktopMobileHostServiceDeps(): MobileHostServiceDeps {
       return items;
     },
 
-    startRun: async () => {
-      throw new MobileHostPendingError('workflowRuns.start', 'FX-BE-082');
-    },
+    createSession: async input => mobileSessionSnapshot(await createMobileInteractiveSession(input)),
+    startRun: async input => startWorkflowRun({
+      projectId: input.projectId,
+      workflowId: input.workflowId,
+      taskTitle: input.task?.trim() || 'Started from Praxis mobile',
+    }),
     cancelRun: async (runId, reason) => {
       await getWorkflowOrchestrator().cancel(runId, reason);
       return summarize(requireRun(runId));
@@ -158,21 +171,43 @@ export function createDesktopMobileHostServiceDeps(): MobileHostServiceDeps {
       await getWorkflowOrchestrator().step(runId);
       return summarize(requireRun(runId));
     },
-    continueSession: async () => {
-      throw new MobileHostPendingError('sessions.continue', 'FX-BE-081');
-    },
-    respondToPermission: async () => {
-      throw new MobileHostPendingError('permissions.respond', 'FX-BE-081');
-    },
+    continueSession: async (sessionId, message) => mobileSessionSnapshot(await continueMobileInteractiveSession(sessionId, message)),
+    cancelSession: async sessionId => mobileSessionSnapshot(await cancelMobileInteractiveSession(sessionId)),
+    respondToPermission: async (requestId, decision, _actor, projectId) => respondToMobilePermission({
+      records: getAiSessionManager().getAllAgentSessions().values(),
+      requestId,
+      projectId,
+      decision,
+      hasActiveTask,
+      respond: respondToActivePermission,
+    }),
   };
 }
 
-export function composeDesktopMobileHost(): ReturnType<typeof createDesktopMobileHostApplication> {
-  const deps = createDesktopMobileHostServiceDeps();
-  return createDesktopMobileHostApplication({
+export function composeDesktopMobileHost(hostId?: string): MobileHostApplication {
+  const deps = createDesktopMobileHostServiceDeps(hostId);
+  const app = createDesktopMobileHostApplication({
     reads: createMobileHostReads(deps),
     commands: createMobileHostExecutionHandlers(deps),
     ledger: new InMemoryMobileCommandLedger(),
     payloadDigest: (command: unknown) => JSON.stringify((command as MobileCommand).payload ?? null),
   });
+  let sequence = 0;
+  getAiSessionManager().onDidChangeAgentSession(record => {
+    sequence += 1;
+    app.ledger.appendEvent<MobileSessionEvent>({
+      protocolVersion: 1,
+      eventId: `${record.sessionId}:${sequence}`,
+      sequence,
+      emittedAt: new Date().toISOString(),
+      target: {
+        hostId: deps.hostId,
+        ...(record.projectId ? { projectId: record.projectId } : {}),
+        sessionId: record.sessionId,
+        ...(record.workflowRunId ? { runId: record.workflowRunId } : {}),
+      },
+      event: { type: 'session.snapshot', snapshot: mobileSessionSnapshot(record, sequence) },
+    });
+  });
+  return app;
 }

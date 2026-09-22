@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../app/theme';
+import type { MobileWorkflowChoice } from '../app/store';
 
 type SessionMode = 'chat' | 'analysis' | 'review';
 
@@ -9,7 +10,12 @@ interface SessionComposerProps {
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
+  onStop?: () => void;
   sending?: boolean;
+  provider?: string;
+  model?: string;
+  workflows?: readonly MobileWorkflowChoice[];
+  onStartWorkflow?: (workflowId: string) => void;
 }
 
 const MODES: SessionMode[] = ['chat', 'analysis', 'review'];
@@ -48,11 +54,15 @@ function SessionOptionsSheet({
   mode,
   onChangeMode,
   onClose,
+  workflows,
+  onStartWorkflow,
 }: {
   visible: boolean;
   mode: SessionMode;
   onChangeMode: (mode: SessionMode) => void;
   onClose: () => void;
+  workflows: readonly MobileWorkflowChoice[];
+  onStartWorkflow?: (workflowId: string) => void;
 }): React.JSX.Element {
   const insets = useSafeAreaInsets();
   return (
@@ -97,8 +107,18 @@ function SessionOptionsSheet({
 
           <Text style={styles.sheetSectionLabel}>ACTIONS</Text>
           <View style={styles.sheetGroup}>
-            <SheetRow icon="›_" label="Commands" onPress={() => undefined} />
-            <SheetRow icon="▶" label="Workflow" onPress={() => undefined} />
+            {workflows.map(workflow => (
+              <SheetRow
+                key={workflow.workflowId}
+                icon="▶"
+                label={workflow.name}
+                onPress={() => {
+                  onStartWorkflow?.(workflow.workflowId);
+                  onClose();
+                }}
+              />
+            ))}
+            {workflows.length === 0 ? <SheetRow icon="▶" label="No workflows available" /> : null}
           </View>
         </View>
       </View>
@@ -106,7 +126,7 @@ function SessionOptionsSheet({
   );
 }
 
-export function SessionComposer({ value, onChange, onSend, sending = false }: SessionComposerProps): React.JSX.Element {
+export function SessionComposer({ value, onChange, onSend, onStop, sending = false, provider = 'Provider', model = 'Default model', workflows = [], onStartWorkflow }: SessionComposerProps): React.JSX.Element {
   const [mode, setMode] = useState<SessionMode>('chat');
   const [usageVisible, setUsageVisible] = useState(true);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -144,8 +164,8 @@ export function SessionComposer({ value, onChange, onSend, sending = false }: Se
         />
 
         <View style={styles.controls}>
-          <ComposerChip icon="‹›" label="Codex" />
-          <ComposerChip icon="✦" label="gpt-5.6" meta="258k" />
+          <ComposerChip icon="‹›" label={provider} />
+          <ComposerChip icon="✦" label={model} />
           <View style={styles.spacer} />
           <Pressable
             accessibilityRole="button"
@@ -158,18 +178,18 @@ export function SessionComposer({ value, onChange, onSend, sending = false }: Se
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={sending ? 'Sending message' : 'Send message'}
-            accessibilityState={{ disabled: !canSend }}
-            disabled={!canSend}
-            onPress={onSend}
-            style={({ pressed }) => [styles.sendButton, !canSend && styles.sendButtonDisabled, pressed && canSend && styles.buttonPressed]}
+            accessibilityLabel={sending ? 'Stop response' : 'Send message'}
+            accessibilityState={{ disabled: sending ? !onStop : !canSend }}
+            disabled={sending ? !onStop : !canSend}
+            onPress={sending ? onStop : onSend}
+            style={({ pressed }) => [styles.sendButton, (!sending && !canSend) && styles.sendButtonDisabled, pressed && styles.buttonPressed]}
           >
-            <Text style={[styles.sendGlyph, canSend && styles.sendGlyphActive]}>{sending ? '·' : '↑'}</Text>
+            <Text style={[styles.sendGlyph, (canSend || sending) && styles.sendGlyphActive]}>{sending ? '■' : '↑'}</Text>
           </Pressable>
         </View>
       </View>
 
-      <SessionOptionsSheet visible={optionsOpen} mode={mode} onChangeMode={setMode} onClose={() => setOptionsOpen(false)} />
+      <SessionOptionsSheet visible={optionsOpen} mode={mode} onChangeMode={setMode} onClose={() => setOptionsOpen(false)} workflows={workflows} onStartWorkflow={onStartWorkflow} />
     </View>
   );
 }

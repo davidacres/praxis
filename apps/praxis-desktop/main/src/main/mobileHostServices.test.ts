@@ -37,13 +37,24 @@ function recorder(overrides: Partial<MobileHostServiceDeps> = {}): Recorder {
       note('listWork', projectId);
       return [{ workId: 'W-1', title: 'x', status: 'idle' }];
     },
+    listSessions: async projectId => {
+      note('listSessions', projectId);
+      return [];
+    },
     getSession: async id => {
       note('getSession', id);
-      return id === 's1' ? { sessionId: 's1', workId: 'W-1', title: 'x', status: 'idle', transcript: [] } : undefined;
+      return id === 's1' ? {
+        sessionId: 's1', sessionKey: 'W-1', projectId: 'p1', workId: 'W-1', title: 'x', lifecycle: 'idle', mode: 'chat', archived: false,
+        startedAt: '2026-09-10T09:00:00.000Z', sequence: 0, messages: [], pendingPermissions: [], canContinue: true, canCancel: false,
+      } : undefined;
+    },
+    listWorkflows: async projectId => {
+      note('listWorkflows', projectId);
+      return [{ workflowId: 'governed-delivery', name: 'Governed delivery', trigger: 'manual' }];
     },
     getRun: async id => {
       note('getRun', id);
-      return id === 'r1' ? { runId: 'r1', status: 'awaiting-approval' } : undefined;
+      return id === 'r1' ? { runId: 'r1', projectId: 'p1', status: 'awaiting-approval' } : undefined;
     },
     listRunChanges: async runId => {
       note('listRunChanges', runId);
@@ -52,6 +63,14 @@ function recorder(overrides: Partial<MobileHostServiceDeps> = {}): Recorder {
     listAttention: async projectId => {
       note('listAttention', projectId);
       return [];
+    },
+    createSession: async input => {
+      note('createSession', input);
+      return {
+        sessionId: 's-new', sessionKey: 'SESSION-NEW', projectId: input.projectId, title: input.title,
+        lifecycle: 'active', mode: 'chat', archived: false, startedAt: '2026-09-10T09:00:00.000Z',
+        sequence: 0, messages: [], pendingPermissions: [], canContinue: false, canCancel: true,
+      };
     },
     startRun: async input => {
       note('startRun', input);
@@ -73,8 +92,12 @@ function recorder(overrides: Partial<MobileHostServiceDeps> = {}): Recorder {
       note('continueSession', sessionId, message, actor);
       return { sessionId };
     },
-    respondToPermission: async (requestId, decision, actor) => {
-      note('respondToPermission', requestId, decision, actor);
+    cancelSession: async (sessionId, actor) => {
+      note('cancelSession', sessionId, actor);
+      return { sessionId };
+    },
+    respondToPermission: async (requestId, decision, actor, projectId) => {
+      note('respondToPermission', requestId, decision, actor, projectId);
       return { requestId };
     },
     ...overrides,
@@ -104,10 +127,12 @@ test('reads route to the matching dependency and pass through scope', async () =
   ]);
   await reads['projects.snapshot'](read('projects.snapshot', { hostId: 'host-mac', projectId: 'p1' }));
   await reads['work.list'](read('work.list', { hostId: 'host-mac', projectId: 'p1' }));
+  await reads['sessions.list'](read('sessions.list', { hostId: 'host-mac', projectId: 'p1' }));
+  await reads['workflows.list'](read('workflows.list', { hostId: 'host-mac', projectId: 'p1' }));
   await reads['attention.list'](read('attention.list', { hostId: 'host-mac', projectId: 'p1' }));
-  await reads['changes.get'](read('changes.get', { hostId: 'host-mac', runId: 'r1' }));
+  await reads['changes.get'](read('changes.get', { hostId: 'host-mac', projectId: 'p1', runId: 'r1' }));
 
-  assert.deepEqual(calls.filter(c => c[0] !== 'getProject').map(c => c[0]), ['listWork', 'listAttention', 'listRunChanges']);
+  assert.deepEqual(calls.filter(c => !['getProject', 'getSession', 'getRun'].includes(c[0])).map(c => c[0]), ['listWork', 'listSessions', 'listWorkflows', 'listAttention', 'listRunChanges']);
   assert.deepEqual(calls.find(c => c[0] === 'listWork'), ['listWork', 'p1']);
 });
 
@@ -129,28 +154,49 @@ test('reads fail closed when a required identifier is missing', async () => {
 test('a not-found run or session is an error, not an empty result', async () => {
   const { deps } = recorder();
   const reads = createMobileHostReads(deps);
-  await assert.rejects(reads['workflowRuns.get'](read('workflowRuns.get', { hostId: 'host-mac', runId: 'missing' })), /was not found/);
-  await assert.rejects(reads['sessions.get'](read('sessions.get', { hostId: 'host-mac', sessionId: 'missing' })), /was not found/);
+  await assert.rejects(reads['workflowRuns.get'](read('workflowRuns.get', { hostId: 'host-mac', projectId: 'p1', runId: 'missing' })), /was not found/);
+  await assert.rejects(reads['sessions.get'](read('sessions.get', { hostId: 'host-mac', projectId: 'p1', sessionId: 'missing' })), /was not found/);
+});
+
+test('resource ids cannot escape the paired project scope', async () => {
+  const { deps } = recorder();
+  const reads = createMobileHostReads(deps);
+  const handlers = createMobileHostExecutionHandlers(deps);
+  await assert.rejects(
+    reads['sessions.get'](read('sessions.get', { hostId: 'host-mac', projectId: 'p2', sessionId: 's1' })),
+    /not found in project p2/,
+  );
+  await assert.rejects(
+    handlers['workflowRuns.cancel'](command('workflowRuns.cancel', { hostId: 'host-mac', projectId: 'p2', runId: 'r1' }, {})),
+    /not found in project p2/,
+  );
 });
 
 test('commands extract payload fields and carry the verified actor', async () => {
   const { calls, deps } = recorder();
   const handlers = createMobileHostExecutionHandlers(deps);
 
+  await handlers['sessions.create'](command('sessions.create', { hostId: 'host-mac', projectId: 'p1' }, { title: 'Mobile chat', message: 'start here' }));
   await handlers['sessions.continue'](command('sessions.continue', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, { message: '  ship it  ' }));
+  await handlers['sessions.cancel'](command('sessions.cancel', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, {}));
   await handlers['workflowGates.approve'](command('workflowGates.approve', { hostId: 'host-mac', projectId: 'p1', runId: 'r1' }, { note: 'looks good' }));
   await handlers['workflowRuns.cancel'](command('workflowRuns.cancel', { hostId: 'host-mac', projectId: 'p1', runId: 'r1' }, {}, deviceOnly));
   await handlers['workflowRuns.retryStage'](command('workflowRuns.retryStage', { hostId: 'host-mac', projectId: 'p1', runId: 'r1' }, { nodeId: 'qa' }));
+  await handlers['workflowRuns.start'](command('workflowRuns.start', { hostId: 'host-mac', projectId: 'p1' }, { workflowId: 'quick-change', task: 'Fix mobile' }));
 
+  assert.deepEqual(calls.find(c => c[0] === 'createSession'), ['createSession', { projectId: 'p1', title: 'Mobile chat', message: 'start here' }]);
   assert.deepEqual(calls.find(c => c[0] === 'continueSession'), ['continueSession', 's1', 'ship it', 'dave']);
+  assert.deepEqual(calls.find(c => c[0] === 'cancelSession'), ['cancelSession', 's1', 'dave']);
   assert.deepEqual(calls.find(c => c[0] === 'approveRun'), ['approveRun', 'r1', 'dave', 'looks good']);
   assert.deepEqual(calls.find(c => c[0] === 'cancelRun'), ['cancelRun', 'r1', undefined, 'phone-1']);
   assert.deepEqual(calls.find(c => c[0] === 'retryStage'), ['retryStage', 'r1', 'qa', 'dave']);
+  assert.deepEqual(calls.find(c => c[0] === 'startRun'), ['startRun', { projectId: 'p1', workflowId: 'quick-change', task: 'Fix mobile' }]);
 });
 
 test('commands reject a missing or malformed payload', async () => {
   const { deps } = recorder();
   const handlers = createMobileHostExecutionHandlers(deps);
+  await assert.rejects(handlers['sessions.create'](command('sessions.create', { hostId: 'host-mac', projectId: 'p1' }, { message: '   ' })), /non-empty payload\.message/);
   await assert.rejects(handlers['sessions.continue'](command('sessions.continue', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, { message: '   ' })), /non-empty payload\.message/);
   await assert.rejects(handlers['workflowRuns.start'](command('workflowRuns.start', { hostId: 'host-mac', projectId: 'p1' }, {})), /payload\.workflowId/);
   await assert.rejects(handlers['permissions.respond'](command('permissions.respond', { hostId: 'host-mac', projectId: 'p1', requestId: 'q1' }, { decision: 'maybe' })), /'allow' or 'deny'/);
