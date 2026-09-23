@@ -971,6 +971,14 @@ export function SessionsPage({
       || (rawActiveError && isProviderLimitMessage(rawActiveError))
   );
   const isDismissed = Boolean(dismissedError && rawActiveError === dismissedError);
+  const limitSwitchVisible = Boolean(
+    selected
+      && isLimit
+      && !isDismissed
+      && !selected.conversation
+      && !isWorkflowStageSession(selected)
+      && limitStoppedFor !== selected.issueKey
+  );
   const activeErrorMessage = !isDismissed
     ? ((isLimit && limitNotice) ? limitNotice : (rawActiveError ? formatErrorMessage(rawActiveError) : undefined))
     : undefined;
@@ -1554,7 +1562,7 @@ export function SessionsPage({
                   <div className="session-error-banner-header">
                     <strong className="session-error-banner-title">
                       {isLimit
-                        ? (activeErrorMessage.toLowerCase().includes('budget') || activeErrorMessage.toLowerCase().includes('spending')
+                        ? ((rawActiveError ?? activeErrorMessage).toLowerCase().includes('budget') || (rawActiveError ?? activeErrorMessage).toLowerCase().includes('spending')
                             ? 'Provider Limit / Budget Exceeded'
                             : 'Provider Limit / Quota Exceeded')
                         : (isSelectedFailed ? 'Session Failed' : 'Error')}
@@ -1915,8 +1923,7 @@ export function SessionsPage({
                 onDrop={handleComposerDrop}
               >
                 {/* The session's AI ran out: carry on with another AI, or stop. A workflow stage's run offers this itself. */}
-                {isLimit && !isDismissed && !selected.conversation && !isWorkflowStageSession(selected) &&
-                  limitStoppedFor !== selected.issueKey && (
+                {limitSwitchVisible && (
                   <SessionLimitSwitch
                     session={selected}
                     onStop={() => {
@@ -1926,6 +1933,7 @@ export function SessionsPage({
                     }}
                   />
                 )}
+                {!limitSwitchVisible && <>
                 {followUpImages.length > 0 && (
                   <div className="session-image-attachments" data-testid="session-image-attachments">
                     {followUpImages.map((image, index) => (
@@ -2472,6 +2480,7 @@ export function SessionsPage({
                   </>
                 )}
               </div>
+                </>}
               </div>
               {context && contextPopoverPosition && createPortal(
                 <div
