@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import { app } from 'electron';
 import {
+  mirrorBundledAgents,
   type ActiveAppearanceAddons,
   type AddonKind,
   type AddonSurfacePackContent,
@@ -327,7 +328,16 @@ export function listInstalledAddons(): Promise<InstalledAddon[]> {
 
 export async function removeInstalledAddon(kind: AddonKind, id: string): Promise<void> {
   await getAddonStorage().remove(kind, id);
-  if (kind === 'agent' || kind === 'skill') await refreshAgentRuntimeForAddons();
+  if (kind === 'agent' || kind === 'skill') {
+    // The discovery sync only visits add-ons that are still installed, so the
+    // removed one's copy must be deleted here or it stays discoverable.
+    const roots = getAgentRuntimeRoots();
+    const root = kind === 'agent' ? roots.agents.global : roots.skills.global;
+    await fs.promises.rm(path.join(root, id), { recursive: true, force: true });
+    // An agent add-on can share a built-in agent's id; put the built-in back.
+    if (kind === 'agent') await mirrorBundledAgents(roots.agents.global);
+    await refreshAgentRuntimeForAddons();
+  }
   emitMarketplaceChanged();
 }
 

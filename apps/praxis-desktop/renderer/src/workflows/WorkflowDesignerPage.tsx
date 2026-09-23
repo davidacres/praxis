@@ -12,7 +12,7 @@ import type {
   WorkflowNodeType,
   WorkflowPolicyProfile
 } from '@praxis/core';
-import { isHostShimProfile } from '../agents/agentCatalog';
+import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
 import { API_MODEL_PROVIDERS } from '../ai/modelProviders';
 import { Icon } from '../ui/Icon';
 import { WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
@@ -735,10 +735,10 @@ export function WorkflowDesignerPage({
                       filteredSkills.map(skill => {
                         const blocked = skill.error || !skill.trusted;
                         const title = blocked
-                          ? `Cannot use ${skill.metadata.name}: ${skill.error ?? 'it needs trust before it can run.'}`
+                          ? `Cannot use ${skillTitle(skill.metadata)}: ${skill.error ?? 'it needs trust before it can run.'}`
                           : selectedAgentStage
-                            ? `Add ${skill.metadata.name} to ${selectedAgentStage.name}${skill.metadata.description ? ` — ${skill.metadata.description}` : ''}`
-                            : `Select an agent stage, then add ${skill.metadata.name}${skill.metadata.description ? ` — ${skill.metadata.description}` : ''}`;
+                            ? `Add ${skillTitle(skill.metadata)} to ${selectedAgentStage.name}${skill.metadata.description ? ` — ${skill.metadata.description}` : ''}`
+                            : `Select an agent stage, then add ${skillTitle(skill.metadata)}${skill.metadata.description ? ` — ${skill.metadata.description}` : ''}`;
                         return (
                           <button
                             key={skill.metadata.name}
@@ -761,7 +761,7 @@ export function WorkflowDesignerPage({
                               <Icon name="sparkles" size={13} />
                             </span>
                             <div className="wf-palette-item-content">
-                              <span className="wf-palette-item-title">{skill.metadata.name}</span>
+                              <span className="wf-palette-item-title">{skillTitle(skill.metadata)}</span>
                               {skill.metadata.description && (
                                 <span className="wf-palette-item-desc">{skill.metadata.description}</span>
                               )}
@@ -1508,7 +1508,7 @@ function AgentStageFields({
                   checked={on}
                   onChange={event => toggleSkill(skill.metadata.name, skill.fingerprint, event.target.checked)}
                 />
-                {skill.metadata.name}
+                {skillTitle(skill.metadata)}
                 {skill.error && <span className="hint is-danger"> (invalid)</span>}
                 {!skill.trusted && <span className="hint"> (untrusted)</span>}
                 {drifted && <span className="hint is-warn"> (changed since pinned)</span>}
