@@ -11,6 +11,13 @@ These are point-in-time design docs, UI audits, and onboarding walkthroughs —
 narrative artifacts, not specs this app reads at runtime. Content is not kept
 in sync automatically; if one goes stale, fix it here and republish by hand.
 
+On 23 Sep 2026 every page gained a "Where it stands now" section of real
+screenshots from the current build. The images live in `shots/` beside the
+pages and are referenced relatively, so keep the folder with them. The
+"Praxis Mobile screens" canvas (a Design-type artifact on claude.ai) is not
+archived as a page; its screenshots are the `shots/m-*.jpg` and
+`shots/mobile-*.jpg` files.
+
 | File | Was published as | Subject |
 | --- | --- | --- |
 | `handing-a-ticket-to-an-agent.html` | Handing a Ticket to an Agent | Verifies the ticket-to-agent flow works, what's proven vs. not |
@@ -25,3 +32,4 @@ in sync automatically; if one goes stale, fix it here and republish by hand.
 | `project-details-and-board-surface.html` | Project Details & Board Surface | FX-BF-008 changelog — project inspector and plain-background boards |
 | `praxis-surface-packs.html` | Praxis Surface Packs | Implementation plan for the surface-pack material layer |
 | `praxis-surfaces.html` | Praxis Surfaces | Reference: the six shipped surface packs, rendered live from the CSS |
+| `praxis-on-your-phone.html` | Praxis on Your Phone | The mobile app: pairing, attention, sessions and settings, from the iOS simulator |

@@ -200,6 +200,37 @@
     </div>
   </header>
 
+<style>
+  .now { --n-ink: var(--ink, var(--page-ink, #1f1d1a)); --n-ink-2: var(--ink-2, var(--ink-mut, var(--page-ink-soft, var(--muted, #5f5a52))));
+    --n-rule: var(--rule, var(--line, var(--page-line, var(--border, #d9d3c7)))); --n-accent: var(--brand, var(--indigo, var(--accent, var(--page-accent, #c6431f))));
+    --n-raised: var(--raised, var(--card, var(--surface, var(--page-surface, #fffdf8))));
+    --n-mono: var(--mono, var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace));
+    margin: 40px 0 8px; padding: 26px 0 8px; border-top: 2px solid var(--n-ink); color: var(--n-ink); }
+  .now-eyebrow { margin: 0 0 8px; font-family: var(--n-mono); font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--n-accent); }
+  .now h2.now-title { margin: 0; padding: 0; border: 0; font-size: clamp(22px, 3vw, 28px); line-height: 1.15; letter-spacing: -.012em; text-wrap: balance; display: block; }
+  .now-lede { max-width: 68ch; margin: 10px 0 0; color: var(--n-ink-2); font-size: 15.5px; line-height: 1.55; }
+  .now-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; margin-top: 22px; }
+  .now-grid.now-wide { grid-template-columns: 1fr; }
+  .now-grid.now-phones { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
+  .now figure { margin: 0; }
+  .now figure a { display: block; border: 1px solid var(--n-rule); border-radius: 8px; overflow: hidden; background: var(--n-raised); }
+  .now figure img { display: block; width: 100%; height: auto; }
+  .now figcaption { margin-top: 8px; font-size: 13px; line-height: 1.45; color: var(--n-ink-2); }
+  .now figcaption b { color: var(--n-ink); font-weight: 600; }
+  .now-changes { list-style: none; margin: 24px 0 0; padding: 0; border-top: 1px solid var(--n-rule); max-width: 820px; }
+  .now-changes li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--n-rule); font-size: 14.5px; line-height: 1.5; color: var(--n-ink-2); }
+  @media (max-width: 560px) { .now-changes li { grid-template-columns: 1fr; gap: 2px; } }
+  .now-changes li::before, .now-changes li::marker { content: none; }
+  .now-changes li { padding-left: 0; max-width: none; position: static; }
+  .now .now-lede, .now p { max-width: 68ch; }
+  .now-changes .k { font-family: var(--n-mono); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--n-accent); padding-top: 2px; }
+  .now-changes b { color: var(--n-ink); font-weight: 600; }
+  .now-foot { margin: 14px 0 0; font-family: var(--n-mono); font-size: 11px; color: var(--n-ink-2); }
+  .now-foot a { color: var(--n-accent); }
+</style>
+<section class="now" id="now" aria-labelledby="now-title"><p class="now-eyebrow">Where it stands now · 23 Sep 2026</p><h2 class="now-title" id="now-title">The same hand-off, with more around it</h2><p class="now-lede">The verified path — ticket in, edits on disk, tool use gated — still holds. Since this was written the session view has grown, the AI can change mid-session, and running out of budget no longer strands the work.</p><div class="now-grid"><figure><a href="shots/session-permission-request.jpg" target="_blank" rel="noopener"><img src="shots/session-permission-request.jpg" alt="Tool use pauses for approval — Allow once, Always allow or Deny, in the session." loading="lazy"></a><figcaption><b>Tool use pauses for approval</b> — Allow once, Always allow or Deny, in the session.</figcaption></figure><figure><a href="shots/session-changes-diff-view.jpg" target="_blank" rel="noopener"><img src="shots/session-changes-diff-view.jpg" alt="Changes tab. Every file the agent edited, as a diff." loading="lazy"></a><figcaption><b>Changes tab.</b> Every file the agent edited, as a diff.</figcaption></figure><figure><a href="shots/session-limit-switch.jpg" target="_blank" rel="noopener"><img src="shots/session-limit-switch.jpg" alt="Out of budget. The composer offers another AI that is set up — the session is handed over and carries on — or Stop." loading="lazy"></a><figcaption><b>Out of budget.</b> The composer offers another AI that is set up — the session is handed over and carries on — or Stop.</figcaption></figure><figure><a href="shots/workflow-limit-ask.jpg" target="_blank" rel="noopener"><img src="shots/workflow-limit-ask.jpg" alt="In a workflow run. A stage whose AI ran out pauses and asks: switch AI, retry, or stop the run." loading="lazy"></a><figcaption><b>In a workflow run.</b> A stage whose AI ran out pauses and asks: switch AI, retry, or stop the run.</figcaption></figure></div><ul class="now-changes"><li><span class="k">New</span><span><b>Budget-aware.</b> Sessions and workflow stages that hit an AI's credit or usage limit pause with a named reason instead of failing; a run can be set to ask, switch automatically, or stop.</span></li><li><span class="k">New</span><span><b>Per-stage AI.</b> A workflow stage can run on its own AI and model; each attempt records which AI ran it.</span></li><li><span class="k">New</span><span><b>Project conventions follow every AI.</b> Instruction files like <code>AGENTS.md</code> and <code>CLAUDE.md</code> are added for runtimes that don't read them themselves, plus an editable working style.</span></li><li><span class="k">New</span><span><b>From the phone.</b> Permission requests and run approvals can be answered from a paired phone.</span></li></ul><p class="now-foot">Screenshots from Praxis desktop v0.3.1 (today's main) · the rest of this page is the original write-up, kept as it was. New: <a href="https://claude.ai/artifact/3frgE85bomtvDZtNRoxMD8">Praxis on Your Phone</a>.</p></section>
+
+
   <section id="layers">
     <h2>How it was tested <span>01</span></h2>
     <p class="lede">Two layers. The first proves the plumbing carries a ticket to a file edit and back, deterministically and for free. The second proves a real model does something sensible with the ticket — the half the first can't touch.</p>
@@ -312,7 +343,6 @@ function slugify(title) {
   </footer>
 
 </div>
-
 
 </body>
 </html>
