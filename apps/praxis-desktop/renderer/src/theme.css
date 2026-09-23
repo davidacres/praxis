@@ -5444,9 +5444,6 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 /* Agent Runtime lists: identity icon on the surface (no tile), then title + badges. */
 .runtime-item-icon { flex: 0 0 auto; margin-top: 2px; color: var(--text-secondary); }
 .runtime-item-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-/* "Runs on" choice on an agent row: a quiet label beside a compact select. */
-.runs-on-control { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--text-tertiary); }
-.settings-inline-controls .runs-on-control .input { min-width: 150px; }
 /* Working style: the habits text at full width, its reset link beneath. */
 .working-style-editor { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); width: 100%; }
 .working-style-editor .textarea, .working-style-editor textarea { width: 100%; min-height: 120px; }
@@ -11570,6 +11567,17 @@ button.session-chat-attachment {
    wait, because it is waiting on the person, not broken. */
 .wf-run-limit { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--lane-awaiting); border-radius: var(--radius-lg); background: var(--bg-elevated); font-size: var(--text-md); }
 .wf-run-limit p { margin: 0; color: var(--text-secondary); }
+/* A session's AI ran out: a strip at the top of the composer — switch AI and carry on, or stop. */
+.session-limit-switch { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); background: var(--bg-elevated); font-size: var(--text-sm); color: var(--text-secondary); }
+.session-limit-switch-text { flex: 1 1 240px; min-width: 0; }
+.session-limit-switch-text strong { color: var(--text); }
+.session-limit-switch-error { color: var(--danger); }
+.session-limit-switch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.session-limit-switch-actions .input { min-width: 140px; }
+/* A stage's AI ran out: switch (label + select + button), retry, stop — wrapping on a narrow rail. */
+.wf-run-limit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.wf-run-limit-switch { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
+.wf-run-limit-switch .input { min-width: 140px; }
 
 /* Start-run dialog. */
 .wf-runstart-card { width: min(460px, calc(100vw - 32px)); padding: var(--space-4); }

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
+import type { AiProvider, WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { PROVIDER_LABELS, providerIconName } from '../ai/modelProviders';
+import { isProviderUsable } from '../ai/providerAvailability';
 import { useDeleteRun } from './useDeleteRun';
 import { WorkflowPipelineVertical } from './WorkflowPipelineVertical';
 import { WorkflowRunsBrowser } from './WorkflowRunsBrowser';
@@ -122,6 +123,19 @@ export function WorkflowRunPage({
   /** A stage the viewer picked; absent means "follow whichever stage is live". */
   const [pinnedStageId, setPinnedStageId] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
+  const [usableAis, setUsableAis] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void window.praxis.ai
+      .listProviderStatuses()
+      .then(statuses => {
+        if (!cancelled) setUsableAis(statuses.filter(isProviderUsable).map(status => status.provider));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [timelineOpen, setTimelineOpen] = useState(false);
   /** `${runId}:${nodeId}:${attempt}` of the evidence panel currently open, if any. */
   const [evidenceKey, setEvidenceKey] = useState<string>();
@@ -385,22 +399,13 @@ export function WorkflowRunPage({
                   </div>
                 </div>
 
-                {run.paused && (
+                {run.paused && run.pauseReason === 'environment' && (
                   <div className="wf-run-limit" role="alert" data-testid="wf-run-limit">
-                    {run.pauseReason === 'environment' ? (
-                      <>
-                        <strong>A step could not run in this environment</strong>
-                        <p>
-                          Its tooling failed before it could check anything — not a problem with the work. Fix it (the step&rsquo;s
-                          log says what), then resume. Nothing is lost and no attempt was used.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <strong>Waiting on your AI provider</strong>
-                        <p>Restore credits (or change the provider in the session settings), then resume. Nothing is lost.</p>
-                      </>
-                    )}
+                    <strong>A step could not run in this environment</strong>
+                    <p>
+                      Its tooling failed before it could check anything — not a problem with the work. Fix it (the step&rsquo;s
+                      log says what), then resume. Nothing is lost and no attempt was used.
+                    </p>
                     <button
                       type="button"
                       className="btn btn-primary btn-compact"
@@ -417,6 +422,20 @@ export function WorkflowRunPage({
                     </button>
                   </div>
                 )}
+                {run.status !== 'cancelled' && run.status !== 'succeeded' &&
+                  run.stages
+                    .filter(stage => stage.pause === 'provider-limit' && !(run.paused && run.pauseReason === 'environment'))
+                    .map(stage => (
+                      <ProviderLimitNotice
+                        key={stage.nodeId}
+                        run={run}
+                        stage={stage}
+                        usableAis={usableAis}
+                        onSwitch={provider => void act(() => window.praxis.workflows.switchStageProvider(run.runId, stage.nodeId, provider as AiProvider))}
+                        onRetry={() => void act(() => window.praxis.workflows.retryStage(run.runId, stage.nodeId))}
+                        onStop={() => void act(() => window.praxis.workflows.stopForProviderLimit(run.runId, stage.nodeId))}
+                      />
+                    ))}
 
                 <p
                   className="wf-run-mode rail-sub"
@@ -542,6 +561,9 @@ export function WorkflowRunPage({
                       {stage.type}
                       {stage.gate ? ` · ${stage.gate} gate` : ''} · {deploymentPhaseLabel(stage) ?? (stage.pause ? 'paused' : stage.outcome)}
                       {stage.maxAttempts && stage.attempts > 0 ? ` (${stage.attempts}/${stage.maxAttempts})` : ''}
+                      {stage.provider || stage.chosenProvider ? (
+                        <span data-testid="wf-stage-ai"> · on {aiName(stage.provider ?? stage.chosenProvider!)}</span>
+                      ) : null}
                     </p>
 
                     {stage.lastError && (
@@ -846,6 +868,76 @@ export function WorkflowRunPage({
           </aside>,
           auxSlot
         )}
+    </div>
+  );
+}
+
+function aiName(provider: string): string {
+  return (PROVIDER_LABELS[provider as AiProvider] ?? provider).replace(/\s*\(local\)$/, '').replace(/ CLI$/, '');
+}
+
+/**
+ * A stage whose AI ran out of credits or hit its usage limit: switch it to
+ * another AI and carry on, retry on the same AI once it is topped up, or stop
+ * the run. After a stop the run can still be picked up the same way.
+ */
+function ProviderLimitNotice({
+  run,
+  stage,
+  usableAis,
+  onSwitch,
+  onRetry,
+  onStop
+}: {
+  run: WorkflowRunSummary;
+  stage: WorkflowRunSummary['stages'][number];
+  usableAis: string[];
+  onSwitch: (provider: string) => void;
+  onRetry: () => void;
+  onStop: () => void;
+}) {
+  const ranOut = stage.provider ?? stage.chosenProvider ?? run.aiProvider;
+  const who = ranOut ? aiName(ranOut) : 'The AI provider';
+  const choices = usableAis.filter(id => id !== ranOut && !run.exhaustedProviders.includes(id));
+  const [choice, setChoice] = useState<string>('');
+  const selected = choices.includes(choice) ? choice : choices[0] ?? '';
+  const stopped = run.status === 'failed';
+  return (
+    <div className="wf-run-limit" role="alert" data-testid="wf-run-limit" data-node-id={stage.nodeId}>
+      <strong>{stopped ? 'The run could not be completed' : `${who} ran out of budget`}</strong>
+      <p>
+        {stage.name} stopped because {who} ran out of credits or hit its usage limit. Nothing is lost and no attempt was used
+        {stopped ? ' — you can still carry on with another AI.' : '.'}
+      </p>
+      <div className="wf-run-limit-actions">
+        {choices.length > 0 ? (
+          <>
+            <label className="wf-run-limit-switch">
+              <span>Switch {stage.name} to</span>
+              <select className="input" data-testid="wf-limit-switch-to" value={selected} onChange={event => setChoice(event.target.value)}>
+                {choices.map(id => (
+                  <option key={id} value={id}>
+                    {aiName(id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="btn btn-primary btn-compact" data-testid="wf-limit-switch" onClick={() => onSwitch(selected)}>
+              Switch and continue
+            </button>
+          </>
+        ) : (
+          <span className="rail-sub">No other AI is set up — add one in Settings › AI Provider to carry on with it.</span>
+        )}
+        <button type="button" className="btn btn-compact" data-testid="wf-run-resume" onClick={onRetry}>
+          Retry on {who}
+        </button>
+        {!stopped && (
+          <button type="button" className="btn btn-quiet btn-compact" data-testid="wf-limit-stop" onClick={onStop}>
+            Stop the run
+          </button>
+        )}
+      </div>
     </div>
   );
 }

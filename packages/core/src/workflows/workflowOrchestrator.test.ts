@@ -688,3 +688,101 @@ test('an environment failure pauses the run: siblings keep running, and a retry 
   assert.equal(run.nodes.gates.outcome, 'succeeded');
   assert.equal(run.status, 'running');
 });
+
+// ── When a stage's AI runs out of budget ─────────────────────────────────
+
+function seedWithPolicy(runs: WorkflowRunPersistence, providerLimitPolicy?: 'ask' | 'switch' | 'stop'): WorkflowRun {
+  const def = definition();
+  (def.nodes[0] as { agent: { providerId?: string } }).agent.providerId = 'openai';
+  const run = createWorkflowRun({ runId: 'run-1', projectId: 'p1', definition: def, at: now(), aiProvider: 'anthropic', ...(providerLimitPolicy ? { providerLimitPolicy } : {}) });
+  void runs.save(run);
+  return run;
+}
+
+const OUT_OF_BUDGET: StageOutcome = { status: 'failed', error: 'Insufficient balance.', pause: 'provider-limit', provider: 'openai' };
+
+test('ask: the stage pauses on its AI running out and waits for the user', async () => {
+  const runs = memoryRuns();
+  seedWithPolicy(runs);
+  const fake = fakeDispatcher();
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now, chooseFallbackProvider: () => 'gemini' });
+  await orchestrator.step('run-1');
+  await settleAll();
+  fake.finish('implement', OUT_OF_BUDGET);
+  await settleAll();
+
+  const run = runs.get('run-1')!;
+  assert.equal(run.status, 'running');
+  assert.equal(run.nodes.implement.attempts[0].provider, 'openai');
+  assert.equal(run.nodes.implement.attempts[0].pause, 'provider-limit');
+  assert.equal(run.stageProviders, undefined, 'nothing switched without asking');
+  assert.match(run.events.at(-1)!.message, /Implement paused: OpenAI ran out of credits or hit its usage limit/);
+  assert.deepEqual(fake.started, ['implement']);
+});
+
+test('switch: the stage moves to the next AI and goes again without asking', async () => {
+  const runs = memoryRuns();
+  seedWithPolicy(runs, 'switch');
+  const fake = fakeDispatcher();
+  const asked: string[] = [];
+  const orchestrator = new WorkflowOrchestrator({
+    runs,
+    dispatcher: fake.dispatcher,
+    now,
+    chooseFallbackProvider: (_run, nodeId) => {
+      asked.push(nodeId);
+      return 'gemini';
+    }
+  });
+  await orchestrator.step('run-1');
+  await settleAll();
+  fake.finish('implement', OUT_OF_BUDGET);
+  await settleAll();
+
+  const run = runs.get('run-1')!;
+  assert.deepEqual(asked, ['implement']);
+  assert.deepEqual(run.stageProviders, { implement: 'gemini' });
+  assert.ok(run.events.some(event => event.kind === 'node-provider-switched' && /Implement switched from OpenAI to Google Gemini automatically after OpenAI ran out/.test(event.message)));
+  assert.deepEqual(fake.started, ['implement', 'implement'], 'the stage went again');
+  assert.equal(run.nodes.implement.outcome, 'running');
+});
+
+test('switch with no other AI set up stops the run and says why', async () => {
+  const runs = memoryRuns();
+  seedWithPolicy(runs, 'switch');
+  const fake = fakeDispatcher();
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now, chooseFallbackProvider: () => undefined });
+  await orchestrator.step('run-1');
+  await settleAll();
+  fake.finish('implement', OUT_OF_BUDGET);
+  await settleAll();
+
+  const run = runs.get('run-1')!;
+  assert.equal(run.status, 'failed');
+  assert.equal(run.endedReason, 'The run could not be completed: OpenAI ran out of credits or hit its usage limit at Implement (no other AI is set up to switch to).');
+});
+
+test('stop: the run ends, naming the AI and the stage; switching later picks it back up', async () => {
+  const runs = memoryRuns();
+  seedWithPolicy(runs, 'stop');
+  const fake = fakeDispatcher();
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now, chooseFallbackProvider: () => 'gemini' });
+  await orchestrator.step('run-1');
+  await settleAll();
+  fake.finish('implement', OUT_OF_BUDGET);
+  await settleAll();
+
+  let run = runs.get('run-1')!;
+  assert.equal(run.status, 'failed');
+  assert.equal(run.endedReason, 'The run could not be completed: OpenAI ran out of credits or hit its usage limit at Implement.');
+  assert.deepEqual(fake.started, ['implement']);
+
+  // The user switches the stage to another AI: the run reopens and the stage goes again.
+  await runs.save(applyWorkflowRunCommand(run, { kind: 'stage-provider-switched', nodeId: 'implement', at: now(), provider: 'claude-code-cli' }));
+  await orchestrator.step('run-1');
+  await settleAll();
+  run = runs.get('run-1')!;
+  assert.equal(run.status, 'running');
+  assert.deepEqual(run.stageProviders, { implement: 'claude-code-cli' });
+  assert.deepEqual(fake.started, ['implement', 'implement']);
+});

@@ -14,12 +14,6 @@ export interface AgentManifest {
   skills?: string[];
   config?: string;
   activation?: AgentActivation;
-  /**
-   * A pin: runs the built-in agent with this id — its own instructions — on
-   * this manifest's runtime instead of the session's (marketplace
-   * "Claude Implementer" and the like).
-   */
-  replaces?: string;
 }
 export type AgentHostDefinition = AgentManifest;
 
@@ -42,12 +36,6 @@ export interface DiscoveredAgent {
    * folder: it has no process of its own and runs on the session's runtime.
    */
   followsSessionRuntime?: boolean;
-  /**
-   * Set when something other than the session chooses this agent's runtime:
-   * the user's "Runs on" setting (`setting: true`, `runtime` = the provider),
-   * or an add-on pin (its id, name and folder).
-   */
-  pinnedBy?: { id: string; name: string; manifestPath: string; runtime?: string; setting?: boolean };
 }
 
 export type DiscoveredRuntimeHost = DiscoveredAgent;
@@ -73,8 +61,6 @@ export function validateAgentManifest(value: unknown, manifestPath: string): Age
     if (object.args !== undefined && (!Array.isArray(object.args) || object.args.some(arg => typeof arg !== 'string'))) errors.push({ path: 'entry.args', message: 'args must be an array of strings.' });
   }
   if (candidate.skills !== undefined && (!Array.isArray(candidate.skills) || candidate.skills.some(item => !text(item)))) errors.push({ path: 'skills', message: 'skills must be an array of non-empty paths.' });
-  if (candidate.replaces !== undefined && !text(candidate.replaces)) errors.push({ path: 'replaces', message: 'replaces must be the id of a built-in agent.' });
-  if (text(candidate.replaces) && candidate.replaces === candidate.id) errors.push({ path: 'replaces', message: 'replaces names another agent; give this one its own id.' });
   if (candidate.activation !== undefined && candidate.activation !== 'onDemand' && candidate.activation !== 'startup') errors.push({ path: 'activation', message: 'activation must be onDemand or startup.' });
   return errors;
 }

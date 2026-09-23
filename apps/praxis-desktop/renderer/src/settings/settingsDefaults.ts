@@ -104,7 +104,6 @@ export const DEFAULT_APP_SETTINGS = {
       extraSkillPaths: [] as string[],
       extraAgentPaths: [] as string[]
     },
-    agentRuntimes: {} as Record<string, 'claude-code-cli' | 'codex-cli' | 'copilot-cli' | 'antigravity-cli'>,
     workingStyle: { enabled: true, text: '' }
   },
   jira: {

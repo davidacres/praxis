@@ -172,18 +172,9 @@ export interface AiSettings {
    * Codex, Copilot, Gemini / Antigravity, Cursor), read in place.
    */
   nativeSources: NativeSourceSettings;
-  /**
-   * Which local AI runs an agent, by agent id ("Runs on"). An agent missing
-   * here runs on the session's runtime. Only CLI runtimes (ACP) can be chosen.
-   */
-  agentRuntimes: Record<string, AgentRuntimeChoice>;
   /** Working habits Praxis asks every AI to follow, so sessions feel the same on any runtime. */
   workingStyle: WorkingStyleSettings;
 }
-
-/** The runtimes an agent can be pinned to — the local CLI agents Praxis launches over ACP. */
-export type AgentRuntimeChoice = 'claude-code-cli' | 'codex-cli' | 'copilot-cli' | 'antigravity-cli';
-export const AGENT_RUNTIME_CHOICES: readonly AgentRuntimeChoice[] = ['claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli'];
 
 export interface WorkingStyleSettings {
   enabled: boolean;
@@ -549,7 +540,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     providers: {},
     browserTools: { enabled: false, allowedHosts: [] },
     nativeSources: { ecosystems: {}, approvedProjects: [], injectInstructions: true, instructionSource: 'all', extraSkillPaths: [], extraAgentPaths: [] },
-    agentRuntimes: {},
     workingStyle: { enabled: true, text: '' }
   },
   jira: {
@@ -1057,15 +1047,6 @@ function readNativeSources(value: unknown): NativeSourceSettings {
   };
 }
 
-function readAgentRuntimes(value: unknown): Record<string, AgentRuntimeChoice> {
-  if (!isRecord(value)) return {};
-  const result: Record<string, AgentRuntimeChoice> = {};
-  for (const [agentId, runtime] of Object.entries(value)) {
-    if (agentId.trim() && (AGENT_RUNTIME_CHOICES as readonly unknown[]).includes(runtime)) result[agentId] = runtime as AgentRuntimeChoice;
-  }
-  return result;
-}
-
 function readWorkingStyle(value: unknown): WorkingStyleSettings {
   const fallback = DEFAULT_APP_SETTINGS.ai.workingStyle;
   if (!isRecord(value)) return { ...fallback };
@@ -1112,7 +1093,6 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         providers: readAiProviderConfigs(raw.ai.providers),
         browserTools: readBrowserTools(raw.ai.browserTools),
         nativeSources: readNativeSources(raw.ai.nativeSources),
-        agentRuntimes: readAgentRuntimes(raw.ai.agentRuntimes),
         workingStyle: readWorkingStyle(raw.ai.workingStyle)
       }
     : {
@@ -1120,7 +1100,6 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         providers: { ...DEFAULT_APP_SETTINGS.ai.providers },
         browserTools: { ...DEFAULT_APP_SETTINGS.ai.browserTools, allowedHosts: [] },
         nativeSources: readNativeSources(undefined),
-        agentRuntimes: {},
         workingStyle: readWorkingStyle(undefined)
       };
 
@@ -1405,8 +1384,6 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
           ecosystems: { ...base.ai.nativeSources.ecosystems, ...(patch.ai!.nativeSources!.ecosystems ?? {}) }
         }
       : base.ai.nativeSources,
-    // Replaced whole: clearing an agent's choice removes its key.
-    agentRuntimes: isRecord(patch.ai?.agentRuntimes) ? readAgentRuntimes(patch.ai!.agentRuntimes) : base.ai.agentRuntimes,
     workingStyle: isRecord(patch.ai?.workingStyle) ? { ...base.ai.workingStyle, ...patch.ai!.workingStyle } : base.ai.workingStyle
   };
 

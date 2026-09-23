@@ -49,6 +49,7 @@ import {
   saveMobileHostConfiguration,
   type MobileHostConfiguration,
 } from './mobileConnection';
+import { formatClock } from '../renderer/mobileTime';
 
 export { MOBILE_PRIMARY_ROUTES };
 export type { MobilePrimaryRoute, MobileDetailTab };
@@ -162,7 +163,7 @@ function workFromSession(session: MobileSessionSummary): MobileWorkItem {
   };
 }
 
-const clock = (at: string): string => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const clock = (at: string): string => formatClock(at);
 
 function transcript(snapshot: MobileSessionSnapshot | undefined): MobileTranscriptMessage[] {
   if (!snapshot) return [];

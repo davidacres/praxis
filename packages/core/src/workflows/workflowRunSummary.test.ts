@@ -40,6 +40,12 @@ test('a fresh run explains that it is waiting to dispatch, with plan ready', () 
   assert.equal(summary.stages.find(stage => stage.nodeId === 'implement')?.lane, 'idle');
 });
 
+test('a summary names its project, which the phone scopes run actions by', () => {
+  // Without it every phone action on a run (approve, retry, …) failed "not found in project".
+  const source = run();
+  assert.equal(summarizeWorkflowRun(source).projectId, source.projectId);
+});
+
 test('a running stage is named in the explanation', () => {
   const started = applyWorkflowRunCommand(run(), { kind: 'node-started', nodeId: 'plan', at: T(1) });
   const summary = summarizeWorkflowRun(started);

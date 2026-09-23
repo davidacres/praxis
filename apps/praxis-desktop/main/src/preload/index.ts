@@ -364,7 +364,7 @@ const praxis: PraxisIpc = {
     listPolicies: () => ipcRenderer.invoke('workflows:listPolicies'),
     savePolicy: (profile: WorkflowPolicyProfile) => ipcRenderer.invoke('workflows:savePolicy', profile),
     removePolicy: (profileId: string) => ipcRenderer.invoke('workflows:removePolicy', profileId),
-    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }, controller?: { sessionKey: string; sessionId: string }, planInput?: WorkflowPlanInput, options?: { permissionMode?: 'ask' | 'auto'; uncommittedChanges?: 'include' | 'omit' }) =>
+    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }, controller?: { sessionKey: string; sessionId: string }, planInput?: WorkflowPlanInput, options?: { permissionMode?: 'ask' | 'auto'; uncommittedChanges?: 'include' | 'omit'; providerLimitPolicy?: 'ask' | 'switch' | 'stop' }) =>
       ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle, issue, controller, planInput, options),
     checkRunBase: (projectId: string) => ipcRenderer.invoke('workflows:checkRunBase', projectId),
     commitRunBase: (projectId: string, message: string) => ipcRenderer.invoke('workflows:commitRunBase', projectId, message),
@@ -385,6 +385,9 @@ const praxis: PraxisIpc = {
     bypassGate: (runId: string, gate: string, actor: string, reason: string, nodeId?: string) =>
       ipcRenderer.invoke('workflows:bypassGate', runId, gate, actor, reason, nodeId),
     retryStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:retryStage', runId, nodeId),
+    switchStageProvider: (runId: string, nodeId: string, provider: string) =>
+      ipcRenderer.invoke('workflows:switchStageProvider', runId, nodeId, provider),
+    stopForProviderLimit: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:stopForProviderLimit', runId, nodeId),
     reworkStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:reworkStage', runId, nodeId),
     cancelRun: (runId: string, reason?: string) => ipcRenderer.invoke('workflows:cancelRun', runId, reason),
     inspectRunWork: (runId: string) => ipcRenderer.invoke('workflows:inspectRunWork', runId),

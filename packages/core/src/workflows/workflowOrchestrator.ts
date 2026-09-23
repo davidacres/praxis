@@ -59,6 +59,8 @@ export interface StageOutcome {
    * pauses on it instead of failing. See `WorkflowPauseReason`.
    */
   pause?: WorkflowPauseReason;
+  /** The AI that ran an agent stage's attempt. */
+  provider?: string;
 }
 
 export interface StageDispatchContext {
@@ -119,6 +121,11 @@ export interface WorkflowOrchestratorOptions {
   workspace?: WorkflowWorkspaceProvider;
   /** Notified after every persisted transition — the run-changed push channel. */
   onRunChanged?: (run: WorkflowRun) => void;
+  /**
+   * The next AI for a stage whose AI ran out of budget, under the `switch`
+   * policy; undefined when no other AI is set up (the run then stops).
+   */
+  chooseFallbackProvider?: (run: WorkflowRun, nodeId: string) => Promise<string | undefined> | string | undefined;
   /** Injectable for tests. */
   now?: () => string;
 }
@@ -392,7 +399,8 @@ export class WorkflowOrchestrator {
                   ...(result.outcome.exitCode !== undefined ? { exitCode: result.outcome.exitCode } : {}),
                   ...(result.outcome.snapshotRef ? { snapshotRef: result.outcome.snapshotRef } : {}),
                   ...(result.outcome.assessedSnapshotRef ? { assessedSnapshotRef: result.outcome.assessedSnapshotRef } : {}),
-                  ...(result.outcome.findings ? { findings: result.outcome.findings } : {})
+                  ...(result.outcome.findings ? { findings: result.outcome.findings } : {}),
+                  ...(result.outcome.provider ? { provider: result.outcome.provider } : {})
                 })
               : applyWorkflowRunCommand(run, {
                   kind: 'node-failed',
@@ -401,7 +409,8 @@ export class WorkflowOrchestrator {
                   error: result.outcome.error ?? 'Stage failed.',
                   ...(result.outcome.exitCode !== undefined ? { exitCode: result.outcome.exitCode } : {}),
                   ...(result.outcome.findings ? { findings: result.outcome.findings } : {}),
-                  ...(result.outcome.pause ? { pause: result.outcome.pause } : {})
+                  ...(result.outcome.pause ? { pause: result.outcome.pause } : {}),
+                  ...(result.outcome.provider ? { provider: result.outcome.provider } : {})
                 });
         if (next !== run) {
           const stage = next.definition.nodes.find(candidate => candidate.id === nodeId);
@@ -423,7 +432,10 @@ export class WorkflowOrchestrator {
               return;
             }
           }
-          const saved = await this.persist(next);
+          let saved = await this.persist(next);
+          if (result.kind === 'outcome' && result.outcome.pause === 'provider-limit' && !isRunSettled(saved)) {
+            saved = await this.applyProviderLimitPolicy(saved, nodeId);
+          }
           // A run that just ended (a required stage failed) has no use for
           // siblings still working: stop them and record how they ended rather
           // than letting their results fall on a finished run and vanish.
@@ -432,6 +444,24 @@ export class WorkflowOrchestrator {
       },
       `settling ${nodeId}`
     );
+  }
+
+  /**
+   * A stage's AI ran out: under `ask` the stage stays paused for the user;
+   * `switch` moves it to the next AI that is set up (stopping when there is
+   * none); `stop` ends the run saying why.
+   */
+  private async applyProviderLimitPolicy(run: WorkflowRun, nodeId: string): Promise<WorkflowRun> {
+    const policy = run.providerLimitPolicy ?? 'ask';
+    if (policy === 'ask') return run;
+    if (policy === 'switch') {
+      const provider = await this.options.chooseFallbackProvider?.(run, nodeId);
+      if (provider) {
+        return this.persist(applyWorkflowRunCommand(run, { kind: 'stage-provider-switched', nodeId, at: this.now, provider, automatic: true }));
+      }
+      return this.persist(applyWorkflowRunCommand(run, { kind: 'provider-limit-stop', nodeId, at: this.now, detail: 'no other AI is set up to switch to' }));
+    }
+    return this.persist(applyWorkflowRunCommand(run, { kind: 'provider-limit-stop', nodeId, at: this.now }));
   }
 
   /**

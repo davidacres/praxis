@@ -99,6 +99,12 @@ const ADAPTERS: Partial<Record<AiProvider, ProviderAdapter>> = {
 };
 
 /** Only valid for `kind: 'api'` providers — `kind: 'cli-agent'` providers use `AcpAgentHost` instead. */
+/** The name people know an AI by: "Claude Code (local)" → "Claude Code", "Codex CLI (local)" → "Codex". */
+export function providerDisplayName(provider: string): string {
+  const descriptor = (PROVIDER_DESCRIPTORS as Record<string, ProviderDescriptor | undefined>)[provider];
+  return descriptor ? descriptor.label.replace(/\s*\(local\)$/, '').replace(/ CLI$/, '') : provider;
+}
+
 export function resolveProviderAdapter(id: AiProvider): ProviderAdapter {
   const adapter = ADAPTERS[id];
   if (!adapter) {

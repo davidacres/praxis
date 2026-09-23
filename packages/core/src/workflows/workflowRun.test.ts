@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   applyWorkflowRunCommand,
   canRetry,
+  exhaustedProviders,
+  stageProvider,
   createWorkflowRun,
   normalizeWorkflowRun,
   reworkWorkflowRun,
@@ -755,7 +757,7 @@ test('a paused run reports itself as paused, not failed, and names the limit', (
   assert.equal(summary.paused, true);
   assert.equal(summary.stages.find(stage => stage.nodeId === 'review')?.lane, 'paused');
   assert.equal(summary.stages.find(stage => stage.nodeId === 'review')?.pause, 'provider-limit');
-  assert.match(summary.explanation, /credits or usage limit/);
+  assert.match(summary.explanation, /ran out of credits or hit its usage limit.*Switch to another AI/);
   assert.match(summary.explanation, /Review/);
 });
 
@@ -884,4 +886,40 @@ test('a gate whose owning stage is paused is pending, not failed', () => {
   genuine = applyWorkflowRunCommand(genuine, { kind: 'node-started', nodeId: 'review', at: T(1) });
   genuine = applyWorkflowRunCommand(genuine, { kind: 'node-failed', nodeId: 'review', at: T(2), error: 'found vulnerabilities' });
   assert.equal(summarizeWorkflowRun(genuine).gates.find(row => row.gate === 'security')?.state, 'failed');
+});
+
+test('a stage runs on the AI it was switched to, else its own, else the run’s, else the selected AI', () => {
+  const def = JSON.parse(JSON.stringify(definitionForAi())) as WorkflowDefinition;
+  let run = createWorkflowRun({ runId: 'r', projectId: 'p', definition: def, at: '2026-09-23T00:00:00.000Z' });
+  assert.equal(stageProvider(run, 'plan', 'vercel-gateway'), 'claude-code-cli');
+  assert.equal(stageProvider(run, 'build', 'vercel-gateway'), 'vercel-gateway');
+  run = createWorkflowRun({ runId: 'r', projectId: 'p', definition: def, at: '2026-09-23T00:00:00.000Z', aiProvider: 'openai' });
+  assert.equal(stageProvider(run, 'build', 'vercel-gateway'), 'openai');
+  run = { ...run, stageProviders: { plan: 'gemini' } };
+  assert.equal(stageProvider(run, 'plan', 'vercel-gateway'), 'gemini');
+  assert.deepEqual(exhaustedProviders(run), []);
+});
+
+function definitionForAi(): WorkflowDefinition {
+  const agent = (id: string, providerId?: string) => ({
+    type: 'agent-task' as const, id, name: id, x: 0, y: 0, inputs: [],
+    agent: { agentId: 'coder', scope: 'global' as const, toolMode: 'full' as const, ...(providerId ? { providerId } : {}) },
+    instructions: '', outputs: [], mutatesWorktree: false
+  });
+  return {
+    schemaVersion: WORKFLOW_SCHEMA_VERSION, id: 'd', name: 'D', scope: 'project', projectId: 'p', version: 1,
+    entryNodeId: 'plan', createdAt: '2026-09-23T00:00:00.000Z', updatedAt: '2026-09-23T00:00:00.000Z',
+    nodes: [agent('plan', 'claude-code-cli'), agent('build')],
+    edges: [{ id: 'e1', from: 'plan', to: 'build', on: 'success', required: true }]
+  };
+}
+
+test('a stored run keeps its budget policy and the AIs its stages were switched to', () => {
+  const run = {
+    ...createWorkflowRun({ runId: 'r', projectId: 'p', definition: definitionForAi(), at: '2026-09-23T00:00:00.000Z', providerLimitPolicy: 'stop' }),
+    stageProviders: { plan: 'gemini', build: 7 as unknown as string }
+  };
+  const restored = normalizeWorkflowRun(JSON.parse(JSON.stringify(run)));
+  assert.equal(restored?.providerLimitPolicy, 'stop');
+  assert.deepEqual(restored?.stageProviders, { plan: 'gemini' });
 });

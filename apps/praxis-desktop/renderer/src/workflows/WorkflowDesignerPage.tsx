@@ -3,6 +3,7 @@ import { useDialogs } from '../ui/dialogs';
 import { createPortal } from 'react-dom';
 import type {
   AgentRuntimeSnapshot,
+  AiProvider,
   AgentWorkflowReference,
   ProjectRecord,
   WorkflowDefinition,
@@ -13,7 +14,7 @@ import type {
   WorkflowPolicyProfile
 } from '@praxis/core';
 import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
-import { API_MODEL_PROVIDERS } from '../ai/modelProviders';
+import { API_MODEL_PROVIDERS, PROVIDER_LABELS } from '../ai/modelProviders';
 import { Icon } from '../ui/Icon';
 import { WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
 import { WorkflowValidationDialog } from './WorkflowValidationDialog';
@@ -1310,6 +1311,21 @@ function AgentStageFields({
           : undefined;
 
   const setAgent = (patch: Partial<typeof node.agent>) => set({ agent: { ...node.agent, ...patch } });
+  // The AIs a stage can run on: those set up and turned on in Settings › AI Provider.
+  const [usableAis, setUsableAis] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void window.praxis.ai
+      .listProviderStatuses()
+      .then(statuses => {
+        if (!cancelled) setUsableAis(statuses.filter(isProviderUsable).map(status => status.provider));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const stageAi = node.agent.providerId?.trim() ?? '';
   const profileWarning =
     profiles.length === 0
       ? 'No agent profiles were discovered. Create an AGENT.md profile in the Agent Hub.'
@@ -1386,13 +1402,34 @@ function AgentStageFields({
         )}
       </Field>
 
-      <Field label="Provider">
-        <input
-          value={node.agent.providerId ?? ''}
-          placeholder="Active project provider"
-          onChange={event => setAgent({ providerId: event.target.value || undefined })}
-        />
+      <Field
+        label="AI"
+        warning={stageAi && usableAis.length > 0 && !usableAis.includes(stageAi) ? `${PROVIDER_LABELS[stageAi as AiProvider] ?? stageAi} is not set up or is turned off — set it up in Settings › AI Provider, or the run will not start.` : undefined}
+      >
+        <select
+          data-testid="wf-node-ai"
+          value={stageAi}
+          onChange={event => set({ agent: { ...node.agent, providerId: event.target.value || undefined }, model: undefined })}
+        >
+          <option value="">Run’s AI</option>
+          {[...new Set([...usableAis, ...(stageAi ? [stageAi] : [])])].map(id => (
+            <option key={id} value={id}>
+              {PROVIDER_LABELS[id as AiProvider] ?? id}
+            </option>
+          ))}
+        </select>
+        <span className="hint">Which AI runs this stage. Different stages can use different AIs — plan with one, implement with another.</span>
       </Field>
+      {stageAi && (
+        <Field label="Model">
+          <input
+            data-testid="wf-node-model"
+            value={node.model ?? ''}
+            placeholder="The model tier below, or the AI’s default"
+            onChange={event => set({ model: event.target.value.trim() ? event.target.value : undefined })}
+          />
+        </Field>
+      )}
 
       <Field label="Launch binding" warning={agentWarning}>
         {agents.length > 0 ? (

@@ -3,8 +3,6 @@ import * as path from 'node:path';
 
 import { app } from 'electron';
 import {
-  AGENT_RUNTIME_CHOICES,
-  PROVIDER_DESCRIPTORS,
   isBundledAgent,
   mirrorBundledAgents,
   type ActiveAppearanceAddons,
@@ -254,22 +252,11 @@ export async function marketplaceWorkflowTemplates(): Promise<unknown[]> {
 }
 
 /**
- * The built-in agent an agent add-on pins to its own runtime, if any. Early
- * packages did it by reusing the built-in's id; newer ones say `replaces`.
+ * A built-in agent's folder holds its instructions (`AGENT.md`); an add-on that
+ * reuses a built-in's id is never mirrored over it.
  */
-export function addonPinTarget(addon: Pick<InstalledAddon, 'manifest'>): string | undefined {
-  if (addon.manifest.kind !== 'agent') return undefined;
-  if (addon.manifest.replaces) return addon.manifest.replaces;
-  return isBundledAgent(addon.manifest.id) ? addon.manifest.id : undefined;
-}
-
-/**
- * The discovery folder an add-on is mirrored into. Never a built-in agent's
- * own folder — that holds the built-in's instructions (`AGENT.md`), which a pin
- * keeps using — so an add-on reusing a built-in's id gets a folder of its own.
- */
-function addonMirrorId(addon: Pick<InstalledAddon, 'manifest'>): string {
-  return addon.manifest.kind === 'agent' && isBundledAgent(addon.manifest.id) ? `${addon.manifest.id}-addon` : addon.manifest.id;
+function shadowsBuiltIn(addon: Pick<InstalledAddon, 'manifest'>): boolean {
+  return addon.manifest.kind === 'agent' && isBundledAgent(addon.manifest.id);
 }
 
 /**
@@ -284,45 +271,19 @@ async function syncAddonKindIntoDiscovery(kind: 'agent' | 'skill', globalRoot: s
   await fs.promises.mkdir(globalRoot, { recursive: true });
 
   for (const addon of installed) {
-    const mirrorId = addonMirrorId(addon);
-    const target = path.join(globalRoot, mirrorId);
+    if (shadowsBuiltIn(addon)) {
+      getLogBus().appendLine(`[marketplace] not using ${addon.manifest.name}: it reuses the built-in agent id "${addon.manifest.id}".`);
+      continue;
+    }
+    const target = path.join(globalRoot, addon.manifest.id);
     const source = store.addonDir(kind, addon.manifest.id);
     await fs.promises.rm(target, { recursive: true, force: true });
     if (addon.enabled) {
       await fs.promises.cp(source, target, { recursive: true });
       // The install record is bookkeeping, not part of the agent/skill.
       await fs.promises.rm(path.join(target, '.praxis-addon.json'), { force: true });
-      const pinTarget = addonPinTarget(addon);
-      if (pinTarget) await markAsPin(path.join(target, 'agent.json'), mirrorId, pinTarget);
     }
   }
-}
-
-/** Writes the pin's discovery id and the built-in it runs into its mirrored `agent.json`. */
-async function markAsPin(manifestPath: string, id: string, replaces: string): Promise<void> {
-  try {
-    const manifest = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8')) as Record<string, unknown>;
-    await fs.promises.writeFile(manifestPath, JSON.stringify({ ...manifest, id, replaces }, null, 2), 'utf8');
-  } catch (error) {
-    getLogBus().appendLine(`[marketplace] could not prepare agent add-on ${id}: ${describe(error)}`);
-  }
-}
-
-/**
- * One pin per built-in agent: installing one uninstalls any other add-on that
- * ran the same built-in, so what runs it is never a tie-break.
- */
-export async function retireOtherPins(installed: InstalledAddon): Promise<string[]> {
-  const target = addonPinTarget(installed);
-  if (!target) return [];
-  const others = (await getAddonStorage().list()).filter(
-    addon => addon.manifest.kind === 'agent' && addon.manifest.id !== installed.manifest.id && addonPinTarget(addon) === target
-  );
-  for (const addon of others) {
-    await getAddonStorage().remove('agent', addon.manifest.id);
-    await fs.promises.rm(path.join(getAgentRuntimeRoots().agents.global, addonMirrorId(addon)), { recursive: true, force: true });
-  }
-  return others.map(addon => addon.manifest.name);
 }
 
 export async function syncAgentAddons(): Promise<void> {
@@ -344,49 +305,32 @@ export async function refreshAgentRuntimeForAddons(): Promise<void> {
 }
 
 /**
- * Praxis's own runtime-pin packages (Claude/Codex Planner, Reviewer,
- * Implementer, and the older id-reusing Praxis ones) were retired in favour of
- * the per-agent "Runs on" setting. Carry an enabled one's choice over to the
- * setting — unless the user already chose — and uninstall them all.
+ * Praxis's runtime-pin packages (Claude/Codex Planner, Reviewer, Implementer and
+ * the older Praxis ones) were retired: which AI runs a stage is chosen on the
+ * workflow stage, and sessions use the session's AI. Uninstall any left behind.
  */
 const RETIRED_PIN_PACKAGE = /^@davidacres\/praxis-addon-agent-(?:(?:claude|codex)-)?(?:planner|reviewer|implementer)$/;
 
-export async function migrateAddonPinsToSettings(): Promise<number> {
+export async function removeRetiredPinAddons(): Promise<number> {
   const store = getAddonStorage();
-  const backend = getSettingsBackend();
-  const choices = { ...backend.read().ai.agentRuntimes };
-  const migrated: string[] = [];
-  for (const addon of await store.list()) {
-    const target = addonPinTarget(addon);
-    if (!target || !RETIRED_PIN_PACKAGE.test(addon.packageName)) continue;
-    let command: string | undefined;
-    try {
-      const manifest = JSON.parse(await fs.promises.readFile(path.join(store.addonDir('agent', addon.manifest.id), 'agent.json'), 'utf8')) as { entry?: string | { command?: string } };
-      command = typeof manifest.entry === 'string' ? manifest.entry : manifest.entry?.command;
-    } catch {
-      command = undefined;
-    }
-    const runtime = AGENT_RUNTIME_CHOICES.find(id => {
-      const descriptor = PROVIDER_DESCRIPTORS[id];
-      return descriptor.kind === 'cli-agent' && descriptor.defaultCommand === path.basename(command ?? '');
-    });
-    if (addon.enabled && runtime) choices[target] ??= runtime;
+  const retired = (await store.list()).filter(addon => addon.manifest.kind === 'agent' && RETIRED_PIN_PACKAGE.test(addon.packageName));
+  for (const addon of retired) {
     await store.remove('agent', addon.manifest.id);
-    await fs.promises.rm(path.join(getAgentRuntimeRoots().agents.global, addonMirrorId(addon)), { recursive: true, force: true });
-    migrated.push(addon.enabled && runtime ? `${addon.manifest.name} → ${target} runs on ${runtime}` : `${addon.manifest.name} (removed)`);
+    if (!shadowsBuiltIn(addon)) {
+      await fs.promises.rm(path.join(getAgentRuntimeRoots().agents.global, addon.manifest.id), { recursive: true, force: true });
+    }
   }
-  if (migrated.length === 0) return 0;
-  await backend.write({ ai: { agentRuntimes: choices } });
-  // A retired package may have been mirrored over a built-in by an older Praxis.
+  if (retired.length === 0) return 0;
+  // An older Praxis mirrored some of these over the built-in agent's folder.
   await mirrorBundledAgents(getAgentRuntimeRoots().agents.global);
-  getLogBus().appendLine(`[marketplace] moved Praxis agent pins to Settings › Agent Runtime: ${migrated.join('; ')}`);
-  return migrated.length;
+  getLogBus().appendLine(`[marketplace] removed retired agent add-ons: ${retired.map(addon => addon.manifest.name).join(', ')}`);
+  return retired.length;
 }
 
 export async function reconcileInstalledOnLaunch(): Promise<void> {
-  const migrated = await migrateAddonPinsToSettings();
+  const removed = await removeRetiredPinAddons();
   await syncAgentAddons();
-  if (migrated > 0) await getAgentRuntimeManager().refresh().catch(() => undefined);
+  if (removed > 0) await getAgentRuntimeManager().refresh().catch(() => undefined);
   await syncSkillAddons();
   const cfg = getSettingsBackend().read().marketplace;
   if (!cfg.checkOnLaunch) return;
@@ -421,14 +365,13 @@ export function listInstalledAddons(): Promise<InstalledAddon[]> {
 }
 
 export async function removeInstalledAddon(kind: AddonKind, id: string): Promise<void> {
-  const addon = await getAddonStorage().get(kind, id);
   await getAddonStorage().remove(kind, id);
   if (kind === 'agent' || kind === 'skill') {
     // The discovery sync only visits add-ons that are still installed, so the
     // removed one's copy must be deleted here or it stays discoverable.
     const roots = getAgentRuntimeRoots();
     const root = kind === 'agent' ? roots.agents.global : roots.skills.global;
-    await fs.promises.rm(path.join(root, addon ? addonMirrorId(addon) : id), { recursive: true, force: true });
+    if (!(kind === 'agent' && isBundledAgent(id))) await fs.promises.rm(path.join(root, id), { recursive: true, force: true });
     // Repairs a built-in folder an older Praxis mirrored an add-on over.
     if (kind === 'agent') await mirrorBundledAgents(roots.agents.global);
     await refreshAgentRuntimeForAddons();
