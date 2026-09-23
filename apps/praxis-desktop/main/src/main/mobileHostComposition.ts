@@ -7,8 +7,19 @@
  * request-specific permissions, cancellation, retry and approval.
  */
 import * as os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import {
   InMemoryMobileCommandLedger,
+  PROVIDER_DESCRIPTORS,
+  fingerprintMobileHostKey,
+  type AiProvider,
+  type MobileCommandLedger,
+  type MobileCommandOperation,
+  type MobileModelCatalog,
+  type MobileProviderCatalog,
+  type MobileProviderOption,
+  type MobileSessionModeOption,
+  type ModelOptions,
   WorkflowRunStore,
   applyWorkflowRunCommand,
   approveStage,
@@ -16,7 +27,6 @@ import {
   summarizeWorkflowRun,
   type MobileCommand,
   type MobileHostApplication,
-  type MobileSessionEvent,
   type WorkflowPolicyProfile,
   type WorkflowRun,
 } from '@praxis/core';
@@ -31,10 +41,20 @@ import {
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore, getWorkflowPolicyStore } from './workflowStoreInstance';
 import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
-import { getAiSessionManager, hasActiveTask, respondToActivePermission } from './aiInstance';
+import {
+  getAiSessionManager,
+  hasActiveTask,
+  listAiProviderStatuses,
+  listApiModelOptions,
+  listCliModelOptions,
+  respondToActivePermission,
+} from './aiInstance';
+import { getMobilePairingRegistry } from './mobilePairingInstance';
+import { handoverSession, switchSessionMode, updateSessionModel } from './aiIpc';
+import { getMobileHostIdentity } from './mobileHostIdentity';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { cancelMobileInteractiveSession, continueMobileInteractiveSession, createMobileInteractiveSession } from './mobileInteractiveSessions';
-import { mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
+import { appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
 import { pendingMobilePermissions, respondToMobilePermission } from './mobilePermissions';
 import { listWorkflowChoices, startWorkflowRun } from './workflowIpc';
 
@@ -60,13 +80,121 @@ function projectSummary(project: { id: string; name: string; workflowStages: Arr
   return { projectId: project.id, name: project.name, workflow: project.workflowStages.map(stage => stage.name).join(' → ') || undefined };
 }
 
-export function createDesktopMobileHostServiceDeps(configuredHostId?: string): MobileHostServiceDeps {
+/**
+ * The provider list as a phone may see it: availability and a readable reason,
+ * never keys, key sources, base URLs or CLI paths.
+ */
+async function providerCatalog(projectId?: string): Promise<MobileProviderCatalog> {
+  const settings = getSettingsBackend().read();
+  const statuses = await listAiProviderStatuses();
+  const providers = statuses.map((status): MobileProviderOption => {
+    const descriptor = PROVIDER_DESCRIPTORS[status.provider];
+    const configuredDefault = status.defaultModel?.trim();
+    const defaultModel = configuredDefault || (descriptor.kind === 'api' ? descriptor.defaultModel : undefined);
+    const base = {
+      provider: status.provider,
+      label: descriptor.label,
+      kind: descriptor.kind === 'cli-agent' ? 'cli-agent' as const : 'api' as const,
+      ...(defaultModel ? { defaultModel } : {}),
+    };
+    if (!status.enabled) {
+      return { ...base, available: false, unavailableReason: 'disabled', unavailableMessage: `${descriptor.label} is turned off on the desktop (Settings → AI Provider).` };
+    }
+    if (!status.configured) {
+      return descriptor.kind === 'cli-agent'
+        ? { ...base, available: false, unavailableReason: 'cli-unavailable', unavailableMessage: `${descriptor.label} is not installed on the desktop, or Praxis cannot find it.` }
+        : { ...base, available: false, unavailableReason: 'not-configured', unavailableMessage: `${descriptor.label} has no API key on the desktop. Add one in Settings → AI Provider.` };
+    }
+    return { ...base, available: true };
+  });
+  const project = projectId ? getProjectStore().get(projectId) : undefined;
+  const chatTools = project?.defaultAiToolMode ?? 'full';
+  const hasFolder = Boolean(project?.workspaceFolder?.trim() || settings.ai.workingDirectory.trim());
+  const sessionModes: MobileSessionModeOption[] = [
+    chatTools === 'full' && !hasFolder
+      ? { mode: 'chat', available: false, toolAccess: 'full', unavailableMessage: 'This project needs a working folder on the desktop before a full-tools chat can start.' }
+      : { mode: 'chat', available: true, toolAccess: chatTools === 'read-only' ? 'read-only' : 'full' },
+    settings.ai.analysisPrompt.trim()
+      ? { mode: 'analysis', available: true, toolAccess: 'read-only' }
+      : { mode: 'analysis', available: false, toolAccess: 'read-only', unavailableMessage: 'Set an analysis system prompt under Settings → AI Provider on the desktop first.' },
+    { mode: 'review', available: true, toolAccess: 'read-only' },
+  ];
+  const defaultProvider = settings.ai.activeProvider;
+  const defaultModel = providers.find(option => option.provider === defaultProvider)?.defaultModel;
+  return { defaultProvider, ...(defaultModel ? { defaultModel } : {}), providers, sessionModes };
+}
+
+/** ACP model lists spawn the agent CLI, so they are cached briefly; API catalogs cache themselves. */
+const cliModelCache = new Map<string, { at: number; options: ModelOptions | undefined }>();
+const CLI_MODEL_TTL_MS = 5 * 60 * 1000;
+
+async function modelCatalog(provider: string, refresh: boolean): Promise<MobileModelCatalog> {
+  if (!(provider in PROVIDER_DESCRIPTORS)) throw new Error(`“${provider}” is not an AI provider this desktop knows.`);
+  const id = provider as AiProvider;
+  const descriptor = PROVIDER_DESCRIPTORS[id];
+  let options: ModelOptions | undefined;
+  try {
+    if (descriptor.kind === 'api') {
+      options = await listApiModelOptions(id, refresh);
+      if (!options) {
+        return { provider, status: 'unavailable', message: `The desktop could not load ${descriptor.label}’s model list. Check its API key and network on the desktop.`, models: [] };
+      }
+    } else {
+      const cached = cliModelCache.get(provider);
+      if (!refresh && cached && Date.now() - cached.at < CLI_MODEL_TTL_MS) {
+        options = cached.options;
+      } else {
+        options = await listCliModelOptions(id);
+        cliModelCache.set(provider, { at: Date.now(), options });
+      }
+      // No selector: the agent always uses its own default model.
+      if (!options) return { provider, status: 'ok', message: `${descriptor.label} uses its own default model.`, models: [] };
+    }
+  } catch (error) {
+    return { provider, status: 'unavailable', message: error instanceof Error ? error.message : String(error), models: [] };
+  }
+  return {
+    provider,
+    status: 'ok',
+    ...(options.currentValue ? { defaultModel: options.currentValue } : {}),
+    models: options.options.map(option => ({
+      modelId: option.value,
+      name: option.name,
+      ...(option.contextLength ? { contextLength: option.contextLength } : {}),
+    })),
+  };
+}
+
+export function createDesktopMobileHostServiceDeps(
+  configuredHostId?: string,
+  ledger: Pick<MobileCommandLedger, 'latestSequence'> = { latestSequence: () => 0 },
+): MobileHostServiceDeps {
   const hostId = configuredHostId?.trim() || (os.hostname() || 'praxis-desktop').trim();
+  const hostName = (): string => getSettingsBackend().read().mobileAccess.hostName.trim() || os.hostname() || 'Praxis desktop';
 
   return {
     hostId,
-    hostName: () => getSettingsBackend().read().mobileAccess.hostName.trim() || os.hostname() || 'Praxis desktop',
+    hostName,
     hostOnline: () => true,
+    hostEpoch: randomUUID(),
+    latestSequence: () => ledger.latestSequence(),
+    providerCatalog,
+    modelCatalog,
+    describeDevice: async deviceId => {
+      const settings = getSettingsBackend().read().mobileAccess;
+      const device = getMobilePairingRegistry().listDevices().find(candidate => candidate.deviceId === deviceId && !candidate.revokedAt);
+      const identity = await getMobileHostIdentity().catch(() => undefined);
+      const projects = (device?.projectIds ?? []).map(projectId => ({ projectId, name: getProjectStore().get(projectId)?.name ?? projectId }));
+      return {
+        ...(device?.label ? { label: device.label } : {}),
+        projects,
+        ...(device?.pairedAt ? { pairedAt: device.pairedAt } : {}),
+        ...(device?.lastSeenAt ? { lastSeenAt: device.lastSeenAt } : {}),
+        hostName: hostName(),
+        ...(identity ? { hostKeyFingerprint: fingerprintMobileHostKey(Buffer.from(identity.publicKey).toString('hex')) } : {}),
+        accessMode: settings.mode,
+      };
+    },
 
     listProjects: async () => getProjectStore().list().map(projectSummary),
     getProject: async projectId => {
@@ -96,7 +224,7 @@ export function createDesktopMobileHostServiceDeps(configuredHostId?: string): M
         candidate => candidate.sessionId === sessionId || candidate.issueKey === sessionId,
       );
       if (!record) return undefined;
-      return mobileSessionSnapshot(record);
+      return mobileSessionSnapshot(record, ledger.latestSequence());
     },
     listWorkflows: async projectId => listWorkflowChoices(projectId),
     getRun: async runId => {
@@ -139,7 +267,10 @@ export function createDesktopMobileHostServiceDeps(configuredHostId?: string): M
       return items;
     },
 
-    createSession: async input => mobileSessionSnapshot(await createMobileInteractiveSession(input)),
+    createSession: async input => {
+      const record = await createMobileInteractiveSession(input);
+      return mobileSessionSnapshot(record, ledger.latestSequence());
+    },
     startRun: async input => startWorkflowRun({
       projectId: input.projectId,
       workflowId: input.workflowId,
@@ -171,8 +302,22 @@ export function createDesktopMobileHostServiceDeps(configuredHostId?: string): M
       await getWorkflowOrchestrator().step(runId);
       return summarize(requireRun(runId));
     },
-    continueSession: async (sessionId, message) => mobileSessionSnapshot(await continueMobileInteractiveSession(sessionId, message)),
-    cancelSession: async sessionId => mobileSessionSnapshot(await cancelMobileInteractiveSession(sessionId)),
+    continueSession: async (sessionId, message) => mobileSessionSnapshot(await continueMobileInteractiveSession(sessionId, message), ledger.latestSequence()),
+    configureSession: async (sessionId, change) => {
+      const record = [...getAiSessionManager().getAllAgentSessions().values()].find(candidate => candidate.sessionId === sessionId);
+      if (!record) throw new Error(`No agent session found for ${sessionId}.`);
+      if (change.mode) switchSessionMode(record.issueKey, change.mode);
+      if (change.model) await updateSessionModel(record.issueKey, change.model);
+      if (change.handover) {
+        await handoverSession(record.issueKey, {
+          provider: change.handover.provider as AiProvider,
+          ...(change.handover.model ? { model: change.handover.model } : {}),
+          expectedBriefRevision: getAiSessionManager().getAgentSession(record.issueKey)?.handoverBrief?.revision ?? 0,
+        });
+      }
+      return mobileSessionSnapshot(getAiSessionManager().getAgentSession(record.issueKey)!, ledger.latestSequence());
+    },
+    cancelSession: async sessionId => mobileSessionSnapshot(await cancelMobileInteractiveSession(sessionId), ledger.latestSequence()),
     respondToPermission: async (requestId, decision, _actor, projectId) => respondToMobilePermission({
       records: getAiSessionManager().getAllAgentSessions().values(),
       requestId,
@@ -185,29 +330,15 @@ export function createDesktopMobileHostServiceDeps(configuredHostId?: string): M
 }
 
 export function composeDesktopMobileHost(hostId?: string): MobileHostApplication {
-  const deps = createDesktopMobileHostServiceDeps(hostId);
+  const ledger = new InMemoryMobileCommandLedger();
+  const deps = createDesktopMobileHostServiceDeps(hostId, ledger);
+  const commands = createMobileHostExecutionHandlers(deps);
   const app = createDesktopMobileHostApplication({
-    reads: createMobileHostReads(deps),
-    commands: createMobileHostExecutionHandlers(deps),
-    ledger: new InMemoryMobileCommandLedger(),
+    reads: createMobileHostReads(deps, Object.keys(commands) as MobileCommandOperation[]),
+    commands,
+    ledger,
     payloadDigest: (command: unknown) => JSON.stringify((command as MobileCommand).payload ?? null),
   });
-  let sequence = 0;
-  getAiSessionManager().onDidChangeAgentSession(record => {
-    sequence += 1;
-    app.ledger.appendEvent<MobileSessionEvent>({
-      protocolVersion: 1,
-      eventId: `${record.sessionId}:${sequence}`,
-      sequence,
-      emittedAt: new Date().toISOString(),
-      target: {
-        hostId: deps.hostId,
-        ...(record.projectId ? { projectId: record.projectId } : {}),
-        sessionId: record.sessionId,
-        ...(record.workflowRunId ? { runId: record.workflowRunId } : {}),
-      },
-      event: { type: 'session.snapshot', snapshot: mobileSessionSnapshot(record, sequence) },
-    });
-  });
+  getAiSessionManager().onDidChangeAgentSession(record => appendMobileSessionEvent(ledger, deps.hostId, record));
   return app;
 }

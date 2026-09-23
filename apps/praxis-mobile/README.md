@@ -7,9 +7,10 @@ React Native companion for controlling sessions and workflows that execute on a 
 This app uses native TCP, UDP discovery, camera, and secure-storage modules, so it requires an iOS/Android development or release build rather than Expo Go.
 
 1. In Praxis desktop, open Settings → Mobile access, choose Local network, and create a pairing code.
-2. Start a native mobile build with `npm run ios --workspace=@praxis/mobile` or `npm run android --workspace=@praxis/mobile`.
-3. Scan the desktop QR code or paste its invitation. The phone opens an authenticated Noise channel and appears in desktop Settings for explicit confirmation.
-4. Grant one or more projects and the required view/execute/approval capabilities. Reconnect on the phone after confirmation.
+2. Start a native mobile build with `npm run ios --workspace=@praxis/mobile` or `npm run android --workspace=@praxis/mobile`. For a real iPhone, follow the [physical-device deployment guide](docs/ios-phone-deployment.md): use the Xcode workspace and a **Release** Run scheme so the JavaScript bundle is embedded.
+3. Scan the desktop QR code or paste its invitation. The phone opens an authenticated Noise channel, presents the invitation's single-use token, and shows "Waiting for confirmation" until the desktop confirms it (it appears there as "Phone <key prefix>").
+4. Grant one or more projects and the required view/execute/approval capabilities. The phone continues automatically once confirmed; a denied, expired, used or revoked invitation is shown with the reason.
+5. In a new chat, choose the provider, model and mode (Chat / Analysis / Review) the desktop offers. Existing sessions show what they run on.
 
 The phone keeps its device key and last confirmed host configuration in OS-protected storage. LAN discovery carries identity hints only and never establishes trust.
 
@@ -36,6 +37,8 @@ The desktop's docs currently live at repository root. This project mirrors that 
 ## Start here
 
 Read [master plan](docs/plans/master-plan.md), [architecture](docs/architecture.md), [plan map](docs/PLAN_MAP.md) and [development guidance](docs/development.md).
+
+For installing on a physical iPhone, also read [iOS phone deployment](docs/ios-phone-deployment.md).
 
 Open this folder as a separate folder-backed Praxis project (key PRAXISMOBILE); its docs/plans is the canonical board source. The root PRAXIS board remains unchanged. The root plan map links here; it does not duplicate these items. No machine-specific workspace paths are committed.
 

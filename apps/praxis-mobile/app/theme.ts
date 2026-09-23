@@ -24,6 +24,14 @@ export const theme = {
   ok: '#4ec98a',
   warn: '#f0b429',
   danger: '#f0736a',
+  /** Translucent chrome over the hex backdrop, and the modal scrim. */
+  chrome: 'rgba(9, 16, 24, 0.95)',
+  hexShade: 'rgba(7, 15, 24, 0.18)',
+  scrim: 'rgba(0, 0, 0, 0.62)',
+  warnSoft: '#3a2f12',
+  dangerSoft: '#3a1a18',
+  camera: '#000000',
+  onAccent: '#0b1220',
   radius: 10,
   space: 16,
 } as const;

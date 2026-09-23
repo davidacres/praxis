@@ -1,6 +1,13 @@
 import TcpSocket from 'react-native-tcp-socket';
 import * as SecureStore from 'expo-secure-store';
-import { generateKeyPair, RecordAssembler, SecureChannel, type KeyPair } from '@praxis/mobile-protocol';
+import {
+  MobileSecureClient,
+  generateKeyPair,
+  type KeyPair,
+  type MobileConnectionError,
+  type MobileConnectionStatus,
+  type MobileReplayResult,
+} from '@praxis/mobile-protocol';
 import type { MobileCommand, MobileEventEnvelope, MobileReadRequest } from '@praxis/core';
 
 export interface MobileHostConfiguration {
@@ -10,17 +17,13 @@ export interface MobileHostConfiguration {
   port: number;
   hostPublicKeyHex: string;
   projectId?: string;
+  /** Present only until the desktop has confirmed this phone; invitations are single-use. */
+  pairingTokenId?: string;
+  pairingExpiresAt?: string;
 }
-
-type RequestFrame = { id: string; kind: 'read' | 'command' | 'replay'; payload: unknown };
-type ReplyFrame = { id: string; kind: 'reply'; ok: boolean; value?: unknown; error?: string };
-type EventFrame = { kind: 'event'; envelope: MobileEventEnvelope };
-type ServerFrame = ReplyFrame | EventFrame;
 
 const DEVICE_KEY = 'praxis.mobile.devicePrivateKey.v1';
 const HOST_CONFIGURATION_KEY = 'praxis.mobile.hostConfiguration.v1';
-const encode = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value));
-const decode = <T>(bytes: Uint8Array): T => JSON.parse(new TextDecoder().decode(bytes)) as T;
 
 function fromHex(value: string): Uint8Array {
   const clean = value.trim();
@@ -59,131 +62,92 @@ export async function saveMobileHostConfiguration(value: MobileHostConfiguration
   });
 }
 
+export async function forgetMobileHostConfiguration(): Promise<void> {
+  await SecureStore.deleteItemAsync(HOST_CONFIGURATION_KEY);
+}
+
+/** Hex prefix of this phone's public key — the desktop lists a pending phone as "Phone <prefix>". */
+export async function mobileDeviceKeyPrefix(): Promise<string> {
+  return toHex((await deviceIdentity()).publicKey).slice(0, 6);
+}
+
+/**
+ * One encrypted session with the desktop over `react-native-tcp-socket`. The
+ * protocol work (handshake, pairing status, request correlation, failure
+ * reasons) is `MobileSecureClient`'s, shared with the desktop's tests.
+ */
 export class NativeMobileConnection {
-  private socket?: ReturnType<typeof TcpSocket.createConnection>;
-  private channel?: SecureChannel;
-  private assembler = new RecordAssembler();
-  private requestSequence = 0;
-  private readonly pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
+  private client?: MobileSecureClient;
   private readonly listeners = new Set<(event: MobileEventEnvelope) => void>();
-  private readonly stateListeners = new Set<(connected: boolean, error?: Error) => void>();
+  private readonly statusListeners = new Set<(status: MobileConnectionStatus) => void>();
+  private readonly closeListeners = new Set<(error: MobileConnectionError) => void>();
 
   constructor(readonly config: MobileHostConfiguration) {}
 
   async connect(): Promise<void> {
-    if (this.socket && this.channel?.open) return;
-    const identity = await deviceIdentity();
-    const channel = SecureChannel.initiator({
+    if (this.client) throw new Error('This connection was already opened; create a new one to reconnect.');
+    const identity: KeyPair = await deviceIdentity();
+    const endpoint = `${this.config.address}:${this.config.port}`;
+    const client = new MobileSecureClient({
+      endpoint,
       staticKeyPair: identity,
       remoteStaticPublicKey: fromHex(this.config.hostPublicKeyHex),
+      ...(this.config.pairingTokenId ? { pairingTokenId: this.config.pairingTokenId } : {}),
+      connectTimeoutMs: 15_000,
+      requestTimeoutMs: 30_000,
+      connect: handlers => {
+        const socket = TcpSocket.createConnection({
+          host: this.config.address,
+          port: this.config.port,
+          interface: 'wifi',
+          connectTimeout: 10_000,
+        }, () => handlers.onConnect());
+        socket.on('data', raw => handlers.onData(typeof raw === 'string' ? new TextEncoder().encode(raw) : new Uint8Array(raw)));
+        socket.on('error', error => handlers.onError(error));
+        socket.on('close', () => handlers.onClose());
+        return { write: bytes => { socket.write(bytes); }, destroy: () => socket.destroy() };
+      },
     });
-    this.channel = channel;
-    this.assembler = new RecordAssembler();
-
-    await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      const socket = TcpSocket.createConnection({
-        host: this.config.address,
-        port: this.config.port,
-        interface: 'wifi',
-        connectTimeout: 10_000,
-      }, () => socket.write(channel.nextHandshakeMessage()));
-      this.socket = socket;
-      const fail = (error: Error): void => {
-        if (!settled) {
-          settled = true;
-          reject(error);
-        }
-        this.rejectPending(error);
-        for (const listener of this.stateListeners) listener(false, error);
-      };
-      socket.setTimeout(30_000, () => fail(new Error('The Praxis desktop connection timed out.')));
-      socket.on('error', fail);
-      socket.on('close', () => fail(new Error('The Praxis desktop connection closed.')));
-      socket.on('data', raw => {
-        const bytes = typeof raw === 'string' ? new TextEncoder().encode(raw) : new Uint8Array(raw);
-        let records: Uint8Array[];
-        try {
-          records = this.assembler.push(bytes);
-        } catch (error) {
-          fail(error instanceof Error ? error : new Error(String(error)));
-          socket.destroy();
-          return;
-        }
-        for (const record of records) {
-          try {
-            if (!channel.open) {
-              channel.readHandshakeMessage(record);
-              if (channel.open && !settled) {
-                settled = true;
-                socket.setTimeout(0);
-                resolve();
-              }
-              continue;
-            }
-            const frame = decode<ServerFrame>(channel.decrypt(record));
-            if (frame.kind === 'event') {
-              for (const listener of this.listeners) listener(frame.envelope);
-            } else {
-              const pending = this.pending.get(frame.id);
-              if (!pending) continue;
-              clearTimeout(pending.timer);
-              this.pending.delete(frame.id);
-              if (frame.ok) pending.resolve(frame.value);
-              else pending.reject(new Error(frame.error || 'The desktop rejected the request.'));
-            }
-          } catch (error) {
-            fail(error instanceof Error ? error : new Error(String(error)));
-            socket.destroy();
-          }
-        }
-      });
+    this.client = client;
+    client.onEvent(envelope => {
+      for (const listener of this.listeners) listener(envelope as unknown as MobileEventEnvelope);
     });
+    client.onStatus(status => {
+      for (const listener of this.statusListeners) listener(status);
+    });
+    client.onClose(error => {
+      for (const listener of this.closeListeners) listener(error);
+    });
+    await client.connect();
   }
 
-  private rejectPending(error: Error): void {
-    for (const pending of this.pending.values()) {
-      clearTimeout(pending.timer);
-      pending.reject(error);
-    }
-    this.pending.clear();
+  private get ready(): MobileSecureClient {
+    if (!this.client) throw new Error('The Praxis desktop is not connected.');
+    return this.client;
   }
 
-  private request<T>(kind: RequestFrame['kind'], payload: unknown): Promise<T> {
-    const socket = this.socket;
-    const channel = this.channel;
-    if (!socket || !channel?.open) return Promise.reject(new Error('The Praxis desktop is offline.'));
-    this.requestSequence += 1;
-    const id = `mobile-${Date.now().toString(36)}-${this.requestSequence.toString(36)}`;
-    return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error('The Praxis desktop did not answer in time.'));
-      }, 30_000);
-      this.pending.set(id, { resolve: value => resolve(value as T), reject, timer });
-      socket.write(channel.encrypt(encode({ id, kind, payload } satisfies RequestFrame)));
-    });
-  }
-
-  read<T>(request: MobileReadRequest): Promise<T> { return this.request<T>('read', request); }
-  command<T>(command: MobileCommand): Promise<T> { return this.request<T>('command', command); }
-  replay(afterSequence: number): Promise<{ replaying: boolean }> { return this.request('replay', { afterSequence }); }
+  read<T>(request: MobileReadRequest): Promise<T> { return this.ready.read<T>(request); }
+  command<T>(command: MobileCommand): Promise<T> { return this.ready.command<T>(command); }
+  replay(afterSequence: number): Promise<MobileReplayResult> { return this.ready.replay(afterSequence); }
 
   subscribe(listener: (event: MobileEventEnvelope) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
+  /** Status frames — notably `pairing-pending` while the desktop has not confirmed this phone. */
+  subscribeStatus(listener: (status: MobileConnectionStatus) => void): () => void {
+    this.statusListeners.add(listener);
+    return () => this.statusListeners.delete(listener);
+  }
 
-  subscribeState(listener: (connected: boolean, error?: Error) => void): () => void {
-    this.stateListeners.add(listener);
-    return () => this.stateListeners.delete(listener);
+  /** Fires once when an established or pending connection ends, with the reason. */
+  subscribeClose(listener: (error: MobileConnectionError) => void): () => void {
+    this.closeListeners.add(listener);
+    return () => this.closeListeners.delete(listener);
   }
 
   close(): void {
-    this.socket?.destroy();
-    this.socket = undefined;
-    this.channel = undefined;
-    this.rejectPending(new Error('The Praxis desktop connection closed.'));
+    this.client?.close();
   }
 }

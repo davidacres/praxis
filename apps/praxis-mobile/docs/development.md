@@ -17,17 +17,49 @@ root `test` chain and `check-types`.
   confirmation and project/capability grants, live session snapshots,
   create/continue/cancel, workflow start/cancel/retry/approve, and exact
   permission allow/deny commands.
-- Fixture only: `demoData.ts` and the loopback host remain deterministic test
-  inputs; the production store no longer loads them on connect.
+- Fixture only: the loopback host (`main/`) remains a deterministic test input.
+  `demoData.ts` was removed on 2026-09-23; no production path uses canned data.
 - Deferred: GenericSystem/Roleover identity, Azure relay and internet push.
   Physical-device release evidence is also still required before closing the
   local milestone.
+
+## Host surface revision 2 (2026-09-23)
+
+Real, tested and in the Release build: provider/model/mode selection for new
+chats from the desktop's provider statuses and model catalog (validated again on
+the desktop), the effective provider/model/mode of existing sessions, live usage
+from session records (cost only when the provider reports it), host-backed
+Desktop connection and Permissions pages, token-gated pairing with a visible
+pending-confirmation state, specific failure reasons, auto-reconnect with
+foreground liveness checks, and sequence-guarded replay. See
+[architecture](architecture.md#host-surface-revision-2-2026-09-23).
+
+Tests: `npm run test:mobile-protocol` (client/pairing/failure classification),
+`npm run test:mobile` (usage, selection, invitation parsing), and
+`npm run test:desktop:mobile`, including `mobileEndToEnd.test.ts`, which drives
+the real LAN listener, host services and session projection with the same
+client the phone uses.
+
+Physical-device evidence (iPhone 17 Pro Max, Release build, desktop on
+revision 3, driven by an XCUITest runner that targets the installed app):
+new chat on Claude Code + Haiku streamed its reply with usage; an existing
+session changed model (Haiku → Sonnet), handed over to Codex CLI (brief not
+shown on the phone), switched Chat → Review → Chat; the phone reconnected by
+itself after a desktop restart and after 40s in the background, then sent and
+streamed a follow-up; Settings → Permissions showed the real grant.
+
+Not yet done on a device: network loss, revocation, host-key reset and a fresh
+pairing (covered by integration tests only), Android, push notifications (the
+app says they are unavailable) and theme selection on mobile.
 
 ## Resume here (2026-09-22)
 
 Build a native development client (`expo run:ios` / `expo run:android`; Expo Go
 does not contain the TCP/UDP native modules), then execute TASK-241's physical
-device matrix. Retain iOS and Android evidence for pair/confirm, streamed turns,
+device matrix. For a real iPhone deployment, use the [iOS phone deployment
+guide](ios-phone-deployment.md) and set the Xcode scheme's **Run** configuration
+to **Release**; Debug skips bundling and can open as a blank screen away from
+Metro. Retain iOS and Android evidence for pair/confirm, streamed turns,
 workflow and permission actions, background/foreground, network loss, host
 sleep, revocation and host-key rotation. Fix only failures observed in that
 journey; cloud relay remains a separate deferred feature.

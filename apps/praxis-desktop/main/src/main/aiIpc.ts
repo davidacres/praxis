@@ -34,6 +34,7 @@ import {
   isProviderLimitError,
   extractProviderLimitMessage
 } from '@praxis/core';
+import { buildReadOnlyModeTask } from './sessionModeTask';
 import {
   abortActiveTask,
   getAcpAgentHost,
@@ -124,27 +125,8 @@ function buildModeTask(
   analysisPrompt: string,
   overrides?: Partial<AgentTaskDefinition>
 ): AgentTaskDefinition {
-  if (mode === 'analysis') {
-    return {
-      kind: 'analysis',
-      sessionMode: 'analysis',
-      goal: [analysisPrompt, overrides?.goal ?? `Analyze ${issue.key} — ${issue.summary}.`, 'This is a read-only analysis; do not implement anything yet.'].join('\n\n'),
-      scope: 'Read-only analysis of the supplied goal and relevant workspace context.',
-      definitionOfDone: 'A clear analysis and ordered implementation plan is presented for review.',
-      nonGoals: ['Do not edit files or change external state during analysis.'],
-      completionContract: 'Stop after presenting the analysis and wait for confirmation.'
-    };
-  }
-  if (mode === 'review') {
-    return {
-      kind: 'review',
-      sessionMode: 'review',
-      goal: overrides?.goal ?? `Review ${issue.key} — ${issue.summary}.`,
-      scope: 'Read-only review of the supplied goal, implementation, tests, and relevant workspace context.',
-      definitionOfDone: 'A concise review identifies strengths, risks, and actionable findings.',
-      nonGoals: ['Do not edit files or implement fixes during review.'],
-      completionContract: 'Stop after presenting review findings and wait for the user.'
-    };
+  if (mode === 'analysis' || mode === 'review') {
+    return buildReadOnlyModeTask(mode, issue, analysisPrompt, overrides?.goal);
   }
   return { ...buildDefaultTask(issue, overrides), sessionMode: 'chat' };
 }
@@ -315,6 +297,92 @@ function mergeToolExtensions(...parts: Array<ToolExtension | undefined>): ToolEx
   };
 }
 
+/** Rejects a model the provider's current catalog does not list (an unreadable catalog is not a rejection). */
+async function assertModelAvailable(provider: AiProvider, model: string): Promise<void> {
+  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const options = descriptor.kind === 'cli-agent'
+    ? await listCliModelOptions(provider).catch(() => undefined)
+    : await listApiModelOptions(provider).catch(() => undefined);
+  if (options && options.options.length > 0 && !options.options.some(option => option.value === model)) {
+    throw new Error(`${model} is not available for ${descriptor.label}.`);
+  }
+}
+
+/** Set by `registerAiIpc`: continues a recorded session with the desktop's full tool wiring. */
+let continueRecordedSessionForHost: ((issueKey: string, message: string) => Promise<void>) | undefined;
+
+/**
+ * Between-turn session runtime changes, shared by the desktop IPC channels and
+ * the paired-phone host so both apply identical rules.
+ */
+export async function updateSessionModel(issueKey: string, model: string): Promise<AgentSessionRecord> {
+  const sessionManager = getAiSessionManager();
+  const trimmed = model.trim();
+  if (!trimmed) throw new Error('Choose a model.');
+  const record = sessionManager.getAgentSession(issueKey);
+  if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+  if (hasActiveTask(issueKey)) {
+    throw new Error('Wait for the session to finish this turn before changing model.');
+  }
+  const provider = record.provider ?? getSettingsBackend().read().ai.activeProvider;
+  await assertModelAvailable(provider, trimmed);
+  if (record.model === trimmed) return record;
+  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  return sessionManager.transitionAgentRuntime(issueKey, {
+    provider,
+    model: trimmed,
+    reason: 'model_change',
+    clearNativeRuntime: descriptor.kind === 'cli-agent',
+    eventSummary: `Model changed to ${trimmed}`,
+    eventDetail: record.model ? `Previous model: ${record.model}` : undefined
+  });
+}
+
+export async function handoverSession(issueKey: string, input: AiHandoverInput): Promise<AgentSessionRecord> {
+  const sessionManager = getAiSessionManager();
+  const record = sessionManager.getAgentSession(issueKey);
+  if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+  if (hasActiveTask(issueKey)) {
+    throw new Error('Wait for the session to finish this turn before handing over.');
+  }
+  const targetProvider = input.provider;
+  const descriptor = PROVIDER_DESCRIPTORS[targetProvider];
+  if (!descriptor) throw new Error('Unknown provider.');
+  const model = input.model?.trim() || undefined;
+  if (model) await assertModelAvailable(targetProvider, model);
+  if (input.briefEdits) {
+    sessionManager.editHandoverBrief(issueKey, input.expectedBriefRevision, input.briefEdits);
+  }
+  await sessionManager.refreshHandoverBrief(issueKey);
+  const current = sessionManager.getAgentSession(issueKey) ?? record;
+  const envelope = buildHandoverEnvelope(current, { provider: targetProvider, model });
+  sessionManager.transitionAgentRuntime(issueKey, {
+    provider: targetProvider,
+    model,
+    reason: 'provider_handover',
+    clearNativeRuntime: true,
+    eventSummary: `Handed over to ${descriptor.label}${model ? ` (${model})` : ''}`,
+    eventDetail: envelope.text
+  });
+  if (!continueRecordedSessionForHost) throw new Error('The AI host is not ready yet.');
+  await continueRecordedSessionForHost(issueKey, envelope.text);
+  return sessionManager.getAgentSession(issueKey)!;
+}
+
+export function switchSessionMode(issueKey: string, mode: SessionMode): AgentSessionRecord {
+  if (mode !== 'chat' && mode !== 'analysis' && mode !== 'review') {
+    throw new Error('Invalid session mode.');
+  }
+  const sessionManager = getAiSessionManager();
+  const record = sessionManager.getAgentSession(issueKey);
+  if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+  if (record.state !== 'completed' && record.state !== 'failed' && record.state !== 'aborted') {
+    throw new Error('Wait for the current session turn to finish before switching mode.');
+  }
+  sessionManager.setAgentSessionMode(issueKey, mode);
+  return sessionManager.getAgentSession(issueKey)!;
+}
+
 /**
  * Registers the AI IPC channels: provider setup (`ai:getStatus`, `ai:setApiKey`),
  * session lifecycle (`ai:listSessions`, `ai:delegate`, `ai:abort`), and the
@@ -324,16 +392,6 @@ function mergeToolExtensions(...parts: Array<ToolExtension | undefined>): ToolEx
 export function registerAiIpc(): void {
   const sessionManager = getAiSessionManager();
   const agentService = getVercelAgentService();
-
-  async function assertModelAvailable(provider: AiProvider, model: string): Promise<void> {
-    const descriptor = PROVIDER_DESCRIPTORS[provider];
-    const options = descriptor.kind === 'cli-agent'
-      ? await listCliModelOptions(provider).catch(() => undefined)
-      : await listApiModelOptions(provider).catch(() => undefined);
-    if (options && options.options.length > 0 && !options.options.some(option => option.value === model)) {
-      throw new Error(`${model} is not available for ${descriptor.label}.`);
-    }
-  }
 
   async function continueRecordedSession(
     issueKey: string,
@@ -380,6 +438,8 @@ export function registerAiIpc(): void {
         : {})
     });
   }
+
+  continueRecordedSessionForHost = (issueKey, message) => continueRecordedSession(issueKey, message);
 
   const queuedConversationTurns = new Set<string>();
   const startingConversationTurns = new Set<string>();
@@ -834,15 +894,7 @@ export function registerAiIpc(): void {
   ipcMain.handle(
     'ai:switchSessionMode',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, mode: SessionMode) => {
-      if (mode !== 'chat' && mode !== 'analysis' && mode !== 'review') {
-        throw new Error('Invalid session mode.');
-      }
-      const record = sessionManager.getAgentSession(issueKey);
-      if (!record) throw new Error(`No agent session found for ${issueKey}.`);
-      if (record.state !== 'completed' && record.state !== 'failed' && record.state !== 'aborted') {
-        throw new Error('Wait for the current session turn to finish before switching mode.');
-      }
-      sessionManager.setAgentSessionMode(issueKey, mode);
+      switchSessionMode(issueKey, mode);
     }
   );
 
@@ -881,27 +933,7 @@ export function registerAiIpc(): void {
 
   ipcMain.handle(
     'ai:updateSessionModel',
-    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, model: string) => {
-      const trimmed = model.trim();
-      if (!trimmed) throw new Error('Choose a model.');
-      const record = sessionManager.getAgentSession(issueKey);
-      if (!record) throw new Error(`No agent session found for ${issueKey}.`);
-      if (hasActiveTask(issueKey)) {
-        throw new Error('Wait for the session to finish this turn before changing model.');
-      }
-      const provider = record.provider ?? getSettingsBackend().read().ai.activeProvider;
-      await assertModelAvailable(provider, trimmed);
-      if (record.model === trimmed) return record;
-      const descriptor = PROVIDER_DESCRIPTORS[provider];
-      return sessionManager.transitionAgentRuntime(issueKey, {
-        provider,
-        model: trimmed,
-        reason: 'model_change',
-        clearNativeRuntime: descriptor.kind === 'cli-agent',
-        eventSummary: `Model changed to ${trimmed}`,
-        eventDetail: record.model ? `Previous model: ${record.model}` : undefined
-      });
-    }
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, model: string) => updateSessionModel(issueKey, model)
   );
 
   ipcMain.handle(
@@ -919,34 +951,7 @@ export function registerAiIpc(): void {
 
   ipcMain.handle(
     'ai:handoverSession',
-    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, input: AiHandoverInput) => {
-      const record = sessionManager.getAgentSession(issueKey);
-      if (!record) throw new Error(`No agent session found for ${issueKey}.`);
-      if (hasActiveTask(issueKey)) {
-        throw new Error('Wait for the session to finish this turn before handing over.');
-      }
-      const targetProvider = input.provider;
-      const descriptor = PROVIDER_DESCRIPTORS[targetProvider];
-      if (!descriptor) throw new Error('Unknown provider.');
-      const model = input.model?.trim() || undefined;
-      if (model) await assertModelAvailable(targetProvider, model);
-      if (input.briefEdits) {
-        sessionManager.editHandoverBrief(issueKey, input.expectedBriefRevision, input.briefEdits);
-      }
-      await sessionManager.refreshHandoverBrief(issueKey);
-      const current = sessionManager.getAgentSession(issueKey) ?? record;
-      const envelope = buildHandoverEnvelope(current, { provider: targetProvider, model });
-      sessionManager.transitionAgentRuntime(issueKey, {
-        provider: targetProvider,
-        model,
-        reason: 'provider_handover',
-        clearNativeRuntime: true,
-        eventSummary: `Handed over to ${descriptor.label}${model ? ` (${model})` : ''}`,
-        eventDetail: envelope.text
-      });
-      await continueRecordedSession(issueKey, envelope.text);
-      return sessionManager.getAgentSession(issueKey)!;
-    }
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, input: AiHandoverInput) => handoverSession(issueKey, input)
   );
 
   ipcMain.handle(

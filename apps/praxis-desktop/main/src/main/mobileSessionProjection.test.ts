@@ -52,3 +52,25 @@ test('bounds large histories so a mobile snapshot stays transportable', () => {
   assert.ok(snapshot.responseText?.includes('content truncated for mobile'));
   assert.ok(Buffer.byteLength(JSON.stringify(snapshot), 'utf8') < 1_000_000);
 });
+
+test('a provider handover reaches the phone as a notice, never as the brief with its workspace paths', () => {
+  const brief = '# Session handover\n## Workspace\nWorking directory: /Users/someone/repo\nContinue the work described in Next steps.';
+  const snapshot = mobileSessionSnapshot(record({
+    state: 'completed',
+    events: [
+      { timestamp: '2026-09-22T09:00:01.000Z', type: 'message', summary: 'Earlier answer' },
+      { timestamp: '2026-09-22T09:00:02.000Z', type: 'model_change', summary: 'Model changed to sonnet', detail: 'Previous model: haiku' },
+      { timestamp: '2026-09-22T09:00:03.000Z', type: 'provider_handover', summary: 'Handed over to Codex CLI (local)', detail: brief },
+      { timestamp: '2026-09-22T09:00:04.000Z', type: 'user_input_completed', summary: brief },
+      { timestamp: '2026-09-22T09:00:05.000Z', type: 'message', summary: 'Picked up from the brief.' },
+    ],
+  }));
+  assert.deepEqual(snapshot.messages.map(message => [message.role, message.text]), [
+    ['user', 'Help'],
+    ['assistant', 'Earlier answer'],
+    ['system', 'Model changed to sonnet'],
+    ['system', 'Handed over to Codex CLI (local)'],
+    ['assistant', 'Picked up from the brief.'],
+  ]);
+  assert.doesNotMatch(JSON.stringify(snapshot), /Working directory|\/Users\/someone/);
+});

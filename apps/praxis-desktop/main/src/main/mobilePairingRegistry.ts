@@ -1,8 +1,13 @@
 /**
  * Desktop pairing ledger: trusted devices on disk, one active single-use
  * invitation and in-flight confirmation requests in memory.
+ *
+ * An unknown phone only becomes a confirmation request by presenting the
+ * current invitation's token (from the QR / pasted invitation) over its
+ * authenticated channel; knowing the host key is not enough. Confirming one
+ * request consumes the token, so every other request made with it is void.
  */
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
   authorizeMobilePeer,
   consumeMobilePairing,
@@ -29,6 +34,7 @@ export class MobilePairingRegistry {
   private token?: MobilePairingToken;
   private readonly tokenStore = new InMemoryMobilePairingStore();
   private readonly pending = new Map<string, MobilePairingPendingRequest>();
+  private superseded: MobilePairingPendingRequest[] = [];
 
   constructor(private readonly persist: MobilePairingPersist) {
     this.devices = [...persist.load().devices];
@@ -67,15 +73,38 @@ export class MobilePairingRegistry {
     return authorizeMobilePeer(this.devices, publicKeyHex, now);
   }
 
-  /** Unknown peer during an active invitation becomes a confirmation request. */
-  submitUnpaired(publicKeyHex: string, now = new Date().toISOString()): MobilePairingPendingRequest | undefined {
-    if (!isActivePairingToken(this.token, now)) return undefined;
-    const hostId = this.token.hostId;
+  hasActiveInvitation(now = new Date().toISOString()): boolean {
+    return isActivePairingToken(this.token, now);
+  }
+
+  /** True when this key belonged to a device the desktop revoked (and it has not re-paired). */
+  wasRevoked(publicKeyHex: string): boolean {
+    const needle = publicKeyHex.toLowerCase();
+    const matches = this.devices.filter(device => device.publicKeyHex?.toLowerCase() === needle);
+    return matches.length > 0 && matches.every(device => device.revokedAt);
+  }
+
+  /**
+   * An unknown peer presenting `tokenId`. Only the current, unexpired,
+   * unconsumed invitation's token creates (or returns the existing)
+   * confirmation request for that key.
+   */
+  submitUnpaired(
+    publicKeyHex: string,
+    tokenId: string,
+    now = new Date().toISOString(),
+  ): { ok: true; request: MobilePairingPendingRequest } | { ok: false; reason: 'no-invitation' | 'expired' | 'used' | 'invalid-token' } {
+    const token = this.token;
+    if (!token) return { ok: false, reason: 'no-invitation' };
+    if (!sameToken(token.tokenId, tokenId)) return { ok: false, reason: 'invalid-token' };
+    if (token.consumedAt) return { ok: false, reason: 'used' };
+    if (!isActivePairingToken(token, now)) return { ok: false, reason: 'expired' };
+    const hostId = token.hostId;
     const existing = [...this.pending.values()].find(request => request.devicePublicKey.toLowerCase() === publicKeyHex.toLowerCase());
-    if (existing) return existing;
+    if (existing) return { ok: true, request: existing };
     const request: MobilePairingPendingRequest = {
       requestId: randomUUID(),
-      tokenId: this.token.tokenId,
+      tokenId: token.tokenId,
       hostId,
       deviceId: mobileDeviceIdForPublicKey(publicKeyHex),
       devicePublicKey: publicKeyHex,
@@ -83,7 +112,7 @@ export class MobilePairingRegistry {
       requestedAt: now,
     };
     this.pending.set(request.requestId, request);
-    return request;
+    return { ok: true, request };
   }
 
   confirm(
@@ -112,6 +141,14 @@ export class MobilePairingRegistry {
     );
     if (!result.ok) return { ok: false, reason: result.reason };
     this.pending.delete(requestId);
+    const superseded: MobilePairingPendingRequest[] = [];
+    for (const [id, other] of this.pending) {
+      if (other.tokenId === pending.tokenId) {
+        superseded.push(other);
+        this.pending.delete(id);
+      }
+    }
+    this.superseded = superseded;
     this.token = this.tokenStore.get(pending.tokenId);
     const device: MobilePairedDevice = {
       deviceId: result.deviceId,
@@ -124,6 +161,13 @@ export class MobilePairingRegistry {
     this.devices = [...this.devices.filter(item => item.deviceId !== device.deviceId), device];
     this.persist.save({ devices: this.devices });
     return { ok: true, device };
+  }
+
+  /** Requests voided by the last confirm (same single-use token); cleared when read. */
+  takeSuperseded(): MobilePairingPendingRequest[] {
+    const out = this.superseded;
+    this.superseded = [];
+    return out;
   }
 
   deny(requestId: string): boolean {
@@ -151,4 +195,10 @@ export class MobilePairingRegistry {
     this.devices = this.devices.map(item => item.deviceId === device.deviceId ? { ...item, lastSeenAt: now } : item);
     this.persist.save({ devices: this.devices });
   }
+}
+
+function sameToken(expected: string, presented: string): boolean {
+  const left = Buffer.from(expected, 'utf8');
+  const right = Buffer.from(presented.trim(), 'utf8');
+  return left.length === right.length && timingSafeEqual(left, right);
 }

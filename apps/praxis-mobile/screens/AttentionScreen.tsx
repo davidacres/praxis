@@ -5,12 +5,18 @@ import { useStore, useOpenAttention } from '../app/store';
 
 export function AttentionScreen({ onOpenSidebar }: { onOpenSidebar: () => void }): React.JSX.Element {
   const items = useOpenAttention();
-  const { approve, respondToPermission, setRoute, openWork } = useStore();
+  const { approve, respondToPermission, setRoute, openWork, work } = useStore();
+  const [failure, setFailure] = React.useState<string | undefined>(undefined);
+  const act = (action: Promise<void>): void => {
+    setFailure(undefined);
+    void action.catch(error => setFailure(error instanceof Error ? error.message : String(error)));
+  };
 
   return (
     <>
       <AppHeader title="Attention" onOpenSidebar={onOpenSidebar} />
       <Screen>
+      {failure ? <Card><Body>{failure}</Body></Card> : null}
       {items.length === 0 && (
         <Card>
           <Body dim>Nothing needs you right now.</Body>
@@ -32,21 +38,23 @@ export function AttentionScreen({ onOpenSidebar }: { onOpenSidebar: () => void }
           {item.kind === 'permission' && item.detail ? <Body dim>{item.detail}</Body> : null}
           {item.kind === 'approval' && item.runId && (
             <View style={styles.actions}>
-              <Button
-                label="Open run"
-                kind="ghost"
-                onPress={() => {
-                  setRoute('work');
-                  openWork('FX-BE-081');
-                }}
-              />
-              <Button label="Approve" onPress={() => approve(item.runId!)} />
+              {work.some(entry => entry.runId === item.runId) ? (
+                <Button
+                  label="Open run"
+                  kind="ghost"
+                  onPress={() => {
+                    setRoute('work');
+                    openWork(work.find(entry => entry.runId === item.runId)!.workId);
+                  }}
+                />
+              ) : null}
+              <Button label="Approve" onPress={() => act(approve(item.runId!))} />
             </View>
           )}
           {item.kind === 'permission' && item.requestId && (
             <View style={styles.actions}>
-              <Button label="Deny" kind="ghost" onPress={() => void respondToPermission(item.requestId!, 'deny')} />
-              <Button label="Allow once" onPress={() => void respondToPermission(item.requestId!, 'allow')} />
+              <Button label="Deny" kind="ghost" onPress={() => act(respondToPermission(item.requestId!, 'deny'))} />
+              <Button label="Allow once" onPress={() => act(respondToPermission(item.requestId!, 'allow'))} />
             </View>
           )}
         </Card>

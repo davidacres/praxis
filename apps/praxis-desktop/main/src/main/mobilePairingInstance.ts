@@ -9,6 +9,7 @@ import {
   type MobilePairedDevice,
   type MobilePairingSnapshot,
 } from '@praxis/core';
+import { mobileConnectionStatus, type MobileConnectionStatus } from '@praxis/mobile-protocol';
 import { MobilePairingRegistry } from './mobilePairingRegistry';
 import { getMobileHostId, getMobileHostIdentity, rotateMobileHostIdentity } from './mobileHostIdentity';
 import { getSettingsBackend } from './settingsBackendInstance';
@@ -90,13 +91,35 @@ export function mobileAuthorizePeer(publicKeyHex: string) {
   };
 }
 
-export function mobileOnUnpairedPeer(publicKeyHex: string): 'pending' | 'refuse' {
+/**
+ * The listener's answer to an unknown phone key. At handshake (`tokenId`
+ * undefined) the phone is asked for its invitation — or told it was revoked;
+ * with a token, the registry decides whether it becomes a confirmation request.
+ */
+export function mobileOnUnpairedPeer(publicKeyHex: string, tokenId?: string): MobileConnectionStatus {
   const settings = getSettingsBackend().read().mobileAccess;
-  if (settings.mode === 'off') return 'refuse';
-  const pending = getMobilePairingRegistry().submitUnpaired(publicKeyHex);
-  if (!pending) return 'refuse';
+  if (settings.mode === 'off') return mobileConnectionStatus('access-disabled');
+  const registry = getMobilePairingRegistry();
+  if (tokenId === undefined) {
+    return registry.wasRevoked(publicKeyHex) && !registry.hasActiveInvitation()
+      ? mobileConnectionStatus('device-revoked')
+      : mobileConnectionStatus('pairing-required');
+  }
+  const result = registry.submitUnpaired(publicKeyHex, tokenId);
+  if (!result.ok) {
+    switch (result.reason) {
+      case 'expired':
+        return mobileConnectionStatus('invitation-expired');
+      case 'used':
+        return mobileConnectionStatus('invitation-used');
+      case 'no-invitation':
+        return mobileConnectionStatus('invitation-expired', 'The desktop is not offering a pairing invitation right now. Create one in Settings → Mobile access and scan it again.');
+      default:
+        return mobileConnectionStatus('invitation-invalid');
+    }
+  }
   emitPairingChanged();
-  return 'pending';
+  return mobileConnectionStatus('pairing-pending', `Waiting for confirmation on ${settings.hostName.trim() || os.hostname() || 'the desktop'}. Open Settings → Mobile access and confirm “${result.request.deviceLabel}”.`);
 }
 
 export async function snapshotMobilePairing(): Promise<MobilePairingSnapshot> {
@@ -144,6 +167,10 @@ export async function snapshotMobilePairing(): Promise<MobilePairingSnapshot> {
 export async function createMobilePairingInvitation(): Promise<MobilePairingSnapshot> {
   const snapshot = await snapshotMobilePairing();
   const addresses = snapshot.listener.addresses.length ? snapshot.listener.addresses : ['127.0.0.1'];
+  // A new invitation voids the old one and every request waiting on it.
+  for (const waiting of getMobilePairingRegistry().listPending()) {
+    lanServer?.dropPublicKey(waiting.devicePublicKey, mobileConnectionStatus('invitation-expired', 'The desktop created a new pairing invitation, which replaced the one this phone used. Scan the new invitation.'));
+  }
   getMobilePairingRegistry().issueInvitation(snapshot.hostId, {
     displayName: snapshot.hostName,
     publicKeyHex: snapshot.publicKeyHex,
@@ -162,6 +189,9 @@ export async function confirmMobilePairing(
 ): Promise<MobilePairingSnapshot> {
   const result = getMobilePairingRegistry().confirm(requestId, grant);
   if (result.ok) {
+    for (const other of getMobilePairingRegistry().takeSuperseded()) {
+      lanServer?.dropPublicKey(other.devicePublicKey, mobileConnectionStatus('invitation-used'));
+    }
     lanServer?.promotePending(result.device.publicKeyHex ?? '', {
       deviceId: result.device.deviceId,
       capabilities: result.device.capabilities ?? ['view'],
@@ -175,21 +205,21 @@ export async function confirmMobilePairing(
 export async function denyMobilePairing(requestId: string): Promise<MobilePairingSnapshot> {
   const pending = getMobilePairingRegistry().listPending().find(item => item.requestId === requestId);
   getMobilePairingRegistry().deny(requestId);
-  if (pending) lanServer?.dropPublicKey(pending.devicePublicKey);
+  if (pending) lanServer?.dropPublicKey(pending.devicePublicKey, mobileConnectionStatus('pairing-rejected'));
   emitPairingChanged();
   return snapshotMobilePairing();
 }
 
 export async function revokeMobilePairedDevice(deviceId: string): Promise<MobilePairingSnapshot> {
   getMobilePairingRegistry().revoke(deviceId);
-  lanServer?.dropDevice(deviceId);
+  lanServer?.dropDevice(deviceId, mobileConnectionStatus('device-revoked'));
   emitPairingChanged();
   return snapshotMobilePairing();
 }
 
 export async function rotateMobileHostKey(): Promise<MobilePairingSnapshot> {
   getMobilePairingRegistry().revokeAll();
-  lanServer?.dropAll();
+  lanServer?.dropAll(mobileConnectionStatus('host-key-reset'));
   await rotateMobileHostIdentity();
   emitPairingChanged();
   return snapshotMobilePairing();

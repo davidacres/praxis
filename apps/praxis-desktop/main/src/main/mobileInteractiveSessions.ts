@@ -3,13 +3,16 @@ import {
   PROVIDER_DESCRIPTORS,
   type AgentSessionRecord,
   type AgentTaskDefinition,
+  type AgentToolMode,
   type AiProvider,
   type IssueDetails,
+  type MobileSessionMode,
 } from '@praxis/core';
 import { continueAgentTask, launchAgentTask, prepareAgentLaunch, preparePersistedAgentLaunch } from './agentSessionLauncher';
 import { abortActiveTask, getAiSessionManager, hasActiveTask } from './aiInstance';
 import { getProjectStore } from './projectStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
+import { buildReadOnlyModeTask } from './sessionModeTask';
 
 function recordForSession(sessionId: string): AgentSessionRecord | undefined {
   const manager = getAiSessionManager();
@@ -29,16 +32,29 @@ export async function createMobileInteractiveSession(input: {
   message: string;
   provider?: string;
   model?: string;
+  mode?: MobileSessionMode;
 }): Promise<AgentSessionRecord> {
   const project = getProjectStore().get(input.projectId);
   if (!project) throw new Error(`Project ${input.projectId} was not found.`);
   const settings = getSettingsBackend().read();
   const requestedProvider = input.provider?.trim();
-  const provider = requestedProvider && requestedProvider in PROVIDER_DESCRIPTORS
-    ? requestedProvider as AiProvider
-    : settings.ai.activeProvider;
+  // An unknown provider is an error, never a silent switch to the default:
+  // the phone must launch what it showed the user.
+  if (requestedProvider && !(requestedProvider in PROVIDER_DESCRIPTORS)) {
+    throw new Error(`“${requestedProvider}” is not an AI provider this desktop knows.`);
+  }
+  const provider = (requestedProvider || settings.ai.activeProvider) as AiProvider;
+  if (settings.ai.providers[provider]?.enabled === false) {
+    throw new Error(`${PROVIDER_DESCRIPTORS[provider].label} is turned off on the desktop (Settings → AI Provider).`);
+  }
+  const mode = input.mode ?? 'chat';
+  const analysisPrompt = settings.ai.analysisPrompt.trim();
+  if (mode === 'analysis' && !analysisPrompt) {
+    throw new Error('Set an analysis system prompt under Settings → AI Provider on the desktop first.');
+  }
   const workingDirectory = project.workspaceFolder?.trim() || settings.ai.workingDirectory.trim() || undefined;
-  const toolMode = project.defaultAiToolMode ?? 'full';
+  // Analysis and Review are read-only by contract, whatever the project's default tools.
+  const toolMode: AgentToolMode = mode === 'chat' ? project.defaultAiToolMode ?? 'full' : 'read-only';
   if (toolMode === 'full' && !workingDirectory) {
     throw new Error('The selected project needs a working folder before a full-tools mobile session can start.');
   }
@@ -51,13 +67,15 @@ export async function createMobileInteractiveSession(input: {
     status: 'New',
     projectKey: project.key,
   } as IssueDetails;
-  const taskDefinition: AgentTaskDefinition = {
-    kind: 'general',
-    sessionMode: 'chat',
-    goal: input.message.trim(),
-    scope: `Project ${project.name} (${project.id}) and its configured working folder.`,
-    definitionOfDone: 'Respond to the user and remain available for follow-up turns.',
-  };
+  const taskDefinition: AgentTaskDefinition = mode === 'chat'
+    ? {
+        kind: 'general',
+        sessionMode: 'chat',
+        goal: input.message.trim(),
+        scope: `Project ${project.name} (${project.id}) and its configured working folder.`,
+        definitionOfDone: 'Respond to the user and remain available for follow-up turns.',
+      }
+    : buildReadOnlyModeTask(mode, issue, analysisPrompt, input.message.trim());
   const prepared = await prepareAgentLaunch({ provider });
   await launchAgentTask(prepared, {
     issue,

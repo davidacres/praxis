@@ -1,12 +1,52 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MOBILE_PROTOCOL_VERSION, type MobileCaller, type MobileCommand, type MobileReadRequest } from '@praxis/core';
+import {
+  MOBILE_PROTOCOL_VERSION,
+  type MobileCaller,
+  type MobileCommand,
+  type MobileModelCatalog,
+  type MobileProviderCatalog,
+  type MobileReadRequest,
+  type MobileSessionSnapshot,
+} from '@praxis/core';
 import {
   createMobileHostExecutionHandlers,
   createMobileHostReads,
   mobileActorFor,
   type MobileHostServiceDeps,
 } from './mobileHostServices';
+
+/** A desktop with Anthropic ready, OpenAI without a key, Gemini switched off, and no analysis prompt. */
+const FAKE_PROVIDER_CATALOG: MobileProviderCatalog = {
+  defaultProvider: 'anthropic',
+  defaultModel: 'claude-sonnet-4-6',
+  providers: [
+    { provider: 'anthropic', label: 'Anthropic', kind: 'api', available: true, defaultModel: 'claude-sonnet-4-6' },
+    { provider: 'openai', label: 'OpenAI', kind: 'api', available: false, unavailableReason: 'not-configured', unavailableMessage: 'OpenAI has no API key on the desktop. Add one in Settings → AI Provider.' },
+    { provider: 'gemini', label: 'Google Gemini', kind: 'api', available: false, unavailableReason: 'disabled', unavailableMessage: 'Google Gemini is turned off on the desktop (Settings → AI Provider).' },
+    { provider: 'claude-code-cli', label: 'Claude Code (local)', kind: 'cli-agent', available: true },
+  ],
+  sessionModes: [
+    { mode: 'chat', available: true, toolAccess: 'full' },
+    { mode: 'analysis', available: false, toolAccess: 'read-only', unavailableMessage: 'Set an analysis system prompt under Settings → AI Provider on the desktop first.' },
+    { mode: 'review', available: true, toolAccess: 'read-only' },
+  ],
+};
+
+function fakeModelCatalog(provider: string): MobileModelCatalog {
+  if (provider === 'anthropic') {
+    return {
+      provider,
+      status: 'ok',
+      defaultModel: 'claude-sonnet-4-6',
+      models: [
+        { modelId: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', contextLength: 200000 },
+        { modelId: 'claude-opus-4-6', name: 'Claude Opus 4.6', contextLength: 200000 },
+      ],
+    };
+  }
+  return { provider, status: 'unavailable', message: 'the agent did not answer', models: [] };
+}
 
 const caller: MobileCaller = { deviceId: 'phone-1', subject: 'dave', capabilities: ['view', 'execute', 'approve'] };
 const deviceOnly: MobileCaller = { deviceId: 'phone-1', capabilities: ['view', 'execute', 'approve'] };
@@ -25,6 +65,20 @@ function recorder(overrides: Partial<MobileHostServiceDeps> = {}): Recorder {
     hostId: 'host-mac',
     hostName: () => 'Dave Mac',
     hostOnline: () => true,
+    hostEpoch: 'epoch-1',
+    latestSequence: () => 41,
+    providerCatalog: async projectId => {
+      note('providerCatalog', projectId);
+      return FAKE_PROVIDER_CATALOG;
+    },
+    modelCatalog: async (provider, refresh) => {
+      note('modelCatalog', provider, refresh);
+      return fakeModelCatalog(provider);
+    },
+    describeDevice: async deviceId => {
+      note('describeDevice', deviceId);
+      return { label: 'Dave’s iPhone', projects: [{ projectId: 'p1', name: 'Praxis' }], hostName: 'Dave Mac', accessMode: 'local-only', pairedAt: '2026-09-20T09:00:00.000Z' };
+    },
     listProjects: async () => {
       note('listProjects');
       return [{ projectId: 'p1', name: 'Praxis' }];
@@ -91,6 +145,13 @@ function recorder(overrides: Partial<MobileHostServiceDeps> = {}): Recorder {
     continueSession: async (sessionId, message, actor) => {
       note('continueSession', sessionId, message, actor);
       return { sessionId };
+    },
+    configureSession: async (sessionId, change, actor) => {
+      note('configureSession', sessionId, change, actor);
+      return {
+        sessionId, sessionKey: 'W-1', projectId: 'p1', title: 'x', lifecycle: 'active', mode: change.mode ?? 'chat', archived: false,
+        startedAt: '2026-09-10T09:00:00.000Z', sequence: 0, messages: [], pendingPermissions: [], canContinue: false, canCancel: true,
+      };
     },
     cancelSession: async (sessionId, actor) => {
       note('cancelSession', sessionId, actor);
@@ -184,7 +245,7 @@ test('commands extract payload fields and carry the verified actor', async () =>
   await handlers['workflowRuns.retryStage'](command('workflowRuns.retryStage', { hostId: 'host-mac', projectId: 'p1', runId: 'r1' }, { nodeId: 'qa' }));
   await handlers['workflowRuns.start'](command('workflowRuns.start', { hostId: 'host-mac', projectId: 'p1' }, { workflowId: 'quick-change', task: 'Fix mobile' }));
 
-  assert.deepEqual(calls.find(c => c[0] === 'createSession'), ['createSession', { projectId: 'p1', title: 'Mobile chat', message: 'start here' }]);
+  assert.deepEqual(calls.find(c => c[0] === 'createSession'), ['createSession', { projectId: 'p1', title: 'Mobile chat', message: 'start here', provider: 'anthropic', mode: 'chat' }]);
   assert.deepEqual(calls.find(c => c[0] === 'continueSession'), ['continueSession', 's1', 'ship it', 'dave']);
   assert.deepEqual(calls.find(c => c[0] === 'cancelSession'), ['cancelSession', 's1', 'dave']);
   assert.deepEqual(calls.find(c => c[0] === 'approveRun'), ['approveRun', 'r1', 'dave', 'looks good']);
@@ -201,4 +262,127 @@ test('commands reject a missing or malformed payload', async () => {
   await assert.rejects(handlers['workflowRuns.start'](command('workflowRuns.start', { hostId: 'host-mac', projectId: 'p1' }, {})), /payload\.workflowId/);
   await assert.rejects(handlers['permissions.respond'](command('permissions.respond', { hostId: 'host-mac', projectId: 'p1', requestId: 'q1' }, { decision: 'maybe' })), /'allow' or 'deny'/);
   await assert.rejects(handlers['permissions.respond'](command('permissions.respond', { hostId: 'host-mac', projectId: 'p1' }, { decision: 'allow' })), /requires target\.requestId/);
+});
+
+function readWith(operation: MobileReadRequest['operation'], target: MobileReadRequest['target'], params: MobileReadRequest['params']): MobileReadRequest {
+  return { ...read(operation, target), ...(params ? { params } : {}) };
+}
+
+test('host.info advertises the current surface and the live event cursor', async () => {
+  const { deps } = recorder();
+  const info = await createMobileHostReads(deps, ['sessions.create'])['host.info'](read('host.info', { hostId: 'host-mac' })) as {
+    surfaceRevision: number; readOperations: string[]; commandOperations: string[]; latestSequence: number; hostEpoch: string;
+  };
+  assert.equal(info.surfaceRevision, 3);
+  for (const operation of ['providers.list', 'models.list', 'sessions.usage', 'access.get', 'host.info']) assert.ok(info.readOperations.includes(operation), operation);
+  assert.deepEqual(info.commandOperations, ['sessions.create']);
+  assert.equal(info.latestSequence, 41);
+  assert.equal(info.hostEpoch, 'epoch-1');
+});
+
+test('providers.list and models.list serve the catalog without private settings', async () => {
+  const { deps, calls } = recorder();
+  const reads = createMobileHostReads(deps);
+  const catalog = await reads['providers.list'](read('providers.list', { hostId: 'host-mac', projectId: 'p1' }));
+  assert.deepEqual(catalog, FAKE_PROVIDER_CATALOG);
+  assert.deepEqual(calls.find(c => c[0] === 'providerCatalog'), ['providerCatalog', 'p1']);
+  assert.doesNotMatch(JSON.stringify(catalog), /apiKey|keySource|gatewayUrl|baseUrl|cliPath|https?:/);
+
+  const models = await reads['models.list'](readWith('models.list', { hostId: 'host-mac' }, { provider: 'anthropic', refresh: true })) as MobileModelCatalog;
+  assert.equal(models.status, 'ok');
+  assert.deepEqual(models.models.map(model => model.modelId), ['claude-sonnet-4-6', 'claude-opus-4-6']);
+  assert.deepEqual(calls.find(c => c[0] === 'modelCatalog'), ['modelCatalog', 'anthropic', true]);
+
+  const unavailable = await reads['models.list'](readWith('models.list', { hostId: 'host-mac' }, { provider: 'openai' })) as MobileModelCatalog;
+  assert.equal(unavailable.status, 'provider-unavailable');
+  assert.match(unavailable.message ?? '', /no API key/);
+  assert.equal(calls.filter(c => c[0] === 'modelCatalog').length, 1, 'an unavailable provider is never probed');
+  await assert.rejects(reads['models.list'](readWith('models.list', { hostId: 'host-mac' }, { provider: 'made-up' })), /not an AI provider this desktop knows/);
+});
+
+test('sessions.create launches exactly the selected provider, model and mode', async () => {
+  const { calls, deps } = recorder();
+  const handlers = createMobileHostExecutionHandlers(deps);
+  await handlers['sessions.create'](command('sessions.create', { hostId: 'host-mac', projectId: 'p1' }, { message: 'review the diff', provider: 'anthropic', model: 'claude-opus-4-6', mode: 'review' }));
+  assert.deepEqual(calls.find(c => c[0] === 'createSession'), ['createSession', {
+    projectId: 'p1', title: 'review the diff', message: 'review the diff', provider: 'anthropic', model: 'claude-opus-4-6', mode: 'review',
+  }]);
+});
+
+test('sessions.create refuses unavailable providers, unknown models and unavailable modes with reasons', async () => {
+  const { calls, deps } = recorder();
+  const handlers = createMobileHostExecutionHandlers(deps);
+  const create = (payload: Record<string, unknown>) => handlers['sessions.create'](command('sessions.create', { hostId: 'host-mac', projectId: 'p1' }, { message: 'hi', ...payload }));
+  await assert.rejects(create({ provider: 'openai' }), /OpenAI has no API key on the desktop/);
+  await assert.rejects(create({ provider: 'gemini' }), /Google Gemini is turned off/);
+  await assert.rejects(create({ provider: 'nope' }), /not an AI provider this desktop knows/);
+  await assert.rejects(create({ provider: 'anthropic', model: 'gpt-4o' }), /Anthropic on this desktop does not offer the model “gpt-4o”/);
+  await assert.rejects(create({ provider: 'claude-code-cli', model: 'opus' }), /could not confirm that Claude Code \(local\) offers “opus” \(the agent did not answer\)/);
+  await assert.rejects(create({ mode: 'analysis' }), /Set an analysis system prompt/);
+  await assert.rejects(create({ mode: 'plan' }), /not a session mode/);
+  assert.equal(calls.filter(c => c[0] === 'createSession').length, 0, 'nothing launched');
+});
+
+test('sessions.usage reports recorded totals, and says when a provider reports no cost', async () => {
+  const base: MobileSessionSnapshot = {
+    sessionId: 's1', sessionKey: 'W-1', projectId: 'p1', title: 'x', lifecycle: 'completed', mode: 'chat', archived: false,
+    startedAt: '2026-09-10T09:00:00.000Z', sequence: 12, messages: [], pendingPermissions: [], canContinue: true, canCancel: false,
+  };
+  const withUsage = recorder({ getSession: async () => ({ ...base, provider: 'claude-code-cli', model: 'opus', tokenUsage: { inputTokens: 1200, outputTokens: 300, totalTokens: 1500 }, contextTokens: 9000, contextLimit: 200000, cost: { currency: 'USD', amount: 0.42 } }) });
+  const usage = await createMobileHostReads(withUsage.deps)['sessions.usage'](read('sessions.usage', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }));
+  assert.deepEqual(usage, {
+    sessionId: 's1', provider: 'claude-code-cli', providerLabel: 'Claude Code (local)', model: 'opus', lifecycle: 'completed',
+    tokenUsage: { inputTokens: 1200, outputTokens: 300, totalTokens: 1500 }, contextTokens: 9000, contextLimit: 200000,
+    cost: { currency: 'USD', amount: 0.42 }, costStatus: 'reported', sequence: 12,
+  });
+
+  const noCost = recorder({ getSession: async () => ({ ...base, provider: 'anthropic', tokenUsage: { totalTokens: 50 } }) });
+  const apiUsage = await createMobileHostReads(noCost.deps)['sessions.usage'](read('sessions.usage', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' })) as { costStatus: string; cost?: unknown };
+  assert.equal(apiUsage.costStatus, 'not-reported');
+  assert.equal(apiUsage.cost, undefined, 'an unreported cost is absent, never zero');
+
+  const empty = recorder({ getSession: async () => base });
+  const none = await createMobileHostReads(empty.deps)['sessions.usage'](read('sessions.usage', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' })) as { tokenUsage?: unknown };
+  assert.equal(none.tokenUsage, undefined);
+  await assert.rejects(createMobileHostReads(empty.deps)['sessions.usage'](read('sessions.usage', { hostId: 'host-mac', projectId: 'p2', sessionId: 's1' })), /not found in project p2/);
+});
+
+test('access.get reports the verified caller grant, not a claimed one', async () => {
+  const { deps } = recorder();
+  const access = await createMobileHostReads(deps)['access.get'](read('access.get', { hostId: 'host-mac' }));
+  assert.deepEqual(access, {
+    deviceId: 'phone-1', capabilities: ['view', 'execute', 'approve'], label: 'Dave’s iPhone', projects: [{ projectId: 'p1', name: 'Praxis' }],
+    hostName: 'Dave Mac', accessMode: 'local-only', pairedAt: '2026-09-20T09:00:00.000Z', transport: 'noise-ik', protocolVersion: 1, surfaceRevision: 3,
+  });
+});
+
+test('sessions.configure hands over, changes model or switches mode between turns only', async () => {
+  const idle: MobileSessionSnapshot = {
+    sessionId: 's1', sessionKey: 'W-1', projectId: 'p1', title: 'x', lifecycle: 'completed', mode: 'chat', archived: false, provider: 'anthropic', model: 'claude-sonnet-4-6',
+    startedAt: '2026-09-10T09:00:00.000Z', sequence: 3, messages: [], pendingPermissions: [], canContinue: true, canCancel: false,
+  };
+  const { calls, deps } = recorder({ getSession: async () => idle });
+  const handlers = createMobileHostExecutionHandlers(deps);
+  const configure = (payload: Record<string, unknown>) => handlers['sessions.configure'](command('sessions.configure', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, payload));
+
+  await configure({ provider: 'anthropic', model: 'claude-opus-4-6' });
+  await configure({ provider: 'claude-code-cli' });
+  await configure({ mode: 'review' });
+  await configure({ provider: 'anthropic', model: 'claude-sonnet-4-6', mode: 'chat' });
+  assert.deepEqual(calls.filter(c => c[0] === 'configureSession').map(c => c[2]), [
+    { model: 'claude-opus-4-6' },
+    { handover: { provider: 'claude-code-cli' } },
+    { mode: 'review' },
+  ], 'a no-op change reaches nothing');
+
+  await assert.rejects(configure({ provider: 'openai' }), /OpenAI has no API key/);
+  await assert.rejects(configure({ model: 'gpt-4o' }), /does not offer the model “gpt-4o”/);
+  await assert.rejects(configure({ mode: 'analysis' }), /Set an analysis system prompt/);
+
+  const busy = recorder({ getSession: async () => ({ ...idle, lifecycle: 'active', canCancel: true }) });
+  await assert.rejects(
+    createMobileHostExecutionHandlers(busy.deps)['sessions.configure'](command('sessions.configure', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, { model: 'claude-opus-4-6' })),
+    /Wait for the current turn to finish/,
+  );
+  assert.equal(busy.calls.filter(c => c[0] === 'configureSession').length, 0);
 });

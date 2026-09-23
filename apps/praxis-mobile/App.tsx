@@ -3,6 +3,7 @@ import { StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StoreProvider, useStore } from './app/store';
 import { theme } from './app/theme';
+import { mobileShellShowsWork } from './renderer/mobileShellState';
 import { AppSidebar } from './app/AppSidebar';
 import { ConnectScreen } from './screens/ConnectScreen';
 import { WorkScreen } from './screens/WorkScreen';
@@ -13,7 +14,7 @@ function Shell(): React.JSX.Element {
   const { shell } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  if (shell.connection !== 'ready') {
+  if (!mobileShellShowsWork(shell)) {
     return <ConnectScreen />;
   }
 
