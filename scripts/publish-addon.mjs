@@ -100,11 +100,13 @@ async function main() {
   const targetDirs = args.filter(a => !a.startsWith('--'));
 
   if (publishAll) {
-    const workflowsDir = path.join(ROOT_DIR, 'addons', 'workflows');
-    const entries = await fs.readdir(workflowsDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        await publishAddon(path.join(workflowsDir, entry.name), { dryRun });
+    for (const group of ['workflows', 'skills']) {
+      const groupDir = path.join(ROOT_DIR, 'addons', group);
+      const entries = await fs.readdir(groupDir, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          await publishAddon(path.join(groupDir, entry.name), { dryRun });
+        }
       }
     }
   } else if (targetDirs.length > 0) {
