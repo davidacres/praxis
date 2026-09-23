@@ -80,6 +80,32 @@ function pickPermissionOptionId(
   return options[0]?.optionId;
 }
 
+/**
+ * An agent's JSON-RPC error names only its code ("Internal error", -32603); the reason a
+ * person can act on is in `data.message` — Codex puts "You've hit your usage limit… try
+ * again at …" there. Promote it to the error's message so every caller (a session, a
+ * workflow stage, a one-shot recommendation) shows the real reason, and so provider-limit
+ * detection can read it. `code` and `data` are left as they were.
+ */
+export function withAgentErrorDetail(error: unknown): unknown {
+  if (!error || typeof error !== 'object') return error;
+  const candidate = error as { message?: unknown; data?: unknown };
+  const data = candidate.data;
+  const detail =
+    data && typeof data === 'object' && typeof (data as { message?: unknown }).message === 'string'
+      ? ((data as { message: string }).message).trim()
+      : '';
+  if (!detail) return error;
+  const current = typeof candidate.message === 'string' ? candidate.message : '';
+  if (current.includes(detail)) return error;
+  try {
+    (error as { message: string }).message = detail;
+  } catch {
+    return Object.assign(new Error(detail), { cause: error, data, code: (error as { code?: unknown }).code });
+  }
+  return error;
+}
+
 export class AcpClientWrapper {
   private child?: ChildProcess;
   private connection?: acp.ClientConnection;
@@ -100,6 +126,14 @@ export class AcpClientWrapper {
 
   /** Spawns the agent subprocess and completes the ACP `initialize` handshake. */
   public async connect(): Promise<void> {
+    try {
+      await this.connectInner();
+    } catch (error) {
+      throw withAgentErrorDetail(error);
+    }
+  }
+
+  private async connectInner(): Promise<void> {
     const acpModule: typeof acp = await import('@agentclientprotocol/sdk');
     this.acpModule = acpModule;
 
@@ -427,6 +461,14 @@ export class AcpClientWrapper {
    * already is.
    */
   public async prompt(text: string, images?: readonly WireImageAttachment[]): Promise<acp.PromptResponse> {
+    try {
+      return await this.promptInner(text, images);
+    } catch (error) {
+      throw withAgentErrorDetail(error);
+    }
+  }
+
+  private async promptInner(text: string, images?: readonly WireImageAttachment[]): Promise<acp.PromptResponse> {
     const promptContent: string | acp.ContentBlock[] = images?.length
       ? [
           { type: 'text', text },

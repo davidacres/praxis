@@ -22,6 +22,13 @@ export function isProviderLimitError(errorOrMessage: unknown): boolean {
     if (data && typeof data.errorKind === 'string' && /rate_limit|quota|usage_limit|budget/i.test(data.errorKind)) {
       return true;
     }
+    // Codex: { message: "You've hit your usage limit…", codexErrorInfo: 'usageLimitExceeded' }
+    if (data && typeof data.codexErrorInfo === 'string' && /usage ?limit|rate ?limit|quota|credits?/i.test(data.codexErrorInfo)) {
+      return true;
+    }
+    if (data && typeof data.message === 'string' && LIMIT_REGEX.test(data.message)) {
+      return true;
+    }
     // Check nested error object
     const errObj = obj.error as Record<string, unknown> | undefined;
     if (errObj && typeof errObj === 'object') {

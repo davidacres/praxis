@@ -341,7 +341,7 @@
   ],
   "entryNodeId": "plan",
   "createdAt": "2026-09-23T22:32:20.536Z",
-  "updatedAt": "2026-09-23T22:40:20.186Z",
+  "updatedAt": "2026-09-23T22:55:32.598Z",
   "description": "Plan, implement, then converge review, QA, and security before a human approves.",
   "projectId": "project-1788215224012-rap082"
 }
