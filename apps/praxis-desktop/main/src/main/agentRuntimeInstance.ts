@@ -42,7 +42,8 @@ export function getAgentRuntimeManager(): AgentRuntimeManager {
       trustedProfileRoots: [roots.profiles.global, roots.runtimeHosts.global],
       skillRoots: [roots.skills.global, roots.skills.project],
       trustedSkillRoots: [roots.skills.global],
-      nativeSources: () => nativeSourceOptionsFor()
+      nativeSources: () => nativeSourceOptionsFor(),
+      agentRuntimes: () => getSettingsBackend().read().ai.agentRuntimes
     });
   }
   return manager;

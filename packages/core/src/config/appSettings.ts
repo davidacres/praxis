@@ -172,7 +172,33 @@ export interface AiSettings {
    * Codex, Copilot, Gemini / Antigravity, Cursor), read in place.
    */
   nativeSources: NativeSourceSettings;
+  /**
+   * Which local AI runs an agent, by agent id ("Runs on"). An agent missing
+   * here runs on the session's runtime. Only CLI runtimes (ACP) can be chosen.
+   */
+  agentRuntimes: Record<string, AgentRuntimeChoice>;
+  /** Working habits Praxis asks every AI to follow, so sessions feel the same on any runtime. */
+  workingStyle: WorkingStyleSettings;
 }
+
+/** The runtimes an agent can be pinned to — the local CLI agents Praxis launches over ACP. */
+export type AgentRuntimeChoice = 'claude-code-cli' | 'codex-cli' | 'copilot-cli' | 'antigravity-cli';
+export const AGENT_RUNTIME_CHOICES: readonly AgentRuntimeChoice[] = ['claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli'];
+
+export interface WorkingStyleSettings {
+  enabled: boolean;
+  /** The user's own wording; empty uses Praxis's (`DEFAULT_WORKING_STYLE`). */
+  text: string;
+}
+
+/** Praxis's working style: the same habits whichever AI runs the session. */
+export const DEFAULT_WORKING_STYLE = [
+  '- Before a multi-step change, state a short plan and keep it up to date as a checklist while you work.',
+  '- Before anything that is hard to undo — deleting files, rewriting history, publishing, changing shared systems — say what you are about to do and wait for approval.',
+  '- Make small, reviewable changes that read like the surrounding code.',
+  '- Verify your work with the project’s own build and tests, and say plainly when you could not.',
+  '- Finish with a short summary: what changed, how you verified it, and anything left for the user.'
+].join('\n');
 
 export interface NativeSourceSettings {
   /** Tools whose folders are read; a tool missing here is read. */
@@ -181,6 +207,11 @@ export interface NativeSourceSettings {
   approvedProjects: string[];
   /** Add a project's instruction files to sessions on runtimes that do not read them natively. */
   injectInstructions: boolean;
+  /**
+   * Whose instruction files Praxis adds: every tool's (`all`), or only one
+   * tool's — its files become the project's instructions for every AI.
+   */
+  instructionSource: 'all' | NativeEcosystem;
   /** Extra folders of skills (each `<name>/SKILL.md`) or agent `.md` files. */
   extraSkillPaths: string[];
   extraAgentPaths: string[];
@@ -517,7 +548,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     activeProvider: 'vercel-gateway',
     providers: {},
     browserTools: { enabled: false, allowedHosts: [] },
-    nativeSources: { ecosystems: {}, approvedProjects: [], injectInstructions: true, extraSkillPaths: [], extraAgentPaths: [] }
+    nativeSources: { ecosystems: {}, approvedProjects: [], injectInstructions: true, instructionSource: 'all', extraSkillPaths: [], extraAgentPaths: [] },
+    agentRuntimes: {},
+    workingStyle: { enabled: true, text: '' }
   },
   jira: {
     siteUrl: '',
@@ -614,9 +647,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
  * per-key so a patch touching one priority doesn't reset the others.
  */
 export interface AppSettingsPatch {
-  ai?: Partial<Omit<AiSettings, 'browserTools' | 'nativeSources'>> & {
+  ai?: Partial<Omit<AiSettings, 'browserTools' | 'nativeSources' | 'workingStyle'>> & {
     browserTools?: Partial<AiSettings['browserTools']>;
     nativeSources?: Partial<NativeSourceSettings>;
+    workingStyle?: Partial<WorkingStyleSettings>;
   };
   jira?: Partial<JiraSettings>;
   performance?: Partial<PerformanceSettings>;
@@ -1015,9 +1049,27 @@ function readNativeSources(value: unknown): NativeSourceSettings {
     ecosystems,
     approvedProjects: readStringList(value.approvedProjects, []),
     injectInstructions: readBoolean(value.injectInstructions, fallback.injectInstructions),
+    instructionSource: value.instructionSource === 'all' || (NATIVE_ECOSYSTEMS as readonly unknown[]).includes(value.instructionSource)
+      ? (value.instructionSource as NativeSourceSettings['instructionSource'])
+      : fallback.instructionSource,
     extraSkillPaths: readStringList(value.extraSkillPaths, []),
     extraAgentPaths: readStringList(value.extraAgentPaths, [])
   };
+}
+
+function readAgentRuntimes(value: unknown): Record<string, AgentRuntimeChoice> {
+  if (!isRecord(value)) return {};
+  const result: Record<string, AgentRuntimeChoice> = {};
+  for (const [agentId, runtime] of Object.entries(value)) {
+    if (agentId.trim() && (AGENT_RUNTIME_CHOICES as readonly unknown[]).includes(runtime)) result[agentId] = runtime as AgentRuntimeChoice;
+  }
+  return result;
+}
+
+function readWorkingStyle(value: unknown): WorkingStyleSettings {
+  const fallback = DEFAULT_APP_SETTINGS.ai.workingStyle;
+  if (!isRecord(value)) return { ...fallback };
+  return { enabled: readBoolean(value.enabled, fallback.enabled), text: readString(value.text, fallback.text) };
 }
 
 function readPriorityColors(value: unknown): Record<string, string> {
@@ -1059,13 +1111,17 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         modelTiers: readModelTiers(raw.ai.modelTiers),
         providers: readAiProviderConfigs(raw.ai.providers),
         browserTools: readBrowserTools(raw.ai.browserTools),
-        nativeSources: readNativeSources(raw.ai.nativeSources)
+        nativeSources: readNativeSources(raw.ai.nativeSources),
+        agentRuntimes: readAgentRuntimes(raw.ai.agentRuntimes),
+        workingStyle: readWorkingStyle(raw.ai.workingStyle)
       }
     : {
         ...DEFAULT_APP_SETTINGS.ai,
         providers: { ...DEFAULT_APP_SETTINGS.ai.providers },
         browserTools: { ...DEFAULT_APP_SETTINGS.ai.browserTools, allowedHosts: [] },
-        nativeSources: readNativeSources(undefined)
+        nativeSources: readNativeSources(undefined),
+        agentRuntimes: {},
+        workingStyle: readWorkingStyle(undefined)
       };
 
   const jira: JiraSettings = isRecord(raw) && isRecord(raw.jira)
@@ -1348,7 +1404,10 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
           ...patch.ai!.nativeSources,
           ecosystems: { ...base.ai.nativeSources.ecosystems, ...(patch.ai!.nativeSources!.ecosystems ?? {}) }
         }
-      : base.ai.nativeSources
+      : base.ai.nativeSources,
+    // Replaced whole: clearing an agent's choice removes its key.
+    agentRuntimes: isRecord(patch.ai?.agentRuntimes) ? readAgentRuntimes(patch.ai!.agentRuntimes) : base.ai.agentRuntimes,
+    workingStyle: isRecord(patch.ai?.workingStyle) ? { ...base.ai.workingStyle, ...patch.ai!.workingStyle } : base.ai.workingStyle
   };
 
   const jira: JiraSettings = {

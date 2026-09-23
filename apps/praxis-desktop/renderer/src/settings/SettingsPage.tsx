@@ -26,6 +26,7 @@ import type {
 import {
   BUILT_IN_LOOKS,
   DEFAULT_APP_SETTINGS,
+  DEFAULT_WORKING_STYLE,
   normalizePriorityColor,
   PRIORITY_NAMES
 } from './settingsDefaults';
@@ -767,6 +768,43 @@ function AgentRuntimeSection({
   }, [addonState]);
 
   const runtimeProviders = AI_PROVIDERS.filter(provider => provider.kind === 'cli-agent');
+  const runtimeName = (id: string) => (AI_PROVIDERS.find(provider => provider.id === id)?.label ?? id).replace(/\s*\(local\)$/, '').replace(/ CLI$/, '');
+  const agentRuntimes = settings.ai.agentRuntimes;
+  const setAgentRuntime = async (agentId: string, runtime: string) => {
+    const next = { ...agentRuntimes };
+    if (runtime) next[agentId] = runtime as (typeof next)[string];
+    else delete next[agentId];
+    await update({ ai: { agentRuntimes: next } });
+    await refresh();
+  };
+  /** "Runs on" for an agent that can run on any runtime; undefined for one with its own launch binding. */
+  const runsOnControl = (agentId: string, agentName: string, binding: (typeof launchBindings)[number] | undefined) => {
+    const followsSession = !binding || binding.pinnedBy || binding.followsSessionRuntime || binding.manifest.entry === 'session' || binding.manifest.type === 'gateway';
+    if (!followsSession) return undefined;
+    const current = agentRuntimes[agentId] ?? '';
+    const choices = runtimeProviders.filter(
+      runtime => runtime.id === current || providerStatuses.find(status => status.provider === runtime.id)?.configured
+    );
+    return (
+      <label className="runs-on-control">
+        <span>Runs on</span>
+        <select
+          className="input"
+          value={current}
+          aria-label={`${agentName} runs on`}
+          data-testid={`agent-runs-on-${agentId}`}
+          onChange={event => void setAgentRuntime(agentId, event.target.value)}
+        >
+          <option value="">Session’s runtime</option>
+          {choices.map(runtime => (
+            <option key={runtime.id} value={runtime.id}>
+              {runtimeName(runtime.id)}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  };
   const availableRuntimes = runtimeProviders.filter(runtime => providerStatuses.find(status => status.provider === runtime.id)?.configured).length;
   // Every binding always has *some* profile entry — one it wrote itself
   // (curated) or one Praxis auto-synthesizes as a placeholder when it has no
@@ -878,8 +916,10 @@ function AgentRuntimeSection({
                     // gateway unless it says otherwise; only the exceptions get a line.
                     const notes = [
                       binding?.pinnedBy
-                        ? `Runs on ${runtimeOfBinding(binding)} — set by ${binding.pinnedBy.name}`
-                        : binding && binding.manifest.type !== 'gateway' ? `${binding.manifest.type.toUpperCase()} launch binding` : undefined,
+                        ? binding.pinnedBy.setting ? undefined : `Runs on ${runtimeOfBinding(binding)} — set by ${binding.pinnedBy.name}`
+                        : binding && binding.manifest.type !== 'gateway' && binding.manifest.entry !== 'session' && !binding.followsSessionRuntime
+                          ? `${binding.manifest.type.toUpperCase()} launch binding`
+                          : undefined,
                       profile.legacy ? 'legacy brief.md' : undefined,
                       profile.error,
                       binding?.errors.length ? binding.errors.map(item => item.message).join('; ') : undefined
@@ -902,7 +942,12 @@ function AgentRuntimeSection({
                           ...(profile.source ? [nativeReaders(profile.source.readBy) ?? 'Runs on any runtime through Praxis'] : []),
                           ...(profile.alsoIn?.length ? [`Also in ${profile.alsoIn.join(', ')}`] : [])
                         ].join(' · ') || undefined}
-                        action={profile.source ? nativeActions('agent', profile.profile.id, profile.source.path, profile.trusted) : undefined}
+                        action={
+                          <>
+                            {runsOnControl(profile.profile.id, profile.profile.name, binding)}
+                            {profile.source ? nativeActions('agent', profile.profile.id, profile.source.path, profile.trusted) : null}
+                          </>
+                        }
                       />
                     );
                   })}
@@ -972,6 +1017,31 @@ function AgentRuntimeSection({
               testId="native-inject-toggle"
               onChange={next => void update({ ai: { nativeSources: { injectInstructions: next } } })}
             />
+            <div className="settings-field-row">
+              <div className="settings-field-label">
+                <strong>Instructions for every AI</strong>
+                <div className="settings-field-help">
+                  Use one tool’s files as the project’s instructions on every AI, or add every tool’s. A runtime still reads its own files itself.
+                </div>
+              </div>
+              <div className="settings-field-control">
+                <select
+                  className="input"
+                  value={settings.ai.nativeSources.instructionSource}
+                  aria-label="Instructions for every AI"
+                  data-testid="native-instruction-source"
+                  disabled={!settings.ai.nativeSources.injectInstructions}
+                  onChange={event => void update({ ai: { nativeSources: { instructionSource: event.target.value as typeof settings.ai.nativeSources.instructionSource } } })}
+                >
+                  <option value="all">Every tool’s files</option>
+                  <option value="claude">Claude Code’s (CLAUDE.md)</option>
+                  <option value="codex">AGENTS.md (Codex and shared)</option>
+                  <option value="copilot">GitHub Copilot’s</option>
+                  <option value="gemini">Gemini’s (GEMINI.md)</option>
+                  <option value="cursor">Cursor’s rules</option>
+                </select>
+              </div>
+            </div>
             {(['project', 'user'] as const).map(scope => {
               // AGENTS.md first — the file most tools share — then the rest by path.
               const files = (snapshot.instructions ?? [])
@@ -990,6 +1060,8 @@ function AgentRuntimeSection({
                         ? `Only applies to ${file.appliesTo ?? 'some files'}, so it is not added to sessions.`
                         : !settings.ai.nativeSources.injectInstructions
                           ? 'Not added to other runtimes (turned off above).'
+                          : settings.ai.nativeSources.instructionSource !== 'all' && settings.ai.nativeSources.instructionSource !== file.ecosystem
+                            ? `Not added — every AI gets ${NATIVE_TOOL_LABELS[settings.ai.nativeSources.instructionSource] ?? settings.ai.nativeSources.instructionSource}’s files instead.`
                           : file.tooLargeForSessions
                             ? 'Too large for Praxis to add to sessions on other runtimes — only the runtimes that read it get it.'
                           : approved
@@ -1013,6 +1085,41 @@ function AgentRuntimeSection({
             })}
             {(snapshot.instructions ?? []).length === 0 && (
               <div className="placeholder-text">No instruction files from other AI tools (AGENTS.md, CLAUDE.md, GEMINI.md, …) were found.</div>
+            )}
+            <h4 className="settings-subsection-title">Working style</h4>
+            <Toggle
+              label="Ask every AI to work the same way"
+              description="Adds these habits to every session, whichever AI runs it, so sessions feel the same on Claude, Codex or any other runtime."
+              checked={settings.ai.workingStyle.enabled}
+              testId="working-style-toggle"
+              onChange={next => void update({ ai: { workingStyle: { enabled: next } } })}
+            />
+            {settings.ai.workingStyle.enabled && (
+              <FieldRow
+                label="Habits"
+                description={settings.ai.workingStyle.text.trim() ? 'Your own wording.' : 'Praxis’s working style. Edit it to make it yours.'}
+                stacked
+              >
+                <div className="working-style-editor">
+                  <DebouncedTextArea
+                    ariaLabel="Working style"
+                    value={settings.ai.workingStyle.text.trim() || DEFAULT_WORKING_STYLE}
+                    onCommit={value =>
+                      void update({ ai: { workingStyle: { text: value.trim() === DEFAULT_WORKING_STYLE ? '' : value } } })
+                    }
+                  />
+                  {settings.ai.workingStyle.text.trim() && (
+                    <button
+                      className="btn btn-quiet"
+                      type="button"
+                      data-testid="working-style-reset"
+                      onClick={() => void update({ ai: { workingStyle: { text: '' } } })}
+                    >
+                      Use Praxis’s working style
+                    </button>
+                  )}
+                </div>
+              </FieldRow>
             )}
           </>
         )}

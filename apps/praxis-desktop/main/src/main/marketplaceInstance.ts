@@ -3,6 +3,8 @@ import * as path from 'node:path';
 
 import { app } from 'electron';
 import {
+  AGENT_RUNTIME_CHOICES,
+  PROVIDER_DESCRIPTORS,
   isBundledAgent,
   mirrorBundledAgents,
   type ActiveAppearanceAddons,
@@ -341,8 +343,50 @@ export async function refreshAgentRuntimeForAddons(): Promise<void> {
   }
 }
 
+/**
+ * Praxis's own runtime-pin packages (Claude/Codex Planner, Reviewer,
+ * Implementer, and the older id-reusing Praxis ones) were retired in favour of
+ * the per-agent "Runs on" setting. Carry an enabled one's choice over to the
+ * setting — unless the user already chose — and uninstall them all.
+ */
+const RETIRED_PIN_PACKAGE = /^@davidacres\/praxis-addon-agent-(?:(?:claude|codex)-)?(?:planner|reviewer|implementer)$/;
+
+export async function migrateAddonPinsToSettings(): Promise<number> {
+  const store = getAddonStorage();
+  const backend = getSettingsBackend();
+  const choices = { ...backend.read().ai.agentRuntimes };
+  const migrated: string[] = [];
+  for (const addon of await store.list()) {
+    const target = addonPinTarget(addon);
+    if (!target || !RETIRED_PIN_PACKAGE.test(addon.packageName)) continue;
+    let command: string | undefined;
+    try {
+      const manifest = JSON.parse(await fs.promises.readFile(path.join(store.addonDir('agent', addon.manifest.id), 'agent.json'), 'utf8')) as { entry?: string | { command?: string } };
+      command = typeof manifest.entry === 'string' ? manifest.entry : manifest.entry?.command;
+    } catch {
+      command = undefined;
+    }
+    const runtime = AGENT_RUNTIME_CHOICES.find(id => {
+      const descriptor = PROVIDER_DESCRIPTORS[id];
+      return descriptor.kind === 'cli-agent' && descriptor.defaultCommand === path.basename(command ?? '');
+    });
+    if (addon.enabled && runtime) choices[target] ??= runtime;
+    await store.remove('agent', addon.manifest.id);
+    await fs.promises.rm(path.join(getAgentRuntimeRoots().agents.global, addonMirrorId(addon)), { recursive: true, force: true });
+    migrated.push(addon.enabled && runtime ? `${addon.manifest.name} → ${target} runs on ${runtime}` : `${addon.manifest.name} (removed)`);
+  }
+  if (migrated.length === 0) return 0;
+  await backend.write({ ai: { agentRuntimes: choices } });
+  // A retired package may have been mirrored over a built-in by an older Praxis.
+  await mirrorBundledAgents(getAgentRuntimeRoots().agents.global);
+  getLogBus().appendLine(`[marketplace] moved Praxis agent pins to Settings › Agent Runtime: ${migrated.join('; ')}`);
+  return migrated.length;
+}
+
 export async function reconcileInstalledOnLaunch(): Promise<void> {
+  const migrated = await migrateAddonPinsToSettings();
   await syncAgentAddons();
+  if (migrated > 0) await getAgentRuntimeManager().refresh().catch(() => undefined);
   await syncSkillAddons();
   const cfg = getSettingsBackend().read().marketplace;
   if (!cfg.checkOnLaunch) return;

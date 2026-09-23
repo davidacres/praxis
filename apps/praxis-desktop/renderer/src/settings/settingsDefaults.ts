@@ -80,6 +80,15 @@ export const BUILT_IN_LOOKS = [
 ];
 
 /** Defaults for the runtime Settings shape — keep in sync with `DEFAULT_APP_SETTINGS` in core. */
+/** Mirror of core's `DEFAULT_WORKING_STYLE` (the renderer imports types only from core). */
+export const DEFAULT_WORKING_STYLE = [
+  '- Before a multi-step change, state a short plan and keep it up to date as a checklist while you work.',
+  '- Before anything that is hard to undo — deleting files, rewriting history, publishing, changing shared systems — say what you are about to do and wait for approval.',
+  '- Make small, reviewable changes that read like the surrounding code.',
+  '- Verify your work with the project’s own build and tests, and say plainly when you could not.',
+  '- Finish with a short summary: what changed, how you verified it, and anything left for the user.'
+].join('\n');
+
 export const DEFAULT_APP_SETTINGS = {
   ai: {
     gatewayUrl: '',
@@ -91,9 +100,12 @@ export const DEFAULT_APP_SETTINGS = {
       ecosystems: {} as Record<string, boolean>,
       approvedProjects: [] as string[],
       injectInstructions: true,
+      instructionSource: 'all' as const,
       extraSkillPaths: [] as string[],
       extraAgentPaths: [] as string[]
-    }
+    },
+    agentRuntimes: {} as Record<string, 'claude-code-cli' | 'codex-cli' | 'copilot-cli' | 'antigravity-cli'>,
+    workingStyle: { enabled: true, text: '' }
   },
   jira: {
     siteUrl: '',

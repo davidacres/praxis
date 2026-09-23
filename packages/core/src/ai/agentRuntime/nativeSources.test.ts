@@ -215,7 +215,7 @@ test('the runtime manager lists other tools’ items, gives agents a session-run
 
 test('native source settings are sanitised and merge field by field', () => {
   const settings = sanitizeAppSettings({ ai: { nativeSources: { ecosystems: { claude: false, bogus: true }, approvedProjects: ['/a', '/a'], injectInstructions: 'yes' } } });
-  assert.deepEqual(settings.ai.nativeSources, { ecosystems: { claude: false }, approvedProjects: ['/a'], injectInstructions: true, extraSkillPaths: [], extraAgentPaths: [] });
+  assert.deepEqual(settings.ai.nativeSources, { ecosystems: { claude: false }, approvedProjects: ['/a'], injectInstructions: true, instructionSource: 'all', extraSkillPaths: [], extraAgentPaths: [] });
   const merged = mergeAppSettings(settings, { ai: { nativeSources: { ecosystems: { cursor: false }, approvedProjects: ['/a', '/b'] } } });
   assert.deepEqual(merged.ai.nativeSources.ecosystems, { claude: false, cursor: false });
   assert.deepEqual(merged.ai.nativeSources.approvedProjects, ['/a', '/b']);
@@ -244,4 +244,23 @@ test('an instruction file too large for a session is left out and flagged in the
   const snapshot = await manager.refresh();
   const flags = Object.fromEntries((snapshot.instructions ?? []).map(file => [file.displayPath, file.tooLargeForSessions]));
   assert.deepEqual(flags, { 'AGENTS.md': true, 'CLAUDE.md': false });
+});
+
+test('with one tool chosen as the source, only its instruction files are added', async () => {
+  const base = await mkdtemp(path.join(tmpdir(), 'praxis-native-source-'));
+  const repo = path.join(base, 'repo');
+  await mkdir(path.join(repo, '.git'), { recursive: true });
+  await put(repo, 'AGENTS.md', 'Shared: PELICAN.');
+  await put(repo, 'CLAUDE.md', 'Claude: CORMORANT.');
+  await put(repo, 'GEMINI.md', 'Gemini: GANNET.');
+  const { instructions } = await discoverNativeSources({ projectRoot: repo, homeDir: path.join(base, 'home'), projectApproved: true });
+  const claudeOnly = buildSessionInstructions(instructions, 'gateway', { projectApproved: true, source: 'claude' });
+  assert.match(claudeOnly.text, /CORMORANT/);
+  assert.doesNotMatch(claudeOnly.text, /PELICAN|GANNET/);
+  assert.deepEqual(claudeOnly.skipped.filter(item => item.reason === 'other-source').map(item => item.displayPath).sort(), ['AGENTS.md', 'GEMINI.md']);
+  // Codex reads AGENTS.md itself; with Claude's files as the source it still gets CLAUDE.md.
+  assert.match(buildSessionInstructions(instructions, 'codex-cli', { projectApproved: true, source: 'claude' }).text, /CORMORANT/);
+  // Claude Code reads CLAUDE.md itself, so nothing is added.
+  assert.equal(buildSessionInstructions(instructions, 'claude-code-cli', { projectApproved: true, source: 'claude' }).text, '');
+  assert.match(buildSessionInstructions(instructions, 'gateway', { projectApproved: true, source: 'all' }).text, /PELICAN[\s\S]*CORMORANT/);
 });

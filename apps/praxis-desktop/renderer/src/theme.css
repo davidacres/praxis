@@ -5444,6 +5444,12 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 /* Agent Runtime lists: identity icon on the surface (no tile), then title + badges. */
 .runtime-item-icon { flex: 0 0 auto; margin-top: 2px; color: var(--text-secondary); }
 .runtime-item-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* "Runs on" choice on an agent row: a quiet label beside a compact select. */
+.runs-on-control { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--text-tertiary); }
+.settings-inline-controls .runs-on-control .input { min-width: 150px; }
+/* Working style: the habits text at full width, its reset link beneath. */
+.working-style-editor { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); width: 100%; }
+.working-style-editor .textarea, .working-style-editor textarea { width: 100%; min-height: 120px; }
 
 .settings-field-help {
   margin-top: 2px;
