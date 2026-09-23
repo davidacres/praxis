@@ -2251,6 +2251,26 @@ export function SessionsPage({
                         stageSession={activeWorkflowStageSession}
                       />
                     )}
+                    {workflowOwnsRuntime && selected.provider && (
+                      <span
+                        className="composer-chip session-runtime-chip is-readonly"
+                        data-testid="session-provider"
+                        title="The workflow controls the active stage runtime; this is the session's selected provider"
+                      >
+                        <Icon name={providerIconName(selected.provider)} size={14} />
+                        {PROVIDER_LABELS[selected.provider]}
+                      </span>
+                    )}
+                    {workflowOwnsRuntime && selected.provider && (
+                      <span
+                        className="composer-chip session-runtime-chip is-readonly"
+                        data-testid="session-model"
+                        title="The workflow controls the active stage runtime; this is the session's selected model"
+                      >
+                        <Icon name="sparkles" size={14} />
+                        <span>{selected.model ?? 'Provider default'}</span>
+                      </span>
+                    )}
                     {!workflowOwnsRuntime && selected.provider && (selected.workflowRole === 'stage' ? (
                       <span
                         className="composer-chip session-runtime-chip is-readonly"

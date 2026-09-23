@@ -6,6 +6,7 @@ import type {
 import { PROJECT_BRIEF_FIELDS } from './projectBriefFields';
 import { PROJECT_COLOR_NAMES, projectColorValue } from './projectColors';
 import { Icon } from '../ui/Icon';
+import { ChipSelect } from '../ui/ChipSelect';
 
 /**
  * Duplicated from core's `PROJECT_ICON_NAMES`, not imported — core is
@@ -201,8 +202,8 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
           <span className="ph-progress"><i><b style={{ width: `${Math.round((filled / briefTotal) * 100)}%` }} /></i>{filled}/{briefTotal}</span>
         </div>
         {editing && <>
-          <label className="field"><span>Project type</span><select className="input" value={type} onChange={e => setType(e.target.value as ProjectType)}><option value="software">Software Development</option><option value="product">Product Development</option><option value="research">Research</option><option value="experiment">Experiment / Prototype</option></select></label>
-          <label className="field"><span>Default session tools</span><select className="input" value={toolMode} disabled={!project.workspaceFolder} onChange={e => setToolMode(e.target.value as AgentToolMode)}>{!project.workspaceFolder && <option value="project-only">Project-board tools only</option>}<option value="read-only">Read-only tools</option><option value="full">Full tools</option></select></label>
+          <label className="field"><span>Project type</span><ChipSelect block ariaLabel="Project type" value={type} onChange={value => setType(value as ProjectType)} options={[{ value: 'software', label: 'Software Development' }, { value: 'product', label: 'Product Development' }, { value: 'research', label: 'Research' }, { value: 'experiment', label: 'Experiment / Prototype' }]} /></label>
+          <label className="field"><span>Default session tools</span><ChipSelect block ariaLabel="Default session tools" value={toolMode} disabled={!project.workspaceFolder} onChange={value => setToolMode(value as AgentToolMode)} options={[...(!project.workspaceFolder ? [{ value: 'project-only', label: 'Project-board tools only' }] : []), { value: 'read-only', label: 'Read-only tools' }, { value: 'full', label: 'Full tools' }]} /></label>
         </>}
         {editing
           ? <label className="field"><span>Purpose</span><textarea className="input textarea" value={purpose} onChange={e => setPurpose(e.target.value)} /></label>
@@ -226,15 +227,12 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
                 value={stage.name}
                 onChange={e => editStage(index, { name: e.target.value })}
               />
-              <select
-                className="input"
-                aria-label={`Stage ${index + 1} category`}
+              <ChipSelect
+                ariaLabel={`Stage ${index + 1} category`}
                 value={stage.category ?? 'indeterminate'}
-                onChange={e => editStage(index, { category: e.target.value as ProjectWorkflowCategory })}
-              >
-                {(['todo', 'indeterminate', 'done'] as const).map(value =>
-                  <option key={value} value={value}>{CATEGORY_LABEL[value]}</option>)}
-              </select>
+                onChange={value => editStage(index, { category: value as ProjectWorkflowCategory })}
+                options={(['todo', 'indeterminate', 'done'] as const).map(value => ({ value, label: CATEGORY_LABEL[value] }))}
+              />
               <div className="ph-stage-actions">
                 <button className="icon-btn icon-btn-sm" title="Move up" aria-label={`Move ${stage.name} up`} disabled={index === 0} onClick={() => moveStage(index, -1)}><Icon name="arrow-up" size={12} /></button>
                 <button className="icon-btn icon-btn-sm" title="Move down" aria-label={`Move ${stage.name} down`} disabled={index === all.length - 1} onClick={() => moveStage(index, 1)}><Icon name="chevron-down" size={12} /></button>
@@ -282,7 +280,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
           <div><strong>{link.displayName}</strong><small>{link.connectionId.startsWith('project-plans-') ? 'Local plans · read-only' : 'Linked board'}</small></div>
           <button className="icon-btn" title="Remove from planning sources" aria-label={`Remove ${link.displayName} from planning sources`} onClick={async () => onChanged(await window.praxis.projects.unlinkBoard(project.id, link.connectionId, link.boardId))}><Icon name="trash" size={14} /></button>
         </div>)}
-        {candidates.length > 0 && <select className="input" defaultValue="" onChange={async e => { const board = candidates.find(item => `${item.connectionId}:${item.id}` === e.target.value); if (board?.connectionId) onChanged(await window.praxis.projects.linkBoard(project.id, { connectionId: board.connectionId, boardId: board.id, displayName: board.name })); e.target.value = ''; }}><option value="">Link an existing board…</option>{candidates.map(board => <option key={`${board.connectionId}:${board.id}`} value={`${board.connectionId}:${board.id}`}>{board.name}</option>)}</select>}
+        {candidates.length > 0 && <ChipSelect block ariaLabel="Link an existing board" icon="link" value="" placeholder="Link an existing board…" onChange={async value => { const board = candidates.find(item => `${item.connectionId}:${item.id}` === value); if (board?.connectionId) onChanged(await window.praxis.projects.linkBoard(project.id, { connectionId: board.connectionId, boardId: board.id, displayName: board.name })); }} options={candidates.map(board => ({ value: `${board.connectionId}:${board.id}`, label: board.name }))} />}
       </section>
     </div>
     {error && <div className="form-error">{error}</div>}

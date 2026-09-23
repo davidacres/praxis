@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 /**
  * FX-BE-022 — the run monitor and the governed delivery pipeline end to end.
@@ -55,16 +56,16 @@ function runPanel(page: Page) {
   return page.getByTestId('wf-run-panel');
 }
 
-/** Starts a run from the sidebar's Runs "+" and lands on its workspace. */
+/** Starts a run from its workflow row and lands on its workspace. */
 async function startRun(page: Page, task: string, options: { ticket?: string } = {}): Promise<void> {
-  await page.getByTestId('project-workflow-run-new').click();
+  await page.getByRole('button', { name: /^Start a run of / }).first().click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByLabel('Run task').fill(task);
   if (options.ticket) {
     const ticketField = page.getByTestId('wf-runstart-issue');
     await expect(ticketField).toBeVisible({ timeout: 10000 });
-    await ticketField.fill(options.ticket);
+    await chooseOption(ticketField, options.ticket);
   }
   await dialog.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(runPanel(page)).toBeVisible();

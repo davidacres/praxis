@@ -115,8 +115,8 @@ export interface SidebarProps {
   onSelectWorkflow: (project: ProjectRecord, workflowId: string) => void;
   onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
   onSelectWorkflowRuns?: (project: ProjectRecord) => void;
-  /** Opens the start-run dialog, optionally preselecting a workflow. */
-  onStartWorkflowRun: (project: ProjectRecord, workflowId?: string) => void;
+  /** Opens the start-run dialog for the selected workflow. */
+  onStartWorkflowRun: (project: ProjectRecord, workflowId: string) => void;
   onCancelWorkflowRun: (runId: string) => void | Promise<void>;
   onDeleteWorkflowRun: (project: ProjectRecord, run: WorkflowRunSummary) => void;
   onArchiveWorkflowRun?: (runId: string, archived: boolean) => Promise<void>;
@@ -548,13 +548,6 @@ export function Sidebar({
                               <span className="tree-label">Runs</span>
                               {projectRunCount > 0 && <span className="tree-badge" title={`${projectRunCount} run${projectRunCount === 1 ? '' : 's'} in flight`}>{projectRunCount}</span>}
                             </button>
-                            <button
-                              type="button"
-                              className="sidebar-section-add"
-                              aria-label={`Start a run in ${project.name}`}
-                              data-testid="project-workflow-run-new"
-                              onClick={() => onStartWorkflowRun(project)}
-                            ><Icon name="plus" size={13} /></button>
                           </div>
                           {!projectRunsCollapsed && activeProjectRuns.map(run => {
                             const live = run.status === 'running' || run.status === 'awaiting-approval';

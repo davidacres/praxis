@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 let app: TestApp;
 
@@ -166,7 +167,7 @@ test('renders the visual Git graph and commit inspector', async () => {
   const branchColors = window.getByRole('checkbox', { name: 'Branch colors' });
   await branchColors.click();
   await expect(branchColors).not.toBeChecked();
-  await window.getByRole('combobox', { name: 'Graph orientation' }).selectOption('horizontal');
+  await chooseOption(window.getByRole('button', { name: 'Graph orientation' }), 'horizontal');
   await expect(window.locator('.git-history-horizontal')).toBeVisible();
   await expect(window.getByRole('list', { name: 'Commit history' }).getByRole('listitem').first()).toBeVisible();
   await window.screenshot({ path: 'output/playwright/git-graph-horizontal.png', fullPage: true });

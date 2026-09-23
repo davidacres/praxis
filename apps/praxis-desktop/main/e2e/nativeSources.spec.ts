@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
+import { chooseOption } from './chipSelect';
 
 let app: TestApp | undefined;
 let mock: MockGatewayServer | undefined;
@@ -128,7 +129,7 @@ test('other AI tools’ agents, skills and instructions are discovered, approved
   await win.getByTestId('titlebar-settings').click();
   await win.getByTestId('settings-nav-agent-runtime').click();
   await tab('instructions');
-  await panel.getByTestId('native-instruction-source').selectOption({ label: 'Claude Code’s (CLAUDE.md)' });
+  await chooseOption(panel.getByTestId('native-instruction-source'), { label: 'Claude Code’s (CLAUDE.md)' });
   await expect(panel.getByTestId('native-instruction-AGENTS.md')).toContainText('Not added — every AI gets Claude Code’s files instead.');
   await expect(panel.getByTestId('native-instruction-CLAUDE.md')).toContainText('Added to sessions on the other runtimes.');
   await win.mouse.move(0, 0);

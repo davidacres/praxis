@@ -27,6 +27,7 @@ import {
   uniqueId,
   updateProfile
 } from './deploymentEdits';
+import { ChipSelect } from '../ui/ChipSelect';
 
 /**
  * Deployment profile selection and review (FX-BE-059 / FX-BE-060 / TASK-159).
@@ -284,10 +285,11 @@ function DeploymentProfileForm({
 
       {/* Executor and target are two independent selectors, never coupled to each other or to any tracker connection. */}
       <FieldRow label="Executor">
-        <select
+        <ChipSelect
+          ariaLabel="Executor"
           value={profile.executor.kind}
-          onChange={e => {
-            const kind = e.target.value as ExecutorRef['kind'];
+          onChange={value => {
+            const kind = value as ExecutorRef['kind'];
             const executor =
               kind === 'direct-process'
                 ? newDirectProcessExecutor()
@@ -296,14 +298,12 @@ function DeploymentProfileForm({
                   : newGitLabCiExecutor();
             onChange(setExecutor(profile, executor));
           }}
-        >
-          {EXECUTOR_KINDS.map(candidate => (
-            <option key={candidate.kind} value={candidate.kind}>
-              {candidate.label}
-              {!candidate.supported ? ' (not yet implemented)' : ''}
-            </option>
-          ))}
-        </select>
+          options={EXECUTOR_KINDS.map(candidate => ({
+            value: candidate.kind,
+            label: candidate.label,
+            meta: candidate.supported ? undefined : 'not yet implemented'
+          }))}
+        />
       </FieldRow>
       {profile.executor.kind === 'github-actions' && (
         <FieldRow label="Workflow file">
@@ -330,21 +330,20 @@ function DeploymentProfileForm({
       )}
 
       <FieldRow label="Target">
-        <select
+        <ChipSelect
+          ariaLabel="Target"
           value={profile.target.kind}
-          onChange={e => {
-            const kind = e.target.value as TargetRef['kind'];
+          onChange={value => {
+            const kind = value as TargetRef['kind'];
             const target = kind === 'local-process' ? newLocalProcessTarget() : kind === 'directory' ? newDirectoryTarget() : newIisTarget();
             onChange(setTarget(profile, target));
           }}
-        >
-          {TARGET_KINDS.map(candidate => (
-            <option key={candidate.kind} value={candidate.kind}>
-              {candidate.label}
-              {!candidate.supported ? ' (not yet implemented)' : ''}
-            </option>
-          ))}
-        </select>
+          options={TARGET_KINDS.map(candidate => ({
+            value: candidate.kind,
+            label: candidate.label,
+            meta: candidate.supported ? undefined : 'not yet implemented'
+          }))}
+        />
       </FieldRow>
       {profile.target.kind === 'local-process' && (
         <LocalProcessTargetFields target={profile.target} onChange={target => onChange(setTarget(profile, target))} />
@@ -368,19 +367,21 @@ function DeploymentProfileForm({
       <HealthCheckFields profile={profile} onChange={onChange} />
 
       <FieldRow label="Rollback policy">
-        <select
+        <ChipSelect
+          ariaLabel="Rollback policy"
           value={profile.rollback.kind}
-          onChange={e =>
+          onChange={value =>
             onChange(
               updateProfile(profile, {
-                rollback: e.target.value === 'keep-previous-artifact' ? { kind: 'keep-previous-artifact', retainCount: 1 } : { kind: 'none' }
+                rollback: value === 'keep-previous-artifact' ? { kind: 'keep-previous-artifact', retainCount: 1 } : { kind: 'none' }
               })
             )
           }
-        >
-          <option value="none">None</option>
-          <option value="keep-previous-artifact">Keep previous artifact</option>
-        </select>
+          options={[
+            { value: 'none', label: 'None' },
+            { value: 'keep-previous-artifact', label: 'Keep previous artifact' }
+          ]}
+        />
       </FieldRow>
 
       <CredentialsFields profile={profile} credentials={credentials} onChange={onChange} />
@@ -446,10 +447,10 @@ function HealthCheckFields({ profile, onChange }: { profile: DeploymentProfile; 
     <fieldset className="form-fieldset">
       <legend>Post-install health check</legend>
       <FieldRow label="Kind">
-        <select
+        <ChipSelect
+          ariaLabel="Health check kind"
           value={profile.healthCheck?.kind ?? ''}
-          onChange={e => {
-            const kind = e.target.value;
+          onChange={kind => {
             if (!kind) {
               onChange(updateProfile(profile, { healthCheck: undefined }));
               return;
@@ -458,14 +459,8 @@ function HealthCheckFields({ profile, onChange }: { profile: DeploymentProfile; 
               kind === 'http' ? { kind: 'http', path: '/' } : kind === 'tcp' ? { kind: 'tcp', port: 0 } : { kind: 'log-line', match: '' };
             onChange(updateProfile(profile, { healthCheck }));
           }}
-        >
-          <option value="">none</option>
-          {PROBE_KINDS.map(candidate => (
-            <option key={candidate.kind} value={candidate.kind}>
-              {candidate.label}
-            </option>
-          ))}
-        </select>
+          options={[{ value: '', label: 'none' }, ...PROBE_KINDS.map(candidate => ({ value: candidate.kind, label: candidate.label }))]}
+        />
       </FieldRow>
       {profile.healthCheck?.kind === 'http' && (
         <FieldRow label="Path">
@@ -736,18 +731,15 @@ function DeploymentHistoryPanel({
               <code>{shortDigest(artifact.digest)}</code>
               {otherProfiles.length > 0 && (
                 <>
-                  <select
-                    aria-label="Promote to profile"
+                  <ChipSelect
+                    ariaLabel="Promote to profile"
                     value={promoteTarget[artifact.id] ?? ''}
-                    onChange={e => setPromoteTarget(current => ({ ...current, [artifact.id]: e.target.value }))}
-                  >
-                    <option value="">promote to…</option>
-                    {otherProfiles.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name || p.id} ({p.environment || 'no environment'})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={value => setPromoteTarget(current => ({ ...current, [artifact.id]: value }))}
+                    options={[
+                      { value: '', label: 'promote to…' },
+                      ...otherProfiles.map(p => ({ value: p.id, label: p.name || p.id, meta: p.environment || 'no environment' }))
+                    ]}
+                  />
                   <button
                     type="button"
                     className="btn btn-compact"

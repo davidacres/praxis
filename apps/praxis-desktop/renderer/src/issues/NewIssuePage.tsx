@@ -9,6 +9,7 @@ import {
   PRIORITY_OPTIONS,
   SEVERITY_OPTIONS
 } from './issueDraftFields';
+import { ChipSelect } from '../ui/ChipSelect';
 
 interface NewIssuePageProps {
   board: Board;
@@ -293,21 +294,17 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
           )}
 
           <FieldRow label="Type">
-            <select
-              className="select"
+            <ChipSelect
+              block
+              ariaLabel="Type"
               data-testid="new-issue-type"
               value={issueType}
-              onChange={event => {
-                setIssueType(event.target.value);
+              onChange={value => {
+                setIssueType(value);
                 setParentText('');
               }}
-            >
-              {typeOptions.map(type => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
+              options={typeOptions.map(type => ({ value: type, label: type }))}
+            />
           </FieldRow>
 
           <FieldRow label="Summary">
@@ -369,19 +366,14 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
           )}
 
           <FieldRow label="Priority">
-            <select
-              className="select"
+            <ChipSelect
+              block
+              ariaLabel="Priority"
               data-testid="new-issue-priority"
               value={priority}
-              onChange={event => setPriority(event.target.value)}
-            >
-              <option value="">—</option>
-              {PRIORITY_OPTIONS.map(option => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              onChange={setPriority}
+              options={[{ value: '', label: '—' }, ...PRIORITY_OPTIONS.map(option => ({ value: option, label: option }))]}
+            />
           </FieldRow>
 
           <FieldRow label="Assignee">
@@ -394,19 +386,14 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
           </FieldRow>
 
           <FieldRow label="Severity">
-            <select
-              className="select"
+            <ChipSelect
+              block
+              ariaLabel="Severity"
               data-testid="new-issue-severity"
               value={severity}
-              onChange={event => setSeverity(event.target.value)}
-            >
-              <option value="">—</option>
-              {SEVERITY_OPTIONS.map(option => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              onChange={setSeverity}
+              options={[{ value: '', label: '—' }, ...SEVERITY_OPTIONS.map(option => ({ value: option, label: option }))]}
+            />
           </FieldRow>
 
           <FieldRow label="Reported by">

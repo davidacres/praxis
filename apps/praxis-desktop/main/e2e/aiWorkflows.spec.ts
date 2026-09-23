@@ -5,6 +5,7 @@ import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
 import { startMockGitLabApi, type MockGitLabServer } from './mockGitLabApi';
+import { chipOptionValues, chooseOption } from './chipSelect';
 
 /**
  * Phase F — AI workflows. Exercises the desktop ports of the extension's AI
@@ -206,15 +207,15 @@ test('analysis uses the selected runtime and continues implementation in the sam
   // is passed to the analysis call — it is not hidden in the delegation modal.
   const provider = win.locator('[data-testid="issue-detail-ai-provider"]');
   const model = win.locator('[data-testid="issue-detail-ai-model"]');
-  await expect(provider).toHaveValue('vercel-gateway');
+  await expect(provider).toHaveAttribute('data-value', 'vercel-gateway');
   // Analysis gating must not silently remove configured implementation agents
   // from the provider list. Copilot's bundled runtime is always available.
-  await expect(provider.locator('option[value="copilot-cli"]')).toHaveText('GitHub Copilot');
-  await provider.selectOption('copilot-cli');
-  await expect(provider).toHaveValue('copilot-cli');
-  await provider.selectOption('vercel-gateway');
-  await expect(model).toHaveValue('mock/fast');
-  await model.selectOption('mock/thorough');
+  expect(await chipOptionValues(provider)).toContain('copilot-cli');
+  await chooseOption(provider, 'copilot-cli');
+  await expect(provider).toHaveAttribute('data-value', 'copilot-cli');
+  await chooseOption(provider, 'vercel-gateway');
+  await expect(model).toHaveAttribute('data-value', 'mock/fast');
+  await chooseOption(model, 'mock/thorough');
 
   // The gate turns the primary header action into Analyze ticket. It starts a
   // normal ticket session whose first turn is the configured read-only analysis.
@@ -262,7 +263,7 @@ test('configured CLI agents remain available in ticket details when analysis is 
 
   await openFirstDemoIssue(win);
   await expect(win.locator('[data-testid="issue-ai-runtime-options"]')).toBeVisible();
-  await expect(win.locator('[data-testid="issue-detail-ai-provider"]')).toHaveValue(/-cli$/);
+  await expect(win.locator('[data-testid="issue-detail-ai-provider"]')).toHaveAttribute('data-value', /-cli$/);
   await win.locator('[data-testid="issue-ai-configure-btn"]').click();
   await expect(win.locator('[data-testid="settings-nav-ai"]')).toHaveClass(/active/);
   await expect(win.locator('.settings-section-title')).toHaveText('AI Provider');
@@ -289,8 +290,8 @@ test('analysis runs through the selected OpenAI provider and model', async () =>
   await win.evaluate(() => window.praxis.ai.setProviderApiKey('openai', 'openai-e2e-key'));
 
   await openFirstDemoIssue(win);
-  await expect(win.locator('[data-testid="issue-detail-ai-provider"]')).toHaveValue('openai');
-  await expect(win.locator('[data-testid="issue-detail-ai-model"]')).toHaveValue('gpt-e2e-analysis');
+  await expect(win.locator('[data-testid="issue-detail-ai-provider"]')).toHaveAttribute('data-value', 'openai');
+  await expect(win.locator('[data-testid="issue-detail-ai-model"]')).toHaveAttribute('data-value', 'gpt-e2e-analysis');
   await win.locator('[data-testid="issue-primary-ai-btn"]').click();
   await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
   await expect(win.locator('[data-testid="session-chat-assistant"]')).toContainText(
@@ -404,7 +405,7 @@ test('feature decomposition creates the sub-task issues and lists them', async (
   // Create the feature-request ticket through the normal New Issue flow.
   await win.locator('[data-testid="board-nav-item"]', { hasText: 'Live E2E' }).click();
   await win.locator('[data-testid="board-new-issue-btn"]').click();
-  await win.locator('[data-testid="new-issue-type"]').selectOption('Feature');
+  await chooseOption(win.locator('[data-testid="new-issue-type"]'), 'Feature');
   await win.locator('[data-testid="new-issue-summary"]').fill('e2e feature request');
   await win.locator('[data-testid="new-issue-description"]').fill('Feature request: split me.');
   await win.locator('[data-testid="new-issue-submit"]').click();

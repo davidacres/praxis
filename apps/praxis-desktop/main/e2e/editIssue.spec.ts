@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, expandAllIssueStacks, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 let app: TestApp | undefined;
 let window: Page;
@@ -115,10 +116,10 @@ test('editing a live folder issue writes the priority back to markdown', async (
   // The details form is visible immediately and prefilled from the loaded issue.
   await expect(window.locator('[data-testid="issue-edit-form"]')).toBeVisible();
   await expect(window.locator('[data-testid="issue-edit-summary"]')).toHaveValue('Edit me task');
-  await expect(window.locator('[data-testid="issue-edit-priority"]')).toHaveValue('Medium');
+  await expect(window.locator('[data-testid="issue-edit-priority"]')).toHaveAttribute('data-value', 'Medium');
 
   await window.locator('[data-testid="issue-edit-summary"]').fill('Edited task title');
-  await window.locator('[data-testid="issue-edit-priority"]').selectOption('High');
+  await chooseOption(window.locator('[data-testid="issue-edit-priority"]'), 'High');
 
   const taskPath = path.join(
     plansDir,

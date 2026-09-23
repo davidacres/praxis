@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
+import { chooseOption, chipOptionLabels } from './chipSelect';
 
 /**
  * Model tiers for workflow stages, the authoring-time suggestion, and grouping a run's stage sessions.
@@ -220,22 +221,22 @@ test('a provider row maps tiers by picking its models, and the designer sets a s
   const head = dialog.getByTestId('ai-provider-row-vercel-gateway').locator('.ai-provider-head');
   if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click();
   const tiers = dialog.getByTestId('ai-model-tiers-vercel-gateway');
-  await expect(tiers.getByLabel('fast tier model')).toHaveValue(TIERS.fast);
-  await expect(tiers.getByLabel('strong tier model')).toHaveValue(TIERS.strong);
+  await expect(tiers.getByLabel('fast tier model')).toHaveAttribute('data-value', TIERS.fast);
+  await expect(tiers.getByLabel('strong tier model')).toHaveAttribute('data-value', TIERS.strong);
   // The choices are the provider's real models, plus "the run's model" and a way to type another id.
-  const options = await tiers.getByLabel('standard tier model').locator('option').allTextContents();
+  const options = await chipOptionLabels(tiers.getByLabel('standard tier model'));
   expect(options).toEqual(expect.arrayContaining(["The run's model", TIERS.standard, 'tier/other-model', 'Other model id…']));
-  await tiers.getByLabel('standard tier model').selectOption('tier/other-model');
+  await chooseOption(tiers.getByLabel('standard tier model'), 'tier/other-model');
   await expect
     .poll(async () => (await page.evaluate(() => window.praxis.settings.get())).ai.modelTiers?.['vercel-gateway']?.standard)
     .toBe('tier/other-model');
   // Choosing "the run's model" clears the tier rather than storing an empty id.
-  await tiers.getByLabel('fast tier model').selectOption('');
+  await chooseOption(tiers.getByLabel('fast tier model'), '');
   await expect
     .poll(async () => (await page.evaluate(() => window.praxis.settings.get())).ai.modelTiers?.['vercel-gateway']?.fast)
     .toBeUndefined();
   // A model outside the list can still be typed.
-  await tiers.getByLabel('strong tier model').selectOption('__custom__');
+  await chooseOption(tiers.getByLabel('strong tier model'), '__custom__');
   await tiers.getByLabel('strong tier model').fill('vendor/not-listed');
   await expect
     .poll(async () => (await page.evaluate(() => window.praxis.settings.get())).ai.modelTiers?.['vercel-gateway']?.strong)
@@ -244,17 +245,17 @@ test('a provider row maps tiers by picking its models, and the designer sets a s
 
   // The same mapping can be set from the model side: Manage models shows each model's tier and sets it.
   await dialog.getByTestId('ai-manage-models-btn').click();
-  await expect(dialog.getByTestId(`model-manager-tier-${TIERS.standard}`)).toHaveValue('');
-  await expect(dialog.getByTestId('model-manager-tier-tier/other-model')).toHaveValue('standard');
+  await expect(dialog.getByTestId(`model-manager-tier-${TIERS.standard}`)).toHaveAttribute('data-value', '');
+  await expect(dialog.getByTestId('model-manager-tier-tier/other-model')).toHaveAttribute('data-value', 'standard');
   // Giving another model the Standard tier takes it from the one that held it.
-  await dialog.getByTestId(`model-manager-tier-${TIERS.standard}`).selectOption('standard');
-  await expect(dialog.getByTestId('model-manager-tier-tier/other-model')).toHaveValue('');
+  await chooseOption(dialog.getByTestId(`model-manager-tier-${TIERS.standard}`), 'standard');
+  await expect(dialog.getByTestId('model-manager-tier-tier/other-model')).toHaveAttribute('data-value', '');
   await expect
     .poll(async () => (await page.evaluate(() => window.praxis.settings.get())).ai.modelTiers?.['vercel-gateway']?.standard)
     .toBe(TIERS.standard);
   await page.screenshot({ path: shot('model-manager-tiers.png') });
   await dialog.getByTestId('model-manager-back').click();
-  await expect(dialog.getByTestId('ai-model-tier-vercel-gateway-standard')).toHaveValue(TIERS.standard);
+  await expect(dialog.getByTestId('ai-model-tier-vercel-gateway-standard')).toHaveAttribute('data-value', TIERS.standard);
   await dialog.getByRole('button', { name: 'Done' }).click();
 
   // The designer: pick a stage, change its tier, save, reload, and it is still there.
@@ -270,9 +271,10 @@ test('a provider row maps tiers by picking its models, and the designer sets a s
   const canvas = page.getByRole('application', { name: 'Workflow canvas' });
   await canvas.getByRole('button', { name: /^First look \(agent-task\)/ }).click();
   const select = page.getByTestId('wf-node-model-tier');
-  await expect(select).toHaveValue('fast');
+  await expect(select).toHaveAttribute('data-value', 'fast');
   await expect(page.getByTestId('wf-node-escalate')).toBeChecked();
-  await select.selectOption('standard');
+  await select.click();
+  await page.getByRole('listbox', { name: 'Model tier options' }).getByRole('option', { name: /^standard/ }).click();
   await page.getByTestId('wf-node-escalate').uncheck();
   await page.screenshot({ path: shot('designer-model-tier.png') });
   await page.getByRole('button', { name: 'Save workflow' }).click();
@@ -282,7 +284,9 @@ test('a provider row maps tiers by picking its models, and the designer sets a s
   expect(stored!.nodes.find(node => node.id === 'first')).toMatchObject({ modelTier: 'standard', escalateOnRetry: false });
 
   // Clearing the tier ("run's model") removes it rather than storing an empty value.
-  await select.selectOption('');
+  await select.click();
+  await page.getByRole('listbox', { name: 'Model tier options' }).getByRole('option', { name: /^Run’s model/ }).click();
+  await expect(select).toHaveAttribute('data-value', '');
   await expect(page.getByTestId('wf-node-escalate')).toHaveCount(0);
 });
 

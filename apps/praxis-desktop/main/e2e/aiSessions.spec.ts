@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
+import { chooseOption } from './chipSelect';
 
 /**
  * Phase E — AI sessions UI. Exercises the renderer against the real IPC
@@ -252,8 +253,8 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
   const dialog = win.locator('[data-testid="issue-session-dialog"]');
   await dialog.waitFor();
   await expect(dialog).toContainText(/APP-\d+ — /);
-  await expect(win.locator('[data-testid="issue-ai-provider"]')).toHaveValue('vercel-gateway');
-  await expect(win.locator('[data-testid="issue-ai-runtime-model"]')).toHaveValue('mock/model');
+  await expect(win.locator('[data-testid="issue-ai-provider"]')).toHaveAttribute('data-value', 'vercel-gateway');
+  await expect(win.locator('[data-testid="issue-ai-runtime-model"]')).toHaveAttribute('data-value', 'mock/model');
   await expect(win.locator('[data-testid="issue-session-goal"]')).not.toHaveValue('');
   await win.locator('[data-testid="issue-session-goal"]').fill('Deliver the ticket from its saved details');
   await win.locator('[data-testid="issue-session-scope"]').fill('Ticket implementation and focused tests');
@@ -639,8 +640,8 @@ test('an opt-in conversation alternates attributed AI turns and stops at its cap
   await win.locator('[data-testid="session-provider-add-vercel-gateway"]').click();
   const dialog = win.locator('[data-testid="session-conversation-dialog"]');
   await expect(dialog).toBeVisible();
-  await dialog.locator('[data-testid="session-conversation-provider"]').selectOption('vercel-gateway');
-  await dialog.locator('[data-testid="session-conversation-model"]').selectOption('mock/other');
+  await chooseOption(dialog.locator('[data-testid="session-conversation-provider"]'), 'vercel-gateway');
+  await chooseOption(dialog.locator('[data-testid="session-conversation-model"]'), 'mock/other');
   await dialog.locator('[data-testid="session-conversation-turn-cap"]').fill('2');
   await dialog.locator('[data-testid="session-conversation-confirm"]').click();
 
@@ -675,20 +676,20 @@ test('a human can direct a message to either participant during an AI conversati
   await win.locator('[data-testid="session-provider"]').click();
   await win.locator('[data-testid="session-provider-add-vercel-gateway"]').click();
   const dialog = win.locator('[data-testid="session-conversation-dialog"]');
-  await dialog.locator('[data-testid="session-conversation-provider"]').selectOption('vercel-gateway');
-  await dialog.locator('[data-testid="session-conversation-model"]').selectOption('mock/other');
+  await chooseOption(dialog.locator('[data-testid="session-conversation-provider"]'), 'vercel-gateway');
+  await chooseOption(dialog.locator('[data-testid="session-conversation-model"]'), 'mock/other');
   await dialog.locator('[data-testid="session-conversation-turn-cap"]').fill('3');
   await dialog.locator('[data-testid="session-conversation-confirm"]').click();
 
   const target = win.locator('[data-testid="session-conversation-target"]');
   await expect(target).toBeVisible();
-  await target.locator('select').selectOption('host');
+  await chooseOption(target, 'host');
   await win.locator('[data-testid="session-follow-up-input"]').fill('Please review the other AI response for missing risks.');
   await win.locator('[data-testid="session-conversation-send"]').click();
   const directedMessage = win.locator('[data-testid="session-chat-user"]').last();
   await expect(directedMessage).toContainText('Please review the other AI response', { timeout: 1000 });
   await expect(directedMessage).toHaveAttribute('data-pending', 'true');
-  await expect(target.locator('select')).toHaveValue('host');
+  await expect(target).toHaveAttribute('data-value', 'host');
   await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('Vercel AI Gateway · mock/other');
   const hostModel = await win.evaluate(key => window.praxis.ai.listSessions().then(records =>
     records.find(record => record.issueKey === key)?.conversation?.participants.find(participant => participant.id === 'host')?.model
@@ -736,14 +737,14 @@ test('an image pasted during a conversation rides with the directed message', as
   await win.locator('[data-testid="session-provider"]').click();
   await win.locator('[data-testid="session-provider-add-vercel-gateway"]').click();
   const dialog = win.locator('[data-testid="session-conversation-dialog"]');
-  await dialog.locator('[data-testid="session-conversation-provider"]').selectOption('vercel-gateway');
-  await dialog.locator('[data-testid="session-conversation-model"]').selectOption('mock/other');
+  await chooseOption(dialog.locator('[data-testid="session-conversation-provider"]'), 'vercel-gateway');
+  await chooseOption(dialog.locator('[data-testid="session-conversation-model"]'), 'mock/other');
   await dialog.locator('[data-testid="session-conversation-turn-cap"]').fill('2');
   await dialog.locator('[data-testid="session-conversation-confirm"]').click();
 
   const target = win.locator('[data-testid="session-conversation-target"]');
   await expect(target).toBeVisible();
-  await target.locator('select').selectOption('host');
+  await chooseOption(target, 'host');
 
   // Paste an image, then send the directed message with it.
   const input = win.locator('[data-testid="session-follow-up-input"]');

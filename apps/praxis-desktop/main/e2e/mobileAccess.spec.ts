@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 let app: TestApp;
 let window: Page;
@@ -22,7 +23,7 @@ async function openMobileAccess(): Promise<void> {
 
 test('mobile access pairing controls stay off until the listener is enabled', async () => {
   await openMobileAccess();
-  await expect(window.locator('[data-testid="mobile-access-mode"]')).toHaveValue('off');
+  await expect(window.locator('[data-testid="mobile-access-mode"]')).toHaveAttribute('data-value', 'off');
   await expect(window.locator('[data-testid="mobile-create-pairing"]')).toBeDisabled();
   await expect(window.locator('[data-testid="mobile-listener-status"]')).toContainText('Not listening');
   await expect(window.locator('[data-testid="mobile-discovery-status"]')).toContainText('not advertised');
@@ -31,7 +32,7 @@ test('mobile access pairing controls stay off until the listener is enabled', as
 
 test('creating a pairing code shows a single-use token and never a private key', async () => {
   await openMobileAccess();
-  await window.locator('[data-testid="mobile-access-mode"]').selectOption('local-only');
+  await chooseOption(window.locator('[data-testid="mobile-access-mode"]'), 'local-only');
   await expect(window.locator('[data-testid="mobile-listener-status"]')).toContainText('Listening');
   await expect(window.locator('[data-testid="mobile-discovery-status"]')).toContainText('advertised as');
   await expect(window.locator('[data-testid="mobile-create-pairing"]')).toBeEnabled();

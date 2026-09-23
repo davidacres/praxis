@@ -17,6 +17,7 @@ import * as fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs');
 
@@ -299,7 +300,7 @@ test('ticket-selected Claude Code runs review and analysis without using Vercel'
   await win.locator('[data-testid="board-nav-item"]').first().click();
   await win.locator('[data-testid="issue-card"]').first().click();
   const provider = win.locator('[data-testid="issue-detail-ai-provider"]');
-  await provider.selectOption('claude-code-cli');
+  await chooseOption(provider, 'claude-code-cli');
 
   await win.locator('[data-testid="issue-ai-review-btn"]').click();
   await expect(win.locator('[data-testid="review-runtime"]')).toContainText('claude-code-cli');

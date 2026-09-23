@@ -1496,7 +1496,11 @@ export function App() {
               issueKey ? { issueKey, connectionId: board?.connectionId } : undefined,
               { sessionKey: record.issueKey, sessionId: record.sessionId },
               undefined,
-              uncommittedChanges ? { uncommittedChanges } : undefined
+              {
+                aiProvider: provider,
+                aiModel: model,
+                ...(uncommittedChanges ? { uncommittedChanges } : {})
+              }
             );
           } catch (error) {
             await window.praxis.ai.deleteSession(record.issueKey).catch(() => undefined);
@@ -1556,7 +1560,12 @@ export function App() {
             workflowId,
             session.title ?? session.taskDefinition.goal,
             session.connectionId ? { issueKey: session.issueKey, connectionId: session.connectionId } : undefined,
-            { sessionKey: session.issueKey, sessionId: session.sessionId }
+            { sessionKey: session.issueKey, sessionId: session.sessionId },
+            undefined,
+            {
+              ...(session.provider ? { aiProvider: session.provider } : {}),
+              ...(session.model ? { aiModel: session.model } : {})
+            }
           );
         }}
         onSelectWorkflowRun={async (session, runId) => {
@@ -1645,7 +1654,6 @@ export function App() {
             onRequireAux={requireAux}
             onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
             onOpenPolicies={() => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'policies' })}
-            onStartRun={() => setStartRunDialog({ projectId: selectedProject.id })}
             onRunGone={() => navigate({ projectId: selectedProject.id, feature: 'workflows' })}
             onSelectRun={runId => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'runs', workflowRunId: runId || undefined })}
             onArchiveRun={async (runId, archived) => {
@@ -2162,7 +2170,7 @@ export function App() {
                   onSelectWorkflow={(project, workflowId) => navigate({ projectId: project.id, feature: 'workflows', workflowId })}
                   onSelectWorkflowRuns={project => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined })}
                   onSelectWorkflowRun={(project, runId) => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: runId })}
-                  onStartWorkflowRun={(project, workflowId) => setStartRunDialog({ projectId: project.id, ...(workflowId ? { workflowId } : {}) })}
+                  onStartWorkflowRun={(project, workflowId) => setStartRunDialog({ projectId: project.id, workflowId })}
                   onArchiveWorkflowRun={async (runId, archived) => {
                     try {
                       await window.praxis.workflows.archiveRun(runId, archived);

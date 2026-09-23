@@ -7,6 +7,7 @@ import { isProviderUsable } from '../ai/providerAvailability';
 import { useDeleteRun } from './useDeleteRun';
 import { WorkflowPipelineVertical } from './WorkflowPipelineVertical';
 import { WorkflowRunsBrowser } from './WorkflowRunsBrowser';
+import { ChipSelect } from '../ui/ChipSelect';
 
 /**
  * The run workspace (replaces the old run monitor and its Runs list page).
@@ -914,13 +915,13 @@ function ProviderLimitNotice({
           <>
             <label className="wf-run-limit-switch">
               <span>Switch {stage.name} to</span>
-              <select className="input" data-testid="wf-limit-switch-to" value={selected} onChange={event => setChoice(event.target.value)}>
-                {choices.map(id => (
-                  <option key={id} value={id}>
-                    {aiName(id)}
-                  </option>
-                ))}
-              </select>
+              <ChipSelect
+                ariaLabel={`Switch ${stage.name} to`}
+                data-testid="wf-limit-switch-to"
+                value={selected}
+                onChange={setChoice}
+                options={choices.map(id => ({ value: id, label: aiName(id), icon: providerIconName(id as AiProvider) }))}
+              />
             </label>
             <button type="button" className="btn btn-primary btn-compact" data-testid="wf-limit-switch" onClick={() => onSwitch(selected)}>
               Switch and continue

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
 /**
@@ -81,6 +81,14 @@ async function newWorkflow(page: Page, template: string, project = 'Delivery Pro
 const canvasOf = (page: Page) => page.getByRole('application', { name: 'Workflow canvas' });
 const inspectorOf = (page: Page) => page.getByRole('region', { name: 'Stage inspector' });
 
+/** Open a chip picker by its label and choose an option (options are named by label, then description). */
+async function pickChip(page: Page, scope: Locator, label: string, option: string | RegExp): Promise<void> {
+  await scope.getByRole('button', { name: label, exact: true }).click();
+  const list = page.getByRole('listbox', { name: `${label} options` });
+  await list.getByRole('option', { name: option }).click();
+  await expect(list).toBeHidden();
+}
+
 test('creates a workflow from a template, edits a stage in the right pane, and persists it', async () => {
   const page = app.window;
 
@@ -120,9 +128,7 @@ test('blocks save while the graph is invalid and announces the errors', async ()
   await rail.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
   // A configured profile is now always visible in the Agent Hub palette;
   // clear the launch binding explicitly to make the stage unrunnable.
-  const bindingControl = inspectorOf(page).getByLabel('Launch binding');
-  if (await bindingControl.evaluate(el => el.tagName.toLowerCase() === 'select')) await bindingControl.selectOption('');
-  else await bindingControl.fill('');
+  await pickChip(page, inspectorOf(page), 'Launch binding', /^None/);
 
   const status = page.getByRole('status').filter({ hasText: /error/ });
   await expect(status).toBeVisible();
@@ -230,7 +236,7 @@ test('builds an agent handoff stage from the palette and attaches a specialist s
   // Dropping a skill on that stage binds the specialist guidance and pins its version.
   await audit.dragTo(reviewerStage);
   await expect(reviewerStage).toContainText('code-audit');
-  await expect(inspectorOf(page).getByLabel('Code Audit')).toBeChecked();
+  await expect(inspectorOf(page).getByTestId('wf-node-skill-code-audit')).toBeVisible();
   await expect(page.getByRole('main')).toHaveScreenshot('workflow-designer-composition.png');
 });
 
@@ -333,14 +339,11 @@ test('validates workflow connections, flow, and configuration via validate workf
   // 2. Introduce an invalid configuration (clear launch binding / agent id)
   const rail = page.getByRole('navigation', { name: 'Workflow stages' });
   await rail.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
-  const bindingControl = inspectorOf(page).getByLabel('Launch binding');
-  if (await bindingControl.evaluate(el => el.tagName.toLowerCase() === 'select')) await bindingControl.selectOption('');
-  else await bindingControl.fill('');
+  await pickChip(page, inspectorOf(page), 'Launch binding', /^None/);
 
-  // 3. Re-run validation via the rail validate button
-  const railValidateBtn = page.getByTestId('wf-rail-validate-btn');
-  await expect(railValidateBtn).toBeVisible();
-  await railValidateBtn.click();
+  // 3. The header's validation chip reports the error, and re-runs validation when clicked
+  await expect(validateBtn).toContainText(/1 error|\d+ errors/);
+  await validateBtn.click();
 
   await expect(dialog).toBeVisible();
   await expect(page.getByTestId('wf-validation-banner')).toContainText('Workflow configuration requires attention');
@@ -441,11 +444,20 @@ test('a stage can run on its own AI and model, chosen from the AIs that are set 
   const inspector = inspectorOf(page);
 
   const ai = inspector.getByTestId('wf-node-ai');
-  await expect(ai).toHaveValue('');
-  await expect(ai.locator('option')).toContainText(['Run’s AI', 'Codex CLI']);
+  await expect(ai).toHaveAttribute('data-value', '');
+  await expect(ai).toContainText('Run’s AI');
   await expect(inspector.getByTestId('wf-node-model')).toHaveCount(0);
-  await ai.selectOption('codex-cli');
-  await inspector.getByTestId('wf-node-model').fill('gpt-5.6-luna');
+  await ai.click();
+  const aiList = page.getByRole('listbox', { name: 'AI options' });
+  await expect(aiList.getByRole('option')).toHaveText([/^Run’s AI/, /^Codex CLI/]);
+  await aiList.getByRole('option', { name: /^Codex CLI/ }).click();
+  await expect(ai).toHaveAttribute('data-value', 'codex-cli');
+  // A model that is not in the AI's list can still be typed into the picker's filter and used.
+  await inspector.getByTestId('wf-node-model').click();
+  const modelList = page.getByRole('listbox', { name: 'Model options' });
+  await modelList.getByLabel('Filter Model').fill('gpt-5.6-luna');
+  await modelList.getByRole('option', { name: 'Use “gpt-5.6-luna”' }).click();
+  await expect(inspector.getByTestId('wf-node-model')).toHaveAttribute('data-value', 'gpt-5.6-luna');
   await page.mouse.move(0, 0);
   await page.screenshot({ path: 'output/playwright/workflow-stage-ai.png' });
 
@@ -457,4 +469,54 @@ test('a stage can run on its own AI and model, chosen from the AIs that are set 
   });
   expect(saved).toContain('"providerId":"codex-cli"');
   expect(saved).toContain('"model":"gpt-5.6-luna"');
+});
+
+test('stage skills are added from the picker dialog and removed from their chip', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Governed delivery');
+  await canvasOf(page).getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
+  const inspector = inspectorOf(page);
+  await expect(inspector.getByRole('list', { name: 'Active skills' })).toHaveCount(0);
+
+  await inspector.getByTestId('wf-node-add-skill').click();
+  const picker = page.getByRole('dialog', { name: 'Stage skills' });
+  await expect(picker).toBeVisible();
+  // Each skill shows its description, and the search narrows by it too.
+  await expect(picker.getByTestId('wf-skill-option-code-audit')).toContainText('Reviews a change for correctness');
+  await picker.getByLabel('Search skills').fill('no such skill');
+  await expect(picker.getByTestId('wf-skill-option-code-audit')).toHaveCount(0);
+  await picker.getByLabel('Search skills').fill('correctness');
+  await picker.getByTestId('wf-skill-option-code-audit').click();
+  await expect(picker.getByTestId('wf-skill-option-code-audit').getByRole('checkbox')).toBeChecked();
+  await picker.getByRole('button', { name: 'Done' }).click();
+  await expect(picker).toBeHidden();
+
+  const chip = inspector.getByTestId('wf-node-skill-code-audit');
+  await expect(chip).toBeVisible();
+  await expect(canvasOf(page).getByRole('button', { name: /^Plan \(agent-task\)/ })).toContainText('code-audit');
+  await chip.getByRole('button', { name: 'Remove skill Code Audit' }).click();
+  await expect(chip).toHaveCount(0);
+});
+
+test('a connection selected on the canvas is edited in the inspector, with no separate tab', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Quick change');
+  const inspector = inspectorOf(page);
+  await expect(inspector.getByRole('tab')).toHaveCount(0);
+
+  await canvasOf(page).locator('[data-testid^="wf-canvas-edge-line-"]').first().click({ force: true });
+  await expect(inspector.getByRole('heading', { name: 'Connection' })).toBeVisible();
+  const outcome = inspector.getByTestId('wf-edge-outcome');
+  await expect(outcome).toHaveAttribute('data-value', 'success');
+  await outcome.click();
+  await page.getByRole('option', { name: /^On failure/ }).click();
+  await expect(outcome).toHaveAttribute('data-value', 'failure');
+
+  // Escape closes a picker without leaving the connection, and Backspace inside the inspector never deletes it.
+  const edgesBefore = await canvasOf(page).locator('[data-testid^="wf-canvas-edge-line-"]').count();
+  await outcome.click();
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  expect(await canvasOf(page).locator('[data-testid^="wf-canvas-edge-line-"]').count()).toBe(edgesBefore);
 });

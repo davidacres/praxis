@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AiProvider, AiProviderConfig, AppSettingsPatch, ModelOptions } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { fetchModelOptions } from './modelProviders';
+import { ChipSelect } from '../ui/ChipSelect';
 
 type TierName = 'fast' | 'standard' | 'strong';
 
@@ -196,20 +197,22 @@ export function ModelManagerPanel({
                 />
                 <span className="model-manager-row-name">{option.name}</span>
                 <span className="model-manager-row-id">{option.value}</span>
-                <select
-                  className="input model-manager-tier"
-                  aria-label={`Model tier for ${option.name}`}
-                  title="Which workflow tier this model serves on this provider"
-                  data-testid={`model-manager-tier-${option.value}`}
-                  value={tierOf(option.value)}
-                  onClick={event => event.stopPropagation()}
-                  onChange={event => setTier(option.value, event.target.value as TierName | '')}
-                >
-                  <option value="">No tier</option>
-                  <option value="fast">Fast</option>
-                  <option value="standard">Standard</option>
-                  <option value="strong">Strong</option>
-                </select>
+                <span className="model-manager-tier-wrap" onClick={event => event.stopPropagation()}>
+                  <ChipSelect
+                    className="model-manager-tier"
+                    ariaLabel={`Model tier for ${option.name}`}
+                    title="Which workflow tier this model serves on this provider"
+                    data-testid={`model-manager-tier-${option.value}`}
+                    value={tierOf(option.value)}
+                    onChange={value => setTier(option.value, value as TierName | '')}
+                    options={[
+                      { value: '', label: 'No tier' },
+                      { value: 'fast', label: 'Fast' },
+                      { value: 'standard', label: 'Standard' },
+                      { value: 'strong', label: 'Strong' }
+                    ]}
+                  />
+                </span>
               </label>
             ))}
           </div>

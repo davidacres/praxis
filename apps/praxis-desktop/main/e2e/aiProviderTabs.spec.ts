@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 import { startMockAnthropicServer, type MockAnthropicServer } from './mockAnthropicServer';
+import { chooseOption, chipOptionValues } from './chipSelect';
 
 /**
  * Settings → AI Provider is tabbed (Providers · Defaults · Spend · Tools), and
@@ -214,7 +215,7 @@ test('the Recommendations provider list leaves out providers that are turned off
   await openAiSettings(win);
 
   const select = () => win.getByTestId('ai-recommendation-provider-select');
-  const optionValues = async () => select().locator('option').evaluateAll(nodes => nodes.map(node => (node as HTMLOptionElement).value));
+  const optionValues = async () => chipOptionValues(select());
 
   await win.getByTestId('ai-tab-defaults').click();
   expect(await optionValues()).toContain('anthropic');
@@ -230,10 +231,12 @@ test('the Recommendations provider list leaves out providers that are turned off
   await win.getByTestId('ai-tab-providers').click();
   await win.getByTestId('ai-provider-enabled-anthropic').click();
   await win.getByTestId('ai-tab-defaults').click();
-  await select().selectOption('anthropic');
+  await chooseOption(select(), 'anthropic');
   await win.getByTestId('ai-tab-providers').click();
   await win.getByTestId('ai-provider-enabled-anthropic').click();
   await win.getByTestId('ai-tab-defaults').click();
-  await expect(select()).toHaveValue('anthropic');
-  await expect(select().locator('option[value="anthropic"]')).toHaveText(/Anthropic \(turned off\)/);
+  await expect(select()).toHaveAttribute('data-value', 'anthropic');
+  await select().click();
+  await expect(win.locator('[role="option"][data-value="anthropic"]')).toHaveText(/Anthropic.*turned off/);
+  await win.keyboard.press('Escape');
 });
