@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isProviderLimitError, isLimitNoticeReply, extractProviderLimitMessage } from './providerLimitError';
+import { withAgentErrorDetail } from './acp/acpClient';
 
 test('isProviderLimitError detects Claude Code session limits', () => {
   const msg = "Internal error: You've hit your session limit · resets 12:50pm (Europe/London)";
@@ -114,4 +115,43 @@ test('isLimitNoticeReply does not mistake a long answer that discusses limits fo
 test('isLimitNoticeReply ignores empty replies', () => {
   assert.equal(isLimitNoticeReply(''), false);
   assert.equal(isLimitNoticeReply(undefined), false);
+});
+
+/**
+ * Codex (codex-acp) reports a spent ChatGPT plan as a bare JSON-RPC "Internal error" whose
+ * reason is only in `data` — captured from a real run. Praxis showed "RequestError: Internal
+ * error" for it, and a workflow stage failed instead of pausing for the limit.
+ */
+function codexUsageLimitError(): Error & { code: number; data: Record<string, unknown> } {
+  return Object.assign(new Error('Internal error'), {
+    name: 'RequestError',
+    code: -32603,
+    data: {
+      message:
+        "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 26th, 2026 1:00 PM.",
+      codexErrorInfo: 'usageLimitExceeded'
+    }
+  });
+}
+
+test('isProviderLimitError detects a Codex usage limit carried only in the error data', () => {
+  assert.equal(isProviderLimitError(codexUsageLimitError()), true);
+  assert.equal(isProviderLimitError({ message: 'Internal error', data: { codexErrorInfo: 'usageLimitExceeded' } }), true);
+  assert.equal(isProviderLimitError({ message: 'Internal error', data: { message: 'Unexpected token in response' } }), false);
+});
+
+test('withAgentErrorDetail promotes the agent\'s reason from data.message to the error message', () => {
+  const error = codexUsageLimitError();
+  const surfaced = withAgentErrorDetail(error) as Error & { code: number; data: unknown };
+  assert.equal(surfaced, error, 'the same error object, so its type, code and data are kept');
+  assert.match(surfaced.message, /^You've hit your usage limit\./);
+  assert.equal(surfaced.code, -32603);
+  assert.equal(isProviderLimitError(surfaced.message), true);
+  assert.match(extractProviderLimitMessage(surfaced), /^Provider limit reached: You've hit your usage limit/);
+
+  // Nothing to promote: left exactly as it was.
+  const plain = new Error('Internal error');
+  assert.equal(withAgentErrorDetail(plain), plain);
+  assert.equal(plain.message, 'Internal error');
+  assert.equal(withAgentErrorDetail('boom'), 'boom');
 });
