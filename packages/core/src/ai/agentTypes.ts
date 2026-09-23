@@ -76,6 +76,8 @@ export interface AgentTaskDefinition {
    * resolved at launch by `buildSessionInstructions`.
    */
   projectInstructions?: string;
+  /** Working habits the user asks every AI to follow (Settings › Agent Runtime). */
+  workingStyle?: string;
   workflow?: AgentWorkflowReference;
   workflowProvenance?: AgentWorkflowProvenance;
   attachments?: AgentTaskAttachment[];

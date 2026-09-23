@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { AgentRuntimeManager } from './manager';
 import { mirrorBundledAgents } from './bundledAgents';
+import type { AiProvider } from '../../types';
 
 async function seedAgent(root: string, id: string, manifest: Record<string, unknown>): Promise<void> {
   const dir = path.join(root, id);
@@ -101,4 +102,27 @@ test('a pin runs a built-in agent on its own runtime with the built-in’s instr
   assert.equal(ids.has('orphan-pin'), true, 'a pin for an unknown agent stays visible so it can be removed');
   const planner = snapshot.runtimeHosts?.find(candidate => candidate.manifest.id === 'praxis-planner');
   assert.equal(planner?.pinnedBy, undefined);
+});
+
+test('the "Runs on" setting runs an agent on the chosen runtime and wins over an add-on pin', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'praxis-runs-on-'));
+  await mirrorBundledAgents(root);
+  await seedAgent(root, 'claude-implementer', { schemaVersion: 1, id: 'claude-implementer', name: 'Claude Implementer', type: 'acp', entry: { command: 'claude-agent-acp' }, replaces: 'praxis-implementer' });
+  let choices: Record<string, AiProvider> = { 'praxis-implementer': 'codex-cli', 'praxis-planner': 'copilot-cli', 'no-such-agent': 'codex-cli', 'praxis-reviewer': 'openai' };
+  const manager = new AgentRuntimeManager({ userAgentsPath: root, profileRoots: [root], trustedProfileRoots: [root], includeBundled: true, agentRuntimes: () => choices });
+  let snapshot = await manager.refresh();
+  const host = (id: string) => snapshot.runtimeHosts?.find(candidate => candidate.manifest.id === id);
+
+  assert.deepEqual(host('praxis-implementer')?.manifest.entry, { command: 'codex-acp' });
+  assert.equal(host('praxis-implementer')?.manifest.name, 'Codex');
+  assert.deepEqual(host('praxis-implementer')?.pinnedBy, { id: 'runtime:codex-cli', name: 'Codex', manifestPath: '', runtime: 'codex-cli', setting: true });
+  assert.deepEqual(host('praxis-planner')?.manifest.entry, { command: 'copilot', args: ['--acp'] });
+  assert.equal(host('praxis-reviewer')?.pinnedBy, undefined, 'an API provider is not a runtime choice');
+  assert.equal(host('no-such-agent'), undefined);
+  assert.match(snapshot.profiles?.find(entry => entry.profile.id === 'praxis-implementer')?.profile.instructions ?? '', /Praxis Implementer/);
+
+  // Cleared: the add-on pin applies again.
+  choices = {};
+  snapshot = await manager.refresh();
+  assert.equal(host('praxis-implementer')?.pinnedBy?.id, 'claude-implementer');
 });

@@ -129,9 +129,14 @@ export function buildMsiVersionExample(
 }
 
 export function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): string {
-  const prompt = buildTaskSystemPrompt(task, issue);
-  const instructions = task.projectInstructions?.trim();
-  return instructions ? `${prompt}\n\n${instructions}` : prompt;
+  const style = task.workingStyle?.trim();
+  return [
+    buildTaskSystemPrompt(task, issue),
+    style ? `## Working style\nFollow these habits whichever tools you have:\n${style}` : undefined,
+    task.projectInstructions?.trim()
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 function buildTaskSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): string {

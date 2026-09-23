@@ -446,7 +446,7 @@ test('Agent Runtime panel: a pin runs a built-in agent on its own runtime, one p
   const codex = window.locator('[data-testid="agent-marketplace-codex-implementer"]');
   await expect(claude).toContainText('Claude Code');
   await expect(claude).toContainText('Always runs the built-in Praxis Implementer on Claude Code');
-  await expect(builtIn).not.toContainText('Runs on');
+  await expect(builtIn).not.toContainText('set by');
 
   // Installing says what changes: the built-in's instructions, on this runtime.
   await claude.getByRole('button', { name: 'Install' }).click();
@@ -504,7 +504,7 @@ test('Agent Runtime panel: a pin runs a built-in agent on its own runtime, one p
   const uninstall = window.getByRole('dialog', { name: 'Uninstall Codex Implementer?' });
   await expect(uninstall).toContainText('The built-in Praxis Implementer goes back to running on the session’s runtime.');
   await uninstall.getByRole('button', { name: 'Uninstall' }).click();
-  await expect(builtIn).not.toContainText('Runs on');
+  await expect(builtIn).not.toContainText('set by');
 });
 
 test('an early pin that reused the built-in agent’s id still pins it without overwriting the built-in', async () => {

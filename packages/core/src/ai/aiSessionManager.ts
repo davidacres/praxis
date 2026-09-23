@@ -183,12 +183,22 @@ export class AiSessionManager {
    * (and so which instruction files it already reads) runs the session.
    */
   public setProjectInstructions(issueKey: string, instructions: string | undefined): void {
+    this.setGuidance(issueKey, 'projectInstructions', instructions);
+  }
+
+  public setWorkingStyle(issueKey: string, workingStyle: string | undefined): void {
+    this.setGuidance(issueKey, 'workingStyle', workingStyle);
+  }
+
+  /** Guidance recomputed each turn from settings and project files; the next prompt uses it. */
+  private setGuidance(issueKey: string, field: 'projectInstructions' | 'workingStyle', value: string | undefined): void {
     const record = this.agentSessions.get(issueKey);
     if (!record) return;
-    const next = instructions?.trim() || undefined;
-    if (record.taskDefinition.projectInstructions === next) return;
-    record.taskDefinition = { ...record.taskDefinition, ...(next ? { projectInstructions: next } : {}) };
-    if (!next) delete record.taskDefinition.projectInstructions;
+    const next = value?.trim() || undefined;
+    if (record.taskDefinition[field] === next) return;
+    record.taskDefinition = { ...record.taskDefinition };
+    if (next) record.taskDefinition[field] = next;
+    else delete record.taskDefinition[field];
     void this.persistAgentSessions();
   }
 

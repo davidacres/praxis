@@ -12,6 +12,7 @@ import {
   type NativeSourceOptions
 } from './nativeSources';
 import type { AiProvider } from '../../types';
+import { PROVIDER_DESCRIPTORS } from '../providers/registry';
 import { loadAgentHost, type AgentCapabilities, type AgentHostHandle } from './hostLoader';
 import {
   buildProfileContext,
@@ -47,6 +48,8 @@ export interface AgentRuntimeSnapshot {
 export interface AgentRuntimeManagerOptions extends DiscoveryOptions {
   /** Where to look for other AI tools' agents, skills and instructions; read at every refresh. */
   nativeSources?: () => NativeSourceOptions | undefined | Promise<NativeSourceOptions | undefined>;
+  /** The user's "Runs on" choices, agent id → local runtime; read at every refresh. */
+  agentRuntimes?: () => Record<string, AiProvider> | undefined;
   skillRoots?: string[];
   trustedSkillRoots?: string[];
   profileRoots?: string[];
@@ -88,6 +91,52 @@ export function resolvePins(hosts: readonly DiscoveredAgent[], profileIds: Reado
     .map(host => (winners.has(host.manifest.id) ? pinned(host.manifest.id, winners.get(host.manifest.id)!) : host));
   for (const [target, pin] of winners) {
     if (!result.some(host => host.manifest.id === target)) result.push(pinned(target, pin));
+  }
+  return result;
+}
+
+/** "Claude Code (local)" → "Claude Code". */
+export function runtimeDisplayName(provider: AiProvider): string {
+  return PROVIDER_DESCRIPTORS[provider].label.replace(/\s*\(local\)$/, '').replace(/ CLI$/, '');
+}
+
+/**
+ * The user's "Runs on" choices: each named agent's launch binding becomes the
+ * chosen local runtime (over ACP), whatever the session uses. Wins over an
+ * add-on pin; agents that are not in the catalog, and choices that are not
+ * local ACP runtimes, are ignored.
+ */
+export function applyRuntimeChoices(
+  hosts: readonly DiscoveredAgent[],
+  profiles: readonly DiscoveredAgentProfile[],
+  choices: Record<string, AiProvider>
+): DiscoveredAgent[] {
+  const result = [...hosts];
+  for (const [agentId, provider] of Object.entries(choices)) {
+    const descriptor = PROVIDER_DESCRIPTORS[provider];
+    const profile = profiles.find(entry => entry.profile.id === agentId);
+    if (!profile || descriptor?.kind !== 'cli-agent' || descriptor.hostKind !== 'acp' || !descriptor.defaultCommand) continue;
+    const index = result.findIndex(host => host.manifest.id === agentId);
+    const existing = index >= 0 ? result[index] : undefined;
+    const name = runtimeDisplayName(provider);
+    const chosen: DiscoveredAgent = {
+      manifest: {
+        schemaVersion: 1,
+        id: agentId,
+        name,
+        type: 'acp',
+        entry: { command: descriptor.defaultCommand, ...(descriptor.defaultArgs ? { args: [...descriptor.defaultArgs] } : {}) }
+      },
+      manifestPath: existing?.manifestPath ?? profile.profilePath,
+      rootPath: existing?.rootPath ?? profile.rootPath,
+      scope: existing?.scope ?? profile.scope,
+      // The choice picks a runtime, not new instructions: trust stays the agent's.
+      trusted: existing?.trusted ?? profile.trusted,
+      errors: [],
+      pinnedBy: { id: `runtime:${provider}`, name, manifestPath: '', runtime: provider, setting: true }
+    };
+    if (index >= 0) result[index] = chosen;
+    else result.push(chosen);
   }
   return result;
 }
@@ -171,7 +220,7 @@ export class AgentRuntimeManager {
 
     // An agent from another tool has no host of its own: give it one that
     // runs on whatever runtime the session uses, like the built-in agents.
-    const hosts = [...runtimeHosts];
+    let hosts = [...runtimeHosts];
     for (const entry of mergedProfiles) {
       if (!entry.source || hosts.some(host => host.manifest.id === entry.profile.id)) continue;
       hosts.push({
@@ -184,6 +233,7 @@ export class AgentRuntimeManager {
         followsSessionRuntime: true
       });
     }
+    hosts = applyRuntimeChoices(hosts, mergedProfiles, this.options.agentRuntimes?.() ?? {});
     const nativeItems = (native?.agents.length ?? 0) + (native?.skills.length ?? 0) + (native?.instructions.length ?? 0);
     const projectItems = [...(native?.agents ?? []), ...(native?.skills ?? [])].filter(item => item.source?.scope === 'project').length
       + (native?.instructions ?? []).filter(file => file.scope === 'project').length;

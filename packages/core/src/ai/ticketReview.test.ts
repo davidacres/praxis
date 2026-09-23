@@ -125,3 +125,13 @@ test('the prompt spells out how to write a gadget that will display', () => {
   assert.match(TICKET_REVIEW_SESSION_PROMPT, /Escape every double quote/);
   assert.match(TICKET_REVIEW_SESSION_PROMPT, /under 300 characters/);
 });
+
+test('the working style and project instructions follow the task prompt, style first', () => {
+  const prompt = buildSystemPrompt(
+    { goal: 'Do it.', scope: '', definitionOfDone: '', workingStyle: '- Plan first.', projectInstructions: '## Project instructions\nUse tabs.' },
+    ISSUE
+  );
+  assert.match(prompt, /## Working style\nFollow these habits whichever tools you have:\n- Plan first\./);
+  assert.ok(prompt.indexOf('## Working style') < prompt.indexOf('## Project instructions'));
+  assert.doesNotMatch(buildSystemPrompt({ goal: 'Do it.', scope: '', definitionOfDone: '' }, ISSUE), /Working style/);
+});

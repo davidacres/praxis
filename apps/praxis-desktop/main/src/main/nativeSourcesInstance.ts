@@ -9,6 +9,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { shell } from 'electron';
 import {
+  DEFAULT_WORKING_STYLE,
   PROVIDER_DESCRIPTORS,
   buildSessionInstructions,
   discoverNativeSources,
@@ -67,7 +68,14 @@ export async function sessionInstructionsFor(runtime: string, workingDirectory?:
   if (!getSettingsBackend().read().ai.nativeSources.injectInstructions) return undefined;
   const options = await nativeSourceOptionsFor(workingDirectory);
   const { instructions } = await discoverNativeSources(options);
-  return buildSessionInstructions(instructions, runtime, { projectApproved: options.projectApproved }).text || undefined;
+  const source = getSettingsBackend().read().ai.nativeSources.instructionSource;
+  return buildSessionInstructions(instructions, runtime, { projectApproved: options.projectApproved, source }).text || undefined;
+}
+
+/** The working style every session carries, whichever AI runs it (Settings › Agent Runtime). */
+export function sessionWorkingStyle(): string | undefined {
+  const style = getSettingsBackend().read().ai.workingStyle;
+  return style.enabled ? style.text.trim() || DEFAULT_WORKING_STYLE : undefined;
 }
 
 export async function setNativeProjectApproval(projectRoot: string, approved: boolean): Promise<AgentRuntimeSnapshot> {

@@ -124,6 +124,28 @@ test('other AI tools’ agents, skills and instructions are discovered, approved
   expect(sent).toContain('KESTREL'); // its skill, supplied by Praxis
   expect(sent).not.toContain('Personal Codex preferences'); // user files stay with their tool
 
+  // One tool's files as the instructions for every AI: only CLAUDE.md is added.
+  await win.getByTestId('titlebar-settings').click();
+  await win.getByTestId('settings-nav-agent-runtime').click();
+  await tab('instructions');
+  await panel.getByTestId('native-instruction-source').selectOption({ label: 'Claude Code’s (CLAUDE.md)' });
+  await expect(panel.getByTestId('native-instruction-AGENTS.md')).toContainText('Not added — every AI gets Claude Code’s files instead.');
+  await expect(panel.getByTestId('native-instruction-CLAUDE.md')).toContainText('Added to sessions on the other runtimes.');
+  await win.mouse.move(0, 0);
+  await win.screenshot({ path: 'output/playwright/native-sources-instruction-source.png' });
+  await win.getByRole('button', { name: 'Done' }).click();
+  const before = mock.requests.length;
+  const second = await win.evaluate(
+    async ({ cwd }) => window.praxis.ai.delegate({ goal: 'Summarise.', workingDirectory: cwd, toolMode: 'read-only', task: { goal: 'Summarise.', maxSteps: 2, timeoutMs: 30000 } }),
+    { cwd: repo }
+  );
+  await expect
+    .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(list => list.find(s => s.issueKey === k)?.state), second.issueKey), { timeout: 20000 })
+    .toBe('completed');
+  const sentAfter = mock.requests.slice(before).map(request => request.body).join('\n');
+  expect(sentAfter).toContain('CORMORANT');
+  expect(sentAfter).not.toContain('PELICAN');
+
   // Turning a tool off removes what came from it.
   await win.getByTestId('titlebar-settings').click();
   await win.getByTestId('settings-nav-agent-runtime').click();
