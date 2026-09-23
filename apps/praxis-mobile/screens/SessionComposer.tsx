@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MobileSessionMode } from '@praxis/core';
-import { theme } from '../app/theme';
+import { mobileScale, theme, themedStyles } from '../app/theme';
 import type { MobileWorkflowChoice } from '../app/store';
 import type { MobileUsageView } from '../renderer/mobileUsage';
 import { MODE_DESCRIPTIONS, MODE_LABELS } from '../renderer/mobileSessionOptions';
@@ -281,10 +281,10 @@ export function SessionComposer(props: SessionComposerProps): React.JSX.Element 
             accessibilityLabel={`Session options, ${MODE_LABELS[mode]} mode`}
             accessibilityState={{ expanded: optionsOpen }}
             onPress={() => setOptionsOpen(true)}
+            hitSlop={5}
             style={({ pressed }) => [styles.moreButton, pressed && styles.buttonPressed]}
           >
-            <Text style={styles.modeBadge}>{MODE_LABELS[mode]}</Text>
-            <Text style={styles.moreGlyph}>•••</Text>
+            <Text style={styles.moreGlyph}>☷</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -292,13 +292,13 @@ export function SessionComposer(props: SessionComposerProps): React.JSX.Element 
             accessibilityState={{ disabled: sending ? !onStop : !canSend }}
             disabled={sending ? !onStop : !canSend}
             onPress={sending ? onStop : onSend}
+            hitSlop={6}
             style={({ pressed }) => [styles.sendButton, (!sending && !canSend) && styles.sendButtonDisabled, pressed && styles.buttonPressed]}
           >
             <Text style={[styles.sendGlyph, (canSend || sending) && styles.sendGlyphActive]}>{sending ? '■' : '↑'}</Text>
           </Pressable>
         </View>
       </View>
-
       <SessionOptionsSheet
         visible={optionsOpen}
         editable={editable}
@@ -317,93 +317,92 @@ export function SessionComposer(props: SessionComposerProps): React.JSX.Element 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   shell: {
-    gap: 7,
-    paddingHorizontal: 10,
-    paddingTop: 7,
-    paddingBottom: 9,
+    gap: mobileScale(7),
+    paddingHorizontal: mobileScale(10),
+    paddingTop: mobileScale(7),
+    paddingBottom: mobileScale(9),
     backgroundColor: theme.chrome,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: theme.border,
   },
   usage: {
-    minHeight: 42,
-    paddingLeft: 11,
+    minHeight: mobileScale(42),
+    paddingLeft: mobileScale(11),
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: theme.border,
-    borderRadius: 8,
+    borderRadius: mobileScale(8),
     backgroundColor: theme.surface,
   },
-  usageRow: { flex: 1, minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  usageLead: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  usageLabel: { color: theme.textSecondary, fontSize: 13 },
-  usageMeta: { flex: 1, minWidth: 0, color: theme.textDim, fontSize: 11 },
-  usageDetails: { width: '100%', paddingRight: 11, paddingBottom: 9, gap: 4 },
+  usageRow: { flex: 1, minHeight: mobileScale(40), flexDirection: 'row', alignItems: 'center', gap: mobileScale(8) },
+  usageLead: { flexDirection: 'row', alignItems: 'center', gap: mobileScale(7) },
+  usageLabel: { color: theme.textSecondary, fontSize: mobileScale(13) },
+  usageMeta: { flex: 1, minWidth: 0, color: theme.textDim, fontSize: mobileScale(11) },
+  usageDetails: { width: '100%', paddingRight: mobileScale(11), paddingBottom: mobileScale(9), gap: mobileScale(4) },
   usageDetailRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  usageDetailLabel: { color: theme.textDim, fontSize: 11 },
-  usageDetailValue: { flexShrink: 1, color: theme.textSecondary, fontSize: 11, fontVariant: ['tabular-nums'] },
-  usageNote: { marginTop: 3, color: theme.textDim, fontSize: 10, lineHeight: 14 },
-  closeButton: { width: 32, height: 40, alignItems: 'center', justifyContent: 'center' },
-  closeText: { color: theme.textDim, fontSize: 17, fontWeight: '300' },
-  blocked: { paddingHorizontal: 4, color: theme.warn, fontSize: 11, lineHeight: 15 },
-  error: { paddingHorizontal: 4, color: theme.danger, fontSize: 11, lineHeight: 15 },
-  composer: { overflow: 'hidden', borderWidth: 1, borderColor: theme.borderStrong, borderRadius: 11, backgroundColor: theme.input },
+  usageDetailLabel: { color: theme.textDim, fontSize: mobileScale(11) },
+  usageDetailValue: { flexShrink: 1, color: theme.textSecondary, fontSize: mobileScale(11), fontVariant: ['tabular-nums'] },
+  usageNote: { marginTop: mobileScale(3), color: theme.textDim, fontSize: mobileScale(10), lineHeight: mobileScale(14) },
+  closeButton: { width: mobileScale(32), height: mobileScale(40), alignItems: 'center', justifyContent: 'center' },
+  closeText: { color: theme.textDim, fontSize: mobileScale(17), fontWeight: '300' },
+  blocked: { paddingHorizontal: mobileScale(4), color: theme.warn, fontSize: mobileScale(11), lineHeight: mobileScale(15) },
+  error: { paddingHorizontal: mobileScale(4), color: theme.danger, fontSize: mobileScale(11), lineHeight: mobileScale(15) },
+  composer: { overflow: 'hidden', borderWidth: 1, borderColor: theme.borderStrong, borderRadius: mobileScale(11), backgroundColor: theme.input },
   input: {
-    minHeight: 58,
+    minHeight: mobileScale(58),
     maxHeight: 124,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 7,
+    paddingHorizontal: mobileScale(12),
+    paddingTop: mobileScale(12),
+    paddingBottom: mobileScale(7),
     color: theme.text,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: mobileScale(13),
+    lineHeight: mobileScale(18),
     textAlignVertical: 'top',
   },
-  controls: { minHeight: 42, paddingHorizontal: 5, paddingBottom: 5, flexDirection: 'row', alignItems: 'center', gap: 1 },
+  controls: { minHeight: mobileScale(48), paddingHorizontal: mobileScale(5), paddingBottom: mobileScale(5), flexDirection: 'row', alignItems: 'center', gap: 1 },
   spacer: { flex: 1 },
-  chip: { height: 29, maxWidth: 124, paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6 },
+  chip: { height: mobileScale(29), maxWidth: mobileScale(124), paddingHorizontal: mobileScale(6), flexDirection: 'row', alignItems: 'center', gap: mobileScale(4), borderRadius: mobileScale(6) },
   chipEditable: { borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border },
-  chipLabel: { flexShrink: 1, color: theme.textSecondary, fontSize: 11 },
+  chipLabel: { flexShrink: 1, color: theme.textSecondary, fontSize: mobileScale(11) },
   chipLabelLocked: { color: theme.textDim },
   chipCaret: { color: theme.textDim, fontSize: 9 },
-  glyph: { color: theme.textSecondary, fontSize: 13, fontWeight: '500' },
+  glyph: { color: theme.textSecondary, fontSize: mobileScale(13), fontWeight: '500' },
   glyphAccent: { color: theme.accent },
-  moreButton: { height: 31, paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 6 },
-  modeBadge: { color: theme.textDim, fontSize: 10, fontWeight: '700' },
-  moreGlyph: { marginTop: -5, color: theme.textSecondary, fontSize: 15, fontWeight: '700', letterSpacing: 1 },
-  sendButton: { width: 31, height: 31, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
+  moreButton: { width: mobileScale(40), height: mobileScale(40), flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: mobileScale(8) },
+  moreGlyph: { color: theme.textSecondary, fontSize: mobileScale(22), fontWeight: '700', lineHeight: mobileScale(24) },
+  sendButton: { width: mobileScale(40), height: mobileScale(40), flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: mobileScale(8) },
   sendButtonDisabled: { opacity: 0.48 },
-  sendGlyph: { color: theme.textDim, fontSize: 20, fontWeight: '500', lineHeight: 22 },
+  sendGlyph: { color: theme.textDim, fontSize: mobileScale(24), fontWeight: '600', lineHeight: mobileScale(26) },
   sendGlyphActive: { color: theme.text },
   buttonPressed: { backgroundColor: theme.surfaceRaised },
   sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
   sheetScrim: { position: 'absolute', inset: 0, backgroundColor: theme.scrim },
-  sheet: { paddingHorizontal: 14, paddingTop: 8, borderTopLeftRadius: 18, borderTopRightRadius: 18, borderWidth: 1, borderBottomWidth: 0, borderColor: theme.borderStrong, backgroundColor: theme.bgSunken },
-  sheetHandle: { width: 42, height: 4, alignSelf: 'center', marginBottom: 12, borderRadius: 2, backgroundColor: theme.borderStrong },
-  sheetHeader: { marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  sheet: { paddingHorizontal: mobileScale(14), paddingTop: mobileScale(8), borderTopLeftRadius: mobileScale(18), borderTopRightRadius: mobileScale(18), borderWidth: 1, borderBottomWidth: 0, borderColor: theme.borderStrong, backgroundColor: theme.bgSunken },
+  sheetHandle: { width: mobileScale(42), height: mobileScale(4), alignSelf: 'center', marginBottom: mobileScale(12), borderRadius: mobileScale(2), backgroundColor: theme.borderStrong },
+  sheetHeader: { marginBottom: mobileScale(12), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: mobileScale(10) },
   sheetHeaderText: { flex: 1 },
-  sheetTitle: { color: theme.text, fontSize: 17, fontWeight: '700' },
-  sheetSubtitle: { marginTop: 3, color: theme.textDim, fontSize: 10 },
-  sheetClose: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 7, backgroundColor: theme.surface },
-  sheetCloseText: { color: theme.textDim, fontSize: 21, fontWeight: '300' },
-  sheetSectionLabel: { marginTop: 12, marginBottom: 6, color: theme.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
-  sheetNote: { marginTop: 6, color: theme.textDim, fontSize: 11, lineHeight: 16 },
+  sheetTitle: { color: theme.text, fontSize: mobileScale(17), fontWeight: '700' },
+  sheetSubtitle: { marginTop: mobileScale(3), color: theme.textDim, fontSize: mobileScale(10) },
+  sheetClose: { width: mobileScale(34), height: mobileScale(34), alignItems: 'center', justifyContent: 'center', borderRadius: mobileScale(7), backgroundColor: theme.surface },
+  sheetCloseText: { color: theme.textDim, fontSize: mobileScale(21), fontWeight: '300' },
+  sheetSectionLabel: { marginTop: mobileScale(12), marginBottom: mobileScale(6), color: theme.textDim, fontSize: mobileScale(10), fontWeight: '700', letterSpacing: 0.8 },
+  sheetNote: { marginTop: mobileScale(6), color: theme.textDim, fontSize: mobileScale(11), lineHeight: mobileScale(16) },
   modeToggle: { flexDirection: 'row', padding: 3, gap: 2, borderWidth: 1, borderColor: theme.border, borderRadius: 8, backgroundColor: theme.surface },
-  modeButton: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 6 },
+  modeButton: { flex: 1, alignItems: 'center', paddingVertical: mobileScale(8), borderRadius: mobileScale(6) },
   modeButtonActive: { backgroundColor: theme.surfaceRaised },
-  modeText: { color: theme.textDim, fontSize: 12, fontWeight: '600' },
+  modeText: { color: theme.textDim, fontSize: mobileScale(12), fontWeight: '600' },
   modeTextActive: { color: theme.text },
   modeTextUnavailable: { opacity: 0.45 },
-  sheetGroup: { marginTop: 6, overflow: 'hidden', borderWidth: 1, borderColor: theme.border, borderRadius: 9, backgroundColor: theme.surface },
-  sheetRow: { minHeight: 48, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
+  sheetGroup: { marginTop: mobileScale(6), overflow: 'hidden', borderWidth: 1, borderColor: theme.border, borderRadius: mobileScale(9), backgroundColor: theme.surface },
+  sheetRow: { minHeight: mobileScale(48), paddingHorizontal: mobileScale(10), flexDirection: 'row', alignItems: 'center', gap: mobileScale(9), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
   sheetRowPressed: { backgroundColor: theme.surfaceRaised },
   sheetRowIcon: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 7, backgroundColor: theme.bgSunken },
   sheetRowIconText: { color: theme.textSecondary, fontSize: 12, fontWeight: '700' },
-  sheetRowLabel: { flex: 1, color: theme.textSecondary, fontSize: 13, fontWeight: '600' },
-  sheetRowValue: { maxWidth: '44%', color: theme.textDim, fontSize: 12, textAlign: 'right' },
-  sheetChevron: { color: theme.textDim, fontSize: 18 },
-});
+  sheetRowLabel: { flex: 1, color: theme.textSecondary, fontSize: mobileScale(13), fontWeight: '600' },
+  sheetRowValue: { maxWidth: '44%', color: theme.textDim, fontSize: mobileScale(12), textAlign: 'right' },
+  sheetChevron: { color: theme.textDim, fontSize: mobileScale(18) },
+}));

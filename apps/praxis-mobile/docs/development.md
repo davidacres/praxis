@@ -5,7 +5,7 @@
 `@praxis/mobile` is an **Expo SDK 57 app that builds and runs** — verified with
 `npx expo start --ios` in the iOS Simulator (bundles in under a second, no
 errors) and screenshotted rendering Connect → Work list → Work detail
-(Chat/Progress/Changes tabs) → Attention. It is driven by the tested
+(Chat/Progress/Changes session views) → Attention. It is driven by the tested
 `renderer/` reducers (`mobileShellState`, `mobileNavigation`, `mobileFollowUp`,
 `mobileAttention`), which still compile and test independently via
 `npm run test:mobile` (`tsc -p tsconfig.test.json && node --test`), run in the

@@ -12,9 +12,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MobileSessionMode } from '@praxis/core';
 import { AppHeader, Body, Button, Card, ConnectionBadge, Pill } from '../app/ui';
-import { theme } from '../app/theme';
+import { SvgXml } from 'react-native-svg';
+import type { MobileMotifAnchor } from '@praxis/core';
+import { currentAppearance, mobileScale, theme, themedStyles } from '../app/theme';
+import { fitCornerMotifSvg, motifSpreadScale, tiledMotifSvg } from '../renderer/mobileTheme';
 import { useStore, type MobileTranscriptMessage } from '../app/store';
-import type { MobileDetailTab } from '../renderer/mobileNavigation';
 import {
   DEFAULT_SESSION_SELECTION,
   effectiveSelection,
@@ -26,16 +28,30 @@ import { SessionComposer, type ComposerModeOption } from './SessionComposer';
 import { ProviderModelSheet } from './ProviderModelSheet';
 import { formatClock } from '../renderer/mobileTime';
 
-const DETAIL_TABS: MobileDetailTab[] = ['chat', 'progress', 'changes'];
-
 export function WorkScreen({ onOpenSidebar }: { onOpenSidebar: () => void }): React.JSX.Element {
   const { work, openWorkId } = useStore();
   const open = work.find(item => item.workId === openWorkId);
   return open ? <WorkDetail workId={open.workId} onOpenSidebar={onOpenSidebar} /> : <EmptySession onOpenSidebar={onOpenSidebar} />;
 }
 
-function HexBackdrop(): React.JSX.Element {
-  const rows = Array.from({ length: 17 }, (_, index) => index);
+/** Where a corner layer sits: flush with its corner, spilling off-screen the way the desktop's does. */
+const CORNER_PLACEMENT: Record<Exclude<MobileMotifAnchor, 'center'>, object> = {
+  'top-left': { top: 0, left: 0 },
+  'top-right': { top: 0, right: 0 },
+  'bottom-left': { bottom: 0, left: 0 },
+  'bottom-right': { bottom: 0, right: 0 },
+};
+
+/**
+ * The desktop's motif behind the conversation — the same SVG the desktop
+ * paints, at the same size and corners. With no motif on the desktop there is
+ * none here; only a desktop too old to send its theme gets the stock hexagons.
+ */
+function MotifBackdrop(): React.JSX.Element {
+  const appearance = currentAppearance();
+  const [box, setBox] = useState({ width: 0, height: 0 });
+  const motif = appearance?.motif;
+  const scale = motif ? motifSpreadScale(motif, box.width, box.height) : 1;
   return (
     <View
       accessible={false}
@@ -43,21 +59,45 @@ function HexBackdrop(): React.JSX.Element {
       importantForAccessibility="no-hide-descendants"
       pointerEvents="none"
       style={styles.hexBackdrop}
+      onLayout={event => setBox({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}
     >
+      {motif ? (
+        <View style={[styles.motifLayers, { opacity: motif.opacity }]}>
+          {motif.layers.map((layer, index) => layer.anchor === 'center' || layer.repeat
+            ? box.width > 0 && <SvgXml key={index} xml={tiledMotifSvg(layer, box.width, box.height)} width={box.width} height={box.height} />
+            : box.width > 0 && (() => {
+              const corner = fitCornerMotifSvg(layer, scale);
+              return (
+                <View key={index} style={[styles.motifCorner, { width: corner.size, height: corner.size }, CORNER_PLACEMENT[layer.anchor]]}>
+                  <SvgXml xml={corner.svg} width={corner.size} height={corner.size} />
+                </View>
+              );
+            })())}
+        </View>
+      ) : !appearance ? <StockHexagons /> : null}
+    </View>
+  );
+}
+
+/** The phone's own hexagons, for a desktop that predates sending its theme. */
+function StockHexagons(): React.JSX.Element {
+  const rows = Array.from({ length: 17 }, (_, index) => index);
+  return (
+    <>
       {rows.map(row => (
         <Text key={row} numberOfLines={1} style={[styles.hexRow, row % 2 === 1 && styles.hexRowOffset]}>
           {'⬡  ⬡  ⬡  ⬡  ⬡  ⬡  ⬡  ⬡  ⬡  ⬡  ⬡'}
         </Text>
       ))}
       <View style={styles.hexShade} />
-    </View>
+    </>
   );
 }
 
 function EmptySession({ onOpenSidebar }: { onOpenSidebar: () => void }): React.JSX.Element {
   return (
     <View style={styles.detailShell}>
-      <HexBackdrop />
+      <MotifBackdrop />
       <AppHeader title="Sessions" onOpenSidebar={onOpenSidebar} />
       <View style={styles.emptySession}>
         <Text style={styles.emptyTitle}>Choose a session</Text>
@@ -87,16 +127,9 @@ function ChatMessage({ message }: { message: MobileTranscriptMessage }): React.J
   );
 }
 
-function SessionHeader({
-  title,
-  detail,
-  onOpenSidebar,
-  onSelectDetail,
-}: {
+function SessionHeader({ title, onOpenSidebar }: {
   title: string;
-  detail: MobileDetailTab;
   onOpenSidebar: () => void;
-  onSelectDetail: (detail: MobileDetailTab) => void;
 }): React.JSX.Element {
   return (
     <View style={styles.header}>
@@ -106,24 +139,6 @@ function SessionHeader({
         </Pressable>
         <Text numberOfLines={1} style={styles.headerTitle}>{title}</Text>
         <ConnectionBadge />
-      </View>
-      <View accessibilityRole="tablist" style={styles.detailTabs}>
-        {DETAIL_TABS.map(tab => {
-          const selected = detail === tab;
-          return (
-            <Pressable
-              key={tab}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              onPress={() => onSelectDetail(tab)}
-              style={[styles.detailTab, selected && styles.detailTabActive]}
-            >
-              <Text style={[styles.detailTabText, selected && styles.detailTabTextActive]}>
-                {tab[0]!.toUpperCase() + tab.slice(1)}
-              </Text>
-            </Pressable>
-          );
-        })}
       </View>
     </View>
   );
@@ -263,8 +278,8 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
 
   return (
     <View style={[styles.detailShell, { paddingBottom: keyboardInset }]}>
-      <HexBackdrop />
-      <SessionHeader title={item.title} detail={detail} onOpenSidebar={onOpenSidebar} onSelectDetail={setDetail} />
+      <MotifBackdrop />
+      <SessionHeader title={item.title} onOpenSidebar={onOpenSidebar} />
 
       {detail === 'chat' ? (
         <>
@@ -421,64 +436,61 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   detailShell: { flex: 1, backgroundColor: theme.bg },
   hexBackdrop: { position: 'absolute', inset: 0, overflow: 'hidden', backgroundColor: theme.bg },
   hexRow: {
-    height: 48,
+    height: mobileScale(48),
     marginTop: -5,
     marginLeft: -26,
     color: theme.accent,
     opacity: 0.09,
-    fontSize: 41,
-    lineHeight: 48,
+    fontSize: mobileScale(41),
+    lineHeight: mobileScale(48),
     letterSpacing: -3,
   },
   hexRowOffset: { marginLeft: 1 },
+  motifLayers: { position: 'absolute', inset: 0 },
+  motifCorner: { position: 'absolute' },
   hexShade: { position: 'absolute', inset: 0, backgroundColor: theme.hexShade },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   header: { borderBottomWidth: 1, borderBottomColor: theme.border, backgroundColor: theme.chrome },
-  headerTop: { minHeight: 48, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  headerTop: { minHeight: mobileScale(48), paddingHorizontal: mobileScale(10), flexDirection: 'row', alignItems: 'center', gap: mobileScale(9) },
   menuButton: {
-    width: 30,
-    height: 30,
+    width: mobileScale(30),
+    height: mobileScale(30),
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 6,
+    borderRadius: mobileScale(6),
     borderWidth: 1,
     borderColor: theme.border,
     backgroundColor: theme.surface,
   },
-  menuGlyph: { color: theme.textSecondary, fontSize: 15, lineHeight: 17 },
-  headerTitle: { flex: 1, minWidth: 0, color: theme.text, fontSize: 14, fontWeight: '700' },
-  detailTabs: { height: 32, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'flex-end', gap: 18 },
-  detailTab: { height: 32, justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  detailTabActive: { borderBottomColor: theme.accent },
-  detailTabText: { color: theme.textDim, fontSize: 11, fontWeight: '600' },
-  detailTabTextActive: { color: theme.text },
-  transcript: { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: 12, paddingTop: 14, paddingBottom: 8 },
+  menuGlyph: { color: theme.textSecondary, fontSize: mobileScale(15), lineHeight: mobileScale(17) },
+  headerTitle: { flex: 1, minWidth: 0, color: theme.text, fontSize: mobileScale(14), fontWeight: '700' },
+  transcript: { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: mobileScale(12), paddingTop: mobileScale(14), paddingBottom: mobileScale(8) },
   message: {
     maxWidth: '88%',
-    marginBottom: 12,
-    paddingHorizontal: 12,
-    paddingTop: 9,
-    paddingBottom: 11,
+    marginBottom: mobileScale(12),
+    paddingHorizontal: mobileScale(12),
+    paddingTop: mobileScale(9),
+    paddingBottom: mobileScale(11),
     borderWidth: 1,
-    borderRadius: 7,
+    borderRadius: mobileScale(7),
   },
   messageUser: { alignSelf: 'flex-end', borderColor: theme.accentMuted, backgroundColor: theme.userMessage },
   messageAssistant: { alignSelf: 'flex-start', borderColor: theme.border, backgroundColor: theme.assistantMessage },
-  messageHeader: { marginBottom: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 18 },
-  messageAuthor: { color: theme.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
-  messageTime: { color: theme.textDim, fontSize: 10, fontVariant: ['tabular-nums'] },
-  messageText: { color: theme.text, fontSize: 13, lineHeight: 19 },
-  notice: { alignSelf: 'center', maxWidth: '90%', marginBottom: 12, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border, backgroundColor: theme.surface },
-  noticeText: { color: theme.textDim, fontSize: 11, textAlign: 'center' },
+  messageHeader: { marginBottom: mobileScale(7), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: mobileScale(18) },
+  messageAuthor: { color: theme.textDim, fontSize: mobileScale(10), fontWeight: '700', letterSpacing: 0.8 },
+  messageTime: { color: theme.textDim, fontSize: mobileScale(10), fontVariant: ['tabular-nums'] },
+  messageText: { color: theme.text, fontSize: mobileScale(13), lineHeight: mobileScale(19) },
+  notice: { alignSelf: 'center', maxWidth: '90%', marginBottom: mobileScale(12), paddingHorizontal: mobileScale(10), paddingVertical: mobileScale(4), borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border, backgroundColor: theme.surface },
+  noticeText: { color: theme.textDim, fontSize: mobileScale(11), textAlign: 'center' },
   messagePending: { color: theme.textDim, fontStyle: 'italic' },
-  messageFailed: { alignSelf: 'flex-start', gap: 8, borderColor: theme.danger, backgroundColor: theme.dangerSoft },
-  draftIntro: { paddingVertical: 24, alignItems: 'center' },
+  messageFailed: { alignSelf: 'flex-start', gap: mobileScale(8), borderColor: theme.danger, backgroundColor: theme.dangerSoft },
+  draftIntro: { paddingVertical: mobileScale(24), alignItems: 'center' },
   detailContent: { flexGrow: 1, padding: theme.space, gap: theme.space },
   emptySession: { flex: 1, padding: 28, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { color: theme.text, fontSize: 18, fontWeight: '700' },
-  emptyText: { maxWidth: 260, marginTop: 7, color: theme.textDim, fontSize: 12, lineHeight: 18, textAlign: 'center' },
-});
+  emptyTitle: { color: theme.text, fontSize: mobileScale(18), fontWeight: '700' },
+  emptyText: { maxWidth: mobileScale(260), marginTop: mobileScale(7), color: theme.textDim, fontSize: mobileScale(12), lineHeight: mobileScale(18), textAlign: 'center' },
+}));

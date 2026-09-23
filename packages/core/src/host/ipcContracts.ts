@@ -59,6 +59,7 @@ import type { BrowserDiagnosticsBundle } from '../projects/browserDiagnostics';
 import type { PreviewVerificationCheck, PreviewVerificationOutcome } from '../projects/previewVerification';
 import type { AppSettings, AppSettingsPatch, MarketplaceSettings } from '../config/appSettings';
 import type { MobilePairingSnapshot } from '../host/mobileAccessAdministration';
+import type { MobileAppearance } from '../host/mobileProtocol';
 import type { MobileCapability } from '../host/mobileProtocol';
 import type {
   ActiveAppearanceAddons,
@@ -250,6 +251,8 @@ export interface SettingsIpc {
   set(patch: AppSettingsPatch): Promise<AppSettings>;
   /** Public host identity and listener status; never includes the host private key or pairing secret. */
   getMobileHostInfo(): Promise<MobilePairingSnapshot>;
+  /** The theme this window just applied, resolved to colours, so paired phones can wear it. */
+  publishMobileAppearance(appearance: MobileAppearance): Promise<void>;
   createMobilePairingInvitation(): Promise<MobilePairingSnapshot>;
   confirmMobilePairing(
     requestId: string,

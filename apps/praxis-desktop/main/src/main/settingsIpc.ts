@@ -19,6 +19,7 @@ import {
   snapshotMobilePairing,
 } from './mobilePairingInstance';
 import { restartMobileLanAfterKeyRotation } from './mobileListenerInstance';
+import { setDesktopAppearance } from './mobileAppearance';
 
 async function removeUserDataFile(name: string): Promise<void> {
   await fs.rm(path.join(app.getPath('userData'), name), { force: true });
@@ -38,6 +39,7 @@ export function registerSettingsIpc(): void {
   );
 
   ipcMain.handle('settings:getMobileHostInfo', async () => snapshotMobilePairing());
+  ipcMain.handle('settings:publishMobileAppearance', async (_event, appearance: unknown) => { setDesktopAppearance(appearance); });
   ipcMain.handle('settings:createMobilePairingInvitation', async () => createMobilePairingInvitation());
   ipcMain.handle('settings:confirmMobilePairing', async (_event, requestId: string, grant: { label?: string; capabilities: readonly MobileCapability[]; projectIds: readonly string[] }) =>
     confirmMobilePairing(requestId, grant),

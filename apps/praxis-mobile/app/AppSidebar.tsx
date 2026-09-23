@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { theme } from './theme';
+import { applyDisplayMode, currentAppearance, currentDisplayMode, mobileScale, theme, themedStyles, type MobileDisplayMode } from './theme';
+import { saveMobileDisplayMode } from './mobileConnection';
 import { useStore, type MobilePrimaryRoute } from './store';
 import { formatDayAndClock } from '../renderer/mobileTime';
+import { PraxisWordmark } from './PraxisWordmark';
 
 type SettingsPage = 'app' | 'server' | 'permissions';
 
@@ -106,9 +108,30 @@ function SettingsDetail({ page, onBack }: { page: SettingsPage; onBack: () => vo
           <>
             <SectionLabel>APPEARANCE</SectionLabel>
             <View style={styles.detailCard}>
-              <DetailRow label="Theme" value="Praxis dark" />
+              <DetailRow label="Theme" value={currentAppearance()?.themeName ?? 'Praxis Dark'} />
+              <DetailRow label="Follows" value={currentAppearance() ? 'The desktop' : 'Default until paired'} />
             </View>
-            <Text style={styles.detailNote}>The phone uses the Praxis dark palette. Choosing a theme, or following the desktop’s theme, is not available on mobile yet.</Text>
+            <Text style={styles.detailNote}>The phone wears the paired desktop’s theme and changes with it. Choose a theme in the desktop’s Settings → Themes.</Text>
+            <SectionLabel>DISPLAY SIZE</SectionLabel>
+            <View style={styles.displayModes}>
+              {(['compact', 'large'] as MobileDisplayMode[]).map(mode => {
+                const selected = currentDisplayMode() === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${mode === 'large' ? 'Large' : 'Compact'} display size`}
+                    onPress={() => { if (applyDisplayMode(mode)) void saveMobileDisplayMode(mode); }}
+                    style={({ pressed }) => [styles.displayMode, selected && styles.displayModeSelected, pressed && styles.navRowPressed]}
+                  >
+                    <Text style={[styles.displayModeTitle, selected && styles.displayModeTitleSelected]}>{mode === 'large' ? 'Large' : 'Compact'}</Text>
+                    <Text style={styles.displayModeCaption}>{mode === 'large' ? 'Larger text and controls' : 'Current sizing'}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.detailNote}>Large mode increases reading size, spacing and touch targets across the mobile app. Compact keeps the current density.</Text>
             <SectionLabel>NOTIFICATIONS</SectionLabel>
             <View style={styles.detailCard}>
               <DetailRow label="Push notifications" value="Not available" />
@@ -190,7 +213,7 @@ function toneColor(tone: 'ok' | 'warn' | 'danger'): string {
 }
 
 export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Element {
-  const { shell, work, openWorkId, setRoute, openWork, startNewChat, attention, host, hostInfo } = useStore();
+  const { shell, work, openWorkId, setRoute, setDetail, openWork, startNewChat, attention, hostInfo } = useStore();
   const insets = useSafeAreaInsets();
   const [settingsPage, setSettingsPage] = useState<SettingsPage | undefined>();
   const unresolved = attention.filter(item => !item.resolved).length;
@@ -221,12 +244,8 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
           ) : (
             <>
               <View style={styles.brand}>
-                <View style={styles.brandMark}><Text style={styles.brandMarkText}>P</Text></View>
-                <View style={styles.brandText}>
-                  <Text style={styles.brandName}>Praxis</Text>
-                  <Text style={[styles.brandHost, { color: toneColor((CONNECTION_TEXT[shell.connection] ?? CONNECTION_TEXT.offline!).tone) }]}>●  {host.hostName || 'Desktop'} · {(CONNECTION_TEXT[shell.connection] ?? CONNECTION_TEXT.offline!).label}</Text>
-                </View>
-                <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={onClose} style={styles.closeButton}>
+                <PraxisWordmark width={102} height={32} />
+                <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={onClose} style={[styles.closeButton, styles.closeButtonRight]}>
                   <Text style={styles.closeText}>×</Text>
                 </Pressable>
               </View>
@@ -277,6 +296,25 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
                   );
                 })}
 
+                {openWorkId ? (
+                  <>
+                    <SectionLabel>SESSION VIEWS</SectionLabel>
+                    {(['chat', 'progress', 'changes'] as const).map(detail => (
+                      <NavRow
+                        key={detail}
+                        icon={detail === 'chat' ? '☷' : detail === 'progress' ? '◔' : '⌁'}
+                        label={detail[0]!.toUpperCase() + detail.slice(1)}
+                        active={shell.navigation.detail === detail}
+                        onPress={() => {
+                          setRoute('work');
+                          setDetail(detail);
+                          onClose();
+                        }}
+                      />
+                    ))}
+                  </>
+                ) : null}
+
                 <SectionLabel>SETTINGS</SectionLabel>
                 {SETTINGS.map(item => (
                   <NavRow key={item.id} icon={item.icon} label={item.label} caption={item.caption} onPress={() => setSettingsPage(item.id)} />
@@ -294,7 +332,7 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   overlay: { flex: 1, flexDirection: 'row', backgroundColor: 'transparent' },
   scrim: { position: 'absolute', inset: 0, backgroundColor: theme.scrim },
   drawer: {
@@ -310,26 +348,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 11,
+    gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
   },
-  brandMark: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: theme.accentSoft, borderWidth: 1, borderColor: theme.accentMuted },
-  brandMarkText: { color: theme.accent, fontSize: 18, fontWeight: '800' },
-  brandText: { flex: 1 },
-  brandName: { color: theme.text, fontSize: 17, fontWeight: '800' },
-  brandHost: { marginTop: 2, fontSize: 10 },
   closeButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  closeButtonRight: { marginLeft: 'auto' },
   closeText: { color: theme.textDim, fontSize: 22, fontWeight: '300' },
   drawerContent: { padding: 10, paddingBottom: 24 },
-  sectionLabel: { marginTop: 14, marginBottom: 6, paddingHorizontal: 8, color: theme.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 0.9 },
+  sectionLabel: { marginTop: mobileScale(14), marginBottom: mobileScale(6), paddingHorizontal: mobileScale(8), color: theme.textDim, fontSize: mobileScale(10), fontWeight: '700', letterSpacing: 0.9 },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sessionHeadingActions: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 7 },
   sectionCount: { color: theme.textDim, fontSize: 10 },
   newChatButton: { height: 28, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: theme.border, borderRadius: 7, backgroundColor: theme.surface },
   newChatGlyph: { color: theme.accent, fontSize: 15, lineHeight: 17 },
   newChatLabel: { color: theme.textSecondary, fontSize: 10, fontWeight: '700' },
-  navRow: { minHeight: 47, paddingHorizontal: 7, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 9, borderRadius: 8 },
+  navRow: { minHeight: mobileScale(47), paddingHorizontal: mobileScale(7), paddingVertical: mobileScale(6), flexDirection: 'row', alignItems: 'center', gap: mobileScale(9), borderRadius: mobileScale(8) },
   navRowActive: { backgroundColor: theme.accentSoft },
   navRowPressed: { backgroundColor: theme.surfaceRaised },
   navIcon: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 7, backgroundColor: theme.surface },
@@ -337,9 +371,9 @@ const styles = StyleSheet.create({
   navIconText: { color: theme.textDim, fontSize: 13, fontWeight: '700' },
   navIconTextActive: { color: theme.text },
   navText: { flex: 1, minWidth: 0 },
-  navLabel: { color: theme.textSecondary, fontSize: 13, fontWeight: '600' },
+  navLabel: { color: theme.textSecondary, fontSize: mobileScale(13), fontWeight: '600' },
   navLabelActive: { color: theme.text },
-  navCaption: { marginTop: 2, color: theme.textDim, fontSize: 10 },
+  navCaption: { marginTop: mobileScale(2), color: theme.textDim, fontSize: mobileScale(10) },
   navBadge: { minWidth: 20, paddingHorizontal: 6, paddingVertical: 2, overflow: 'hidden', borderRadius: 10, backgroundColor: theme.warn, color: theme.bgSunken, fontSize: 10, fontWeight: '800', textAlign: 'center' },
   chevron: { color: theme.textDim, fontSize: 18 },
   footer: { paddingHorizontal: 18, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: theme.border },
@@ -349,14 +383,20 @@ const styles = StyleSheet.create({
   detailHeader: { minHeight: 60, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: theme.border },
   backButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 7, backgroundColor: theme.surface },
   backText: { marginTop: -2, color: theme.textSecondary, fontSize: 27, lineHeight: 28 },
-  detailTitle: { color: theme.text, fontSize: 16, fontWeight: '700' },
+  detailTitle: { color: theme.text, fontSize: mobileScale(16), fontWeight: '700' },
   detailContent: { padding: 12, paddingBottom: 30 },
   detailCard: { overflow: 'hidden', borderWidth: 1, borderColor: theme.border, borderRadius: 9, backgroundColor: theme.surface },
   detailRow: { minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
   // The label wraps before the value does, so a short value ("Allowed") never breaks a letter a line.
-  detailLabel: { flex: 1, color: theme.textSecondary, fontSize: 12 },
-  detailValue: { flexShrink: 1, maxWidth: '60%', textAlign: 'right', fontSize: 12, fontWeight: '600' },
-  detailNote: { marginVertical: 12, paddingHorizontal: 4, color: theme.textDim, fontSize: 11, lineHeight: 17 },
+  detailLabel: { flex: 1, color: theme.textSecondary, fontSize: mobileScale(12) },
+  detailValue: { flexShrink: 1, maxWidth: '60%', textAlign: 'right', fontSize: mobileScale(12), fontWeight: '600' },
+  detailNote: { marginVertical: mobileScale(12), paddingHorizontal: mobileScale(4), color: theme.textDim, fontSize: mobileScale(11), lineHeight: mobileScale(17) },
+  displayModes: { flexDirection: 'row', gap: 8 },
+  displayMode: { flex: 1, minHeight: mobileScale(58), padding: mobileScale(10), borderWidth: 1, borderColor: theme.border, borderRadius: mobileScale(9), backgroundColor: theme.bgSunken },
+  displayModeSelected: { borderColor: theme.accent, backgroundColor: theme.accentSoft },
+  displayModeTitle: { color: theme.textSecondary, fontSize: mobileScale(13), fontWeight: '700' },
+  displayModeTitleSelected: { color: theme.accent },
+  displayModeCaption: { marginTop: mobileScale(4), color: theme.textDim, fontSize: mobileScale(10) },
   serverIdentity: { marginBottom: 4, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderColor: theme.border, borderRadius: 9, backgroundColor: theme.surface },
   serverGlyph: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: theme.accentSoft },
   serverGlyphText: { color: theme.accent, fontSize: 19, fontWeight: '800' },
@@ -366,4 +406,4 @@ const styles = StyleSheet.create({
   detailActions: { marginTop: 12, flexDirection: 'row', gap: 8 },
   detailButton: { minHeight: 38, paddingHorizontal: 14, justifyContent: 'center', borderWidth: 1, borderColor: theme.border, borderRadius: 8, backgroundColor: theme.surface },
   detailButtonText: { color: theme.textSecondary, fontSize: 12, fontWeight: '700' },
-});
+}));

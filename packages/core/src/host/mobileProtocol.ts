@@ -6,10 +6,11 @@ export type MobileCapability = 'view' | 'execute' | 'approve';
  * set; revision 2 added `host.info`, `providers.list`, `models.list`,
  * `sessions.usage`, `access.get` and the `mode` / validated `provider` /
  * `model` fields of `sessions.create`; revision 3 added `sessions.configure`
- * (between-turn provider handover, model change and mode switch). A phone reads `host.info` first and
+ * (between-turn provider handover, model change and mode switch); revision 4 added `host.info`
+ * `appearance` and the `host.appearance` event, so the phone wears the desktop's theme. A phone reads `host.info` first and
  * treats a missing operation (an older desktop) as "unsupported", not an error.
  */
-export const MOBILE_HOST_SURFACE_REVISION = 3 as const;
+export const MOBILE_HOST_SURFACE_REVISION = 4 as const;
 export type MobileReadOperation = 'hosts.list' | 'host.info' | 'projects.snapshot' | 'work.list' | 'sessions.list' | 'sessions.get' | 'sessions.usage' | 'workflows.list' | 'workflowRuns.get' | 'changes.get' | 'attention.list' | 'providers.list' | 'models.list' | 'access.get';
 export type MobileCommandOperation = 'sessions.create' | 'sessions.continue' | 'sessions.cancel' | 'sessions.configure' | 'workflowRuns.start' | 'workflowRuns.cancel' | 'workflowRuns.retryStage' | 'permissions.respond' | 'workflowGates.approve';
 export type MobileOperation = MobileReadOperation | MobileCommandOperation;
@@ -36,6 +37,104 @@ export interface MobileHostInfo {
   latestSequence: number;
   /** Changes whenever the desktop process restarts; event sequences restart with it. */
   hostEpoch: string;
+  /** The desktop's current theme, once its window has applied one (revision 4). */
+  appearance?: MobileAppearance;
+}
+
+/**
+ * The desktop's theme resolved to plain colours, so the phone can wear it
+ * without knowing any theme's definition. Every colour is `#rrggbb`.
+ */
+export interface MobileAppearance {
+  themeId: string;
+  themeName: string;
+  mode: 'light' | 'dark';
+  colors: MobileAppearanceColors;
+  /** The surface motif (the hexagon watermark and friends) as the desktop paints it; absent when it paints none. */
+  motif?: MobileMotif;
+}
+/**
+ * A still rendering of the desktop's motif: the same SVG images the desktop
+ * paints, with where each sits. A `corner` layer is anchored to that corner at
+ * its own size; `center` layers repeat as a tile across the whole surface.
+ */
+export interface MobileMotif {
+  /** Final strength of the layer, 0..1, after the desktop's intensity dial. */
+  opacity: number;
+  layers: MobileMotifLayer[];
+  /** The desktop window the motif was laid out for, so a smaller screen can keep its proportions. */
+  viewport?: { width: number; height: number };
+}
+export type MobileMotifAnchor = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+export interface MobileMotifLayer {
+  svg: string;
+  width: number;
+  height: number;
+  anchor: MobileMotifAnchor;
+  repeat: boolean;
+}
+const MOTIF_ANCHORS: readonly MobileMotifAnchor[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'];
+const MAX_MOTIF_SVG = 200_000;
+
+function normalizeMobileMotif(value: unknown): MobileMotif | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as Partial<MobileMotif>;
+  if (typeof candidate.opacity !== 'number' || !(candidate.opacity > 0) || !Array.isArray(candidate.layers)) return undefined;
+  const layers: MobileMotifLayer[] = [];
+  for (const layer of candidate.layers.slice(0, 4) as Partial<MobileMotifLayer>[]) {
+    if (!layer || typeof layer.svg !== 'string' || !layer.svg.startsWith('<svg') || layer.svg.length > MAX_MOTIF_SVG) return undefined;
+    if (!MOTIF_ANCHORS.includes(layer.anchor as MobileMotifAnchor)) return undefined;
+    const size = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 1 && n <= 4000;
+    if (!size(layer.width) || !size(layer.height)) return undefined;
+    layers.push({ svg: layer.svg, width: layer.width, height: layer.height, anchor: layer.anchor as MobileMotifAnchor, repeat: layer.repeat === true });
+  }
+  const viewport = candidate.viewport;
+  const fits = viewport && [viewport.width, viewport.height].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 100 && n <= 10_000);
+  return layers.length
+    ? { opacity: Math.min(1, candidate.opacity), layers, ...(fits ? { viewport: { width: viewport!.width, height: viewport!.height } } : {}) }
+    : undefined;
+}
+export interface MobileAppearanceColors {
+  bg: string;
+  bgElevated: string;
+  bgSunken: string;
+  bgInput: string;
+  border: string;
+  borderStrong: string;
+  text: string;
+  textSecondary: string;
+  textTertiary: string;
+  accent: string;
+  accentContrast: string;
+  success: string;
+  warning: string;
+  danger: string;
+}
+export const MOBILE_APPEARANCE_COLOR_KEYS: readonly (keyof MobileAppearanceColors)[] = [
+  'bg', 'bgElevated', 'bgSunken', 'bgInput', 'border', 'borderStrong', 'text', 'textSecondary',
+  'textTertiary', 'accent', 'accentContrast', 'success', 'warning', 'danger',
+];
+/** Host-wide events, delivered to every paired phone whatever projects it is granted. */
+export type MobileHostEvent = { type: 'host.appearance'; appearance: MobileAppearance };
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/;
+/** A well-formed appearance, or undefined: anything else is dropped rather than painted. */
+export function normalizeMobileAppearance(value: unknown): MobileAppearance | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as Partial<MobileAppearance>;
+  if (typeof candidate.themeId !== 'string' || !candidate.themeId.trim()) return undefined;
+  if (candidate.mode !== 'light' && candidate.mode !== 'dark') return undefined;
+  if (!candidate.colors || typeof candidate.colors !== 'object') return undefined;
+  const colors = {} as MobileAppearanceColors;
+  for (const key of MOBILE_APPEARANCE_COLOR_KEYS) {
+    const color = (candidate.colors as unknown as Record<string, unknown>)[key];
+    if (typeof color !== 'string' || !HEX_COLOR.test(color.toLowerCase())) return undefined;
+    colors[key] = color.toLowerCase();
+  }
+  const themeId = candidate.themeId.trim().slice(0, 120);
+  const themeName = typeof candidate.themeName === 'string' && candidate.themeName.trim() ? candidate.themeName.trim().slice(0, 120) : themeId;
+  const motif = normalizeMobileMotif(candidate.motif);
+  return { themeId, themeName, mode: candidate.mode, colors, ...(motif ? { motif } : {}) };
 }
 
 export type MobileSessionMode = 'chat' | 'analysis' | 'review';

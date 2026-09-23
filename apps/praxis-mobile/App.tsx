@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StoreProvider, useStore } from './app/store';
-import { theme } from './app/theme';
+import { applyDisplayMode, statusBarStyle, theme, themedStyles, useThemeVersion } from './app/theme';
+import { loadMobileDisplayMode } from './app/mobileConnection';
 import { mobileShellShowsWork } from './renderer/mobileShellState';
 import { AppSidebar } from './app/AppSidebar';
 import { ConnectScreen } from './screens/ConnectScreen';
@@ -32,11 +33,16 @@ function Shell(): React.JSX.Element {
 }
 
 export default function App(): React.JSX.Element {
+  // Re-render from the root when the desktop's theme arrives or changes, so every screen repaints.
+  useThemeVersion();
+  useEffect(() => {
+    void loadMobileDisplayMode().then(mode => { if (mode) applyDisplayMode(mode); });
+  }, []);
   return (
     <SafeAreaProvider>
       <StoreProvider>
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-          <StatusBar barStyle="light-content" backgroundColor={theme.bg} />
+          <StatusBar barStyle={statusBarStyle()} backgroundColor={theme.bg} />
           <Shell />
         </SafeAreaView>
       </StoreProvider>
@@ -44,8 +50,8 @@ export default function App(): React.JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.bg },
   shell: { flex: 1, backgroundColor: theme.bg },
   content: { flex: 1 },
-});
+}));

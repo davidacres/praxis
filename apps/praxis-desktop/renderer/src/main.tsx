@@ -13,11 +13,16 @@ import {
   registerMarketplaceThemes
 } from './settings/themes';
 import { registerCustomSurfacePacks, registerMarketplaceSurfacePacks } from './settings/surfacePacks';
+import { startPublishingMobileAppearance } from './settings/mobileAppearancePublisher';
 import type { AppSettings } from '@praxis/core';
 import './theme.css';
 import './surfaces.css';
 
 document.documentElement.setAttribute('data-accent', localStorage.getItem('tm-theme-accent') ?? 'violet');
+const applyDisplayMode = (mode: unknown): void => {
+  document.documentElement.setAttribute('data-display-size', mode === 'large' ? 'large' : 'compact');
+};
+applyDisplayMode('compact');
 applyThemePreference(getInitialThemeId(), localStorage.getItem('tm-theme-mode') === 'light' ? 'light' : 'dark');
 applySurfacePack(getInitialSurfaceId(), getInitialSurfaceOpts());
 
@@ -25,6 +30,9 @@ applySurfacePack(getInitialSurfaceId(), getInitialSurfaceOpts());
 // `var()`. Re-bake it whenever the palette changes to keep the watermark tinted
 // from the live theme.
 window.addEventListener('tm-theme-changed', () => refreshSurfacePattern());
+
+// Paired phones wear the desktop's theme: tell the host whenever it changes.
+startPublishingMobileAppearance();
 
 // A file dropped outside a handler that accepts it (the session chat
 // composer) would otherwise make Chromium navigate this window to the file —
@@ -84,6 +92,7 @@ async function applyMarketplaceAppearance(): Promise<void> {
 }
 
 void window.praxis.settings.get().then(async settings => {
+  applyDisplayMode(settings.appearance.displayMode);
   registerCustomThemes(settings.appearance.customThemes);
   registerCustomSurfacePacks(settings.appearance.customSurfacePacks);
   await applyMarketplaceAppearance();
@@ -99,6 +108,8 @@ void window.praxis.settings.get().then(async settings => {
 }).catch(() => {
   // Local storage remains a usable first-launch fallback when settings are unavailable.
 });
+
+window.praxis.settings.onChanged(settings => applyDisplayMode(settings.appearance.displayMode));
 
 window.praxis.marketplace.onChanged(() => {
   void applyMarketplaceAppearance().then(() => {

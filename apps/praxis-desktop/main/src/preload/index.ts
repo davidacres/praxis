@@ -158,6 +158,7 @@ const praxis: PraxisIpc = {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch: AppSettingsPatch) => ipcRenderer.invoke('settings:set', patch),
     getMobileHostInfo: () => ipcRenderer.invoke('settings:getMobileHostInfo'),
+    publishMobileAppearance: (appearance) => ipcRenderer.invoke('settings:publishMobileAppearance', appearance),
     createMobilePairingInvitation: () => ipcRenderer.invoke('settings:createMobilePairingInvitation'),
     confirmMobilePairing: (requestId, grant) => ipcRenderer.invoke('settings:confirmMobilePairing', requestId, grant),
     denyMobilePairing: (requestId) => ipcRenderer.invoke('settings:denyMobilePairing', requestId),

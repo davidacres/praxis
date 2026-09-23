@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppHeader, Body, Card, Screen } from '../app/ui';
-import { theme } from '../app/theme';
+import { theme, themedStyles } from '../app/theme';
 import { useStore } from '../app/store';
 
 /** The latest turn of each session on the desktop, newest first — from live session snapshots. */
@@ -41,9 +41,9 @@ export function ActivityScreen({ onOpenSidebar }: { onOpenSidebar: () => void })
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   time: { color: theme.textDim, fontSize: 12, fontVariant: ['tabular-nums'] },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.accent },
   title: { flex: 1, color: theme.text, fontSize: 14, fontWeight: '700' },
-});
+}));
