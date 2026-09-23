@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Praxis on Your Phone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --ground: #f3f4f6;
+    --raised: #ffffff;
+    --sunken: #e7e9ee;
+    --ink: #121821;
+    --ink-2: #4a5462;
+    --ink-3: #7b8594;
+    --rule: #d9dde4;
+    --rule-2: #bfc5cf;
+    --signal: #1d64c4;
+    --signal-soft: rgba(29, 100, 196, .1);
+    --amber: #a8650c;
+    --amber-soft: rgba(168, 101, 12, .12);
+    --ok: #237a4b;
+    --ok-soft: rgba(35, 122, 75, .12);
+    --bezel: #0b0f14;
+    --shadow: 0 1px 2px rgba(18, 24, 33, .06), 0 18px 40px -24px rgba(18, 24, 33, .45);
+    --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+    --body: "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0c1117; --raised: #141b24; --sunken: #0a0e13;
+      --ink: #e6ebf2; --ink-2: #a9b3c1; --ink-3: #758092;
+      --rule: #232c38; --rule-2: #334052;
+      --signal: #5aa2f2; --signal-soft: rgba(90, 162, 242, .14);
+      --amber: #e1a24a; --amber-soft: rgba(225, 162, 74, .14);
+      --ok: #5cc28a; --ok-soft: rgba(92, 194, 138, .14);
+      --bezel: #000;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 18px 40px -22px rgba(0, 0, 0, .9);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0c1117; --raised: #141b24; --sunken: #0a0e13;
+    --ink: #e6ebf2; --ink-2: #a9b3c1; --ink-3: #758092;
+    --rule: #232c38; --rule-2: #334052;
+    --signal: #5aa2f2; --signal-soft: rgba(90, 162, 242, .14);
+    --amber: #e1a24a; --amber-soft: rgba(225, 162, 74, .14);
+    --ok: #5cc28a; --ok-soft: rgba(92, 194, 138, .14);
+    --bezel: #000;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 18px 40px -22px rgba(0, 0, 0, .9);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--body); font-size: 16.5px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  a { color: var(--signal); }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  code, .mono { font-family: var(--mono); font-size: .84em; }
+  code { padding: 1px 5px; border-radius: 4px; background: var(--sunken); color: var(--ink); }
+
+  .wrap { max-width: 1060px; margin: 0 auto; padding-inline: 28px; padding-block: 0 96px; }
+  @media (max-width: 640px) { .wrap { padding-inline: 16px; } }
+
+  /* Masthead: the three screens someone meets first, standing in a row */
+  .masthead { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 40px; align-items: center; padding-block: 64px 48px; border-bottom: 1px solid var(--rule-2); }
+  @media (max-width: 860px) { .masthead { grid-template-columns: 1fr; padding-block: 44px 36px; } }
+  .eyebrow { margin: 0 0 16px; font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--signal); }
+  h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(38px, 5.6vw, 60px); line-height: 1.02; letter-spacing: -.025em; text-wrap: balance; }
+  .standfirst { margin: 20px 0 0; max-width: 54ch; font-size: 19px; line-height: 1.5; color: var(--ink-2); }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+  .fact { font-family: var(--mono); font-size: 11.5px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--rule-2); color: var(--ink-2); background: var(--raised); }
+
+  .trio { display: flex; justify-content: center; align-items: flex-end; gap: 14px; }
+  .trio .phone:nth-child(2) { transform: translateY(-22px); }
+  @media (max-width: 860px) { .trio .phone:nth-child(3) { display: none; } }
+
+  /* A phone: the real screenshot inside a drawn bezel */
+  .phone { margin: 0; flex: 0 0 auto; width: var(--w, 200px); max-width: 100%; }
+  .phone .screen { display: block; border: 7px solid var(--bezel); border-radius: 34px; overflow: hidden; background: var(--bezel); box-shadow: var(--shadow); }
+  .phone img { display: block; width: 100%; height: auto; }
+  .phone figcaption { margin-top: 10px; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+  .phone figcaption b { display: block; color: var(--ink); font-weight: 600; }
+
+  .shot { margin: 0; }
+  .shot .frame { display: block; border: 1px solid var(--rule-2); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); background: var(--raised); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .shot figcaption { margin-top: 10px; font-size: 13.5px; color: var(--ink-2); }
+  .shot figcaption b { color: var(--ink); font-weight: 600; }
+
+  section { padding-top: 64px; }
+  .sec-head { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-bottom: 26px; }
+  .sec-head .kicker { font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+  h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(26px, 3.4vw, 34px); line-height: 1.12; letter-spacing: -.018em; text-wrap: balance; }
+  .lede { max-width: 66ch; margin: 8px 0 0; color: var(--ink-2); }
+  h3 { margin: 0 0 6px; font-family: var(--display); font-weight: 600; font-size: 19px; letter-spacing: -.01em; }
+  p { max-width: 68ch; }
+
+  /* Pairing: three real moments, desktop → phone → desktop */
+  .pairing { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, .62fr) minmax(0, 1.35fr); gap: 22px; align-items: start; }
+  @media (max-width: 900px) { .pairing { grid-template-columns: 1fr; } .pairing .phone { --w: 260px; margin-inline: auto; } }
+  .step-no { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: 6px; border-radius: 50%; background: var(--signal); color: #fff; font-family: var(--mono); font-size: 11px; font-weight: 600; vertical-align: 1px; }
+
+  .note { margin-top: 26px; padding: 16px 20px; border: 1px solid var(--rule); border-radius: 10px; background: var(--raised); max-width: 780px; }
+  .note b { font-weight: 600; }
+  .note p { margin: 6px 0 0; color: var(--ink-2); font-size: 15px; }
+
+  /* Rows of phones that wrap */
+  .phones { display: flex; flex-wrap: wrap; gap: 26px 22px; align-items: flex-start; }
+  .phones .phone { --w: 228px; }
+  @media (max-width: 560px) { .phones .phone { --w: calc(50% - 11px); } }
+
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+  @media (max-width: 820px) { .split { grid-template-columns: 1fr; } }
+
+  /* What stays on the desktop */
+  .ledger { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .ledger th { text-align: left; font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); padding: 0 12px 8px 0; border-bottom: 1px solid var(--rule-2); }
+  .ledger td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  .ledger td:first-child { font-weight: 600; white-space: nowrap; }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+  .tag.stays { color: var(--ok); background: var(--ok-soft); }
+  .tag.phone-ok { color: var(--signal); background: var(--signal-soft); }
+  .scroller { overflow-x: auto; }
+
+  /* Trouble: screen + what it means + what to do */
+  .trouble { display: grid; gap: 22px; }
+  .case { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 24px; align-items: start; padding: 20px; border: 1px solid var(--rule); border-radius: 12px; background: var(--raised); }
+  @media (max-width: 600px) { .case { grid-template-columns: 1fr; } .case .phone { --w: 200px; } }
+  .case .phone { --w: 180px; }
+  .case--text { grid-template-columns: 1fr; }
+  .case h3 { margin-top: 2px; }
+  .case p { margin: 6px 0 0; color: var(--ink-2); font-size: 15.5px; }
+  .case .fix { margin-top: 10px; padding-left: 12px; border-left: 3px solid var(--signal); color: var(--ink); font-size: 15px; }
+
+  /* Fixed while capturing */
+  .fixed { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule-2); }
+  .fixed li { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
+  @media (max-width: 600px) { .fixed li { grid-template-columns: 1fr; gap: 4px; } }
+  .fixed .where { font-family: var(--mono); font-size: 11.5px; color: var(--amber); padding-top: 3px; }
+  .fixed b { font-weight: 600; }
+  .fixed p { margin: 4px 0 0; color: var(--ink-2); font-size: 15px; }
+
+  footer { margin-top: 72px; padding-top: 18px; border-top: 1px solid var(--rule); font-family: var(--mono); font-size: 11.5px; line-height: 1.9; color: var(--ink-3); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Praxis mobile · iPhone companion · 23 Sep 2026</p>
+      <h1>Praxis on Your Phone</h1>
+      <p class="standfirst">Your sessions and workflow runs keep going on the desktop. The phone lets you answer what they need — approve a run, allow a tool, send the next message, switch the AI — from wherever you are on the same network.</p>
+      <div class="facts">
+        <span class="fact">Local network only</span>
+        <span class="fact">Noise IK encrypted</span>
+        <span class="fact">Pairs once, then reconnects</span>
+        <span class="fact">Keys stay on the desktop</span>
+      </div>
+    </div>
+    <div class="trio" aria-label="Three screens from the Praxis phone app">
+      <figure class="phone" style="--w: 172px"><span class="screen"><img src="shots/m-attention-run.jpg" alt="Attention: a Release review run waiting for approval, with an Approve button" loading="eager"></span></figure>
+      <figure class="phone" style="--w: 188px"><span class="screen"><img src="shots/m-session-followup.jpg" alt="A session answering a follow-up sent from the phone" loading="eager"></span></figure>
+      <figure class="phone" style="--w: 172px"><span class="screen"><img src="shots/m-nav.jpg" alt="The navigation drawer: Attention, Activity, sessions and settings" loading="eager"></span></figure>
+    </div>
+  </header>
+
+  <section id="pair">
+    <div class="sec-head">
+      <span class="kicker">Getting connected</span>
+      <h2>Pair once, from Settings on the desktop</h2>
+      <p class="lede">Pairing is a three-way handshake you can watch: the desktop issues a single-use invitation, the phone presents it over an encrypted channel, and the desktop asks you to confirm the phone and say what it may do.</p>
+    </div>
+    <div class="pairing">
+      <figure class="shot">
+        <span class="frame"><img src="shots/desktop-mobile-access.jpg" alt="Desktop Settings, Mobile access: listening on the local network, a pairing code with its QR and a Copy pairing invitation button" loading="lazy"></span>
+        <figcaption><span class="step-no">1</span><b>Desktop · Settings → Mobile access.</b> Turn on local access and create a pairing code. It is single-use and expires in ten minutes; the private host key is never shown.</figcaption>
+      </figure>
+      <figure class="phone">
+        <span class="screen"><img src="shots/mobile-pair-invitation.jpg" alt="Phone pairing screen with the invitation pasted: address, port and host ID filled in, and Pair and connect" loading="lazy"></span>
+        <figcaption><span class="step-no">2</span><b>Phone · scan or paste.</b> The invitation fills in the address, port and host ID and pins the desktop's key.</figcaption>
+      </figure>
+      <figure class="shot">
+        <span class="frame"><img src="shots/desktop-mobile-confirm.jpg" alt="Desktop: Confirm device, with Allow approvals ticked and the project to grant, and Confirm or Deny" loading="lazy"></span>
+        <figcaption><span class="step-no">3</span><b>Desktop · confirm the phone.</b> Check the name matches the phone, choose whether it may approve, and which projects it can see.</figcaption>
+      </figure>
+    </div>
+    <div class="note">
+      <b>After that, it just reconnects.</b>
+      <p>The phone keeps its identity key in the device's secure storage and the desktop remembers it as trusted, so reopening the app goes straight back in. The paired phone is listed under <b>Paired devices</b> on the desktop with a <b>Revoke</b> button that closes its connection immediately.</p>
+    </div>
+  </section>
+
+  <section id="attention">
+    <div class="sec-head">
+      <span class="kicker">What needs you</span>
+      <h2>Attention is the inbox</h2>
+      <p class="lede">Anything waiting on a person lands here: a workflow run at its approval gate, or an agent asking before it uses a tool. Each card names the run or session it belongs to, and the answer goes straight back to the desktop.</p>
+    </div>
+    <div class="phones">
+      <figure class="phone"><span class="screen"><img src="shots/m-attention-run.jpg" alt="Attention: approval card for Release review — Checkout 2.4" loading="lazy"></span>
+        <figcaption><b>A run at its approval gate</b>Approve from the phone; the desktop's gate records you as the approver.</figcaption></figure>
+      <figure class="phone"><span class="screen"><img src="shots/m-attention-permission.jpg" alt="Attention: a permission request from Pre-fill the saved address, with Deny and Allow once" loading="lazy"></span>
+        <figcaption><b>An agent asking to use a tool</b>Allow once or deny. The phone never grants standing permissions.</figcaption></figure>
+      <figure class="phone"><span class="screen"><img src="shots/m-attention-approved.jpg" alt="Attention: Nothing needs you right now" loading="lazy"></span>
+        <figcaption><b>Answered</b>The card clears, and the run carries on on the desktop.</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="sessions">
+    <div class="sec-head">
+      <span class="kicker">Carry on</span>
+      <h2>Continue a session, on the AI you choose</h2>
+      <p class="lede">Open any session to read it and send the next message. The composer offers the same AIs and models the desktop has set up — nothing is configured on the phone, and the picker says why an AI is unavailable.</p>
+    </div>
+    <div class="phones">
+      <figure class="phone"><span class="screen"><img src="shots/m-session-followup.jpg" alt="A session: the phone asked which step has the biggest drop-off and the agent answered" loading="lazy"></span>
+        <figcaption><b>A follow-up from the phone</b>The agent runs on the desktop and answers here, with usage alongside.</figcaption></figure>
+      <figure class="phone"><span class="screen"><img src="shots/m-provider-sheet.jpg" alt="AI provider picker: Vercel AI Gateway selected; OpenAI and Anthropic have no API key on the desktop; Claude Code is turned off; Codex CLI available" loading="lazy"></span>
+        <figcaption><b>Choose the AI</b>Unavailable ones say why — no key on the desktop, or turned off there.</figcaption></figure>
+      <figure class="phone"><span class="screen"><img src="shots/m-model-sheet.jpg" alt="Model picker for Vercel AI Gateway: claude-sonnet-4.6 with 200k context and gpt-5.6-luna with 400k context" loading="lazy"></span>
+        <figcaption><b>Choose the model</b>With each model's context size.</figcaption></figure>
+      <figure class="phone"><span class="screen"><img src="shots/m-session-options.jpg" alt="Session options: Chat, Analysis or Review mode, and workflows that can be started on the desktop" loading="lazy"></span>
+        <figcaption><b>Mode and workflows</b>Switch Chat, Analysis or Review, or start one of the project's workflows on the desktop.</figcaption></figure>
+      <figure class="phone"><span class="screen"><img src="shots/m-new-chat.jpg" alt="New chat: choose the provider, model and mode, then send the first message" loading="lazy"></span>
+        <figcaption><b>Start something new</b>A new chat runs on the desktop, in the project the phone is granted.</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="track">
+    <div class="sec-head">
+      <span class="kicker">Keep track</span>
+      <h2>What happened while you were away</h2>
+    </div>
+    <div class="phones">
+      <figure class="phone"><span class="screen"><img src="shots/m-activity.jpg" alt="Activity: finished sessions with a one-line result each" loading="lazy"></span>
+        <figcaption><b>Activity</b>Newest first, each with the one line that matters: what the agent concluded.</figcaption></figure>
+      <figure class="phone"><span class="screen"><img src="shots/m-nav.jpg" alt="Navigation drawer with Attention count, Activity, sessions and settings" loading="lazy"></span>
+        <figcaption><b>Everything in one drawer</b>Attention with its count, Activity, every session, and settings.</figcaption></figure>
+      <figure class="phone"><span class="screen"><img src="shots/m-session-progress.jpg" alt="A session's Progress tab" loading="lazy"></span>
+        <figcaption><b>Progress and Changes</b>For a session doing a workflow stage, its run's stages and changed files. A plain chat says it has none.</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="trust">
+    <div class="sec-head">
+      <span class="kicker">Trust</span>
+      <h2>What the phone can reach — and what it can't</h2>
+      <p class="lede">The phone is a remote control for work that runs on the desktop. It is shown what it needs to act, and nothing that would let it act on its own.</p>
+    </div>
+    <div class="split">
+      <div class="scroller">
+        <table class="ledger">
+          <thead><tr><th>Thing</th><th>Where it lives</th></tr></thead>
+          <tbody>
+            <tr><td>AI provider keys</td><td><span class="tag stays">desktop only</span> The phone sees which AIs are set up, never the keys.</td></tr>
+            <tr><td>Repositories and files</td><td><span class="tag stays">desktop only</span> Shell and file access are never offered to phones.</td></tr>
+            <tr><td>Host private key</td><td><span class="tag stays">desktop only</span> The phone pins the public key from the invitation.</td></tr>
+            <tr><td>Sessions, runs, attention</td><td><span class="tag phone-ok">phone can act</span> Read, continue, approve and answer — within what you granted.</td></tr>
+            <tr><td>Which projects</td><td><span class="tag phone-ok">you choose</span> Granted when you confirm the phone; changeable on the desktop.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="phones">
+        <figure class="phone" style="--w: 210px"><span class="screen"><img src="shots/m-settings-permissions.jpg" alt="Permissions: remote actions allowed, shell or file access never offered, and the granted project" loading="lazy"></span>
+          <figcaption><b>Permissions</b>Exactly what the desktop allows this phone.</figcaption></figure>
+        <figure class="phone" style="--w: 210px"><span class="screen"><img src="shots/m-settings-connection.jpg" alt="Desktop connection: Studio Mac connected over the local network, Noise IK encrypted transport" loading="lazy"></span>
+          <figcaption><b>Desktop connection</b>Which desktop, how it is connected, and Disconnect.</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="trouble">
+    <div class="sec-head">
+      <span class="kicker">When it won't connect</span>
+      <h2>Every failure says what to do next</h2>
+    </div>
+    <div class="trouble">
+      <div class="case">
+        <figure class="phone"><span class="screen"><img src="shots/mobile-handshake-refused.jpg" alt="Secure handshake refused, with Scan pairing QR and Forget this desktop" loading="lazy"></span></figure>
+        <div>
+          <h3>Secure handshake refused</h3>
+          <p>The desktop the phone remembers no longer has the key it pinned — its host key was reset, or it is a different Praxis on the same address.</p>
+          <p class="fix">Choose <b>Forget this desktop</b>, then pair again with a new invitation. Forgetting now also clears the address, port, host and project the form remembered, so nothing carries over from the old desktop.</p>
+        </div>
+      </div>
+      <div class="case">
+        <figure class="phone"><span class="screen"><img src="shots/mobile-access-revoked.jpg" alt="Access revoked: the desktop revoked this phone's access" loading="lazy"></span></figure>
+        <div>
+          <h3>Access revoked</h3>
+          <p>Someone pressed <b>Revoke</b> for this phone under Paired devices on the desktop.</p>
+          <p class="fix">Pair again from Settings → Mobile access if the phone should have access.</p>
+        </div>
+      </div>
+      <div class="case case--text">
+        <div>
+          <h3>Desktop unreachable</h3>
+          <p>“Couldn't reach the Praxis desktop at <span class="mono">10.0.0.34:43111</span> (Connection refused).” Praxis isn't running, Mobile access is off, or the two devices are on different networks.</p>
+          <p class="fix">Check the desktop's <b>Listener</b> line in Settings → Mobile access — it shows whether it is listening, on which port and addresses — then <b>Try again</b>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="fixed">
+    <div class="sec-head">
+      <span class="kicker">Found while capturing these screens</span>
+      <h2>Five things fixed along the way</h2>
+      <p class="lede">These screenshots come from the real app, driven on an iOS simulator against a demo desktop. Walking every screen that way turned up these, now fixed and covered by tests.</p>
+    </div>
+    <ul class="fixed">
+      <li><span class="where">desktop + core</span><div><b>Approving a run from the phone always failed.</b><p>Every phone action on a workflow run was refused with “Run … was not found in project …”, because the run summary the check read had no project. Summaries now carry their project; approve, retry and the rest work.</p></div></li>
+      <li><span class="where">phone</span><div><b>“Forget this desktop” left the old project behind.</b><p>Pairing with a different desktop afterwards failed with “not authorised for project …”. Forgetting now clears the whole form, and an invitation from another desktop drops the old desktop's project.</p></div></li>
+      <li><span class="where">phone</span><div><b>An invitation's expiry read “Invalid Date”.</b><p>The phone's JavaScript engine formatted times unreliably. Times are now read and shown by the app itself — here and in message timestamps.</p></div></li>
+      <li><span class="where">phone + desktop</span><div><b>Attention cards showed raw IDs.</b><p>A card said <span class="mono">dbd122d0-4c62-…</span> instead of what it was about. Cards now name the session or run, which the desktop includes for approvals and failures.</p></div></li>
+      <li><span class="where">phone</span><div><b>Permission values wrapped a letter per line.</b><p>“Allowed” stood as a column of letters next to a long label. Labels now wrap first.</p></div></li>
+    </ul>
+  </section>
+
+  <footer>
+    Praxis mobile (Release build, iOS simulator · iPhone 15 Pro) paired with Praxis desktop v0.3.1 on a demo project.<br>
+    Every screenshot is from the running apps · 23 Sep 2026 · See also <a href="https://claude.ai/code/artifact/6ec90c6b-0990-401f-a72a-b57cb6da292d">Your First Praxis Project</a>
+  </footer>
+</div>
+
+</body>
+</html>
