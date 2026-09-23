@@ -8,7 +8,10 @@ test.afterEach(async () => {
 });
 
 test('VERIFY: Marketplace loads and displays real GitHub packages', async () => {
-  // Launch with REAL GitHub config and token
+  // Hits the REAL GitHub API. Opt in with a read:packages token in
+  // PRAXIS_E2E_MARKETPLACE_TOKEN; never commit a token to this file.
+  const liveToken = process.env.PRAXIS_E2E_MARKETPLACE_TOKEN?.trim();
+  test.skip(!liveToken, 'Set PRAXIS_E2E_MARKETPLACE_TOKEN to run against the live marketplace.');
   app = await launchTestApp({
     marketplace: {
       enabled: true,
@@ -20,7 +23,7 @@ test('VERIFY: Marketplace loads and displays real GitHub packages', async () => 
       checkOnLaunch: false
     }
   }, undefined, {
-    PRAXIS_MARKETPLACE_TOKEN: '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'
+    PRAXIS_MARKETPLACE_TOKEN: liveToken
   });
   const window = app.window;
 

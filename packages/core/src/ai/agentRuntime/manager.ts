@@ -2,6 +2,7 @@ import { discoverAgents, type DiscoveryOptions } from './discovery';
 import type { DiscoveredAgent } from './manifest';
 import { discoverSkills, loadSkillInstructions, type DiscoveredSkill } from './skillRegistry';
 import { discoverAgentProfiles, type DiscoveredAgentProfile } from './profileRegistry';
+import { bundledAgentDescription } from './bundledAgents';
 import { loadAgentHost, type AgentCapabilities, type AgentHostHandle } from './hostLoader';
 import {
   buildProfileContext,
@@ -79,7 +80,13 @@ export class AgentRuntimeManager {
         this.options.trustedSkillRoots ?? this.options.skillRoots ?? []
       )
     ]);
-    const alignedProfiles = [...profiles];
+    // Built-in agents written before descriptions existed keep their AGENT.md
+    // (user edits are preserved), so their list description comes from the bundle.
+    const alignedProfiles = profiles.map(entry => {
+      if (entry.profile.description) return entry;
+      const description = bundledAgentDescription(entry.profile.id);
+      return description ? { ...entry, profile: { ...entry.profile, description } } : entry;
+    });
     for (const runtimeHost of runtimeHosts) {
       if (alignedProfiles.some(profile => profile.profile.id === runtimeHost.manifest.id)) continue;
       alignedProfiles.push({

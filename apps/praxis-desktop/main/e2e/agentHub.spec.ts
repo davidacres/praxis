@@ -40,10 +40,17 @@ async function openAgents(page: Page): Promise<void> {
   await expect(page.getByTestId('profile-nav-item').first()).toBeVisible();
 }
 
-/** Open Settings -> Agent Runtime, where launch bindings are managed. */
-async function openAgentRuntimeSettings(page: Page): Promise<void> {
+type RuntimeTab = 'agents' | 'skills' | 'runtimes' | 'advanced';
+
+/** Open Settings -> Agent Runtime (optionally on a tab; launch bindings live under Advanced). */
+async function openAgentRuntimeSettings(page: Page, tab?: RuntimeTab): Promise<void> {
   await page.getByTestId('titlebar-settings').click();
   await page.getByTestId('settings-nav-agent-runtime').click();
+  if (tab) await showRuntimeTab(page, tab);
+}
+
+async function showRuntimeTab(page: Page, tab: RuntimeTab): Promise<void> {
+  await page.getByTestId(`agent-runtime-tab-${tab}`).click();
 }
 
 const record = (page: Page) => page.getByRole('main');
@@ -125,15 +132,17 @@ test('Agent Runtime settings separate AI runtimes from agent profiles, and manag
   await openAgentRuntimeSettings(page);
 
   const panel = page.getByTestId('settings-agent-runtime');
-  await expect(panel.getByRole('heading', { name: 'AI runtimes' })).toBeVisible();
+  await showRuntimeTab(page, 'runtimes');
   await expect(panel.getByTestId('agent-runtime-provider-claude-code-cli')).toContainText('Claude Code (local)');
   await expect(panel.getByTestId('agent-runtime-provider-codex-cli')).toContainText('Codex CLI (local)');
 
+  await showRuntimeTab(page, 'agents');
   const reviewer = panel.getByTestId('agent-runtime-profile-praxis-reviewer');
   await expect(reviewer).toContainText('Praxis Reviewer');
-  await expect(reviewer).toContainText('uses the runtime selected for the session');
   await expect(reviewer).toContainText('ACP launch binding');
   await expect(panel.getByTestId('agent-runtime-host-praxis-reviewer')).toHaveCount(0);
+
+  await showRuntimeTab(page, 'advanced');
 
   // A standalone binding (no matching profile) lists its manifest problem
   // inline, and "Manage" opens its full record — the same invalid-manifest
@@ -151,7 +160,7 @@ test('Agent Runtime settings separate AI runtimes from agent profiles, and manag
 test('starting, restarting, and stopping a host moves its lifecycle state', async () => {
   const page = app.window;
   await openAgents(page);
-  await openAgentRuntimeSettings(page);
+  await openAgentRuntimeSettings(page, 'advanced');
   const panel = page.getByTestId('settings-agent-runtime');
   await panel.getByTestId('agent-runtime-binding-live-agent').getByRole('button', { name: 'Manage' }).click();
 
@@ -180,7 +189,7 @@ test('activating a skill and opening a session carries the agent context', async
   await expect(runtime(page).getByText(/live-agent · \w+ mode/)).toBeVisible();
 
   // Live Agent has no profile, so its record is reached through Settings.
-  await openAgentRuntimeSettings(page);
+  await openAgentRuntimeSettings(page, 'advanced');
   await page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-binding-live-agent').getByRole('button', { name: 'Manage' }).click();
   await expect(runtime(page).getByText(/code-audit \(\w+\)/)).toBeVisible();
   await runtime(page).getByRole('button', { name: 'Open a session' }).click();
@@ -191,7 +200,7 @@ test('activating a skill and opening a session carries the agent context', async
 
 test('the New launch binding wizard writes a validated, discoverable manifest', async () => {
   const page = app.window;
-  await openAgentRuntimeSettings(page);
+  await openAgentRuntimeSettings(page, 'advanced');
   await page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-new-binding').click();
 
   const dialog = page.getByRole('dialog', { name: 'New agent' });
@@ -208,7 +217,7 @@ test('the New launch binding wizard writes a validated, discoverable manifest', 
 
   // The new binding has no profile, so it belongs in Settings, not the
   // primary sidebar tree.
-  await openAgentRuntimeSettings(page);
+  await openAgentRuntimeSettings(page, 'advanced');
   await expect(page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-binding-scaffolded-agent')).toBeVisible();
   await page.getByRole('button', { name: 'Done' }).click();
 
@@ -246,6 +255,7 @@ test('import validates a folder without executing it and rejects a bad manifest'
   // Settings is already open from the top of the test — re-clicking the
   // titlebar toggle here would close it instead.
   await page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-refresh').click();
+  await showRuntimeTab(page, 'advanced');
   await expect(
     page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-binding-imported-agent')
   ).toBeVisible();

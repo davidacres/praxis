@@ -102,6 +102,22 @@ const TIDY_AGENT = {
   }
 };
 
+const DEVICE_SKILL = {
+  packageName: 'praxis-addon-device-check',
+  version: '1.0.1',
+  manifest: {
+    schemaVersion: 1,
+    kind: 'skill',
+    id: 'device-check',
+    name: 'Device check',
+    summary: 'Checks a phone is ready for automated tests.',
+    author: 'acme'
+  },
+  payload: {
+    'SKILL.md': '---\nname: device-check\ndescription: Checks a connected phone is ready for automated UI tests.\nversion: 1.0.1\n---\n\n# Device check\n'
+  }
+};
+
 function seeded(registryBase: string): Record<string, unknown> {
   return {
     marketplace: {
@@ -246,6 +262,40 @@ test('Agent Runtime panel: an agent installs untrusted and only runs after trust
   await expect(installedRow.getByRole('button', { name: 'Revoke trust' })).toBeVisible();
 });
 
+test('Agent Runtime panel: a skill installs untrusted, then agents can load it once trusted', async () => {
+  registry = await startMockAddonRegistry({ owner: OWNER, addons: [DEVICE_SKILL] });
+  app = await launchTestApp(seeded(registry.baseUrl), undefined, {
+    PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
+  });
+  window = app.window;
+
+  await openSettings();
+  await nav('agent-runtime');
+  await window.locator('[data-testid="agent-runtime-tab-skills"]').click();
+
+  const catalogRow = window.locator('[data-testid="skill-marketplace-device-check"]');
+  await expect(catalogRow).toContainText('Device check');
+  await expect(catalogRow).toContainText('Checks a phone is ready for automated tests.');
+  await catalogRow.getByRole('button', { name: 'Install (untrusted)' }).click();
+
+  const installedRow = window.locator('[data-testid="skill-marketplace-installed-device-check"]');
+  await expect(installedRow).toContainText('installed but not trusted');
+  await expect(window.locator('[data-testid="agent-runtime-skill-device-check"]')).toHaveCount(0);
+
+  await installedRow.getByRole('button', { name: 'Trust' }).click();
+  // Once trusted it is discovered, and is listed once — under Installed, with its controls.
+  const discovered = window.locator('[data-testid="agent-runtime-skill-device-check"]');
+  await expect(discovered).toContainText('Device check');
+  await expect(discovered).toContainText('Checks a connected phone is ready for automated UI tests.');
+  await expect(discovered).toContainText('Marketplace');
+  await expect(installedRow).toHaveCount(0);
+  await expect(window.locator('[data-testid="agent-runtime-tab-skills"]')).toContainText('Skills (1)');
+
+  await discovered.getByRole('button', { name: 'Revoke trust' }).click();
+  await expect(discovered).toHaveCount(0);
+  await expect(installedRow).toContainText('installed but not trusted');
+});
+
 test('an unconfigured marketplace is explained inside each panel', async () => {
   registry = await startMockAddonRegistry({ owner: OWNER, addons: [NORD_THEME] });
   app = await launchTestApp(
@@ -319,7 +369,10 @@ test('Themes marketplace filter toggle shows All and Installed views with screen
 });
 
 test('Marketplace loads real GitHub packages with token configured', async () => {
-  // Test with REAL GitHub API using real token
+  // Hits the REAL GitHub API. Opt in with a read:packages token in
+  // PRAXIS_E2E_MARKETPLACE_TOKEN; never commit a token to this file.
+  const liveToken = process.env.PRAXIS_E2E_MARKETPLACE_TOKEN?.trim();
+  test.skip(!liveToken, 'Set PRAXIS_E2E_MARKETPLACE_TOKEN to run against the live marketplace.');
   app = await launchTestApp({
     marketplace: {
       enabled: true,
@@ -331,7 +384,7 @@ test('Marketplace loads real GitHub packages with token configured', async () =>
       checkOnLaunch: false
     }
   }, undefined, {
-    PRAXIS_MARKETPLACE_TOKEN: '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'
+    PRAXIS_MARKETPLACE_TOKEN: liveToken
   });
   window = app.window;
 

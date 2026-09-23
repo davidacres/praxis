@@ -212,7 +212,7 @@ const CATEGORIES: CategoryDef[] = [
     id: 'agent-runtime',
     label: 'Agent Runtime',
     icon: 'robot',
-    description: 'Local AI runtimes, agent profiles, launch bindings, and progressively indexed skills.'
+    description: 'Agents are the roles a session can take on; skills are procedures an agent can load; runtimes are the local AI programs that run them.'
   },
   {
     id: 'workflow-templates',
@@ -521,6 +521,119 @@ function NavGroup({
   );
 }
 
+type AgentRuntimeTab = 'agents' | 'skills' | 'runtimes' | 'advanced';
+
+/** Trust and remove controls for an installed agent/skill add-on. */
+function AddonTrustControls({ addons, id, enabled }: { addons: ReturnType<typeof useKindAddons>; id: string; enabled: boolean }) {
+  return (
+    <div className="settings-field-control settings-inline-controls">
+      <button
+        className="btn btn-quiet"
+        type="button"
+        disabled={addons.busy === `trust:${id}`}
+        onClick={() => void addons.setTrust(id, !enabled)}
+      >
+        {enabled ? 'Revoke trust' : 'Trust'}
+      </button>
+      <button className="btn btn-quiet" type="button" disabled={addons.busy === `remove:${id}`} onClick={() => void addons.remove(id)}>
+        Remove
+      </button>
+    </div>
+  );
+}
+
+/**
+ * One kind's marketplace inside the Agent Runtime panel: installed add-ons
+ * awaiting (or holding) trust, then what the catalogue offers that is not
+ * installed. `replaces` names an existing item an add-on would overwrite (a
+ * marketplace agent with a built-in agent's id is copied over it).
+ */
+function RuntimeAddonCatalog({
+  addons,
+  kindLabel,
+  testIdPrefix,
+  replaces,
+  trustedHelp,
+  shownAbove
+}: {
+  addons: ReturnType<typeof useKindAddons>;
+  kindLabel: 'agent' | 'skill';
+  testIdPrefix: 'agent-marketplace' | 'skill-marketplace';
+  replaces: (id: string) => string | undefined;
+  trustedHelp: string;
+  /** Installed add-ons already listed (with their controls) under Installed. */
+  shownAbove: ReadonlySet<string>;
+}) {
+  const installedIds = new Set(addons.installed.map(addon => addon.manifest.id));
+  const pendingInstalled = addons.installed.filter(addon => !shownAbove.has(addon.manifest.id));
+  const available = (addons.catalog ?? []).filter(entry => !installedIds.has(entry.manifest.id));
+  return (
+    <div data-testid={`${testIdPrefix === 'agent-marketplace' ? 'agent-runtime' : 'skill-runtime'}-marketplace`}>
+      <h4 className="settings-subsection-title">From the marketplace</h4>
+      {addons.error && <div className="error-banner">{addons.error}</div>}
+      {!addons.ready && (
+        <p className="settings-field-help">Set up the add-on catalogue in Settings › Add-ons to install {kindLabel}s from GitHub Packages.</p>
+      )}
+      {pendingInstalled.map(addon => (
+        <div className="settings-field-row" key={addon.manifest.id} data-testid={`${testIdPrefix}-installed-${addon.manifest.id}`}>
+          <div className="settings-field-label">
+            <strong>{addon.manifest.name}</strong>
+            <div className="settings-field-help">
+              v{addon.version} · {addon.enabled ? trustedHelp : 'installed but not trusted — will not run until you allow it'}
+            </div>
+          </div>
+          <AddonTrustControls addons={addons} id={addon.manifest.id} enabled={addon.enabled} />
+        </div>
+      ))}
+      {addons.ready && addons.catalog === undefined && <div className="placeholder-text">Loading the catalogue…</div>}
+      {available.map(entry => {
+        const replaced = replaces(entry.manifest.id);
+        return (
+          <div className="settings-field-row" key={entry.packageName} data-testid={`${testIdPrefix}-${entry.manifest.id}`}>
+            <div className="settings-field-label">
+              <strong>{entry.manifest.name}</strong>
+              <div className="settings-field-help">
+                v{entry.latestVersion}
+                {entry.manifest.author ? ` · ${entry.manifest.author}` : ''}
+                {entry.manifest.summary ? ` — ${entry.manifest.summary}` : ''}
+                {entry.incompatible ? ' · needs a newer Praxis' : ''}
+              </div>
+              {replaced && (
+                <div className="settings-field-help" data-testid={`${testIdPrefix}-replaces-${entry.manifest.id}`}>
+                  Installing replaces the built-in {replaced} while this add-on is trusted.
+                </div>
+              )}
+            </div>
+            <div className="settings-field-control">
+              <button
+                className="btn"
+                type="button"
+                disabled={entry.incompatible || addons.busy === `install:${entry.packageName}`}
+                onClick={() => void addons.install(entry.packageName)}
+              >
+                Install (untrusted)
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      {addons.ready && addons.catalog !== undefined && available.length === 0 && pendingInstalled.length === 0 && (
+        <div className="placeholder-text">
+          {addons.catalog.length > 0 ? `Every ${kindLabel} in the catalogue is installed.` : `No ${kindLabel}s in the catalogue.`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function useBrowseOnce(addons: ReturnType<typeof useKindAddons>): void {
+  useEffect(() => {
+    if (addons.ready && addons.catalog === undefined && !addons.busy) {
+      void addons.browse();
+    }
+  }, [addons.ready, addons.catalog, addons.busy, addons.browse]);
+}
+
 function AgentRuntimeSection({
   settings,
   onNewAgentItem,
@@ -535,14 +648,12 @@ function AgentRuntimeSection({
   const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>([]);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<AgentRuntimeTab>('agents');
 
   const agentAddons = useKindAddons('agent');
-  useEffect(() => {
-    if (agentAddons.ready && agentAddons.catalog === undefined && !agentAddons.busy) {
-      void agentAddons.browse();
-    }
-  }, [agentAddons.ready, agentAddons.catalog, agentAddons.busy, agentAddons.browse]);
-  const installedAgentAddonIds = new Set(agentAddons.installed.map(addon => addon.manifest.id));
+  const skillAddons = useKindAddons('skill');
+  useBrowseOnce(agentAddons);
+  useBrowseOnce(skillAddons);
 
   const refresh = async () => {
     setBusy(true);
@@ -562,60 +673,164 @@ function AgentRuntimeSection({
     void window.praxis.ai.listProviderStatuses().then(setProviderStatuses).catch(() => {});
   }, []);
 
+  // Trusting or removing an agent/skill add-on changes what discovery finds.
+  const addonState = [...agentAddons.installed, ...skillAddons.installed].map(addon => `${addon.manifest.id}:${addon.enabled}`).join(',');
+  useEffect(() => {
+    if (snapshot) void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addonState]);
+
   const runtimeProviders = AI_PROVIDERS.filter(provider => provider.kind === 'cli-agent');
+  const availableRuntimes = runtimeProviders.filter(runtime => providerStatuses.find(status => status.provider === runtime.id)?.configured).length;
   // Every binding always has *some* profile entry — one it wrote itself
   // (curated) or one Praxis auto-synthesizes as a placeholder when it has no
-  // AGENT.md. Only the curated ones belong under "Agent profiles"; a binding
-  // whose only profile is that placeholder is a custom launch binding.
+  // AGENT.md. Only the curated ones are agents; a binding whose only profile
+  // is that placeholder is a custom launch binding.
   const profiles = (snapshot?.profiles ?? []).filter(profile => !isHostShimProfile(profile));
   const launchBindings = snapshot?.runtimeHosts ?? snapshot?.agents ?? [];
   const launchBindingsById = new Map(launchBindings.map(binding => [binding.manifest.id, binding]));
   const standaloneBindings = launchBindings.filter(binding => !profiles.some(profile => profile.profile.id === binding.manifest.id));
+  const skills = snapshot?.skills ?? [];
+  const agentAddonIds = new Set(agentAddons.installed.map(addon => addon.manifest.id));
+  const refreshedAt = snapshot?.refreshedAt ? new Date(snapshot.refreshedAt).toLocaleString() : 'not yet';
+
+  const tabs: Array<{ id: AgentRuntimeTab; label: string; count?: number }> = [
+    { id: 'agents', label: 'Agents', count: profiles.length },
+    { id: 'skills', label: 'Skills', count: skills.length },
+    { id: 'runtimes', label: 'Runtimes', count: runtimeProviders.length },
+    { id: 'advanced', label: 'Advanced' }
+  ];
 
   return (
     <section data-testid="settings-agent-runtime">
-      <CategoryHeader category={CATEGORIES.find(category => category.id === 'agent-runtime')!} />
-      <div className="settings-list">
-        <div className="settings-field-row">
-          <div className="settings-field-label">
-            <strong>Registry</strong>
-            <div className="settings-field-help">
-              Read-only diagnostics. AI runtimes execute sessions; profiles define behaviour; launch bindings connect custom agents to Praxis.
-            </div>
-          </div>
-          <div className="settings-field-control">
-            <button className="btn" type="button" onClick={() => void refresh()} disabled={busy} data-testid="agent-runtime-refresh">
-              {busy ? 'Refreshing…' : 'Refresh'}
-            </button>
-          </div>
-        </div>
-        {roots && (
-          <div className="settings-field-row" data-testid="agent-runtime-paths">
-            <div className="settings-field-label">
-              <strong>Discovery paths</strong>
-              <div className="settings-field-help">
-                Global profiles: <code>{roots.profiles?.global ?? roots.agents.global}</code>
-                <br />
-                Global launch bindings: <code>{roots.runtimeHosts?.global ?? roots.agents.global}</code> · skills: <code>{roots.skills.global}</code>
-                <br />
-                Project profiles: <code>{roots.profiles?.project ?? roots.agents.project}</code>
-                <br />
-                Project launch bindings: <code>{roots.runtimeHosts?.project ?? roots.agents.project}</code> · skills: <code>{roots.skills.project}</code>
-              </div>
-            </div>
-          </div>
-        )}
+      <CategoryHeader
+        category={CATEGORIES.find(category => category.id === 'agent-runtime')!}
+        actions={
+          <button className="btn" type="button" onClick={() => void refresh()} disabled={busy} data-testid="agent-runtime-refresh">
+            {busy ? 'Refreshing…' : 'Refresh'}
+          </button>
+        }
+      />
+
+      <div className="settings-tabs" role="tablist" aria-label="Agent runtime sections" data-testid="agent-runtime-tabs">
+        {tabs.map(item => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            id={`agent-runtime-tab-${item.id}`}
+            aria-selected={tab === item.id}
+            aria-controls={`agent-runtime-tabpanel-${item.id}`}
+            className={tab === item.id ? 'active' : ''}
+            data-testid={`agent-runtime-tab-${item.id}`}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+            {item.count !== undefined && snapshot ? ` (${item.count})` : ''}
+          </button>
+        ))}
+      </div>
+
+      <div
+        className="settings-list"
+        role="tabpanel"
+        id={`agent-runtime-tabpanel-${tab}`}
+        aria-labelledby={`agent-runtime-tab-${tab}`}
+        data-testid={`agent-runtime-tabpanel-${tab}`}
+      >
         {error && <div className="error-banner">{error}</div>}
         {!snapshot && !error && <div className="placeholder-text">Loading agent runtime…</div>}
-        {snapshot && (
-          <>
-            <div className="settings-section-description">
-              Last refreshed: {snapshot.refreshedAt || 'not yet'} · {runtimeProviders.length} AI runtimes · {profiles.length} profiles · {launchBindings.length} launch bindings · {snapshot.skills.length} skills
-            </div>
 
-            <h4 className="settings-subsection-title">AI runtimes</h4>
+        {snapshot && tab === 'agents' && (
+          <>
+            <h4 className="settings-subsection-title">Installed</h4>
+            {profiles.map(profile => {
+              const binding = launchBindingsById.get(profile.profile.id);
+              const addon = agentAddons.installed.find(candidate => candidate.manifest.id === profile.profile.id);
+              const fromAddon = Boolean(addon);
+              return (
+                <div className="settings-field-row" key={profile.profile.id} data-testid={`agent-runtime-profile-${profile.profile.id}`}>
+                  <div className="settings-field-label">
+                    <strong>{profile.profile.name}</strong>{' '}
+                    {fromAddon && <span className="chip">Marketplace</span>}
+                    {profile.scope === 'project' && <span className="chip">Project</span>}
+                    {!profile.trusted && <span className="chip">Needs approval</span>}
+                    {profile.profile.description && <div className="settings-field-help">{profile.profile.description}</div>}
+                    {(() => {
+                      // Every agent runs on the session's runtime through the built-in
+                      // gateway unless it says otherwise; only the exceptions are worth a line.
+                      const notes = [
+                        binding && binding.manifest.type !== 'gateway' ? `${binding.manifest.type.toUpperCase()} launch binding` : undefined,
+                        profile.legacy ? 'legacy brief.md' : undefined,
+                        profile.error,
+                        binding?.errors.length ? binding.errors.map(item => item.message).join('; ') : undefined
+                      ].filter(Boolean);
+                      return notes.length ? <div className="settings-field-help">{notes.join(' · ')}</div> : null;
+                    })()}
+                  </div>
+                  {addon && <AddonTrustControls addons={agentAddons} id={addon.manifest.id} enabled={addon.enabled} />}
+                </div>
+              );
+            })}
+            {profiles.length === 0 && <div className="placeholder-text">No agents installed.</div>}
+            <RuntimeAddonCatalog
+              addons={agentAddons}
+              kindLabel="agent"
+              testIdPrefix="agent-marketplace"
+              replaces={id => (agentAddonIds.has(id) ? undefined : profiles.find(profile => profile.profile.id === id)?.profile.name)}
+              trustedHelp="trusted — runs like a global agent"
+              shownAbove={new Set(profiles.map(profile => profile.profile.id))}
+            />
+          </>
+        )}
+
+        {snapshot && tab === 'skills' && (
+          <>
+            <h4 className="settings-subsection-title">Installed</h4>
+            {skills.map(skill => {
+              const addon = skillAddons.installed.find(candidate => candidate.manifest.id === skill.metadata.name);
+              return (
+                <div className="settings-field-row" key={skill.metadata.name} data-testid={`agent-runtime-skill-${skill.metadata.name}`}>
+                  <div className="settings-field-label">
+                    <strong>{addon?.manifest.name ?? skill.metadata.name}</strong>{' '}
+                    {addon && <span className="chip">Marketplace</span>}
+                    {skill.scope === 'project' && <span className="chip">Project</span>}
+                    {!skill.trusted && <span className="chip">Needs approval</span>}
+                    <div className="settings-field-help">
+                      {skill.error ? `Invalid: ${skill.error}` : skill.metadata.description || 'No description.'}
+                    </div>
+                    <div className="settings-field-help">
+                      {[addon ? `v${addon.version}` : skill.metadata.version ? `v${skill.metadata.version}` : undefined, addon ? undefined : skill.metadata.name]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </div>
+                  </div>
+                  {addon && <AddonTrustControls addons={skillAddons} id={addon.manifest.id} enabled={addon.enabled} />}
+                </div>
+              );
+            })}
+            {skills.length === 0 && (
+              <div className="placeholder-text">
+                No skills installed. Skills give agents a tested procedure for a job — install one from the marketplace below, or add a
+                folder with a SKILL.md to a skills path (see Advanced).
+              </div>
+            )}
+            <RuntimeAddonCatalog
+              addons={skillAddons}
+              kindLabel="skill"
+              testIdPrefix="skill-marketplace"
+              replaces={() => undefined}
+              trustedHelp="trusted — agents can load it"
+              shownAbove={new Set(skills.map(skill => skill.metadata.name))}
+            />
+          </>
+        )}
+
+        {snapshot && tab === 'runtimes' && (
+          <>
             <p className="settings-field-help">
-              These are the executors used for AI sessions. Configure them in <strong>AI Provider</strong>; a profile such as Praxis Reviewer can run on any available runtime.
+              The local AI programs that execute sessions — {availableRuntimes} of {runtimeProviders.length} available on this Mac. Configure them in{' '}
+              <strong>AI Provider</strong>; any agent can run on any available runtime.
             </p>
             {runtimeProviders.map(runtime => {
               const status = providerStatuses.find(candidate => candidate.provider === runtime.id);
@@ -623,54 +838,33 @@ function AgentRuntimeSection({
               return (
                 <div className="settings-field-row" key={runtime.id} data-testid={`agent-runtime-provider-${runtime.id}`}>
                   <div className="settings-field-label">
-                    <strong>{runtime.label}</strong>
-                    <div className="settings-field-help">
-                      AI runtime · {status ? (status.configured ? 'available' : 'unavailable') : 'checking availability'}{isActive ? ' · active for new sessions' : ''}
-                    </div>
+                    <strong>{runtime.label}</strong>{' '}
+                    {isActive && <span className="chip">Default for new sessions</span>}
+                    <div className="settings-field-help">{status ? (status.configured ? 'Available' : 'Not installed or not found on this Mac') : 'Checking availability…'}</div>
                   </div>
                 </div>
               );
             })}
+          </>
+        )}
 
-            <h4 className="settings-subsection-title">Agent profiles</h4>
-            {profiles.map(profile => {
-              const binding = launchBindingsById.get(profile.profile.id);
-              return (
-                <div className="settings-field-row" key={profile.profile.id} data-testid={`agent-runtime-profile-${profile.profile.id}`}>
-                  <div className="settings-field-label">
-                    <strong>{profile.profile.name}</strong>
-                    <div className="settings-field-help">
-                      agent profile · {profile.scope} · {profile.trusted ? 'trusted' : 'approval required'} · uses the runtime selected for the session
-                      {binding ? ` · ${binding.manifest.type.toUpperCase()} launch binding` : ''}
-                      {profile.legacy ? ' · legacy brief.md' : ''}
-                      {profile.error ? ` · ${profile.error}` : ''}
-                      {binding?.errors.length ? ` · ${binding.errors.map(item => item.message).join('; ')}` : ''}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {profiles.length === 0 && <div className="placeholder-text">No agent profiles discovered.</div>}
-
+        {snapshot && tab === 'advanced' && (
+          <>
             <div className="settings-field-row">
               <div className="settings-field-label">
                 <strong>Custom launch bindings</strong>
                 <div className="settings-field-help">
-                  Advanced: a transport manifest for an agent that isn't just an AGENT.md profile running on a provider — creation and import live here, not in the primary Agent Hub.
+                  A transport manifest for an agent that is not just an AGENT.md profile running on a runtime. Create or import one here.
                 </div>
               </div>
-              {(onNewAgentItem || onOpenAgent) && (
+              {onNewAgentItem && (
                 <div className="settings-field-control">
-                  {onNewAgentItem && (
-                    <>
-                      <button className="btn" type="button" onClick={() => onNewAgentItem('agent')} data-testid="agent-runtime-new-binding">
-                        New launch binding
-                      </button>
-                      <button className="btn" type="button" onClick={() => onNewAgentItem('import')} data-testid="agent-runtime-import-binding">
-                        Import…
-                      </button>
-                    </>
-                  )}
+                  <button className="btn" type="button" onClick={() => onNewAgentItem('agent')} data-testid="agent-runtime-new-binding">
+                    New launch binding
+                  </button>
+                  <button className="btn" type="button" onClick={() => onNewAgentItem('import')} data-testid="agent-runtime-import-binding">
+                    Import…
+                  </button>
                 </div>
               )}
             </div>
@@ -691,85 +885,29 @@ function AgentRuntimeSection({
             ))}
             {standaloneBindings.length === 0 && <div className="placeholder-text">No custom launch bindings.</div>}
 
-            <h4 className="settings-subsection-title">Skills</h4>
-            {snapshot.skills.map(skill => (
-              <div className="settings-field-row" key={skill.metadata.name} data-testid={`agent-runtime-skill-${skill.metadata.name}`}>
+            {roots && (
+              <div className="settings-field-row" data-testid="agent-runtime-paths">
                 <div className="settings-field-label">
-                  <strong>{skill.metadata.name}</strong>
-                  <div className="settings-field-help">{skill.error ? `Invalid: ${skill.error}` : `${skill.scope} · ${skill.trusted ? 'indexed' : 'approval required'}`}</div>
+                  <strong>Discovery paths</strong>
+                  <div className="settings-field-help">
+                    Global profiles: <code>{roots.profiles?.global ?? roots.agents.global}</code>
+                    <br />
+                    Global launch bindings: <code>{roots.runtimeHosts?.global ?? roots.agents.global}</code>
+                    <br />
+                    Global skills: <code>{roots.skills.global}</code>
+                    <br />
+                    Project profiles: <code>{roots.profiles?.project ?? roots.agents.project}</code>
+                    <br />
+                    Project launch bindings: <code>{roots.runtimeHosts?.project ?? roots.agents.project}</code>
+                    <br />
+                    Project skills: <code>{roots.skills.project}</code>
+                  </div>
                 </div>
               </div>
-            ))}
-            {snapshot.skills.length === 0 && <div className="placeholder-text">No skills discovered.</div>}
+            )}
+            <div className="settings-field-help">Last refreshed {refreshedAt}.</div>
           </>
         )}
-
-        <div data-testid="agent-runtime-marketplace">
-        <h4 className="settings-subsection-title">Marketplace</h4>
-        {agentAddons.error && <div className="error-banner">{agentAddons.error}</div>}
-        {!agentAddons.ready && (
-          <p className="settings-field-help">Set up the add-on catalogue in Settings › Add-ons to install agents from GitHub Packages.</p>
-        )}
-        {agentAddons.installed.map(addon => (
-          <div className="settings-field-row" key={addon.manifest.id} data-testid={`agent-marketplace-installed-${addon.manifest.id}`}>
-            <div className="settings-field-label">
-              <strong>{addon.manifest.name}</strong>
-              <div className="settings-field-help">
-                v{addon.version} · {addon.enabled ? 'trusted — runs like a global agent' : 'installed but not trusted — will not run until you allow it'}
-              </div>
-            </div>
-            <div className="settings-field-control settings-inline-controls">
-              <button
-                className="btn btn-quiet"
-                type="button"
-                disabled={agentAddons.busy === `trust:${addon.manifest.id}`}
-                onClick={() => void agentAddons.setTrust(addon.manifest.id, !addon.enabled)}
-              >
-                {addon.enabled ? 'Revoke trust' : 'Trust'}
-              </button>
-              <button
-                className="btn btn-quiet"
-                type="button"
-                disabled={agentAddons.busy === `remove:${addon.manifest.id}`}
-                onClick={() => void agentAddons.remove(addon.manifest.id)}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        ))}
-        {agentAddons.ready && agentAddons.catalog === undefined && <div className="placeholder-text">Loading the catalogue…</div>}
-        {(agentAddons.catalog ?? [])
-          .filter(entry => !installedAgentAddonIds.has(entry.manifest.id))
-          .map(entry => (
-            <div className="settings-field-row" key={entry.packageName} data-testid={`agent-marketplace-${entry.manifest.id}`}>
-              <div className="settings-field-label">
-                <strong>{entry.manifest.name}</strong>
-                <div className="settings-field-help">
-                  v{entry.latestVersion}
-                  {entry.manifest.author ? ` · ${entry.manifest.author}` : ''}
-                  {entry.manifest.summary ? ` — ${entry.manifest.summary}` : ''}
-                  {entry.incompatible ? ' · needs a newer Praxis' : ''}
-                </div>
-              </div>
-              <div className="settings-field-control">
-                <button
-                  className="btn"
-                  type="button"
-                  disabled={entry.incompatible || agentAddons.busy === `install:${entry.packageName}`}
-                  onClick={() => void agentAddons.install(entry.packageName)}
-                >
-                  Install (untrusted)
-                </button>
-              </div>
-            </div>
-          ))}
-        {agentAddons.ready &&
-          agentAddons.catalog?.filter(entry => !installedAgentAddonIds.has(entry.manifest.id)).length === 0 &&
-          agentAddons.installed.length === 0 && (
-            <div className="placeholder-text">No agents in the catalogue.</div>
-          )}
-        </div>
       </div>
     </section>
   );

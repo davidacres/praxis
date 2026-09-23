@@ -59,6 +59,8 @@ Rules:
 
 export interface BundledAgentDefinition {
   manifest: AgentManifest;
+  /** One line for agent lists; not part of the instructions. */
+  description: string;
   /** Provider-neutral agent-profile instructions. */
   brief: string;
 }
@@ -68,6 +70,7 @@ function bundledProfileDoc(definition: BundledAgentDefinition): string {
     '---',
     `id: ${definition.manifest.id}`,
     `name: ${definition.manifest.name}`,
+    `description: ${definition.description}`,
     'version: 1.0.0',
     '---',
     '',
@@ -85,6 +88,7 @@ export const BUNDLED_AGENT_DEFINITIONS: Record<string, BundledAgentDefinition> =
       type: 'gateway',
       entry: 'gateway'
     },
+    description: 'Breaks a goal or ticket into a structured plan with tasks, acceptance criteria and dependencies.',
     brief: `# Praxis Planner
 
 You are the Praxis planning agent.
@@ -101,6 +105,7 @@ Follow repository planning conventions and output markdown plan specifications.`
       type: 'gateway',
       entry: 'gateway'
     },
+    description: 'Makes the requested change with minimal diffs, verifies it with the repo’s build and tests, and commits it.',
     brief: `# Praxis Implementer
 
 You are the Praxis implementation agent.
@@ -117,6 +122,7 @@ Output clean git commit changesets with descriptive commit messages.`
       type: 'gateway',
       entry: 'gateway'
     },
+    description: 'Reviews an implemented change for correctness and quality and reports structured findings.',
     brief: STRUCTURED_CODE_REVIEW_SYSTEM_PROMPT
   },
 
@@ -128,6 +134,7 @@ Output clean git commit changesets with descriptive commit messages.`
       type: 'gateway',
       entry: 'gateway'
     },
+    description: 'Reviews a change for security issues and reports structured findings with remediations.',
     brief: STRUCTURED_SECURITY_REVIEW_SYSTEM_PROMPT
   },
 
@@ -139,6 +146,7 @@ Output clean git commit changesets with descriptive commit messages.`
       type: 'gateway',
       entry: 'gateway'
     },
+    description: 'Writes and maintains Praxis Test contracts that explain what each automated test proves.',
     brief: `# Praxis Test Author
 
 You are the Praxis test-contract agent.
@@ -155,6 +163,7 @@ Use the repository's validator/generator when available. Never claim coverage th
       type: 'gateway',
       entry: 'gateway'
     },
+    description: 'Builds, validates, packages and publishes Praxis marketplace add-ons.',
     brief: `# Praxis Add-on Builder
 
 You are the Praxis add-on development agent.
@@ -214,6 +223,7 @@ export const AVAILABLE_AGENT_DEFINITIONS: Record<string, BundledAgentDefinition>
       type: 'gateway',
       entry: 'gateway'
     },
+    description: 'Reviews C# and .NET changes for SOLID, DRY and idiomatic, safe code.',
     brief: CSHARP_CODE_REVIEW_SYSTEM_PROMPT
   }
 };
@@ -288,6 +298,11 @@ When reviewing .NET and C# code, evaluate:
 /**
  * Installs an available agent definition into the given target directory (e.g. userData/agents).
  */
+/** The description a built-in agent shows when its AGENT.md predates descriptions. */
+export function bundledAgentDescription(id: string): string | undefined {
+  return AVAILABLE_AGENT_DEFINITIONS[id]?.description;
+}
+
 export async function installAvailableAgent(agentId: string, targetAgentsDir: string): Promise<boolean> {
   const def = AVAILABLE_AGENT_DEFINITIONS[agentId];
   if (!def) return false;
