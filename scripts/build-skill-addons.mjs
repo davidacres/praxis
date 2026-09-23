@@ -32,8 +32,8 @@ const BUNDLES = {
     {
       source: 'apps/praxis-mobile/tools/device-driver',
       target: 'scripts/device-driver',
-      // Generated or machine-local; never shipped.
-      exclude: ['.run', 'PraxisDriver.xcodeproj', '.gitignore']
+      // Generated, machine-local, or repo-only (publishing); never shipped.
+      exclude: ['.run', 'PraxisDriver.xcodeproj', '.gitignore', 'publish-skill.sh']
     }
   ]
 };

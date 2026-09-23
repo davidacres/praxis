@@ -90,5 +90,52 @@ Example: start a chat on a chosen provider and model.
   spend real tokens; prefer cheap models and short prompts.
 - `preflight.sh` cannot see Settings → Developer → Enable UI Automation; if every
   step fails while "enabling automation mode", that setting is off.
-- The marketplace skill `addons/skills/mobile-device-testing` ships a copy of
-  these scripts. After changing them run `node scripts/build-skill-addons.mjs`.
+- The marketplace skill ships a copy of these scripts — see below.
+
+## The marketplace skill
+
+This driver also ships inside the **Mobile device testing** skill in the Praxis
+marketplace (`@davidacres/praxis-addon-mobile-device-testing`, source in
+`addons/skills/mobile-device-testing/`). The skill tells an agent how to run
+these tests on a simulator or an iPhone: it explains what it can do, asks
+before starting (and about Developer Mode, UI Automation and pairing), then
+builds, installs, drives the app and reports evidence. Its `SKILL.md` and
+`references/` hold the procedure; `scripts/device-driver/` is a copy of this
+folder so it works outside the repository.
+
+Install it in Praxis from Settings → Marketplace and grant it trust. Praxis
+places it in `~/Library/Application Support/Praxis/skills/mobile-device-testing/`.
+
+### Publishing a new version
+
+After changing anything in this folder or in the skill, run:
+
+```sh
+./publish-skill.sh --dry-run   # check first: token, sync, validation, next version
+./publish-skill.sh             # publish
+```
+
+It does every step:
+
+1. **Picks the token** in this order and checks it has `write:packages`
+   (it never prints it):
+   1. `PRAXIS_MARKETPLACE_TOKEN`, if set;
+   2. the `//npm.pkg.github.com/:_authToken=` line in `~/.npmrc`;
+   3. `GITHUB_TOKEN` — last, because it is usually a CLI/CI token without
+      package scopes (publishing with it fails with
+      `403 … The token provided does not match expected scopes`).
+2. **Builds core** and runs `node scripts/build-skill-addons.mjs`, which copies
+   this folder into the skill (minus `.run/`, the generated project,
+   `.gitignore` and this publish script), validates the manifest, and checks
+   Praxis's skill discovery accepts `SKILL.md`.
+3. **Bumps the version** when the local version is not newer than the
+   published one: patch by default, `--bump minor|major`, or `--version x.y.z`.
+   It updates `package.json`, `praxis.contentVersion` and `SKILL.md` together.
+   A dry run only reports the version it would use.
+4. **Publishes** with `node scripts/publish-addon.mjs` to
+   `https://npm.pkg.github.com`.
+5. **Reminds you to commit** the synced copy and version bump, so the repo
+   matches what was published.
+
+To check only that the skill's copy is current (for example in CI):
+`node scripts/build-skill-addons.mjs --check` fails when it is out of date.
