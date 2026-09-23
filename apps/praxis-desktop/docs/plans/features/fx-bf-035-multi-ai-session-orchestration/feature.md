@@ -89,3 +89,19 @@ Status: Failed · Duration: 1m 22s
 - ⏳ Security scan: pending
 
 Required stage "plan" failed.
+
+**PRX-F35** — 2026-09-23T23:26:42.654Z
+**Workflow run cancelled: Governed delivery — FX-BF-035: Multi-AI session orchestration across Claude, Codex and Copilot**
+
+Status: Cancelled · Duration: 30m 43s
+
+- ✅ Plan: succeeded
+- ❌ Implement: failed
+- ⏭️ Praxis Test contracts: cancelled
+- ⏭️ Review: cancelled
+- ⏭️ Install dependencies: cancelled
+- ⏭️ Build: cancelled
+- ⏭️ QA: cancelled
+- ⏭️ Security scan: cancelled
+
+Deleted by the user.

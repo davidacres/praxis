@@ -658,7 +658,7 @@ export class AcpAgentHost {
       })
       .finally(() => {
         clearTimeout(timeoutHandle);
-        void this.cleanupTask(issue.key);
+        void this.cleanupTask(issue.key, task);
       });
 
     return sessionId;
@@ -800,7 +800,7 @@ export class AcpAgentHost {
       const limitNotice = limitCandidate ? extractProviderLimitMessage(limitCandidate) : undefined;
       this.sessionManager.updateAgentState(issueKey, 'failed', limitNotice ?? text);
       this.appendEvent(issueKey, evt('error', limitNotice ?? text));
-    }).finally(() => void this.cleanupTask(issueKey));
+    }).finally(() => void this.cleanupTask(issueKey, task));
   }
 
   public respondToPermission(issueKey: string, decision: PermissionDecision): void {
@@ -901,15 +901,28 @@ export class AcpAgentHost {
       this.appendEvent(issueKey, options.event);
     }
     this.logger.appendLine(options.logLine);
-    await this.cleanupTask(issueKey);
+    await this.cleanupTask(issueKey, task);
   }
 
-  private async cleanupTask(issueKey: string): Promise<void> {
-    const task = this.activeTasks.get(issueKey);
+  /**
+   * Shuts down `task` and forgets it — but only forgets the entry if it is still `task`.
+   *
+   * A workflow stage retries under the same session key (a switch to another AI after a
+   * usage limit starts the next attempt ~0.5s after the last one failed), and shutting a
+   * client down can take longer than that (`session/close`, then waiting for the child to
+   * exit). Deleting by key alone removed the *new* attempt's entry: its updates were then
+   * dropped as "no active task", the stage never recorded progress or completion, and
+   * even its timeout found nothing to stop — a run that looked frozen forever while the
+   * agent kept working in its worktree.
+   */
+  private async cleanupTask(issueKey: string, task: ActiveAcpTask | undefined = this.activeTasks.get(issueKey)): Promise<void> {
     if (!task) {
       return;
     }
     await task.client.shutdown();
+    if (this.activeTasks.get(issueKey) !== task) {
+      return;
+    }
     this.activeTasks.delete(issueKey);
     this.emitActiveTaskChange(issueKey);
   }
