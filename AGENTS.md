@@ -1055,3 +1055,15 @@ have twice been killed mid-flight with no output; smaller batches complete relia
 - **Document what you tested.** Report which e2e tests passed, which snapshots were updated, and which manual interactions verified the feature works. A session ending with "build succeeded" is not done — include verification in the completion.
 
 No test *guarantees* correctness (a regression can still paint), but tests + screenshots catch real bugs. Use both.
+
+## Real iPhone deployment guardrail
+
+For the mobile app, a physical iPhone deployment must use the Xcode workspace
+at `apps/praxis-mobile/ios/Praxis.xcworkspace`, the `Praxis` scheme, and the
+connected device's actual destination. Set Product → Scheme → Edit Scheme →
+Run → Info → Build Configuration to **Release** before running. Debug sets
+`SKIP_BUNDLING=1` and expects Metro; installing that build on a phone can look
+like a blank app. Verify the Release product contains a non-empty
+`main.jsbundle` and that the Xcode console reports `Running "main"` before
+claiming the physical deployment works. See
+`apps/praxis-mobile/docs/ios-phone-deployment.md` for the complete procedure.

@@ -1,17 +1,124 @@
 /** Browser-safe protocol contracts for a mobile client controlling a running Praxis host. */
 export const MOBILE_PROTOCOL_VERSION = 1 as const;
 export type MobileCapability = 'view' | 'execute' | 'approve';
-export type MobileReadOperation = 'hosts.list' | 'projects.snapshot' | 'work.list' | 'sessions.list' | 'sessions.get' | 'workflows.list' | 'workflowRuns.get' | 'changes.get' | 'attention.list';
-export type MobileCommandOperation = 'sessions.create' | 'sessions.continue' | 'sessions.cancel' | 'workflowRuns.start' | 'workflowRuns.cancel' | 'workflowRuns.retryStage' | 'permissions.respond' | 'workflowGates.approve';
+/**
+ * Additive revision of the v1 read/command surface. Revision 1 is the original
+ * set; revision 2 added `host.info`, `providers.list`, `models.list`,
+ * `sessions.usage`, `access.get` and the `mode` / validated `provider` /
+ * `model` fields of `sessions.create`; revision 3 added `sessions.configure`
+ * (between-turn provider handover, model change and mode switch). A phone reads `host.info` first and
+ * treats a missing operation (an older desktop) as "unsupported", not an error.
+ */
+export const MOBILE_HOST_SURFACE_REVISION = 3 as const;
+export type MobileReadOperation = 'hosts.list' | 'host.info' | 'projects.snapshot' | 'work.list' | 'sessions.list' | 'sessions.get' | 'sessions.usage' | 'workflows.list' | 'workflowRuns.get' | 'changes.get' | 'attention.list' | 'providers.list' | 'models.list' | 'access.get';
+export type MobileCommandOperation = 'sessions.create' | 'sessions.continue' | 'sessions.cancel' | 'sessions.configure' | 'workflowRuns.start' | 'workflowRuns.cancel' | 'workflowRuns.retryStage' | 'permissions.respond' | 'workflowGates.approve';
 export type MobileOperation = MobileReadOperation | MobileCommandOperation;
 export interface MobileCaller { deviceId: string; subject?: string; capabilities: readonly MobileCapability[]; }
 export interface MobileTarget { hostId: string; projectId?: string; sessionId?: string; runId?: string; requestId?: string; }
 export interface MobileCommand<TPayload = unknown> { protocolVersion: typeof MOBILE_PROTOCOL_VERSION; commandId: string; issuedAt: string; caller: MobileCaller; target: MobileTarget; operation: MobileCommandOperation; expectedVersion?: number; payload: TPayload; }
-export interface MobileReadRequest { protocolVersion: typeof MOBILE_PROTOCOL_VERSION; requestId: string; caller: MobileCaller; target: MobileTarget; operation: MobileReadOperation; cursor?: string; limit?: number; }
+/** Operation-specific read arguments. Only `models.list` uses them today. */
+export interface MobileReadParams { provider?: string; refresh?: boolean; }
+export interface MobileReadRequest { protocolVersion: typeof MOBILE_PROTOCOL_VERSION; requestId: string; caller: MobileCaller; target: MobileTarget; operation: MobileReadOperation; cursor?: string; limit?: number; params?: MobileReadParams; }
 export interface MobileEventCursor { hostId: string; projectId?: string; sequence: number; }
 export interface MobileEventEnvelope<TEvent = unknown> { protocolVersion: typeof MOBILE_PROTOCOL_VERSION; eventId: string; sequence: number; emittedAt: string; target: MobileTarget; event: TEvent; }
 export type MobileProtocolErrorCode = 'unsupported-version' | 'invalid-envelope' | 'unauthenticated' | 'forbidden' | 'stale-version' | 'duplicate-command' | 'command-conflict' | 'not-found' | 'host-offline' | 'cursor-expired';
 export interface MobileProtocolError { code: MobileProtocolErrorCode; message: string; retryable: boolean; commandId?: string; currentVersion?: number; }
+
+/** `host.info`: what this desktop serves, and where its event stream currently ends. */
+export interface MobileHostInfo {
+  hostId: string;
+  hostName: string;
+  protocolVersion: typeof MOBILE_PROTOCOL_VERSION;
+  surfaceRevision: number;
+  readOperations: readonly MobileReadOperation[];
+  commandOperations: readonly MobileCommandOperation[];
+  /** Highest event sequence appended so far. Replay after this to follow live changes. */
+  latestSequence: number;
+  /** Changes whenever the desktop process restarts; event sequences restart with it. */
+  hostEpoch: string;
+}
+
+export type MobileSessionMode = 'chat' | 'analysis' | 'review';
+export type MobileProviderUnavailableReason = 'disabled' | 'not-configured' | 'cli-unavailable';
+/**
+ * A provider as the phone may see it. Deliberately omits every private desktop
+ * detail the settings UI shows — API keys, key source, base URLs, CLI paths.
+ */
+export interface MobileProviderOption {
+  provider: string;
+  label: string;
+  kind: 'api' | 'cli-agent';
+  /** Configured and enabled on the desktop — the only providers a new session may use. */
+  available: boolean;
+  unavailableReason?: MobileProviderUnavailableReason;
+  /** Human-readable reason, suitable to show as-is. */
+  unavailableMessage?: string;
+  /** The model a session uses when none is chosen, when the desktop has one configured. */
+  defaultModel?: string;
+}
+export interface MobileSessionModeOption { mode: MobileSessionMode; available: boolean; toolAccess: 'full' | 'read-only'; unavailableMessage?: string; }
+/** `providers.list`. */
+export interface MobileProviderCatalog {
+  defaultProvider: string;
+  defaultModel?: string;
+  providers: readonly MobileProviderOption[];
+  sessionModes: readonly MobileSessionModeOption[];
+}
+export interface MobileModelOption { modelId: string; name: string; contextLength?: number; }
+/** `models.list` (params.provider). `unavailable` means the list could not be read; only the provider default is then offered. */
+export interface MobileModelCatalog {
+  provider: string;
+  status: 'ok' | 'unavailable' | 'provider-unavailable';
+  message?: string;
+  defaultModel?: string;
+  models: readonly MobileModelOption[];
+}
+/**
+ * Payload of `sessions.configure`, applied between turns with the desktop's own
+ * rules: a different provider is a handover (the desktop sends that provider a
+ * handover brief and starts a turn), a model on the same provider switches in
+ * place, and a mode applies to the next turn.
+ */
+export interface MobileConfigureSessionPayload { provider?: string; model?: string; mode?: MobileSessionMode; }
+/** Payload of `sessions.create`. provider/model/mode are validated against the desktop's catalog. */
+export interface MobileCreateSessionPayload { title?: string; message: string; provider?: string; model?: string; mode?: MobileSessionMode; }
+
+export interface MobileTokenUsage { inputTokens?: number; outputTokens?: number; totalTokens?: number }
+/**
+ * `sessions.usage`. Running totals from the desktop's session record — never
+ * estimated. `costStatus: 'not-reported'` means the provider reports no cost
+ * (API providers do not); it is not zero.
+ */
+export interface MobileSessionUsage {
+  sessionId: string;
+  provider?: string;
+  providerLabel?: string;
+  model?: string;
+  lifecycle: MobileSessionLifecycle;
+  tokenUsage?: MobileTokenUsage;
+  contextTokens?: number;
+  contextLimit?: number;
+  cost?: { currency: string; amount: number };
+  costStatus: 'reported' | 'not-reported';
+  sequence: number;
+}
+
+/** `access.get`: what the desktop has granted the calling device. */
+export interface MobileDeviceAccess {
+  deviceId: string;
+  label?: string;
+  capabilities: readonly MobileCapability[];
+  /** Empty when the grant is not project-scoped. */
+  projects: readonly { projectId: string; name: string }[];
+  pairedAt?: string;
+  lastSeenAt?: string;
+  hostName: string;
+  hostKeyFingerprint?: string;
+  accessMode: 'off' | 'local-only' | 'internet';
+  transport: 'noise-ik';
+  protocolVersion: typeof MOBILE_PROTOCOL_VERSION;
+  surfaceRevision: number;
+}
 
 export type MobileSessionLifecycle = 'idle' | 'active' | 'awaiting-input' | 'completed' | 'failed' | 'stopped';
 export interface MobileSessionSummary {
@@ -25,7 +132,7 @@ export interface MobileSessionSummary {
   lifecycle: MobileSessionLifecycle;
   provider?: string;
   model?: string;
-  mode: 'chat' | 'analysis' | 'review';
+  mode: MobileSessionMode;
   archived: boolean;
   startedAt: string;
   completedAt?: string;
@@ -47,12 +154,17 @@ export interface MobilePendingPermission {
   createdAt: string;
 }
 export interface MobileSessionSnapshot extends MobileSessionSummary {
+  /**
+   * The host event sequence this snapshot is current as of (`host.info`
+   * `latestSequence` for a read, the envelope sequence for an event). A client
+   * keeps the snapshot with the higher sequence, so replay never regresses it.
+   */
   sequence: number;
   messages: readonly MobileSessionMessage[];
   pendingPermissions: readonly MobilePendingPermission[];
   responseText?: string;
   reasoningText?: string;
-  tokenUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  tokenUsage?: MobileTokenUsage;
   contextTokens?: number;
   contextLimit?: number;
   cost?: { currency: string; amount: number };
@@ -66,11 +178,11 @@ const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const CAPABILITY_BY_OPERATION: Record<MobileOperation, MobileCapability> = {
-  'hosts.list':'view','projects.snapshot':'view','work.list':'view','sessions.list':'view','sessions.get':'view','workflows.list':'view','workflowRuns.get':'view','changes.get':'view','attention.list':'view',
-  'sessions.create':'execute','sessions.continue':'execute','sessions.cancel':'execute','workflowRuns.start':'execute','workflowRuns.cancel':'execute','workflowRuns.retryStage':'execute','permissions.respond':'approve','workflowGates.approve':'approve',
+  'hosts.list':'view','host.info':'view','sessions.usage':'view','providers.list':'view','models.list':'view','access.get':'view','projects.snapshot':'view','work.list':'view','sessions.list':'view','sessions.get':'view','workflows.list':'view','workflowRuns.get':'view','changes.get':'view','attention.list':'view',
+  'sessions.create':'execute','sessions.continue':'execute','sessions.configure':'execute','sessions.cancel':'execute','workflowRuns.start':'execute','workflowRuns.cancel':'execute','workflowRuns.retryStage':'execute','permissions.respond':'approve','workflowGates.approve':'approve',
 };
 export function mobileCapabilityFor(operation: MobileOperation): MobileCapability { return CAPABILITY_BY_OPERATION[operation]; }
-export function mobileOperationRequiresMutation(operation: MobileOperation): boolean { return operation in {'sessions.create':true,'sessions.continue':true,'sessions.cancel':true,'workflowRuns.start':true,'workflowRuns.cancel':true,'workflowRuns.retryStage':true,'permissions.respond':true,'workflowGates.approve':true}; }
+export function mobileOperationRequiresMutation(operation: MobileOperation): boolean { return operation in {'sessions.create':true,'sessions.continue':true,'sessions.configure':true,'sessions.cancel':true,'workflowRuns.start':true,'workflowRuns.cancel':true,'workflowRuns.retryStage':true,'permissions.respond':true,'workflowGates.approve':true}; }
 export function callerHasCapability(caller: MobileCaller, operation: MobileOperation): boolean { return caller.capabilities.includes(mobileCapabilityFor(operation)); }
 export function createMobileCommand<TPayload>(input: Omit<MobileCommand<TPayload>, 'protocolVersion'>): MobileCommand<TPayload> { const command={protocolVersion:MOBILE_PROTOCOL_VERSION,...input}; const validation=validateMobileCommand(command); if(!validation.ok) throw new Error(validation.error.message); return command; }
 export function validateMobileCommand(command: MobileCommand): {ok:true}|{ok:false;error:MobileProtocolError} {

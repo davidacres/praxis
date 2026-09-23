@@ -132,6 +132,9 @@ export function createMobileHostFixture(now: () => string = () => new Date().toI
       emit({ kind: 'session.stopped', sessionId: state.session.sessionId }, { sessionId: state.session.sessionId });
       return { sessionId: state.session.sessionId, stopped: true };
     },
+    'sessions.configure': async () => {
+      throw new Error('The fixture host does not change session runtimes.');
+    },
     'workflowRuns.start': async () => {
       state.run.status = 'running';
       state.run.stage = 'implement';

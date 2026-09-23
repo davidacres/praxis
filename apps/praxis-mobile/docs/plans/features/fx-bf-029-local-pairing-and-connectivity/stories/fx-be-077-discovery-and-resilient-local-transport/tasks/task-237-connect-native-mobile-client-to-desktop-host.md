@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Type:** Task
 type: Task
 id: TASK-237
 title: "Connect native mobile client to desktop host"
-status: planned
+status: in-progress
 story: FX-BE-077
-updated: 2026-09-22
+updated: 2026-09-23
 dependencies: [TASK-209, TASK-212]
 ---
 
@@ -82,3 +82,18 @@ Replace the mobile app's simulated connection with a production native transport
 ## Notes
 
 This task owns the concrete pairing and platform-adapter work left out of TASK-209 through TASK-211. It does not own session rendering or execution commands beyond the minimum authenticated read/replay needed to prove connectivity. Completion evidence must name the shipping iOS/Android adapters and desktop settings/listener paths; helper predicates or loopback-only fixtures cannot close it.
+
+## Progress (2026-09-23)
+
+Source work for this task's typed disconnect reasons, token-gated pairing wait/cancel/expiry, forget/re-pair, backoff and foreground reconciliation is implemented and covered by protocol, desktop and
+mobile tests plus `mobileEndToEnd.test.ts` (real listener + host services + the
+phone's client). The iOS Release build is installed on a physical iPhone and
+launches (`Running "main"`). Still open: the recorded physical-device journey
+against a desktop running revision 2, and Android. Status stays In Progress.
+
+## Description
+
+
+## Comments
+
+

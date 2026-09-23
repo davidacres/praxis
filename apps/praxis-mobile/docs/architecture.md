@@ -78,3 +78,68 @@ GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mo
 Decision: use the Expo React Native application in `apps/praxis-mobile` with thin native platform adapters for TCP transport, QR scanning, local discovery, secure storage, browser sign-in, app lifecycle, and push notifications. Native connection/key ownership remains outside screen components; tested renderer helpers remain platform-neutral where useful. Mobile imports only versioned browser-safe contracts and never Electron or Node desktop modules. Expo Go may support UI prototyping, but any feature requiring native adapters is built and verified through iOS/Android development or release builds.
 
 The current monorepo layout is an interim arrangement. The mobile folder is intentionally portable so it can move to its own repository without changing the protocol boundary. iOS/Android distribution and signing remain a later feasibility spike. Local LAN continuation and execution do not require GenericSystem, Roleover, Azure, or internet access.
+
+## Host surface revisions 2–3 (2026-09-23)
+
+Protocol v1 is unchanged on the wire; revision 2 adds operations and frames,
+revision 3 adds `sessions.configure`.
+A phone reads `host.info` first and treats a missing operation (an older
+desktop) as *unsupported*, never as an error.
+
+| Where | Addition |
+| --- | --- |
+| `packages/core/src/host/mobileProtocol.ts` | `MOBILE_HOST_SURFACE_REVISION = 2`; reads `host.info` (revision, operations, `latestSequence`, `hostEpoch`), `providers.list`, `models.list` (`params.provider`, `params.refresh`), `sessions.usage`, `access.get`; `MobileCreateSessionPayload` (`provider`, `model`, `mode`). All reads need only `view`. |
+| `packages/mobile-protocol/src/wire.ts` | Frames inside the Noise channel, a `status` frame and its codes (`ready`, `pairing-required`, `pairing-pending`, `pairing-rejected`, `invitation-expired/invalid/used`, `device-revoked`, `host-key-reset`, `access-disabled/denied`, `host-shutdown`), a `pair` request carrying the invitation `tokenId`, reply error codes, and `MobileConnectionError` classification of failures the host cannot explain (unreachable, handshake rejected, connection lost, timed out). |
+| `packages/mobile-protocol/src/client.ts` | `MobileSecureClient`: the one phone-side implementation of handshake, pairing, request correlation and failure reasons, over any byte socket. The iOS app and the desktop integration tests both use it. |
+| `packages/mobile-protocol/src/sessionMirror.ts` | Merge-by-sequence for session snapshots and an event cursor. |
+
+**Provider/model selection.** `providers.list` is built from the desktop's own
+provider statuses (`listAiProviderStatuses`) and exposes only id, label, kind,
+availability with a readable reason, and default model — never keys, key
+source, base URLs or CLI paths. `models.list` reuses the desktop model catalog
+(`listApiModelOptions` / `listCliModelOptions`). `sessions.create` re-validates
+provider, model and mode on the desktop (`resolveMobileSessionLaunch`) and
+rejects an unavailable provider, an unknown model or an unavailable mode with a
+message a person can act on; an unknown provider is never silently replaced.
+**Existing sessions (revision 3).** `sessions.configure` changes an existing
+session between turns using the desktop's own functions (`updateSessionModel`,
+`handoverSession`, `switchSessionMode` in `aiIpc.ts`, shared with the desktop
+IPC channels): a model on the same provider switches in place; a different
+provider is a handover — the desktop builds its handover brief and starts a
+turn on the new provider, so the phone asks for confirmation first; a mode
+switch applies to the next turn (Analysis and Review make the session's tools
+read-only, Chat restores full tools). All are refused mid-turn with a reason.
+The mobile projection shows handover and model changes as one-line notices and
+never sends the handover brief (it contains workspace paths) to the phone.
+
+**Session modes.** Chat uses the project's tool mode. Analysis and Review use
+the desktop's shared read-only task contract (`sessionModeTask.ts`, also used
+by `ai:delegate`) and always run with read-only tools; Analysis needs the
+desktop's analysis prompt. `providers.list.sessionModes` reports which modes can
+start in the project, with reasons. Tool access and working folder remain
+desktop project settings and are not editable from the phone.
+
+**Usage.** Running totals from the session record (`tokenUsage`,
+`contextTokens`/`contextLimit`, `cost`) arrive with every streamed snapshot and
+on demand via `sessions.usage`. Cost is shown only when the provider reports it
+(`costStatus: 'not-reported'` otherwise); Praxis does not estimate it on the phone.
+
+**Pairing.** An unknown key receives `pairing-required` and must present the
+current invitation's `tokenId`; knowing the host key is not enough. The
+desktop answers `pairing-pending` and holds the socket until someone confirms
+(then `ready`) or denies (`pairing-rejected`). Tokens are single-use: confirming
+one request voids others made with the same token (`invitation-used`), and a new
+invitation voids the old one. Revocation, host-key reset, policy changes and
+listener shutdown send their reason before closing. A wrong pinned key cannot
+be told anything (no shared key exists), so the phone reports a handshake
+rejection and asks for a new invitation.
+
+**Replay and reconnect.** A newly authorised peer receives only events appended
+after it connected. The phone pins `host.info.latestSequence`, re-reads
+sessions (each snapshot stamped with that sequence), then replays after it;
+snapshots merge by sequence, so replay never duplicates a message or rolls back
+a streamed reply. The event log keeps the last 5000 events, and a replay from
+before that window reports `truncated`. A changed `hostEpoch` (desktop restart)
+resets the phone's cursor. The phone reconnects with backoff (1s → 30s) after
+retryable losses, checks liveness when it returns to the foreground, and keeps
+the session UI in a read-only *reconnecting* state meanwhile.

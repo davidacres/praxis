@@ -8,7 +8,16 @@ import {
   type MobileHostApplication,
   type MobileReadRequest,
 } from '@praxis/core';
-import { RecordAssembler, SecureChannel, generateKeyPair } from '@praxis/mobile-protocol';
+import {
+  MobileConnectionError,
+  MobileSecureClient,
+  RecordAssembler,
+  SecureChannel,
+  generateKeyPair,
+  mobileConnectionStatus,
+  type KeyPair,
+  type MobileSocketConnector,
+} from '@praxis/mobile-protocol';
 import * as net from 'node:net';
 import { MobileLanServer } from './mobileLanServer';
 
@@ -28,6 +37,7 @@ function fixtureApp(onRead?: (request: MobileReadRequest) => void): MobileHostAp
       'sessions.create': async () => ({ ok: true }),
       'sessions.continue': async () => ({ ok: true }),
       'sessions.cancel': async () => ({ ok: true }),
+      'sessions.configure': async () => ({ ok: true }),
       'workflowRuns.start': async () => ({ runId: 'r1' }),
       'workflowRuns.cancel': async () => ({ ok: true }),
       'workflowRuns.retryStage': async () => ({ ok: true }),
@@ -81,7 +91,8 @@ function callRead(port: number, hostPublicKey: Uint8Array, pairingCode?: string,
           }
           continue;
         }
-        const reply = JSON.parse(new TextDecoder().decode(channel.decrypt(record))) as { ok: boolean; value?: unknown; error?: string };
+        const reply = JSON.parse(new TextDecoder().decode(channel.decrypt(record))) as { kind: string; ok: boolean; value?: unknown; error?: string };
+        if (reply.kind === 'status') continue;
         clearTimeout(timer);
         resolve(reply);
         socket.destroy();
@@ -260,96 +271,162 @@ test('applyPolicy(dropConnections) severs established peers', async () => {
   }
 });
 
-test('an unpaired peer is held for confirmation then authorised from the paired-device record', async () => {
+function nodeConnector(port: number): MobileSocketConnector {
+  return handlers => {
+    const socket = net.createConnection({ host: '127.0.0.1', port }, () => handlers.onConnect());
+    socket.on('data', (chunk: Buffer) => handlers.onData(new Uint8Array(chunk)));
+    socket.on('error', error => handlers.onError(error));
+    socket.on('close', () => handlers.onClose());
+    return { write: bytes => socket.write(bytes), destroy: () => socket.destroy() };
+  };
+}
+
+function phoneClient(port: number, hostKey: KeyPair, phoneKey: KeyPair = generateKeyPair(), pairingTokenId?: string): MobileSecureClient {
+  return new MobileSecureClient({
+    connect: nodeConnector(port),
+    endpoint: `127.0.0.1:${port}`,
+    staticKeyPair: phoneKey,
+    remoteStaticPublicKey: hostKey.publicKey,
+    connectTimeoutMs: 2_000,
+    requestTimeoutMs: 2_000,
+    ...(pairingTokenId ? { pairingTokenId } : {}),
+  });
+}
+
+const readProject = { protocolVersion: MOBILE_PROTOCOL_VERSION, requestId: 'r-live', caller, target: { hostId: 'host', projectId: 'p1' }, operation: 'projects.snapshot' as const };
+
+test('an unpaired phone presents its invitation token and stays pending until the desktop confirms', async () => {
   const hostKey = generateKeyPair();
   const phoneKey = generateKeyPair();
   const publicKeyHex = Buffer.from(phoneKey.publicKey).toString('hex');
-  let unpaired = 0;
+  const presented: Array<string | undefined> = [];
   let trusted = false;
   const granted = { deviceId: 'phone-live', capabilities: ['view'] as const, projectIds: ['p1'] };
   const server = new MobileLanServer({
     app: fixtureApp(),
     hostStaticKey: hostKey,
     authorizePeer: hex => trusted && hex === publicKeyHex ? granted : undefined,
-    onUnpairedPeer: () => {
-      unpaired += 1;
-      return 'pending';
+    onUnpairedPeer: (_hex, tokenId) => {
+      presented.push(tokenId);
+      if (tokenId === undefined) return mobileConnectionStatus('pairing-required');
+      return tokenId === 'invite-1' ? mobileConnectionStatus('pairing-pending') : mobileConnectionStatus('invitation-invalid');
     },
   });
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   try {
-    const first = await new Promise<{ ok: boolean; error?: string }>((resolve, reject) => {
-      const channel = SecureChannel.initiator({ staticKeyPair: phoneKey, remoteStaticPublicKey: hostKey.publicKey });
-      const assembler = new RecordAssembler();
-      const socket = net.createConnection({ host: '127.0.0.1', port: server.port! }, () => socket.write(channel.nextHandshakeMessage()));
-      const timer = setTimeout(() => { socket.destroy(); reject(new Error('timed out')); }, 2000);
-      socket.on('error', reject);
-      socket.on('data', (chunk: Buffer) => {
-        for (const record of assembler.push(chunk)) {
-          if (!channel.open) {
-            channel.readHandshakeMessage(record);
-            if (channel.open) {
-              socket.write(channel.encrypt(encode({
-                id: 'pending-read',
-                kind: 'read',
-                payload: {
-                  protocolVersion: MOBILE_PROTOCOL_VERSION,
-                  requestId: 'r-pending',
-                  caller,
-                  target: { hostId: 'host', projectId: 'p1' },
-                  operation: 'projects.snapshot',
-                },
-              })));
-            }
-            continue;
-          }
-          const reply = JSON.parse(new TextDecoder().decode(channel.decrypt(record))) as { ok: boolean; error?: string };
-          clearTimeout(timer);
-          socket.destroy();
-          resolve(reply);
-        }
-      });
-    });
-    assert.equal(first.ok, false);
-    assert.match(first.error ?? '', /waiting for confirmation/);
-    assert.equal(unpaired, 1);
+    const wrong = phoneClient(server.port!, hostKey, generateKeyPair(), 'stolen-guess');
+    await assert.rejects(wrong.connect(), (error: unknown) => error instanceof MobileConnectionError && error.code === 'invitation-invalid');
 
-    trusted = true;
-    server.promotePending(publicKeyHex, granted);
-    const second = await new Promise<{ ok: boolean; value?: unknown }>((resolve, reject) => {
-      const channel = SecureChannel.initiator({ staticKeyPair: phoneKey, remoteStaticPublicKey: hostKey.publicKey });
-      const assembler = new RecordAssembler();
-      const socket = net.createConnection({ host: '127.0.0.1', port: server.port! }, () => socket.write(channel.nextHandshakeMessage()));
-      const timer = setTimeout(() => { socket.destroy(); reject(new Error('timed out')); }, 2000);
-      socket.on('error', reject);
-      socket.on('data', (chunk: Buffer) => {
-        for (const record of assembler.push(chunk)) {
-          if (!channel.open) {
-            channel.readHandshakeMessage(record);
-            if (channel.open) {
-              socket.write(channel.encrypt(encode({
-                id: 'live-read',
-                kind: 'read',
-                payload: {
-                  protocolVersion: MOBILE_PROTOCOL_VERSION,
-                  requestId: 'r-live',
-                  caller,
-                  target: { hostId: 'host', projectId: 'p1' },
-                  operation: 'projects.snapshot',
-                },
-              })));
-            }
-            continue;
-          }
-          const reply = JSON.parse(new TextDecoder().decode(channel.decrypt(record))) as { ok: boolean; value?: unknown };
-          clearTimeout(timer);
-          socket.destroy();
-          resolve(reply);
+    const phone = phoneClient(server.port!, hostKey, phoneKey, 'invite-1');
+    const statuses: string[] = [];
+    const connected = new Promise<void>((resolve, reject) => {
+      phone.onStatus(status => {
+        statuses.push(status.code);
+        if (status.code === 'pairing-pending') {
+          // The desktop confirms well after the phone started waiting.
+          setTimeout(() => {
+            trusted = true;
+            server.promotePending(publicKeyHex, granted);
+          }, 100);
         }
       });
+      phone.connect().then(resolve, reject);
     });
-    assert.equal(second.ok, true);
+    await connected;
+    assert.deepEqual(statuses, ['pairing-required', 'pairing-pending', 'ready']);
+    assert.deepEqual(presented, [undefined, 'stolen-guess', undefined, 'invite-1']);
+    assert.deepEqual(await phone.read(readProject), { projectId: 'p1', name: 'Praxis' });
+    phone.close();
+
+    // Reconnecting as the now-paired device goes straight to ready.
+    const again = phoneClient(server.port!, hostKey, phoneKey);
+    await again.connect();
+    assert.deepEqual(await again.read(readProject), { projectId: 'p1', name: 'Praxis' });
+    again.close();
   } finally {
+    await server.stop();
+  }
+});
+
+test('refusals reach the phone as reasons, not a bare closed socket', async () => {
+  const hostKey = generateKeyPair();
+  const server = new MobileLanServer({
+    app: fixtureApp(),
+    hostStaticKey: hostKey,
+    authorizePeer: () => undefined,
+    onUnpairedPeer: () => mobileConnectionStatus('device-revoked'),
+  });
+  await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
+  try {
+    await assert.rejects(phoneClient(server.port!, hostKey).connect(), (error: unknown) =>
+      error instanceof MobileConnectionError && error.code === 'device-revoked' && /revoked/.test(error.message));
+    server.applyPolicy({ mode: 'local-only', allowedInterfaces: [], allowedSubnets: ['10.0.0.'] }, false);
+    await assert.rejects(phoneClient(server.port!, hostKey).connect(), (error: unknown) =>
+      error instanceof MobileConnectionError && error.code === 'access-denied' && /allowed interfaces and subnets/.test(error.message));
+  } finally {
+    await server.stop();
+  }
+});
+
+test('revocation, key reset and listener shutdown tell a connected phone why it was dropped', async () => {
+  const hostKey = generateKeyPair();
+  const phoneKey = generateKeyPair();
+  const publicKeyHex = Buffer.from(phoneKey.publicKey).toString('hex');
+  const server = new MobileLanServer({
+    app: fixtureApp(),
+    hostStaticKey: hostKey,
+    authorizePeer: hex => hex === publicKeyHex ? { deviceId: 'phone-live', capabilities: ['view'] } : undefined,
+  });
+  await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
+  try {
+    const dropped = async (act: () => void): Promise<MobileConnectionError> => {
+      const phone = phoneClient(server.port!, hostKey, phoneKey);
+      await phone.connect();
+      const reason = new Promise<MobileConnectionError>(resolve => phone.onClose(resolve));
+      act();
+      return reason;
+    };
+    assert.equal((await dropped(() => server.dropDevice('phone-live'))).code, 'device-revoked');
+    assert.equal((await dropped(() => server.dropAll(mobileConnectionStatus('host-key-reset')))).code, 'host-key-reset');
+    const shutdown = await dropped(() => void server.stop());
+    assert.equal(shutdown.code, 'host-shutdown');
+    assert.equal(shutdown.retryable, true);
+  } finally {
+    await server.stop();
+  }
+});
+
+test('a new peer starts live, replays on request, and learns about unsupported reads', async () => {
+  const hostKey = generateKeyPair();
+  const app = fixtureApp();
+  const append = (sequence: number): void => app.ledger.appendEvent({
+    protocolVersion: MOBILE_PROTOCOL_VERSION,
+    eventId: `event-${sequence}`,
+    sequence,
+    emittedAt: new Date().toISOString(),
+    target: { hostId: 'host', projectId: 'p1', sessionId: 's1' },
+    event: { type: 'session.snapshot' },
+  });
+  append(1);
+  append(2);
+  const server = new MobileLanServer({ app, hostStaticKey: hostKey });
+  await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
+  const phone = phoneClient(server.port!, hostKey);
+  const seen: number[] = [];
+  phone.onEvent(envelope => seen.push(envelope.sequence));
+  try {
+    await phone.connect();
+    append(3);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.deepEqual(seen, [3], 'history is not pushed unasked');
+    const replay = await phone.replay(1);
+    assert.equal(replay.latestSequence, 3);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.deepEqual(seen, [3, 2, 3]);
+    await assert.rejects(phone.read({ ...readProject, operation: 'providers.list' }), (error: unknown) =>
+      error instanceof Error && (error as { code?: string }).code === 'unsupported-operation' && /Update Praxis on the desktop/.test(error.message));
+  } finally {
+    phone.close();
     await server.stop();
   }
 });

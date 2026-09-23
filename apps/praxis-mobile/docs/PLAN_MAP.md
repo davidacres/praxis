@@ -20,6 +20,11 @@ closure gate is real iOS/Android development/release-build evidence across
 pairing, foreground/background reconnect, revocation and interruption; no
 physical-device evidence is claimed by this source change.
 
+**Revision 2 (2026-09-23).** Provider/model/mode selection, real usage,
+host-backed settings, token-gated pairing with explicit statuses, and
+reconnect/replay are implemented and tested (see architecture.md). TASK-237/238
+move to In Progress; physical-device journey evidence (TASK-241) is still owed.
+
 **Open integration ownership (2026-09-22).** TASK-237–240 now have their source
 paths wired end to end. TASK-241 remains the acceptance owner for production
 binaries on physical iOS and Android devices. FX-BF-029/031–033 cannot close
@@ -82,8 +87,8 @@ from helper predicates, loopback fixtures, static screenshots, or Expo Go alone.
 | [TASK-234](plans/features/fx-bf-033-mobile-reliability-and-release/stories/fx-be-085-operational-release-and-repository-extraction/tasks/task-234-prepare-release-operations-and-rollback.md) | Task | Prepare release operations and rollback | Complete | FX-BE-084 |
 | [TASK-235](plans/features/fx-bf-033-mobile-reliability-and-release/stories/fx-be-085-operational-release-and-repository-extraction/tasks/task-235-prove-standalone-repository-portability.md) | Task | Prove standalone repository portability | Complete | TASK-234 |
 | [TASK-236](plans/features/fx-bf-033-mobile-reliability-and-release/stories/fx-be-085-operational-release-and-repository-extraction/tasks/task-236-complete-release-acceptance-and-documentation.md) | Task | Complete release acceptance and documentation | Complete | TASK-235 |
-| [TASK-237](plans/features/fx-bf-029-local-pairing-and-connectivity/stories/fx-be-077-discovery-and-resilient-local-transport/tasks/task-237-connect-native-mobile-client-to-desktop-host.md) | Task | Connect native mobile client to desktop host | Planned | TASK-212 |
-| [TASK-238](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-081-read-and-continue-existing-work/tasks/task-238-wire-mobile-sessions-to-live-host-data.md) | Task | Wire mobile sessions to live host data | Planned | TASK-237 |
+| [TASK-237](plans/features/fx-bf-029-local-pairing-and-connectivity/stories/fx-be-077-discovery-and-resilient-local-transport/tasks/task-237-connect-native-mobile-client-to-desktop-host.md) | Task | Connect native mobile client to desktop host | In Progress | TASK-212 |
+| [TASK-238](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-081-read-and-continue-existing-work/tasks/task-238-wire-mobile-sessions-to-live-host-data.md) | Task | Wire mobile sessions to live host data | In Progress | TASK-237 |
 | [TASK-239](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-082-start-and-control-existing-work/tasks/task-239-enable-live-workflow-execution-commands.md) | Task | Enable live workflow execution commands | Planned | TASK-238 |
 | [TASK-240](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-083-attention-and-request-specific-approvals/tasks/task-240-enable-request-scoped-mobile-decisions.md) | Task | Enable request-scoped mobile decisions | Planned | TASK-239 |
 | [TASK-241](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-083-attention-and-request-specific-approvals/tasks/task-241-prove-live-mobile-desktop-journey.md) | Task | Prove live mobile-desktop journey | Planned | TASK-237, TASK-238, TASK-239, TASK-240 |

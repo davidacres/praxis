@@ -26,3 +26,12 @@ test('replays events after a cursor with a bounded page', () => {
   for (const sequence of [1, 2, 3]) ledger.appendEvent({ protocolVersion: 1, eventId: `event-${sequence}`, sequence, emittedAt: '2026-09-09T12:00:00.000Z', target: { hostId: 'host-mac' }, event: { sequence } });
   assert.deepEqual(ledger.replay(1, 1).map(event => event.sequence), [2]);
 });
+
+test('retains a bounded window of events and reports its bounds', () => {
+  const ledger = new InMemoryMobileCommandLedger(3);
+  assert.equal(ledger.latestSequence(), 0);
+  for (const sequence of [1, 2, 3, 4, 5]) ledger.appendEvent({ protocolVersion: 1, eventId: `event-${sequence}`, sequence, emittedAt: '2026-09-09T12:00:00.000Z', target: { hostId: 'host-mac' }, event: { sequence } });
+  assert.equal(ledger.latestSequence(), 5);
+  assert.equal(ledger.oldestRetainedSequence(), 3);
+  assert.deepEqual(ledger.replay(0).map(event => event.sequence), [3, 4, 5]);
+});
