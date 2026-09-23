@@ -816,8 +816,11 @@ export function formatErrorMessage(raw?: string): string {
 
 export function sessionLimitNotice(session?: AgentSessionRecord): string | undefined {
   if (!session) return undefined;
-  if (session.lastError && isProviderLimitMessage(session.lastError)) return formatErrorMessage(session.lastError);
-  if (session.responseText && isProviderLimitMessage(session.responseText)) return formatErrorMessage(session.responseText);
+  // Provider responses can contain a full handover/recovery transcript. Keep
+  // that operational detail out of the session error banner.
+  const concise = 'This provider has reached its usage limit. Switch providers to continue, or stop this session.';
+  if (session.lastError && isProviderLimitMessage(session.lastError)) return concise;
+  if (session.responseText && isProviderLimitMessage(session.responseText)) return concise;
   // Only a limit the session has not moved past: a reply (or a new session start,
   // as after a handover to another AI) since the error means the limit is behind it.
   const events = session.events ?? [];
@@ -825,13 +828,10 @@ export function sessionLimitNotice(session?: AgentSessionRecord): string | undef
   const lastErrorEvent = lastErrorIndex >= 0 ? events[lastErrorIndex] : undefined;
   const movedOn = events.slice(lastErrorIndex + 1).some(e => e.type === 'message' || e.type === 'session_start');
   if (lastErrorEvent && !movedOn && isProviderLimitMessage(lastErrorEvent.summary || lastErrorEvent.detail)) {
-    return formatErrorMessage(lastErrorEvent.summary || lastErrorEvent.detail);
+    return concise;
   }
   if (session.providerLimitReached) {
-    if (session.lastError && !/^(?:the stage session failed:\s*)?(?:internal error|internal failure)$/i.test(session.lastError.trim())) {
-      return formatErrorMessage(session.lastError);
-    }
-    return 'Provider usage limit, budget, or credits exhausted. The session was halted and will not retry automatically.';
+    return concise;
   }
   return undefined;
 }

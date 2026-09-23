@@ -753,20 +753,22 @@ export function SessionLimitSwitch({ session, onStop }: { session: AgentSessionR
       <div className="session-limit-switch-actions">
         {choices.length > 0 && (
           <>
-            <select
-              className="input"
-              aria-label="Switch to"
-              data-testid="session-limit-switch-to"
-              value={selected}
-              disabled={busy}
-              onChange={event => setChoice(event.target.value as AiProvider)}
-            >
+            <div className="session-limit-provider-list" role="listbox" aria-label="Switch to" data-testid="session-limit-switch-to">
               {choices.map(provider => (
-                <option key={provider} value={provider}>
+                <button
+                  key={provider}
+                  type="button"
+                  className={`composer-chip${selected === provider ? ' active' : ''}`}
+                  role="option"
+                  aria-selected={selected === provider}
+                  disabled={busy}
+                  onClick={() => setChoice(provider)}
+                >
+                  <Icon name={providerIconName(provider)} size={14} />
                   {aiName(provider)}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
             <button type="button" className="btn btn-primary btn-compact" data-testid="session-limit-switch-go" disabled={busy} onClick={() => void switchAndContinue()}>
               Switch and continue
             </button>

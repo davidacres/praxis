@@ -11592,7 +11592,8 @@ button.session-chat-attachment {
 .session-limit-switch-text strong { color: var(--text); }
 .session-limit-switch-error { color: var(--danger); }
 .session-limit-switch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.session-limit-switch-actions .input { min-width: 140px; }
+.session-limit-provider-list { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-input); }
+.session-limit-provider-list .composer-chip { min-height: 26px; }
 /* A stage's AI ran out: switch (label + select + button), retry, stop — wrapping on a narrow rail. */
 .wf-run-limit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .wf-run-limit-switch { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
