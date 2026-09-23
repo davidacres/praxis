@@ -155,3 +155,9 @@ test('withAgentErrorDetail promotes the agent\'s reason from data.message to the
   assert.equal(plain.message, 'Internal error');
   assert.equal(withAgentErrorDetail('boom'), 'boom');
 });
+
+test('extractProviderLimitMessage is idempotent — re-extracting never stacks the prefix', () => {
+  const once = extractProviderLimitMessage("You've hit your usage limit. Try again at Sep 26th, 2026 1:00 PM.");
+  assert.equal(once, "Provider limit reached: You've hit your usage limit. Try again at Sep 26th, 2026 1:00 PM.");
+  assert.equal(extractProviderLimitMessage(extractProviderLimitMessage(once)), once);
+});

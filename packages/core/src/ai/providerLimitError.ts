@@ -102,6 +102,9 @@ export function extractProviderLimitMessage(errorOrMessage: unknown): string {
 
   // Strip generic transport/RPC wrappers like "The stage session failed: ", "RequestError: ", "Internal error: "
   let cleaned = raw.replace(/^(?:The stage session failed:\s*)?(?:RequestError:\s*)?(?:Internal error:\s*)?(?:Provider error:\s*)?(?:Gateway returned \d+:\s*)?/i, '').trim();
+  // A notice passes through several layers (agent host → session → stage), each of which
+  // extracts again; without this each added its own prefix ("Provider limit reached: " ×4).
+  cleaned = cleaned.replace(/^(?:Provider limit reached:\s*)+/i, '').trim();
 
   // If cleaned is or contains JSON, extract the inner message
   try {
