@@ -34,7 +34,7 @@ export function validateAddonManifest(value: unknown): AddonManifestValidation {
   }
 
   if (!isAddonKind(value.kind)) {
-    errors.push('`kind` must be one of theme, surface-pack, agent, workflow-template.');
+    errors.push('`kind` must be one of theme, surface-pack, agent, skill, workflow-template.');
   }
 
   const id = value.id;
