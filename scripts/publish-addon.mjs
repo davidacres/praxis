@@ -9,7 +9,9 @@
  *   node scripts/publish-addon.mjs --dry-run addons/workflows/full-sdlc
  *
  * Requirements:
- *   - PRAXIS_MARKETPLACE_TOKEN or GITHUB_TOKEN environment variable with `write:packages` scope.
+ *   - A token with `write:packages`: PRAXIS_MARKETPLACE_TOKEN, else the registry's
+ *     `_authToken` in ~/.npmrc, else GITHUB_TOKEN (often a CI/CLI token without
+ *     package scopes, so it is the last resort).
  *   - Valid `praxis` manifest block in package.json.
  */
 
@@ -32,6 +34,21 @@ async function execCommand(cmd, args, options = {}) {
     });
     child.on('error', reject);
   });
+}
+
+/** The `_authToken` ~/.npmrc holds for this registry, if any. */
+async function npmrcToken(registry) {
+  const host = registry.replace(/^https?:/, '').replace(/\/+$/, '');
+  try {
+    const npmrc = await fs.readFile(path.join(process.env.HOME || '', '.npmrc'), 'utf8');
+    for (const line of npmrc.split(/\r?\n/)) {
+      const [key, ...rest] = line.split('=');
+      if (key?.trim() === `${host}/:_authToken`) return rest.join('=').trim() || undefined;
+    }
+  } catch {
+    // No ~/.npmrc.
+  }
+  return undefined;
 }
 
 export async function publishAddon(addonDir, options = {}) {
@@ -67,12 +84,11 @@ export async function publishAddon(addonDir, options = {}) {
     return { ok: true, dryRun: true, name: rawPkg.name, version: rawPkg.version };
   }
 
-  const token = options.token || process.env.PRAXIS_MARKETPLACE_TOKEN || process.env.GITHUB_TOKEN;
-  if (!token) {
-    throw new Error('Missing token. Set GITHUB_TOKEN or PRAXIS_MARKETPLACE_TOKEN with write:packages permission.');
-  }
-
   const registry = options.registry || 'https://npm.pkg.github.com';
+  const token = options.token || process.env.PRAXIS_MARKETPLACE_TOKEN || (await npmrcToken(registry)) || process.env.GITHUB_TOKEN;
+  if (!token) {
+    throw new Error('Missing token. Set PRAXIS_MARKETPLACE_TOKEN (or add the registry to ~/.npmrc) with write:packages permission.');
+  }
   console.log(`🚀 Publishing to registry ${registry}...`);
 
   // Create temporary .npmrc in addon dir with auth
