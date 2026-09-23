@@ -16,6 +16,7 @@
         "agentId": "praxis-planner",
         "profileId": "praxis-planner",
         "hostId": "praxis-planner",
+        "providerId": "claude-code-cli",
         "scope": "global",
         "toolMode": "project-only"
       },
@@ -29,6 +30,7 @@
         }
       ],
       "mutatesWorktree": false,
+      "model": "default",
       "modelTier": "fast"
     },
     {
@@ -340,8 +342,8 @@
     }
   ],
   "entryNodeId": "plan",
-  "createdAt": "2026-09-23T22:32:20.536Z",
-  "updatedAt": "2026-09-23T22:55:32.598Z",
+  "createdAt": "2026-09-23T23:26:52.387Z",
+  "updatedAt": "2026-09-23T23:28:33.283Z",
   "description": "Plan, implement, then converge review, QA, and security before a human approves.",
   "projectId": "project-1788215224012-rap082"
 }

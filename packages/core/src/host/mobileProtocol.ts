@@ -11,7 +11,7 @@ export type MobileCapability = 'view' | 'execute' | 'approve';
  * treats a missing operation (an older desktop) as "unsupported", not an error.
  */
 export const MOBILE_HOST_SURFACE_REVISION = 4 as const;
-export type MobileReadOperation = 'hosts.list' | 'host.info' | 'projects.snapshot' | 'work.list' | 'sessions.list' | 'sessions.get' | 'sessions.usage' | 'workflows.list' | 'workflowRuns.get' | 'changes.get' | 'attention.list' | 'providers.list' | 'models.list' | 'access.get';
+export type MobileReadOperation = 'hosts.list' | 'host.info' | 'projects.snapshot' | 'work.list' | 'sessions.list' | 'sessions.get' | 'sessions.usage' | 'workflows.list' | 'workflowRuns.list' | 'workflowRuns.get' | 'changes.get' | 'attention.list' | 'providers.list' | 'models.list' | 'access.get';
 export type MobileCommandOperation = 'sessions.create' | 'sessions.continue' | 'sessions.cancel' | 'sessions.configure' | 'workflowRuns.start' | 'workflowRuns.cancel' | 'workflowRuns.retryStage' | 'permissions.respond' | 'workflowGates.approve';
 export type MobileOperation = MobileReadOperation | MobileCommandOperation;
 export interface MobileCaller { deviceId: string; subject?: string; capabilities: readonly MobileCapability[]; }
@@ -273,11 +273,60 @@ export interface MobileSessionSnapshot extends MobileSessionSummary {
 export type MobileSessionEvent =
   | { type: 'session.snapshot'; snapshot: MobileSessionSnapshot }
   | { type: 'session.removed'; sessionId: string; sessionKey: string };
+
+/** How a stage stands, for the phone's step list: the desktop monitor's lane, not a raw outcome. */
+export type MobileRunStageLane = 'idle' | 'ready' | 'running' | 'done' | 'failed' | 'skipped' | 'awaiting' | 'paused';
+export interface MobileRunStage {
+  nodeId: string;
+  name: string;
+  /** 'agent-task' | 'check' | 'approval' | 'deployment' | 'join'. */
+  type: string;
+  lane: MobileRunStageLane;
+  attempts: number;
+  /** The stage's session (agent stages), so the phone can show its conversation. */
+  sessionId?: string;
+  sessionKey?: string;
+  /** The AI that ran the latest attempt, else the one it is set to use. */
+  provider?: string;
+  lastError?: string;
+  /** Stopped without a verdict: the AI ran out of budget, or the stage's tooling could not run. */
+  pause?: 'provider-limit' | 'environment';
+}
+/**
+ * A workflow run as the phone shows it (`workflowRuns.list`, `run.snapshot`): the steps and
+ * where the run is, without the desktop monitor's graph, gates or event log.
+ */
+export interface MobileRunSnapshot {
+  runId: string;
+  projectId: string;
+  workflowName: string;
+  /** 'running' | 'awaiting-approval' | 'succeeded' | 'failed' | 'cancelled'. */
+  status: string;
+  paused: boolean;
+  /** One sentence: why the run is where it is. */
+  explanation: string;
+  startedAt: string;
+  endedAt?: string;
+  issueKey?: string;
+  /** The run's own AI; a stage may use another. */
+  aiProvider?: string;
+  aiModel?: string;
+  /** The stage the run is at — running, waiting on a person, paused, or the one it ended on. */
+  currentNodeId?: string;
+  stages: readonly MobileRunStage[];
+  /** A person can approve the run's gate now. */
+  canApprove: boolean;
+  /** Host event sequence this snapshot is current as of; the higher one wins. */
+  sequence: number;
+}
+export type MobileRunEvent =
+  | { type: 'run.snapshot'; run: MobileRunSnapshot }
+  | { type: 'run.removed'; runId: string };
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const CAPABILITY_BY_OPERATION: Record<MobileOperation, MobileCapability> = {
-  'hosts.list':'view','host.info':'view','sessions.usage':'view','providers.list':'view','models.list':'view','access.get':'view','projects.snapshot':'view','work.list':'view','sessions.list':'view','sessions.get':'view','workflows.list':'view','workflowRuns.get':'view','changes.get':'view','attention.list':'view',
+  'hosts.list':'view','host.info':'view','sessions.usage':'view','providers.list':'view','models.list':'view','access.get':'view','projects.snapshot':'view','work.list':'view','sessions.list':'view','sessions.get':'view','workflows.list':'view','workflowRuns.list':'view','workflowRuns.get':'view','changes.get':'view','attention.list':'view',
   'sessions.create':'execute','sessions.continue':'execute','sessions.configure':'execute','sessions.cancel':'execute','workflowRuns.start':'execute','workflowRuns.cancel':'execute','workflowRuns.retryStage':'execute','permissions.respond':'approve','workflowGates.approve':'approve',
 };
 export function mobileCapabilityFor(operation: MobileOperation): MobileCapability { return CAPABILITY_BY_OPERATION[operation]; }
