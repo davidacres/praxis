@@ -858,8 +858,9 @@ test('session failure displays unified error banner above the chat panel and not
   const errorBanner = win.locator('[data-testid="session-error-banner"]');
   await expect(errorBanner).toBeVisible();
   await expect(errorBanner).toContainText('Provider Limit / Quota Exceeded');
-  await expect(errorBanner).toContainText('Insufficient balance or no resource package. Please recharge.');
-  await expect(errorBanner).toContainText('Code 1113 · HTTP 429');
+  await expect(errorBanner).toContainText('This provider has reached its usage limit. Switch providers to continue, or stop this session.');
+  await expect(errorBanner).not.toContainText('Insufficient balance or no resource package. Please recharge.');
+  await expect(errorBanner).not.toContainText('Code 1113 · HTTP 429');
 
   // No error bubbles or duplicate banners in the chat thread or composer
   await expect(win.locator('[data-testid="session-chat-error"]')).toHaveCount(0);
