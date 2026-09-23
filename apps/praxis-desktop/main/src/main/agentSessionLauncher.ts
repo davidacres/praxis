@@ -20,7 +20,7 @@ import {
   resolveAcpStartOptions,
   resolveConnectionOptions
 } from './aiInstance';
-import { effectiveRuntime, sessionInstructionsFor } from './nativeSourcesInstance';
+import { effectiveRuntime, sessionInstructionsFor, sessionWorkingStyle } from './nativeSourcesInstance';
 
 export type AgentHostAdapterState = 'acp' | 'gateway' | 'unsupported' | 'scaffold';
 
@@ -202,11 +202,13 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
   // Instruction files other AI tools keep in the project, minus the ones this
   // runtime already reads itself.
   const projectInstructions = await sessionInstructionsFor(effectiveRuntime(input.provider, prepared.plan), input.workingDirectory);
+  const workingStyle = sessionWorkingStyle();
   input = {
     ...input,
     taskDefinition: {
       ...input.taskDefinition,
-      ...(projectInstructions ? { projectInstructions } : {})
+      ...(projectInstructions ? { projectInstructions } : {}),
+      ...(workingStyle ? { workingStyle } : {})
     }
   };
   if (prepared.plan.state === 'acp') {
@@ -265,6 +267,7 @@ export async function continueAgentTask(
     input.issueKey,
     await sessionInstructionsFor(effectiveRuntime(provider, prepared.plan), input.workingDirectory)
   );
+  getAiSessionManager().setWorkingStyle(input.issueKey, sessionWorkingStyle());
   if (prepared.plan.state === 'acp') {
     await getAcpAgentHost().continueTask(input.issueKey, input.message, {
       command: prepared.plan.command!,

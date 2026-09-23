@@ -659,16 +659,21 @@ those are code (see above), never catalogue data.
 - e2e: `mockAddonRegistry.ts` serves both endpoints from one in-process server
   and builds real gzipped tarballs so the integrity path runs for real;
   `marketplace.spec.ts` drives install/remove/trust from each panel.
-- **Agent pins** (`addons/agents/`, e.g. Claude Implementer, Codex Implementer): an
-  agent add-on with `replaces: "<built-in id>"` (in `praxis` and in `agent.json`) runs
-  that built-in — its own `AGENT.md` instructions — on the pin's runtime instead of the
-  session's. Named `<Runtime> <Role>`; `display.runtime` labels it before install.
-  `resolvePins` (manager) makes the pin the built-in's launch binding (`pinnedBy`);
-  the pin is not an agent itself. One pin per built-in: installing another
-  uninstalls the first (`retireOtherPins`). An add-on is **never mirrored into a
-  built-in's folder** — early packages that reused a built-in id are mirrored to
-  `<id>-addon` and treated as pins. `compileAgentHostLaunch` must check `pinnedBy`
-  before the bundled-id shortcut, or the pin is silently ignored.
+- **Which AI runs an agent** is the per-agent **"Runs on"** setting
+  (`ai.agentRuntimes`, agent id → local ACP runtime), not a package.
+  `applyRuntimeChoices` (manager) makes the chosen runtime the agent's launch binding
+  (`pinnedBy.setting`); the agent keeps its own instructions. It wins over an add-on
+  pin. `compileAgentHostLaunch` must check `pinnedBy` before the bundled-id shortcut,
+  and launches a pinned runtime via `resolveAcpStartOptions` (honours its CLI path).
+- An agent add-on may still pin a built-in with `replaces` (third parties);
+  `resolvePins` handles it, one pin per built-in (`retireOtherPins`), and an add-on
+  is **never mirrored into a built-in's folder** (id-reusing ones go to `<id>-addon`).
+  Praxis's own pin packages were retired: `migrateAddonPinsToSettings` turns an
+  installed one into the setting on launch.
+- **Working style** (`ai.workingStyle`, `DEFAULT_WORKING_STYLE`, mirrored in
+  `settingsDefaults.ts`) is added to every session's system prompt on every runtime
+  via `launchAgentTask`/`continueAgentTask`; `nativeSources.instructionSource` limits
+  the project instruction files Praxis adds to one tool's.
 
 ## Other AI tools' agents, skills and instructions (`agentRuntime/nativeSources.ts`)
 

@@ -431,7 +431,7 @@ export interface SessionInstructions {
   text: string;
   included: Array<{ displayPath: string; ecosystem: NativeEcosystem }>;
   /** Files the runtime already reads natively (or that do not always apply). */
-  skipped: Array<{ displayPath: string; reason: 'native' | 'path-specific' | 'duplicate' | 'user-scope' | 'untrusted' | 'size-limit' }>;
+  skipped: Array<{ displayPath: string; reason: 'native' | 'path-specific' | 'duplicate' | 'user-scope' | 'untrusted' | 'size-limit' | 'other-source' }>;
 }
 
 /**
@@ -443,7 +443,11 @@ export interface SessionInstructions {
 export function buildSessionInstructions(
   files: readonly NativeInstructionFile[],
   runtime: AiProvider | 'custom' | string,
-  options: { projectApproved: boolean }
+  options: {
+    projectApproved: boolean;
+    /** Only this tool's files — its conventions become the project's instructions for every AI. */
+    source?: 'all' | NativeEcosystem;
+  }
 ): SessionInstructions {
   const rank = (file: NativeInstructionFile): number => {
     const index = INSTRUCTION_ORDER.indexOf(file.displayPath);
@@ -457,6 +461,7 @@ export function buildSessionInstructions(
   for (const file of [...files].sort((left, right) => rank(left) - rank(right) || left.displayPath.localeCompare(right.displayPath))) {
     if (file.scope !== 'project') { skipped.push({ displayPath: file.displayPath, reason: 'user-scope' }); continue; }
     if (!options.projectApproved) { skipped.push({ displayPath: file.displayPath, reason: 'untrusted' }); continue; }
+    if (options.source && options.source !== 'all' && file.ecosystem !== options.source) { skipped.push({ displayPath: file.displayPath, reason: 'other-source' }); continue; }
     if (file.readBy.includes(runtime as AiProvider)) { skipped.push({ displayPath: file.displayPath, reason: 'native' }); continue; }
     if (!file.alwaysApplies) { skipped.push({ displayPath: file.displayPath, reason: 'path-specific' }); continue; }
     const normalized = file.content.replace(/\s+/g, ' ').trim();

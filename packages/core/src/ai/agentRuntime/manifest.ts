@@ -42,8 +42,12 @@ export interface DiscoveredAgent {
    * folder: it has no process of its own and runs on the session's runtime.
    */
   followsSessionRuntime?: boolean;
-  /** On a built-in's host when a pin runs it: the pin's own id, name and folder. */
-  pinnedBy?: { id: string; name: string; manifestPath: string };
+  /**
+   * Set when something other than the session chooses this agent's runtime:
+   * the user's "Runs on" setting (`setting: true`, `runtime` = the provider),
+   * or an add-on pin (its id, name and folder).
+   */
+  pinnedBy?: { id: string; name: string; manifestPath: string; runtime?: string; setting?: boolean };
 }
 
 export type DiscoveredRuntimeHost = DiscoveredAgent;
