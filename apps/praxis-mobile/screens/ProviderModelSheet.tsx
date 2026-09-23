@@ -2,8 +2,9 @@ import React from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MobileModelCatalog, MobileProviderCatalog } from '@praxis/core';
-import { theme } from '../app/theme';
+import { theme, themedStyles } from '../app/theme';
 import type { Remote } from '../app/store';
+import { availableProviderOptions } from '../renderer/mobileSessionOptions';
 
 interface ProviderModelSheetProps {
   kind: 'provider' | 'model' | undefined;
@@ -68,6 +69,7 @@ function StateNote({ busy, text, tone = 'dim' }: { busy?: boolean; text: string;
 export function ProviderModelSheet(props: ProviderModelSheetProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const catalog = props.providers.value;
+  const availableProviders = availableProviderOptions(catalog);
   const modelCatalog = props.models?.value;
   const title = props.kind === 'model' ? `Model · ${props.providerLabel}` : 'AI provider';
   return (
@@ -111,15 +113,15 @@ export function ProviderModelSheet(props: ProviderModelSheetProps): React.JSX.El
                 {props.providers.status === 'unsupported' || props.providers.status === 'error' ? (
                   <StateNote tone="warn" text={props.providers.message ?? 'The desktop did not return its providers.'} />
                 ) : null}
-                {catalog && catalog.providers.every(option => !option.available) ? (
+                {catalog && availableProviders.length === 0 ? (
                   <StateNote tone="warn" text="No AI provider is ready on the desktop. Add a key or enable a provider in Settings → AI Provider." />
                 ) : null}
-                {catalog?.providers.map(option => (
+                {availableProviders.map(option => (
                   <OptionRow
                     key={option.provider}
                     title={option.label}
                     caption={option.available
-                      ? `${option.kind === 'cli-agent' ? 'Local agent' : 'API'}${option.provider === catalog.defaultProvider ? ' · desktop default' : ''}`
+                      ? `${option.kind === 'cli-agent' ? 'Local agent' : 'API'}${option.provider === catalog?.defaultProvider ? ' · desktop default' : ''}`
                       : option.unavailableMessage ?? 'Not available on the desktop'}
                     selected={props.selectedProvider === option.provider}
                     disabled={!option.available}
@@ -160,7 +162,7 @@ export function ProviderModelSheet(props: ProviderModelSheetProps): React.JSX.El
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   scrim: { position: 'absolute', inset: 0, backgroundColor: theme.scrim },
   sheet: { maxHeight: '78%', paddingHorizontal: 14, paddingTop: 8, borderTopLeftRadius: 18, borderTopRightRadius: 18, borderWidth: 1, borderBottomWidth: 0, borderColor: theme.borderStrong, backgroundColor: theme.bgSunken },
@@ -194,4 +196,4 @@ const styles = StyleSheet.create({
   confirmPrimary: { borderColor: theme.accent, backgroundColor: theme.accent },
   confirmCancel: { color: theme.textSecondary, fontSize: 13, fontWeight: '700' },
   confirmPrimaryText: { color: theme.onAccent, fontSize: 13, fontWeight: '700' },
-});
+}));

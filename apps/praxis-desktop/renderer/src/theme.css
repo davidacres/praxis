@@ -8,26 +8,27 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 :root {
+  --ui-scale: 1;
   --font-sans: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
   --font-mono: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
   /* xterm.js receives this resolved stack directly; keep it aligned with VS
      Code's macOS terminal rather than the app's denser code-label font. */
   --terminal-font: Menlo, Monaco, 'SF Mono', 'Courier New', monospace;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
+  --radius-sm: calc(4px * var(--ui-scale));
+  --radius-md: calc(6px * var(--ui-scale));
+  --radius-lg: calc(10px * var(--ui-scale));
+  --radius-xl: calc(14px * var(--ui-scale));
   --radius-pill: 999px;
 
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
+  --space-1: calc(4px * var(--ui-scale));
+  --space-2: calc(8px * var(--ui-scale));
+  --space-3: calc(12px * var(--ui-scale));
+  --space-4: calc(16px * var(--ui-scale));
+  --space-5: calc(24px * var(--ui-scale));
+  --space-6: calc(32px * var(--ui-scale));
 
-  --titlebar-height: 40px;
+  --titlebar-height: calc(40px * var(--ui-scale));
 
   /* Sidebar hierarchy follows the active theme. Backend marks may keep their
      own brand artwork, but ordinary folders and rows remain visually native. */
@@ -106,14 +107,18 @@
 
      The small band (everything that was ≤10px, plus the half-pixel drift) is
      migrated. Headings still carry literals pending a second pass. */
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-md: 13px;
-  --text-lg: 15px;
-  --text-xl: 18px;
-  --text-2xl: 22px;
-  --text-3xl: 30px;
+  --text-xs: calc(11px * var(--ui-scale));
+  --text-sm: calc(12px * var(--ui-scale));
+  --text-md: calc(13px * var(--ui-scale));
+  --text-lg: calc(15px * var(--ui-scale));
+  --text-xl: calc(18px * var(--ui-scale));
+  --text-2xl: calc(22px * var(--ui-scale));
+  --text-3xl: calc(30px * var(--ui-scale));
 }
+
+/* Compact is the byte-for-byte default. Large composes with every theme and
+   surface by changing only shared sizing tokens, never palette values. */
+:root[data-display-size='large'] { --ui-scale: 1.16; }
 
 :root[data-mode='light'] {
   --bg: #f6f6f6;
@@ -2502,6 +2507,7 @@ textarea {
 .composer-chip {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 6px;
   font-family: inherit;
   height: 26px;
@@ -2512,6 +2518,19 @@ textarea {
   color: var(--text-secondary);
   font-size: var(--text-md);
   cursor: pointer;
+  white-space: nowrap;
+}
+
+/* New-session provider/model controls must keep their own readable width. The
+   flex row also contains a spacer, so allowing these buttons to shrink makes
+   long model labels wrap into the neighbouring chip. */
+.session-provider-chip { max-width: 180px; }
+.session-model-chip { min-width: 0; max-width: min(360px, 32vw); }
+.session-model-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-chip:hover {

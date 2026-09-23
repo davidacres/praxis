@@ -21,6 +21,7 @@ import {
   type MobileCommandOperation,
   type MobileDeviceAccess,
   type MobileExecutionHandlers,
+  type MobileAppearance,
   type MobileHostInfo,
   type MobileHostReads,
   type MobileModelCatalog,
@@ -65,6 +66,8 @@ export interface MobileHostServiceDeps {
   /** Changes when the desktop process restarts (event sequences restart with it). */
   hostEpoch: string;
   latestSequence(): number;
+  /** The desktop's current theme as colours; undefined until a window has applied one. */
+  appearance?(): MobileAppearance | undefined;
 
   /** Every provider, stripped of keys/URLs/paths, plus which session modes can start in `projectId`. */
   providerCatalog(projectId?: string): Promise<MobileProviderCatalog>;
@@ -246,6 +249,7 @@ export function createMobileHostReads(deps: MobileHostServiceDeps, commandOperat
       commandOperations,
       latestSequence: deps.latestSequence(),
       hostEpoch: deps.hostEpoch,
+      ...(deps.appearance?.() ? { appearance: deps.appearance() } : {}),
     }),
     'providers.list': async (request: MobileReadRequest) => deps.providerCatalog(request.target.projectId?.trim() || undefined),
     'models.list': async (request: MobileReadRequest): Promise<MobileModelCatalog> => {

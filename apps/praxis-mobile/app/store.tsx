@@ -5,6 +5,7 @@ import type {
   MobileCommand,
   MobileDeviceAccess,
   MobileEventEnvelope,
+  MobileHostEvent,
   MobileHostInfo,
   MobileModelCatalog,
   MobileProviderCatalog,
@@ -17,6 +18,8 @@ import type {
   MobileSessionUsage,
 } from '@praxis/core';
 import { MobileEventCursor, mergeSequencedSnapshot } from '@praxis/mobile-protocol';
+import { applyAppearance, currentAppearance } from './theme';
+import { readMobileAppearance } from '../renderer/mobileTheme';
 import {
   createMobileShellState,
   setMobileShellConnection,
@@ -45,6 +48,8 @@ import { describeConnectionIssue, reconnectDelayMs, type MobileConnectionIssue }
 import {
   NativeMobileConnection,
   forgetMobileHostConfiguration,
+  loadDesktopAppearance,
+  saveDesktopAppearance,
   mobileDeviceKeyPrefix,
   saveMobileHostConfiguration,
   type MobileHostConfiguration,
@@ -98,6 +103,8 @@ export interface Remote<T> { status: 'idle' | 'loading' | 'ready' | 'unsupported
 
 interface Store {
   shell: MobileShellState;
+  /** False after an intentional disconnect, so the connect screen does not immediately bootstrap the saved host. */
+  autoConnectEnabled: boolean;
   host: MobileHostSummary;
   hostInfo: MobileHostInfo | undefined;
   hostConfig: MobileHostConfiguration | undefined;
@@ -202,8 +209,15 @@ function permissionItems(hostId: string, snapshot: MobileSessionSnapshot): Mobil
   }));
 }
 
+/** Paints the desktop's theme and remembers it for the next launch; anything malformed is ignored. */
+function wearDesktopAppearance(value: unknown): void {
+  const appearance = readMobileAppearance(value);
+  if (appearance && applyAppearance(appearance)) void saveDesktopAppearance(appearance).catch(() => undefined);
+}
+
 export function StoreProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [shell, setShell] = useState<MobileShellState>(() => createMobileShellState());
+  const [autoConnectEnabled, setAutoConnectEnabled] = useState(true);
   const [host, setHost] = useState<MobileHostSummary>(NO_HOST);
   const [hostInfo, setHostInfo] = useState<MobileHostInfo | undefined>(undefined);
   const [hostConfig, setHostConfig] = useState<MobileHostConfiguration | undefined>(undefined);
@@ -233,6 +247,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const commandsRef = useRef(new Map<string, { command: MobileCommand; workId: string; draft: boolean }>());
   const openConnectionRef = useRef<(config: MobileHostConfiguration, mode: 'initial' | 'reconnect') => Promise<void>>(async () => undefined);
+
+  // Wear the paired desktop's last theme straight away; host.info replaces it once connected.
+  useEffect(() => {
+    void loadDesktopAppearance().then(stored => {
+      if (stored && !currentAppearance()) applyAppearance(stored);
+    }).catch(() => undefined);
+  }, []);
 
   const setPhase = useCallback((phase: MobileShellState['connection']): void => {
     phaseRef.current = phase;
@@ -271,7 +292,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
 
   const applyEvent = useCallback((envelope: MobileEventEnvelope): void => {
     if (!cursorRef.current.observe(envelope.sequence)) return;
-    const event = envelope.event as MobileSessionEvent;
+    const event = envelope.event as MobileSessionEvent | MobileHostEvent;
+    if (event.type === 'host.appearance') {
+      wearDesktopAppearance(event.appearance);
+      return;
+    }
     if (event.type === 'session.snapshot') applySnapshot(event.snapshot);
     if (event.type === 'session.removed') {
       setWork(previous => previous.filter(item => item.sessionId !== event.sessionId));
@@ -317,6 +342,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
     const epochChanged = hostInfoRef.current?.hostEpoch !== info?.hostEpoch;
     hostInfoRef.current = info;
     setHostInfo(info);
+    wearDesktopAppearance(info?.appearance);
     if (epochChanged) {
       // The desktop restarted: its event sequence restarted too.
       cursorRef.current.reset(info?.latestSequence ?? 0);
@@ -563,6 +589,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
 
     return {
       shell,
+      autoConnectEnabled,
       host,
       hostInfo,
       hostConfig,
@@ -580,22 +607,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
       access,
       activity,
 
-      connect: config => openConnection(config, 'initial'),
+      connect: config => {
+        setAutoConnectEnabled(true);
+        return openConnection(config, 'initial');
+      },
       retryConnection: () => {
         const config = configRef.current;
         if (!config) return;
+        setAutoConnectEnabled(true);
         reconnectAttemptRef.current = 0;
         void openConnection(config, phaseRef.current === 'reconnecting' ? 'reconnect' : 'initial');
       },
       cancelConnect: () => {
         clearReconnectTimer();
         closeConnection();
+        setAutoConnectEnabled(false);
         setPairing(undefined);
         setPhase('offline');
       },
       disconnect: options => {
         clearReconnectTimer();
         closeConnection();
+        setAutoConnectEnabled(false);
         projectRef.current = undefined;
         hostInfoRef.current = undefined;
         cursorRef.current.reset(0);
@@ -622,6 +655,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
           configRef.current = undefined;
           setHostConfig(undefined);
           void forgetMobileHostConfiguration();
+          applyAppearance(undefined);
         }
       },
       setRoute: primary => nav(state => selectMobileRoute(state, primary)),
@@ -774,7 +808,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
         setRuns(previous => ({ ...previous, [runId]: summary }));
       },
     };
-  }, [shell, host, hostInfo, hostConfig, project, work, attention, followUps, workflows, runs, openWorkId, connectionIssue, pairing, providers, models, access, snapshots, usageReads, applySnapshot, openConnection, setPhase]);
+  }, [shell, autoConnectEnabled, host, hostInfo, hostConfig, project, work, attention, followUps, workflows, runs, openWorkId, connectionIssue, pairing, providers, models, access, snapshots, usageReads, applySnapshot, openConnection, setPhase]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

@@ -248,9 +248,9 @@ const CATEGORIES: CategoryDef[] = [
   },
   {
     id: 'appearance',
-    label: 'Board Settings',
+    label: 'Appearance',
     icon: 'columns',
-    description: 'Board presentation, brand artwork, and colors used by ticket cards.'
+    description: 'App-wide display size, board presentation, brand artwork, and ticket colors.'
   },
   {
     id: 'marketplace',
@@ -295,6 +295,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
     applySurfacePack(appearance.surfacePackId, appearance.surface);
     await update({
       appearance: {
+        displayMode: appearance.displayMode,
         showBrandArtwork: appearance.showBrandArtwork,
         themeId: appearance.themeId,
         themeMode: appearance.themeMode,
@@ -4823,6 +4824,21 @@ function AppearanceSection({
     <>
       <CategoryHeader category={category} />
       <div className="settings-list">
+        <div className="theme-mode-toolbar" role="group" aria-label="Display size">
+          <span>Display size</span>
+          {(['compact', 'large'] as const).map(mode => (
+            <button
+              key={mode}
+              type="button"
+              className={settings.appearance.displayMode === mode ? 'active' : ''}
+              aria-pressed={settings.appearance.displayMode === mode}
+              onClick={() => void update({ appearance: { displayMode: mode } })}
+            >
+              {mode === 'compact' ? 'Compact' : 'Large'}
+            </button>
+          ))}
+        </div>
+        <p className="settings-help">Large mode increases readable text, spacing, and control sizes throughout Praxis. Compact keeps the current density.</p>
         <Toggle
           label="Brand artwork in board list"
           description="Show each backend's logo (Jira, GitHub, GitLab) as the board icon. When off, boards use the generic board-type icons."

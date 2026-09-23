@@ -1,37 +1,92 @@
+import { useSyncExternalStore } from 'react';
+import type { MobileAppearance } from '@praxis/core';
+import { DEFAULT_MOBILE_PALETTE, paletteFromAppearance, type MobilePalette } from '../renderer/mobileTheme';
+
+export type MobileDisplayMode = 'compact' | 'large';
+
 /**
- * Browser-safe mirror of the desktop session palette.
- *
- * Mobile must not import runtime values from the desktop renderer, but these
- * names deliberately follow its surface/text ramp so the conversation and
- * composer read as the same product on either screen.
+ * The live palette. It starts as Praxis Dark and becomes the paired desktop's
+ * theme once `host.info` or a `host.appearance` event arrives, so every read of
+ * `theme.x` at render time follows the desktop.
  */
-export const theme = {
-  bg: '#0d1722',
-  bgSunken: '#091018',
-  surface: '#151c24',
-  surfaceRaised: '#1b2632',
-  input: '#0c131b',
-  userMessage: '#172b40',
-  assistantMessage: '#171d24',
-  border: '#293847',
-  borderStrong: '#355472',
-  text: '#e4e9ef',
-  textSecondary: '#b4bec9',
-  textDim: '#7f8b98',
-  accent: '#2e8de6',
-  accentSoft: '#142b41',
-  accentMuted: '#245d8f',
-  ok: '#4ec98a',
-  warn: '#f0b429',
-  danger: '#f0736a',
-  /** Translucent chrome over the hex backdrop, and the modal scrim. */
-  chrome: 'rgba(9, 16, 24, 0.95)',
-  hexShade: 'rgba(7, 15, 24, 0.18)',
-  scrim: 'rgba(0, 0, 0, 0.62)',
-  warnSoft: '#3a2f12',
-  dangerSoft: '#3a1a18',
-  camera: '#000000',
-  onAccent: '#0b1220',
+export const theme: MobilePalette & { radius: number; space: number; displayMode: MobileDisplayMode; scale: number } = {
+  ...DEFAULT_MOBILE_PALETTE,
   radius: 10,
   space: 16,
-} as const;
+  displayMode: 'compact',
+  scale: 1,
+};
+
+let appearance: MobileAppearance | undefined;
+let version = 0;
+const listeners = new Set<() => void>();
+
+/** The desktop theme the phone is wearing, if it has heard of one. */
+export function currentAppearance(): MobileAppearance | undefined {
+  return appearance;
+}
+
+/** Wears `next` (or Praxis Dark for undefined); returns whether anything changed. */
+export function applyAppearance(next: MobileAppearance | undefined): boolean {
+  if (JSON.stringify(next) === JSON.stringify(appearance)) return false;
+  appearance = next;
+  Object.assign(theme, next ? paletteFromAppearance(next) : DEFAULT_MOBILE_PALETTE);
+  version += 1;
+  for (const listener of listeners) listener();
+  return true;
+}
+
+/** Applies the user's preferred reading/control size while keeping compact as the default. */
+export function applyDisplayMode(next: MobileDisplayMode): boolean {
+  if (theme.displayMode === next) return false;
+  theme.displayMode = next;
+  theme.scale = next === 'large' ? 1.16 : 1;
+  theme.space = next === 'large' ? 20 : 16;
+  theme.radius = next === 'large' ? 12 : 10;
+  version += 1;
+  for (const listener of listeners) listener();
+  return true;
+}
+
+export function currentDisplayMode(): MobileDisplayMode {
+  return theme.displayMode;
+}
+
+/** Scales a dimension or type size for the large display mode. */
+export function mobileScale(value: number): number {
+  return Math.round(value * theme.scale);
+}
+
+/** Re-renders the caller whenever the palette changes. The app root uses it, which repaints everything. */
+export function useThemeVersion(): number {
+  return useSyncExternalStore(
+    listener => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    () => version,
+  );
+}
+
+/**
+ * A stylesheet built from the live palette: `styles.x` is rebuilt the first
+ * time it is read after the palette changes, so module-level stylesheets
+ * follow the desktop's theme without each screen threading it through.
+ */
+export function themedStyles<T>(build: () => T): T {
+  let builtFor = -1;
+  let built: T;
+  const current = (): T => {
+    if (builtFor !== version) {
+      built = build();
+      builtFor = version;
+    }
+    return built;
+  };
+  return new Proxy({} as object, { get: (_target, key) => (current() as Record<PropertyKey, unknown>)[key] }) as T;
+}
+
+/** Status bar text that stays readable on the current background. */
+export function statusBarStyle(): 'light-content' | 'dark-content' {
+  return appearance?.mode === 'light' ? 'dark-content' : 'light-content';
+}

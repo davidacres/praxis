@@ -801,7 +801,7 @@ export function NewSession({
             </button>
             <button
               ref={providerChipRef}
-              className="composer-chip"
+              className="composer-chip session-provider-chip"
               data-testid="new-session-provider-chip"
               aria-haspopup="listbox"
               aria-expanded={Boolean(providerMenuPos)}
@@ -852,7 +852,7 @@ export function NewSession({
               return (
                 <button
                   ref={modelChipRef}
-                  className="composer-chip"
+                  className="composer-chip session-model-chip"
                   data-testid="new-session-model-chip"
                   aria-haspopup="listbox"
                   aria-expanded={Boolean(modelMenuPos)}
@@ -864,7 +864,7 @@ export function NewSession({
                     ? 'Loading models…'
                     : (
                       <>
-                        <span>{selectedOption?.name ?? selectedModel ?? 'Model'}</span>
+                        <span className="session-model-chip-label">{selectedOption?.name ?? selectedModel ?? 'Model'}</span>
                         {contextSize && <span className="composer-chip-meta">{contextSize}</span>}
                         {cost && <span className="composer-chip-meta">{cost}</span>}
                       </>

@@ -144,6 +144,7 @@ export const DEFAULT_APP_SETTINGS = {
     boardsSidebarMode: 'classic' as 'classic' | 'work'
   },
   appearance: {
+    displayMode: 'compact' as 'compact' | 'large',
     showBrandArtwork: true,
     themeId: 'praxis-light',
     themeMode: 'light' as 'light' | 'dark' | 'system',

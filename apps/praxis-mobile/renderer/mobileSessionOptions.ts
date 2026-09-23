@@ -33,6 +33,11 @@ export function providerOption(catalog: MobileProviderCatalog | undefined, provi
   return provider ? catalog?.providers.find(option => option.provider === provider) : undefined;
 }
 
+/** Providers the desktop says are both configured and enabled for new sessions. */
+export function availableProviderOptions(catalog: MobileProviderCatalog | undefined): readonly MobileProviderOption[] {
+  return catalog?.providers.filter(option => option.available) ?? [];
+}
+
 export function modeOption(catalog: MobileProviderCatalog | undefined, mode: MobileSessionMode): MobileSessionModeOption | undefined {
   return catalog?.sessionModes.find(option => option.mode === mode);
 }
@@ -49,7 +54,7 @@ export function effectiveSelection(
 ): MobileSessionSelection & { providerOption?: MobileProviderOption } {
   if (!catalog) return selection;
   const chosen = providerOption(catalog, selection.provider);
-  const fallback = [providerOption(catalog, catalog.defaultProvider), ...catalog.providers].find(option => option?.available);
+  const fallback = [providerOption(catalog, catalog.defaultProvider), ...availableProviderOptions(catalog)].find(option => option?.available);
   const provider = chosen?.available ? chosen : fallback;
   const keepModel = provider && selection.model && provider.provider === selection.provider
     && (!models || models.provider !== provider.provider || models.models.some(model => model.modelId === selection.model));

@@ -25,6 +25,7 @@
     "react-native": "0.86.3",
     "react-native-get-random-values": "^2.0.0",
     "react-native-safe-area-context": "~5.7.0",
+    "react-native-svg": "^15.15.4",
     "react-native-tcp-socket": "^6.4.3",
     "react-native-udp": "^4.1.7"
   },

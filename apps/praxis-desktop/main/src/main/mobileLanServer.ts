@@ -237,7 +237,8 @@ export class MobileLanServer {
       if (!peer || closing) return;
       for (const envelope of ledger.replay(flushed)) {
         flushed = Math.max(flushed, envelope.sequence);
-        if (peer.projectIds?.length && (!envelope.target.projectId || !peer.projectIds.includes(envelope.target.projectId))) continue;
+        const hostWide = (envelope.event as { type?: string } | undefined)?.type === 'host.appearance';
+        if (!hostWide && peer.projectIds?.length && (!envelope.target.projectId || !peer.projectIds.includes(envelope.target.projectId))) continue;
         sendSecure({ kind: 'event', envelope: envelope as unknown as MobileEventFrame['envelope'] });
       }
     };
