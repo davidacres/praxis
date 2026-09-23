@@ -15,11 +15,20 @@ export interface MobileCommandLedger {
   put(record: MobileCommandRecord): void;
   appendEvent<TEvent>(event: MobileEventEnvelope<TEvent>): void;
   replay(afterSequence: number, limit?: number): readonly MobileEventEnvelope[];
+  /** Highest sequence appended so far (0 when none). */
+  latestSequence(): number;
+  /** Lowest sequence still retained; a replay starting before `oldest - 1` has lost events. */
+  oldestRetainedSequence(): number;
 }
+
+/** Streamed sessions append a full snapshot per change, so the event log is bounded. */
+export const MOBILE_EVENT_RETENTION = 5000;
 
 export class InMemoryMobileCommandLedger implements MobileCommandLedger {
   private readonly commands = new Map<string, MobileCommandRecord>();
   private readonly events: MobileEventEnvelope[] = [];
+
+  constructor(private readonly retention = MOBILE_EVENT_RETENTION) {}
 
   get(commandId: string): MobileCommandRecord | undefined {
     return this.commands.get(commandId);
@@ -31,6 +40,15 @@ export class InMemoryMobileCommandLedger implements MobileCommandLedger {
 
   appendEvent<TEvent>(event: MobileEventEnvelope<TEvent>): void {
     this.events.push(event);
+    if (this.events.length > this.retention) this.events.splice(0, this.events.length - this.retention);
+  }
+
+  latestSequence(): number {
+    return this.events.at(-1)?.sequence ?? 0;
+  }
+
+  oldestRetainedSequence(): number {
+    return this.events[0]?.sequence ?? this.latestSequence() + 1;
   }
 
   replay(afterSequence: number, limit = 100): readonly MobileEventEnvelope[] {

@@ -49,3 +49,10 @@ Desktop mobile host dispatch for `workflowRuns.start` and existing retry/cancel 
 ## Notes
 
 This closes the concrete host-command gap left after TASK-225 through TASK-227; it does not add workflow editing or template administration to mobile.
+
+## Description
+
+
+## Comments
+
+

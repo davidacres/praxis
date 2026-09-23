@@ -17,10 +17,27 @@ const ROUTES: Array<{ id: MobilePrimaryRoute; icon: string; label: string }> = [
 ];
 
 const SETTINGS: Array<{ id: SettingsPage; icon: string; label: string; caption: string }> = [
+  { id: 'server', icon: '⌁', label: 'Desktop connection', caption: 'Connection and host details' },
+  { id: 'permissions', icon: '◇', label: 'Permissions', caption: 'What the desktop allows this phone' },
   { id: 'app', icon: '⚙', label: 'App settings', caption: 'Appearance and notifications' },
-  { id: 'server', icon: '⌁', label: 'Remote server', caption: 'Connection and host details' },
-  { id: 'permissions', icon: '◇', label: 'Permissions', caption: 'Remote action access' },
 ];
+
+const CONNECTION_TEXT: Record<string, { label: string; tone: 'ok' | 'warn' | 'danger' }> = {
+  ready: { label: 'Connected', tone: 'ok' },
+  reconnecting: { label: 'Reconnecting', tone: 'warn' },
+  connecting: { label: 'Connecting', tone: 'warn' },
+  pairing: { label: 'Awaiting confirmation', tone: 'warn' },
+  offline: { label: 'Offline', tone: 'danger' },
+};
+
+const CAPABILITY_ROWS: Array<{ capability: 'view' | 'execute' | 'approve'; label: string }> = [
+  { capability: 'view', label: 'View sessions, runs and attention' },
+  { capability: 'execute', label: 'Start and continue sessions, run workflows' },
+  { capability: 'approve', label: 'Approve gates and answer permission requests' },
+];
+
+const formatWhen = (at: string | undefined): string | undefined =>
+  at ? new Date(at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : undefined;
 
 function SectionLabel({ children }: { children: string }): React.JSX.Element {
   return <Text style={styles.sectionLabel}>{children}</Text>;
@@ -72,8 +89,10 @@ function DetailRow({ label, value, tone }: { label: string; value: string; tone?
 }
 
 function SettingsDetail({ page, onBack }: { page: SettingsPage; onBack: () => void }): React.JSX.Element {
-  const { host, shell } = useStore();
+  const { host, shell, hostInfo, hostConfig, access, connectionIssue, retryConnection, disconnect } = useStore();
   const title = SETTINGS.find(item => item.id === page)?.label ?? 'Settings';
+  const state = CONNECTION_TEXT[shell.connection] ?? CONNECTION_TEXT.offline!;
+  const grant = access.value;
   return (
     <View style={styles.detailPage}>
       <View style={styles.detailHeader}>
@@ -88,15 +107,14 @@ function SettingsDetail({ page, onBack }: { page: SettingsPage; onBack: () => vo
             <SectionLabel>APPEARANCE</SectionLabel>
             <View style={styles.detailCard}>
               <DetailRow label="Theme" value="Praxis dark" />
-              <DetailRow label="Surface" value="Hexagon" />
-              <DetailRow label="Follow desktop" value="On" tone="ok" />
             </View>
+            <Text style={styles.detailNote}>The phone uses the Praxis dark palette. Choosing a theme, or following the desktop’s theme, is not available on mobile yet.</Text>
             <SectionLabel>NOTIFICATIONS</SectionLabel>
             <View style={styles.detailCard}>
-              <DetailRow label="Attention requests" value="On" tone="ok" />
-              <DetailRow label="Completed work" value="On" tone="ok" />
-              <DetailRow label="Sounds and haptics" value="System" />
+              <DetailRow label="Push notifications" value="Not available" />
+              <DetailRow label="Attention while open" value="Refreshes every 5s" />
             </View>
+            <Text style={styles.detailNote}>Praxis mobile does not send notifications yet. Attention requests and session updates arrive only while the app is open and connected.</Text>
           </>
         )}
         {page === 'server' && (
@@ -104,32 +122,62 @@ function SettingsDetail({ page, onBack }: { page: SettingsPage; onBack: () => vo
             <View style={styles.serverIdentity}>
               <View style={styles.serverGlyph}><Text style={styles.serverGlyphText}>P</Text></View>
               <View style={styles.serverIdentityText}>
-                <Text style={styles.serverName}>{host.hostName}</Text>
-                <Text style={styles.serverStatus}>●  Connected over local network</Text>
+                <Text style={styles.serverName}>{host.hostName || hostConfig?.hostName || hostConfig?.address || 'Desktop'}</Text>
+                <Text style={[styles.serverStatus, { color: toneColor(state.tone) }]}>●  {state.label}{shell.connection === 'ready' ? ' over the local network' : ''}</Text>
               </View>
             </View>
+            {connectionIssue && shell.connection !== 'ready' ? <Text style={[styles.detailNote, { color: theme.warn }]}>{connectionIssue.message}</Text> : null}
             <SectionLabel>CONNECTION</SectionLabel>
             <View style={styles.detailCard}>
-              <DetailRow label="Host ID" value={host.hostId} />
-              <DetailRow label="Transport" value="Noise IK" />
-              <DetailRow label="Protocol" value="Praxis mobile v1" />
-              <DetailRow label="State" value={shell.connection} tone="ok" />
+              <DetailRow label="State" value={state.label} tone={state.tone} />
+              {hostConfig ? <DetailRow label="Address" value={`${hostConfig.address}:${hostConfig.port}`} /> : null}
+              <DetailRow label="Host ID" value={host.hostId || hostConfig?.hostId || '—'} />
+              {grant?.hostKeyFingerprint ? <DetailRow label="Host key" value={grant.hostKeyFingerprint} /> : null}
+              <DetailRow label="Transport" value="Noise IK, encrypted" />
+              <DetailRow label="Protocol" value={hostInfo ? `v${hostInfo.protocolVersion} · revision ${hostInfo.surfaceRevision}` : 'v1 · revision 1 (older desktop)'} />
+              {grant ? <DetailRow label="Desktop access mode" value={grant.accessMode === 'local-only' ? 'Local network only' : grant.accessMode === 'internet' ? 'Internet relay' : 'Off'} tone={grant.accessMode === 'off' ? 'danger' : undefined} /> : null}
             </View>
-            <Text style={styles.detailNote}>Execution remains on this desktop host. The phone never receives provider credentials or repository access.</Text>
+            <View style={styles.detailActions}>
+              {shell.connection !== 'ready' ? (
+                <Pressable accessibilityRole="button" onPress={retryConnection} style={({ pressed }) => [styles.detailButton, pressed && styles.navRowPressed]}>
+                  <Text style={styles.detailButtonText}>Reconnect now</Text>
+                </Pressable>
+              ) : null}
+              <Pressable accessibilityRole="button" onPress={() => disconnect()} style={({ pressed }) => [styles.detailButton, pressed && styles.navRowPressed]}>
+                <Text style={styles.detailButtonText}>Disconnect</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.detailNote}>Execution stays on this desktop. The phone never receives provider credentials, repository paths or the desktop’s private key.</Text>
           </>
         )}
         {page === 'permissions' && (
           <>
-            <Text style={styles.detailNote}>Permissions are enforced by the desktop host and scoped to the connected project.</Text>
-            <SectionLabel>REMOTE ACCESS</SectionLabel>
-            <View style={styles.detailCard}>
-              <DetailRow label="View work" value="Allowed" tone="ok" />
-              <DetailRow label="Continue sessions" value="Allowed" tone="ok" />
-              <DetailRow label="Run workflows" value="Allowed" tone="ok" />
-              <DetailRow label="Approvals" value="Ask every time" tone="warn" />
-              <DetailRow label="Persistent allow" value="Unavailable" />
-              <DetailRow label="Direct shell" value="Denied" tone="danger" />
-            </View>
+            <Text style={styles.detailNote}>Granted when this phone was confirmed on the desktop and enforced there on every request. Change it in Settings → Mobile access on the desktop.</Text>
+            {access.status === 'loading' || access.status === 'idle' ? <Text style={styles.detailNote}>Loading this phone’s grant from the desktop…</Text> : null}
+            {access.status === 'unsupported' || access.status === 'error' ? <Text style={[styles.detailNote, { color: theme.warn }]}>{access.message}</Text> : null}
+            {grant ? (
+              <>
+                <SectionLabel>THIS PHONE</SectionLabel>
+                <View style={styles.detailCard}>
+                  <DetailRow label="Name on desktop" value={grant.label ?? grant.deviceId} />
+                  {formatWhen(grant.pairedAt) ? <DetailRow label="Paired" value={formatWhen(grant.pairedAt)!} /> : null}
+                  {formatWhen(grant.lastSeenAt) ? <DetailRow label="Last connected" value={formatWhen(grant.lastSeenAt)!} /> : null}
+                </View>
+                <SectionLabel>REMOTE ACTIONS</SectionLabel>
+                <View style={styles.detailCard}>
+                  {CAPABILITY_ROWS.map(row => {
+                    const allowed = grant.capabilities.includes(row.capability);
+                    return <DetailRow key={row.capability} label={row.label} value={allowed ? 'Allowed' : 'Not allowed'} tone={allowed ? 'ok' : 'danger'} />;
+                  })}
+                  <DetailRow label="Shell or file access" value="Never offered to phones" />
+                </View>
+                <SectionLabel>PROJECTS</SectionLabel>
+                <View style={styles.detailCard}>
+                  {grant.projects.length === 0 ? <DetailRow label="Scope" value="All projects" /> : grant.projects.map(item => <DetailRow key={item.projectId} label={item.name} value="Granted" tone="ok" />)}
+                </View>
+                <Text style={styles.detailNote}>Each tool permission an agent asks for is answered once, here or on the desktop; the phone cannot grant standing permissions.</Text>
+              </>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -137,8 +185,12 @@ function SettingsDetail({ page, onBack }: { page: SettingsPage; onBack: () => vo
   );
 }
 
+function toneColor(tone: 'ok' | 'warn' | 'danger'): string {
+  return tone === 'ok' ? theme.ok : tone === 'warn' ? theme.warn : theme.danger;
+}
+
 export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Element {
-  const { shell, work, openWorkId, setRoute, openWork, startNewChat, attention, host } = useStore();
+  const { shell, work, openWorkId, setRoute, openWork, startNewChat, attention, host, hostInfo } = useStore();
   const insets = useSafeAreaInsets();
   const [settingsPage, setSettingsPage] = useState<SettingsPage | undefined>();
   const unresolved = attention.filter(item => !item.resolved).length;
@@ -172,7 +224,7 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
                 <View style={styles.brandMark}><Text style={styles.brandMarkText}>P</Text></View>
                 <View style={styles.brandText}>
                   <Text style={styles.brandName}>Praxis</Text>
-                  <Text style={styles.brandHost}>●  {host.hostName}</Text>
+                  <Text style={[styles.brandHost, { color: toneColor((CONNECTION_TEXT[shell.connection] ?? CONNECTION_TEXT.offline!).tone) }]}>●  {host.hostName || 'Desktop'} · {(CONNECTION_TEXT[shell.connection] ?? CONNECTION_TEXT.offline!).label}</Text>
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={onClose} style={styles.closeButton}>
                   <Text style={styles.closeText}>×</Text>
@@ -216,9 +268,9 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
                   return (
                     <NavRow
                       key={item.workId}
-                      icon={live ? '●' : '✓'}
+                      icon={item.draft ? '＋' : live ? '●' : '✓'}
                       label={item.title}
-                      caption={`${item.workId} · ${item.status}`}
+                      caption={item.draft ? 'Draft · not sent yet' : `${item.mode === 'chat' ? '' : `${item.mode[0]!.toUpperCase()}${item.mode.slice(1)} · `}${item.status}${item.model ? ` · ${item.model}` : ''}`}
                       active={active}
                       onPress={() => openSession(item.workId)}
                     />
@@ -231,8 +283,8 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
                 ))}
               </ScrollView>
               <View style={styles.footer}>
-                <Text style={styles.footerText}>Local connection · encrypted</Text>
-                <Text style={styles.footerVersion}>v0.1</Text>
+                <Text style={styles.footerText}>Local connection · Noise IK encrypted</Text>
+                <Text style={styles.footerVersion}>{hostInfo ? `rev ${hostInfo.surfaceRevision}` : 'rev 1'}</Text>
               </View>
             </>
           )}
@@ -244,7 +296,7 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, flexDirection: 'row', backgroundColor: 'transparent' },
-  scrim: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.62)' },
+  scrim: { position: 'absolute', inset: 0, backgroundColor: theme.scrim },
   drawer: {
     width: '88%',
     maxWidth: 370,
@@ -266,7 +318,7 @@ const styles = StyleSheet.create({
   brandMarkText: { color: theme.accent, fontSize: 18, fontWeight: '800' },
   brandText: { flex: 1 },
   brandName: { color: theme.text, fontSize: 17, fontWeight: '800' },
-  brandHost: { marginTop: 2, color: theme.ok, fontSize: 10 },
+  brandHost: { marginTop: 2, fontSize: 10 },
   closeButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   closeText: { color: theme.textDim, fontSize: 22, fontWeight: '300' },
   drawerContent: { padding: 10, paddingBottom: 24 },
@@ -309,5 +361,8 @@ const styles = StyleSheet.create({
   serverGlyphText: { color: theme.accent, fontSize: 19, fontWeight: '800' },
   serverIdentityText: { flex: 1 },
   serverName: { color: theme.text, fontSize: 14, fontWeight: '700' },
-  serverStatus: { marginTop: 4, color: theme.ok, fontSize: 10 },
+  serverStatus: { marginTop: 4, fontSize: 10 },
+  detailActions: { marginTop: 12, flexDirection: 'row', gap: 8 },
+  detailButton: { minHeight: 38, paddingHorizontal: 14, justifyContent: 'center', borderWidth: 1, borderColor: theme.border, borderRadius: 8, backgroundColor: theme.surface },
+  detailButtonText: { color: theme.textSecondary, fontSize: 12, fontWeight: '700' },
 });

@@ -1,35 +1,51 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Body, Button, Card, H1, Screen } from '../app/ui';
 import { useStore } from '../app/store';
 import { theme } from '../app/theme';
-import { loadMobileHostConfiguration } from '../app/mobileConnection';
+import { loadMobileHostConfiguration, type MobileHostConfiguration } from '../app/mobileConnection';
 import { listenForMobileHosts, type DiscoveredMobileHost } from '../app/mobileDiscovery';
+import { parseMobileInvitation, type MobileInvitationDetails } from '../renderer/mobilePairingInvitation';
+
+const ACTION_HINTS = {
+  rescan: 'Open Settings → Mobile access on the desktop, create a pairing invitation, and scan it here.',
+  retry: 'Check that Praxis is running on the desktop, Mobile access is on, and both devices are on the same network.',
+  wait: 'Confirm this phone on the desktop.',
+  'check-desktop': 'Check Settings → Mobile access on the desktop.',
+} as const;
 
 export function ConnectScreen(): React.JSX.Element {
-  const { shell, connect, connectionError } = useStore();
+  const { shell, connect, connectionIssue, pairing, cancelConnect, retryConnection, disconnect, hostConfig } = useStore();
   const connecting = shell.connection === 'connecting';
-  const [address, setAddress] = useState('192.168.1.2');
+  const pairingPending = shell.connection === 'pairing';
+  const [address, setAddress] = useState('');
   const [port, setPort] = useState('43100');
-  const [hostId, setHostId] = useState('praxis-desktop');
+  const [hostId, setHostId] = useState('');
   const [hostName, setHostName] = useState('');
   const [projectId, setProjectId] = useState('');
-  const [hostPublicKeyHex, setHostPublicKeyHex] = useState('');
+  const [invitationText, setInvitationText] = useState('');
+  const [invitation, setInvitation] = useState<MobileInvitationDetails | undefined>(undefined);
+  const [formError, setFormError] = useState<string | undefined>(undefined);
   const [discovered, setDiscovered] = useState<DiscoveredMobileHost[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+
+  const applySaved = (config: MobileHostConfiguration): void => {
+    setAddress(config.address);
+    setPort(String(config.port));
+    setHostId(config.hostId);
+    setHostName(config.hostName ?? '');
+    setProjectId(config.projectId ?? '');
+    setInvitation({ hostPublicKeyHex: config.hostPublicKeyHex });
+    setInvitationText(config.hostPublicKeyHex);
+  };
 
   useEffect(() => {
     let live = true;
     void loadMobileHostConfiguration().then(config => {
       if (!live || !config) return;
-      setAddress(config.address);
-      setPort(String(config.port));
-      setHostId(config.hostId);
-      setHostName(config.hostName ?? '');
-      setProjectId(config.projectId ?? '');
-      setHostPublicKeyHex(config.hostPublicKeyHex);
+      applySaved(config);
       void connect(config);
     });
     return () => { live = false; };
@@ -40,41 +56,22 @@ export function ConnectScreen(): React.JSX.Element {
   }), []);
 
   const importConnectionDetails = (value: string): void => {
-    setHostPublicKeyHex(value);
-    if (value.startsWith('P1|')) {
-      const [, compactHostId, compactKey, endpoint] = value.split('|');
-      const separator = endpoint?.lastIndexOf(':') ?? -1;
-      if (compactHostId) setHostId(compactHostId);
-      if (compactKey) setHostPublicKeyHex(compactKey);
-      if (endpoint && separator > 0) {
-        setAddress(endpoint.slice(0, separator));
-        setPort(endpoint.slice(separator + 1));
-      }
+    setInvitationText(value);
+    setFormError(undefined);
+    const parsed = parseMobileInvitation(value);
+    if (parsed.kind === 'unrecognised') {
+      setInvitation(undefined);
+      if (value.trim()) setFormError('That is not a Praxis pairing invitation or host key. Copy the invitation from Settings → Mobile access on the desktop.');
       return;
     }
-    try {
-      const parsed = JSON.parse(value) as {
-        hostId?: unknown;
-        displayName?: unknown;
-        hostName?: unknown;
-        port?: unknown;
-        publicKeyHex?: unknown;
-        addresses?: unknown;
-        endpoints?: unknown;
-      };
-      if (typeof parsed.hostId === 'string') setHostId(parsed.hostId);
-      if (typeof parsed.displayName === 'string') setHostName(parsed.displayName);
-      if (typeof parsed.hostName === 'string') setHostName(parsed.hostName);
-      if (typeof parsed.port === 'number') setPort(String(parsed.port));
-      if (typeof parsed.publicKeyHex === 'string') setHostPublicKeyHex(parsed.publicKeyHex);
-      if (Array.isArray(parsed.addresses) && typeof parsed.addresses[0] === 'string') setAddress(parsed.addresses[0]);
-      if (Array.isArray(parsed.endpoints)) {
-        const endpoint = parsed.endpoints[0] as { address?: unknown; port?: unknown } | undefined;
-        if (typeof endpoint?.address === 'string') setAddress(endpoint.address);
-        if (typeof endpoint?.port === 'number') setPort(String(endpoint.port));
-      }
-    } catch {
-      // A raw public key remains a supported manual setup path.
+    const details = parsed.details;
+    setInvitation(details);
+    if (details.hostId) setHostId(details.hostId);
+    if (details.hostName) setHostName(details.hostName);
+    if (details.address) setAddress(details.address);
+    if (details.port) setPort(String(details.port));
+    if (parsed.kind === 'invitation' && parsed.expired) {
+      setFormError(`This invitation expired at ${new Date(details.expiresAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Create a new one in Settings → Mobile access on the desktop.`);
     }
   };
 
@@ -84,17 +81,28 @@ export function ConnectScreen(): React.JSX.Element {
   };
 
   const submit = (): void => {
+    setFormError(undefined);
     const parsedPort = Number(port);
-    if (!address.trim() || !hostId.trim() || !Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) return;
+    if (!address.trim()) return setFormError('Enter the desktop’s address, or scan its pairing invitation.');
+    if (!hostId.trim()) return setFormError('Enter the desktop’s host ID, or scan its pairing invitation.');
+    if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) return setFormError('The port must be a number from 1 to 65535.');
+    if (!invitation?.hostPublicKeyHex) return setFormError('Scan or paste the desktop’s pairing invitation so this phone can pin its host key.');
+    if (invitation.expiresAt && Date.parse(invitation.expiresAt) <= Date.now()) {
+      return setFormError('This invitation has expired. Create a new one in Settings → Mobile access on the desktop.');
+    }
     void connect({
       address: address.trim(),
       port: parsedPort,
       hostId: hostId.trim(),
       ...(hostName.trim() ? { hostName: hostName.trim() } : {}),
-      hostPublicKeyHex: hostPublicKeyHex.trim(),
+      hostPublicKeyHex: invitation.hostPublicKeyHex,
       ...(projectId.trim() ? { projectId: projectId.trim() } : {}),
+      ...(invitation.tokenId ? { pairingTokenId: invitation.tokenId } : {}),
+      ...(invitation.expiresAt ? { pairingExpiresAt: invitation.expiresAt } : {}),
     });
   };
+
+  const desktopName = hostConfig?.hostName || hostName || address || 'the desktop';
 
   return (
     <Screen>
@@ -102,10 +110,51 @@ export function ConnectScreen(): React.JSX.Element {
       <Card>
         <Body>Continue and act on work running on your desktop host.</Body>
         <Body dim>
-          Pair once with a QR code from the desktop; after that the phone finds the host on your network and connects over an
-          encrypted channel.
+          Pair once with a QR code from the desktop; after that the phone reconnects over an encrypted channel. Agents, keys and
+          repositories stay on the desktop.
         </Body>
       </Card>
+
+      {pairingPending ? (
+        <Card style={styles.pendingCard}>
+          <View style={styles.statusRow}>
+            <ActivityIndicator color={theme.warn} />
+            <Text style={styles.statusTitle}>Waiting for confirmation</Text>
+          </View>
+          <Body>{pairing?.message ?? `Confirm this phone in Settings → Mobile access on ${desktopName}.`}</Body>
+          {pairing?.deviceLabel ? <Body dim>This phone appears on the desktop as “{pairing.deviceLabel}”. Check that name before confirming.</Body> : null}
+          <Button label="Cancel" kind="ghost" onPress={cancelConnect} />
+        </Card>
+      ) : null}
+
+      {connecting && !pairingPending ? (
+        <Card>
+          <View style={styles.statusRow}>
+            <ActivityIndicator color={theme.accent} />
+            <Text style={styles.statusTitle}>{pairing?.message ?? `Opening an encrypted connection to ${desktopName}…`}</Text>
+          </View>
+          <Button label="Cancel" kind="ghost" onPress={cancelConnect} />
+        </Card>
+      ) : null}
+
+      {connectionIssue && !connecting && !pairingPending ? (
+        <Card style={styles.issueCard}>
+          <Text accessibilityRole="alert" style={styles.issueTitle}>{connectionIssue.title}</Text>
+          <Body>{connectionIssue.message}</Body>
+          <Body dim>{ACTION_HINTS[connectionIssue.action]}</Body>
+          <View style={styles.actions}>
+            {connectionIssue.action === 'rescan' ? (
+              <>
+                <Button label="Scan pairing QR" onPress={() => void openScanner()} />
+                {hostConfig ? <Button label="Forget this desktop" kind="ghost" onPress={() => disconnect({ forget: true })} /> : null}
+              </>
+            ) : hostConfig ? (
+              <Button label="Try again" onPress={retryConnection} />
+            ) : null}
+          </View>
+        </Card>
+      ) : null}
+
       {discovered.length > 0 ? (
         <Card>
           <Text style={styles.label}>DESKTOPS ON THIS NETWORK</Text>
@@ -125,12 +174,35 @@ export function ConnectScreen(): React.JSX.Element {
               <Text style={styles.discoveredMeta}>{item.addresses[0] ?? 'Address unavailable'}:{item.port} · {item.fingerprint}</Text>
             </Pressable>
           ))}
-          <Body dim>Discovery identifies a host only. Paste its current pairing invitation below to pin the full host key.</Body>
+          <Body dim>Discovery identifies a host only. Scan or paste its current pairing invitation to pin the full host key.</Body>
         </Card>
       ) : null}
+
       <Card>
+        <Button label="Scan pairing QR" kind="ghost" onPress={() => void openScanner()} />
+        {cameraPermission?.granted === false && !cameraPermission.canAskAgain ? (
+          <Text style={styles.error}>Camera access is off for Praxis. Paste the invitation copied from the desktop instead, or allow the camera in iOS Settings.</Text>
+        ) : null}
+        <Text style={styles.label}>PAIRING INVITATION OR HOST KEY</Text>
+        <TextInput
+          accessibilityLabel="Pairing invitation or desktop host key"
+          autoCapitalize="none"
+          autoCorrect={false}
+          multiline
+          onChangeText={importConnectionDetails}
+          placeholder="Paste the invitation copied from Praxis desktop"
+          placeholderTextColor={theme.textDim}
+          style={[styles.input, styles.keyInput]}
+          value={invitationText}
+        />
+        {invitation?.tokenId ? (
+          <Body dim>
+            Invitation {invitation.tokenId}
+            {invitation.expiresAt ? ` · expires ${new Date(invitation.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+          </Body>
+        ) : invitation?.hostPublicKeyHex ? <Body dim>Host key pinned. A phone the desktop already trusts reconnects without an invitation.</Body> : null}
         <Text style={styles.label}>DESKTOP ADDRESS</Text>
-        <TextInput accessibilityLabel="Desktop address" autoCapitalize="none" autoCorrect={false} onChangeText={setAddress} style={styles.input} value={address} />
+        <TextInput accessibilityLabel="Desktop address" autoCapitalize="none" autoCorrect={false} onChangeText={setAddress} placeholder="192.168.1.2" placeholderTextColor={theme.textDim} style={styles.input} value={address} />
         <View style={styles.row}>
           <View style={styles.grow}>
             <Text style={styles.label}>PORT</Text>
@@ -142,27 +214,12 @@ export function ConnectScreen(): React.JSX.Element {
           </View>
         </View>
         <Text style={styles.label}>PROJECT ID</Text>
-        <TextInput accessibilityLabel="Project ID" autoCapitalize="none" autoCorrect={false} onChangeText={setProjectId} placeholder="Optional" placeholderTextColor={theme.textDim} style={styles.input} value={projectId} />
-        <Text style={styles.label}>CONNECTION DETAILS OR HOST PUBLIC KEY</Text>
-        <TextInput
-          accessibilityLabel="Desktop host public key"
-          autoCapitalize="none"
-          autoCorrect={false}
-          multiline
-          onChangeText={importConnectionDetails}
-          placeholder="Paste the connection details copied from Praxis desktop"
-          placeholderTextColor={theme.textDim}
-          style={[styles.input, styles.keyInput]}
-          value={hostPublicKeyHex}
-        />
-        <Button label="Scan pairing QR" kind="ghost" onPress={() => void openScanner()} />
-        {cameraPermission?.granted === false && !cameraPermission.canAskAgain ? (
-          <Text style={styles.error}>Camera access is disabled. Paste the invitation copied from the desktop instead.</Text>
-        ) : null}
-        {connectionError ? <Text accessibilityRole="alert" style={styles.error}>{connectionError}</Text> : null}
-        <Body dim>{connecting ? 'Opening encrypted connection…' : 'The device key remains in secure device storage.'}</Body>
-        <Button label={connecting ? 'Connecting…' : 'Connect'} onPress={submit} />
+        <TextInput accessibilityLabel="Project ID" autoCapitalize="none" autoCorrect={false} onChangeText={setProjectId} placeholder="Optional — first granted project" placeholderTextColor={theme.textDim} style={styles.input} value={projectId} />
+        {formError ? <Text accessibilityRole="alert" style={styles.error}>{formError}</Text> : null}
+        <Body dim>The phone’s identity key stays in this device’s secure storage.</Body>
+        <Button label={connecting || pairingPending ? 'Connecting…' : invitation?.tokenId ? 'Pair and connect' : 'Connect'} disabled={connecting || pairingPending} onPress={submit} />
       </Card>
+
       <Modal animationType="slide" onRequestClose={() => setScannerOpen(false)} visible={scannerOpen}>
         <View style={styles.scanner}>
           <CameraView
@@ -189,12 +246,18 @@ const styles = StyleSheet.create({
   keyInput: { minHeight: 82, fontSize: 12, textAlignVertical: 'top' },
   row: { flexDirection: 'row', gap: 10 },
   grow: { flex: 1, gap: 6 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   error: { color: theme.danger, fontSize: 12, lineHeight: 17 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statusTitle: { flex: 1, color: theme.text, fontSize: 15, fontWeight: '700' },
+  pendingCard: { borderColor: theme.warn, backgroundColor: theme.warnSoft },
+  issueCard: { borderColor: theme.danger, backgroundColor: theme.dangerSoft },
+  issueTitle: { color: theme.text, fontSize: 16, fontWeight: '700' },
   discovered: { padding: 10, borderWidth: 1, borderColor: theme.border, borderRadius: 8, backgroundColor: theme.input },
   discoveredPressed: { backgroundColor: theme.surfaceRaised },
   discoveredName: { color: theme.text, fontSize: 14, fontWeight: '700' },
   discoveredMeta: { marginTop: 3, color: theme.textDim, fontSize: 10 },
-  scanner: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  scanner: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.camera },
   scannerGuide: { width: 250, height: 250, borderWidth: 2, borderColor: theme.accent, borderRadius: 18 },
   scannerClose: { position: 'absolute', bottom: 48, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 10, backgroundColor: theme.bgSunken },
   scannerCloseText: { color: theme.text, fontSize: 15, fontWeight: '700' },

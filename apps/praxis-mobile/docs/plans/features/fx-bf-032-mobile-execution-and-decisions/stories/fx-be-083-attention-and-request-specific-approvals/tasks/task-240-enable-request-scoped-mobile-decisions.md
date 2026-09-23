@@ -49,3 +49,10 @@ Desktop mobile host dispatch for `permissions.respond`, the permission FIFO to r
 ## Notes
 
 This task owns the concrete integration left after TASK-228 and TASK-229. Human workflow gates remain distinct from tool-permission auto-approval.
+
+## Description
+
+
+## Comments
+
+

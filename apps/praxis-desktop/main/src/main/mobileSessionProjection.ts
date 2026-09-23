@@ -1,5 +1,7 @@
 import type {
   AgentSessionRecord,
+  MobileCommandLedger,
+  MobileSessionEvent,
   MobileSessionLifecycle,
   MobileSessionMessage,
   MobilePendingPermission,
@@ -65,7 +67,17 @@ function persistedMessages(record: AgentSessionRecord): MobileSessionMessage[] {
   const messages: MobileSessionMessage[] = initialGoal
     ? [{ id: `${record.sessionId}:initial`, role: 'user', text: initialGoal, at: record.startedAt, status: 'complete' }]
     : [];
+  // A provider handover is recorded as a runtime event whose detail is the
+  // handover brief, then sent to the new provider as a user turn. The brief
+  // carries workspace paths and transcript excerpts, so the phone gets only
+  // the event's one-line summary and never the brief itself.
+  const handoverBriefs = new Set<string>();
   record.events.forEach((event, index) => {
+    if (event.type === 'provider_handover' || event.type === 'model_change') {
+      if (event.type === 'provider_handover' && event.detail?.trim()) handoverBriefs.add(event.detail.trim());
+      messages.push({ id: `${record.sessionId}:event:${index}`, role: 'system', text: event.summary.trim(), at: event.timestamp, status: 'complete' });
+      return;
+    }
     const role = event.type === 'user_input_completed'
       ? 'user'
       : event.type === 'message'
@@ -75,6 +87,7 @@ function persistedMessages(record: AgentSessionRecord): MobileSessionMessage[] {
           : undefined;
     const text = (event.detail || event.summary).trim();
     if (!role || !text) return;
+    if (role === 'user' && handoverBriefs.has(text)) return;
     if (role === 'user' && messages.some(message => message.role === 'user' && message.text === text)) return;
     messages.push({
       id: `${record.sessionId}:event:${index}`,
@@ -135,4 +148,31 @@ export function mobileSessionSnapshot(record: AgentSessionRecord, sequence = rec
     canContinue: !active && !record.archived,
     canCancel: active,
   };
+}
+
+/**
+ * Appends a session change to the mobile event log as a full snapshot stamped
+ * with its own sequence — what `composeDesktopMobileHost` does on every
+ * `onDidChangeAgentSession`, and what a phone replays after reconnecting.
+ */
+export function appendMobileSessionEvent(
+  ledger: Pick<MobileCommandLedger, 'appendEvent' | 'latestSequence'>,
+  hostId: string,
+  record: AgentSessionRecord,
+): number {
+  const sequence = ledger.latestSequence() + 1;
+  ledger.appendEvent<MobileSessionEvent>({
+    protocolVersion: 1,
+    eventId: `${record.sessionId}:${sequence}`,
+    sequence,
+    emittedAt: new Date().toISOString(),
+    target: {
+      hostId,
+      ...(record.projectId ? { projectId: record.projectId } : {}),
+      sessionId: record.sessionId,
+      ...(record.workflowRunId ? { runId: record.workflowRunId } : {}),
+    },
+    event: { type: 'session.snapshot', snapshot: mobileSessionSnapshot(record, sequence) },
+  });
+  return sequence;
 }

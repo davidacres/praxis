@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Type:** Task
 type: Task
 id: TASK-238
 title: "Wire mobile sessions to live host data"
-status: planned
+status: in-progress
 story: FX-BE-081
-updated: 2026-09-22
+updated: 2026-09-23
 dependencies: [TASK-237]
 ---
 
@@ -87,3 +87,18 @@ Replace canned work and transcript state with host snapshots and events, send fo
 ## Notes
 
 This task owns the concrete host-backed integration left out of TASK-222 and TASK-223. It does not add workflow administration or on-device execution. Completion evidence must include real desktop composition, live event publication, the mobile repository/reducer, clean builds, focused tests, and an inspected running journey; DTOs, helper reducers, or mock-host evidence alone cannot close it.
+
+## Progress (2026-09-23)
+
+Source work for this task's provider/model chips from host data, host-reasoned unavailable controls, usage, and sequence-guarded snapshot/replay merging is implemented and covered by protocol, desktop and
+mobile tests plus `mobileEndToEnd.test.ts` (real listener + host services + the
+phone's client). The iOS Release build is installed on a physical iPhone and
+launches (`Running "main"`). Still open: the recorded physical-device journey
+against a desktop running revision 2, and Android. Status stays In Progress.
+
+## Description
+
+
+## Comments
+
+
