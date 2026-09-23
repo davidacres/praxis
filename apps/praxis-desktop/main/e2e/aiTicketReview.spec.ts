@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 /**
  * Interactive ticket review.
@@ -47,7 +48,7 @@ async function openReview(env: Record<string, string> = {}): Promise<{ win: Test
   const issueKey = (await card.getAttribute('data-issue-key')) ?? '';
   await card.click();
   await win.locator('[data-testid="issue-ai-section"]').waitFor();
-  await win.locator('[data-testid="issue-detail-ai-provider"]').selectOption('claude-code-cli');
+  await chooseOption(win.locator('[data-testid="issue-detail-ai-provider"]'), 'claude-code-cli');
 
   await win.locator('[data-testid="issue-ai-review-btn"]').click();
   await win.locator('[data-testid="ai-review-page"]').waitFor();

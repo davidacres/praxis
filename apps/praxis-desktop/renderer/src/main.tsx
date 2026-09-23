@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { DialogHost } from './ui/dialogs';
+import { installIconButtonTooltips } from './ui/iconButtonTooltips';
 import {
   applySurfacePack,
   applyThemePreference,
@@ -30,6 +31,9 @@ applySurfacePack(getInitialSurfaceId(), getInitialSurfaceOpts());
 // `var()`. Re-bake it whenever the palette changes to keep the watermark tinted
 // from the live theme.
 window.addEventListener('tm-theme-changed', () => refreshSurfacePattern());
+
+// An icon-only button shows its accessible name as a tooltip (see iconButtonTooltips.ts).
+installIconButtonTooltips();
 
 // Paired phones wear the desktop's theme: tell the host whenever it changes.
 startPublishingMobileAppearance();

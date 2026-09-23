@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, expandAllIssueStacks, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 let app: TestApp | undefined;
 let window: Page;
@@ -72,12 +73,12 @@ test('creating a demo issue with the full field set shows it on the board', asyn
   await expect(window.locator('[data-testid="new-issue-page"]')).toBeVisible();
 
   const summary = `e2e new issue ${Date.now()}`;
-  await window.locator('[data-testid="new-issue-type"]').selectOption('Task');
+  await chooseOption(window.locator('[data-testid="new-issue-type"]'), 'Task');
   await window.locator('[data-testid="new-issue-summary"]').fill(summary);
   await window.locator('[data-testid="new-issue-description"]').fill('Created by the e2e suite.');
-  await window.locator('[data-testid="new-issue-priority"]').selectOption('High');
+  await chooseOption(window.locator('[data-testid="new-issue-priority"]'), 'High');
   await window.locator('[data-testid="new-issue-assignee"]').fill('E2E Tester');
-  await window.locator('[data-testid="new-issue-severity"]').selectOption('Medium');
+  await chooseOption(window.locator('[data-testid="new-issue-severity"]'), 'Medium');
   await window.locator('[data-testid="new-issue-reported-by"]').fill('Playwright');
   await window.locator('[data-testid="new-issue-submit"]').click();
 
@@ -95,7 +96,7 @@ test('creating a live folder task under a feature writes the markdown file', asy
     await window.locator('[data-testid="board-new-issue-btn"]').click();
     await expect(window.locator('[data-testid="new-issue-page"]')).toBeVisible();
 
-    await window.locator('[data-testid="new-issue-type"]').selectOption('Task');
+    await chooseOption(window.locator('[data-testid="new-issue-type"]'), 'Task');
     const summary = `e2e live task ${Date.now()}`;
     await window.locator('[data-testid="new-issue-summary"]').fill(summary);
 
@@ -107,7 +108,7 @@ test('creating a live folder task under a feature writes the markdown file', asy
     expect(parentValue).toBeTruthy();
     await window.locator('[data-testid="new-issue-parent"]').fill(parentValue!);
 
-    await window.locator('[data-testid="new-issue-priority"]').selectOption('High');
+    await chooseOption(window.locator('[data-testid="new-issue-priority"]'), 'High');
     await window.locator('[data-testid="new-issue-submit"]').click();
     await expandAllIssueStacks(window);
 
@@ -161,13 +162,13 @@ test('New idea opens the create form preset to Idea with the research transcript
   await expect(window.locator('[data-testid="new-issue-page"]')).toBeVisible();
 
   // Type is pre-selected and the idea-only field is on the form.
-  await expect(window.locator('[data-testid="new-issue-type"]')).toHaveValue('Idea');
+  await expect(window.locator('[data-testid="new-issue-type"]')).toHaveAttribute('data-value', 'Idea');
   await expect(window.locator('[data-testid="new-issue-idea-transcript"]')).toBeVisible();
 
   // Switching away from Idea hides the transcript field; switching back restores it.
-  await window.locator('[data-testid="new-issue-type"]').selectOption('Task');
+  await chooseOption(window.locator('[data-testid="new-issue-type"]'), 'Task');
   await expect(window.locator('[data-testid="new-issue-idea-transcript"]')).toHaveCount(0);
-  await window.locator('[data-testid="new-issue-type"]').selectOption('Idea');
+  await chooseOption(window.locator('[data-testid="new-issue-type"]'), 'Idea');
   await expect(window.locator('[data-testid="new-issue-idea-transcript"]')).toBeVisible();
 
   const summary = `e2e idea ${Date.now()}`;
@@ -203,7 +204,7 @@ test('creating a live folder idea writes the research transcript into the markdo
     await window.locator('[data-testid="board-nav-item"]', { hasText: 'Live E2E' }).click();
 
     await window.locator('[data-testid="board-new-idea-btn"]').click();
-    await expect(window.locator('[data-testid="new-issue-type"]')).toHaveValue('Idea');
+    await expect(window.locator('[data-testid="new-issue-type"]')).toHaveAttribute('data-value', 'Idea');
 
     // Live folder ideas must still belong to a Feature — pick the fixture's.
     const parentOptions = window.locator('#new-issue-parent-options option');
@@ -244,7 +245,7 @@ test('the demo board offers Subtask with a required story/task/bug parent', asyn
   await expect(window.locator('[data-testid="new-issue-page"]')).toBeVisible();
 
   // Subtask is one of the demo mode's creatable types.
-  await window.locator('[data-testid="new-issue-type"]').selectOption('Subtask');
+  await chooseOption(window.locator('[data-testid="new-issue-type"]'), 'Subtask');
   const parentField = window.locator('[data-testid="new-issue-parent"]');
   await expect(parentField).toBeVisible();
   await expect(parentField).toHaveAttribute('placeholder', 'Enter a parent issue key');

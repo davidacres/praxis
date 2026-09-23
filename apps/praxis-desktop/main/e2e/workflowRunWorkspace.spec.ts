@@ -315,6 +315,7 @@ test('the start-run dialog opens from a workflow row with that workflow preselec
   const { page, seeded } = await launch(true);
   await page.reload();
 
+  await expect(page.getByTestId('project-workflow-run-new')).toHaveCount(0);
   await page.getByTestId('project-workflow-nav-item').hover();
   await page.getByTestId(`project-workflow-run-${seeded.workflowId}`).click();
   const dialog = page.getByTestId('wf-runstart-dialog');
@@ -473,7 +474,7 @@ test('a stage whose AI ran out can be switched to another AI and carries on', as
   await page.getByTestId('project-workflow-run-row').filter({ hasText: /Switch AI/ }).getByRole('button').first().click();
   const notice = page.getByTestId('wf-run-limit');
   await expect(notice).toContainText('Vercel AI Gateway ran out of budget');
-  await expect(notice.getByTestId('wf-limit-switch-to')).toHaveValue('codex-cli');
+  await expect(notice.getByTestId('wf-limit-switch-to')).toHaveAttribute('data-value', 'codex-cli');
   await expect(notice.getByTestId('wf-run-resume')).toHaveText('Retry on Vercel AI Gateway');
   await expect(notice.getByTestId('wf-limit-stop')).toBeVisible();
   await page.mouse.move(0, 0);
@@ -649,6 +650,7 @@ test('a terminal run can be archived, removing it from the sidebar and listing i
   // Clicking the Runs header opens the workflow runs browser
   await runsGroup.click();
   await expect(page.getByTestId('wf-runs-browser')).toBeVisible();
+  await expect(page.getByTestId('wf-runs-browser-new-run')).toHaveCount(0);
 
   // In the runs browser, toggle open the Archived group
   const archivedToggle = page.getByTestId('wf-runs-archived-toggle');

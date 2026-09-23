@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AssigneeMode, IssueSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { ChipSelect } from '../ui/ChipSelect';
 
 /**
  * The board's active filter state. `assigneeMode` defaults to 'all' (unlike
@@ -186,36 +187,28 @@ export function BoardFilterBar({
         active={active}
       />
 
-      <select
-        className="select"
+      <ChipSelect
         data-testid="board-filter-assignee"
-        aria-label="Assignee filter"
+        ariaLabel="Assignee filter"
         value={value.assigneeMode}
-        onChange={event =>
-          onChange({ ...value, assigneeMode: event.target.value as AssigneeMode })
-        }
-      >
-        <option value="all">All assignees</option>
-        <option value="me">Assigned to me</option>
-      </select>
+        onChange={mode => onChange({ ...value, assigneeMode: mode as AssigneeMode })}
+        options={[
+          { value: 'all', label: 'All assignees' },
+          { value: 'me', label: 'Assigned to me' }
+        ]}
+      />
 
       {parentOptions.length > 0 && (
-        <select
-          className="select"
+        <ChipSelect
           data-testid="board-filter-parent"
-          aria-label="Parent filter"
+          ariaLabel="Parent filter"
           value={value.parentKey ?? ''}
-          onChange={event =>
-            onChange({ ...value, parentKey: event.target.value || undefined })
-          }
-        >
-          <option value="">All parents</option>
-          {parentOptions.map(parent => (
-            <option key={parent.key} value={parent.key}>
-              {parent.key} — {parent.summary}
-            </option>
-          ))}
-        </select>
+          onChange={parentKey => onChange({ ...value, parentKey: parentKey || undefined })}
+          options={[
+            { value: '', label: 'All parents' },
+            ...parentOptions.map(parent => ({ value: parent.key, label: parent.key, description: parent.summary }))
+          ]}
+        />
       )}
 
       {isFilterActive(value) && (

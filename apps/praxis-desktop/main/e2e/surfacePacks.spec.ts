@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { DEFAULT_APP_SETTINGS } from '@praxis/core';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 /**
  * Phase 1 of Surface Packs — the premium material layer applied on the
@@ -101,10 +102,10 @@ test('built-in surfaces use their intended default pattern', async () => {
   await window.locator('[data-testid="surface-card-graphite"]').click();
   expect(await markup()).toContain('M-'); // diagonal lines cross tile edges
 
-  await window.locator('[data-testid="motif-pattern"]').selectOption('grid');
+  await chooseOption(window.locator('[data-testid="motif-pattern"]'), 'grid');
   expect(await markup()).toContain('stroke-opacity="0.4"'); // drafting grid motif
 
-  await window.locator('[data-testid="motif-pattern"]').selectOption('binary');
+  await chooseOption(window.locator('[data-testid="motif-pattern"]'), 'binary');
   expect(await markup()).toContain('<text');
 
   await window.locator('[data-testid="surface-card-aurora-glass"]').click();
@@ -113,15 +114,15 @@ test('built-in surfaces use their intended default pattern', async () => {
 
 test('selecting a surface restores its default motif after a custom override', async () => {
   await openSurface();
-  await window.locator('[data-testid="motif-pattern"]').selectOption('hexagon');
+  await chooseOption(window.locator('[data-testid="motif-pattern"]'), 'grid');
   await expect(window.locator('[data-testid="motif-reset"]')).toBeVisible();
 
   await window.locator('[data-testid="surface-card-graphite"]').click();
-  await expect(window.locator('[data-testid="motif-pattern"]')).toHaveValue('diagonal');
+  await expect(window.locator('[data-testid="motif-pattern"]')).toHaveAttribute('data-value', 'diagonal');
   await expect(window.locator('[data-testid="motif-reset"]')).not.toBeVisible();
 
   await window.locator('[data-testid="surface-card-aurora-glass"]').click();
-  await expect(window.locator('[data-testid="motif-pattern"]')).toHaveValue('none');
+  await expect(window.locator('[data-testid="motif-pattern"]')).toHaveAttribute('data-value', 'none');
 });
 
 test('the watermark is tinted from the live theme and re-bakes when the palette changes', async () => {
@@ -212,8 +213,8 @@ test('the motif rides over any pack, and Reset hands it back', async () => {
   // grain and bevel underneath.
   await openSurface();
   await window.locator('[data-testid="surface-card-graphite"]').click();
-  await window.locator('[data-testid="motif-pattern"]').selectOption('hexagon');
-  await window.locator('[data-testid="motif-ink"]').selectOption('custom');
+  await chooseOption(window.locator('[data-testid="motif-pattern"]'), 'hexagon');
+  await chooseOption(window.locator('[data-testid="motif-ink"]'), 'custom');
   await window.locator('[data-testid="motif-ink-color"]').fill('#4ec9b0');
 
   const tile = () => window.evaluate(() =>
@@ -235,7 +236,7 @@ test('solid cells scatter through a super-tile rather than repeating in step', a
   // With fill > 0 the hexagon repeat grows to 3×2 cells so the filled ones do
   // not land in the same spot in every tile.
   await openSurface();
-  await window.locator('[data-testid="motif-placement"]').selectOption('tile');
+  await chooseOption(window.locator('[data-testid="motif-placement"]'), 'tile');
   const width = async () => Number((await window.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-size').trim()))
     .split('px')[0]);
@@ -331,7 +332,7 @@ async function watermarkSvg(): Promise<string> {
 async function chooseMandelbrot(): Promise<void> {
   await openSurface();
   await window.locator('[data-testid="motif-panel"]').scrollIntoViewIfNeeded();
-  await window.locator('[data-testid="motif-pattern"]').selectOption('mandelbrot');
+  await chooseOption(window.locator('[data-testid="motif-pattern"]'), 'mandelbrot');
 }
 
 test('the Mandelbrot motif paints as real geometry and its tile actually loads', async () => {
@@ -351,7 +352,7 @@ test('the Mandelbrot motif paints as real geometry and its tile actually loads',
 
 test('with animation off the motif is baked complete, with no keyframes at all', async () => {
   await chooseMandelbrot();
-  await window.locator('[data-testid="motif-animation"]').selectOption('none');
+  await chooseOption(window.locator('[data-testid="motif-animation"]'), 'none');
 
   const svg = await watermarkSvg();
   // "Off" must mean the finished mark, immediately — not a stopped animation.
@@ -375,7 +376,7 @@ test('with animation off the motif is baked complete, with no keyframes at all',
 
 test('Draw bakes the reveal into the motif SVG and rests on the complete mark', async () => {
   await chooseMandelbrot();
-  await window.locator('[data-testid="motif-animation"]').selectOption('draw');
+  await chooseOption(window.locator('[data-testid="motif-animation"]'), 'draw');
   await expect(window.locator('html')).toHaveAttribute('data-motif-anim', 'draw');
 
   const svg = await watermarkSvg();
@@ -393,7 +394,7 @@ test('Draw bakes the reveal into the motif SVG and rests on the complete mark', 
 
 test('Repeat is what turns a one-shot reveal into a loop', async () => {
   await chooseMandelbrot();
-  await window.locator('[data-testid="motif-animation"]').selectOption('draw');
+  await chooseOption(window.locator('[data-testid="motif-animation"]'), 'draw');
   expect(await watermarkSvg()).not.toContain('infinite');
 
   // `.click()` rather than `.check()`: the Repeat row mounts only for a reveal
@@ -406,7 +407,7 @@ test('Repeat is what turns a one-shot reveal into a loop', async () => {
 
 test('layer-family styles drive CSS and leave the motif SVG untouched', async () => {
   await chooseMandelbrot();
-  await window.locator('[data-testid="motif-animation"]').selectOption('shimmer');
+  await chooseOption(window.locator('[data-testid="motif-animation"]'), 'shimmer');
   await expect(window.locator('html')).toHaveAttribute('data-motif-anim', 'shimmer');
 
   // Shimmer is pure CSS over the painted layer, so it works on every pattern in
@@ -436,10 +437,10 @@ test('an animated motif never raises the declared strength past the contrast cei
   const strength = async () => window.evaluate(() =>
     Number(getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-opacity')));
 
-  await window.locator('[data-testid="motif-animation"]').selectOption('none');
+  await chooseOption(window.locator('[data-testid="motif-animation"]'), 'none');
   const still = await strength();
   for (const style of ['shimmer', 'ripple', 'cyberpunk', 'glow']) {
-    await window.locator('[data-testid="motif-animation"]').selectOption(style);
+    await chooseOption(window.locator('[data-testid="motif-animation"]'), style);
     expect(await strength(), `${style} watermark opacity`).toBeCloseTo(still, 5);
     expect(await strength(), `${style} contrast ceiling`).toBeLessThanOrEqual(0.4);
   }
@@ -447,7 +448,7 @@ test('an animated motif never raises the declared strength past the contrast cei
 
 test('the master switch stops every motif animation, whatever the style says', async () => {
   await chooseMandelbrot();
-  await window.locator('[data-testid="motif-animation"]').selectOption('draw');
+  await chooseOption(window.locator('[data-testid="motif-animation"]'), 'draw');
   await expect(window.locator('html')).toHaveAttribute('data-motif-anim', 'draw');
 
   // The gate is applied at bake time, not by disabling a running animation —
@@ -467,7 +468,7 @@ test('the motif rides over any pack, and animation rides over any motif', async 
   await window.locator('[data-testid="surface-card-graphite"]').click();
   await window.locator('[data-testid="motif-panel"]').scrollIntoViewIfNeeded();
   // Graphite ships a diagonal pattern; it takes the same layer styles.
-  await window.locator('[data-testid="motif-animation"]').selectOption('glow');
+  await chooseOption(window.locator('[data-testid="motif-animation"]'), 'glow');
   await expect(window.locator('html')).toHaveAttribute('data-motif-anim', 'glow');
   const filter = await window.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-filter').trim());
@@ -668,7 +669,7 @@ test('a user can swap the material by picking a pattern — no code, no new CSS'
   await openSurface();
   await window.locator('[data-testid="surface-new"]').click();
   await window.locator('[data-testid="custom-surface-name"]').fill('Contours');
-  await window.locator('[data-testid="custom-surface-pattern"]').selectOption('topo');
+  await chooseOption(window.locator('[data-testid="custom-surface-pattern"]'), 'topo');
   await window.locator('[data-testid="custom-surface-pattern-scale"]').fill('96');
   await window.locator('.custom-theme-editor .primary').click();
   await expect(window.locator('html')).toHaveAttribute('data-surface', /^custom-/);

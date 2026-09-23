@@ -5,6 +5,7 @@ import { useSettings } from '../settings/useSettings';
 import { GitDiffWorkspace } from './GitDiffWorkspace';
 import { GitConflictWorkspace } from './GitConflictWorkspace';
 import { useDialogs } from '../ui/dialogs';
+import { ChipSelect } from '../ui/ChipSelect';
 
 const LANE_COLORS = ['#1687ff', '#d900e8', '#ff2d55', '#ff8a00', '#d6e800', '#31d7b1', '#00b8d9', '#8c63ff', '#ff4f9a'];
 const LANE_GAP = 18;
@@ -325,10 +326,16 @@ export function GitGraphPage({
       <div className="git-toolbar">
         <div className="git-branch-picker">
           <span className="git-toolbar-label">Branch</span>
-          <select aria-label="Branch filter" value={branchFilter ?? ''} onChange={event => setBranchFilter(event.target.value || undefined)}>
-            <option value="">All branches</option>
-            {(snapshot?.branches ?? []).map(branch => <option key={branch.ref} value={branch.name}>{branch.isRemote ? `↗ ${branch.name}` : `● ${branch.name}`}</option>)}
-          </select>
+          <ChipSelect
+            ariaLabel="Branch filter"
+            icon="git-branch"
+            value={branchFilter ?? ''}
+            onChange={value => setBranchFilter(value || undefined)}
+            options={[
+              { value: '', label: 'All branches' },
+              ...(snapshot?.branches ?? []).map(branch => ({ value: branch.name, label: branch.name, meta: branch.isRemote ? 'remote' : undefined }))
+            ]}
+          />
         </div>
         {snapshot && (() => {
           const target = branchFilter ? snapshot.branches.find(branch => branch.name === branchFilter) : undefined;
@@ -384,7 +391,7 @@ export function GitGraphPage({
         <label>Git executable<input aria-label="Git executable path" value={gitSettings.executablePath} placeholder="System default (git)" onChange={event => void update({ git: { executablePath: event.target.value } })} /></label>
         <label>Default branch focus<input aria-label="Default branch focus" value={gitSettings.defaultBranch} placeholder="No default focus" onChange={event => void update({ git: { defaultBranch: event.target.value } })} /></label>
         <label>Fetch interval (minutes)<input aria-label="Fetch interval" type="number" min="0" max="1440" value={gitSettings.fetchIntervalMinutes} onChange={event => void update({ git: { fetchIntervalMinutes: Number(event.target.value) || 0 } })} /></label>
-        <label>Graph orientation<select aria-label="Graph orientation" value={visualSettings.orientation} onChange={event => void update({ gitVisual: { orientation: event.target.value as 'vertical' | 'horizontal' } })}><option value="vertical">Vertical timeline</option><option value="horizontal">Horizontal timeline</option></select></label>
+        <label>Graph orientation<ChipSelect block ariaLabel="Graph orientation" value={visualSettings.orientation} onChange={value => void update({ gitVisual: { orientation: value as 'vertical' | 'horizontal' } })} options={[{ value: 'vertical', label: 'Vertical timeline' }, { value: 'horizontal', label: 'Horizontal timeline' }]} /></label>
         <label className="git-setting-check"><input type="checkbox" checked={visualSettings.branchColorsEnabled} onChange={event => void update({ gitVisual: { branchColorsEnabled: event.target.checked } })} /> Branch colors</label>
         <label className="git-setting-check"><input type="checkbox" checked={visualSettings.mergeMarkersEnabled} onChange={event => void update({ gitVisual: { mergeMarkersEnabled: event.target.checked } })} /> Merge markers</label>
         <label className="git-setting-check"><input type="checkbox" checked={visualSettings.performanceMode} onChange={event => void update({ gitVisual: { performanceMode: event.target.checked } })} /> Performance mode (show newest 800 commits)</label>
@@ -392,9 +399,9 @@ export function GitGraphPage({
 
       {compareOpen && snapshot && <section className="git-compare-panel" aria-label="Compare revisions">
         <div><strong>Compare revisions</strong><span>Choose any two local or remote branches, tags, or commit references.</span></div>
-        <label>From<select aria-label="Compare from" value={compareLeft} onChange={event => setCompareLeft(event.target.value)}>{snapshot.branches.map(branch => <option key={branch.ref} value={branch.name}>{branch.name}</option>)}</select></label>
+        <label>From<ChipSelect ariaLabel="Compare from" value={compareLeft} onChange={setCompareLeft} icon="git-branch" options={snapshot.branches.map(branch => ({ value: branch.name, label: branch.name }))} /></label>
         <span className="git-compare-arrow">→</span>
-        <label>To<select aria-label="Compare to" value={compareRight} onChange={event => setCompareRight(event.target.value)}>{snapshot.branches.map(branch => <option key={branch.ref} value={branch.name}>{branch.name}</option>)}</select></label>
+        <label>To<ChipSelect ariaLabel="Compare to" value={compareRight} onChange={setCompareRight} icon="git-branch" options={snapshot.branches.map(branch => ({ value: branch.name, label: branch.name }))} /></label>
         <button disabled={!compareLeft || !compareRight || compareLeft === compareRight} onClick={() => openDiff({ kind: 'compare', left: compareLeft, right: compareRight })}>Open comparison</button>
       </section>}
 

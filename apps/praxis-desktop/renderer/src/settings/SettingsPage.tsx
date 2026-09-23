@@ -31,9 +31,10 @@ import {
   PRIORITY_NAMES
 } from './settingsDefaults';
 import { Icon, type IconName } from '../ui/Icon';
+import { ChipSelect } from '../ui/ChipSelect';
 import { ModelManagerPanel } from '../ai/ModelManagerPanel';
 import { AiUsageStatsSection } from './AiUsageStatsSection';
-import { MODEL_PROVIDERS, fetchModelOptions } from '../ai/modelProviders';
+import { MODEL_PROVIDERS, fetchModelOptions, providerIconName } from '../ai/modelProviders';
 import {
   formatCost,
   formatTokenCount,
@@ -955,21 +956,22 @@ function AgentRuntimeSection({
                 </div>
               </div>
               <div className="settings-field-control">
-                <select
-                  className="input"
+                <ChipSelect
+                  block
                   value={settings.ai.nativeSources.instructionSource}
-                  aria-label="Instructions for every AI"
+                  ariaLabel="Instructions for every AI"
                   data-testid="native-instruction-source"
                   disabled={!settings.ai.nativeSources.injectInstructions}
-                  onChange={event => void update({ ai: { nativeSources: { instructionSource: event.target.value as typeof settings.ai.nativeSources.instructionSource } } })}
-                >
-                  <option value="all">Every tool’s files</option>
-                  <option value="claude">Claude Code’s (CLAUDE.md)</option>
-                  <option value="codex">AGENTS.md (Codex and shared)</option>
-                  <option value="copilot">GitHub Copilot’s</option>
-                  <option value="gemini">Gemini’s (GEMINI.md)</option>
-                  <option value="cursor">Cursor’s rules</option>
-                </select>
+                  onChange={value => void update({ ai: { nativeSources: { instructionSource: value as typeof settings.ai.nativeSources.instructionSource } } })}
+                  options={[
+                    { value: 'all', label: 'Every tool’s files' },
+                    { value: 'claude', label: 'Claude Code’s (CLAUDE.md)' },
+                    { value: 'codex', label: 'AGENTS.md (Codex and shared)' },
+                    { value: 'copilot', label: 'GitHub Copilot’s' },
+                    { value: 'gemini', label: 'Gemini’s (GEMINI.md)' },
+                    { value: 'cursor', label: 'Cursor’s rules' }
+                  ]}
+                />
               </div>
             </div>
             {(['project', 'user'] as const).map(scope => {
@@ -1438,15 +1440,13 @@ function MarketplaceSection() {
               onChange={event => setOwnerDraft(event.target.value)}
               data-testid="marketplace-owner"
             />
-            <select
-              className="input"
+            <ChipSelect
               value={ownerTypeDraft}
-              onChange={event => setOwnerTypeDraft(event.target.value === 'org' ? 'org' : 'user')}
+              ariaLabel="Owner type"
+              onChange={value => setOwnerTypeDraft(value === 'org' ? 'org' : 'user')}
               data-testid="marketplace-owner-type"
-            >
-              <option value="user">User</option>
-              <option value="org">Organisation</option>
-            </select>
+              options={[{ value: 'user', label: 'User' }, { value: 'org', label: 'Organisation' }]}
+            />
           </div>
         </FieldRow>
 
@@ -2483,8 +2483,9 @@ function AiSection({
                       label="Z.ai plan type"
                       description="GLM Coding Plan subscribers must use the coding endpoint. Pay-as-you-go subscribers use the general API endpoint."
                     >
-                      <select
-                        className="input"
+                      <ChipSelect
+                        block
+                        ariaLabel="Z.ai plan type"
                         data-testid="ai-z-ai-plan-select"
                         value={
                           selectedConfig.baseUrl === 'https://api.z.ai/api/paas/v4'
@@ -2493,19 +2494,19 @@ function AiSection({
                               ? 'coding'
                               : 'custom'
                         }
-                        onChange={event => {
-                          const val = event.target.value;
+                        onChange={val => {
                           if (val === 'coding') {
                             void commitUrl('https://api.z.ai/api/coding/paas/v4');
                           } else if (val === 'general') {
                             void commitUrl('https://api.z.ai/api/paas/v4');
                           }
                         }}
-                      >
-                        <option value="coding">GLM Coding Plan (https://api.z.ai/api/coding/paas/v4) — Recommended</option>
-                        <option value="general">General API / Pay-as-you-go (https://api.z.ai/api/paas/v4)</option>
-                        <option value="custom">Custom base URL (configured below)</option>
-                      </select>
+                        options={[
+                          { value: 'coding', label: 'GLM Coding Plan', description: 'https://api.z.ai/api/coding/paas/v4', meta: 'Recommended' },
+                          { value: 'general', label: 'General API / Pay-as-you-go', description: 'https://api.z.ai/api/paas/v4' },
+                          { value: 'custom', label: 'Custom base URL', description: 'Configured below' }
+                        ]}
+                      />
                     </FieldRow>
                   )}
                   {selectedProviderId === 'openai' && (
@@ -2606,29 +2607,28 @@ function AiSection({
               label="Recommendations provider"
               description="Which provider lightweight AI recommendations (workflow template pick, workflow agent-for-stage pick) use. Auto prefers the active provider above when configured, else the first configured API provider or available ACP host."
             >
-              <select
-                className="input"
+              <ChipSelect
+                block
+                ariaLabel="Recommendations provider"
                 data-testid="ai-recommendation-provider-select"
                 value={settings.ai.recommendationProvider ?? ''}
-                onChange={event => {
-                  const value = event.target.value;
-                  void update({ ai: { recommendationProvider: value ? (value as AiProvider) : undefined } });
-                }}
-              >
-                <option value="">Auto (first configured provider)</option>
-                {AI_PROVIDERS.filter(
-                  meta =>
-                    (meta.kind === 'api' || meta.kind === 'cli-agent') &&
-                    // A provider that is off is not offered; one that is already chosen stays listed (marked) so the
-                    // select never shows a blank for a value that is really stored.
-                    (settings.ai.providers[meta.id]?.enabled !== false || settings.ai.recommendationProvider === meta.id)
-                ).map(meta => (
-                  <option key={meta.id} value={meta.id}>
-                    {meta.label}
-                    {settings.ai.providers[meta.id]?.enabled === false ? ' (turned off)' : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={value => void update({ ai: { recommendationProvider: value ? (value as AiProvider) : undefined } })}
+                options={[
+                  { value: '', label: 'Auto (first configured provider)' },
+                  ...AI_PROVIDERS.filter(
+                    meta =>
+                      (meta.kind === 'api' || meta.kind === 'cli-agent') &&
+                      // A provider that is off is not offered; one that is already chosen stays listed (marked) so the
+                      // picker never shows a blank for a value that is really stored.
+                      (settings.ai.providers[meta.id]?.enabled !== false || settings.ai.recommendationProvider === meta.id)
+                  ).map(meta => ({
+                    value: meta.id,
+                    label: meta.label,
+                    icon: providerIconName(meta.id),
+                    meta: settings.ai.providers[meta.id]?.enabled === false ? 'turned off' : undefined
+                  }))
+                ]}
+              />
             </FieldRow>
 
             <FieldRow
@@ -2882,16 +2882,17 @@ function MobileAccessSection({
     <>
       <CategoryHeader category={category} />
       <FieldRow label="Access mode" description="Off binds no listener. Local network accepts direct connections on the selected interfaces and subnets.">
-        <select
-          aria-label="Mobile access mode"
+        <ChipSelect
+          ariaLabel="Mobile access mode"
           data-testid="mobile-access-mode"
           value={settings.mobileAccess.mode}
-          onChange={event => void update({ mobileAccess: { mode: event.target.value as 'off' | 'local-only' | 'internet' } })}
-        >
-          <option value="off">Off</option>
-          <option value="local-only">Local network</option>
-          <option value="internet">Internet relay</option>
-        </select>
+          onChange={value => void update({ mobileAccess: { mode: value as 'off' | 'local-only' | 'internet' } })}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'local-only', label: 'Local network' },
+            { value: 'internet', label: 'Internet relay' }
+          ]}
+        />
       </FieldRow>
       <FieldRow label="Host name" description="The friendly desktop name shown on the phone.">
         <DebouncedTextField
@@ -3387,7 +3388,7 @@ function CustomThemeEditor({
     <div className="custom-theme-editor-heading"><div><strong>{theme.id.startsWith('custom-') ? 'Custom theme' : 'Edit custom theme'}</strong><span>Changes preview live after saving.</span></div><button type="button" className="icon-btn icon-btn-sm" aria-label="Close custom theme editor" onClick={onCancel}>×</button></div>
     <div className="custom-theme-editor-grid">
       <label>Name<input value={theme.name} onChange={event => update({ name: event.target.value })} maxLength={80} /></label>
-      <label>Mode<select value={theme.mode} onChange={event => update({ mode: event.target.value as 'light' | 'dark' })}><option value="light">Light</option><option value="dark">Dark</option></select></label>
+      <label>Mode<ChipSelect block ariaLabel="Mode" value={theme.mode} onChange={value => update({ mode: value as 'light' | 'dark' })} options={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} /></label>
       <label className="wide">Description<input value={theme.description} onChange={event => update({ description: event.target.value })} maxLength={240} /></label>
     </div>
     <div className="custom-theme-color-grid">{CUSTOM_COLOR_FIELDS.map(([key, label]) => <label key={key}>{label}<span><input type="color" value={/^#[0-9a-f]{6}$/i.test(theme.preview[key]) ? theme.preview[key] : '#7c5cff'} onChange={event => updateColor(key, event.target.value)} /><input value={theme.preview[key]} onChange={event => updateColor(key, event.target.value)} /></span></label>)}</div>
@@ -3521,10 +3522,13 @@ function CustomSurfaceEditor({
     <div className="custom-theme-editor-grid">
       <label>Name<input value={pack.name} onChange={event => onChange({ ...pack, name: event.target.value })} maxLength={80} data-testid="custom-surface-name" /></label>
       <label>Base
-        <select value={pack.basePackId ?? ''} onChange={event => onChange({ ...pack, basePackId: event.target.value || undefined })}>
-          <option value="">None</option>
-          {SURFACE_PACKS.filter(base => base.id !== 'flat').map(base => <option key={base.id} value={base.id}>{base.name}</option>)}
-        </select>
+        <ChipSelect
+          block
+          ariaLabel="Base"
+          value={pack.basePackId ?? ''}
+          onChange={value => onChange({ ...pack, basePackId: value || undefined })}
+          options={[{ value: '', label: 'None' }, ...SURFACE_PACKS.filter(base => base.id !== 'flat').map(base => ({ value: base.id, label: base.name }))]}
+        />
       </label>
       <label className="wide">Description<input value={pack.description} onChange={event => onChange({ ...pack, description: event.target.value })} maxLength={240} /></label>
     </div>
@@ -3540,15 +3544,18 @@ function CustomSurfaceEditor({
       <label className="surface-dial"><span className="surface-dial-label">Corner boost <em>{Math.round(dials.radius)}px</em></span>
         <input type="range" min={0} max={8} step={1} value={dials.radius} onChange={event => setDials({ radius: Number(event.target.value) })} /></label>
       <label className="surface-dial"><span className="surface-dial-label">Blend</span>
-        <select value={dials.blend} onChange={event => setDials({ blend: event.target.value })}>{SURFACE_BLEND_MODES.map(mode => <option key={mode} value={mode}>{mode}</option>)}</select></label>
+        <ChipSelect block ariaLabel="Blend" value={dials.blend} onChange={value => setDials({ blend: value })} options={SURFACE_BLEND_MODES.map(mode => ({ value: mode, label: mode }))} /></label>
     </div>
     <div className="surface-dials surface-pattern-dials">
       <label className="surface-dial"><span className="surface-dial-label">Pattern</span>
-        <select
+        <ChipSelect
+          block
+          ariaLabel="Pattern"
           value={pattern.id}
           data-testid="custom-surface-pattern"
-          onChange={event => setPattern({ id: event.target.value })}
-        >{SURFACE_PATTERNS.map(entry => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></label>
+          onChange={value => setPattern({ id: value })}
+          options={SURFACE_PATTERNS.map(entry => ({ value: entry.id, label: entry.name }))}
+        /></label>
       <label className="surface-dial"><span className="surface-dial-label">Pattern scale <em>{Math.round(pattern.scale)}px</em></span>
         <input type="range" min={16} max={260} step={4} value={Math.round(pattern.scale)} disabled={pattern.id === 'none'}
           data-testid="custom-surface-pattern-scale"
@@ -3557,11 +3564,14 @@ function CustomSurfaceEditor({
         <input type="range" min={0} max={40} step={1} value={Math.round(pattern.opacity * 100)} disabled={pattern.id === 'none'}
           onChange={event => setPattern({ opacity: Number(event.target.value) / 100 })} /></label>
       <label className="surface-dial"><span className="surface-dial-label">Pattern ink</span>
-        <select value={pattern.ink ?? 'accent'} disabled={pattern.id === 'none'}
-          onChange={event => setPattern({ ink: event.target.value as SurfacePatternInk })}>
-          <option value="accent">Accent</option>
-          <option value="text">Text</option>
-        </select></label>
+        <ChipSelect
+          block
+          ariaLabel="Pattern ink"
+          value={pattern.ink ?? 'accent'}
+          disabled={pattern.id === 'none'}
+          onChange={value => setPattern({ ink: value as SurfacePatternInk })}
+          options={[{ value: 'accent', label: 'Accent' }, { value: 'text', label: 'Text' }]}
+        /></label>
     </div>
     <Toggle label="Grain texture" checked={dials.grain} onChange={next => setDials({ grain: next })} testId="custom-surface-grain" />
     <input ref={importRef} type="file" accept="application/json" hidden onChange={event => { const file = event.target.files?.[0]; if (file) runImport(file); event.target.value = ''; }} />
@@ -3647,25 +3657,37 @@ function MotifPanel({
       </div>
       <div className="surface-dials surface-motif-dials">
         <label className="surface-dial"><span className="surface-dial-label">Pattern</span>
-          <select value={effective.id} disabled={disabled} data-testid="motif-pattern"
-            onChange={e => {
+          <ChipSelect
+            block
+            ariaLabel="Pattern"
+            value={effective.id}
+            disabled={disabled}
+            data-testid="motif-pattern"
+            onChange={value => {
               // Adopt the incoming pattern's own line weight. The library spans
               // an order of magnitude — 0.012 for the Mandelbrot emblem against
               // 0.1 for weave — because a mark drawn once at the full spread
               // needs a far finer line than a lattice cell. Carrying the old
               // value across renders the new motif unusably heavy or invisible.
-              const next = findSurfacePattern(e.target.value);
-              set({ id: e.target.value, ...(next ? { weight: next.weight } : {}) });
-            }}>
-            {SURFACE_PATTERNS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select></label>
+              const next = findSurfacePattern(value);
+              set({ id: value, ...(next ? { weight: next.weight } : {}) });
+            }}
+            options={SURFACE_PATTERNS.map(p => ({ value: p.id, label: p.name }))}
+          /></label>
 
         <label className="surface-dial"><span className="surface-dial-label">Placement</span>
-          <select value={effective.placement} disabled={disabled || effective.id === 'none'} data-testid="motif-placement"
-            onChange={e => set({ placement: e.target.value as SurfacePatternPlacement })}>
-            <option value="tile">Tile — repeats everywhere</option>
-            <option value="corner">Corner — one fading mark</option>
-          </select></label>
+          <ChipSelect
+            block
+            ariaLabel="Placement"
+            value={effective.placement ?? 'tile'}
+            disabled={disabled || effective.id === 'none'}
+            data-testid="motif-placement"
+            onChange={value => set({ placement: value as SurfacePatternPlacement })}
+            options={[
+              { value: 'tile', label: 'Tile', description: 'Repeats everywhere' },
+              { value: 'corner', label: 'Corner', description: 'One fading mark' }
+            ]}
+          /></label>
 
         {isCorner && (
           <div className="surface-dial surface-motif-corners-field">
@@ -3734,18 +3756,21 @@ function MotifPanel({
             onChange={e => set({ weight: Number(e.target.value) / 1000 })} /></label>
 
         <label className="surface-dial"><span className="surface-dial-label">Animation</span>
-          <select value={style} disabled={motionOff} data-testid="motif-animation"
-            onChange={e => set({ animation: e.target.value as SurfaceMotifAnimation })}>
-            {SURFACE_MOTIF_ANIMATIONS.map(entry => (
-              <option
-                key={entry.id}
-                value={entry.id}
-                // Plot walks a head along one continuous line, and only a
-                // pattern that declares a route has one to walk.
-                disabled={entry.id === 'plot' && !definition?.route}
-              >{entry.name}</option>
-            ))}
-          </select></label>
+          <ChipSelect
+            block
+            ariaLabel="Animation"
+            value={style}
+            disabled={motionOff}
+            data-testid="motif-animation"
+            onChange={value => set({ animation: value as SurfaceMotifAnimation })}
+            options={SURFACE_MOTIF_ANIMATIONS.map(entry => ({
+              value: entry.id,
+              label: entry.name,
+              // Plot walks a head along one continuous line, and only a
+              // pattern that declares a route has one to walk.
+              disabled: entry.id === 'plot' && !definition?.route
+            }))}
+          /></label>
 
         {style !== 'none' && (
           <label className="surface-dial">
@@ -3767,12 +3792,19 @@ function MotifPanel({
         )}
 
         <label className="surface-dial"><span className="surface-dial-label">Colour</span>
-          <select value={effective.ink ?? 'accent'} disabled={disabled || effective.id === 'none'} data-testid="motif-ink"
-            onChange={e => set({ ink: e.target.value as SurfacePatternInk })}>
-            <option value="accent">Theme accent</option>
-            <option value="text">Theme text</option>
-            <option value="custom">Custom…</option>
-          </select></label>
+          <ChipSelect
+            block
+            ariaLabel="Colour"
+            value={effective.ink ?? 'accent'}
+            disabled={disabled || effective.id === 'none'}
+            data-testid="motif-ink"
+            onChange={value => set({ ink: value as SurfacePatternInk })}
+            options={[
+              { value: 'accent', label: 'Theme accent' },
+              { value: 'text', label: 'Theme text' },
+              { value: 'custom', label: 'Custom…' }
+            ]}
+          /></label>
 
         {effective.ink === 'custom' && (
           <label className="surface-dial"><span className="surface-dial-label">Custom colour</span>
@@ -4891,17 +4923,14 @@ function TerminalSection({
         label="Default profile"
         description="Used when you click New terminal without choosing a profile."
       >
-        <select
-          className="select"
-          aria-label="Terminal default profile"
+        <ChipSelect
+          ariaLabel="Terminal default profile"
+          icon="terminal"
           value={profileId}
-          onChange={event => updateTerminal({ defaultProfileId: event.target.value })}
-        >
-          {profiles.length === 0 && <option value="">Detecting profiles…</option>}
-          {profiles.map(profile => (
-            <option key={profile.id} value={profile.id}>{profile.name} · {profile.shell}</option>
-          ))}
-        </select>
+          placeholder="Detecting profiles…"
+          onChange={value => updateTerminal({ defaultProfileId: value })}
+          options={profiles.map(profile => ({ value: profile.id, label: profile.name, meta: profile.shell }))}
+        />
       </FieldRow>
       <div className="settings-subsection-title">Appearance</div>
       <FieldRow label="Font family" description="A comma-separated CSS font stack used by terminal sessions.">
@@ -4936,16 +4965,16 @@ function TerminalSection({
         />
       </FieldRow>
       <FieldRow label="Cursor" description="Choose the cursor shape used in terminal sessions.">
-        <select
-          className="select"
-          aria-label="Terminal cursor style"
+        <ChipSelect
+          ariaLabel="Terminal cursor style"
           value={settings.terminal.cursorStyle}
-          onChange={event => updateTerminal({ cursorStyle: event.target.value as AppSettings['terminal']['cursorStyle'] })}
-        >
-          <option value="block">Block</option>
-          <option value="bar">Line</option>
-          <option value="underline">Underline</option>
-        </select>
+          onChange={value => updateTerminal({ cursorStyle: value as AppSettings['terminal']['cursorStyle'] })}
+          options={[
+            { value: 'block', label: 'Block' },
+            { value: 'bar', label: 'Line' },
+            { value: 'underline', label: 'Underline' }
+          ]}
+        />
       </FieldRow>
       <Toggle
         label="Blinking cursor"
@@ -5159,18 +5188,13 @@ function PriorityColorRow({
           </div>
 
           {gradient ? (
-            <select
-              className="input priority-gradient-direction"
+            <ChipSelect
+              className="priority-gradient-direction"
               value={gradient.direction}
-              aria-label={`${priority} gradient direction`}
-              onChange={event => onCommit(formatLinearGradient({ ...gradient, direction: event.target.value }))}
-            >
-              {directions.map(direction => (
-                <option key={direction} value={direction}>
-                  {direction}
-                </option>
-              ))}
-            </select>
+              ariaLabel={`${priority} gradient direction`}
+              onChange={value => onCommit(formatLinearGradient({ ...gradient, direction: value }))}
+              options={directions.map(direction => ({ value: direction, label: direction }))}
+            />
           ) : (
             <span />
           )}
@@ -5351,24 +5375,26 @@ function ProviderModelTiers({
                 )}
               </span>
             ) : (
-              <select
-                className="input"
-                aria-label={`${tier} tier model`}
+              <ChipSelect
+                block
+                ariaLabel={`${tier} tier model`}
                 data-testid={`ai-model-tier-${provider}-${tier}`}
                 value={current}
-                onChange={event => {
-                  if (event.target.value === CUSTOM_MODEL) setCustomTiers(state => ({ ...state, [tier]: true }));
-                  else commit(tier, event.target.value);
+                searchable
+                onChange={value => {
+                  if (value === CUSTOM_MODEL) setCustomTiers(state => ({ ...state, [tier]: true }));
+                  else commit(tier, value);
                 }}
-              >
-                <option value="">The run's model</option>
-                {catalog!.map(choice => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.name && choice.name !== choice.value ? `${choice.name} (${choice.value})` : choice.value}
-                  </option>
-                ))}
-                <option value={CUSTOM_MODEL}>Other model id…</option>
-              </select>
+                options={[
+                  { value: '', label: "The run's model" },
+                  ...catalog!.map(choice => ({
+                    value: choice.value,
+                    label: choice.name || choice.value,
+                    description: choice.name && choice.name !== choice.value ? choice.value : undefined
+                  })),
+                  { value: CUSTOM_MODEL, label: 'Other model id…', icon: 'pencil' as const }
+                ]}
+              />
             )}
           </label>
         );

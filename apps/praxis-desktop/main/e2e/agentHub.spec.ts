@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 /**
  * FX-BF-009 / FX-BF-010 / FX-BF-011 — the Agent Hub.
@@ -122,7 +123,7 @@ test('the sidebar tree lists agent profiles and skills only; a profile shows its
   await expect(record(page).getByRole('heading', { name: 'Code Audit', level: 1 })).toBeVisible();
   await expect(record(page).getByText('code-audit', { exact: true })).toBeVisible();
   await expect(record(page).getByText('Audits a diff for risky changes.')).toBeVisible();
-  await expect(runtime(page).getByRole('button', { name: /^Activate/ })).toBeEnabled();
+  await expect(runtime(page).getByRole('button', { name: /^Activate(?! with)/ })).toBeEnabled();
 });
 
 test('Agent Runtime settings separate AI runtimes from agent profiles, and manage standalone launch bindings', async () => {
@@ -186,8 +187,8 @@ test('activating a skill and opening a session carries the agent context', async
   const tree = page.getByRole('navigation', { name: 'Workspace' });
 
   await tree.getByTestId('skill-nav-item').click();
-  await runtime(page).getByLabel('Activate with').selectOption({ label: 'Live Agent' });
-  await runtime(page).getByRole('button', { name: 'Activate' }).click();
+  await chooseOption(runtime(page).getByLabel('Activate with'), { label: 'Live Agent' });
+  await runtime(page).getByRole('button', { name: /^Activate(?! with)/ }).click();
   await expect(runtime(page).getByText(/live-agent · \w+ mode/)).toBeVisible();
 
   // Live Agent has no profile, so its record is reached through Settings.

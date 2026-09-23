@@ -14,6 +14,7 @@ import type {
 import { Icon } from '../ui/Icon';
 import { FieldRow } from '../ui/formControls';
 import { PreviewPane } from './PreviewPane';
+import { ChipSelect } from '../ui/ChipSelect';
 
 /**
  * Project Run profile editor (FX-BE-054 / TASK-143).
@@ -565,20 +566,18 @@ export function RunProfileEditor({ project }: RunProfileEditorProps) {
 
                 <FieldRow label="Readiness probe" description="How Praxis knows this service is ready.">
                   <div className="run-probe-editor">
-                    <select
-                      className="select"
+                    <ChipSelect
+                      ariaLabel="Readiness probe"
                       value={service.readinessProbe?.kind ?? ''}
-                      onChange={e => {
-                        const kind = e.target.value as RunReadinessProbe['kind'] | '';
+                      onChange={value => {
+                        const kind = value as RunReadinessProbe['kind'] | '';
                         if (!kind) { updateService(index, { readinessProbe: undefined }); return; }
                         if (kind === 'http') updateService(index, { readinessProbe: { kind: 'http', path: '/' } });
                         else if (kind === 'tcp') updateService(index, { readinessProbe: { kind: 'tcp', port: service.port ?? 0 } });
                         else updateService(index, { readinessProbe: { kind: 'log-line', match: '' } });
                       }}
-                    >
-                      <option value="">None</option>
-                      {PROBE_KINDS.map(({ kind, label }) => <option key={kind} value={kind}>{label}</option>)}
-                    </select>
+                      options={[{ value: '', label: 'None' }, ...PROBE_KINDS.map(({ kind, label }) => ({ value: kind, label }))]}
+                    />
                     {service.readinessProbe?.kind === 'http' && (
                       <input
                         className="input"

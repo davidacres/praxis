@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { BoardColumnPreferences } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { DEFAULT_BOARD_PREFS } from './boardPreferences';
+import { ChipSelect } from '../ui/ChipSelect';
 
 /**
  * Per-board settings popover (the board toolbar's gear button). Covers
@@ -181,39 +182,35 @@ export function BoardSettingsMenu({
             {prefs.viewMode !== 'list' && (
               <label className="board-prefs-field">
                 <span>Swim lanes</span>
-                <select
-                  className="select"
+                <ChipSelect
+                  block
+                  ariaLabel="Swim lanes"
                   data-testid="board-prefs-swimlane"
                   value={prefs.swimLaneGroupBy ?? 'none'}
-                  onChange={event =>
+                  onChange={value =>
                     onChange({
                       ...prefs,
-                      swimLaneGroupBy: event.target.value as BoardColumnPreferences['swimLaneGroupBy']
+                      swimLaneGroupBy: value as BoardColumnPreferences['swimLaneGroupBy']
                     })
                   }
-                >
-                  <option value="none">None</option>
-                  <option value="assignee">By assignee</option>
-                  <option value="epic">By epic</option>
-                </select>
+                  options={[
+                    { value: 'none', label: 'None' },
+                    { value: 'assignee', label: 'By assignee' },
+                    { value: 'epic', label: 'By epic' }
+                  ]}
+                />
               </label>
             )}
             <label className="board-prefs-field">
               <span>Hide issues older than</span>
-              <select
-                className="select"
+              <ChipSelect
+                block
+                ariaLabel="Hide issues older than"
                 data-testid="board-prefs-max-age"
-                value={prefs.maxAgeWeeks ?? 0}
-                onChange={event =>
-                  onChange({ ...prefs, maxAgeWeeks: Number(event.target.value) || undefined })
-                }
-              >
-                {MAX_AGE_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                value={String(prefs.maxAgeWeeks ?? 0)}
+                onChange={value => onChange({ ...prefs, maxAgeWeeks: Number(value) || undefined })}
+                options={MAX_AGE_OPTIONS.map(option => ({ value: String(option.value), label: option.label }))}
+              />
             </label>
           </div>
 

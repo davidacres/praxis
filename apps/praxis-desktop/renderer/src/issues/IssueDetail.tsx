@@ -37,6 +37,7 @@ import {
   providerIconName
 } from '../ai/modelProviders';
 import { isProviderUsable } from '../ai/providerAvailability';
+import { ChipSelect } from '../ui/ChipSelect';
 
 /** Centre-pane AI tooling views the detail panel can hand off to. */
 export type IssueAiView = 'review' | 'lpr';
@@ -217,55 +218,54 @@ function StartAiSessionDialog({
           <div className="session-setup-options">
             <label className="session-setup-field">
               <span>Provider</span>
-              <select
-                className="select"
+              <ChipSelect
+                block
+                ariaLabel="Provider"
                 data-testid="issue-ai-provider"
                 value={selectedProvider ?? ''}
+                placeholder="No configured provider"
                 disabled={starting || configuredProviders.length === 0}
-                onChange={event => onProviderChange(event.target.value as AiProvider)}
-              >
-                {configuredProviders.length === 0 && <option value="">No configured provider</option>}
-                {configuredProviders.map(status => (
-                  <option key={status.provider} value={status.provider}>
-                    {PROVIDER_LABELS[status.provider]}
-                  </option>
-                ))}
-              </select>
+                onChange={value => onProviderChange(value as AiProvider)}
+                options={configuredProviders.map(status => ({ value: status.provider, label: PROVIDER_LABELS[status.provider], icon: providerIconName(status.provider) }))}
+              />
             </label>
             <label className="session-setup-field">
               <span>Model</span>
-              <select
-                className="select"
+              <ChipSelect
+                block
+                ariaLabel="Model"
                 data-testid="issue-ai-runtime-model"
                 value={selectedModel}
+                icon="sparkles"
                 disabled={starting || modelsLoading || !runtimeModels?.options.length}
-                onChange={event => onModelChange(event.target.value)}
-              >
-                <option value="">{modelsLoading ? 'Loading models…' : 'Provider default'}</option>
-                {runtimeModels?.options.map(option => (
-                  <option key={option.value} value={option.value}>{option.name}</option>
-                ))}
-              </select>
+                onChange={onModelChange}
+                options={[
+                  { value: '', label: modelsLoading ? 'Loading models…' : 'Provider default' },
+                  ...(runtimeModels?.options.map(option => ({ value: option.value, label: option.name, description: option.description })) ?? [])
+                ]}
+              />
             </label>
           </div>
 
           {governedWorkflows.length > 0 && (
             <label className="session-setup-field">
               <span>Governed workflow</span>
-              <select
-                className="select"
+              <ChipSelect
+                block
+                ariaLabel="Governed workflow"
                 data-testid="issue-session-workflow"
                 value={governedWorkflowId}
                 disabled={starting}
-                onChange={event => setGovernedWorkflowId(event.target.value)}
-              >
-                <option value="">No governed workflow — ordinary session</option>
-                {governedWorkflows.map(workflow => (
-                  <option key={workflow.id} value={workflow.id}>
-                    {workflow.name} · v{workflow.version}{workflow.ready ? '' : ' — not ready'}
-                  </option>
-                ))}
-              </select>
+                onChange={setGovernedWorkflowId}
+                options={[
+                  { value: '', label: 'No governed workflow — ordinary session' },
+                  ...governedWorkflows.map(workflow => ({
+                    value: workflow.id,
+                    label: workflow.name,
+                    meta: `v${workflow.version}${workflow.ready ? '' : ' · not ready'}`
+                  }))
+                ]}
+              />
               {governedWorkflowId && (() => {
                 const selected = governedWorkflows.find(option => option.id === governedWorkflowId);
                 return selected && !selected.ready ? (
@@ -280,18 +280,15 @@ function StartAiSessionDialog({
           {workflows.length > 0 && (
             <label className="session-setup-field">
               <span>Workflow pack</span>
-              <select
-                className="select"
+              <ChipSelect
+                block
+                ariaLabel="Workflow pack"
                 data-testid="issue-session-workflow-pack"
                 value={workflowPackId}
                 disabled={starting}
-                onChange={event => setWorkflowPackId(event.target.value)}
-              >
-                <option value="">No workflow pack</option>
-                {workflowPackOptions.map(workflow => (
-                  <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
-                ))}
-              </select>
+                onChange={setWorkflowPackId}
+                options={[{ value: '', label: 'No workflow pack' }, ...workflowPackOptions.map(workflow => ({ value: workflow.id, label: workflow.name }))]}
+              />
             </label>
           )}
 
@@ -1253,38 +1250,32 @@ export function IssueDetail({
               </FieldRow>
 
               <FieldRow label="Status">
-                <select
-                  className="select new-issue-grow"
+                <ChipSelect
+                  block
+                  className="new-issue-grow"
+                  ariaLabel="Status"
                   data-testid="issue-edit-status"
                   value={statusTransitionId}
-                  onChange={event => setStatusTransitionId(event.target.value)}
+                  onChange={setStatusTransitionId}
                   disabled={!issue.transitions?.length}
-                >
-                  <option value="">{issue.status}</option>
-                  {issue.transitions?.map(transition => (
-                    <option key={transition.id} value={transition.id}>
-                      {transition.toStatus ?? transition.name}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: '', label: issue.status },
+                    ...(issue.transitions?.map(transition => ({ value: transition.id, label: transition.toStatus ?? transition.name })) ?? [])
+                  ]}
+                />
               </FieldRow>
 
               <FieldRow label="Ticket type" description={unsupportedEditHelp(connectionMode, 'issueType')}>
-                <select
-                  className="select new-issue-grow"
+                <ChipSelect
+                  block
+                  className="new-issue-grow"
+                  ariaLabel="Ticket type"
                   data-testid="issue-edit-issueType"
                   value={draft.issueType}
                   disabled={!supportsEdit(connectionMode, 'issueType')}
-                  onChange={event =>
-                    setDraft(current => ({ ...current, issueType: event.target.value, parentKey: '' }))
-                  }
-                >
-                  {issueTypeOptions.map(type => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
+                  onChange={value => setDraft(current => ({ ...current, issueType: value, parentKey: '' }))}
+                  options={issueTypeOptions.map(type => ({ value: type, label: type }))}
+                />
               </FieldRow>
 
               <FieldRow label="Assignee" description={unsupportedEditHelp(connectionMode, 'assignee')}>
@@ -1307,37 +1298,29 @@ export function IssueDetail({
               </FieldRow>
 
               <FieldRow label="Priority" description={unsupportedEditHelp(connectionMode, 'priority')}>
-                <select
-                  className="select new-issue-grow"
+                <ChipSelect
+                  block
+                  className="new-issue-grow"
+                  ariaLabel="Priority"
                   data-testid="issue-edit-priority"
                   value={draft.priority}
                   disabled={!supportsEdit(connectionMode, 'priority')}
-                  onChange={event => setDraft(current => ({ ...current, priority: event.target.value }))}
-                >
-                  <option value="">—</option>
-                  {priorityOptions.map(option => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                  onChange={value => setDraft(current => ({ ...current, priority: value }))}
+                  options={[{ value: '', label: '—' }, ...priorityOptions.map(option => ({ value: option, label: option }))]}
+                />
               </FieldRow>
 
               <FieldRow label="Severity" description={unsupportedEditHelp(connectionMode, 'severity')}>
-                <select
-                  className="select new-issue-grow"
+                <ChipSelect
+                  block
+                  className="new-issue-grow"
+                  ariaLabel="Severity"
                   data-testid="issue-edit-severity"
                   value={draft.severity}
                   disabled={!supportsEdit(connectionMode, 'severity')}
-                  onChange={event => setDraft(current => ({ ...current, severity: event.target.value }))}
-                >
-                  <option value="">— None —</option>
-                  {severityOptions.map(option => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                  onChange={value => setDraft(current => ({ ...current, severity: value }))}
+                  options={[{ value: '', label: '— None —' }, ...severityOptions.map(option => ({ value: option, label: option }))]}
+                />
               </FieldRow>
 
               <FieldRow label="Reported by" description={unsupportedEditHelp(connectionMode, 'reportedBy')}>
@@ -1507,16 +1490,16 @@ export function IssueDetail({
                       <span className="detail-list-summary">{subTask.summary}</span>
                       <span className="detail-meta">{subTask.status}</span>
                       {availableWorkflows.length > 0 && (
-                        <select
-                          className="select detail-subtask-workflow"
-                          aria-label={`Workflow for ${subTask.key}`}
+                        <ChipSelect
+                          className="detail-subtask-workflow"
+                          ariaLabel={`Workflow for ${subTask.key}`}
                           data-testid={`subtask-workflow-${subTask.key}`}
                           value={subTaskAssignments[subTask.key]?.workflow?.instructionsPath ?? ''}
                           disabled={busy}
-                          onChange={event => {
+                          onChange={value => {
                             const workflow =
                               availableWorkflows.find(
-                                candidate => candidate.instructionsPath === event.target.value
+                                candidate => candidate.instructionsPath === value
                               ) ?? null;
                             void window.praxis.ai
                               .setWorkflowAssignment(subTask.key, workflow)
@@ -1529,14 +1512,11 @@ export function IssueDetail({
                               )
                               .catch(err => setError(err instanceof Error ? err.message : String(err)));
                           }}
-                        >
-                          <option value="">No workflow</option>
-                          {availableWorkflows.map(workflow => (
-                            <option key={workflow.id} value={workflow.instructionsPath}>
-                              {workflow.name}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: '', label: 'No workflow' },
+                            ...availableWorkflows.map(workflow => ({ value: workflow.instructionsPath, label: workflow.name }))
+                          ]}
+                        />
                       )}
                     </div>
                   ))}
@@ -1638,35 +1618,32 @@ export function IssueDetail({
                 <div className="detail-ai-runtime-options" data-testid="issue-ai-runtime-options">
                   <label className="detail-ai-runtime-field">
                     <span>AI provider</span>
-                    <select
-                      className="select"
+                    <ChipSelect
+                      block
+                      ariaLabel="AI provider"
                       data-testid="issue-detail-ai-provider"
                       value={selectedProvider ?? ''}
+                      placeholder="No configured provider"
                       disabled={configuredProviders.length === 0}
-                      onChange={event => setSelectedProvider(event.target.value as AiProvider)}
-                    >
-                      {configuredProviders.length === 0 && <option value="">No configured provider</option>}
-                      {configuredProviders.map(status => (
-                        <option key={status.provider} value={status.provider}>
-                          {PROVIDER_LABELS[status.provider]}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={value => setSelectedProvider(value as AiProvider)}
+                      options={configuredProviders.map(status => ({ value: status.provider, label: PROVIDER_LABELS[status.provider], icon: providerIconName(status.provider) }))}
+                    />
                   </label>
                   <label className="detail-ai-runtime-field">
                     <span>Model</span>
-                    <select
-                      className="select"
+                    <ChipSelect
+                      block
+                      ariaLabel="Model"
                       data-testid="issue-detail-ai-model"
                       value={selectedRuntimeModel}
+                      icon="sparkles"
                       disabled={modelsLoading || !runtimeModels?.options.length}
-                      onChange={event => setSelectedRuntimeModel(event.target.value)}
-                    >
-                      <option value="">{modelsLoading ? 'Loading models…' : 'Provider default'}</option>
-                      {runtimeModels?.options.map(option => (
-                        <option key={option.value} value={option.value}>{option.name}</option>
-                      ))}
-                    </select>
+                      onChange={setSelectedRuntimeModel}
+                      options={[
+                        { value: '', label: modelsLoading ? 'Loading models…' : 'Provider default' },
+                        ...(runtimeModels?.options.map(option => ({ value: option.value, label: option.name, description: option.description })) ?? [])
+                      ]}
+                    />
                   </label>
                   {onOpenAiSettings && (
                     <button

@@ -9,6 +9,7 @@ import {
   skillActivateBlockedReason
 } from './agentCatalog';
 import type { ActivationMap, CatalogSelection, LifecycleAction } from './agentSelection';
+import { ChipSelect } from '../ui/ChipSelect';
 
 /**
  * Agent Hub runtime panel — the shell's right pane for the `agents` route.
@@ -138,11 +139,12 @@ function ProfileBinding({
           <div className="inspector-actions">
             <label className="form-field">
               <span>Launch binding</span>
-              <select value={hostId} onChange={event => setHostId(event.target.value)}>
-                {compatibleHosts.map(host => (
-                  <option key={host.manifest.id} value={host.manifest.id}>{host.manifest.name}</option>
-                ))}
-              </select>
+              <ChipSelect
+                ariaLabel="Launch binding"
+                value={hostId}
+                onChange={setHostId}
+                options={compatibleHosts.map(host => ({ value: host.manifest.id, label: host.manifest.name }))}
+              />
             </label>
           </div>
         )
@@ -343,13 +345,12 @@ function SkillRuntime({
         {eligible.length > 1 && (
           <label className="form-field">
             <span>Activate with</span>
-            <select value={target} onChange={event => setAgentId(event.target.value)}>
-              {eligible.map(agent => (
-                <option key={agent.manifest.id} value={agent.manifest.id}>
-                  {agent.manifest.name}
-                </option>
-              ))}
-            </select>
+            <ChipSelect
+              ariaLabel="Activate with"
+              value={target}
+              onChange={setAgentId}
+              options={eligible.map(agent => ({ value: agent.manifest.id, label: agent.manifest.name }))}
+            />
           </label>
         )}
         <button

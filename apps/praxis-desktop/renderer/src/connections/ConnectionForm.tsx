@@ -10,6 +10,7 @@ import {
   secretNamesForMode,
   supportsManualBoardSelection
 } from './connectionPolicy';
+import { ChipSelect } from '../ui/ChipSelect';
 
 /** What the parent should do after a save: open the board picker or stay put. */
 export type SaveFollowUp = 'boards' | 'none';
@@ -429,15 +430,16 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel }: Con
           label="Backend"
           description={existing ? 'Backend type cannot be changed after creation.' : undefined}
         >
-          <select
-            className="select"
+          <ChipSelect
+            block
+            ariaLabel="Backend"
             data-testid="conn-field-mode"
             value={mode}
             disabled={existing !== undefined}
-            onChange={event => {
+            onChange={value => {
               // Switching mode swaps the whole field set — stale values from the
               // previous mode would silently persist into the new one's settings.
-              setMode(event.target.value as BackendMode);
+              setMode(value as BackendMode);
               setValues({});
               setSecrets({});
               setTestResult(undefined);
@@ -448,16 +450,11 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel }: Con
               setJiraSetupMode('cloud');
               setJiraAuthMethod('oauth');
             }}
-          >
-            {CONNECTION_MODES.map(candidate => (
-              <option key={candidate} value={candidate}>
-                {backendModeMeta(candidate).label}
-              </option>
-            ))}
-            {existing?.mode === 'app' && (
-              <option value="app">{backendModeMeta('app').label}</option>
-            )}
-          </select>
+            options={[
+              ...CONNECTION_MODES.map(candidate => ({ value: candidate, label: backendModeMeta(candidate).label })),
+              ...(existing?.mode === 'app' ? [{ value: 'app', label: backendModeMeta('app').label }] : [])
+            ]}
+          />
         </FieldRow>
 
         <ModeFields
@@ -786,15 +783,17 @@ function ModeFields({
           ) : (
             <>
               <FieldRow label="Connection type" description="How the Jira MCP server is reached.">
-                <select
-                  className="select"
+                <ChipSelect
+                  block
+                  ariaLabel="Connection type"
                   data-testid="conn-field-connectionType"
                   value={textValue('connectionType') || 'stdio'}
-                  onChange={event => setValue('connectionType', event.target.value)}
-                >
-                  <option value="stdio">stdio (local MCP server)</option>
-                  <option value="http">HTTP (remote MCP server)</option>
-                </select>
+                  onChange={value => setValue('connectionType', value)}
+                  options={[
+                    { value: 'stdio', label: 'stdio', description: 'Local MCP server' },
+                    { value: 'http', label: 'HTTP', description: 'Remote MCP server' }
+                  ]}
+                />
               </FieldRow>
               {textValue('connectionType') === 'http' ? (
                 textField('httpUrl', 'MCP server URL', 'https://mcp.example.atlassian.net/v1/sse')

@@ -30,6 +30,14 @@
 
   --titlebar-height: calc(40px * var(--ui-scale));
 
+  /* Form-control chips (ChipSelect, skill and toggle chips) and the small icon
+     buttons beside them. Sized from the display scale, like the type, so Large
+     grows the whole control — not just the text inside a fixed-height box. */
+  --field-chip-height: calc(28px * var(--ui-scale));
+  --field-chip-icon: calc(14px * var(--ui-scale));
+  --tool-btn-size: calc(28px * var(--ui-scale));
+  --tool-btn-icon: calc(15px * var(--ui-scale));
+
   /* Sidebar hierarchy follows the active theme. Backend marks may keep their
      own brand artwork, but ordinary folders and rows remain visually native. */
   --folder: var(--text-secondary);
@@ -119,6 +127,11 @@
 /* Compact is the byte-for-byte default. Large composes with every theme and
    surface by changing only shared sizing tokens, never palette values. */
 :root[data-display-size='large'] { --ui-scale: 1.16; }
+
+/* Every <Icon> carries its requested size as --icon-size. At zero specificity, so a
+   component that sizes its own glyphs still wins; everything else grows with Large
+   instead of sitting shrunken inside a control that did. (scale 1 = the attribute.) */
+:where(.ui-icon) { width: calc(var(--icon-size, 16px) * var(--ui-scale)); height: calc(var(--icon-size, 16px) * var(--ui-scale)); }
 
 :root[data-mode='light'] {
   --bg: #f6f6f6;
@@ -585,8 +598,8 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--tool-btn-size);
+  height: var(--tool-btn-size);
   padding: 0;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -612,8 +625,8 @@ textarea {
 }
 
 .icon-btn-sm {
-  width: 22px;
-  height: 22px;
+  width: calc(22px * var(--ui-scale));
+  height: calc(22px * var(--ui-scale));
 }
 
 /* Windows-style caption buttons: full-bleed, wider, no radius. */
@@ -4226,6 +4239,7 @@ textarea {
 
 .detail-panel .settings-field-control > .input,
 .detail-panel .settings-field-control > .select,
+.detail-panel .settings-field-control > .chip-select,
 .detail-panel .settings-field-control > .textarea,
 .detail-panel .new-issue-grow {
   flex: 1 1 150px;
@@ -4233,7 +4247,7 @@ textarea {
 }
 
 .btn-compact {
-  min-height: 28px;
+  min-height: var(--field-chip-height);
   padding: 3px 8px;
   white-space: nowrap;
 }
@@ -4460,7 +4474,7 @@ button.detail-list-key:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
+  height: var(--field-chip-height);
   padding: 0 var(--space-3);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -4540,7 +4554,7 @@ button.detail-list-key:hover {
 .input,
 .select,
 .textarea {
-  height: 28px;
+  height: var(--field-chip-height);
   padding: 0 var(--space-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -5487,6 +5501,9 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
    gadget rows share the same full-width rhythm. */
 .settings-field-control--field {
   flex: 1 1 0;
+  /* A long description has a huge flex basis; without a floor it squeezed the field
+     beside it to a sliver (Working directory, the Recommendations provider picker). */
+  min-width: min(calc(220px * var(--ui-scale)), 45%);
 }
 
 /* A wrapping cluster of controls (inputs + buttons) inside a settings row —
@@ -10687,6 +10704,36 @@ button.session-chat-attachment {
 .wf-header { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
 .wf-header h1 { margin: 0; font-size: 20px; }
 .wf-header-sub { color: var(--text-tertiary); font-size: var(--text-md); }
+/* The designer is a tool surface, not a document: a tight frame so the canvas gets the room. */
+.wf-page--designer { gap: 6px; padding: var(--space-2); }
+.wf-page--designer > .wf-header { align-items: center; gap: var(--space-2); flex-wrap: nowrap; min-height: var(--tool-btn-size); }
+.wf-header-title { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+.wf-page--designer .wf-header h1 { font-size: var(--text-lg); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-header-title .wf-header-sub { font-size: var(--text-sm); white-space: nowrap; }
+.wf-header-sep { width: 1px; height: calc(var(--tool-btn-size) * 0.65); margin: 0 2px; background: var(--border); }
+.wf-header-actions .icon-btn,
+.wf-inspector-actions .icon-btn,
+.wf-canvas-toolbar .icon-btn { width: var(--tool-btn-size); height: var(--tool-btn-size); }
+.wf-header-actions .icon-btn svg,
+.wf-inspector-actions .icon-btn svg,
+.wf-canvas-toolbar .icon-btn svg,
+.wf-canvas-help-icon svg { width: var(--tool-btn-icon); height: var(--tool-btn-icon); }
+.wf-header-save { height: var(--tool-btn-size); min-height: var(--tool-btn-size); font-size: var(--text-md); }
+.wf-header-del:hover:not(:disabled) { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.wf-header-notice { display: inline-flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-2); height: var(--field-chip-height); border-radius: var(--radius-md); color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, transparent); font-size: var(--text-sm); cursor: help; white-space: nowrap; }
+.wf-header-notice svg { width: var(--field-chip-icon); height: var(--field-chip-icon); }
+.wf-header-save { min-width: 104px; justify-content: center; }
+.wf-validate-chip { height: var(--tool-btn-size); padding: 0 var(--space-2); border: 1px solid var(--border); background: var(--bg-sunken); font-size: var(--text-md); }
+.wf-validate-chip svg { width: var(--field-chip-icon); height: var(--field-chip-icon); }
+.wf-validate-chip.is-valid > svg { color: var(--success, var(--accent)); }
+.wf-validate-chip.is-warn > svg { color: var(--warning); }
+.wf-validate-chip.is-invalid { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--bg-sunken)); }
+.wf-validate-chip.is-invalid:hover { color: var(--danger); }
+.wf-header .is-spinning { animation: wf-pulse 1s ease-in-out infinite; }
+@keyframes wf-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .wf-header .is-spinning { animation: none; } }
+.wf-banner { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: 4px 4px 4px var(--space-2); }
+.wf-banner > .icon-btn { margin-left: auto; flex-shrink: 0; }
 .wf-viewswitch { margin-left: auto; display: flex; gap: var(--space-1); padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-sunken); }
 .wf-viewswitch .btn-compact { border: 1px solid transparent; border-radius: calc(var(--radius-md) - 2px); background: transparent; color: var(--text-tertiary); cursor: pointer; }
 .wf-viewswitch .btn-compact:hover { color: var(--text); }
@@ -10708,8 +10755,8 @@ button.session-chat-attachment {
 @media (max-width: 1200px) { .wf-designer { grid-template-columns: 220px minmax(0, 1fr) 300px; } }
 /* FX-BF-014 rev: inspector lives in the shell's right pane, so the designer is
    two columns — rail + canvas — and the canvas gets the rest. */
-.wf-designer--two { grid-template-columns: 248px minmax(0, 1fr); }
-@media (max-width: 1200px) { .wf-designer--two { grid-template-columns: 220px minmax(0, 1fr); } }
+.wf-designer--two { grid-template-columns: 232px minmax(0, 1fr); gap: 6px; }
+@media (max-width: 1200px) { .wf-designer--two { grid-template-columns: 208px minmax(0, 1fr); } }
 .wf-designer .rail { width: auto; }
 .wf-header-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
 .wf-header-del { margin-left: auto; }
@@ -10718,6 +10765,7 @@ button.session-chat-attachment {
 .aux-slot { display: flex; height: 100%; min-height: 0; }
 .aux-slot > * { flex: 1; min-height: 0; }
 .aux-panel { height: 100%; box-sizing: border-box; padding: var(--space-3); }
+.aux-panel.wf-inspector { padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3); gap: 0; }
 .rail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .rail-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail-add { display: flex; flex-wrap: wrap; gap: var(--space-1); }
@@ -10726,7 +10774,7 @@ button.session-chat-attachment {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: var(--space-2);
+  padding: 6px;
   gap: var(--space-2);
   box-sizing: border-box;
 }
@@ -11229,11 +11277,179 @@ button.session-chat-attachment {
 }
 .inspector-body > .empty-state { padding: var(--space-5) var(--space-3); }
 
+/* Designer inspector — one scrolling column, no tabs and no card-in-a-panel: sections
+   are a small heading and a hairline so the pane holds a whole agent stage. */
+.wf-inspector-body { display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-3); }
+.wf-inspector-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--tool-btn-size); }
+.wf-inspector-kind { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--text-secondary); }
+.wf-inspector-kind > svg { width: var(--tool-btn-icon); height: var(--tool-btn-icon); }
+.wf-inspector-kind h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; color: var(--text); }
+.wf-inspector-kind .rail-mark { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); text-transform: uppercase; letter-spacing: 0.04em; }
+.wf-inspector-actions { display: inline-flex; gap: 2px; flex-shrink: 0; }
+.wf-inspector-danger:hover:not(:disabled) { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.wf-inspector-issues { margin: 0; padding: 6px 8px 6px 22px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.wf-inspector-section { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); margin-top: var(--space-1); border-top: 1px solid var(--border); }
+.wf-inspector-section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--field-chip-height); }
+.wf-inspector-section-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+.wf-section-add { height: var(--field-chip-height); padding: 0 var(--space-2); gap: var(--space-1); font-size: var(--text-md); color: var(--accent); }
+.wf-section-add svg { width: var(--field-chip-icon); height: var(--field-chip-icon); }
+.wf-section-add:hover { color: var(--accent-hover, var(--accent)); background: var(--accent-soft, var(--bg-hover)); }
+
+/* Inline field: label left, chip right. A stacked field (text input) keeps the column. */
+.wf-field .form-field-label { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.wf-field .form-field-label-row { flex: 0 1 auto; min-width: 0; justify-content: flex-start; gap: 4px; }
+.wf-field.is-stacked .form-field-label { flex-direction: column; align-items: stretch; gap: 3px; }
+.wf-field.is-stacked .form-field-label-row { justify-content: space-between; }
+.wf-field .form-field-label-text { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-tertiary); font-size: var(--text-md); white-space: nowrap; }
+.wf-field .form-field-label-text svg, .wf-field .form-field-warn svg { width: calc(12px * var(--ui-scale)); height: calc(12px * var(--ui-scale)); }
+.wf-field .wf-recommend-btn { width: var(--field-chip-height); height: var(--field-chip-height); }
+.wf-field .wf-recommend-btn svg { width: var(--field-chip-icon); height: var(--field-chip-icon); }
+.wf-field .form-field-label-text[title] { cursor: help; }
+.wf-field-info { opacity: 0.6; }
+.wf-field .form-field-warn { position: static; }
+.wf-field.has-warn .form-field-label > span { padding-right: 0; }
+.wf-field > .form-field-label > .chip-select { min-width: 0; max-width: 64%; }
+.wf-field-hint { font-size: var(--text-xs); }
+.wf-inspector :where(input:not([type='checkbox']):not([type='radio'])) { min-height: var(--field-chip-height); }
+.wf-inspector :where(input[type='checkbox']) { width: calc(14px * var(--ui-scale)); height: calc(14px * var(--ui-scale)); }
+.wf-inspector .form-check { font-size: var(--text-md); color: var(--text-secondary); }
+.wf-inspector-group { display: flex; flex-direction: column; gap: var(--space-1); }
+.wf-inspector-group > .form-field-label-text { color: var(--text-tertiary); font-size: var(--text-md); }
+
+/* A chip that stands in for a <select>: the composer chip, framed so it reads as a
+   control on a form rather than text in a toolbar. */
+.chip-select { min-width: 0; max-width: 100%; height: var(--field-chip-height); gap: var(--space-2); padding: 0 var(--space-2) 0 calc(10px * var(--ui-scale)); border: 1px solid var(--border); background: var(--bg-sunken); color: var(--text); font-size: var(--text-md); }
+.chip-select > svg { width: var(--field-chip-icon); height: var(--field-chip-icon); }
+.chip-select > svg:last-child { width: calc(11px * var(--ui-scale)); height: calc(11px * var(--ui-scale)); }
+.chip-select:hover:not(:disabled) { border-color: var(--border-strong); }
+.chip-select.active { border-color: var(--accent); }
+.chip-select:disabled { opacity: 0.55; cursor: default; }
+.chip-select > svg { flex-shrink: 0; color: var(--text-tertiary); }
+.chip-select-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-select-label.is-placeholder { color: var(--text-tertiary); }
+.chip-select--block { width: 100%; min-width: calc(180px * var(--ui-scale)); }
+/* In a settings/form row the chip stands where a full-width select stood. */
+.settings-field-control > .chip-select--block { flex: 1 1 calc(180px * var(--ui-scale)); }
+.chip-select--block > .chip-select-label { flex: 1; text-align: left; }
+/* Beside the board filter bar's own pill chips (Status, Type), match their shape. */
+.board-filter-bar .chip-select { border-radius: 999px; padding-left: calc(12px * var(--ui-scale)); }
+.chip-select--plain { border-color: transparent; background: transparent; color: var(--text-secondary); }
+.chip-select--plain:hover:not(:disabled) { border-color: transparent; background: var(--bg-hover); color: var(--text); }
+.chip-select-menu {
+  /* Portalled into <body>, so it must clear every overlay a chip can sit in: the
+     Settings dialog (250), modals (400), context menus (500), docked popovers (1000). */
+  z-index: 1100;
+  max-width: min(calc(380px * var(--ui-scale)), 90vw);
+  max-height: min(calc(320px * var(--ui-scale)), 70vh);
+  outline: none;
+}
+.chip-select-option { gap: var(--space-2); padding: calc(7px * var(--ui-scale)) var(--space-2); }
+.chip-select-option svg { width: var(--field-chip-icon); height: var(--field-chip-icon); }
+.chip-select-option { align-items: flex-start; }
+.chip-select-option > svg { margin-top: 2px; }
+.chip-select-option.is-focused:not(.active) { background: var(--bg-hover); }
+.chip-select-option-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.chip-select-option-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-select-option-desc { color: var(--text-tertiary); font-size: var(--text-sm); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.chip-select-option small { margin-top: 2px; white-space: nowrap; }
+.chip-select-option .chip-select-check { color: var(--accent); margin-left: 4px; }
+
+/* Toggle chips — a few on/off choices (approval gates) in one row. */
+.wf-toggle-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.wf-toggle-chip { height: var(--field-chip-height); border: 1px solid var(--border); font-size: var(--text-md); }
+.wf-toggle-chip input { margin: 0; }
+.wf-toggle-chip.active { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.wf-toggle-chip.is-locked { cursor: help; }
+
+/* Active skills — removable chips; the full catalogue lives in the picker dialog. */
+.wf-skill-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.wf-skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  height: var(--field-chip-height);
+  padding: 0 calc(3px * var(--ui-scale)) 0 calc(9px * var(--ui-scale));
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-size: var(--text-md);
+}
+.wf-skill-chip > svg { flex-shrink: 0; width: calc(12px * var(--ui-scale)); height: calc(12px * var(--ui-scale)); color: var(--accent); }
+.wf-skill-chip.is-warn { border-color: color-mix(in srgb, var(--warning) 50%, var(--border)); }
+.wf-skill-chip.is-warn > svg { color: var(--warning); }
+.wf-skill-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-skill-chip-remove { display: inline-grid; place-items: center; width: calc(20px * var(--ui-scale)); height: calc(20px * var(--ui-scale)); padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-tertiary); cursor: pointer; }
+.wf-skill-chip-remove:hover { background: var(--bg-hover); color: var(--danger); }
+.wf-skill-chip-remove svg { width: calc(11px * var(--ui-scale)); height: calc(11px * var(--ui-scale)); }
+
+.modal-card.wf-skill-picker { width: min(480px, 92vw); max-height: min(560px, 80vh); }
+.wf-skill-picker .modal-header h3 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-skill-picker-count { color: var(--text-tertiary); font-size: var(--text-sm); }
+.wf-skill-picker-search { position: relative; display: flex; align-items: center; padding: var(--space-2) var(--space-2) 0; }
+.wf-skill-picker-search > svg { position: absolute; left: calc(var(--space-2) + 8px); color: var(--text-tertiary); pointer-events: none; }
+.wf-skill-picker-search .input { flex: 1; padding-left: 26px; }
+.wf-skill-picker-list { flex: 1; min-height: 0; }
+.wf-skill-option { display: flex; align-items: flex-start; gap: var(--space-2); padding: 6px var(--space-2); border-radius: var(--radius-sm); cursor: pointer; }
+.wf-skill-option:hover { background: var(--bg-hover); }
+.wf-skill-option.is-on { background: var(--bg-active); }
+.wf-skill-option input { margin-top: 3px; flex-shrink: 0; }
+.wf-skill-option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wf-skill-option-title { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: var(--text-md); color: var(--text); }
+.wf-skill-option-desc { color: var(--text-tertiary); font-size: var(--text-sm); line-height: 1.4; }
+
+/* A selected connection's two ends. */
+.wf-edge-ends { display: flex; align-items: center; gap: var(--space-1); color: var(--text-tertiary); min-width: 0; }
+.wf-edge-ends .composer-chip { min-width: 0; flex: 0 1 auto; height: var(--field-chip-height); border: 1px solid var(--border); font-size: var(--text-md); color: var(--text); }
+.wf-edge-ends svg { width: var(--field-chip-icon); height: var(--field-chip-icon); }
+.wf-edge-ends .composer-chip span { overflow: hidden; text-overflow: ellipsis; }
+
 /* Canvas — reuses .designer-canvas for the dot-grid surface. */
-.wf-canvas { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; flex: 1; }
-.wf-canvas-bar { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-sm); color: var(--text-tertiary); }
-.wf-canvas-bar > span:first-child { flex: 1; }
-.wf-canvas-zoom { font-variant-numeric: tabular-nums; }
+.wf-canvas { position: relative; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+/* Floating over the surface's top-right corner rather than a row of its own above it. */
+.wf-canvas-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity) * 100%), transparent);
+  background-image: var(--surface-panel-tint-layer);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  backdrop-filter: var(--surface-backdrop);
+}
+.wf-canvas-toolbar-sep { width: 1px; height: calc(var(--tool-btn-size) * 0.6); margin: 0 2px; background: var(--border); }
+.wf-canvas-zoom {
+  min-width: calc(46px * var(--ui-scale));
+  height: var(--tool-btn-size);
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.wf-canvas-zoom:hover { background: var(--bg-hover); color: var(--text); }
+.wf-canvas-help-icon { display: inline-grid; place-items: center; width: var(--tool-btn-size); height: var(--tool-btn-size); color: var(--text-tertiary); cursor: help; }
 .wf-canvas-surface { flex: 1; min-height: 360px; cursor: default; touch-action: none; }
 .wf-canvas-surface.is-panning { cursor: grabbing; }
 .wf-canvas-world { position: absolute; inset: 0; transform-origin: 0 0; }
@@ -11600,20 +11816,42 @@ button.session-chat-attachment {
 .wf-run-limit-switch .input { min-width: 140px; }
 
 /* Start-run dialog. */
-.wf-runstart-card { width: min(460px, calc(100vw - 32px)); padding: var(--space-4); }
-.wf-runstart { display: flex; flex-direction: column; gap: var(--space-3); }
+.wf-runstart-card { width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; overflow: hidden; }
+.wf-runstart { display: flex; flex-direction: column; gap: var(--space-4); max-height: calc(100vh - 32px); padding: var(--space-4); overflow-y: auto; }
 .wf-runstart-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .wf-runstart-head h3 { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-lg); }
+.wf-runstart-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wf-runstart-title p { margin: 0; color: var(--text-tertiary); font-size: var(--text-sm); }
 .wf-runstart label { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); color: var(--text-tertiary); }
-.wf-runstart-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
-/* Run mode choice: two radio rows, each a title over a one-line consequence. */
-.wf-runstart-mode { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; border: 0; min-width: 0; }
-.wf-runstart-mode legend { padding: 0; margin-bottom: var(--space-1); font-size: var(--text-sm); color: var(--text-tertiary); }
-.wf-runstart .wf-runstart-mode-option { flex-direction: row; align-items: flex-start; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); cursor: pointer; }
-.wf-runstart-mode-option:has(input:checked) { border-color: var(--accent); }
-.wf-runstart-mode-option span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.wf-runstart-mode-option strong { font-size: var(--text-md); }
-.wf-runstart-mode-option em { font-style: normal; font-size: var(--text-sm); color: var(--text-tertiary); }
+.wf-runstart-notices { display: flex; flex-direction: column; gap: var(--space-1); }
+.wf-runstart-notices p { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-elevated); color: var(--text-secondary); font-size: var(--text-sm); }
+.wf-runstart-notices p.is-warn { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); color: var(--warning); }
+.wf-runstart-section { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.wf-runstart-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.wf-runstart-section-head h4 { margin: 0; color: var(--text); font-size: var(--text-md); }
+.wf-runstart-section-head p { margin: 0; color: var(--text-tertiary); font-size: var(--text-sm); text-align: right; }
+.wf-runstart-details-grid, .wf-runstart-runtime-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.wf-runstart-task-field { grid-column: 1 / -1; }
+.wf-runstart-details-grid:not(:has(.wf-runstart-workflow-field)) .wf-runstart-ticket-field,
+.wf-runstart-runtime-grid > label:only-child { grid-column: 1 / -1; }
+.wf-runstart-actions { display: flex; justify-content: flex-end; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.wf-runstart-select-chip { min-width: calc(180px * var(--ui-scale)); }
+.wf-runstart-policy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.wf-runstart-mode { display: flex; flex-flow: row wrap; align-content: flex-start; gap: var(--space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.wf-runstart-mode legend { width: 100%; padding: 0; margin-bottom: var(--space-1); color: var(--text); font-size: var(--text-md); font-weight: 600; }
+.wf-runstart .wf-runstart-mode-option { position: relative; display: inline-flex; flex-direction: row; align-items: center; width: auto; min-height: 26px; padding: 0 var(--space-2); border: 1px solid transparent; color: var(--text-secondary); cursor: pointer; }
+.wf-runstart-mode-option input { position: absolute; width: 1px; height: 1px; margin: -1px; opacity: 0; pointer-events: none; }
+.wf-runstart-mode-option:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.wf-runstart-mode-option.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.wf-runstart-mode-option span { display: inline-flex; width: auto; }
+.wf-runstart-mode-option strong { font-size: var(--text-sm); font-weight: 600; }
+.wf-runstart-policy-help { flex: 1 0 100%; min-height: 34px; margin: var(--space-1) 0 0; color: var(--text-tertiary); font-size: var(--text-sm); line-height: 1.4; }
+@media (max-width: 620px) {
+  .wf-runstart-details-grid, .wf-runstart-runtime-grid, .wf-runstart-policy-grid { grid-template-columns: minmax(0, 1fr); }
+  .wf-runstart-task-field { grid-column: auto; }
+  .wf-runstart-section-head { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .wf-runstart-section-head p { text-align: left; }
+}
 .wf-run-mode, .wf-run-provider { margin: 0; display: flex; align-items: center; gap: var(--space-1); }
 
 /* Vertical pipeline (right pane). Progress reads down the list; parallel steps

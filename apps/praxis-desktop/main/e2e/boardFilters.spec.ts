@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 let app: TestApp | undefined;
 let window: Page;
@@ -170,14 +171,14 @@ test('assignee and parent scope filters narrow the board', async () => {
   const cards = window.locator('[data-testid="issue-card"]');
   await expect(cards).toHaveCount(33);
 
-  await window.locator('[data-testid="board-filter-assignee"]').selectOption('me');
+  await chooseOption(window.locator('[data-testid="board-filter-assignee"]'), 'me');
   await expect(cards).toHaveCount(17);
 
   // Parent scope: only APP-100's three sub-tasks match (it is the sole
   // Feature, so the parent select exists on this board).
-  await window.locator('[data-testid="board-filter-assignee"]').selectOption('all');
+  await chooseOption(window.locator('[data-testid="board-filter-assignee"]'), 'all');
   await expect(cards).toHaveCount(33);
-  await window.locator('[data-testid="board-filter-parent"]').selectOption('APP-100');
+  await chooseOption(window.locator('[data-testid="board-filter-parent"]'), 'APP-100');
   await expect(cards).toHaveCount(3);
   await expect(window.locator('[data-testid="board-filter-count"]')).toHaveText('3 items');
 });

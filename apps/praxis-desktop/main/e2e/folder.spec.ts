@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, expandAllIssueStacks, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 let app: TestApp;
 let window: Page;
@@ -53,7 +54,7 @@ async function addFolderConnection(name: string): Promise<void> {
   await window.locator('[data-testid="nav-connections"]').click();
   await window.locator('[data-testid="add-connection-btn"]').click();
   await window.locator('[data-testid="conn-field-name"]').fill(name);
-  await window.locator('[data-testid="conn-field-mode"]').selectOption('folder');
+  await chooseOption(window.locator('[data-testid="conn-field-mode"]'), 'folder');
   await window.locator('[data-testid="conn-field-root-0"]').fill(plansDir);
   await window.locator('[data-testid="conn-save-btn"]').click();
   await expect(window.locator('[data-testid="connection-row"]', { hasText: name })).toBeVisible();
@@ -78,9 +79,9 @@ test('transitioning a live folder issue writes the new status back to markdown',
   await window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' }).click();
 
   const status = window.locator('[data-testid="issue-edit-status"]');
-  await status.selectOption({ label: 'Done' });
+  await chooseOption(status, { label: 'Done' });
   await window.locator('[data-testid="issue-edit-save-btn"]').click();
-  await expect(status.locator('option:checked')).toHaveText('Done');
+  await expect(status.locator('.chip-select-label')).toHaveText('Done');
 
   const taskPath = path.join(plansDir, 'features', 'feature-01-demo-feature', 'task-01-01-do-the-thing.md');
   await expect
