@@ -15,6 +15,7 @@ import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName, 
 import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing } from './sessionNav';
 import { isProviderUsable } from './providerAvailability';
 import { isTerminalAgentState } from './aiSessionState';
+import { ChipSelect } from '../ui/ChipSelect';
 
 function purposeOf(session: AgentSessionRecord) {
   return session.purpose ?? {
@@ -624,25 +625,34 @@ export function SessionConversationDialog({ session, open, position, onClose, in
         </div>
         <p className="session-popover-note">Starts a bounded conversation. Two models may incur spend; only one can hold tools at a time.</p>
         <label className="session-brief-field"><span className="rail-sub">Second AI provider</span>
-          <select
+          <ChipSelect
+            block
+            ariaLabel="Second AI provider"
             data-testid="session-conversation-provider"
             value={provider}
             disabled={!providerStatuses || configuredProviders.length === 0}
-            onChange={event => setProvider(event.target.value as AiProvider)}
-          >
-            {!providerStatuses && <option value={provider}>Loading providers…</option>}
-            {providerStatuses && configuredProviders.length === 0 && <option value={provider}>No providers configured</option>}
-            {configuredProviders.map(id => <option key={id} value={id}>{PROVIDER_LABELS[id]}</option>)}
-          </select>
+            placeholder={!providerStatuses ? 'Loading providers…' : 'No providers configured'}
+            onChange={value => setProvider(value as AiProvider)}
+            options={configuredProviders.map(id => ({ value: id, label: PROVIDER_LABELS[id], icon: providerIconName(id) }))}
+          />
         </label>
         <label className="session-brief-field"><span className="rail-sub">Model</span>
-          {options?.options.length ? <select data-testid="session-conversation-model" value={model} onChange={event => setModel(event.target.value)}>{options.options.map(option => <option key={option.value} value={option.value}>{option.name || option.value}</option>)}</select>
+          {options?.options.length ? <ChipSelect block ariaLabel="Model" data-testid="session-conversation-model" value={model} icon="sparkles" onChange={setModel} options={options.options.map(option => ({ value: option.value, label: option.name || option.value, description: option.description }))} />
             : <input data-testid="session-conversation-model" value={model} onChange={event => setModel(event.target.value)} />}
         </label>
         <label className="session-brief-field"><span className="rail-sub">Mode</span>
-          <select data-testid="session-conversation-mode" value={mode} onChange={event => setMode(event.target.value as AgentConversationMode)}>
-            <option value="consult">Consult — both read only</option><option value="debate">Debate — both read only</option><option value="pair">Pair — one tool owner at a time</option>
-          </select>
+          <ChipSelect
+            block
+            ariaLabel="Mode"
+            data-testid="session-conversation-mode"
+            value={mode}
+            onChange={value => setMode(value as AgentConversationMode)}
+            options={[
+              { value: 'consult', label: 'Consult', description: 'Both read only' },
+              { value: 'debate', label: 'Debate', description: 'Both read only' },
+              { value: 'pair', label: 'Pair', description: 'One tool owner at a time' }
+            ]}
+          />
         </label>
         <label className="session-brief-field"><span className="rail-sub">Total AI turns</span>
           <input data-testid="session-conversation-turn-cap" type="number" min={1} max={20} value={turnCap} onChange={event => setTurnCap(Number(event.target.value))} />
@@ -663,13 +673,19 @@ export function SessionConversationActions({ session, onStop, onToolOwner, targe
     const current = conversation.participants.find(participant => participant.id === conversation.currentSpeakerId);
     const owner = conversation.participants.find(participant => participant.id === conversation.toolOwnerId);
     return <>
-      <label className="composer-chip session-conversation-target" data-testid="session-conversation-target">
-        <Icon name={providerIconName((conversation.participants.find(participant => participant.id === targetId) ?? current)?.provider ?? 'openai')} size={13} />
-        <span>Ask</span>
-        <select aria-label="Choose which AI receives your message" value={targetId ?? current?.id ?? ''} onChange={event => onTargetChange?.(event.target.value)}>
-          {conversation.participants.map(participant => <option key={participant.id} value={participant.id}>{participant.displayLabel}</option>)}
-        </select>
-      </label>
+      <ChipSelect
+        variant="plain"
+        className="session-conversation-target"
+        data-testid="session-conversation-target"
+        ariaLabel="Choose which AI receives your message"
+        value={targetId ?? current?.id ?? ''}
+        onChange={value => onTargetChange?.(value)}
+        options={conversation.participants.map(participant => ({
+          value: participant.id,
+          label: `Ask ${participant.displayLabel}`,
+          icon: providerIconName(participant.provider)
+        }))}
+      />
       <span className="composer-chip session-runtime-chip is-readonly" data-testid="session-conversation-status">{conversation.mode} · {conversation.turnsUsed}/{conversation.turnCap} · {current?.displayLabel}</span>
       <span className="composer-chip session-runtime-chip is-readonly" data-testid="session-conversation-tool-owner">Tools: {owner?.displayLabel ?? 'None'}</span>
       {conversation.mode === 'pair' && idle && conversation.participants.map(participant => <button key={participant.id} className="composer-chip" type="button" data-testid={`session-conversation-owner-${participant.id}`} disabled={participant.id === conversation.toolOwnerId} onClick={() => onToolOwner(participant.id)}>Give tools to {participant.role}</button>)}

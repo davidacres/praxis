@@ -9,6 +9,7 @@ import { getActiveTerminalId, setActiveTerminalId } from '../ai/terminalSelectio
 import { visibleMessageText } from '../ai/gadgets/messageText';
 import { useSettings } from '../settings/useSettings';
 import { DEFAULT_THEME_ID, terminalColorsForTheme } from '../settings/themes';
+import { ChipSelect } from '../ui/ChipSelect';
 
 export type PanelTab = 'output' | 'terminal';
 
@@ -293,12 +294,18 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
         <span className="spacer" />
         {tab === 'terminal' && !terminalDisabledReason && <>
           <Icon name="terminal" size={14} />
-          <select className="terminal-session-select" aria-label="Active terminal" value={activeId ?? ''}
-            onChange={event => selectTerminal(event.target.value || undefined)}>
-            {sessions.map((session, index) => <option key={session.id} value={session.id}>
-              {session.title} {index + 1}{session.exited ? ' (exited)' : ''}
-            </option>)}
-          </select>
+          <ChipSelect
+            className="terminal-session-select"
+            variant="plain"
+            ariaLabel="Active terminal"
+            value={activeId ?? ''}
+            onChange={value => selectTerminal(value || undefined)}
+            options={sessions.map((session, index) => ({
+              value: session.id,
+              label: `${session.title} ${index + 1}`,
+              meta: session.exited ? 'exited' : undefined
+            }))}
+          />
           <button className="icon-btn icon-btn-sm" aria-label="New terminal" title="New terminal" onClick={() => void createTerminal()}><Icon name="plus" size={14} /></button>
           <button className={`icon-btn icon-btn-sm${profileMenuOpen ? ' active' : ''}`} aria-label="Launch terminal profile"
             aria-expanded={profileMenuOpen} title="Launch terminal profile" onClick={() => setProfileMenuOpen(open => !open)}>
@@ -340,12 +347,16 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
               </label>
               <label className="terminal-session-setting-row">
                 <span>Cursor</span>
-                <select aria-label="Session cursor style" value={activeSessionSettings.cursorStyle}
-                  onChange={event => updateSessionSettings({ cursorStyle: event.target.value as TerminalSettings['cursorStyle'] })}>
-                  <option value="block">Block</option>
-                  <option value="bar">Line</option>
-                  <option value="underline">Underline</option>
-                </select>
+                <ChipSelect
+                  ariaLabel="Session cursor style"
+                  value={activeSessionSettings.cursorStyle}
+                  onChange={value => updateSessionSettings({ cursorStyle: value as TerminalSettings['cursorStyle'] })}
+                  options={[
+                    { value: 'block', label: 'Block' },
+                    { value: 'bar', label: 'Line' },
+                    { value: 'underline', label: 'Underline' }
+                  ]}
+                />
               </label>
               <label className="terminal-session-setting-row">
                 <span>Scrollback</span>

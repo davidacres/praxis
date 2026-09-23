@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 let app: TestApp | undefined;
 
@@ -147,7 +148,7 @@ test('swim lanes group columns by assignee', async () => {
   await openApplicationBoard(app.window);
 
   await openDisplayMenu(app.window);
-  await app.window.locator('[data-testid="board-prefs-swimlane"]').selectOption('assignee');
+  await chooseOption(app.window.locator('[data-testid="board-prefs-swimlane"]'), 'assignee');
 
   const lanes = app.window.locator('[data-testid="board-swimlane"]');
   // Demo issues are assigned to Alex Agent or Jordan Builder — two lanes.
@@ -164,13 +165,13 @@ test('max-age preference hides stale issues', async () => {
 
   await openDisplayMenu(app.window);
   // Every demo issue was last updated in March 2026, well over a week ago.
-  await app.window.locator('[data-testid="board-prefs-max-age"]').selectOption('1');
+  await chooseOption(app.window.locator('[data-testid="board-prefs-max-age"]'), '1');
 
   await expect(app.window.locator('[data-testid="issue-card"]')).toHaveCount(0);
   await expect(app.window.locator('[data-testid="board-prefs-empty"]')).toBeVisible();
 
   // Back to all time, cards return.
-  await app.window.locator('[data-testid="board-prefs-max-age"]').selectOption('0');
+  await chooseOption(app.window.locator('[data-testid="board-prefs-max-age"]'), '0');
   await expect(app.window.locator('[data-testid="issue-card"]')).toHaveCount(33);
 });
 

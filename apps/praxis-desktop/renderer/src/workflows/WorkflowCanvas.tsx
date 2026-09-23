@@ -22,6 +22,8 @@ import { Icon } from '../ui/Icon';
 
 const NODE_W = 190;
 const NODE_H = 92;
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 2;
 
 export interface WorkflowNodePresentation {
   agent?: string;
@@ -75,8 +77,10 @@ export function WorkflowCanvas({
   useEffect(() => {
     if (!selectedEdgeId && !selectedNodeId) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      const tag = (event.target as HTMLElement)?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      // Only keys aimed at the canvas itself: a Backspace in the inspector, a picker, or a
+      // dialog must never delete the selected stage behind it.
+      const target = event.target as HTMLElement | null;
+      if (target && target !== document.body && !surfaceRef.current?.contains(target)) return;
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
         if (selectedEdgeId) {
@@ -165,8 +169,21 @@ export function WorkflowCanvas({
   const onWheel = useCallback((event: React.WheelEvent) => {
     event.preventDefault();
     setView(current => {
-      const zoom = Math.min(2, Math.max(0.4, current.zoom * (event.deltaY < 0 ? 1.1 : 0.9)));
+      const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current.zoom * (event.deltaY < 0 ? 1.1 : 0.9)));
       return { ...current, zoom: Math.round(zoom * 100) / 100 };
+    });
+  }, []);
+
+  /** Toolbar zoom — keeps the centre of the visible surface where it is. */
+  const zoomBy = useCallback((factor: number) => {
+    const rect = surfaceRef.current?.getBoundingClientRect();
+    setView(current => {
+      const zoom = Math.round(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current.zoom * factor)) * 100) / 100;
+      if (!rect) return { ...current, zoom };
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+      const scale = zoom / current.zoom;
+      return { x: cx - (cx - current.x) * scale, y: cy - (cy - current.y) * scale, zoom };
     });
   }, []);
 
@@ -228,29 +245,45 @@ export function WorkflowCanvas({
 
   return (
     <div className="wf-canvas">
-      <div className="wf-canvas-bar">
-        <span>Drag a card to move it, drag from its ▸ handle onto another to connect. Click a connection to delete it. Scroll to zoom.</span>
+      <div className="wf-canvas-toolbar" role="toolbar" aria-label="Canvas">
         <button
           type="button"
-          className="btn btn-compact"
+          className="icon-btn icon-btn-sm"
           data-testid="wf-auto-arrange"
+          aria-label="Auto arrange"
           onClick={() => onChange(autoArrange(definition))}
           disabled={definition.nodes.length < 2}
-          title="Arrange workflow stages in dependency order without overlap"
+          title="Auto arrange — lay stages out in dependency order without overlap"
         >
-          <Icon name="layout-focus" size={12} /> Auto arrange
+          <Icon name="columns" size={13} />
         </button>
-        <button type="button" className="btn btn-compact" onClick={() => setView({ x: 40, y: 40, zoom: 1 })}>
-          Reset view
+        <span className="wf-canvas-toolbar-sep" aria-hidden />
+        <button type="button" className="icon-btn icon-btn-sm" aria-label="Zoom out" title="Zoom out" disabled={view.zoom <= MIN_ZOOM} onClick={() => zoomBy(1 / 1.2)}>
+          <Icon name="zoom-out" size={13} />
         </button>
-        <span className="wf-canvas-zoom">{Math.round(view.zoom * 100)}%</span>
+        <button type="button" className="wf-canvas-zoom" aria-label="Reset view" title="Reset view (100%, back to the origin)" onClick={() => setView({ x: 40, y: 40, zoom: 1 })}>
+          {Math.round(view.zoom * 100)}%
+        </button>
+        <button type="button" className="icon-btn icon-btn-sm" aria-label="Zoom in" title="Zoom in" disabled={view.zoom >= MAX_ZOOM} onClick={() => zoomBy(1.2)}>
+          <Icon name="zoom-in" size={13} />
+        </button>
+        <span className="wf-canvas-toolbar-sep" aria-hidden />
+        <span
+          className="wf-canvas-help-icon"
+          tabIndex={0}
+          role="img"
+          aria-label="Canvas help"
+          title="Drag a card to move it; drag from its ▸ handle onto another card to connect. Click a connection to select or delete it. Drag empty space to pan, scroll to zoom."
+        >
+          <Icon name="info" size={13} />
+        </span>
       </div>
 
       <p id="wf-canvas-help" className="sr-only">
         Each stage is a button. Press Tab to move between stages, Enter or Space to select one
         and open its inspector, and the arrow keys to nudge the selected stage (hold Shift for a
-        larger step). Connections are made with a pointer from a stage's handle, or in the
-        Connections panel. Select a connection and press Delete to remove it.
+        larger step). Connections are made with a pointer from a stage's handle. Select a
+        connection to set its outcome in the inspector, or press Delete to remove it.
       </p>
       <div
         ref={surfaceRef}

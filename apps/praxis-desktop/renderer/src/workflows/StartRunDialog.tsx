@@ -11,8 +11,9 @@ import type {
 } from '@praxis/core';
 import { isIssueDone } from '../board/boardMeta';
 import { Icon } from '../ui/Icon';
+import { ChipSelect } from '../ui/ChipSelect';
 import { assertRunBaseOrThrow, UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from './UncommittedBaseNotice';
-import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS } from '../ai/modelProviders';
+import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from '../ai/modelProviders';
 import { isProviderUsable } from '../ai/providerAvailability';
 
 /** "KEY — Summary", the same picker convention IssueDetail's parent-issue field uses. */
@@ -146,6 +147,7 @@ export function StartRunDialog({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // An open chip picker takes its own Escape and stops it before it gets here.
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
@@ -265,42 +267,56 @@ export function StartRunDialog({
           }}
         >
           <div className="wf-runstart-head">
-            <h3>
-              <Icon name="play" size={14} />
-              Start a run
-            </h3>
+            <div className="wf-runstart-title">
+              <h3>
+                <Icon name="play" size={15} />
+                Start workflow run
+              </h3>
+              <p>{project.name}</p>
+            </div>
             <button type="button" className="icon-btn icon-btn-sm" aria-label="Close" onClick={onClose}>
               <Icon name="close" size={13} />
             </button>
           </div>
-          <p className="hint">
-            {project.name} — for day-to-day work, add a workflow from a session so the session becomes its controller.
-          </p>
-          {planInput && (
-            <p className="hint" data-testid="workflow-plan-input">
-              Plan input attached: master plan ({planInput.generatedFeatureCount} feature(s), {planInput.generatedStoryCount} stor{planInput.generatedStoryCount === 1 ? 'y' : 'ies'}).
-            </p>
+          {(planInput || !project.workspaceFolder || runnableWorkflows.length === 0) && (
+            <div className="wf-runstart-notices">
+              {planInput && (
+                <p data-testid="workflow-plan-input">
+                  <Icon name="check" size={13} />
+                  Master plan attached · {planInput.generatedFeatureCount} feature{planInput.generatedFeatureCount === 1 ? '' : 's'} · {planInput.generatedStoryCount} stor{planInput.generatedStoryCount === 1 ? 'y' : 'ies'}
+                </p>
+              )}
+              {!project.workspaceFolder && (
+                <p className="is-warn">
+                  <Icon name="warning" size={13} />
+                  No project folder. Agent and check stages will need manual completion.
+                </p>
+              )}
+              {runnableWorkflows.length === 0 && <p>Save a workflow in the designer before starting a run.</p>}
+            </div>
           )}
-          {!project.workspaceFolder && (
-            <p className="hint is-warn">
-              No folder is attached — agent and check stages will need to be advanced by hand.
-            </p>
-          )}
-          {runnableWorkflows.length === 0 && <p className="hint">Save a workflow in the designer first.</p>}
+          <section className="wf-runstart-section">
+            <div className="wf-runstart-section-head">
+              <h4>Run details</h4>
+              <p>Choose the work this run should complete.</p>
+            </div>
+            <div className="wf-runstart-details-grid">
           {runnableWorkflows.length > 1 && (
-            <label>
+            <label className="wf-runstart-workflow-field">
               <span>Workflow</span>
-              <select aria-label="Run workflow" value={startWorkflowId} onChange={e => setStartWorkflowId(e.target.value)}>
-                <option value="">—</option>
-                {runnableWorkflows.map(w => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
+              <ChipSelect
+                block
+                className="wf-runstart-select-chip"
+                ariaLabel="Run workflow"
+                icon="play"
+                value={startWorkflowId}
+                placeholder="Choose a workflow"
+                onChange={setStartWorkflowId}
+                options={[{ value: '', label: 'Choose a workflow' }, ...runnableWorkflows.map(w => ({ value: w.id, label: w.name }))]}
+              />
             </label>
           )}
-          <label>
+          <label className="wf-runstart-task-field">
             <span>Task</span>
             <input
               aria-label="Run task"
@@ -311,78 +327,80 @@ export function StartRunDialog({
             />
           </label>
           {issueOptions.length > 0 && (
-            <label>
+            <label className="wf-runstart-ticket-field">
               <span>Ticket (optional)</span>
-              <input
-                aria-label="Run ticket"
-                list="wf-runstart-issue-options"
-                value={issueKeyDraft}
-                onChange={e => {
-                  const val = e.target.value;
-                  setIssueKeyDraft(val);
-                  const key = extractIssueKey(val);
-                  const matched = issueOptions.find(option => option.key === key);
-                  if (matched && !taskTitle.trim()) {
-                    setTaskTitle(matched.summary);
-                  }
-                }}
-                placeholder="Write the outcome back as a comment"
+              <ChipSelect
+                block
+                className="wf-runstart-select-chip"
+                ariaLabel="Run ticket"
                 data-testid="wf-runstart-issue"
+                icon="ticket"
+                value={extractIssueKey(issueKeyDraft)}
+                placeholder="No ticket"
+                searchable
+                onChange={key => {
+                  setIssueKeyDraft(key);
+                  const matched = issueOptions.find(option => option.key === key);
+                  if (matched && !taskTitle.trim()) setTaskTitle(matched.summary);
+                }}
+                options={[
+                  { value: '', label: 'No ticket', description: 'The outcome is not written back anywhere' },
+                  ...issueOptions.map(option => ({ value: option.key, label: `${option.key} · ${option.summary}` }))
+                ]}
               />
-              <datalist id="wf-runstart-issue-options">
-                {issueOptions.map(option => (
-                  <option key={option.key} value={`${option.key} ${ISSUE_OPTION_SEPARATOR} ${option.summary}`} />
-                ))}
-              </datalist>
             </label>
           )}
+            </div>
+          </section>
           {availableProviderOptions.length > 0 && (
-            <div
-              className="wf-runstart-row"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: modelOptions && modelOptions.options.length > 0 ? '1fr 1fr' : '1fr',
-                gap: 'var(--space-2)'
-              }}
-            >
+            <section className="wf-runstart-section">
+              <div className="wf-runstart-section-head">
+                <h4>AI runtime</h4>
+                <p>Used when a stage does not specify its own model.</p>
+              </div>
+              <div className="wf-runstart-runtime-grid">
               <label>
                 <span>AI Provider</span>
-                <select
-                  aria-label="Run AI provider"
-                  value={selectedProvider ?? ''}
-                  onChange={e => setSelectedProvider(e.target.value as AiProvider)}
+                <ChipSelect
+                  block
+                  className="wf-runstart-select-chip"
+                  ariaLabel="Run AI provider"
                   data-testid="wf-runstart-provider"
-                >
-                  {availableProviderOptions.map(status => (
-                    <option key={status.provider} value={status.provider}>
-                      {PROVIDER_LABELS[status.provider] ?? status.provider}
-                    </option>
-                  ))}
-                </select>
+                  icon="robot"
+                  value={selectedProvider ?? ''}
+                  placeholder="Choose a provider"
+                  onChange={value => setSelectedProvider(value as AiProvider)}
+                  options={availableProviderOptions.map(status => ({
+                    value: status.provider,
+                    label: PROVIDER_LABELS[status.provider] ?? status.provider,
+                    icon: providerIconName(status.provider)
+                  }))}
+                />
               </label>
               {modelOptions && modelOptions.options.length > 0 && (
                 <label>
                   <span>Model</span>
-                  <select
-                    aria-label="Run AI model"
-                    value={selectedModel}
-                    onChange={e => setSelectedModel(e.target.value)}
+                  <ChipSelect
+                    block
+                    className="wf-runstart-select-chip"
+                    ariaLabel="Run AI model"
                     data-testid="wf-runstart-model"
+                    icon="sparkles"
+                    value={selectedModel}
+                    placeholder="Choose a model"
                     disabled={modelsLoading}
-                  >
-                    {modelOptions.options.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.name || opt.value}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSelectedModel}
+                    options={modelOptions.options.map(opt => ({ value: opt.value, label: opt.name || opt.value, description: opt.description }))}
+                  />
                 </label>
               )}
-            </div>
+              </div>
+            </section>
           )}
+          <div className="wf-runstart-policy-grid">
           <fieldset className="wf-runstart-mode" data-testid="wf-runstart-limit">
             <legend>If an AI runs out of budget</legend>
-            <label className="wf-runstart-mode-option">
+            <label className={`composer-chip wf-runstart-mode-option${providerLimitPolicy === 'ask' ? ' active' : ''}`}>
               <input
                 type="radio"
                 name="wf-provider-limit"
@@ -393,10 +411,9 @@ export function StartRunDialog({
               />
               <span>
                 <strong>Ask me</strong>
-                <em>Pause the stage and ask whether to switch to another AI, retry or stop.</em>
               </span>
             </label>
-            <label className="wf-runstart-mode-option">
+            <label className={`composer-chip wf-runstart-mode-option${providerLimitPolicy === 'switch' ? ' active' : ''}`}>
               <input
                 type="radio"
                 name="wf-provider-limit"
@@ -406,11 +423,10 @@ export function StartRunDialog({
                 data-testid="wf-runstart-limit-switch"
               />
               <span>
-                <strong>Switch AI automatically</strong>
-                <em>Carry on with the next AI that is set up, without asking.</em>
+                <strong>Auto-switch</strong>
               </span>
             </label>
-            <label className="wf-runstart-mode-option">
+            <label className={`composer-chip wf-runstart-mode-option${providerLimitPolicy === 'stop' ? ' active' : ''}`}>
               <input
                 type="radio"
                 name="wf-provider-limit"
@@ -421,13 +437,17 @@ export function StartRunDialog({
               />
               <span>
                 <strong>Stop the run</strong>
-                <em>End the run and say which AI ran out and where.</em>
               </span>
             </label>
+            <p className="wf-runstart-policy-help">
+              {providerLimitPolicy === 'ask' && 'Pause and ask whether to switch AI, retry, or stop.'}
+              {providerLimitPolicy === 'switch' && 'Continue with the next configured AI without asking.'}
+              {providerLimitPolicy === 'stop' && 'End the run and report where the limit was reached.'}
+            </p>
           </fieldset>
           <fieldset className="wf-runstart-mode" data-testid="wf-runstart-mode">
             <legend>Tool permissions</legend>
-            <label className="wf-runstart-mode-option">
+            <label className={`composer-chip wf-runstart-mode-option${permissionMode === 'ask' ? ' active' : ''}`}>
               <input
                 type="radio"
                 name="wf-permission-mode"
@@ -438,10 +458,9 @@ export function StartRunDialog({
               />
               <span>
                 <strong>Ask</strong>
-                <em>A stage stops for Allow / Deny before each edit or command.</em>
               </span>
             </label>
-            <label className="wf-runstart-mode-option">
+            <label className={`composer-chip wf-runstart-mode-option${permissionMode === 'auto' ? ' active' : ''}`}>
               <input
                 type="radio"
                 name="wf-permission-mode"
@@ -452,13 +471,15 @@ export function StartRunDialog({
               />
               <span>
                 <strong>Auto-approve</strong>
-                <em>
-                  Stages allow their own tool requests without stopping. Each stage&rsquo;s tool access still applies — a
-                  read-only stage stays read-only — and the final approval still needs a person.
-                </em>
               </span>
             </label>
+            <p className="wf-runstart-policy-help">
+              {permissionMode === 'ask'
+                ? 'Pause for Allow or Deny before edits and commands.'
+                : 'Approve stage tool requests automatically. Stage access limits and human gates still apply.'}
+            </p>
           </fieldset>
+          </div>
           {uncommittedFiles && (
             <UncommittedBaseNotice
               files={uncommittedFiles.files}

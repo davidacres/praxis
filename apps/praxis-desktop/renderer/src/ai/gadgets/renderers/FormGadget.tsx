@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FormGadgetPayload, GadgetActionValue } from '@praxis/core';
 import { GadgetActionBar, GadgetHeading } from '../controls';
 import { payloadOf, type GadgetRendererProps } from '../gadgetContract';
+import { ChipSelect } from '../../../ui/ChipSelect';
 
 type FieldValue = string | number | boolean;
 
@@ -62,22 +63,24 @@ export function FormGadget({ gadget, actionable, busy, onSubmit }: GadgetRendere
                     {field.required && <span className="gadget-field-required" aria-hidden="true"> *</span>}
                   </label>
                   {field.type === 'select' ? (
-                    <select
+                    <ChipSelect
+                      block
                       id={id}
-                      className="select"
+                      ariaLabel={field.label}
                       value={typeof current === 'string' ? current : ''}
                       disabled={!actionable}
-                      required={field.required}
                       aria-describedby={describedBy}
-                      onChange={event => set(field.name, event.target.value)}
-                    >
-                      <option value="">Choose…</option>
-                      {field.options?.map(option => (
-                        <option key={option.value} value={option.value} disabled={Boolean(option.disabledReason)}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={value => set(field.name, value)}
+                      options={[
+                        { value: '', label: 'Choose…' },
+                        ...(field.options ?? []).map(option => ({
+                          value: option.value,
+                          label: option.label,
+                          disabled: Boolean(option.disabledReason),
+                          description: option.disabledReason
+                        }))
+                      ]}
+                    />
                   ) : field.type === 'textarea' ? (
                     <textarea
                       id={id}

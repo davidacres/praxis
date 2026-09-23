@@ -14,15 +14,15 @@ import type {
   WorkflowPolicyProfile
 } from '@praxis/core';
 import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
-import { API_MODEL_PROVIDERS, PROVIDER_LABELS } from '../ai/modelProviders';
-import { Icon } from '../ui/Icon';
+import { API_MODEL_PROVIDERS, fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from '../ai/modelProviders';
+import { ChipSelect, type ChipSelectOption } from '../ui/ChipSelect';
+import { Icon, type IconName } from '../ui/Icon';
 import { WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
 import { WorkflowValidationDialog } from './WorkflowValidationDialog';
 import { WorkflowAssistantPopover } from './WorkflowAssistantPopover';
 import {
   addNode,
   bucketFeedback,
-  connectNodes,
   disconnect,
   duplicateNode,
   newNode,
@@ -43,7 +43,7 @@ import { isProviderUsable } from '../ai/providerAvailability';
  * centre column.
  */
 
-const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: string; description: string }> = [
+const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: IconName; description: string }> = [
   { type: 'agent-task', label: 'Agent stage', icon: 'robot', description: 'Autonomous agent task stage' },
   { type: 'check', label: 'Check', icon: 'shield', description: 'Verification, test, or security gate' },
   { type: 'approval', label: 'Approval', icon: 'check-square', description: 'Manual human sign-off gate' },
@@ -52,7 +52,15 @@ const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: string; d
 ];
 
 const GATES: WorkflowGateKind[] = ['review', 'qa', 'security'];
-const OUTCOMES: WorkflowEdgeOutcome[] = ['success', 'failure', 'always'];
+const OUTCOMES: Array<{ value: WorkflowEdgeOutcome; label: string; description: string }> = [
+  { value: 'success', label: 'On success', description: 'Follow this connection when the stage passes' },
+  { value: 'failure', label: 'On failure', description: 'Follow this connection when the stage fails' },
+  { value: 'always', label: 'Always', description: 'Follow this connection whatever the outcome' }
+];
+
+function nodeKind(type: WorkflowNodeType) {
+  return NODE_KINDS.find(kind => kind.type === type) ?? NODE_KINDS[0];
+}
 
 /** The gate a stage satisfies, without importing a core runtime helper. */
 function railGate(node: WorkflowNode): WorkflowGateKind | undefined {
@@ -135,15 +143,11 @@ export function WorkflowDesignerPage({
   const [notFound, setNotFound] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
-  const [inspectorTab, setInspectorTab] = useState<'stage' | 'connections'>('stage');
   const selectStage = useCallback(
     (nodeId: string | undefined) => {
       setSelectedNodeId(nodeId);
       setSelectedEdgeId(undefined);
-      if (nodeId) {
-        setInspectorTab('stage');
-        onRequireAux?.();
-      }
+      if (nodeId) onRequireAux?.();
     },
     [onRequireAux]
   );
@@ -152,7 +156,6 @@ export function WorkflowDesignerPage({
       setSelectedEdgeId(edgeId);
       if (edgeId) {
         setSelectedNodeId(undefined);
-        setInspectorTab('connections');
         onRequireAux?.();
       }
     },
@@ -464,99 +467,101 @@ export function WorkflowDesignerPage({
     );
   }
 
+  const selectedEdge = selectedEdgeId ? definition.edges.find(edge => edge.id === selectedEdgeId) : undefined;
   const inspector = (
-    <section className="inspector inspector--tabbed aux-panel" aria-label="Stage inspector">
-      <div role="tablist" aria-label="Inspector" className="inspector-tabs">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={inspectorTab === 'stage'}
-          className={inspectorTab === 'stage' ? 'active' : ''}
-          onClick={() => setInspectorTab('stage')}
-        >
-          Stage
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={inspectorTab === 'connections'}
-          className={inspectorTab === 'connections' ? 'active' : ''}
-          onClick={() => setInspectorTab('connections')}
-        >
-          Connections{definition.edges.length > 0 ? ` (${definition.edges.length})` : ''}
-        </button>
-      </div>
-      <div className="inspector-body">
-        {inspectorTab === 'stage' ? (
-          selectedNode ? (
-            <NodeInspector
-              definition={definition}
-              node={selectedNode}
-              issues={feedback?.byNode[selectedNode.id] ?? []}
-              catalog={catalog}
-              policy={policy}
-              recommendationAvailable={recommendationAvailable}
-              onChange={mutate}
-              onSelectNode={selectStage}
-            />
-          ) : (
-            <div className="empty-state">
-              <Icon name="cursor" size={26} />
-              <span>Stage settings appear here. Pick a stage on the canvas.</span>
-            </div>
-          )
-        ) : (
-          <EdgeEditor
-            definition={definition}
-            selectedEdgeId={selectedEdgeId}
-            onSelectEdge={selectEdge}
-            onChange={mutate}
-          />
-        )}
-      </div>
+    <section className="inspector wf-inspector aux-panel" aria-label="Stage inspector">
+      {selectedEdge ? (
+        <EdgeInspector
+          definition={definition}
+          edgeId={selectedEdge.id}
+          onChange={mutate}
+          onSelectEdge={selectEdge}
+          onSelectNode={selectStage}
+        />
+      ) : selectedNode ? (
+        <NodeInspector
+          definition={definition}
+          node={selectedNode}
+          issues={feedback?.byNode[selectedNode.id] ?? []}
+          catalog={catalog}
+          policy={policy}
+          recommendationAvailable={recommendationAvailable}
+          onChange={mutate}
+          onSelectNode={selectStage}
+        />
+      ) : (
+        <div className="empty-state">
+          <Icon name="cursor" size={26} />
+          <span>Pick a stage or a connection on the canvas to edit it.</span>
+        </div>
+      )}
     </section>
   );
 
   return (
-    <div className="view-scroll wf-page">
+    <div className="view-scroll wf-page wf-page--designer">
       <header className="wf-header">
-        <h1>{definition.name}</h1>
-        <span className="wf-header-sub">{project.name}</span>
+        <div className="wf-header-title">
+          <h1>{definition.name}</h1>
+          <span className="wf-header-sub">{project.name}</span>
+        </div>
         <div className="wf-header-actions">
+          {!project.workspaceFolder && (
+            <span className="wf-header-notice" title="Attach a folder to this project to run this workflow.">
+              <Icon name="warning" size={12} />
+              No folder
+            </span>
+          )}
+          <ValidationChip feedback={feedback} validating={validating} disabled={validating || busy} onValidate={() => void runValidation()} />
           <button
             type="button"
-            className="btn btn-compact"
-            data-testid="wf-validate-btn"
-            onClick={() => void runValidation()}
-            disabled={validating || busy}
-            title="Validate workflow connections, flow, and stage configuration"
-          >
-            <Icon name="shield" size={13} /> {validating ? 'Validating…' : 'Validate workflow'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-compact"
+            className="icon-btn"
             data-testid="wf-suggest-tiers-btn"
+            aria-label="Suggest model tiers"
             onClick={() => void suggestTiers()}
             disabled={suggestingTiers || busy}
-            title="Ask the AI which model tier each agent stage needs. Stages that already have a choice are kept."
+            title={suggestingTiers ? 'Suggesting model tiers…' : 'Suggest model tiers — ask the AI which tier each agent stage needs. Stages that already have a choice are kept.'}
           >
-            <Icon name="sparkles" size={13} /> {suggestingTiers ? 'Suggesting…' : 'Suggest model tiers'}
+            <Icon name="sparkles" size={14} className={suggestingTiers ? 'is-spinning' : undefined} />
           </button>
-          <button type="button" className="btn btn-compact wf-header-del" onClick={() => void remove()} disabled={busy}>
-            <Icon name="trash" size={13} /> Delete
+          <button
+            type="button"
+            className="icon-btn wf-header-del"
+            aria-label="Delete workflow"
+            title="Delete workflow"
+            onClick={() => void remove()}
+            disabled={busy}
+          >
+            <Icon name="trash" size={14} />
+          </button>
+          <span className="wf-header-sep" aria-hidden />
+          <button
+            type="button"
+            onClick={save}
+            disabled={busy || !feedback?.valid || savedAt === definition.updatedAt}
+            className="btn btn-primary btn-compact wf-header-save"
+            title={feedback && !feedback.valid ? 'Fix the validation errors before saving' : undefined}
+          >
+            {savedAt === definition.updatedAt ? 'Saved' : 'Save workflow'}
           </button>
         </div>
       </header>
 
       {error && (
-        <p role="alert" className="error-banner">
+        <p role="alert" className="error-banner wf-banner">
           {error}
+          <button type="button" className="icon-btn icon-btn-sm" aria-label="Dismiss" onClick={() => setError(undefined)}>
+            <Icon name="close" size={11} />
+          </button>
         </p>
       )}
       {tierNote && (
-        <p className="hint" role="status" data-testid="wf-suggest-tiers-note">
+        <p className="hint wf-banner" role="status" data-testid="wf-suggest-tiers-note">
+          <Icon name="sparkles" size={12} />
           {tierNote}
+          <button type="button" className="icon-btn icon-btn-sm" aria-label="Dismiss" onClick={() => setTierNote(undefined)}>
+            <Icon name="close" size={11} />
+          </button>
         </p>
       )}
 
@@ -652,7 +657,7 @@ export function WorkflowDesignerPage({
                       }}
                     >
                       <span className="wf-tool-icon">
-                        <Icon name={kind.icon as never} size={13} />
+                        <Icon name={kind.icon} size={13} />
                       </span>
                       <span className="wf-tool-label">{kind.label}</span>
                     </button>
@@ -820,16 +825,7 @@ export function WorkflowDesignerPage({
                   {filteredNodes.map(node => {
                     const issues = feedback?.byNode[node.id]?.length ?? 0;
                     const isEntry = node.id === definition.entryNodeId;
-                    const icon =
-                      node.type === 'agent-task'
-                        ? 'robot'
-                        : node.type === 'check'
-                          ? 'shield'
-                          : node.type === 'deployment'
-                            ? 'rocket'
-                            : node.type === 'approval'
-                              ? 'check-square'
-                              : 'split-horizontal';
+                    const icon = nodeKind(node.type).icon;
                     return (
                       <li key={node.id} className="wf-stage-rail-item">
                         <button
@@ -842,7 +838,7 @@ export function WorkflowDesignerPage({
                           onClick={() => selectStage(node.id)}
                         >
                           <span className="rail-row-icon">
-                            <Icon name={icon as never} size={13} />
+                            <Icon name={icon} size={13} />
                           </span>
                           <span className="rail-main">
                             <span className="rail-name">{node.name}</span>
@@ -880,29 +876,6 @@ export function WorkflowDesignerPage({
             )}
           </div>
 
-          <div className="rail-foot">
-            <ValidationSummary feedback={feedback} onOpenValidation={() => void runValidation()} />
-            {!project.workspaceFolder && (
-              <p className="hint is-warn">Attach a folder to this project to run this workflow.</p>
-            )}
-            <button
-              type="button"
-              className="btn"
-              data-testid="wf-rail-validate-btn"
-              onClick={() => void runValidation()}
-              disabled={validating || busy}
-            >
-              <Icon name="shield" size={13} /> {validating ? 'Validating…' : 'Validate workflow'}
-            </button>
-            <button
-              type="button"
-              onClick={save}
-              disabled={busy || !feedback?.valid || savedAt === definition.updatedAt}
-              className="btn btn-primary"
-            >
-              {savedAt === definition.updatedAt ? 'Saved' : 'Save workflow'}
-            </button>
-          </div>
         </nav>
 
         <div className="wf-canvas-slot">
@@ -984,41 +957,48 @@ export function WorkflowDesignerPage({
   );
 }
 
-// ── Validation summary ───────────────────────────────────────────────────
+// ── Validation chip ──────────────────────────────────────────────────────
 
-function ValidationSummary({
+/** The header's validation state and its trigger in one: click to see the full report. */
+function ValidationChip({
   feedback,
-  onOpenValidation
+  validating,
+  disabled,
+  onValidate
 }: {
   feedback: BucketedFeedback | undefined;
-  onOpenValidation?: () => void;
+  validating: boolean;
+  disabled: boolean;
+  onValidate: () => void;
 }) {
-  if (!feedback) return null;
-  const graphIssues = feedback.byNode[''] ?? [];
+  const errors = feedback?.errors.length ?? 0;
+  const warnings = feedback?.warnings.length ?? 0;
+  const graphIssues = feedback?.byNode[''] ?? [];
+  const summary = !feedback
+    ? 'Checking…'
+    : feedback.valid
+      ? warnings > 0
+        ? `Valid · ${warnings} warning${warnings === 1 ? '' : 's'}`
+        : 'Valid'
+      : `${errors} error${errors === 1 ? '' : 's'}`;
+  const tone = !feedback ? '' : !feedback.valid ? ' is-invalid' : warnings > 0 ? ' is-warn' : ' is-valid';
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={`wf-validation${feedback.valid ? '' : ' is-invalid'}`}
-      onClick={onOpenValidation}
-      style={{ cursor: onOpenValidation ? 'pointer' : undefined }}
-      title={onOpenValidation ? 'Click to view validation details' : undefined}
+    <button
+      type="button"
+      className={`composer-chip wf-validate-chip${tone}`}
+      data-testid="wf-validate-btn"
+      onClick={onValidate}
+      disabled={disabled}
+      title={[
+        'Validate workflow — check connections, flow, and stage configuration',
+        ...graphIssues.map(issue => `• ${issue.message}`)
+      ].join('\n')}
     >
-      {feedback.valid ? (
-        <>Valid — {feedback.warnings.length} warning{feedback.warnings.length === 1 ? '' : 's'}.</>
-      ) : (
-        <>
-          {feedback.errors.length} error{feedback.errors.length === 1 ? '' : 's'}.
-          {graphIssues.length > 0 && (
-            <ul>
-              {graphIssues.map((issue, index) => (
-                <li key={index}>{issue.message}</li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
-    </div>
+      <Icon name={feedback && !feedback.valid ? 'warning' : 'shield'} size={13} />
+      <span role="status" aria-live="polite">
+        {validating ? 'Validating…' : summary}
+      </span>
+    </button>
   );
 }
 
@@ -1044,37 +1024,63 @@ function NodeInspector({
   onSelectNode: (nodeId: string | undefined) => void;
 }) {
   const set = (patch: Partial<WorkflowNode>) => onChange(updateNode(definition, node.id, patch as never));
+  const kind = nodeKind(node.type);
+  const isEntry = node.id === definition.entryNodeId;
 
   return (
-    <div className="inspector-card">
-      <div className="inspector-head">
-        <h2>{node.type}</h2>
-        <div className="inspector-head-actions">
-          {node.id !== definition.entryNodeId && (
-            <button type="button" className="btn btn-compact" onClick={() => onChange(setEntryNode(definition, node.id))}>
-              Make entry
+    <div className="wf-inspector-body">
+      <div className="wf-inspector-head">
+        <span className="wf-inspector-kind">
+          <Icon name={kind.icon} size={14} />
+          <h2>{kind.label}</h2>
+          {isEntry && <span className="rail-mark is-entry">entry</span>}
+        </span>
+        <div className="wf-inspector-actions">
+          {!isEntry && (
+            <button
+              type="button"
+              className="icon-btn icon-btn-sm"
+              aria-label="Make entry stage"
+              title="Make this the entry stage — where a run starts"
+              onClick={() => onChange(setEntryNode(definition, node.id))}
+            >
+              <Icon name="play" size={12} />
             </button>
           )}
-          <button type="button" className="btn btn-compact" onClick={() => onChange(duplicateNode(definition, node.id))}>
-            Duplicate
+          <button
+            type="button"
+            className="icon-btn icon-btn-sm"
+            aria-label="Duplicate stage"
+            title="Duplicate stage"
+            onClick={() => onChange(duplicateNode(definition, node.id))}
+          >
+            <Icon name="copy" size={12} />
           </button>
           <button
             type="button"
-            className="btn btn-compact"
+            className="icon-btn icon-btn-sm wf-inspector-danger"
             data-testid="wf-stage-remove-btn"
+            aria-label={`Delete ${node.name}`}
             title={`Delete ${node.name}`}
             onClick={() => {
               onChange(removeNode(definition, node.id));
               onSelectNode(undefined);
             }}
           >
-            <Icon name="trash" size={11} />
-            <span>Delete</span>
+            <Icon name="trash" size={12} />
           </button>
         </div>
       </div>
 
-      <Field label="Name">
+      {issues.length > 0 && (
+        <ul className="issues wf-inspector-issues">
+          {issues.map((issue, index) => (
+            <li key={index}>{issue.message}</li>
+          ))}
+        </ul>
+      )}
+
+      <Field label="Name" stacked>
         <input value={node.name} onChange={event => set({ name: event.target.value })} />
       </Field>
 
@@ -1084,12 +1090,13 @@ function NodeInspector({
 
       {node.type === 'check' && (
         <>
-          <Field label="Command">
+          <Field label="Command" stacked>
             <input value={node.command} placeholder="npm" onChange={event => set({ command: event.target.value })} />
           </Field>
-          <Field label="Arguments (space-separated)">
+          <Field label="Arguments" stacked hint="Space-separated">
             <input
               value={(node.args ?? []).join(' ')}
+              placeholder="run test"
               onChange={event => set({ args: event.target.value.split(/\s+/).filter(Boolean) })}
             />
           </Field>
@@ -1099,49 +1106,52 @@ function NodeInspector({
 
       {node.type === 'deployment' && (
         <>
-          <Field label="Deployment profile ID">
+          <Field label="Deployment profile" stacked hint="Resolved against the project’s deployment profiles when the run reaches this stage.">
             <input
               value={node.deploymentProfileId}
               placeholder="staging"
               onChange={event => set({ deploymentProfileId: event.target.value })}
             />
           </Field>
-          <p className="hint">
-            Resolved against the project&rsquo;s deployment profiles when the run reaches this stage.
-          </p>
           <GateSelect value={node.satisfiesGate} onChange={gate => set({ satisfiesGate: gate })} />
         </>
       )}
 
       {node.type === 'approval' && (
         <>
-          <Field label="Prompt">
+          <Field label="Prompt" stacked>
             <textarea rows={2} value={node.prompt} onChange={event => set({ prompt: event.target.value })} />
           </Field>
-          <fieldset className="form-fieldset">
-            <legend>Required gates</legend>
-            {GATES.map(gate => {
-              const policyRequires = policy?.requiredGates.includes(gate) ?? false;
-              return (
-                <label key={gate} className="form-check">
-                  <input
-                    type="checkbox"
-                    checked={node.requiredGates.includes(gate) || policyRequires}
-                    disabled={policyRequires}
-                    onChange={event =>
-                      set({
-                        requiredGates: event.target.checked
-                          ? [...node.requiredGates, gate]
-                          : node.requiredGates.filter(g => g !== gate)
-                      })
-                    }
-                  />
-                  {gate}
-                  {policyRequires && <span className="hint"> — required by project policy</span>}
-                </label>
-              );
-            })}
-          </fieldset>
+          <div className="wf-inspector-group" role="group" aria-label="Required gates">
+            <span className="form-field-label-text">Required gates</span>
+            <div className="wf-toggle-chips">
+              {GATES.map(gate => {
+                const policyRequires = policy?.requiredGates.includes(gate) ?? false;
+                const on = node.requiredGates.includes(gate) || policyRequires;
+                return (
+                  <label
+                    key={gate}
+                    className={`composer-chip wf-toggle-chip${on ? ' active' : ''}${policyRequires ? ' is-locked' : ''}`}
+                    title={policyRequires ? 'Required by project policy' : undefined}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      disabled={policyRequires}
+                      onChange={event =>
+                        set({
+                          requiredGates: event.target.checked
+                            ? [...node.requiredGates, gate]
+                            : node.requiredGates.filter(g => g !== gate)
+                        })
+                      }
+                    />
+                    {gate}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
           <label className={`form-check${policy?.allowGateBypass === false ? ' is-disabled' : ''}`}>
             <input
               type="checkbox"
@@ -1161,20 +1171,17 @@ function NodeInspector({
       )}
 
       {node.type === 'join' && (
-        <Field label="Mode">
-          <select value={node.mode} onChange={event => set({ mode: event.target.value as never })}>
-            <option value="all">all — wait for every branch</option>
-            <option value="all-required">all-required — wait only for required branches</option>
-          </select>
+        <Field label="Wait for">
+          <ChipSelect
+            ariaLabel="Mode"
+            value={node.mode}
+            onChange={mode => set({ mode: mode as never })}
+            options={[
+              { value: 'all', label: 'Every branch', description: 'Continue once every incoming branch has finished' },
+              { value: 'all-required', label: 'Required branches', description: 'Continue once the required branches have finished' }
+            ]}
+          />
         </Field>
-      )}
-
-      {issues.length > 0 && (
-        <ul className="issues">
-          {issues.map((issue, index) => (
-            <li key={index}>{issue.message}</li>
-          ))}
-        </ul>
       )}
     </div>
   );
@@ -1347,252 +1354,344 @@ function AgentStageFields({
     setAgent({ skillNames, skillFingerprints: fingerprints });
   };
 
+  const profileOptions: ChipSelectOption[] = profiles.map(profile => ({
+    value: profile.profile.id,
+    label: profile.profile.name,
+    description: profile.profile.description,
+    icon: 'robot',
+    meta: [profile.scope === 'project' ? 'project' : '', profile.legacy ? 'legacy' : '', profile.trusted ? '' : 'untrusted']
+      .filter(Boolean)
+      .join(' · ') || undefined
+  }));
+  if (selectedProfileId && !chosenProfile) profileOptions.push({ value: selectedProfileId, label: selectedProfileId, meta: 'not found' });
+
+  const bindingOptions: ChipSelectOption[] = [
+    { value: '', label: 'None' },
+    ...agents.map(agent => ({
+      value: agent.manifest.id,
+      label: agent.manifest.name,
+      meta: [agent.trusted ? '' : 'untrusted', agent.errors.length > 0 ? 'invalid manifest' : ''].filter(Boolean).join(' · ') || undefined
+    }))
+  ];
+  if (selectedHostId && !chosen) bindingOptions.push({ value: selectedHostId, label: selectedHostId, meta: 'not discovered' });
+  const capabilityList = caps
+    ? Object.entries(caps)
+        .filter(([, value]) => value === true)
+        .map(([key]) => key.replace(/^supports/, '').toLowerCase())
+        .join(', ') || 'none reported'
+    : 'host not running';
+
+  const aiOptions: ChipSelectOption[] = [
+    { value: '', label: 'Run’s AI', description: 'Use the AI the run was started with', icon: 'sparkles' },
+    ...[...new Set([...usableAis, ...(stageAi ? [stageAi] : [])])].map(id => ({
+      value: id,
+      label: PROVIDER_LABELS[id as AiProvider] ?? id,
+      icon: providerIconName(id as AiProvider),
+      meta: usableAis.includes(id) ? undefined : 'not set up'
+    }))
+  ];
+
+  const [stageModels, setStageModels] = useState<ChipSelectOption[] | undefined>();
+  const [modelsLoading, setModelsLoading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setStageModels(undefined);
+    if (!stageAi || !MODEL_PROVIDERS.has(stageAi as AiProvider)) return;
+    setModelsLoading(true);
+    fetchModelOptions(stageAi as AiProvider, false)
+      .then(result => {
+        if (!cancelled) setStageModels(result?.options.map(option => ({ value: option.value, label: option.name, description: option.description })));
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [stageAi]);
+  const modelOptions: ChipSelectOption[] = [
+    { value: '', label: node.modelTier ? `${node.modelTier} tier` : 'AI’s default', description: 'Let the model tier, or the AI’s own default, decide' },
+    ...(stageModels ?? []),
+    ...(node.model && !(stageModels ?? []).some(option => option.value === node.model) ? [{ value: node.model, label: node.model }] : [])
+  ];
+
+  const activeSkills = node.agent.skillNames ?? [];
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
+
   return (
     <>
-      <Field
-        label="Agent profile"
-        warning={profileWarning}
-        actions={
-          recommendationAvailable === true && recommendableAgents.length > 0 ? (
-            hasRecommendation ? (
+      <InspectorSection title="Agent">
+        <Field
+          label="Profile"
+          warning={profileWarning}
+          actions={
+            recommendationAvailable === true && recommendableAgents.length > 0 ? (
               <button
                 type="button"
                 className="icon-btn icon-btn-sm wf-recommend-btn"
-                data-testid="wf-recommend-refresh-btn"
-                title="Ask the AI to recommend again — the last recommendation is cached and doesn't re-ask on its own"
+                data-testid={hasRecommendation ? 'wf-recommend-refresh-btn' : 'wf-recommend-agent-btn'}
+                aria-label={hasRecommendation ? 'Recommend again' : 'Recommend a profile'}
+                title={
+                  hasRecommendation
+                    ? 'Ask the AI to recommend again — the last recommendation is cached and doesn’t re-ask on its own'
+                    : 'Ask the configured AI to recommend an agent profile for this stage — cached afterwards, never re-asked automatically'
+                }
                 disabled={recommendState.status === 'loading'}
                 onClick={() => void requestRecommendation()}
               >
-                <Icon name="refresh" size={12} />
+                <Icon name={hasRecommendation ? 'refresh' : 'sparkles'} size={12} />
               </button>
-            ) : (
-              <button
-                type="button"
-                className="icon-btn icon-btn-sm wf-recommend-btn"
-                data-testid="wf-recommend-agent-btn"
-                title="Ask the configured AI to recommend an agent profile for this stage — cached afterwards, never re-asked automatically"
-                disabled={recommendState.status === 'loading'}
-                onClick={() => void requestRecommendation()}
+            ) : recommendationAvailable === false ? (
+              <span
+                className="icon-btn icon-btn-sm wf-recommend-btn is-disabled"
+                data-testid="wf-recommend-unavailable"
+                title="Recommending an agent needs an API-based AI provider (Vercel AI Gateway, OpenAI, or Anthropic) configured in Settings → AI."
               >
                 <Icon name="sparkles" size={12} />
-              </button>
-            )
-          ) : recommendationAvailable === false ? (
-            <span
-              className="icon-btn icon-btn-sm wf-recommend-btn is-disabled"
-              data-testid="wf-recommend-unavailable"
-              title="Recommending an agent needs an API-based AI provider (Vercel AI Gateway, OpenAI, or Anthropic) configured in Settings → AI."
+              </span>
+            ) : undefined
+          }
+        >
+          {profiles.length > 0 ? (
+            <ChipSelect
+              ariaLabel="Agent profile"
+              data-testid="wf-node-profile"
+              value={selectedProfileId}
+              placeholder="Choose a profile"
+              icon="robot"
+              options={profileOptions}
+              searchable={profiles.length > 5}
+              onChange={profileId => setAgent({ profileId })}
+            />
+          ) : (
+            <input aria-label="Agent profile" value={selectedProfileId} placeholder="e.g. praxis-reviewer" onChange={event => setAgent({ profileId: event.target.value })} />
+          )}
+        </Field>
+
+        {recommendState.status === 'loading' && (
+          <p className="hint wf-recommend-status" data-testid="wf-recommend-loading">
+            Asking the AI which agent profile fits this stage…
+          </p>
+        )}
+        {recommendState.status === 'error' && (
+          <p className="hint is-danger wf-recommend-status" data-testid="wf-recommend-error">
+            {recommendState.message}
+          </p>
+        )}
+        {recommendState.status === 'done' && (
+          <div className="wf-recommend-result" data-testid="wf-recommend-result">
+            <Icon name="sparkles" size={12} />
+            <div className="wf-recommend-result-text">
+              <strong>
+                {profiles.find(candidate => candidate.profile.id === recommendState.agentId)?.profile.name ?? recommendState.agentId}
+              </strong>
+              <span>{recommendState.rationale}</span>
+              {recommendState.stale && (
+                <span className="wf-recommend-stale" data-testid="wf-recommend-stale">
+                  The stage changed since this was recommended — refresh to update.
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="btn btn-compact"
+              data-testid="wf-recommend-use"
+              onClick={() => {
+                setAgent({ profileId: recommendState.agentId });
+                setRecommendState({ status: 'idle' });
+              }}
             >
-              <Icon name="sparkles" size={12} />
-            </span>
+              Use
+            </button>
+            <button
+              type="button"
+              className="icon-btn icon-btn-sm"
+              aria-label="Dismiss recommendation"
+              onClick={() => setRecommendState({ status: 'idle' })}
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+        )}
+
+        <Field
+          label="Launch binding"
+          warning={agentWarning}
+          labelTitle={chosen ? `Trust: ${chosen.trusted ? 'trusted' : 'untrusted'} · Capabilities: ${capabilityList}` : undefined}
+        >
+          {agents.length > 0 ? (
+            <ChipSelect
+              ariaLabel="Launch binding"
+              data-testid="wf-node-binding"
+              value={selectedHostId}
+              placeholder="None"
+              options={bindingOptions}
+              onChange={hostId => setAgent({ hostId, agentId: hostId })}
+            />
+          ) : (
+            <input
+              aria-label="Launch binding"
+              value={selectedHostId}
+              placeholder="e.g. claude-acp"
+              onChange={event => setAgent({ hostId: event.target.value, agentId: event.target.value })}
+            />
+          )}
+        </Field>
+        {chosen && chosen.errors.length > 0 && (
+          <p className="hint is-danger">Manifest: {chosen.errors.map(error => error.message).join('; ')}</p>
+        )}
+
+        <Field label="Tool mode">
+          <ChipSelect
+            ariaLabel="Tool mode"
+            data-testid="wf-node-tool-mode"
+            value={node.agent.toolMode}
+            icon="tools"
+            options={[
+              { value: 'read-only', label: 'Read-only', description: 'Reads the project; cannot write or run commands' },
+              { value: 'project-only', label: 'Project-only', description: 'Writes and runs commands inside the project only' },
+              { value: 'full', label: 'Full', description: 'Unrestricted tool access' }
+            ]}
+            onChange={toolMode => setAgent({ toolMode: toolMode as never })}
+          />
+        </Field>
+      </InspectorSection>
+
+      <InspectorSection title="Model">
+        <Field
+          label="AI"
+          labelTitle="Which AI runs this stage. Different stages can use different AIs — plan with one, implement with another."
+          warning={stageAi && usableAis.length > 0 && !usableAis.includes(stageAi) ? `${PROVIDER_LABELS[stageAi as AiProvider] ?? stageAi} is not set up or is turned off — set it up in Settings › AI Provider, or the run will not start.` : undefined}
+        >
+          <ChipSelect
+            ariaLabel="AI"
+            data-testid="wf-node-ai"
+            value={stageAi}
+            options={aiOptions}
+            onChange={providerId => set({ agent: { ...node.agent, providerId: providerId || undefined }, model: undefined })}
+          />
+        </Field>
+        {stageAi && (
+          <Field label="Model" labelTitle="An exact model wins over the tier. Leave it on the default to let the tier choose.">
+            <ChipSelect
+              ariaLabel="Model"
+              data-testid="wf-node-model"
+              value={node.model ?? ''}
+              options={modelOptions}
+              icon="sparkles"
+              searchable
+              allowCustom
+              placeholder={modelsLoading ? 'Loading models…' : 'AI’s default'}
+              onChange={model => set({ model: model.trim() ? model : undefined })}
+            />
+          </Field>
+        )}
+        <Field
+          label="Model tier"
+          labelTitle="Which model this stage’s session uses. Map each tier to a model per provider in Settings → AI Provider → Providers (open a provider’s row); an unmapped tier uses the run’s model."
+        >
+          <ChipSelect
+            ariaLabel="Model tier"
+            data-testid="wf-node-model-tier"
+            value={node.modelTier ?? ''}
+            options={[
+              { value: '', label: 'Run’s model', description: 'Use whatever model the run was started with' },
+              { value: 'fast', label: 'fast', description: 'Quick, inexpensive work' },
+              { value: 'standard', label: 'standard', description: 'Everyday implementation and review' },
+              { value: 'strong', label: 'strong', description: 'Hard reasoning, planning, and recovery' }
+            ]}
+            onChange={tier => set({ modelTier: (tier || undefined) as typeof node.modelTier })}
+          />
+        </Field>
+        {node.modelTier && (
+          <label className="form-check">
+            <input
+              type="checkbox"
+              data-testid="wf-node-escalate"
+              checked={node.escalateOnRetry !== false}
+              onChange={event => set({ escalateOnRetry: event.target.checked ? undefined : false })}
+            />
+            Move up a tier on each retry
+          </label>
+        )}
+      </InspectorSection>
+
+      <InspectorSection
+        title="Skills"
+        count={activeSkills.length}
+        action={
+          skills.length > 0 ? (
+            <button
+              type="button"
+              className="composer-chip wf-section-add"
+              data-testid="wf-node-add-skill"
+              onClick={() => setSkillPickerOpen(true)}
+            >
+              <Icon name="plus" size={12} />
+              Add
+            </button>
           ) : undefined
         }
       >
-        {profiles.length > 0 ? (
-          <select value={selectedProfileId} onChange={event => setAgent({ profileId: event.target.value })}>
-            <option value="">— choose a profile —</option>
-            {profiles.map(profile => (
-              <option key={profile.profile.id} value={profile.profile.id}>
-                {profile.profile.name}{profile.scope === 'project' ? ' (project)' : ''}{profile.legacy ? ' (legacy brief)' : ''}{profile.trusted ? '' : ' (untrusted)'}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input value={selectedProfileId} placeholder="e.g. praxis-reviewer" onChange={event => setAgent({ profileId: event.target.value })} />
-        )}
-      </Field>
-
-      <Field
-        label="AI"
-        warning={stageAi && usableAis.length > 0 && !usableAis.includes(stageAi) ? `${PROVIDER_LABELS[stageAi as AiProvider] ?? stageAi} is not set up or is turned off — set it up in Settings › AI Provider, or the run will not start.` : undefined}
-      >
-        <select
-          data-testid="wf-node-ai"
-          value={stageAi}
-          onChange={event => set({ agent: { ...node.agent, providerId: event.target.value || undefined }, model: undefined })}
-        >
-          <option value="">Run’s AI</option>
-          {[...new Set([...usableAis, ...(stageAi ? [stageAi] : [])])].map(id => (
-            <option key={id} value={id}>
-              {PROVIDER_LABELS[id as AiProvider] ?? id}
-            </option>
-          ))}
-        </select>
-        <span className="hint">Which AI runs this stage. Different stages can use different AIs — plan with one, implement with another.</span>
-      </Field>
-      {stageAi && (
-        <Field label="Model">
-          <input
-            data-testid="wf-node-model"
-            value={node.model ?? ''}
-            placeholder="The model tier below, or the AI’s default"
-            onChange={event => set({ model: event.target.value.trim() ? event.target.value : undefined })}
-          />
-        </Field>
-      )}
-
-      <Field label="Launch binding" warning={agentWarning}>
-        {agents.length > 0 ? (
-          <select
-            value={selectedHostId}
-            onChange={event => setAgent({ hostId: event.target.value, agentId: event.target.value })}
-          >
-            <option value="">— choose an agent —</option>
-            {agents.map(agent => (
-              <option key={agent.manifest.id} value={agent.manifest.id}>
-                {agent.manifest.name}
-                {agent.trusted ? '' : ' (untrusted)'}
-                {agent.errors.length > 0 ? ' (invalid manifest)' : ''}
-              </option>
-            ))}
-            {selectedHostId && !chosen && (
-              <option value={selectedHostId}>{selectedHostId} (not discovered)</option>
-            )}
-          </select>
-        ) : (
-          <input
-            value={selectedHostId}
-            placeholder="e.g. claude-acp"
-            onChange={event => setAgent({ hostId: event.target.value, agentId: event.target.value })}
-          />
-        )}
-      </Field>
-
-      {recommendState.status === 'loading' && (
-        <p className="hint wf-recommend-status" data-testid="wf-recommend-loading">
-          Asking the AI which agent profile fits this stage…
-        </p>
-      )}
-      {recommendState.status === 'error' && (
-        <p className="hint is-danger wf-recommend-status" data-testid="wf-recommend-error">
-          {recommendState.message}
-        </p>
-      )}
-      {recommendState.status === 'done' && (
-        <div className="wf-recommend-result" data-testid="wf-recommend-result">
-          <Icon name="sparkles" size={12} />
-          <div className="wf-recommend-result-text">
-            <strong>
-              {profiles.find(candidate => candidate.profile.id === recommendState.agentId)?.profile.name ?? recommendState.agentId}
-            </strong>
-            <span>{recommendState.rationale}</span>
-            {recommendState.stale && (
-              <span className="wf-recommend-stale" data-testid="wf-recommend-stale">
-                The stage changed since this was recommended — refresh to update.
-              </span>
-            )}
+        {activeSkills.length > 0 ? (
+          <div className="wf-skill-chips" role="list" aria-label="Active skills">
+            {activeSkills.map(name => {
+              const skill = skills.find(candidate => candidate.metadata.name === name);
+              const drifted = skill && node.agent.skillFingerprints?.[name] !== skill.fingerprint;
+              const problem = !skill ? 'Not installed' : skill.error ? 'Invalid' : drifted ? 'Changed since pinned' : !skill.trusted ? 'Untrusted' : undefined;
+              const label = skill ? skillTitle(skill.metadata) : name;
+              return (
+                <span
+                  key={name}
+                  role="listitem"
+                  className={`wf-skill-chip${problem ? ' is-warn' : ''}`}
+                  data-testid={`wf-node-skill-${name}`}
+                  title={[label, skill?.metadata.description, problem].filter(Boolean).join(' — ')}
+                >
+                  {problem ? <Icon name="warning" size={11} /> : <Icon name="zap" size={11} />}
+                  <span className="wf-skill-chip-label">{label}</span>
+                  <button
+                    type="button"
+                    className="wf-skill-chip-remove"
+                    aria-label={`Remove skill ${label}`}
+                    onClick={() => toggleSkill(name, skill?.fingerprint ?? '', false)}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                </span>
+              );
+            })}
           </div>
-          <button
-            type="button"
-            className="btn btn-compact"
-            data-testid="wf-recommend-use"
-            onClick={() => {
-              setAgent({ profileId: recommendState.agentId });
-              setRecommendState({ status: 'idle' });
-            }}
-          >
-            Use this profile
-          </button>
-          <button
-            type="button"
-            className="icon-btn icon-btn-sm"
-            aria-label="Dismiss recommendation"
-            onClick={() => setRecommendState({ status: 'idle' })}
-          >
-            <Icon name="close" size={12} />
-          </button>
-        </div>
-      )}
+        ) : (
+          <p className="hint">{skills.length > 0 ? 'No skills — the agent works from its profile alone.' : 'No skills are installed.'}</p>
+        )}
+      </InspectorSection>
 
-      {chosen && (
-        <div className="wf-agent-meta">
-          <span>Trust: {chosen.trusted ? 'trusted' : 'untrusted'}</span>
-          <span>
-            Capabilities:{' '}
-            {caps
-              ? Object.entries(caps)
-                  .filter(([, value]) => value === true)
-                  .map(([key]) => key.replace(/^supports/, '').toLowerCase())
-                  .join(', ') || 'none reported'
-              : 'host not running'}
-          </span>
-          {chosen.errors.length > 0 && (
-            <span className="is-danger">
-              Manifest: {chosen.errors.map(error => error.message).join('; ')}
-            </span>
-          )}
-        </div>
-      )}
-
-      <Field label="Tool mode">
-        <select value={node.agent.toolMode} onChange={event => setAgent({ toolMode: event.target.value as never })}>
-          <option value="read-only">read-only</option>
-          <option value="project-only">project-only</option>
-          <option value="full">full</option>
-        </select>
-      </Field>
-
-      {skills.length > 0 && (
-        <fieldset className="form-fieldset">
-          <legend>Skills to activate</legend>
-          {skills.map(skill => {
-            const on = (node.agent.skillNames ?? []).includes(skill.metadata.name);
-            const drifted = on && node.agent.skillFingerprints?.[skill.metadata.name] !== skill.fingerprint;
-            return (
-              <label key={skill.metadata.name} className="form-check">
-                <input
-                  type="checkbox"
-                  checked={on}
-                  onChange={event => toggleSkill(skill.metadata.name, skill.fingerprint, event.target.checked)}
-                />
-                {skillTitle(skill.metadata)}
-                {skill.error && <span className="hint is-danger"> (invalid)</span>}
-                {!skill.trusted && <span className="hint"> (untrusted)</span>}
-                {drifted && <span className="hint is-warn"> (changed since pinned)</span>}
-              </label>
-            );
-          })}
-        </fieldset>
-      )}
-
-      <Field label="Instructions">
-        <textarea rows={3} value={node.instructions} onChange={event => set({ instructions: event.target.value })} />
-      </Field>
-      <label className="form-check">
-        <input
-          type="checkbox"
-          checked={node.mutatesWorktree}
-          onChange={event => set({ mutatesWorktree: event.target.checked })}
-        />
-        Writes to the implementation worktree
-      </label>
-      <GateSelect value={node.satisfiesGate} onChange={gate => set({ satisfiesGate: gate })} />
-      <Field label="Model tier">
-        <select
-          data-testid="wf-node-model-tier"
-          value={node.modelTier ?? ''}
-          onChange={event => set({ modelTier: (event.target.value || undefined) as typeof node.modelTier })}
-        >
-          <option value="">run's model</option>
-          <option value="fast">fast</option>
-          <option value="standard">standard</option>
-          <option value="strong">strong</option>
-        </select>
-        <span className="hint">
-          Which model this stage's session uses. Map each tier to a model per provider in Settings → AI Provider →
-          Providers (open a provider's row); an unmapped tier uses the run's model.
-        </span>
-      </Field>
-      {node.modelTier && (
+      <InspectorSection title="Behaviour">
+        <Field label="Instructions" stacked>
+          <textarea rows={3} value={node.instructions} onChange={event => set({ instructions: event.target.value })} />
+        </Field>
         <label className="form-check">
           <input
             type="checkbox"
-            data-testid="wf-node-escalate"
-            checked={node.escalateOnRetry !== false}
-            onChange={event => set({ escalateOnRetry: event.target.checked ? undefined : false })}
+            checked={node.mutatesWorktree}
+            onChange={event => set({ mutatesWorktree: event.target.checked })}
           />
-          Move up a tier on each retry
+          Writes to the implementation worktree
         </label>
+        <GateSelect value={node.satisfiesGate} onChange={gate => set({ satisfiesGate: gate })} />
+      </InspectorSection>
+
+      {skillPickerOpen && (
+        <SkillPickerDialog
+          stageName={node.name}
+          skills={skills}
+          active={activeSkills}
+          fingerprints={node.agent.skillFingerprints ?? {}}
+          onToggle={toggleSkill}
+          onClose={() => setSkillPickerOpen(false)}
+        />
       )}
     </>
   );
@@ -1606,137 +1705,241 @@ function GateSelect({
   onChange: (gate: WorkflowGateKind | undefined) => void;
 }) {
   return (
-    <Field label="Satisfies gate">
-      <select value={value ?? ''} onChange={event => onChange((event.target.value || undefined) as WorkflowGateKind | undefined)}>
-        <option value="">none</option>
-        {GATES.map(gate => (
-          <option key={gate} value={gate}>
-            {gate}
-          </option>
-        ))}
-      </select>
+    <Field label="Satisfies gate" labelTitle="The approval gate this stage counts towards when it passes">
+      <ChipSelect
+        ariaLabel="Satisfies gate"
+        value={value ?? ''}
+        icon="shield"
+        options={[{ value: '', label: 'None' }, ...GATES.map(gate => ({ value: gate, label: gate }))]}
+        onChange={gate => onChange((gate || undefined) as WorkflowGateKind | undefined)}
+      />
     </Field>
   );
 }
 
-// ── Edge editor ──────────────────────────────────────────────────────────
+// ── Skill picker ─────────────────────────────────────────────────────────
 
-function EdgeEditor({
+/**
+ * Every installed skill, searchable, with enough detail to choose — the stage's
+ * inspector only lists the ones it has switched on. Toggling applies at once;
+ * the dialog is just a bigger place to browse.
+ */
+function SkillPickerDialog({
+  stageName,
+  skills,
+  active,
+  fingerprints,
+  onToggle,
+  onClose
+}: {
+  stageName: string;
+  skills: AgentRuntimeSnapshot['skills'];
+  active: string[];
+  fingerprints: Record<string, string>;
+  onToggle: (name: string, fingerprint: string, on: boolean) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const visible = skills.filter(
+    skill =>
+      !q ||
+      skill.metadata.name.toLowerCase().includes(q) ||
+      skillTitle(skill.metadata).toLowerCase().includes(q) ||
+      (skill.metadata.description?.toLowerCase().includes(q) ?? false)
+  );
+
+  return createPortal(
+    <div
+      className="modal-overlay"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="modal-card wf-skill-picker"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Stage skills"
+        data-testid="wf-skill-picker"
+        onKeyDown={event => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            onClose();
+          }
+        }}
+      >
+        <div className="modal-header">
+          <Icon name="zap" size={14} />
+          <h3>Skills for {stageName}</h3>
+          <span className="wf-skill-picker-count">{active.length} active</span>
+          <button type="button" className="icon-btn icon-btn-sm" aria-label="Close" onClick={onClose}>
+            <Icon name="close" size={12} />
+          </button>
+        </div>
+        <div className="wf-skill-picker-search">
+          <Icon name="search" size={12} />
+          <input
+            type="text"
+            className="input"
+            placeholder="Search skills…"
+            aria-label="Search skills"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            autoFocus
+          />
+        </div>
+        <div className="modal-body wf-skill-picker-list" role="group" aria-label="Skills">
+          {visible.length === 0 && <p className="popover-label">No matching skills</p>}
+          {visible.map(skill => {
+            const name = skill.metadata.name;
+            const on = active.includes(name);
+            const drifted = on && fingerprints[name] !== skill.fingerprint;
+            return (
+              <label key={name} className={`wf-skill-option${on ? ' is-on' : ''}`} data-testid={`wf-skill-option-${name}`}>
+                <input type="checkbox" checked={on} onChange={event => onToggle(name, skill.fingerprint, event.target.checked)} />
+                <span className="wf-skill-option-text">
+                  <span className="wf-skill-option-title">
+                    {skillTitle(skill.metadata)}
+                    {skill.scope === 'project' && <span className="wf-palette-badge chip-muted">project</span>}
+                    {skill.error && <span className="wf-palette-badge is-warn">invalid</span>}
+                    {!skill.trusted && <span className="wf-palette-badge is-warn">untrusted</span>}
+                    {drifted && <span className="wf-palette-badge is-warn">changed since pinned</span>}
+                  </span>
+                  {skill.metadata.description && <span className="wf-skill-option-desc">{skill.metadata.description}</span>}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-primary btn-compact" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ── Connection inspector ─────────────────────────────────────────────────
+
+/** One connection, selected on the canvas: its outcome, whether it is required, and delete. */
+function EdgeInspector({
   definition,
-  selectedEdgeId,
+  edgeId,
+  onChange,
   onSelectEdge,
-  onChange
+  onSelectNode
 }: {
   definition: WorkflowDefinition;
-  selectedEdgeId?: string;
-  onSelectEdge?: (edgeId: string | undefined) => void;
+  edgeId: string;
   onChange: (next: WorkflowDefinition) => void;
+  onSelectEdge: (edgeId: string | undefined) => void;
+  onSelectNode: (nodeId: string | undefined) => void;
 }) {
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const edge = definition.edges.find(candidate => candidate.id === edgeId);
+  if (!edge) return null;
+  const from = definition.nodes.find(node => node.id === edge.from);
+  const to = definition.nodes.find(node => node.id === edge.to);
+  const fromName = from?.name ?? edge.from;
+  const toName = to?.name ?? edge.to;
 
   return (
-    <div className="inspector-card">
-      <h2>Connections</h2>
-
-      <div className="wf-edge-form">
-        <Field label="From">
-          <select value={from} onChange={event => setFrom(event.target.value)}>
-            <option value="">—</option>
-            {definition.nodes.map(node => (
-              <option key={node.id} value={node.id}>
-                {node.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="To">
-          <select value={to} onChange={event => setTo(event.target.value)}>
-            <option value="">—</option>
-            {definition.nodes.map(node => (
-              <option key={node.id} value={node.id}>
-                {node.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <button
-          type="button"
-          className="btn btn-compact"
-          disabled={!from || !to || from === to}
-          onClick={() => {
-            onChange(connectNodes(definition, { from, to }));
-            setFrom('');
-            setTo('');
-          }}
-        >
-          Connect
+    <div className="wf-inspector-body">
+      <div className="wf-inspector-head">
+        <span className="wf-inspector-kind">
+          <Icon name="link" size={14} />
+          <h2>Connection</h2>
+        </span>
+        <div className="wf-inspector-actions">
+          <button
+            type="button"
+            className="icon-btn icon-btn-sm wf-inspector-danger"
+            aria-label={`Remove connection ${fromName} to ${toName}`}
+            title="Remove connection"
+            onClick={() => {
+              onChange(disconnect(definition, edge.id));
+              onSelectEdge(undefined);
+            }}
+          >
+            <Icon name="trash" size={12} />
+          </button>
+        </div>
+      </div>
+      <div className="wf-edge-ends">
+        <button type="button" className="composer-chip" onClick={() => onSelectNode(edge.from)} title={`Open ${fromName}`}>
+          {from && <Icon name={nodeKind(from.type).icon} size={12} />}
+          <span>{fromName}</span>
+        </button>
+        <Icon name="arrow-right" size={12} />
+        <button type="button" className="composer-chip" onClick={() => onSelectNode(edge.to)} title={`Open ${toName}`}>
+          {to && <Icon name={nodeKind(to.type).icon} size={12} />}
+          <span>{toName}</span>
         </button>
       </div>
-
-      <ul className="wf-edge-list">
-        {definition.edges.map(edge => {
-          const fromName = definition.nodes.find(node => node.id === edge.from)?.name ?? edge.from;
-          const toName = definition.nodes.find(node => node.id === edge.to)?.name ?? edge.to;
-          const isSelected = selectedEdgeId === edge.id;
-          return (
-            <li
-              key={edge.id}
-              className={`wf-edge-row${isSelected ? ' is-selected' : ''}`}
-              onClick={() => onSelectEdge?.(edge.id)}
-            >
-              <span className="wf-edge-label" title={`${fromName} → ${toName}`}>
-                {fromName} <span aria-hidden>→</span> {toName}
-              </span>
-              <div className="wf-edge-controls">
-                <select
-                  aria-label={`Outcome for ${fromName} to ${toName}`}
-                  value={edge.on}
-                  onChange={event => onChange(updateEdge(definition, edge.id, { on: event.target.value as WorkflowEdgeOutcome }))}
-                >
-                  {OUTCOMES.map(outcome => (
-                    <option key={outcome} value={outcome}>
-                      {outcome}
-                    </option>
-                  ))}
-                </select>
-                <label className="form-check">
-                  <input
-                    type="checkbox"
-                    checked={edge.required}
-                    onChange={event => onChange(updateEdge(definition, edge.id, { required: event.target.checked }))}
-                  />
-                  required
-                </label>
-                <button
-                  type="button"
-                  className="btn-icon wf-edge-remove"
-                  aria-label={`Remove connection ${fromName} to ${toName}`}
-                  title="Remove"
-                  onClick={event => {
-                    event.stopPropagation();
-                    onChange(disconnect(definition, edge.id));
-                    if (selectedEdgeId === edge.id) onSelectEdge?.(undefined);
-                  }}
-                >
-                  <Icon name="window-close" size={12} />
-                </button>
-              </div>
-            </li>
-          );
-        })}
-        {definition.edges.length === 0 && <li className="rail-empty">No connections yet.</li>}
-      </ul>
+      <Field label="Follow">
+        <ChipSelect
+          ariaLabel={`Outcome for ${fromName} to ${toName}`}
+          data-testid="wf-edge-outcome"
+          value={edge.on}
+          options={OUTCOMES}
+          onChange={on => onChange(updateEdge(definition, edge.id, { on: on as WorkflowEdgeOutcome }))}
+        />
+      </Field>
+      <label className="form-check">
+        <input
+          type="checkbox"
+          checked={edge.required}
+          onChange={event => onChange(updateEdge(definition, edge.id, { required: event.target.checked }))}
+        />
+        Required — the run waits on this branch
+      </label>
     </div>
   );
 }
 
-// ── Small field wrapper ──────────────────────────────────────────────────
+// ── Layout helpers ───────────────────────────────────────────────────────
 
+/** A titled group inside the inspector — a heading and a hairline, not another bordered panel. */
+function InspectorSection({
+  title,
+  count,
+  action,
+  children
+}: {
+  title: string;
+  count?: number;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="wf-inspector-section" aria-label={title}>
+      <div className="wf-inspector-section-head">
+        <h3>
+          {title}
+          {count !== undefined && count > 0 && <span className="wf-section-count">{count}</span>}
+        </h3>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * A labelled control. Chips sit on the label's row (label left, value right) to
+ * keep the pane dense; text inputs pass `stacked` and take the full width.
+ */
 function Field({
   label,
   warning,
   actions,
+  stacked = false,
+  hint,
+  labelTitle,
   children
 }: {
   label: string;
@@ -1744,22 +1947,34 @@ function Field({
   warning?: string;
   /** Trailing controls beside the label — e.g. the "Recommended" AI trigger on the Agent field. */
   actions?: React.ReactNode;
+  stacked?: boolean;
+  /** A short muted line under a stacked control. */
+  hint?: string;
+  /** Explanatory tooltip on the label text. */
+  labelTitle?: string;
   children: React.ReactNode;
 }) {
+  // Only a stacked text field is a <label>: wrapped around a chip plus its row actions, a
+  // label click would activate whichever button came first. Chips carry their own aria-label.
+  const Wrapper = stacked ? 'label' : 'div';
   return (
-    <div className={`form-field${warning ? ' has-warn' : ''}`}>
-      <label className="form-field-label">
+    <div className={`form-field wf-field${stacked ? ' is-stacked' : ''}${warning ? ' has-warn' : ''}`}>
+      <Wrapper className="form-field-label">
         <span className="form-field-label-row">
-          <span>{label}</span>
+          <span className="form-field-label-text" title={labelTitle}>
+            {label}
+            {labelTitle && <Icon name="info" size={10} className="wf-field-info" />}
+          </span>
+          {warning && (
+            <span className="form-field-warn" role="img" aria-label={`Warning: ${warning}`} title={warning}>
+              <Icon name="warning" size={12} />
+            </span>
+          )}
           {actions}
         </span>
         {children}
-      </label>
-      {warning && (
-        <span className="form-field-warn" role="img" aria-label={`Warning: ${warning}`} title={warning}>
-          <Icon name="warning" size={12} />
-        </span>
-      )}
+      </Wrapper>
+      {hint && stacked && <span className="hint wf-field-hint">{hint}</span>}
     </div>
   );
 }

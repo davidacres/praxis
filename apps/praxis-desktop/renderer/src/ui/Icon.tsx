@@ -1,3 +1,4 @@
+import type React from 'react';
 /**
  * Thin-stroke 16x16 icon set in the VS Code (codicon) visual idiom.
  *
@@ -229,9 +230,11 @@ export function Icon({ name, size = 16, className, strokeWidth = 1.2 }: IconProp
 
   return (
     <svg
-      className={className}
+      className={className ? `ui-icon ${className}` : 'ui-icon'}
       width={size}
       height={size}
+      // Read by `.ui-icon` in theme.css to scale the glyph with the Large display size.
+      style={{ '--icon-size': `${size}px` } as React.CSSProperties}
       viewBox="0 0 16 16"
       fill="none"
       stroke={filled ? 'none' : 'currentColor'}

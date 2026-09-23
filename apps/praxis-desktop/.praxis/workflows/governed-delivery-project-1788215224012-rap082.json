@@ -17,7 +17,7 @@
         "profileId": "praxis-planner",
         "hostId": "praxis-planner",
         "scope": "global",
-        "toolMode": "read-only"
+        "toolMode": "project-only"
       },
       "instructions": "Produce an implementation plan for the assigned task.",
       "outputs": [
@@ -28,7 +28,8 @@
           "description": "The implementation plan."
         }
       ],
-      "mutatesWorktree": false
+      "mutatesWorktree": false,
+      "modelTier": "fast"
     },
     {
       "id": "implement",
@@ -56,7 +57,8 @@
         }
       ],
       "mutatesWorktree": true,
-      "maxAttempts": 2
+      "maxAttempts": 2,
+      "modelTier": "strong"
     },
     {
       "id": "test-contracts",
@@ -87,7 +89,8 @@
         }
       ],
       "mutatesWorktree": true,
-      "maxAttempts": 2
+      "maxAttempts": 2,
+      "modelTier": "strong"
     },
     {
       "id": "review",
@@ -115,7 +118,8 @@
         }
       ],
       "mutatesWorktree": false,
-      "satisfiesGate": "review"
+      "satisfiesGate": "review",
+      "modelTier": "standard"
     },
     {
       "id": "install",
@@ -336,8 +340,8 @@
     }
   ],
   "entryNodeId": "plan",
-  "createdAt": "2026-09-21T19:25:35.802Z",
-  "updatedAt": "2026-09-21T23:16:28.645Z",
+  "createdAt": "2026-09-23T22:32:20.536Z",
+  "updatedAt": "2026-09-23T22:40:20.186Z",
   "description": "Plan, implement, then converge review, QA, and security before a human approves.",
   "projectId": "project-1788215224012-rap082"
 }

@@ -9,6 +9,7 @@ import {
   type AgentDraft,
   type SkillDraft
 } from './agentAuthoring';
+import { ChipSelect } from '../ui/ChipSelect';
 
 function ScopeField({ value, onChange }: { value: CatalogScope; onChange: (scope: CatalogScope) => void }) {
   return (
@@ -159,13 +160,13 @@ export function CreateAgentDialog({
         <input value={draft.id} onChange={event => set({ id: event.target.value })} placeholder="praxis-reviewer" />
       </Field>
       <Field label="Transport">
-        <select value={draft.transport} onChange={event => set({ transport: event.target.value as AgentTransport })}>
-          {AGENT_TRANSPORTS.map(transport => (
-            <option key={transport.id} value={transport.id}>
-              {transport.label}
-            </option>
-          ))}
-        </select>
+        <ChipSelect
+          block
+          ariaLabel="Transport"
+          value={draft.transport}
+          onChange={value => set({ transport: value as AgentTransport })}
+          options={AGENT_TRANSPORTS.map(transport => ({ value: transport.id, label: transport.label }))}
+        />
       </Field>
       {meta.needs === 'command' ? (
         <>
@@ -182,10 +183,16 @@ export function CreateAgentDialog({
         </Field>
       )}
       <Field label="Activation">
-        <select value={draft.activation} onChange={event => set({ activation: event.target.value as 'onDemand' | 'startup' })}>
-          <option value="onDemand">onDemand</option>
-          <option value="startup">startup</option>
-        </select>
+        <ChipSelect
+          block
+          ariaLabel="Activation"
+          value={draft.activation}
+          onChange={value => set({ activation: value as 'onDemand' | 'startup' })}
+          options={[
+            { value: 'onDemand', label: 'On demand', description: 'Starts when a session first needs it' },
+            { value: 'startup', label: 'At startup', description: 'Starts with Praxis' }
+          ]}
+        />
       </Field>
       <label className="form-check">
         <input type="checkbox" checked={draft.scaffold} onChange={event => set({ scaffold: event.target.checked })} />

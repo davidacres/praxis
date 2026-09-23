@@ -56,6 +56,11 @@ test('an existing project session selects and starts governed workflows from one
   await page.getByTestId('nav-sessions').click();
   await page.getByTestId('session-list-row').filter({ hasText: 'Keep this project conversation available.' }).click();
 
+  // Before a workflow owns the session, the ordinary session runtime controls
+  // remain available for changing provider/model.
+  await expect(page.getByTestId('session-provider')).toBeEnabled();
+  await expect(page.getByTestId('session-model')).toBeEnabled();
+
   const add = page.getByTestId('session-workflow-add');
   await expect(add).toBeEnabled();
   await add.click();
@@ -70,8 +75,10 @@ test('an existing project session selects and starts governed workflows from one
   }, sessionKey)).toBe(1);
   await expect(page.getByTestId('session-workflow-add')).toContainText('Quick change');
   await expect(page.getByTestId('session-workflow-runtime')).toContainText('Workflow managed');
-  await expect(page.getByTestId('session-provider')).toHaveCount(0);
-  await expect(page.getByTestId('session-model')).toHaveCount(0);
+  await expect(page.getByTestId('session-provider')).toBeVisible();
+  await expect(page.getByTestId('session-model')).toBeVisible();
+  await expect.poll(async () => page.getByTestId('session-provider').evaluate(element => element.tagName)).toBe('SPAN');
+  await expect.poll(async () => page.getByTestId('session-model').evaluate(element => element.tagName)).toBe('SPAN');
   await page.getByTestId('session-workflow-runtime').click();
   const runtime = page.getByTestId('session-workflow-runtime-popover');
   await expect(runtime).toBeVisible();
@@ -131,4 +138,6 @@ test('an existing project session selects and starts governed workflows from one
   await expect(page.getByTestId('session-workflow-runtime')).toHaveCount(0);
   await expect(page.getByTestId('session-provider')).toBeVisible();
   await expect(page.getByTestId('session-model')).toBeVisible();
+  await expect(page.getByTestId('session-provider')).toBeEnabled();
+  await expect(page.getByTestId('session-model')).toBeEnabled();
 });

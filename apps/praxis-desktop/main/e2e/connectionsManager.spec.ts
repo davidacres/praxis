@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 let app: TestApp | undefined;
 let window: Page;
@@ -43,14 +44,14 @@ test('the new-connection form renders the per-mode field sets', async () => {
   // demo is the default mode.
   await expect(window.locator('[data-testid="conn-mode-note"]')).toContainText('sample data');
 
-  await modeSelect.selectOption('folder');
+  await chooseOption(modeSelect, 'folder');
   await expect(window.locator('[data-testid="conn-field-root-0"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-browse-root-0"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-projectKey"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-projectName"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-allowIssueCreation"]')).toBeVisible();
 
-  await modeSelect.selectOption('jiracloud');
+  await chooseOption(modeSelect, 'jiracloud');
   // The default jira sub-mode for a new connection is Cloud (recommended); the
   // Advanced controls (connectionType / stdioArgs / httpUrl / boardJql …) stay
   // hidden behind the "Advanced" radio until the user opts in.
@@ -71,20 +72,20 @@ test('the new-connection form renders the per-mode field sets', async () => {
   await expect(window.locator('[data-testid="jira-byo-oauth"]')).toHaveCount(0);
   // Flipping to Advanced reveals the original MCP-server controls, including
   // the httpUrl field once connectionType is "http".
-  await window.locator('[data-testid="conn-field-mode"]').selectOption('jiracloud'); // (no-op keeps mode)
+  await chooseOption(window.locator('[data-testid="conn-field-mode"]'), 'jiracloud'); // (no-op keeps mode)
   await window.locator('[data-testid="jira-setup-mode-advanced"]').click();
   await expect(window.locator('[data-testid="conn-field-connectionType"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-boardJql"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-httpUrl"]')).toHaveCount(0);
-  await window.locator('[data-testid="conn-field-connectionType"]').selectOption('http');
+  await chooseOption(window.locator('[data-testid="conn-field-connectionType"]'), 'http');
   await expect(window.locator('[data-testid="conn-field-httpUrl"]')).toBeVisible();
 
-  await modeSelect.selectOption('gitlab');
+  await chooseOption(modeSelect, 'gitlab');
   await expect(window.locator('[data-testid="conn-field-url"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-projectPath"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-secret-apiKey"]')).toBeVisible();
 
-  await modeSelect.selectOption('github');
+  await chooseOption(modeSelect, 'github');
   await expect(window.locator('[data-testid="conn-field-owner"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-repo"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-secret-pat"]')).toBeVisible();
@@ -98,7 +99,7 @@ test('saving a live folder connection auto-tracks its board', async () => {
     await openNewConnectionForm();
 
     await window.locator('[data-testid="conn-field-name"]').fill('e2e-live-manager');
-    await window.locator('[data-testid="conn-field-mode"]').selectOption('folder');
+    await chooseOption(window.locator('[data-testid="conn-field-mode"]'), 'folder');
     await window.locator('[data-testid="conn-field-root-0"]').fill(plansDir);
     await window.locator('[data-testid="conn-field-projectKey"]').fill('E2EL');
     await window.locator('[data-testid="conn-field-projectName"]').fill('E2E Live');
@@ -122,7 +123,7 @@ test('testing an unconfigured Jira connection surfaces the stub error', async ()
   await openNewConnectionForm();
 
   await window.locator('[data-testid="conn-field-name"]').fill('e2e-jira-stub');
-  await window.locator('[data-testid="conn-field-mode"]').selectOption('jiracloud');
+  await chooseOption(window.locator('[data-testid="conn-field-mode"]'), 'jiracloud');
   // Cloud is the default sub-mode and writes a fixed httpUrl on save, which
   // is enough for the resolver to pick an endpoint. Switch to Advanced and
   // leave its fields empty to exercise the "no MCP server configured" stub.
@@ -185,7 +186,7 @@ test('a saved GitLab API key shows as saved when the connection is re-opened', a
   await openNewConnectionForm();
 
   await window.locator('[data-testid="conn-field-name"]').fill('e2e-gitlab-secret');
-  await window.locator('[data-testid="conn-field-mode"]').selectOption('gitlab');
+  await chooseOption(window.locator('[data-testid="conn-field-mode"]'), 'gitlab');
   await window.locator('[data-testid="conn-field-url"]').fill('http://127.0.0.1:9');
   await window.locator('[data-testid="conn-field-secret-apiKey"]').fill('glpat-e2e-secret');
   await window.locator('[data-testid="conn-save-btn"]').click();
@@ -213,7 +214,7 @@ test('saving a Jira Cloud connection in API-token mode writes the expected on-di
 
   const name = `e2e-jira-cloud-token-${Date.now()}`;
   await window.locator('[data-testid="conn-field-name"]').fill(name);
-  await window.locator('[data-testid="conn-field-mode"]').selectOption('jiracloud');
+  await chooseOption(window.locator('[data-testid="conn-field-mode"]'), 'jiracloud');
 
   // Cloud is the default jira sub-mode; OAuth is the default sign-in method.
   await expect(window.locator('[data-testid="jira-setup-mode-cloud"]')).toBeChecked();
@@ -264,7 +265,7 @@ test('saving a Jira Cloud connection with a BYO OAuth app writes the client id',
 
   const name = `e2e-jira-cloud-oauth-byo-${Date.now()}`;
   await window.locator('[data-testid="conn-field-name"]').fill(name);
-  await window.locator('[data-testid="conn-field-mode"]').selectOption('jiracloud');
+  await chooseOption(window.locator('[data-testid="conn-field-mode"]'), 'jiracloud');
 
   // Cloud + OAuth is the default sub-mode/sign-in method for a new
   // connection; the BYO section is collapsed by default, so expand it

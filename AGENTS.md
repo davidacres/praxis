@@ -151,6 +151,31 @@ app from the keyboard. This eroded once already (26 outline resets against 15 `:
 rules, while `:hover` was styled 91 times); `e2e/keyboardFocus.spec.ts` now tabs through the
 shell and fails loudly if any control paints nothing.
 
+## Icon-only buttons get a tooltip
+
+A control with no visible text shows its accessible name as a tooltip: `ui/iconButtonTooltips.ts`
+(installed in `main.tsx`) copies `aria-label` into `title` the first time the pointer or focus reaches
+it, never overwriting a `title` you set. So an icon-only button needs an `aria-label` that says what it
+does — that one string is both what a screen reader announces and what everyone else sees on hover.
+`e2e/iconButtonTooltips.spec.ts` walks the main screens (every Settings page included) and fails, naming
+the element, on any visible icon-only control with no `title` and no accessible name.
+
+## Drop-downs and control sizing
+
+There is no native `<select>` in the renderer — like `window.confirm`, it ignores the theme and surface
+pack. Use `ui/ChipSelect.tsx` (the session composer's chip + `.composer-provider-menu` list, with a filter
+row once a list is long): `block` for a form field, `variant="plain"` in a toolbar. Things it already
+handles and a new picker would have to rediscover: the menu is portalled with `z-index: 1100` so it clears
+Settings/modals; a chip inside a `<label>` calls `preventDefault` or the label's re-dispatched click toggles
+it shut; it follows its chip on scroll rather than closing (smooth-scrolling panes and Playwright's
+scroll-into-view fire scroll events after the click); and its events stop at the menu so a row that selects
+on click, or a popover that closes on outside mousedown, does not also react. e2e specs drive it with
+`e2e/chipSelect.ts` (`chooseOption`, `chipOptionValues`) and assert with `toHaveAttribute('data-value', …)`.
+
+Control heights come from `--field-chip-height` / `--tool-btn-size` (and `<Icon>` glyphs from `--icon-size`),
+all multiplied by `--ui-scale`, so the Large display size grows the whole control, not just its text.
+Compact is scale 1 and pixel-identical. Size a new control from these tokens, not a bare `px`.
+
 ## Dialogs
 
 There is no `window.confirm` / `window.prompt` in the renderer. They are OS-modal,

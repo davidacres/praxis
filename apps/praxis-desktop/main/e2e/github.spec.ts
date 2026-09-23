@@ -18,6 +18,7 @@ import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGitHubApi, type MockGitHubServer } from './mockGitHubApi';
+import { chooseOption } from './chipSelect';
 
 const OWNER = 'octocat';
 const REPO = 'demo';
@@ -147,9 +148,9 @@ test('moving a card to a status column adds the label and preserves unrelated la
   await window.locator('[data-testid="issue-card"]', { hasText: 'Polish board rendering' }).click();
 
   const status = window.locator('[data-testid="issue-edit-status"]');
-  await status.selectOption({ label: 'Doing' });
+  await chooseOption(status, { label: 'Doing' });
   await window.locator('[data-testid="issue-edit-save-btn"]').click();
-  await expect(status.locator('option:checked')).toHaveText('Doing');
+  await expect(status.locator('.chip-select-label')).toHaveText('Doing');
 
   await expect.poll(() => mock?.counters.lastUpdatedIssue?.labels).toEqual(['bug', 'status: Doing']);
 });

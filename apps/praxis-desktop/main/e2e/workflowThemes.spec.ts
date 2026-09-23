@@ -78,17 +78,20 @@ test('the designer and run monitor hold up on a dark theme', async () => {
   // The stage/connection inspector lives in the shell's right pane.
   const inspector = page.getByRole('region', { name: 'Stage inspector' });
   await expect(inspector).toHaveScreenshot('workflow-themes-inspector-dark.png');
-  await inspector.getByRole('tab', { name: /^Connections/ }).click();
-  await expect(inspector.getByRole('heading', { name: 'Connections' })).toBeVisible();
+  // A chip picker's menu carries the theme too.
+  await inspector.getByTestId('wf-node-tool-mode').click();
+  await expect(page.getByRole('listbox', { name: 'Tool mode options' })).toHaveScreenshot('workflow-themes-chip-menu-dark.png');
+  await page.keyboard.press('Escape');
+  await canvas.locator('[data-testid^="wf-canvas-edge-line-"]').first().click({ force: true });
+  await expect(inspector.getByRole('heading', { name: 'Connection' })).toBeVisible();
   await expect(inspector).toHaveScreenshot('workflow-themes-connections-dark.png');
-  await inspector.getByRole('tab', { name: 'Stage' }).click();
 
-  // Save, then open the start-run dialog from the sidebar Runs node.
+  // Save, then open the start-run dialog from the workflow itself.
   await canvas.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
   await page.getByLabel('Name').fill('Plan the work');
   await page.getByRole('button', { name: 'Save workflow' }).click();
   await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
-  await page.getByTestId('project-workflow-run-new').click();
+  await page.getByRole('button', { name: /^Start a run of / }).first().click();
   await expect(page.getByTestId('wf-runstart-dialog')).toBeVisible();
   await expect(page.getByTestId('wf-runstart-dialog')).toHaveScreenshot('workflow-themes-start-run-dark.png');
 });

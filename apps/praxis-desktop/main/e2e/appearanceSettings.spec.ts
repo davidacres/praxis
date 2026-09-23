@@ -3,6 +3,7 @@ import type { Page } from 'playwright';
 import { DEFAULT_APP_SETTINGS } from '@praxis/core';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockAddonRegistry } from './mockAddonRegistry';
+import { chooseOption, chipOptionValues } from './chipSelect';
 
 /**
  * The suite runs fully isolated (see launchTestApp.ts): each test gets its own
@@ -242,7 +243,7 @@ test('gradient priorities expose a picker per stop plus a direction control', as
   // Highest ships as `linear-gradient(to bottom, #DC2626, #EA580C)`.
   await expect(window.getByLabel('Highest gradient start color')).toHaveValue('#dc2626');
   await expect(window.getByLabel('Highest gradient end color')).toHaveValue('#ea580c');
-  await expect(window.getByLabel('Highest gradient direction')).toHaveValue('to bottom');
+  await expect(window.getByLabel('Highest gradient direction')).toHaveAttribute('data-value', 'to bottom');
 
   // Solid priorities get a single picker and no direction control.
   await expect(window.getByLabel('Lowest priority color')).toHaveValue('#22c55e');
@@ -254,9 +255,9 @@ test('terminal settings expose detected profiles and persist appearance preferen
   await window.locator('[data-testid="settings-nav-terminal"]').click();
   const dialog = window.getByRole('dialog', { name: 'Settings' });
   await expect(dialog.locator('.settings-section-title')).toHaveText('Terminal');
-  await expect(dialog.getByLabel('Terminal default profile').locator('option')).not.toHaveCount(0);
+  expect(await chipOptionValues(dialog.getByLabel('Terminal default profile'))).not.toHaveLength(0);
   await dialog.getByLabel('Terminal font size').fill('16');
-  await dialog.getByLabel('Terminal cursor style').selectOption('underline');
+  await chooseOption(dialog.getByLabel('Terminal cursor style'), 'underline');
   await dialog.getByRole('switch', { name: 'Copy on selection' }).click();
   await window.waitForTimeout(500);
 
@@ -264,7 +265,7 @@ test('terminal settings expose detected profiles and persist appearance preferen
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-terminal"]').click();
   await expect(window.getByLabel('Terminal font size')).toHaveValue('16');
-  await expect(window.getByLabel('Terminal cursor style')).toHaveValue('underline');
+  await expect(window.getByLabel('Terminal cursor style')).toHaveAttribute('data-value', 'underline');
   await expect(window.getByRole('switch', { name: 'Copy on selection' })).toHaveAttribute('aria-checked', 'true');
 });
 
@@ -281,12 +282,12 @@ test('solid and gradient round trip through the mode toggle and survive a reload
   await expect(window.getByLabel('Critical gradient start color')).toHaveValue('#dc2626');
   await expect(window.getByLabel('Critical gradient end color')).toHaveValue('#8f1919');
 
-  await window.getByLabel('Critical gradient direction').selectOption('to right');
+  await chooseOption(window.getByLabel('Critical gradient direction'), 'to right');
   await window.waitForTimeout(300);
 
   await window.reload();
   await openAppearance();
-  await expect(window.getByLabel('Critical gradient direction')).toHaveValue('to right');
+  await expect(window.getByLabel('Critical gradient direction')).toHaveAttribute('data-value', 'to right');
   await expect(window.getByLabel('Critical gradient start color')).toHaveValue('#dc2626');
 
   // Back to solid: the first stop becomes the solid color.
