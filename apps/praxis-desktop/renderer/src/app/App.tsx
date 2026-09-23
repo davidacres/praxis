@@ -1333,7 +1333,7 @@ export function App() {
       entries.push({ id: `skill:${skill.metadata.name}`, label: skillTitle(skill.metadata), hint: 'Skill', group: 'Agent Hub', icon: 'sparkles', run: () => navigate({ feature: 'agents', skillName: skill.metadata.name }) });
     });
     const settingsPages: Array<[SettingsCategory, string]> = [
-      ['overview', 'Settings'], ['startup', 'Startup'], ['appearance', 'Board settings'],
+      ['overview', 'Settings'], ['startup', 'Startup'], ['appearance', 'Appearance'],
       ['appearance-themes', 'Themes'], ['appearance-surfaces', 'Surfaces'], ['appearance-looks', 'Looks'],
       ['ai', 'AI Provider'], ['agent-runtime', 'Agent Runtime'], ['mcp', 'MCP Server'], ['delivery', 'Delivery'],
       ['connections', 'Connections'], ['jira', 'Jira'], ['terminal', 'Terminal'], ['performance', 'Performance'], ['preview', 'Preview']

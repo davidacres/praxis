@@ -256,6 +256,8 @@ export interface MarketplaceSettings {
 }
 
 export interface AppearanceSettings {
+  /** UI density preference; compact is the default, large improves readability and touch targets. */
+  displayMode: 'compact' | 'large';
   /**
    * When true (default), the board list shows each backend's brand artwork
    * (Jira, GitLab, GitHub logos, …) as the board icon. When false, boards use
@@ -583,6 +585,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     boardsSidebarMode: 'classic'
   },
   appearance: {
+    displayMode: 'compact',
     showBrandArtwork: true,
     themeId: 'praxis-light',
     themeMode: 'light',
@@ -650,6 +653,7 @@ export interface AppSettingsPatch {
   marketplace?: Partial<MarketplaceSettings>;
   preview?: Partial<PreviewSettings>;
   appearance?: {
+    displayMode?: 'compact' | 'large';
     showBrandArtwork?: boolean;
     priorityColors?: Record<string, string>;
     themeId?: string;
@@ -716,6 +720,10 @@ function readBoardsSidebarMode(value: unknown, fallback: BoardsSidebarMode): Boa
 
 function readThemeMode(value: unknown, fallback: AppearanceSettings['themeMode']): AppearanceSettings['themeMode'] {
   return value === 'light' || value === 'dark' || value === 'system' ? value : fallback;
+}
+
+function readDisplayMode(value: unknown, fallback: AppearanceSettings['displayMode']): AppearanceSettings['displayMode'] {
+  return value === 'compact' || value === 'large' ? value : fallback;
 }
 
 function readMobileAccessMode(value: unknown, fallback: MobileAccessMode): MobileAccessMode {
@@ -1217,6 +1225,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
 
   const appearance: AppearanceSettings = isRecord(raw) && isRecord(raw.appearance)
     ? {
+        displayMode: readDisplayMode(raw.appearance.displayMode, DEFAULT_APP_SETTINGS.appearance.displayMode),
         showBrandArtwork: readBoolean(
           raw.appearance.showBrandArtwork,
           DEFAULT_APP_SETTINGS.appearance.showBrandArtwork
@@ -1234,6 +1243,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ,activeLookId: appearanceActiveLookId
       }
     : {
+        displayMode: DEFAULT_APP_SETTINGS.appearance.displayMode,
         showBrandArtwork: DEFAULT_APP_SETTINGS.appearance.showBrandArtwork,
         priorityColors: { ...DEFAULT_APP_SETTINGS.appearance.priorityColors }
         ,themeId: DEFAULT_APP_SETTINGS.appearance.themeId
@@ -1423,6 +1433,7 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
   };
 
   const appearance: AppearanceSettings = {
+    displayMode: patch.appearance?.displayMode ?? base.appearance.displayMode,
     showBrandArtwork: patch.appearance?.showBrandArtwork ?? base.appearance.showBrandArtwork,
     themeId: patch.appearance?.themeId ?? base.appearance.themeId,
     themeMode: patch.appearance?.themeMode ?? base.appearance.themeMode,

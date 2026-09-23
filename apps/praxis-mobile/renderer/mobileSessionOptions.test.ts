@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { MobileModelCatalog, MobileProviderCatalog } from '@praxis/core';
-import { effectiveSelection, modelLabel, selectionPayload, validateSelection } from './mobileSessionOptions';
+import { availableProviderOptions, effectiveSelection, modelLabel, selectionPayload, validateSelection } from './mobileSessionOptions';
 
 const catalog: MobileProviderCatalog = {
   defaultProvider: 'openai',
@@ -20,6 +20,10 @@ const anthropicModels: MobileModelCatalog = {
   provider: 'anthropic', status: 'ok', defaultModel: 'claude-sonnet-4-6',
   models: [{ modelId: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' }, { modelId: 'claude-opus-4-6', name: 'Claude Opus 4.6' }],
 };
+
+test('provider picker choices contain only configured and enabled providers', () => {
+  assert.deepEqual(availableProviderOptions(catalog).map(option => option.provider), ['anthropic', 'codex-cli']);
+});
 
 test('an unavailable desktop default falls through to the first available provider', () => {
   const selection = effectiveSelection(catalog, { mode: 'chat' });

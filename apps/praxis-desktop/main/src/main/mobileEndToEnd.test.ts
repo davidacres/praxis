@@ -32,7 +32,7 @@ import {
 } from '@praxis/mobile-protocol';
 import { MobileLanServer } from './mobileLanServer';
 import { createMobileHostExecutionHandlers, createMobileHostReads, type MobileHostServiceDeps } from './mobileHostServices';
-import { appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
+import { appendMobileAppearanceEvent, appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
 
 const HOST = 'host-mac';
 const PROJECT = 'p1';
@@ -209,7 +209,7 @@ test('the phone lists providers and models, and the desktop launches exactly the
   const phone = nodeClient(server.port!, hostKey, phoneKey);
   try {
     const mirror = await phoneMirror(phone);
-    assert.equal(mirror.info.surfaceRevision, 3);
+    assert.equal(mirror.info.surfaceRevision, 4);
 
     // (1) the real provider list reaches the phone — availability, labels, no secrets
     const providers = await phone.read<MobileProviderCatalog>(read('providers.list'));
@@ -315,6 +315,36 @@ test('usage streams to the phone and reconnect/replay neither duplicates nor los
     assert.equal(after.lifecycle, 'active');
     assert.equal(after.tokenUsage?.totalTokens, 1160);
     second.close();
+  } finally {
+    await server.stop();
+  }
+});
+
+test('a theme change reaches a project-scoped phone live, as a host-wide event', async () => {
+  const desktop = fakeDesktop();
+  const hostKey = generateKeyPair();
+  const phoneKey = generateKeyPair();
+  const server = new MobileLanServer({
+    app: desktop.app,
+    hostStaticKey: hostKey,
+    authorizePeer: () => ({ deviceId: 'paired-phone', capabilities: ['view'], projectIds: [PROJECT] }),
+  });
+  await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
+  const phone = nodeClient(server.port!, hostKey, phoneKey);
+  try {
+    const appearances: string[] = [];
+    phone.onEvent(envelope => {
+      const event = (envelope as unknown as { event: { type: string; appearance?: { themeId: string } } }).event;
+      if (event.type === 'host.appearance') appearances.push(event.appearance!.themeId);
+    });
+    await phoneMirror(phone);
+    appendMobileAppearanceEvent(desktop.ledger, HOST, {
+      themeId: 'praxis-light', themeName: 'Praxis Light', mode: 'light',
+      colors: { bg: '#f5f2eb', bgElevated: '#fffdf8', bgSunken: '#ebe7de', bgInput: '#fffdf8', border: '#d5c8b8', borderStrong: '#ad9a85', text: '#2c2620', textSecondary: '#74695e', textTertiary: '#958878', accent: '#c6431f', accentContrast: '#fffdf8', success: '#467a5b', warning: '#9b6b22', danger: '#b94a48' },
+    });
+    await settle();
+    assert.deepEqual(appearances, ['praxis-light'], 'the unscoped theme event is not filtered out like an unscoped session');
+    phone.close();
   } finally {
     await server.stop();
   }

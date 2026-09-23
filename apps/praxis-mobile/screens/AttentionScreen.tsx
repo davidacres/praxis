@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { AppHeader, Body, Button, Card, Pill, Screen } from '../app/ui';
 import { useStore, useOpenAttention } from '../app/store';
 import { attentionSubject } from '../renderer/mobileAttention';
+import { mobileScale, themedStyles } from '../app/theme';
 
 export function AttentionScreen({ onOpenSidebar }: { onOpenSidebar: () => void }): React.JSX.Element {
   const items = useOpenAttention();
@@ -65,7 +66,7 @@ export function AttentionScreen({ onOpenSidebar }: { onOpenSidebar: () => void }
   );
 }
 
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  actions: { flexDirection: 'row', gap: 8 },
-});
+const styles = themedStyles(() => StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: mobileScale(8) },
+  actions: { flexDirection: 'row', gap: mobileScale(8) },
+}));

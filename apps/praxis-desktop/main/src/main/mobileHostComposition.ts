@@ -54,7 +54,8 @@ import { handoverSession, switchSessionMode, updateSessionModel } from './aiIpc'
 import { getMobileHostIdentity } from './mobileHostIdentity';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { cancelMobileInteractiveSession, continueMobileInteractiveSession, createMobileInteractiveSession } from './mobileInteractiveSessions';
-import { appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
+import { getDesktopAppearance, onDidChangeDesktopAppearance } from './mobileAppearance';
+import { appendMobileAppearanceEvent, appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
 import { pendingMobilePermissions, respondToMobilePermission } from './mobilePermissions';
 import { listWorkflowChoices, startWorkflowRun } from './workflowIpc';
 
@@ -178,6 +179,7 @@ export function createDesktopMobileHostServiceDeps(
     hostOnline: () => true,
     hostEpoch: randomUUID(),
     latestSequence: () => ledger.latestSequence(),
+    appearance: getDesktopAppearance,
     providerCatalog,
     modelCatalog,
     describeDevice: async deviceId => {
@@ -340,5 +342,6 @@ export function composeDesktopMobileHost(hostId?: string): MobileHostApplication
     payloadDigest: (command: unknown) => JSON.stringify((command as MobileCommand).payload ?? null),
   });
   getAiSessionManager().onDidChangeAgentSession(record => appendMobileSessionEvent(ledger, deps.hostId, record));
+  onDidChangeDesktopAppearance(appearance => appendMobileAppearanceEvent(ledger, deps.hostId, appearance));
   return app;
 }

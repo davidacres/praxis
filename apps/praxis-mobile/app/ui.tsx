@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
-import { theme } from './theme';
+import { mobileScale, theme, themedStyles } from './theme';
 import { useStore } from './store';
 
 export function Screen({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -96,45 +96,45 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.bg },
   screenContent: { padding: theme.space, gap: theme.space },
   card: { backgroundColor: theme.surface, borderRadius: theme.radius, borderWidth: 1, borderColor: theme.border, padding: theme.space, gap: 8 },
-  h1: { color: theme.text, fontSize: 22, fontWeight: '700' },
+  h1: { color: theme.text, fontSize: mobileScale(22), fontWeight: '700' },
   appHeader: {
-    minHeight: 52,
-    paddingHorizontal: 12,
+    minHeight: mobileScale(52),
+    paddingHorizontal: mobileScale(12),
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: mobileScale(10),
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
     backgroundColor: theme.bgSunken,
   },
   menuButton: {
-    width: 32,
-    height: 32,
+    width: mobileScale(32),
+    height: mobileScale(32),
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: theme.border,
-    borderRadius: 7,
+    borderRadius: mobileScale(7),
     backgroundColor: theme.surface,
   },
-  menuGlyph: { color: theme.textSecondary, fontSize: 17, lineHeight: 19 },
-  appHeaderTitle: { flex: 1, color: theme.text, fontSize: 15, fontWeight: '700' },
+  menuGlyph: { color: theme.textSecondary, fontSize: mobileScale(17), lineHeight: mobileScale(19) },
+  appHeaderTitle: { flex: 1, color: theme.text, fontSize: mobileScale(15), fontWeight: '700' },
   connectionState: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   connectionDot: { width: 6, height: 6, borderRadius: 3 },
   connectionText: { color: theme.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 0.6 },
-  body: { color: theme.text, fontSize: 15, lineHeight: 21 },
+  body: { color: theme.text, fontSize: mobileScale(15), lineHeight: mobileScale(21) },
   bodyDim: { color: theme.textDim },
-  pill: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
-  pillText: { fontSize: 12, fontWeight: '600' },
-  button: { borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center' },
+  pill: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 999, paddingHorizontal: mobileScale(10), paddingVertical: mobileScale(3) },
+  pillText: { fontSize: mobileScale(12), fontWeight: '600' },
+  button: { minHeight: mobileScale(46), borderRadius: mobileScale(10), paddingVertical: mobileScale(12), paddingHorizontal: mobileScale(16), alignItems: 'center', justifyContent: 'center' },
   buttonPrimary: { backgroundColor: theme.accent },
   buttonGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.border },
   buttonPressed: { opacity: 0.7 },
   buttonDisabled: { opacity: 0.45 },
-  buttonText: { color: theme.onAccent, fontSize: 15, fontWeight: '700' },
+  buttonText: { color: theme.onAccent, fontSize: mobileScale(15), fontWeight: '700' },
   buttonTextGhost: { color: theme.text },
-});
+}));

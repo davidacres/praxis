@@ -8,7 +8,9 @@ import {
   type MobileConnectionStatus,
   type MobileReplayResult,
 } from '@praxis/mobile-protocol';
-import type { MobileCommand, MobileEventEnvelope, MobileReadRequest } from '@praxis/core';
+import type { MobileAppearance, MobileCommand, MobileEventEnvelope, MobileReadRequest } from '@praxis/core';
+import { readMobileAppearance } from '../renderer/mobileTheme';
+import type { MobileDisplayMode } from './theme';
 
 export interface MobileHostConfiguration {
   hostId: string;
@@ -24,6 +26,8 @@ export interface MobileHostConfiguration {
 
 const DEVICE_KEY = 'praxis.mobile.devicePrivateKey.v1';
 const HOST_CONFIGURATION_KEY = 'praxis.mobile.hostConfiguration.v1';
+const APPEARANCE_KEY = 'praxis.mobile.desktopAppearance.v1';
+const DISPLAY_MODE_KEY = 'praxis.mobile.displayMode.v1';
 
 function fromHex(value: string): Uint8Array {
   const clean = value.trim();
@@ -64,6 +68,31 @@ export async function saveMobileHostConfiguration(value: MobileHostConfiguration
 
 export async function forgetMobileHostConfiguration(): Promise<void> {
   await SecureStore.deleteItemAsync(HOST_CONFIGURATION_KEY);
+  await SecureStore.deleteItemAsync(APPEARANCE_KEY);
+}
+
+/** The paired desktop's last theme, so the phone opens wearing it before it reconnects. */
+export async function loadDesktopAppearance(): Promise<MobileAppearance | undefined> {
+  const stored = await SecureStore.getItemAsync(APPEARANCE_KEY).catch(() => null);
+  if (!stored) return undefined;
+  try {
+    return readMobileAppearance(JSON.parse(stored));
+  } catch {
+    return undefined;
+  }
+}
+
+export async function saveDesktopAppearance(value: MobileAppearance): Promise<void> {
+  await SecureStore.setItemAsync(APPEARANCE_KEY, JSON.stringify(value));
+}
+
+export async function loadMobileDisplayMode(): Promise<MobileDisplayMode | undefined> {
+  const stored = await SecureStore.getItemAsync(DISPLAY_MODE_KEY).catch(() => null);
+  return stored === 'large' || stored === 'compact' ? stored : undefined;
+}
+
+export async function saveMobileDisplayMode(value: MobileDisplayMode): Promise<void> {
+  await SecureStore.setItemAsync(DISPLAY_MODE_KEY, value);
 }
 
 /** Hex prefix of this phone's public key — the desktop lists a pending phone as "Phone <prefix>". */

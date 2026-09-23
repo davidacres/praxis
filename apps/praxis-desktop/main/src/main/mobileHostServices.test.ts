@@ -273,11 +273,19 @@ test('host.info advertises the current surface and the live event cursor', async
   const info = await createMobileHostReads(deps, ['sessions.create'])['host.info'](read('host.info', { hostId: 'host-mac' })) as {
     surfaceRevision: number; readOperations: string[]; commandOperations: string[]; latestSequence: number; hostEpoch: string;
   };
-  assert.equal(info.surfaceRevision, 3);
+  assert.equal(info.surfaceRevision, 4);
   for (const operation of ['providers.list', 'models.list', 'sessions.usage', 'access.get', 'host.info']) assert.ok(info.readOperations.includes(operation), operation);
   assert.deepEqual(info.commandOperations, ['sessions.create']);
   assert.equal(info.latestSequence, 41);
   assert.equal(info.hostEpoch, 'epoch-1');
+  assert.equal('appearance' in info, false, 'no theme until a desktop window has applied one');
+});
+
+test('host.info carries the desktop theme once a window has published it', async () => {
+  const { deps } = recorder();
+  const appearance = { themeId: 'praxis-dark', themeName: 'Praxis Dark', mode: 'dark' as const, colors: {} as never };
+  const info = await createMobileHostReads({ ...deps, appearance: () => appearance })['host.info'](read('host.info', { hostId: 'host-mac' })) as { appearance?: unknown };
+  assert.deepEqual(info.appearance, appearance);
 });
 
 test('providers.list and models.list serve the catalog without private settings', async () => {
@@ -352,7 +360,7 @@ test('access.get reports the verified caller grant, not a claimed one', async ()
   const access = await createMobileHostReads(deps)['access.get'](read('access.get', { hostId: 'host-mac' }));
   assert.deepEqual(access, {
     deviceId: 'phone-1', capabilities: ['view', 'execute', 'approve'], label: 'Dave’s iPhone', projects: [{ projectId: 'p1', name: 'Praxis' }],
-    hostName: 'Dave Mac', accessMode: 'local-only', pairedAt: '2026-09-20T09:00:00.000Z', transport: 'noise-ik', protocolVersion: 1, surfaceRevision: 3,
+    hostName: 'Dave Mac', accessMode: 'local-only', pairedAt: '2026-09-20T09:00:00.000Z', transport: 'noise-ik', protocolVersion: 1, surfaceRevision: 4,
   });
 });
 

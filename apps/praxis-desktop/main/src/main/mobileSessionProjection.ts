@@ -1,6 +1,8 @@
 import type {
   AgentSessionRecord,
+  MobileAppearance,
   MobileCommandLedger,
+  MobileHostEvent,
   MobileSessionEvent,
   MobileSessionLifecycle,
   MobileSessionMessage,
@@ -173,6 +175,24 @@ export function appendMobileSessionEvent(
       ...(record.workflowRunId ? { runId: record.workflowRunId } : {}),
     },
     event: { type: 'session.snapshot', snapshot: mobileSessionSnapshot(record, sequence) },
+  });
+  return sequence;
+}
+
+/** Appends a theme change: host-wide, so every paired phone gets it whatever projects it is granted. */
+export function appendMobileAppearanceEvent(
+  ledger: Pick<MobileCommandLedger, 'appendEvent' | 'latestSequence'>,
+  hostId: string,
+  appearance: MobileAppearance,
+): number {
+  const sequence = ledger.latestSequence() + 1;
+  ledger.appendEvent<MobileHostEvent>({
+    protocolVersion: 1,
+    eventId: `appearance:${sequence}`,
+    sequence,
+    emittedAt: new Date().toISOString(),
+    target: { hostId },
+    event: { type: 'host.appearance', appearance },
   });
   return sequence;
 }

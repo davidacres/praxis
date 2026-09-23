@@ -18,6 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.acresweb.praxis.mobile",
+      "appleTeamId": "WY4B2H77A5",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Praxis connects to your desktop on the local network to show and control active sessions."
       }

@@ -3,21 +3,15 @@ import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View 
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Body, Button, Card, H1, Screen } from '../app/ui';
 import { useStore } from '../app/store';
-import { theme } from '../app/theme';
+import { theme, themedStyles } from '../app/theme';
 import { loadMobileHostConfiguration, type MobileHostConfiguration } from '../app/mobileConnection';
 import { listenForMobileHosts, type DiscoveredMobileHost } from '../app/mobileDiscovery';
 import { parseMobileInvitation, type MobileInvitationDetails } from '../renderer/mobilePairingInvitation';
 import { formatClock, parseInstant } from '../renderer/mobileTime';
-
-const ACTION_HINTS = {
-  rescan: 'Open Settings → Mobile access on the desktop, create a pairing invitation, and scan it here.',
-  retry: 'Check that Praxis is running on the desktop, Mobile access is on, and both devices are on the same network.',
-  wait: 'Confirm this phone on the desktop.',
-  'check-desktop': 'Check Settings → Mobile access on the desktop.',
-} as const;
+import { PraxisWordmark } from '../app/PraxisWordmark';
 
 export function ConnectScreen(): React.JSX.Element {
-  const { shell, connect, connectionIssue, pairing, cancelConnect, retryConnection, disconnect, hostConfig } = useStore();
+  const { shell, autoConnectEnabled, connect, connectionIssue, pairing, cancelConnect, retryConnection, disconnect, hostConfig } = useStore();
   const connecting = shell.connection === 'connecting';
   const pairingPending = shell.connection === 'pairing';
   const [address, setAddress] = useState('');
@@ -30,6 +24,7 @@ export function ConnectScreen(): React.JSX.Element {
   const [formError, setFormError] = useState<string | undefined>(undefined);
   const [discovered, setDiscovered] = useState<DiscoveredMobileHost[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
   const applySaved = (config: MobileHostConfiguration): void => {
@@ -43,6 +38,7 @@ export function ConnectScreen(): React.JSX.Element {
   };
 
   useEffect(() => {
+    if (!autoConnectEnabled) return;
     let live = true;
     void loadMobileHostConfiguration().then(config => {
       if (!live || !config) return;
@@ -120,58 +116,52 @@ export function ConnectScreen(): React.JSX.Element {
 
   const desktopName = hostConfig?.hostName || hostName || address || 'the desktop';
 
+  const connectFromLanding = (): void => {
+    if (hostConfig) retryConnection();
+    else setAdvancedOpen(true);
+  };
   return (
     <Screen>
-      <H1>Praxis</H1>
-      <Card>
-        <Body>Continue and act on work running on your desktop host.</Body>
-        <Body dim>
-          Pair once with a QR code from the desktop; after that the phone reconnects over an encrypted channel. Agents, keys and
-          repositories stay on the desktop.
-        </Body>
-      </Card>
-
-      {pairingPending ? (
-        <Card style={styles.pendingCard}>
-          <View style={styles.statusRow}>
-            <ActivityIndicator color={theme.warn} />
-            <Text style={styles.statusTitle}>Waiting for confirmation</Text>
+      {!advancedOpen ? (
+        <View style={styles.connectionStage}>
+          <PraxisWordmark width={210} height={78} />
+          <H1>{connectionIssue ? 'We couldn’t connect' : 'Connect to Praxis'}</H1>
+          <Body dim>
+            {connectionIssue
+              ? 'The desktop is not reachable right now. Your work stays safely on the desktop until the connection returns.'
+              : 'Open your work from the paired Praxis desktop. Your files stay on the desktop.'}
+          </Body>
+          {pairingPending ? (
+            <Card style={styles.statusCard}>
+              <View style={styles.statusRow}><ActivityIndicator color={theme.warn} /><Text style={styles.statusTitle}>Waiting for confirmation</Text></View>
+              <Body>{pairing?.message ?? `Confirm this phone in Settings → Mobile access on ${desktopName}.`}</Body>
+              <Button label="Cancel" kind="ghost" onPress={cancelConnect} />
+            </Card>
+          ) : connecting ? (
+            <Card style={styles.statusCard}>
+              <View style={styles.statusRow}><ActivityIndicator color={theme.accent} /><Text style={styles.statusTitle}>Connecting to {desktopName}…</Text></View>
+              <Button label="Cancel" kind="ghost" onPress={cancelConnect} />
+            </Card>
+          ) : (
+            <>
+              {connectionIssue ? <Text accessibilityRole="alert" style={styles.issueTitle}>{connectionIssue.title}</Text> : null}
+              <Button label={connectionIssue ? 'Try again' : 'Connect'} onPress={connectFromLanding} />
+              <Button label="Add connection" kind="ghost" onPress={() => setAdvancedOpen(true)} />
+            </>
+          )}
+          <Pressable accessibilityRole="button" accessibilityLabel="Advanced settings" onPress={() => setAdvancedOpen(true)} style={styles.advancedIcon}>
+            <Text style={styles.advancedIconText}>⚙</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <>
+          <View style={styles.advancedHeader}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Back to connection" onPress={() => setAdvancedOpen(false)} style={styles.backButton}>
+              <Text style={styles.backText}>‹</Text>
+            </Pressable>
+            <Text style={styles.advancedTitle}>Connection settings</Text>
           </View>
-          <Body>{pairing?.message ?? `Confirm this phone in Settings → Mobile access on ${desktopName}.`}</Body>
-          {pairing?.deviceLabel ? <Body dim>This phone appears on the desktop as “{pairing.deviceLabel}”. Check that name before confirming.</Body> : null}
-          <Button label="Cancel" kind="ghost" onPress={cancelConnect} />
-        </Card>
-      ) : null}
-
-      {connecting && !pairingPending ? (
-        <Card>
-          <View style={styles.statusRow}>
-            <ActivityIndicator color={theme.accent} />
-            <Text style={styles.statusTitle}>{pairing?.message ?? `Opening an encrypted connection to ${desktopName}…`}</Text>
-          </View>
-          <Button label="Cancel" kind="ghost" onPress={cancelConnect} />
-        </Card>
-      ) : null}
-
-      {connectionIssue && !connecting && !pairingPending ? (
-        <Card style={styles.issueCard}>
-          <Text accessibilityRole="alert" style={styles.issueTitle}>{connectionIssue.title}</Text>
-          <Body>{connectionIssue.message}</Body>
-          <Body dim>{ACTION_HINTS[connectionIssue.action]}</Body>
-          <View style={styles.actions}>
-            {connectionIssue.action === 'rescan' ? (
-              <>
-                <Button label="Scan pairing QR" onPress={() => void openScanner()} />
-                {hostConfig ? <Button label="Forget this desktop" kind="ghost" onPress={forgetDesktop} /> : null}
-              </>
-            ) : hostConfig ? (
-              <Button label="Try again" onPress={retryConnection} />
-            ) : null}
-          </View>
-        </Card>
-      ) : null}
-
-      {discovered.length > 0 ? (
+          {discovered.length > 0 ? (
         <Card>
           <Text style={styles.label}>DESKTOPS ON THIS NETWORK</Text>
           {discovered.map(item => (
@@ -192,7 +182,7 @@ export function ConnectScreen(): React.JSX.Element {
           ))}
           <Body dim>Discovery identifies a host only. Scan or paste its current pairing invitation to pin the full host key.</Body>
         </Card>
-      ) : null}
+          ) : null}
 
       <Card>
         <Button label="Scan pairing QR" kind="ghost" onPress={() => void openScanner()} />
@@ -233,8 +223,11 @@ export function ConnectScreen(): React.JSX.Element {
         <TextInput accessibilityLabel="Project ID" autoCapitalize="none" autoCorrect={false} onChangeText={setProjectId} placeholder="Optional — first granted project" placeholderTextColor={theme.textDim} style={styles.input} value={projectId} />
         {formError ? <Text accessibilityRole="alert" style={styles.error}>{formError}</Text> : null}
         <Body dim>The phone’s identity key stays in this device’s secure storage.</Body>
+        {hostConfig && connectionIssue?.action === 'rescan' ? <Button label="Forget this desktop" kind="ghost" onPress={forgetDesktop} /> : null}
         <Button label={connecting || pairingPending ? 'Connecting…' : invitation?.tokenId ? 'Pair and connect' : 'Connect'} disabled={connecting || pairingPending} onPress={submit} />
       </Card>
+        </>
+      )}
 
       <Modal animationType="slide" onRequestClose={() => setScannerOpen(false)} visible={scannerOpen}>
         <View style={styles.scanner}>
@@ -256,18 +249,23 @@ export function ConnectScreen(): React.JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
+  connectionStage: { flex: 1, minHeight: 520, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, gap: 12 },
+  statusCard: { width: '100%', marginTop: 8 },
+  advancedIcon: { position: 'absolute', right: 4, bottom: 10, width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border, borderRadius: 23, backgroundColor: theme.surface },
+  advancedIconText: { color: theme.textSecondary, fontSize: 22 },
+  advancedHeader: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: 1, borderBottomColor: theme.border },
+  backButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
+  backText: { color: theme.textSecondary, fontSize: 28, fontWeight: '300' },
+  advancedTitle: { color: theme.text, fontSize: 16, fontWeight: '700' },
   label: { marginTop: 5, color: theme.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 0.7 },
   input: { minHeight: 42, paddingHorizontal: 11, paddingVertical: 9, borderWidth: 1, borderColor: theme.border, borderRadius: 8, backgroundColor: theme.input, color: theme.text, fontSize: 14 },
   keyInput: { minHeight: 82, fontSize: 12, textAlignVertical: 'top' },
   row: { flexDirection: 'row', gap: 10 },
   grow: { flex: 1, gap: 6 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   error: { color: theme.danger, fontSize: 12, lineHeight: 17 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   statusTitle: { flex: 1, color: theme.text, fontSize: 15, fontWeight: '700' },
-  pendingCard: { borderColor: theme.warn, backgroundColor: theme.warnSoft },
-  issueCard: { borderColor: theme.danger, backgroundColor: theme.dangerSoft },
   issueTitle: { color: theme.text, fontSize: 16, fontWeight: '700' },
   discovered: { padding: 10, borderWidth: 1, borderColor: theme.border, borderRadius: 8, backgroundColor: theme.input },
   discoveredPressed: { backgroundColor: theme.surfaceRaised },
@@ -277,4 +275,4 @@ const styles = StyleSheet.create({
   scannerGuide: { width: 250, height: 250, borderWidth: 2, borderColor: theme.accent, borderRadius: 18 },
   scannerClose: { position: 'absolute', bottom: 48, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 10, backgroundColor: theme.bgSunken },
   scannerCloseText: { color: theme.text, fontSize: 15, fontWeight: '700' },
-});
+}));

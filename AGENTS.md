@@ -1113,3 +1113,15 @@ like a blank app. Verify the Release product contains a non-empty
 `main.jsbundle` and that the Xcode console reports `Running "main"` before
 claiming the physical deployment works. See
 `apps/praxis-mobile/docs/ios-phone-deployment.md` for the complete procedure.
+
+## Mobile theme follows the desktop
+
+The phone wears the paired desktop's theme. The desktop renderer resolves its
+live CSS tokens to hex (`settings/mobileAppearancePublisher.ts`) and hands them
+to main on every `tm-theme-changed`; `host.info` carries them as `appearance`
+and a host-wide `host.appearance` event carries changes (the LAN server lets that
+one event past a phone's project scope). On the phone, `app/theme.ts` holds the
+live palette: build stylesheets with `themedStyles(() => StyleSheet.create(…))`
+and read `theme.x` at render time, never capture a colour in a module-level
+constant, or it won't follow the desktop. The phone imports only types from
+`@praxis/core`, so its validation lives in `renderer/mobileTheme.ts`.
