@@ -71,6 +71,10 @@ configuration before testing the app.
 - **The phone is not listed:** unlock it, accept the Trust This Computer prompt,
   reconnect the cable, and check Xcode's Devices and Simulators window.
 
+To drive the installed app from the command line (taps, typing,
+accessibility tree and screenshots), use the
+[device driver](../tools/device-driver/README.md).
+
 After the app opens, verify the real journey separately: desktop Mobile access
 listener enabled, pair and confirm the device, grant the required scopes, then
 connect to a live session and confirm streamed responses.

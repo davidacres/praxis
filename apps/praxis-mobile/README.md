@@ -24,6 +24,7 @@ Continue and execute existing desktop work from a phone using the same agents, w
 | screens/ | React Native connection, session, attention, and activity screens |
 | main/ | Deterministic host fixture and end-to-end protocol journey; not Electron |
 | renderer/ | Browser-safe reducers and contracts shared by tests and the native UI |
+| tools/device-driver/ | XCUITest driver for the installed app on a physical iPhone (device testing and evidence) |
 | docs/plans/features/ | Canonical Feature → stories → tasks implementation plans |
 | docs/issues/features/ | Navigational issue mirrors, matching the desktop documentation convention |
 | docs/PLAN_MAP.md | Complete ordered dependency index |
