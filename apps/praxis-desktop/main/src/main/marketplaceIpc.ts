@@ -15,6 +15,7 @@ import {
   onMarketplaceChanged,
   readActiveAppearance,
   refreshAgentRuntimeForAddons,
+  retireOtherPins,
   removeInstalledAddon,
   setInstalledAddonTrust,
   setMarketplaceToken
@@ -52,6 +53,8 @@ export function registerMarketplaceIpc(): void {
     async (_event, packageName: string, options?: MarketplaceInstallOptions) => {
       const service = await buildMarketplaceService();
       const record = await service.install(packageName, options);
+      const retired = await retireOtherPins(record);
+      if (retired.length) getLogBus().appendLine(`[marketplace] uninstalled ${retired.join(', ')} — ${record.manifest.name} now runs that agent`);
       if (record.manifest.kind === 'agent' || record.manifest.kind === 'skill') {
         await refreshAgentRuntimeForAddons();
       }

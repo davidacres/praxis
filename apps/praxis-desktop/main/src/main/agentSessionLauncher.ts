@@ -20,6 +20,7 @@ import {
   resolveAcpStartOptions,
   resolveConnectionOptions
 } from './aiInstance';
+import { effectiveRuntime, sessionInstructionsFor } from './nativeSourcesInstance';
 
 export type AgentHostAdapterState = 'acp' | 'gateway' | 'unsupported' | 'scaffold';
 
@@ -96,11 +97,21 @@ export function isBundledAgentHost(hostId: string): boolean {
 }
 
 /** Compiles a discovered manifest into an explicit, supported session adapter. */
+function acpProviderForCommand(command: string): AiProvider | undefined {
+  return (Object.keys(PROVIDER_DESCRIPTORS) as AiProvider[]).find(id => {
+    const descriptor = PROVIDER_DESCRIPTORS[id];
+    return descriptor.kind === 'cli-agent' && descriptor.hostKind === 'acp' && descriptor.defaultCommand === path.basename(command);
+  });
+}
+
 export async function compileAgentHostLaunch(
-  host: { manifest: { id: string; type: string; entry: string | { command?: string; args?: string[] }; }; rootPath: string },
+  host: { manifest: { id: string; type: string; entry: string | { command?: string; args?: string[] }; }; rootPath: string; followsSessionRuntime?: boolean; pinnedBy?: unknown },
   provider: AiProvider
 ): Promise<AgentHostLaunchPlan> {
-  if (isBundledAgentHost(host.manifest.id)) {
+  // Built-in agents, agents found in other AI tools' folders and copies of
+  // them (`entry: "session"`) all run on the session's own runtime — unless a
+  // pin (e.g. the marketplace "Claude Implementer") runs the built-in on its own.
+  if ((isBundledAgentHost(host.manifest.id) && !host.pinnedBy) || host.followsSessionRuntime || host.manifest.entry === 'session') {
     if (PROVIDER_DESCRIPTORS[provider].kind === 'api') {
       return { state: 'gateway', hostId: host.manifest.id };
     }
@@ -116,7 +127,10 @@ export async function compileAgentHostLaunch(
       };
     }
     const command = entryCommand(host.manifest.entry, host.rootPath);
-    return { state: 'acp', hostId: host.manifest.id, ...command };
+    // A pin names a runtime Praxis already configures (`claude-agent-acp`):
+    // launch it the way that runtime's sessions do, honouring its CLI path.
+    const configured = host.pinnedBy ? acpProviderForCommand(command.command) : undefined;
+    return { state: 'acp', hostId: host.manifest.id, ...(configured ? resolveAcpStartOptions(configured) : command) };
   }
 
   // Gateway hosts intentionally use the configured provider gateway. This is
@@ -185,6 +199,16 @@ export async function prepareAgentLaunch(input: {
 
 /** Starts a task using the adapter selected by prepareAgentLaunch. */
 export async function launchAgentTask(prepared: PreparedAgentLaunch, input: AgentTaskLaunchInput): Promise<void> {
+  // Instruction files other AI tools keep in the project, minus the ones this
+  // runtime already reads itself.
+  const projectInstructions = await sessionInstructionsFor(effectiveRuntime(input.provider, prepared.plan), input.workingDirectory);
+  input = {
+    ...input,
+    taskDefinition: {
+      ...input.taskDefinition,
+      ...(projectInstructions ? { projectInstructions } : {})
+    }
+  };
   if (prepared.plan.state === 'acp') {
     await getAcpAgentHost().startTask(input.issue, input.taskDefinition, input.provider, {
       command: prepared.plan.command!,
@@ -235,6 +259,12 @@ export async function continueAgentTask(
   input: AgentTaskContinueInput
 ): Promise<void> {
   const provider = prepared.provider;
+  // Recomputed each turn: a handover can move the session to a runtime that
+  // reads a different set of instruction files.
+  getAiSessionManager().setProjectInstructions(
+    input.issueKey,
+    await sessionInstructionsFor(effectiveRuntime(provider, prepared.plan), input.workingDirectory)
+  );
   if (prepared.plan.state === 'acp') {
     await getAcpAgentHost().continueTask(input.issueKey, input.message, {
       command: prepared.plan.command!,

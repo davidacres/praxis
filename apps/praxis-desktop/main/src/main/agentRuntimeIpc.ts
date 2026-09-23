@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import type { CatalogScope, NewAgentInput, NewAgentProfileInput, NewSkillInput } from '@praxis/core';
 import { getAgentRuntimeManager, getAgentRuntimeRoots } from './agentRuntimeInstance';
 import { createAgent, createAgentProfile, createSkill, importItem, previewImport } from './agentRuntimeAuthoring';
+import { copyNativeItem, revealNativeItem, setNativeProjectApproval } from './nativeSourcesInstance';
 
 export function registerAgentRuntimeIpc(): void {
   ipcMain.handle('agentRuntime:list', () => getAgentRuntimeManager().list());
@@ -24,4 +25,9 @@ export function registerAgentRuntimeIpc(): void {
     (_event, kind: 'agent' | 'profile' | 'skill', sourceDir: string, scope: CatalogScope, onDuplicate: 'block' | 'rename') =>
       importItem(kind, sourceDir, scope, onDuplicate)
   );
+  ipcMain.handle('agentRuntime:approveNativeProject', (_event, projectRoot: string, approved: boolean) =>
+    setNativeProjectApproval(projectRoot, approved === true)
+  );
+  ipcMain.handle('agentRuntime:revealNative', (_event, itemPath: string) => revealNativeItem(itemPath));
+  ipcMain.handle('agentRuntime:copyNative', (_event, kind: 'agent' | 'skill', id: string) => copyNativeItem(kind, id));
 }

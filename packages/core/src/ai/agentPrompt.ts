@@ -129,6 +129,12 @@ export function buildMsiVersionExample(
 }
 
 export function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): string {
+  const prompt = buildTaskSystemPrompt(task, issue);
+  const instructions = task.projectInstructions?.trim();
+  return instructions ? `${prompt}\n\n${instructions}` : prompt;
+}
+
+function buildTaskSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): string {
   const workflow = task.workflow
     ? [
         '\n## Assigned Workflow Pack',

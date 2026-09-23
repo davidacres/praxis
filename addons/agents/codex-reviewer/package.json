@@ -1,0 +1,26 @@
+{
+  "name": "@davidacres/praxis-addon-agent-codex-reviewer",
+  "version": "1.0.0",
+  "description": "Always runs the built-in Praxis Reviewer on Codex, whatever runtime the session uses.",
+  "author": "davidacres",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidacres/praxis.git",
+    "directory": "addons/agents/codex-reviewer"
+  },
+  "praxis": {
+    "schemaVersion": 1,
+    "kind": "agent",
+    "id": "codex-reviewer",
+    "name": "Codex Reviewer",
+    "summary": "Always runs the built-in Praxis Reviewer on Codex, whatever runtime the session uses.",
+    "replaces": "praxis-reviewer",
+    "display": {
+      "runtime": "Codex"
+    },
+    "author": "davidacres",
+    "contentVersion": "1.0.0",
+    "minAppVersion": "0.3.1"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "codex-implementer",
+  "name": "Codex Implementer",
+  "type": "acp",
+  "entry": {
+    "command": "codex-acp"
+  },
+  "activation": "onDemand",
+  "replaces": "praxis-implementer"
+}

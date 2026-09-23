@@ -2,14 +2,29 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CatalogScope } from './manifest';
+import type { NativeSourceRef } from './nativeSources';
 export interface SkillMetadata { name: string; description: string; version?: string; triggers: string[]; /** Display name in proper case; `name` stays the stable identifier. */ title?: string; }
-export interface DiscoveredSkill { metadata: SkillMetadata; skillPath: string; instructionsPath: string; fingerprint: string; scope: CatalogScope; trusted: boolean; error?: string; /** Shipped with Praxis (set by the runtime manager). */ builtIn?: boolean; }
+export interface DiscoveredSkill { metadata: SkillMetadata; skillPath: string; instructionsPath: string; fingerprint: string; scope: CatalogScope; trusted: boolean; error?: string; /** Shipped with Praxis (set by the runtime manager). */ builtIn?: boolean; /** Found in another AI tool's folder rather than Praxis's own. */ source?: NativeSourceRef; /** Other places the same name was found. */ alsoIn?: string[]; }
+/** A one-line YAML scalar: quotes removed and a double-quoted value's escapes (`\"`, `\n`) decoded. */
+export function yamlScalar(raw: string): string {
+  const value = raw.trim();
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    try {
+      return (JSON.parse(value) as string).trim();
+    } catch {
+      return value.slice(1, -1).replace(/\\"/g, '"').trim();
+    }
+  }
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1).replace(/''/g, "'").trim();
+  return value;
+}
+
 function parseFrontMatter(content: string): { metadata: SkillMetadata; error?: string } {
   const empty = { name: '', description: '', triggers: [] as string[] };
   if (!content.startsWith('---')) return { metadata: empty, error: 'SKILL.md must start with YAML front matter.' };
   const end = content.indexOf('\n---', 3); if (end < 0) return { metadata: empty, error: 'SKILL.md front matter is not closed.' };
   const values = new Map<string, string>();
-  for (const line of content.slice(3, end).split(/\r?\n/)) { const match = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line.trim()); if (match) values.set(match[1], match[2].replace(/^['"]|['"]$/g, '').trim()); }
+  for (const line of content.slice(3, end).split(/\r?\n/)) { const match = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line.trim()); if (match) values.set(match[1], yamlScalar(match[2])); }
   const name = values.get('name') ?? ''; const description = values.get('description') ?? ''; const triggers = (values.get('triggers') ?? '').split(',').map(item => item.trim()).filter(Boolean);
   if (!name || !description) return { metadata: { name, description, triggers }, error: 'name and description are required.' };
   const title = values.get('title');

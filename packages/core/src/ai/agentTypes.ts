@@ -70,6 +70,12 @@ export interface AgentTaskDefinition {
   goal: string;
   scope: string;
   definitionOfDone: string;
+  /**
+   * Instruction files the project keeps for other AI tools (AGENTS.md,
+   * CLAUDE.md, …) that this session's runtime does not load itself —
+   * resolved at launch by `buildSessionInstructions`.
+   */
+  projectInstructions?: string;
   workflow?: AgentWorkflowReference;
   workflowProvenance?: AgentWorkflowProvenance;
   attachments?: AgentTaskAttachment[];

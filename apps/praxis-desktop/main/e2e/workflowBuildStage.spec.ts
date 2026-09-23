@@ -122,7 +122,8 @@ test('a governed run refuses a dirty product checkout instead of testing an olde
     }
   }, ids);
 
-  expect(message).toContain('workflow worktree branches from committed HEAD and would test older code');
+  expect(message).toContain('1 uncommitted file in this project is not in the last commit (build.js)');
+  expect(message).toContain('Commit or stash them and try again');
   expect(await app.window.evaluate(projectId => window.praxis.workflows.listRuns(projectId), ids.projectId)).toEqual([]);
   expect(sh(repo, 'git', 'worktree', 'list', '--porcelain').match(/^worktree /gm)).toHaveLength(1);
 });

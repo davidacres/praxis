@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "codex-planner",
+  "name": "Codex Planner",
+  "type": "acp",
+  "entry": {
+    "command": "codex-acp"
+  },
+  "activation": "onDemand",
+  "replaces": "praxis-planner"
+}
