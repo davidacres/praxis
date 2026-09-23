@@ -73,6 +73,10 @@ function commandEntry(entry: string | AgentEntry): { command: string; args: stri
 export async function loadAgentHost(agent: DiscoveredAgent, timeoutMs = 5000): Promise<AgentHostHandle> {
   if (!agent.trusted || agent.errors.length > 0) throw new Error(`Agent ${agent.manifest.id} is not trusted or has manifest errors.`);
   const entry = agent.manifest.entry;
+  // Runs on the session's runtime: there is no process of its own to start.
+  if (agent.followsSessionRuntime || entry === 'session') {
+    return { agentId: agent.manifest.id, capabilities: { ...emptyCapabilities, supportsStreaming: true }, dispose: async () => {} };
+  }
   if (agent.manifest.type === 'http') {
     if (typeof entry !== 'object' || !entry.url) throw new Error('HTTP agent requires entry.url.');
     return {

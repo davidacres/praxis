@@ -75,7 +75,10 @@ export async function launchTestApp(
     PRAXIS_SETTINGS_PATH: settingsPath,
     // Full-tools AI sessions require a working folder; give every test profile
     // one (its own isolated user-data dir) unless a test overrides it.
-    PRAXIS_AI_WORKING_DIR: userDataDir
+    PRAXIS_AI_WORKING_DIR: userDataDir,
+    // Other AI tools' user-level folders (~/.claude, ~/.codex, …) are read from
+    // here, so a developer's real home never leaks into a test.
+    PRAXIS_NATIVE_SOURCES_HOME: userDataDir
   } as Record<string, string>;
   // Per-test env overrides; `undefined` deletes a variable so a developer's
   // real credentials (e.g. AI_GATEWAY_API_KEY) can't leak into a test.

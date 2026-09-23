@@ -659,6 +659,42 @@ those are code (see above), never catalogue data.
 - e2e: `mockAddonRegistry.ts` serves both endpoints from one in-process server
   and builds real gzipped tarballs so the integrity path runs for real;
   `marketplace.spec.ts` drives install/remove/trust from each panel.
+- **Agent pins** (`addons/agents/`, e.g. Claude Implementer, Codex Implementer): an
+  agent add-on with `replaces: "<built-in id>"` (in `praxis` and in `agent.json`) runs
+  that built-in — its own `AGENT.md` instructions — on the pin's runtime instead of the
+  session's. Named `<Runtime> <Role>`; `display.runtime` labels it before install.
+  `resolvePins` (manager) makes the pin the built-in's launch binding (`pinnedBy`);
+  the pin is not an agent itself. One pin per built-in: installing another
+  uninstalls the first (`retireOtherPins`). An add-on is **never mirrored into a
+  built-in's folder** — early packages that reused a built-in id are mirrored to
+  `<id>-addon` and treated as pins. `compileAgentHostLaunch` must check `pinnedBy`
+  before the bundled-id shortcut, or the pin is silently ignored.
+
+## Other AI tools' agents, skills and instructions (`agentRuntime/nativeSources.ts`)
+
+Praxis reads, in place, what other AI tools keep in the project and in the user's home:
+`.claude/agents|skills` + `CLAUDE.md`, `.codex/skills` + `AGENTS.md`, `.agents/skills`,
+`.github/agents|skills` + `copilot-instructions.md` + `instructions/*.instructions.md`,
+`.gemini/agents` + `GEMINI.md`, `.cursor/rules/*.mdc` + `.cursorrules`. The project is the
+nearest `.git` above the working folder (`settings → session → PRAXIS_AI_WORKING_DIR`; never
+the app's own cwd). Desktop glue: `main/nativeSourcesInstance.ts`. The Agent Runtime panel
+shows them under "From other AI tools" and on its Instructions tab.
+
+- **Precedence (same id):** Praxis project > Praxis global (incl. "Copy to Praxis") >
+  native project > native user > built-in; the losers are kept in `alsoIn`.
+- **Trust:** project files are untrusted until "Allow this project"
+  (`ai.nativeSources.approvedProjects`, keyed by git root); user-folder files are trusted.
+- **No double-loading:** every source carries `readBy` — the runtimes that load it
+  themselves. `createBinding` marks such a skill `native` (instructions not injected), and
+  `buildSessionInstructions` skips instruction files the session's runtime reads natively
+  (`effectiveRuntime`: a custom ACP command counts as reading nothing). User-level
+  instruction files are never injected; path-scoped rules are shown only; one session gets
+  at most `MAX_INSTRUCTION_CHARS`.
+- Native agents get a synthetic `followsSessionRuntime` host so they launch on whatever
+  runtime the session uses and appear in the workflow designer palette.
+- **Tests:** `launchTestApp` points `PRAXIS_NATIVE_SOURCES_HOME` at the test's user-data
+  dir, so a developer's real `~/.claude` etc. never leaks in. `nativeSources.spec.ts`
+  builds its own repo + home fixture.
 
 ## Agent sessions (ACP)
 

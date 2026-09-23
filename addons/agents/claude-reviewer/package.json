@@ -1,0 +1,26 @@
+{
+  "name": "@davidacres/praxis-addon-agent-claude-reviewer",
+  "version": "1.0.0",
+  "description": "Always runs the built-in Praxis Reviewer on Claude Code, whatever runtime the session uses.",
+  "author": "davidacres",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidacres/praxis.git",
+    "directory": "addons/agents/claude-reviewer"
+  },
+  "praxis": {
+    "schemaVersion": 1,
+    "kind": "agent",
+    "id": "claude-reviewer",
+    "name": "Claude Reviewer",
+    "summary": "Always runs the built-in Praxis Reviewer on Claude Code, whatever runtime the session uses.",
+    "replaces": "praxis-reviewer",
+    "display": {
+      "runtime": "Claude Code"
+    },
+    "author": "davidacres",
+    "contentVersion": "1.0.0",
+    "minAppVersion": "0.3.1"
+  }
+}

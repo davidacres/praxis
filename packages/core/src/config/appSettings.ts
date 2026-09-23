@@ -1,4 +1,5 @@
 import { parseHexRgb } from '../ui/hexColor';
+import { NATIVE_ECOSYSTEMS, type NativeEcosystem } from '../ai/agentRuntime/nativeSources';
 import type { AiProvider } from '../types';
 import type { MobileAccessMode } from '../host/mobileAccessPolicy';
 import type { MobileAccessSettings } from '../host/mobileAccessAdministration';
@@ -166,6 +167,23 @@ export interface AiSettings {
      */
     allowedHosts: string[];
   };
+  /**
+   * Agents, skills and instruction files other AI tools keep (Claude Code,
+   * Codex, Copilot, Gemini / Antigravity, Cursor), read in place.
+   */
+  nativeSources: NativeSourceSettings;
+}
+
+export interface NativeSourceSettings {
+  /** Tools whose folders are read; a tool missing here is read. */
+  ecosystems: Partial<Record<NativeEcosystem, boolean>>;
+  /** Project roots whose files the user approved (a clone's files are untrusted until then). */
+  approvedProjects: string[];
+  /** Add a project's instruction files to sessions on runtimes that do not read them natively. */
+  injectInstructions: boolean;
+  /** Extra folders of skills (each `<name>/SKILL.md`) or agent `.md` files. */
+  extraSkillPaths: string[];
+  extraAgentPaths: string[];
 }
 
 const KNOWN_AI_PROVIDERS: readonly AiProvider[] = [
@@ -498,7 +516,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     spendLimit: 0,
     activeProvider: 'vercel-gateway',
     providers: {},
-    browserTools: { enabled: false, allowedHosts: [] }
+    browserTools: { enabled: false, allowedHosts: [] },
+    nativeSources: { ecosystems: {}, approvedProjects: [], injectInstructions: true, extraSkillPaths: [], extraAgentPaths: [] }
   },
   jira: {
     siteUrl: '',
@@ -595,8 +614,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
  * per-key so a patch touching one priority doesn't reset the others.
  */
 export interface AppSettingsPatch {
-  ai?: Partial<Omit<AiSettings, 'browserTools'>> & {
+  ai?: Partial<Omit<AiSettings, 'browserTools' | 'nativeSources'>> & {
     browserTools?: Partial<AiSettings['browserTools']>;
+    nativeSources?: Partial<NativeSourceSettings>;
   };
   jira?: Partial<JiraSettings>;
   performance?: Partial<PerformanceSettings>;
@@ -982,6 +1002,24 @@ function readBrowserTools(value: unknown): AiSettings['browserTools'] {
   };
 }
 
+function readNativeSources(value: unknown): NativeSourceSettings {
+  const fallback = DEFAULT_APP_SETTINGS.ai.nativeSources;
+  if (!isRecord(value)) return { ...fallback, ecosystems: {}, approvedProjects: [], extraSkillPaths: [], extraAgentPaths: [] };
+  const ecosystems: NativeSourceSettings['ecosystems'] = {};
+  if (isRecord(value.ecosystems)) {
+    for (const ecosystem of NATIVE_ECOSYSTEMS) {
+      if (typeof value.ecosystems[ecosystem] === 'boolean') ecosystems[ecosystem] = value.ecosystems[ecosystem] as boolean;
+    }
+  }
+  return {
+    ecosystems,
+    approvedProjects: readStringList(value.approvedProjects, []),
+    injectInstructions: readBoolean(value.injectInstructions, fallback.injectInstructions),
+    extraSkillPaths: readStringList(value.extraSkillPaths, []),
+    extraAgentPaths: readStringList(value.extraAgentPaths, [])
+  };
+}
+
 function readPriorityColors(value: unknown): Record<string, string> {
   if (!isRecord(value)) {
     return { ...DEFAULT_APP_SETTINGS.appearance.priorityColors };
@@ -1020,12 +1058,14 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         recommendationProvider: readOptionalAiProvider(raw.ai.recommendationProvider),
         modelTiers: readModelTiers(raw.ai.modelTiers),
         providers: readAiProviderConfigs(raw.ai.providers),
-        browserTools: readBrowserTools(raw.ai.browserTools)
+        browserTools: readBrowserTools(raw.ai.browserTools),
+        nativeSources: readNativeSources(raw.ai.nativeSources)
       }
     : {
         ...DEFAULT_APP_SETTINGS.ai,
         providers: { ...DEFAULT_APP_SETTINGS.ai.providers },
-        browserTools: { ...DEFAULT_APP_SETTINGS.ai.browserTools, allowedHosts: [] }
+        browserTools: { ...DEFAULT_APP_SETTINGS.ai.browserTools, allowedHosts: [] },
+        nativeSources: readNativeSources(undefined)
       };
 
   const jira: JiraSettings = isRecord(raw) && isRecord(raw.jira)
@@ -1301,7 +1341,14 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
       : base.ai.providers,
     browserTools: isRecord(patch.ai?.browserTools)
       ? { ...base.ai.browserTools, ...patch.ai!.browserTools }
-      : base.ai.browserTools
+      : base.ai.browserTools,
+    nativeSources: isRecord(patch.ai?.nativeSources)
+      ? {
+          ...base.ai.nativeSources,
+          ...patch.ai!.nativeSources,
+          ecosystems: { ...base.ai.nativeSources.ecosystems, ...(patch.ai!.nativeSources!.ecosystems ?? {}) }
+        }
+      : base.ai.nativeSources
   };
 
   const jira: JiraSettings = {
