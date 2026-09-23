@@ -45,7 +45,7 @@ import {
 } from '../ai/sessionNav';
 import { useSettings } from './useSettings';
 import { useKindAddons } from './marketplaceAddons';
-import { isHostShimProfile, NATIVE_TOOL_LABELS, nativeReaders, nativeSourceLabel, runtimeOfBinding, skillTitle } from '../agents/agentCatalog';
+import { isHostShimProfile, NATIVE_TOOL_LABELS, nativeReaders, nativeSourceLabel, skillTitle } from '../agents/agentCatalog';
 import { BUILT_IN_GADGET_CATALOG } from '../ai/gadgets';
 import { allThemes, applySurfacePack, applyThemePreference, DEFAULT_THEME_ID, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
@@ -573,13 +573,10 @@ function RuntimeItem({
  */
 function RuntimeMarketplace({
   addons,
-  kind,
-  replaces
+  kind
 }: {
   addons: ReturnType<typeof useKindAddons>;
   kind: 'agent' | 'skill';
-  /** The built-in agent an add-on runs on its own runtime, if any: its id and name. */
-  replaces: (manifest: AddonManifest) => { id: string; name: string } | undefined;
 }) {
   const dialogs = useDialogs();
   const catalog = addons.catalog ?? [];
@@ -593,28 +590,18 @@ function RuntimeMarketplace({
   ];
 
   const install = async (entry: (typeof catalog)[number]) => {
-    const pin = replaces(entry.manifest);
-    // One add-on runs a built-in agent at a time; installing another replaces it.
-    const displaced = pin
-      ? addons.installed.filter(addon => addon.manifest.id !== entry.manifest.id && replaces(addon.manifest)?.id === pin.id)
-      : [];
     const confirmed = await dialogs.confirm({
       title: `Install ${entry.manifest.name}?`,
-      message: pin
-        ? `Praxis will run the built-in ${pin.name} — its own instructions — on ${entry.manifest.display?.runtime ?? 'this add-on’s runtime'} instead of the session’s runtime.${displaced.length ? ` ${displaced.map(addon => addon.manifest.name).join(' and ')} will be uninstalled.` : ''} Install it only if you trust its author.`
-        : `This ${kind} gives Praxis agents instructions${kind === 'skill' ? ' — and any scripts it includes —' : ''} to follow when they use it. Install it only if you trust its author.`,
+      message: `This ${kind} gives Praxis agents instructions${kind === 'skill' ? ' — and any scripts it includes —' : ''} to follow when they use it. Install it only if you trust its author.`,
       details: [`${entry.packageName} v${entry.latestVersion}`, ...(entry.manifest.author ? [`By ${entry.manifest.author}`] : [])],
       confirmLabel: 'Install'
     });
     if (confirmed) await addons.install(entry.packageName, { trust: true });
   };
   const uninstall = async (manifest: AddonManifest) => {
-    const pin = replaces(manifest);
     const confirmed = await dialogs.confirm({
       title: `Uninstall ${manifest.name}?`,
-      message: pin
-        ? `The built-in ${pin.name} goes back to running on the session’s runtime. You can install ${manifest.name} again from the marketplace.`
-        : `Agents will no longer be able to use this ${kind}. You can install it again from the marketplace.`,
+      message: `Agents will no longer be able to use this ${kind}. You can install it again from the marketplace.`,
       confirmLabel: 'Uninstall',
       danger: true
     });
@@ -631,7 +618,6 @@ function RuntimeMarketplace({
       {addons.ready && addons.catalog === undefined && <div className="placeholder-text">Loading the catalogue…</div>}
       {rows.map(row => {
         const installed = installedById.get(row.id);
-        const pin = replaces(row.manifest);
         const busy = addons.busy === `remove:${row.id}` || (row.entry ? addons.busy === `install:${row.entry.packageName}` : false);
         return (
           <RuntimeItem
@@ -639,13 +625,9 @@ function RuntimeMarketplace({
             testId={`${kind}-marketplace-${row.id}`}
             icon={kind === 'agent' ? 'robot' : 'sparkles'}
             title={row.manifest.name}
-            badges={[
-              ...(row.manifest.display?.runtime ? [row.manifest.display.runtime] : []),
-              ...(installed ? [installed.enabled ? 'Installed' : 'Installed · disabled'] : [])
-            ]}
+            badges={installed ? [installed.enabled ? 'Installed' : 'Installed · disabled'] : []}
             description={row.manifest.summary}
             meta={[
-              pin && !row.manifest.summary?.includes(pin.name) ? `Runs the built-in ${pin.name}` : undefined,
               `v${row.version}`,
               row.manifest.author,
               row.entry?.incompatible ? 'needs a newer Praxis' : undefined
@@ -768,43 +750,6 @@ function AgentRuntimeSection({
   }, [addonState]);
 
   const runtimeProviders = AI_PROVIDERS.filter(provider => provider.kind === 'cli-agent');
-  const runtimeName = (id: string) => (AI_PROVIDERS.find(provider => provider.id === id)?.label ?? id).replace(/\s*\(local\)$/, '').replace(/ CLI$/, '');
-  const agentRuntimes = settings.ai.agentRuntimes;
-  const setAgentRuntime = async (agentId: string, runtime: string) => {
-    const next = { ...agentRuntimes };
-    if (runtime) next[agentId] = runtime as (typeof next)[string];
-    else delete next[agentId];
-    await update({ ai: { agentRuntimes: next } });
-    await refresh();
-  };
-  /** "Runs on" for an agent that can run on any runtime; undefined for one with its own launch binding. */
-  const runsOnControl = (agentId: string, agentName: string, binding: (typeof launchBindings)[number] | undefined) => {
-    const followsSession = !binding || binding.pinnedBy || binding.followsSessionRuntime || binding.manifest.entry === 'session' || binding.manifest.type === 'gateway';
-    if (!followsSession) return undefined;
-    const current = agentRuntimes[agentId] ?? '';
-    const choices = runtimeProviders.filter(
-      runtime => runtime.id === current || providerStatuses.find(status => status.provider === runtime.id)?.configured
-    );
-    return (
-      <label className="runs-on-control">
-        <span>Runs on</span>
-        <select
-          className="input"
-          value={current}
-          aria-label={`${agentName} runs on`}
-          data-testid={`agent-runs-on-${agentId}`}
-          onChange={event => void setAgentRuntime(agentId, event.target.value)}
-        >
-          <option value="">Session’s runtime</option>
-          {choices.map(runtime => (
-            <option key={runtime.id} value={runtime.id}>
-              {runtimeName(runtime.id)}
-            </option>
-          ))}
-        </select>
-      </label>
-    );
-  };
   const availableRuntimes = runtimeProviders.filter(runtime => providerStatuses.find(status => status.provider === runtime.id)?.configured).length;
   // Every binding always has *some* profile entry — one it wrote itself
   // (curated) or one Praxis auto-synthesizes as a placeholder when it has no
@@ -817,12 +762,7 @@ function AgentRuntimeSection({
   const skills = snapshot?.skills ?? [];
   const agentAddonIds = new Set(agentAddons.installed.map(addon => addon.manifest.id));
   const skillAddonIds = new Set(skillAddons.installed.map(addon => addon.manifest.id));
-  const builtInAgentNames = new Map(profiles.filter(profile => profile.builtIn).map(profile => [profile.profile.id, profile.profile.name]));
-  // A pin names the built-in it runs; early packages reused the built-in's id instead.
-  const pinnedBuiltIn = (manifest: AddonManifest) => {
-    const id = manifest.kind === 'agent' ? manifest.replaces ?? (builtInAgentNames.has(manifest.id) ? manifest.id : undefined) : undefined;
-    return id ? { id, name: builtInAgentNames.get(id) ?? id } : undefined;
-  };
+
   const refreshedAt = snapshot?.refreshedAt ? new Date(snapshot.refreshedAt).toLocaleString() : 'not yet';
 
   const tabs: Array<{ id: AgentRuntimeTab; label: string; count?: number }> = [
@@ -915,11 +855,9 @@ function AgentRuntimeSection({
                     // Every agent runs on the session's runtime through the built-in
                     // gateway unless it says otherwise; only the exceptions get a line.
                     const notes = [
-                      binding?.pinnedBy
-                        ? binding.pinnedBy.setting ? undefined : `Runs on ${runtimeOfBinding(binding)} — set by ${binding.pinnedBy.name}`
-                        : binding && binding.manifest.type !== 'gateway' && binding.manifest.entry !== 'session' && !binding.followsSessionRuntime
-                          ? `${binding.manifest.type.toUpperCase()} launch binding`
-                          : undefined,
+                      binding && binding.manifest.type !== 'gateway' && binding.manifest.entry !== 'session' && !binding.followsSessionRuntime
+                        ? `${binding.manifest.type.toUpperCase()} launch binding`
+                        : undefined,
                       profile.legacy ? 'legacy brief.md' : undefined,
                       profile.error,
                       binding?.errors.length ? binding.errors.map(item => item.message).join('; ') : undefined
@@ -942,23 +880,14 @@ function AgentRuntimeSection({
                           ...(profile.source ? [nativeReaders(profile.source.readBy) ?? 'Runs on any runtime through Praxis'] : []),
                           ...(profile.alsoIn?.length ? [`Also in ${profile.alsoIn.join(', ')}`] : [])
                         ].join(' · ') || undefined}
-                        action={
-                          <>
-                            {runsOnControl(profile.profile.id, profile.profile.name, binding)}
-                            {profile.source ? nativeActions('agent', profile.profile.id, profile.source.path, profile.trusted) : null}
-                          </>
-                        }
+                        action={profile.source ? nativeActions('agent', profile.profile.id, profile.source.path, profile.trusted) : undefined}
                       />
                     );
                   })}
                   {group.items.length === 0 && <div className="placeholder-text">No built-in agents found. Use Refresh, or restart Praxis.</div>}
                 </div>
               ))}
-            <RuntimeMarketplace
-              addons={agentAddons}
-              kind="agent"
-              replaces={pinnedBuiltIn}
-            />
+            <RuntimeMarketplace addons={agentAddons} kind="agent" />
           </>
         )}
 
@@ -1000,7 +929,7 @@ function AgentRuntimeSection({
                 Skills give agents a tested procedure for a job. Built-in skills are added when a workflow needs them; install others from the marketplace.
               </p>
             )}
-            <RuntimeMarketplace addons={skillAddons} kind="skill" replaces={() => undefined} />
+            <RuntimeMarketplace addons={skillAddons} kind="skill" />
           </>
         )}
 

@@ -97,21 +97,13 @@ export function isBundledAgentHost(hostId: string): boolean {
 }
 
 /** Compiles a discovered manifest into an explicit, supported session adapter. */
-function acpProviderForCommand(command: string): AiProvider | undefined {
-  return (Object.keys(PROVIDER_DESCRIPTORS) as AiProvider[]).find(id => {
-    const descriptor = PROVIDER_DESCRIPTORS[id];
-    return descriptor.kind === 'cli-agent' && descriptor.hostKind === 'acp' && descriptor.defaultCommand === path.basename(command);
-  });
-}
-
 export async function compileAgentHostLaunch(
-  host: { manifest: { id: string; type: string; entry: string | { command?: string; args?: string[] }; }; rootPath: string; followsSessionRuntime?: boolean; pinnedBy?: unknown },
+  host: { manifest: { id: string; type: string; entry: string | { command?: string; args?: string[] }; }; rootPath: string; followsSessionRuntime?: boolean },
   provider: AiProvider
 ): Promise<AgentHostLaunchPlan> {
   // Built-in agents, agents found in other AI tools' folders and copies of
-  // them (`entry: "session"`) all run on the session's own runtime — unless a
-  // pin (e.g. the marketplace "Claude Implementer") runs the built-in on its own.
-  if ((isBundledAgentHost(host.manifest.id) && !host.pinnedBy) || host.followsSessionRuntime || host.manifest.entry === 'session') {
+  // them (`entry: "session"`) all run on the session's own runtime.
+  if (isBundledAgentHost(host.manifest.id) || host.followsSessionRuntime || host.manifest.entry === 'session') {
     if (PROVIDER_DESCRIPTORS[provider].kind === 'api') {
       return { state: 'gateway', hostId: host.manifest.id };
     }
@@ -127,10 +119,7 @@ export async function compileAgentHostLaunch(
       };
     }
     const command = entryCommand(host.manifest.entry, host.rootPath);
-    // A pin names a runtime Praxis already configures (`claude-agent-acp`):
-    // launch it the way that runtime's sessions do, honouring its CLI path.
-    const configured = host.pinnedBy ? acpProviderForCommand(command.command) : undefined;
-    return { state: 'acp', hostId: host.manifest.id, ...(configured ? resolveAcpStartOptions(configured) : command) };
+    return { state: 'acp', hostId: host.manifest.id, ...command };
   }
 
   // Gateway hosts intentionally use the configured provider gateway. This is

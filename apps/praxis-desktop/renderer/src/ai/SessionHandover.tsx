@@ -14,6 +14,7 @@ import { Icon } from '../ui/Icon';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName, refreshModelOptions } from './modelProviders';
 import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing } from './sessionNav';
 import { isProviderUsable } from './providerAvailability';
+import { isTerminalAgentState } from './aiSessionState';
 
 function purposeOf(session: AgentSessionRecord) {
   return session.purpose ?? {
@@ -676,4 +677,109 @@ export function SessionConversationActions({ session, onStop, onToolOwner, targe
     </>;
   }
   return null;
+}
+
+/**
+ * In the composer when the session's AI ran out of credits or hit its usage
+ * limit: hand the session over to another AI that is set up — it carries on
+ * from the handover brief — or stop here. Never switches without the user.
+ */
+export function SessionLimitSwitch({ session, onStop }: { session: AgentSessionRecord; onStop: () => void }) {
+  const [usable, setUsable] = useState<AiProvider[]>();
+  const [choice, setChoice] = useState<AiProvider>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    let cancelled = false;
+    void window.praxis.ai
+      .listProviderStatuses()
+      .then(statuses => {
+        if (!cancelled) setUsable(statuses.filter(isProviderUsable).map(status => status.provider));
+      })
+      .catch(() => {
+        if (!cancelled) setUsable([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session.issueKey]);
+
+  const who = session.provider ? aiName(session.provider) : 'This AI';
+  const choices = (usable ?? []).filter(provider => provider !== session.provider);
+  const selected = choice && choices.includes(choice) ? choice : choices[0];
+  const running = !isTerminalAgentState(session.state);
+
+  const switchAndContinue = async () => {
+    if (!selected) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (running) await window.praxis.ai.abort(session.issueKey);
+      const models = await fetchModelOptions(selected, false);
+      await window.praxis.ai.handoverSession(session.issueKey, {
+        provider: selected,
+        model: preferredModel(models),
+        expectedBriefRevision: session.handoverBrief?.revision ?? 0
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const stop = async () => {
+    setBusy(true);
+    try {
+      if (running) await window.praxis.ai.abort(session.issueKey);
+      onStop();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="session-limit-switch" role="alert" data-testid="session-limit-switch">
+      <div className="session-limit-switch-text">
+        <strong>{who} ran out of budget.</strong>{' '}
+        {choices.length > 0
+          ? 'Switch to another AI to carry on where it stopped, or stop here.'
+          : usable
+            ? 'No other AI is set up — add one in Settings › AI Provider, or stop here.'
+            : ''}
+        {error && <span className="session-limit-switch-error"> {error}</span>}
+      </div>
+      <div className="session-limit-switch-actions">
+        {choices.length > 0 && (
+          <>
+            <select
+              className="input"
+              aria-label="Switch to"
+              data-testid="session-limit-switch-to"
+              value={selected}
+              disabled={busy}
+              onChange={event => setChoice(event.target.value as AiProvider)}
+            >
+              {choices.map(provider => (
+                <option key={provider} value={provider}>
+                  {aiName(provider)}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="btn btn-primary btn-compact" data-testid="session-limit-switch-go" disabled={busy} onClick={() => void switchAndContinue()}>
+              Switch and continue
+            </button>
+          </>
+        )}
+        <button type="button" className="btn btn-quiet btn-compact" data-testid="session-limit-stop" disabled={busy} onClick={() => void stop()}>
+          Stop
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function aiName(provider: AiProvider): string {
+  return (PROVIDER_LABELS[provider] ?? provider).replace(/\s*\(local\)$/, '').replace(/ CLI$/, '');
 }

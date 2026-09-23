@@ -107,7 +107,7 @@ import type { WorkflowValidationResult } from '../workflows/workflowValidation';
 import type { WorkflowCatalog } from '../workflows/workflowStore';
 import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
-import type { WorkflowPermissionMode, WorkflowPlanInput, WorkflowUncommittedChanges } from '../workflows/workflowRun';
+import type { WorkflowPermissionMode, WorkflowPlanInput, WorkflowProviderLimitPolicy, WorkflowUncommittedChanges } from '../workflows/workflowRun';
 import type { WorkflowEvidenceEntry } from '../workflows/workflowEvidence';
 import type { CreateDiagnosisSessionResult } from '../ai/diagnosisBrief';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileContent, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
@@ -1190,6 +1190,8 @@ export interface WorkflowsIpc {
       aiModel?: string;
       /** Proceed although the checkout has uncommitted product changes: include them, or omit them. */
       uncommittedChanges?: WorkflowUncommittedChanges;
+      /** When a stage's AI runs out of budget: ask (default), switch AI automatically, or stop. */
+      providerLimitPolicy?: WorkflowProviderLimitPolicy;
     }
   ): Promise<WorkflowRunSummary>;
   /**
@@ -1238,6 +1240,10 @@ export interface WorkflowsIpc {
   bypassGate(runId: string, gate: string, actor: string, reason: string, nodeId?: string): Promise<WorkflowRunSummary>;
   /** Queues a failed stage for another attempt within its budget. */
   retryStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
+  /** Moves a stage whose AI ran out of budget to another AI; a paused stage goes again on it. */
+  switchStageProvider(runId: string, nodeId: string, provider: AiProvider): Promise<WorkflowRunSummary>;
+  /** Ends the run because a stage's AI ran out of budget. */
+  stopForProviderLimit(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
   /** Starts a new delivery revision and replays the selected stage's downstream path. */
   reworkStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
   /** Cancels a run. */

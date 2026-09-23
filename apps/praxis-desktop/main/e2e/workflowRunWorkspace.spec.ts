@@ -6,6 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
 
+const FAKE_ACP_AGENT = path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs');
+
 /**
  * Runs as tree nodes, and the run workspace.
  *
@@ -134,7 +136,7 @@ async function seedProject(page: Page, repo: string, slowCheck = false, toolMode
 async function launch(
   slowCheck = false,
   mode: 'complete' | 'error' = 'complete',
-  extra: { toolMode?: 'read-only' | 'full'; toolCall?: { name: string; arguments: Record<string, unknown> } } = {}
+  extra: { toolMode?: 'read-only' | 'full'; toolCall?: { name: string; arguments: Record<string, unknown> }; withCodex?: boolean } = {}
 ): Promise<{ page: Page; seeded: Seeded }> {
   mock = await startMockGatewayServer({
     mode,
@@ -143,7 +145,24 @@ async function launch(
   });
   const repo = createRepository();
   app = await launchTestApp(
-    { ai: { activeProvider: 'vercel-gateway', workingDirectory: repo } },
+    {
+      ai: {
+        activeProvider: 'vercel-gateway',
+        workingDirectory: repo,
+        // A second AI to switch to: the fake ACP agent standing in for Codex. The
+        // other local AIs are turned off, so a real CLI on this machine is never picked.
+        ...(extra.withCodex
+          ? {
+              providers: {
+                'codex-cli': { cliPath: FAKE_ACP_AGENT },
+                'claude-code-cli': { enabled: false },
+                'copilot-cli': { enabled: false },
+                'antigravity-cli': { enabled: false }
+              }
+            }
+          : {})
+      }
+    },
     profileWithAgent(),
     { AI_GATEWAY_API_KEY: 'e2e-key', AI_GATEWAY_URL: mock.baseUrl, VERCEL_AI_GATEWAY_URL: undefined },
     { openNewSession: false }
@@ -417,7 +436,7 @@ test('an out-of-credits provider pauses the run instead of failing it, and resum
   expect(paused.outcome).toBe('failed');
   // maxAttempts is 1, yet Retry is still offered — the limit did not spend it.
   expect(paused.retry).toBe(true);
-  expect(paused.explanation).toMatch(/credits or usage limit/);
+  expect(paused.explanation).toMatch(/Vercel AI Gateway ran out of credits or hit its usage limit/);
 
   // The UI says paused, not failed, and offers one way forward.
   await page.reload();
@@ -439,6 +458,70 @@ test('an out-of-credits provider pauses the run instead of failing it, and resum
   await expect.poll(() => runStatus(page, run.runId), { timeout: 30000 }).toBe('awaiting-approval');
   await expect(page.getByTestId('wf-run-limit')).toHaveCount(0);
   await expect(page.getByTestId('wf-vpipe-step-review')).toHaveAttribute('data-lane', 'done');
+});
+
+test('a stage whose AI ran out can be switched to another AI and carries on', async () => {
+  const { page, seeded } = await launch(false, 'error', { withCodex: true });
+  const run = await page.evaluate(async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Switch AI'), seeded);
+  await expect
+    .poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(summary => summary?.stages.find(stage => stage.nodeId === 'review')?.pause), run.runId), { timeout: 60000 })
+    .toBe('provider-limit');
+
+  await page.reload();
+  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
+  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
+  await page.getByTestId('project-workflow-run-row').filter({ hasText: /Switch AI/ }).getByRole('button').first().click();
+  const notice = page.getByTestId('wf-run-limit');
+  await expect(notice).toContainText('Vercel AI Gateway ran out of budget');
+  await expect(notice.getByTestId('wf-limit-switch-to')).toHaveValue('codex-cli');
+  await expect(notice.getByTestId('wf-run-resume')).toHaveText('Retry on Vercel AI Gateway');
+  await expect(notice.getByTestId('wf-limit-stop')).toBeVisible();
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: path.resolve(process.cwd(), 'output', 'playwright', 'workflow-limit-ask.png') });
+
+  await notice.getByTestId('wf-limit-switch').click();
+  await expect(notice).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(summary => summary?.stages.find(stage => stage.nodeId === 'review')?.provider), run.runId), { timeout: 30000 })
+    .toBe('codex-cli');
+  const summary = await page.evaluate(id => window.praxis.workflows.getRun(id), run.runId);
+  expect(summary?.events.some(event => event.kind === 'node-provider-switched' && /switched from Vercel AI Gateway to Codex after Vercel AI Gateway ran out/.test(event.message))).toBe(true);
+  expect(summary?.exhaustedProviders).toEqual(['vercel-gateway']);
+});
+
+test('with "Switch AI automatically" the stage moves to another AI without asking', async () => {
+  const { page, seeded } = await launch(false, 'error', { withCodex: true });
+  const run = await page.evaluate(
+    async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Auto switch', undefined, undefined, undefined, { providerLimitPolicy: 'switch' }),
+    seeded
+  );
+  await expect
+    .poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(summary => summary?.stages.find(stage => stage.nodeId === 'review')?.provider), run.runId), { timeout: 60000 })
+    .toBe('codex-cli');
+  const summary = await page.evaluate(id => window.praxis.workflows.getRun(id), run.runId);
+  expect(summary?.providerLimitPolicy).toBe('switch');
+  expect(summary?.events.some(event => /switched from Vercel AI Gateway to Codex automatically/.test(event.message))).toBe(true);
+});
+
+test('with "Stop the run" the run ends saying which AI ran out, and can still carry on with another AI', async () => {
+  const { page, seeded } = await launch(false, 'error', { withCodex: true });
+  const run = await page.evaluate(
+    async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Stop on limit', undefined, undefined, undefined, { providerLimitPolicy: 'stop' }),
+    seeded
+  );
+  await expect.poll(() => runStatus(page, run.runId), { timeout: 60000 }).toBe('failed');
+  const summary = await page.evaluate(id => window.praxis.workflows.getRun(id), run.runId);
+  expect(summary?.events.at(-1)?.message).toMatch(/The run could not be completed: Vercel AI Gateway ran out of credits or hit its usage limit at /);
+
+  await page.reload();
+  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
+  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
+  await page.getByTestId('project-workflow-run-row').filter({ hasText: /Stop on limit/ }).getByRole('button').first().click();
+  const notice = page.getByTestId('wf-run-limit');
+  await expect(notice).toContainText('The run could not be completed');
+  await expect(notice.getByTestId('wf-limit-stop')).toHaveCount(0);
+  await notice.getByTestId('wf-limit-switch').click();
+  await expect.poll(() => runStatus(page, run.runId), { timeout: 30000 }).not.toBe('failed');
 });
 
 const WRITE_CALL = { name: 'write_file', arguments: { path: 'note.txt', content: 'written by the stage' } };

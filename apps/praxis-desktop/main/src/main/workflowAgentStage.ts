@@ -14,7 +14,9 @@ import {
   stageSessionKey,
   chooseStageModel,
   formatUpstreamReports,
+  stageProvider,
   type FinishedStageSession,
+  type AiProvider,
   type IssueDetails,
   type StageDispatchContext,
   type StageOutcome,
@@ -144,13 +146,9 @@ export async function runWorkflowAgentStage(
   const issueKey = stageSessionKey(workflowRun.runId, node.id);
   const sessions = getAiSessionManager();
   const settings = getSettingsBackend().read();
-  const provider = workflowRun.aiProvider || settings.ai.activeProvider;
-  if (preflight.binding.providerId && preflight.binding.providerId !== provider) {
-    return {
-      status: 'failed',
-      error: `Stage requires provider "${preflight.binding.providerId}" but "${provider}" is selected.`
-    };
-  }
+  // The stage's AI: one it was switched to in this run, its own choice, the run's, or the selected AI.
+  const runProvider = workflowRun.aiProvider || settings.ai.activeProvider;
+  const provider = stageProvider(workflowRun, node.id, runProvider) as AiProvider;
   const taskDefinition = buildStageTaskDefinition(stageContext);
 
   // Hand the stage what earlier stages concluded, so it does not start cold and re-derive it. A report
@@ -171,11 +169,15 @@ export async function runWorkflowAgentStage(
   const failedAttempts = (workflowRun.nodes[node.id]?.attempts ?? []).filter(
     attempt => attempt.outcome === 'failed' && !attempt.pause
   ).length;
+  // A model id belongs to the AI it was chosen for: the stage's exact model only
+  // on the stage's own AI, the run's model only on the run's AI.
+  const switched = Boolean(workflowRun.stageProviders?.[node.id]);
+  const ownProvider = node.agent.providerId?.trim();
   const modelChoice = chooseStageModel({
-    node,
+    node: !switched && (!ownProvider || ownProvider === provider) ? node : { ...node, model: undefined },
     provider,
     tiers: settings.ai.modelTiers,
-    runModel: workflowRun.aiModel,
+    runModel: provider === runProvider ? workflowRun.aiModel : undefined,
     attemptsSpent: failedAttempts
   });
 
@@ -225,6 +227,7 @@ export async function runWorkflowAgentStage(
     return {
       status: 'failed',
       error: errorMessage,
+      provider,
       ...(isLimit ? { pause: 'provider-limit' as const } : {})
     };
   }
@@ -259,10 +262,13 @@ export async function runWorkflowAgentStage(
     ? await freezeWorktree(worktreePath, context.stageName)
     : undefined;
 
-  return stageOutcomeFromSession(node, {
-    ...finished,
-    ...(snapshotRef ? { snapshotRef } : {})
-  });
+  return {
+    ...stageOutcomeFromSession(node, {
+      ...finished,
+      ...(snapshotRef ? { snapshotRef } : {})
+    }),
+    provider
+  };
 }
 
 export async function cancelWorkflowAgentStage(runId: string, nodeId: string): Promise<void> {

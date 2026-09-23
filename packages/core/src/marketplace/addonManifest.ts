@@ -93,26 +93,11 @@ export function validateAddonManifest(value: unknown): AddonManifestValidation {
       if (value.display.mode !== undefined && mode === undefined) {
         errors.push('`display.mode` must be "light" or "dark".');
       }
-      const runtime = value.display.runtime;
-      if (runtime !== undefined && (typeof runtime !== 'string' || runtime.trim().length === 0 || runtime.length > 40)) {
-        errors.push('`display.runtime` must be a short name (≤ 40 characters) when present.');
-      }
       display = {
         ...(Object.keys(preview).length > 0 ? { preview } : {}),
-        ...(mode ? { mode } : {}),
-        ...(typeof runtime === 'string' && runtime.trim() ? { runtime: runtime.trim() } : {})
+        ...(mode ? { mode } : {})
       };
       if (Object.keys(display).length === 0) display = undefined;
-    }
-  }
-
-  if (value.replaces !== undefined) {
-    if (typeof value.replaces !== 'string' || !ID_RE.test(value.replaces)) {
-      errors.push('`replaces` must be the id of a built-in agent.');
-    } else if (value.kind !== 'agent') {
-      errors.push('Only an agent add-on can replace a built-in agent.');
-    } else if (value.replaces === id) {
-      errors.push('`replaces` names another agent; give the add-on its own `id`.');
     }
   }
 
@@ -137,7 +122,6 @@ export function validateAddonManifest(value: unknown): AddonManifestValidation {
     minAppVersion: value.minAppVersion as string | undefined,
     author: value.author as string | undefined,
     homepage: value.homepage as string | undefined,
-    ...(typeof value.replaces === 'string' ? { replaces: value.replaces } : {}),
     display
   };
   return { manifest, errors, warnings };

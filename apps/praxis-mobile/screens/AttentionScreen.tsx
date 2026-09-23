@@ -2,10 +2,11 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { AppHeader, Body, Button, Card, Pill, Screen } from '../app/ui';
 import { useStore, useOpenAttention } from '../app/store';
+import { attentionSubject } from '../renderer/mobileAttention';
 
 export function AttentionScreen({ onOpenSidebar }: { onOpenSidebar: () => void }): React.JSX.Element {
   const items = useOpenAttention();
-  const { approve, respondToPermission, setRoute, openWork, work } = useStore();
+  const { approve, respondToPermission, setRoute, openWork, work, runs } = useStore();
   const [failure, setFailure] = React.useState<string | undefined>(undefined);
   const act = (action: Promise<void>): void => {
     setFailure(undefined);
@@ -26,7 +27,7 @@ export function AttentionScreen({ onOpenSidebar }: { onOpenSidebar: () => void }
         <Card key={item.id}>
           <View style={styles.row}>
             <Pill label={item.kind} tone={item.kind === 'failure' ? 'danger' : 'warn'} />
-            <Body dim>{item.runId ?? item.sessionId}</Body>
+            <Body dim>{attentionSubject(item, work, runs)}</Body>
           </View>
           <Body>
             {item.kind === 'approval'

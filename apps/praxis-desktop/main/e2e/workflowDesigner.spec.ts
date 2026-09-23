@@ -420,3 +420,41 @@ test('selecting an agent task and pressing Delete key removes it', async () => {
   await page.keyboard.press('Delete');
   await expect(stage).toBeHidden();
 });
+
+test('a stage can run on its own AI and model, chosen from the AIs that are set up', async () => {
+  const page = app.window;
+  // Only Codex (the fake ACP agent) is set up; the other local AIs are off, so the list is predictable.
+  await page.evaluate(async cliPath => {
+    await window.praxis.settings.set({
+      ai: {
+        providers: {
+          'codex-cli': { cliPath },
+          'claude-code-cli': { enabled: false },
+          'copilot-cli': { enabled: false },
+          'antigravity-cli': { enabled: false }
+        }
+      }
+    });
+  }, path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs'));
+  await newWorkflow(page, 'Governed delivery');
+  await canvasOf(page).getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
+  const inspector = inspectorOf(page);
+
+  const ai = inspector.getByTestId('wf-node-ai');
+  await expect(ai).toHaveValue('');
+  await expect(ai.locator('option')).toContainText(['Run’s AI', 'Codex CLI']);
+  await expect(inspector.getByTestId('wf-node-model')).toHaveCount(0);
+  await ai.selectOption('codex-cli');
+  await inspector.getByTestId('wf-node-model').fill('gpt-5.6-luna');
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: 'output/playwright/workflow-stage-ai.png' });
+
+  await page.getByRole('button', { name: 'Save workflow' }).click();
+  await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
+  const saved = await page.evaluate(async () => {
+    const project = (await window.praxis.projects.list())[0];
+    return JSON.stringify(await window.praxis.workflows.catalog(project.id));
+  });
+  expect(saved).toContain('"providerId":"codex-cli"');
+  expect(saved).toContain('"model":"gpt-5.6-luna"');
+});

@@ -24,7 +24,7 @@ import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { basename, contextPressure, formatCost, formatContextLength, formatErrorMessage, formatModelCost, getKnownContextLength, getModelPricing, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
-import { SessionConversationActions, SessionConversationDialog, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
+import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
 import { LiveTurnActivityIndicator, formatElapsedDuration } from './LiveTurnActivityIndicator';
 import {
@@ -685,6 +685,8 @@ export function SessionsPage({
   const [followUpImages, setFollowUpImages] = useState<WireImageAttachment[]>([]);
   const [followUpError, setFollowUpError] = useState<string | undefined>();
   const [dismissedError, setDismissedError] = useState<string | undefined>();
+  // "Stop" on the out-of-budget notice, for this session until the user sends it another message.
+  const [limitStoppedFor, setLimitStoppedFor] = useState<string>();
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
   /** True while an image drag hovers the composer, for the drop highlight. */
   const [composerDragOver, setComposerDragOver] = useState(false);
@@ -1151,6 +1153,7 @@ export function SessionsPage({
   const sendFollowUp = async () => {
     if (!selected) return;
     if (!followUp.trim() && followUpImages.length === 0) return;
+    setLimitStoppedFor(undefined);
     if (selected.conversation?.state === 'running') {
       const message = followUp.trim();
       setSendingFollowUp(true);
@@ -1911,6 +1914,18 @@ export function SessionsPage({
                 }}
                 onDrop={handleComposerDrop}
               >
+                {/* The session's AI ran out: carry on with another AI, or stop. A workflow stage's run offers this itself. */}
+                {isLimit && !isDismissed && !selected.conversation && !isWorkflowStageSession(selected) &&
+                  limitStoppedFor !== selected.issueKey && (
+                  <SessionLimitSwitch
+                    session={selected}
+                    onStop={() => {
+                      setFollowUpError(undefined);
+                      if (rawActiveError) setDismissedError(rawActiveError);
+                      setLimitStoppedFor(selected.issueKey);
+                    }}
+                  />
+                )}
                 {followUpImages.length > 0 && (
                   <div className="session-image-attachments" data-testid="session-image-attachments">
                     {followUpImages.map((image, index) => (

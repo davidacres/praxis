@@ -69,6 +69,7 @@ export function StartRunDialog({
   const [busy, setBusy] = useState(false);
   // Asking is the default every time: auto-approve is a deliberate, per-run choice.
   const [permissionMode, setPermissionMode] = useState<'ask' | 'auto'>('ask');
+  const [providerLimitPolicy, setProviderLimitPolicy] = useState<'ask' | 'switch' | 'stop'>('ask');
   const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<AiProvider | undefined>();
   const [modelOptions, setModelOptions] = useState<ModelOptions | undefined>();
@@ -225,6 +226,7 @@ export function StartRunDialog({
         planInput,
         {
           permissionMode,
+          providerLimitPolicy,
           aiProvider: selectedProvider,
           aiModel: selectedModel.trim() || undefined,
           ...(uncommittedChanges ? { uncommittedChanges } : {})
@@ -378,6 +380,51 @@ export function StartRunDialog({
               )}
             </div>
           )}
+          <fieldset className="wf-runstart-mode" data-testid="wf-runstart-limit">
+            <legend>If an AI runs out of budget</legend>
+            <label className="wf-runstart-mode-option">
+              <input
+                type="radio"
+                name="wf-provider-limit"
+                value="ask"
+                checked={providerLimitPolicy === 'ask'}
+                onChange={() => setProviderLimitPolicy('ask')}
+                data-testid="wf-runstart-limit-ask"
+              />
+              <span>
+                <strong>Ask me</strong>
+                <em>Pause the stage and ask whether to switch to another AI, retry or stop.</em>
+              </span>
+            </label>
+            <label className="wf-runstart-mode-option">
+              <input
+                type="radio"
+                name="wf-provider-limit"
+                value="switch"
+                checked={providerLimitPolicy === 'switch'}
+                onChange={() => setProviderLimitPolicy('switch')}
+                data-testid="wf-runstart-limit-switch"
+              />
+              <span>
+                <strong>Switch AI automatically</strong>
+                <em>Carry on with the next AI that is set up, without asking.</em>
+              </span>
+            </label>
+            <label className="wf-runstart-mode-option">
+              <input
+                type="radio"
+                name="wf-provider-limit"
+                value="stop"
+                checked={providerLimitPolicy === 'stop'}
+                onChange={() => setProviderLimitPolicy('stop')}
+                data-testid="wf-runstart-limit-stop"
+              />
+              <span>
+                <strong>Stop the run</strong>
+                <em>End the run and say which AI ran out and where.</em>
+              </span>
+            </label>
+          </fieldset>
           <fieldset className="wf-runstart-mode" data-testid="wf-runstart-mode">
             <legend>Tool permissions</legend>
             <label className="wf-runstart-mode-option">

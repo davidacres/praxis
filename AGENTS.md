@@ -659,17 +659,22 @@ those are code (see above), never catalogue data.
 - e2e: `mockAddonRegistry.ts` serves both endpoints from one in-process server
   and builds real gzipped tarballs so the integrity path runs for real;
   `marketplace.spec.ts` drives install/remove/trust from each panel.
-- **Which AI runs an agent** is the per-agent **"Runs on"** setting
-  (`ai.agentRuntimes`, agent id → local ACP runtime), not a package.
-  `applyRuntimeChoices` (manager) makes the chosen runtime the agent's launch binding
-  (`pinnedBy.setting`); the agent keeps its own instructions. It wins over an add-on
-  pin. `compileAgentHostLaunch` must check `pinnedBy` before the bundled-id shortcut,
-  and launches a pinned runtime via `resolveAcpStartOptions` (honours its CLI path).
-- An agent add-on may still pin a built-in with `replaces` (third parties);
-  `resolvePins` handles it, one pin per built-in (`retireOtherPins`), and an add-on
-  is **never mirrored into a built-in's folder** (id-reusing ones go to `<id>-addon`).
-  Praxis's own pin packages were retired: `migrateAddonPinsToSettings` turns an
-  installed one into the setting on launch.
+- **Agents never choose their AI.** A session uses the session's AI; a workflow stage
+  uses its own AI if the designer set one (`agent.providerId`), else the run's
+  (`stageProvider`). There is no per-agent "Runs on" and no runtime-pin add-on: an
+  add-on reusing a built-in agent's id is never mirrored over it, and Praxis's retired
+  pin packages are removed on launch (`removeRetiredPinAddons`).
+- **Budget limits.** A stage whose AI runs out pauses (`pause: 'provider-limit'`, the
+  attempt records `provider`, and is free). The run's `providerLimitPolicy` then
+  decides: `ask` (default) waits for the user — Switch AI / Retry / Stop on the run
+  page; `switch` moves the stage to the next usable AI (`chooseFallbackProvider` →
+  `fallbackProviderForStage`, skipping `exhaustedProviders`); `stop` ends the run
+  (`provider-limit-stop`) with a reason naming the AI and stage. `stage-provider-switched`
+  records `run.stageProviders` and re-queues the stage, reopening a stopped run. A stage's
+  exact model only applies on its own AI, the run's model only on the run's.
+  **`normalizeWorkflowRun` whitelists run fields** — add new ones there or they vanish
+  on save. A normal session that runs out gets `SessionLimitSwitch` in its composer
+  (handover to another usable AI, or stop).
 - **Working style** (`ai.workingStyle`, `DEFAULT_WORKING_STYLE`, mirrored in
   `settingsDefaults.ts`) is added to every session's system prompt on every runtime
   via `launchAgentTask`/`continueAgentTask`; `nativeSources.instructionSource` limits

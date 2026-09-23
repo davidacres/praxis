@@ -442,26 +442,19 @@ test('a provider is enabled unless it was explicitly turned off, and the choice 
   assert.equal(back.ai.providers.anthropic?.enabled, true);
 });
 
-test('agent runtime choices, instruction source and working style are sanitized and merged', () => {
+test('instruction source and working style are sanitized and merged', () => {
   const defaults = sanitizeAppSettings({});
-  assert.deepEqual(defaults.ai.agentRuntimes, {});
   assert.deepEqual(defaults.ai.workingStyle, { enabled: true, text: '' });
   assert.equal(defaults.ai.nativeSources.instructionSource, 'all');
 
   const raw = sanitizeAppSettings({
-    ai: {
-      agentRuntimes: { 'praxis-implementer': 'codex-cli', 'praxis-planner': 'openai', '': 'codex-cli' },
-      workingStyle: { enabled: false, text: 'Mine.' },
-      nativeSources: { instructionSource: 'claude' }
-    }
+    ai: { workingStyle: { enabled: false, text: 'Mine.' }, nativeSources: { instructionSource: 'claude' }, agentRuntimes: { 'praxis-implementer': 'codex-cli' } }
   });
-  assert.deepEqual(raw.ai.agentRuntimes, { 'praxis-implementer': 'codex-cli' }, 'only local runtimes can be chosen');
   assert.deepEqual(raw.ai.workingStyle, { enabled: false, text: 'Mine.' });
   assert.equal(raw.ai.nativeSources.instructionSource, 'claude');
+  assert.equal('agentRuntimes' in raw.ai, false, 'the retired "Runs on" choices are dropped');
   assert.equal(sanitizeAppSettings({ ai: { nativeSources: { instructionSource: 'nope' } } }).ai.nativeSources.instructionSource, 'all');
 
-  // The choices map is replaced whole, so clearing one removes it; the style merges by key.
-  const merged = mergeAppSettings(raw, { ai: { agentRuntimes: { 'praxis-reviewer': 'claude-code-cli' }, workingStyle: { enabled: true } } });
-  assert.deepEqual(merged.ai.agentRuntimes, { 'praxis-reviewer': 'claude-code-cli' });
+  const merged = mergeAppSettings(raw, { ai: { workingStyle: { enabled: true } } });
   assert.deepEqual(merged.ai.workingStyle, { enabled: true, text: 'Mine.' });
 });

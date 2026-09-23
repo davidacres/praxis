@@ -12,8 +12,6 @@
 // GitHub token is supplied via `PRAXIS_MARKETPLACE_TOKEN` because the e2e
 // sandbox has no `safeStorage` keychain (same as github.spec.ts).
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
@@ -103,29 +101,6 @@ const TIDY_AGENT = {
     }
   }
 };
-
-/** A pin: runs a built-in agent on its own runtime (the marketplace "Claude Implementer" and the like). */
-function implementerPin(id: string, name: string, runtime: string, command: string) {
-  return {
-    packageName: `praxis-addon-agent-${id}`,
-    version: '1.0.0',
-    manifest: {
-      schemaVersion: 1,
-      kind: 'agent',
-      id,
-      name,
-      summary: `Always runs the built-in Praxis Implementer on ${runtime}, whatever runtime the session uses.`,
-      replaces: 'praxis-implementer',
-      display: { runtime },
-      author: 'acme'
-    },
-    payload: {
-      'agent.json': { schemaVersion: 1, id, name, type: 'acp', entry: { command }, activation: 'onDemand', replaces: 'praxis-implementer' }
-    }
-  };
-}
-const CLAUDE_IMPLEMENTER = implementerPin('claude-implementer', 'Claude Implementer', 'Claude Code', 'claude-agent-acp');
-const CODEX_IMPLEMENTER = implementerPin('codex-implementer', 'Codex Implementer', 'Codex', 'codex-acp');
 
 const DEVICE_SKILL = {
   packageName: 'praxis-addon-device-check',
@@ -431,116 +406,4 @@ test('Marketplace loads real GitHub packages with token configured', async () =>
   // Verify at least one theme card appears from the published packages
   const themeCards = marketplace.locator('[data-testid^="theme-card-"]');
   await expect(themeCards.first()).toBeVisible({ timeout: 10000 });
-});
-
-test('Agent Runtime panel: a pin runs a built-in agent on its own runtime, one pin per agent', async () => {
-  registry = await startMockAddonRegistry({ owner: OWNER, addons: [CLAUDE_IMPLEMENTER, CODEX_IMPLEMENTER] });
-  app = await launchTestApp(seeded(registry.baseUrl), undefined, { PRAXIS_MARKETPLACE_TOKEN: 'e2e-token' });
-  window = app.window;
-  const agentsDir = path.join(app.userDataDir, 'agents');
-
-  await openSettings();
-  await nav('agent-runtime');
-  const builtIn = window.locator('[data-testid="agent-runtime-profile-praxis-implementer"]');
-  const claude = window.locator('[data-testid="agent-marketplace-claude-implementer"]');
-  const codex = window.locator('[data-testid="agent-marketplace-codex-implementer"]');
-  await expect(claude).toContainText('Claude Code');
-  await expect(claude).toContainText('Always runs the built-in Praxis Implementer on Claude Code');
-  await expect(builtIn).not.toContainText('set by');
-
-  // Installing says what changes: the built-in's instructions, on this runtime.
-  await claude.getByRole('button', { name: 'Install' }).click();
-  const installClaude = window.getByRole('dialog', { name: 'Install Claude Implementer?' });
-  await expect(installClaude).toContainText('Praxis will run the built-in Praxis Implementer — its own instructions — on Claude Code');
-  await installClaude.getByRole('button', { name: 'Install' }).click();
-  await expect(claude).toContainText('Installed');
-  // The built-in stays listed — it is still the agent — and says what runs it.
-  await expect(builtIn).toContainText('Runs on Claude Code — set by Claude Implementer');
-  await expect(window.locator('[data-testid="agent-runtime-profile-claude-implementer"]')).toHaveCount(0);
-
-  // A second pin for the same agent replaces the first.
-  await codex.getByRole('button', { name: 'Install' }).click();
-  const installCodex = window.getByRole('dialog', { name: 'Install Codex Implementer?' });
-  await expect(installCodex).toContainText('Claude Implementer will be uninstalled.');
-  await installCodex.getByRole('button', { name: 'Install' }).click();
-  await expect(codex).toContainText('Installed');
-  await expect(claude.getByRole('button', { name: 'Install' })).toBeVisible();
-  await expect(builtIn).toContainText('Runs on Codex — set by Codex Implementer');
-  await window.mouse.move(0, 0);
-  await window.screenshot({ path: 'output/playwright/agent-pins.png' });
-
-  // The built-in's own folder is untouched; the pin lives beside it.
-  const builtInManifest = JSON.parse(fs.readFileSync(path.join(agentsDir, 'praxis-implementer', 'agent.json'), 'utf8'));
-  expect(builtInManifest.type).toBe('gateway');
-  expect(fs.existsSync(path.join(agentsDir, 'praxis-implementer', 'AGENT.md'))).toBe(true);
-  expect(fs.existsSync(path.join(agentsDir, 'claude-implementer'))).toBe(false);
-  await window.getByRole('button', { name: 'Done' }).click();
-
-  // A session with the built-in, on an API runtime, launches the pin's runtime
-  // (Codex, honouring its configured CLI path) with the built-in's instructions.
-  const fixture = path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs');
-  const session = await window.evaluate(async ({ cliPath, cwd }) => {
-    await window.praxis.settings.set({ ai: { providers: { 'codex-cli': { cliPath } } } });
-    return window.praxis.ai.delegate({
-      goal: 'ECHO_PROMPT',
-      workingDirectory: cwd,
-      toolMode: 'read-only',
-      profileId: 'praxis-implementer',
-      hostId: 'praxis-implementer',
-      task: { goal: 'ECHO_PROMPT', maxSteps: 2, timeoutMs: 30000 }
-    });
-  }, { cliPath: fixture, cwd: app.userDataDir });
-  const transcript = () => window.evaluate(key => window.praxis.ai.listSessions().then(list => JSON.stringify(list.find(item => item.issueKey === key) ?? {})), session.issueKey);
-  await expect.poll(transcript, { timeout: 20000 }).toContain('PROMPT_ECHO:');
-  expect(await transcript()).toContain('Hello from the fake ACP agent');
-  // The echo is the prompt the pinned runtime received: the built-in's own brief.
-  const echoes = (await transcript()).split('PROMPT_ECHO:').slice(1);
-  expect(echoes.some(echo => echo.includes('You are the Praxis implementation agent.'))).toBe(true);
-
-  // Uninstalling hands the built-in back to the session's runtime.
-  await openSettings();
-  await nav('agent-runtime');
-  await codex.getByRole('button', { name: 'Uninstall' }).click();
-  const uninstall = window.getByRole('dialog', { name: 'Uninstall Codex Implementer?' });
-  await expect(uninstall).toContainText('The built-in Praxis Implementer goes back to running on the session’s runtime.');
-  await uninstall.getByRole('button', { name: 'Uninstall' }).click();
-  await expect(builtIn).not.toContainText('set by');
-});
-
-test('an early pin that reused the built-in agent’s id still pins it without overwriting the built-in', async () => {
-  const legacy = {
-    packageName: 'praxis-addon-agent-implementer',
-    version: '1.0.0',
-    manifest: { schemaVersion: 1, kind: 'agent', id: 'praxis-implementer', name: 'Praxis Implementer', summary: 'Implements a plan and commits the change. Runs on Claude Code via claude-agent-acp.', author: 'acme' },
-    payload: { 'agent.json': { schemaVersion: 1, id: 'praxis-implementer', name: 'Praxis Implementer', type: 'acp', entry: { command: 'claude-agent-acp' }, activation: 'onDemand' } }
-  };
-  registry = await startMockAddonRegistry({ owner: OWNER, addons: [legacy, CLAUDE_IMPLEMENTER] });
-  app = await launchTestApp(seeded(registry.baseUrl), undefined, { PRAXIS_MARKETPLACE_TOKEN: 'e2e-token' });
-  window = app.window;
-  const agentsDir = path.join(app.userDataDir, 'agents');
-
-  await openSettings();
-  await nav('agent-runtime');
-  const row = window.locator('[data-testid="agent-marketplace-praxis-implementer"]');
-  await expect(row).toContainText('Runs the built-in Praxis Implementer');
-  await row.getByRole('button', { name: 'Install' }).click();
-  await window.getByRole('dialog', { name: 'Install Praxis Implementer?' }).getByRole('button', { name: 'Install' }).click();
-  await expect(row).toContainText('Installed');
-
-  const builtIn = window.locator('[data-testid="agent-runtime-profile-praxis-implementer"]');
-  await expect(builtIn).toContainText('Built-in');
-  await expect(builtIn).toContainText('Runs on Claude Code — set by Praxis Implementer');
-  expect(JSON.parse(fs.readFileSync(path.join(agentsDir, 'praxis-implementer', 'agent.json'), 'utf8')).type).toBe('gateway');
-  expect(fs.existsSync(path.join(agentsDir, 'praxis-implementer', 'AGENT.md'))).toBe(true);
-  expect(JSON.parse(fs.readFileSync(path.join(agentsDir, 'praxis-implementer-addon', 'agent.json'), 'utf8')).replaces).toBe('praxis-implementer');
-
-  // The new pin for the same agent takes over and removes the early one.
-  const claude = window.locator('[data-testid="agent-marketplace-claude-implementer"]');
-  await claude.getByRole('button', { name: 'Install' }).click();
-  const dialog = window.getByRole('dialog', { name: 'Install Claude Implementer?' });
-  await expect(dialog).toContainText('Praxis Implementer will be uninstalled.');
-  await dialog.getByRole('button', { name: 'Install' }).click();
-  await expect(builtIn).toContainText('Runs on Claude Code — set by Claude Implementer');
-  await expect(row.getByRole('button', { name: 'Install' })).toBeVisible();
-  expect(fs.existsSync(path.join(agentsDir, 'praxis-implementer-addon'))).toBe(false);
 });

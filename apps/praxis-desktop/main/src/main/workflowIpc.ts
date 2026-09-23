@@ -68,8 +68,10 @@ import {
   type WorkflowValidationResult,
   type WorkflowAssistantMessage,
   type WorkflowAssistantResult,
-  type IssueDetails
+  type IssueDetails,
+  providerDisplayName
 } from '@praxis/core';
+import { usableProviders } from './providerFallback';
 import { getProjectStore } from './projectStoreInstance';
 import { getAgentRuntimeManager, getAgentRuntimeRoots } from './agentRuntimeInstance';
 import { getAiSessionManager, getAcpAgentHost, resolveAcpStartOptions } from './aiInstance';
@@ -326,7 +328,7 @@ export async function startWorkflowRun(input: {
   issue?: { issueKey: string; connectionId?: string };
   controller?: { sessionKey: string; sessionId: string };
   planInput?: WorkflowPlanInput;
-  options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown };
+  options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown; providerLimitPolicy?: unknown };
 }): Promise<WorkflowRunSummary> {
   const { projectId, workflowId, taskTitle, issue, controller, planInput, options } = input;
   let definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
@@ -365,6 +367,24 @@ export async function startWorkflowRun(input: {
     aiModel ??= session.model;
   }
 
+  // An AI someone chose for this run or for one of its stages must be set up now,
+  // not discovered missing halfway through. (With none chosen, stages use the
+  // selected AI, and a launch problem there shows on the stage as before.)
+  const chosenAis = [...new Set([
+    ...(aiProvider ? [aiProvider] : []),
+    ...definition.nodes.flatMap(node => (node.type === 'agent-task' && node.agent.providerId?.trim() ? [node.agent.providerId.trim()] : []))
+  ])];
+  if (chosenAis.length) {
+    const usable = await usableProviders();
+    const missing = chosenAis.filter(id => !usable.includes(id as AiProvider));
+    if (missing.length) {
+      throw new Error(
+        `This run needs ${missing.map(providerDisplayName).join(' and ')}, which ${missing.length === 1 ? 'is' : 'are'} not set up or turned off. Set ${missing.length === 1 ? 'it' : 'them'} up in Settings › AI Provider, or choose another AI for those stages.`
+      );
+    }
+  }
+  const providerLimitPolicy = options?.providerLimitPolicy === 'switch' || options?.providerLimitPolicy === 'stop' ? options.providerLimitPolicy : undefined;
+
   const uncommittedChanges = options?.uncommittedChanges === 'include' || options?.uncommittedChanges === 'omit'
     ? options.uncommittedChanges
     : undefined;
@@ -381,7 +401,8 @@ export async function startWorkflowRun(input: {
     ...(options?.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
     ...(uncommittedChanges ? { uncommittedChanges } : {}),
     ...(aiProvider ? { aiProvider } : {}),
-    ...(aiModel ? { aiModel } : {})
+    ...(aiModel ? { aiModel } : {}),
+    ...(providerLimitPolicy ? { providerLimitPolicy } : {})
   });
   await saveRun(run);
   if (controller) {
@@ -762,7 +783,7 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       issue?: { issueKey: string; connectionId?: string },
       controller?: { sessionKey: string; sessionId: string },
       planInput?: WorkflowPlanInput,
-      options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown }
+      options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown; providerLimitPolicy?: unknown }
     ): Promise<WorkflowRunSummary> => startWorkflowRun({ projectId, workflowId, taskTitle, issue, controller, planInput, options })
   );
 
@@ -911,6 +932,23 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
     const summary = await withRun(runId, run =>
       applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId, at: new Date().toISOString() })
     );
+    await getWorkflowOrchestrator().step(runId);
+    const run = runStore().get(runId);
+    return run ? summarize(run) : summary;
+  });
+
+  // A stage whose AI ran out: carry on with another AI, or stop the run.
+  ipcMain.handle('workflows:switchStageProvider', async (_event, runId: string, nodeId: string, provider: string): Promise<WorkflowRunSummary> => {
+    if (!(await usableProviders()).includes(provider as AiProvider)) {
+      throw new Error(`${providerDisplayName(provider)} is not set up or is turned off.`);
+    }
+    await withRun(runId, run => applyWorkflowRunCommand(run, { kind: 'stage-provider-switched', nodeId, at: new Date().toISOString(), provider }));
+    await getWorkflowOrchestrator().step(runId);
+    return summarize(runStore().get(runId)!);
+  });
+
+  ipcMain.handle('workflows:stopForProviderLimit', async (_event, runId: string, nodeId: string): Promise<WorkflowRunSummary> => {
+    const summary = await withRun(runId, run => applyWorkflowRunCommand(run, { kind: 'provider-limit-stop', nodeId, at: new Date().toISOString() }));
     await getWorkflowOrchestrator().step(runId);
     const run = runStore().get(runId);
     return run ? summarize(run) : summary;
