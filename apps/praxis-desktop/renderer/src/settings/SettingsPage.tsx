@@ -43,7 +43,7 @@ import {
 } from '../ai/sessionNav';
 import { useSettings } from './useSettings';
 import { useKindAddons } from './marketplaceAddons';
-import { isHostShimProfile } from '../agents/agentCatalog';
+import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
 import { BUILT_IN_GADGET_CATALOG } from '../ai/gadgets';
 import { allThemes, applySurfacePack, applyThemePreference, DEFAULT_THEME_ID, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
@@ -523,104 +523,137 @@ function NavGroup({
 
 type AgentRuntimeTab = 'agents' | 'skills' | 'runtimes' | 'advanced';
 
-/** Trust and remove controls for an installed agent/skill add-on. */
-function AddonTrustControls({ addons, id, enabled }: { addons: ReturnType<typeof useKindAddons>; id: string; enabled: boolean }) {
+/** One agent or skill row: identity icon on the surface, title with badges, description, one action. */
+function RuntimeItem({
+  icon,
+  title,
+  badges = [],
+  description,
+  meta,
+  action,
+  testId
+}: {
+  icon: IconName;
+  title: string;
+  badges?: string[];
+  description?: string;
+  meta?: string;
+  action?: React.ReactNode;
+  testId: string;
+}) {
   return (
-    <div className="settings-field-control settings-inline-controls">
-      <button
-        className="btn btn-quiet"
-        type="button"
-        disabled={addons.busy === `trust:${id}`}
-        onClick={() => void addons.setTrust(id, !enabled)}
-      >
-        {enabled ? 'Revoke trust' : 'Trust'}
-      </button>
-      <button className="btn btn-quiet" type="button" disabled={addons.busy === `remove:${id}`} onClick={() => void addons.remove(id)}>
-        Remove
-      </button>
+    <div className="settings-field-row" data-testid={testId}>
+      <span className="runtime-item-icon" aria-hidden="true">
+        <Icon name={icon} size={16} />
+      </span>
+      <div className="settings-field-label">
+        <div className="runtime-item-title">
+          <strong>{title}</strong>
+          {badges.map(badge => (
+            <span key={badge} className="badge">
+              {badge}
+            </span>
+          ))}
+        </div>
+        {description && <div className="settings-field-help">{description}</div>}
+        {meta && <div className="settings-field-help">{meta}</div>}
+      </div>
+      {action && <div className="settings-field-control settings-inline-controls">{action}</div>}
     </div>
   );
 }
 
 /**
- * One kind's marketplace inside the Agent Runtime panel: installed add-ons
- * awaiting (or holding) trust, then what the catalogue offers that is not
- * installed. `replaces` names an existing item an add-on would overwrite (a
- * marketplace agent with a built-in agent's id is copied over it).
+ * One kind's marketplace: every catalogue item once, with Install or
+ * Uninstall. Agents and skills carry instructions (a skill may carry scripts)
+ * that agents act on, so installing asks first — confirming is the trust
+ * decision; there is no separate trust step.
  */
-function RuntimeAddonCatalog({
+function RuntimeMarketplace({
   addons,
-  kindLabel,
-  testIdPrefix,
-  replaces,
-  trustedHelp,
-  shownAbove
+  kind,
+  replaces
 }: {
   addons: ReturnType<typeof useKindAddons>;
-  kindLabel: 'agent' | 'skill';
-  testIdPrefix: 'agent-marketplace' | 'skill-marketplace';
+  kind: 'agent' | 'skill';
+  /** The built-in item an add-on with this id replaces, if any. */
   replaces: (id: string) => string | undefined;
-  trustedHelp: string;
-  /** Installed add-ons already listed (with their controls) under Installed. */
-  shownAbove: ReadonlySet<string>;
 }) {
-  const installedIds = new Set(addons.installed.map(addon => addon.manifest.id));
-  const pendingInstalled = addons.installed.filter(addon => !shownAbove.has(addon.manifest.id));
-  const available = (addons.catalog ?? []).filter(entry => !installedIds.has(entry.manifest.id));
+  const dialogs = useDialogs();
+  const catalog = addons.catalog ?? [];
+  const installedById = new Map(addons.installed.map(addon => [addon.manifest.id, addon]));
+  const rows = [
+    ...catalog.map(entry => ({ id: entry.manifest.id, manifest: entry.manifest, version: entry.latestVersion, entry })),
+    // Installed add-ons that left the catalogue stay listed so they can be uninstalled.
+    ...addons.installed
+      .filter(addon => !catalog.some(entry => entry.manifest.id === addon.manifest.id))
+      .map(addon => ({ id: addon.manifest.id, manifest: addon.manifest, version: addon.version, entry: undefined }))
+  ];
+
+  const install = async (entry: (typeof catalog)[number]) => {
+    const confirmed = await dialogs.confirm({
+      title: `Install ${entry.manifest.name}?`,
+      message: `This ${kind} gives Praxis agents instructions${kind === 'skill' ? ' — and any scripts it includes —' : ''} to follow when they use it. Install it only if you trust its author.`,
+      details: [`${entry.packageName} v${entry.latestVersion}`, ...(entry.manifest.author ? [`By ${entry.manifest.author}`] : [])],
+      confirmLabel: 'Install'
+    });
+    if (confirmed) await addons.install(entry.packageName, { trust: true });
+  };
+  const uninstall = async (id: string, name: string) => {
+    const replaced = replaces(id);
+    const confirmed = await dialogs.confirm({
+      title: `Uninstall ${name}?`,
+      message: `Agents will no longer be able to use this ${kind}.${replaced ? ` The built-in ${replaced} comes back.` : ''} You can install it again from the marketplace.`,
+      confirmLabel: 'Uninstall',
+      danger: true
+    });
+    if (confirmed) await addons.remove(id);
+  };
+
   return (
-    <div data-testid={`${testIdPrefix === 'agent-marketplace' ? 'agent-runtime' : 'skill-runtime'}-marketplace`}>
-      <h4 className="settings-subsection-title">From the marketplace</h4>
+    <div data-testid={`${kind}-runtime-marketplace`}>
+      <h4 className="settings-subsection-title">Marketplace</h4>
       {addons.error && <div className="error-banner">{addons.error}</div>}
       {!addons.ready && (
-        <p className="settings-field-help">Set up the add-on catalogue in Settings › Add-ons to install {kindLabel}s from GitHub Packages.</p>
+        <p className="settings-field-help">Set up the add-on catalogue in Settings › Add-ons to browse {kind}s from GitHub Packages.</p>
       )}
-      {pendingInstalled.map(addon => (
-        <div className="settings-field-row" key={addon.manifest.id} data-testid={`${testIdPrefix}-installed-${addon.manifest.id}`}>
-          <div className="settings-field-label">
-            <strong>{addon.manifest.name}</strong>
-            <div className="settings-field-help">
-              v{addon.version} · {addon.enabled ? trustedHelp : 'installed but not trusted — will not run until you allow it'}
-            </div>
-          </div>
-          <AddonTrustControls addons={addons} id={addon.manifest.id} enabled={addon.enabled} />
-        </div>
-      ))}
       {addons.ready && addons.catalog === undefined && <div className="placeholder-text">Loading the catalogue…</div>}
-      {available.map(entry => {
-        const replaced = replaces(entry.manifest.id);
+      {rows.map(row => {
+        const installed = installedById.get(row.id);
+        const replaced = replaces(row.id);
+        const busy = addons.busy === `remove:${row.id}` || (row.entry ? addons.busy === `install:${row.entry.packageName}` : false);
         return (
-          <div className="settings-field-row" key={entry.packageName} data-testid={`${testIdPrefix}-${entry.manifest.id}`}>
-            <div className="settings-field-label">
-              <strong>{entry.manifest.name}</strong>
-              <div className="settings-field-help">
-                v{entry.latestVersion}
-                {entry.manifest.author ? ` · ${entry.manifest.author}` : ''}
-                {entry.manifest.summary ? ` — ${entry.manifest.summary}` : ''}
-                {entry.incompatible ? ' · needs a newer Praxis' : ''}
-              </div>
-              {replaced && (
-                <div className="settings-field-help" data-testid={`${testIdPrefix}-replaces-${entry.manifest.id}`}>
-                  Installing replaces the built-in {replaced} while this add-on is trusted.
-                </div>
-              )}
-            </div>
-            <div className="settings-field-control">
-              <button
-                className="btn"
-                type="button"
-                disabled={entry.incompatible || addons.busy === `install:${entry.packageName}`}
-                onClick={() => void addons.install(entry.packageName)}
-              >
-                Install (untrusted)
-              </button>
-            </div>
-          </div>
+          <RuntimeItem
+            key={row.id}
+            testId={`${kind}-marketplace-${row.id}`}
+            icon={kind === 'agent' ? 'robot' : 'sparkles'}
+            title={row.manifest.name}
+            badges={installed ? [installed.enabled ? 'Installed' : 'Installed · disabled'] : []}
+            description={[row.manifest.summary, replaced ? `Replaces the built-in ${replaced} while installed.` : undefined].filter(Boolean).join(' ')}
+            meta={[`v${row.version}`, row.manifest.author, row.entry?.incompatible ? 'needs a newer Praxis' : undefined].filter(Boolean).join(' · ')}
+            action={
+              installed ? (
+                <>
+                  {!installed.enabled && (
+                    <button className="btn" type="button" disabled={busy} onClick={() => void addons.setTrust(row.id, true)}>
+                      Enable
+                    </button>
+                  )}
+                  <button className="btn btn-quiet" type="button" disabled={busy} onClick={() => void uninstall(row.id, row.manifest.name)}>
+                    Uninstall
+                  </button>
+                </>
+              ) : row.entry ? (
+                <button className="btn" type="button" disabled={busy || row.entry.incompatible} onClick={() => void install(row.entry!)}>
+                  Install
+                </button>
+              ) : undefined
+            }
+          />
         );
       })}
-      {addons.ready && addons.catalog !== undefined && available.length === 0 && pendingInstalled.length === 0 && (
-        <div className="placeholder-text">
-          {addons.catalog.length > 0 ? `Every ${kindLabel} in the catalogue is installed.` : `No ${kindLabel}s in the catalogue.`}
-        </div>
+      {addons.ready && addons.catalog !== undefined && rows.length === 0 && (
+        <div className="placeholder-text">No {kind}s in the marketplace yet.</div>
       )}
     </div>
   );
@@ -692,6 +725,9 @@ function AgentRuntimeSection({
   const standaloneBindings = launchBindings.filter(binding => !profiles.some(profile => profile.profile.id === binding.manifest.id));
   const skills = snapshot?.skills ?? [];
   const agentAddonIds = new Set(agentAddons.installed.map(addon => addon.manifest.id));
+  const skillAddonIds = new Set(skillAddons.installed.map(addon => addon.manifest.id));
+  // A trusted marketplace agent with a built-in id replaces it on disk, so remember built-in names.
+  const builtInAgentNames = new Map(profiles.filter(profile => profile.builtIn).map(profile => [profile.profile.id, profile.profile.name]));
   const refreshedAt = snapshot?.refreshedAt ? new Date(snapshot.refreshedAt).toLocaleString() : 'not yet';
 
   const tabs: Array<{ id: AgentRuntimeTab; label: string; count?: number }> = [
@@ -743,86 +779,84 @@ function AgentRuntimeSection({
 
         {snapshot && tab === 'agents' && (
           <>
-            <h4 className="settings-subsection-title">Installed</h4>
-            {profiles.map(profile => {
-              const binding = launchBindingsById.get(profile.profile.id);
-              const addon = agentAddons.installed.find(candidate => candidate.manifest.id === profile.profile.id);
-              const fromAddon = Boolean(addon);
-              return (
-                <div className="settings-field-row" key={profile.profile.id} data-testid={`agent-runtime-profile-${profile.profile.id}`}>
-                  <div className="settings-field-label">
-                    <strong>{profile.profile.name}</strong>{' '}
-                    {fromAddon && <span className="chip">Marketplace</span>}
-                    {profile.scope === 'project' && <span className="chip">Project</span>}
-                    {!profile.trusted && <span className="chip">Needs approval</span>}
-                    {profile.profile.description && <div className="settings-field-help">{profile.profile.description}</div>}
-                    {(() => {
-                      // Every agent runs on the session's runtime through the built-in
-                      // gateway unless it says otherwise; only the exceptions are worth a line.
-                      const notes = [
-                        binding && binding.manifest.type !== 'gateway' ? `${binding.manifest.type.toUpperCase()} launch binding` : undefined,
-                        profile.legacy ? 'legacy brief.md' : undefined,
-                        profile.error,
-                        binding?.errors.length ? binding.errors.map(item => item.message).join('; ') : undefined
-                      ].filter(Boolean);
-                      return notes.length ? <div className="settings-field-help">{notes.join(' · ')}</div> : null;
-                    })()}
-                  </div>
-                  {addon && <AddonTrustControls addons={agentAddons} id={addon.manifest.id} enabled={addon.enabled} />}
+            {[
+              { heading: 'Built-in', items: profiles.filter(profile => profile.builtIn && !agentAddonIds.has(profile.profile.id)) },
+              { heading: 'Your own', items: profiles.filter(profile => !profile.builtIn && !agentAddonIds.has(profile.profile.id)) }
+            ]
+              .filter(group => group.heading === 'Built-in' || group.items.length > 0)
+              .map(group => (
+                <div key={group.heading}>
+                  <h4 className="settings-subsection-title">{group.heading}</h4>
+                  {group.items.map(profile => {
+                    const binding = launchBindingsById.get(profile.profile.id);
+                    // Every agent runs on the session's runtime through the built-in
+                    // gateway unless it says otherwise; only the exceptions get a line.
+                    const notes = [
+                      binding && binding.manifest.type !== 'gateway' ? `${binding.manifest.type.toUpperCase()} launch binding` : undefined,
+                      profile.legacy ? 'legacy brief.md' : undefined,
+                      profile.error,
+                      binding?.errors.length ? binding.errors.map(item => item.message).join('; ') : undefined
+                    ].filter(Boolean);
+                    return (
+                      <RuntimeItem
+                        key={profile.profile.id}
+                        testId={`agent-runtime-profile-${profile.profile.id}`}
+                        icon="robot"
+                        title={profile.profile.name}
+                        badges={[
+                          ...(profile.builtIn ? ['Built-in'] : []),
+                          ...(profile.scope === 'project' ? ['Project'] : []),
+                          ...(!profile.trusted ? ['Needs approval'] : [])
+                        ]}
+                        description={profile.profile.description}
+                        meta={notes.join(' · ') || undefined}
+                      />
+                    );
+                  })}
+                  {group.items.length === 0 && <div className="placeholder-text">No built-in agents found. Use Refresh, or restart Praxis.</div>}
                 </div>
-              );
-            })}
-            {profiles.length === 0 && <div className="placeholder-text">No agents installed.</div>}
-            <RuntimeAddonCatalog
+              ))}
+            <RuntimeMarketplace
               addons={agentAddons}
-              kindLabel="agent"
-              testIdPrefix="agent-marketplace"
-              replaces={id => (agentAddonIds.has(id) ? undefined : profiles.find(profile => profile.profile.id === id)?.profile.name)}
-              trustedHelp="trusted — runs like a global agent"
-              shownAbove={new Set(profiles.map(profile => profile.profile.id))}
+              kind="agent"
+              replaces={id => profiles.find(profile => profile.builtIn && profile.profile.id === id)?.profile.name ?? builtInAgentNames.get(id)}
             />
           </>
         )}
 
         {snapshot && tab === 'skills' && (
           <>
-            <h4 className="settings-subsection-title">Installed</h4>
-            {skills.map(skill => {
-              const addon = skillAddons.installed.find(candidate => candidate.manifest.id === skill.metadata.name);
-              return (
-                <div className="settings-field-row" key={skill.metadata.name} data-testid={`agent-runtime-skill-${skill.metadata.name}`}>
-                  <div className="settings-field-label">
-                    <strong>{addon?.manifest.name ?? skill.metadata.name}</strong>{' '}
-                    {addon && <span className="chip">Marketplace</span>}
-                    {skill.scope === 'project' && <span className="chip">Project</span>}
-                    {!skill.trusted && <span className="chip">Needs approval</span>}
-                    <div className="settings-field-help">
-                      {skill.error ? `Invalid: ${skill.error}` : skill.metadata.description || 'No description.'}
-                    </div>
-                    <div className="settings-field-help">
-                      {[addon ? `v${addon.version}` : skill.metadata.version ? `v${skill.metadata.version}` : undefined, addon ? undefined : skill.metadata.name]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </div>
-                  </div>
-                  {addon && <AddonTrustControls addons={skillAddons} id={addon.manifest.id} enabled={addon.enabled} />}
+            {[
+              { heading: 'Built-in', items: skills.filter(skill => skill.builtIn && !skillAddonIds.has(skill.metadata.name)) },
+              { heading: 'Your own', items: skills.filter(skill => !skill.builtIn && !skillAddonIds.has(skill.metadata.name)) }
+            ]
+              .filter(group => group.items.length > 0)
+              .map(group => (
+                <div key={group.heading}>
+                  <h4 className="settings-subsection-title">{group.heading}</h4>
+                  {group.items.map(skill => (
+                    <RuntimeItem
+                      key={skill.metadata.name}
+                      testId={`agent-runtime-skill-${skill.metadata.name}`}
+                      icon="sparkles"
+                      title={skillTitle(skill.metadata)}
+                      badges={[
+                        ...(skill.builtIn ? ['Built-in'] : []),
+                        ...(skill.scope === 'project' ? ['Project'] : []),
+                        ...(!skill.trusted ? ['Needs approval'] : [])
+                      ]}
+                      description={skill.error ? `Invalid: ${skill.error}` : skill.metadata.description}
+                      meta={skill.metadata.version ? `v${skill.metadata.version}` : undefined}
+                    />
+                  ))}
                 </div>
-              );
-            })}
-            {skills.length === 0 && (
-              <div className="placeholder-text">
-                No skills installed. Skills give agents a tested procedure for a job — install one from the marketplace below, or add a
-                folder with a SKILL.md to a skills path (see Advanced).
-              </div>
+              ))}
+            {skills.every(skill => skillAddonIds.has(skill.metadata.name)) && (
+              <p className="settings-field-help">
+                Skills give agents a tested procedure for a job. Built-in skills are added when a workflow needs them; install others from the marketplace.
+              </p>
             )}
-            <RuntimeAddonCatalog
-              addons={skillAddons}
-              kindLabel="skill"
-              testIdPrefix="skill-marketplace"
-              replaces={() => undefined}
-              trustedHelp="trusted — agents can load it"
-              shownAbove={new Set(skills.map(skill => skill.metadata.name))}
-            />
+            <RuntimeMarketplace addons={skillAddons} kind="skill" replaces={() => undefined} />
           </>
         )}
 

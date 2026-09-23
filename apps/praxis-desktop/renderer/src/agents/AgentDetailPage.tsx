@@ -1,6 +1,6 @@
 import type { AgentRuntimeSnapshot, DiscoveredAgent, DiscoveredAgentProfile, DiscoveredSkill, ProjectRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { isHostShimProfile, runningHostCount, transportLabel } from './agentCatalog';
+import { isHostShimProfile, runningHostCount, transportLabel, skillTitle } from './agentCatalog';
 import type { CatalogSelection } from './agentSelection';
 
 /**
@@ -179,7 +179,7 @@ function SkillRecord({ skill, project }: { skill: DiscoveredSkill; project?: Pro
   return (
     <>
       <Hero
-        title={skill.metadata.name}
+        title={skillTitle(skill.metadata)}
         lede={skill.metadata.description || undefined}
         chips={
           <>
@@ -193,6 +193,7 @@ function SkillRecord({ skill, project }: { skill: DiscoveredSkill; project?: Pro
       <section className="agent-section" aria-label="Package">
         <h2>Package</h2>
         <Facts>
+          <Fact label="Skill ID">{skill.metadata.name}</Fact>
           {skill.metadata.version && <Fact label="Version">{skill.metadata.version}</Fact>}
           {skill.metadata.triggers.length > 0 && (
             <Fact label="Triggers">

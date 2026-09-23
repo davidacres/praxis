@@ -236,7 +236,7 @@ test('Surfaces panel: the marketplace section installs a pack, and it can be rem
   await expect(window.locator('[data-testid="surface-marketplace-faded-linen"]')).toBeVisible();
 });
 
-test('Agent Runtime panel: an agent installs untrusted and only runs after trust is granted', async () => {
+test('Agent Runtime panel: installing an agent asks first, then it can be uninstalled', async () => {
   registry = await startMockAddonRegistry({ owner: OWNER, addons: [TIDY_AGENT] });
   app = await launchTestApp(seeded(registry.baseUrl), undefined, {
     PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
@@ -246,23 +246,29 @@ test('Agent Runtime panel: an agent installs untrusted and only runs after trust
   await openSettings();
   await nav('agent-runtime');
 
-  const catalogRow = window.locator('[data-testid="agent-marketplace-tidy-bot"]');
-  await expect(catalogRow).toContainText('Tidy Bot');
-  await catalogRow.getByRole('button', { name: 'Install (untrusted)' }).click();
+  const row = window.locator('[data-testid="agent-marketplace-tidy-bot"]');
+  await expect(row).toContainText('Tidy Bot');
+  await expect(row).toContainText('Keeps a working tree tidy between tasks.');
+  await row.getByRole('button', { name: 'Install' }).click();
 
-  const installedRow = window.locator('[data-testid="agent-marketplace-installed-tidy-bot"]');
-  await expect(installedRow).toContainText('installed but not trusted');
-  // The clicked Install control becomes Remove in place. Move the pointer away
-  // so the snapshot records its resting state rather than a stale hover state.
+  // Installing is the trust decision, made in one themed confirmation.
+  const dialog = window.getByRole('dialog', { name: 'Install Tidy Bot?' });
+  await expect(dialog).toContainText('Install it only if you trust its author.');
+  await dialog.getByRole('button', { name: 'Install' }).click();
+
+  await expect(row).toContainText('Installed');
+  await expect(row.getByRole('button', { name: 'Uninstall' })).toBeVisible();
+  await expect(row.getByRole('button', { name: /Trust|Enable/ })).toHaveCount(0);
+  // Move the pointer away so the snapshot records the resting state.
   await window.mouse.move(0, 0);
   await expect(window.locator('[data-testid="agent-runtime-marketplace"]')).toHaveScreenshot('agents-marketplace.png');
 
-  await installedRow.getByRole('button', { name: 'Trust' }).click();
-  await expect(installedRow).toContainText('trusted — runs like a global agent');
-  await expect(installedRow.getByRole('button', { name: 'Revoke trust' })).toBeVisible();
+  await row.getByRole('button', { name: 'Uninstall' }).click();
+  await window.getByRole('dialog', { name: 'Uninstall Tidy Bot?' }).getByRole('button', { name: 'Uninstall' }).click();
+  await expect(row.getByRole('button', { name: 'Install' })).toBeVisible();
 });
 
-test('Agent Runtime panel: a skill installs untrusted, then agents can load it once trusted', async () => {
+test('Agent Runtime panel: a marketplace skill installs after confirmation and agents can load it', async () => {
   registry = await startMockAddonRegistry({ owner: OWNER, addons: [DEVICE_SKILL] });
   app = await launchTestApp(seeded(registry.baseUrl), undefined, {
     PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
@@ -272,28 +278,26 @@ test('Agent Runtime panel: a skill installs untrusted, then agents can load it o
   await openSettings();
   await nav('agent-runtime');
   await window.locator('[data-testid="agent-runtime-tab-skills"]').click();
+  const skillsTab = window.locator('[data-testid="agent-runtime-tab-skills"]');
+  await expect(skillsTab).toContainText('Skills (0)');
 
-  const catalogRow = window.locator('[data-testid="skill-marketplace-device-check"]');
-  await expect(catalogRow).toContainText('Device check');
-  await expect(catalogRow).toContainText('Checks a phone is ready for automated tests.');
-  await catalogRow.getByRole('button', { name: 'Install (untrusted)' }).click();
+  const row = window.locator('[data-testid="skill-marketplace-device-check"]');
+  await expect(row).toContainText('Device check');
+  await expect(row).toContainText('Checks a phone is ready for automated tests.');
+  await row.getByRole('button', { name: 'Install' }).click();
+  const dialog = window.getByRole('dialog', { name: 'Install Device check?' });
+  await expect(dialog).toContainText('any scripts it includes');
+  await dialog.getByRole('button', { name: 'Install' }).click();
 
-  const installedRow = window.locator('[data-testid="skill-marketplace-installed-device-check"]');
-  await expect(installedRow).toContainText('installed but not trusted');
+  // Listed once — in the marketplace, as installed — and discovered for agents.
+  await expect(row).toContainText('Installed');
+  await expect(skillsTab).toContainText('Skills (1)');
   await expect(window.locator('[data-testid="agent-runtime-skill-device-check"]')).toHaveCount(0);
 
-  await installedRow.getByRole('button', { name: 'Trust' }).click();
-  // Once trusted it is discovered, and is listed once — under Installed, with its controls.
-  const discovered = window.locator('[data-testid="agent-runtime-skill-device-check"]');
-  await expect(discovered).toContainText('Device check');
-  await expect(discovered).toContainText('Checks a connected phone is ready for automated UI tests.');
-  await expect(discovered).toContainText('Marketplace');
-  await expect(installedRow).toHaveCount(0);
-  await expect(window.locator('[data-testid="agent-runtime-tab-skills"]')).toContainText('Skills (1)');
-
-  await discovered.getByRole('button', { name: 'Revoke trust' }).click();
-  await expect(discovered).toHaveCount(0);
-  await expect(installedRow).toContainText('installed but not trusted');
+  await row.getByRole('button', { name: 'Uninstall' }).click();
+  await window.getByRole('dialog', { name: 'Uninstall Device check?' }).getByRole('button', { name: 'Uninstall' }).click();
+  await expect(row.getByRole('button', { name: 'Install' })).toBeVisible();
+  await expect(skillsTab).toContainText('Skills (0)');
 });
 
 test('an unconfigured marketplace is explained inside each panel', async () => {

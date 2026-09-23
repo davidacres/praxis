@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CatalogScope } from './manifest';
-export interface SkillMetadata { name: string; description: string; version?: string; triggers: string[]; }
-export interface DiscoveredSkill { metadata: SkillMetadata; skillPath: string; instructionsPath: string; fingerprint: string; scope: CatalogScope; trusted: boolean; error?: string; }
+export interface SkillMetadata { name: string; description: string; version?: string; triggers: string[]; /** Display name in proper case; `name` stays the stable identifier. */ title?: string; }
+export interface DiscoveredSkill { metadata: SkillMetadata; skillPath: string; instructionsPath: string; fingerprint: string; scope: CatalogScope; trusted: boolean; error?: string; /** Shipped with Praxis (set by the runtime manager). */ builtIn?: boolean; }
 function parseFrontMatter(content: string): { metadata: SkillMetadata; error?: string } {
   const empty = { name: '', description: '', triggers: [] as string[] };
   if (!content.startsWith('---')) return { metadata: empty, error: 'SKILL.md must start with YAML front matter.' };
@@ -12,7 +12,8 @@ function parseFrontMatter(content: string): { metadata: SkillMetadata; error?: s
   for (const line of content.slice(3, end).split(/\r?\n/)) { const match = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line.trim()); if (match) values.set(match[1], match[2].replace(/^['"]|['"]$/g, '').trim()); }
   const name = values.get('name') ?? ''; const description = values.get('description') ?? ''; const triggers = (values.get('triggers') ?? '').split(',').map(item => item.trim()).filter(Boolean);
   if (!name || !description) return { metadata: { name, description, triggers }, error: 'name and description are required.' };
-  return { metadata: { name, description, triggers, version: values.get('version') } };
+  const title = values.get('title');
+  return { metadata: { name, description, triggers, version: values.get('version'), ...(title ? { title } : {}) } };
 }
 async function skillDirectories(root: string): Promise<string[]> { try { return (await readdir(root, { withFileTypes: true })).filter(entry => entry.isDirectory()).map(entry => path.join(root, entry.name)).sort(); } catch { return []; } }
 /** Indexes metadata and fingerprints without loading instruction bodies or resources. */

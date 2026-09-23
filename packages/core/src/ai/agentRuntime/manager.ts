@@ -2,7 +2,7 @@ import { discoverAgents, type DiscoveryOptions } from './discovery';
 import type { DiscoveredAgent } from './manifest';
 import { discoverSkills, loadSkillInstructions, type DiscoveredSkill } from './skillRegistry';
 import { discoverAgentProfiles, type DiscoveredAgentProfile } from './profileRegistry';
-import { bundledAgentDescription } from './bundledAgents';
+import { bundledAgentDescription, bundledSkill, isBundledAgent } from './bundledAgents';
 import { loadAgentHost, type AgentCapabilities, type AgentHostHandle } from './hostLoader';
 import {
   buildProfileContext,
@@ -83,9 +83,19 @@ export class AgentRuntimeManager {
     // Built-in agents written before descriptions existed keep their AGENT.md
     // (user edits are preserved), so their list description comes from the bundle.
     const alignedProfiles = profiles.map(entry => {
-      if (entry.profile.description) return entry;
-      const description = bundledAgentDescription(entry.profile.id);
-      return description ? { ...entry, profile: { ...entry.profile, description } } : entry;
+      const builtIn = isBundledAgent(entry.profile.id);
+      const description = entry.profile.description ?? bundledAgentDescription(entry.profile.id);
+      return {
+        ...entry,
+        ...(builtIn ? { builtIn } : {}),
+        profile: { ...entry.profile, ...(description ? { description } : {}) }
+      };
+    });
+    // Same for skills installed before titles existed.
+    const labelledSkills = skills.map(skill => {
+      const bundled = bundledSkill(skill.metadata.name);
+      if (!bundled) return skill;
+      return { ...skill, builtIn: true, metadata: { ...skill.metadata, title: skill.metadata.title ?? bundled.title } };
     });
     for (const runtimeHost of runtimeHosts) {
       if (alignedProfiles.some(profile => profile.profile.id === runtimeHost.manifest.id)) continue;
@@ -107,7 +117,7 @@ export class AgentRuntimeManager {
       agents: runtimeHosts,
       runtimeHosts,
       profiles: alignedProfiles,
-      skills,
+      skills: labelledSkills,
       capabilities: Object.fromEntries([...this.hosts].map(([id, host]) => [id, host.capabilities])),
       hosts: Object.fromEntries(this.hostStatus),
       refreshedAt: new Date().toISOString()

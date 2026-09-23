@@ -118,7 +118,9 @@ test('the sidebar tree lists agent profiles and skills only; a profile shows its
 
   // A skill record shows its package facts.
   await tree.getByTestId('skill-nav-item').click();
-  await expect(record(page).getByRole('heading', { name: 'code-audit', level: 1 })).toBeVisible();
+  // Titled for people; the identifier workflows use stays visible as a fact.
+  await expect(record(page).getByRole('heading', { name: 'Code Audit', level: 1 })).toBeVisible();
+  await expect(record(page).getByText('code-audit', { exact: true })).toBeVisible();
   await expect(record(page).getByText('Audits a diff for risky changes.')).toBeVisible();
   await expect(runtime(page).getByRole('button', { name: /^Activate/ })).toBeEnabled();
 });
