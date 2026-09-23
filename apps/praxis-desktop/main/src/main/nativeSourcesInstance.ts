@@ -56,7 +56,7 @@ export function effectiveRuntime(provider: AiProvider, plan: { state: string; co
     return descriptor.kind === 'cli-agent' ? providers[id]?.cliPath?.trim() || descriptor.defaultCommand : undefined;
   };
   if (PROVIDER_DESCRIPTORS[provider].kind === 'cli-agent' && (!plan.command || plan.command === commandOf(provider))) return provider;
-  // A pinned agent launches its own runtime whatever the session uses.
+  // A custom ACP binding that launches one of the known runtimes reads what it reads.
   const launched = (Object.keys(PROVIDER_DESCRIPTORS) as AiProvider[]).find(
     id => PROVIDER_DESCRIPTORS[id].kind === 'cli-agent' && plan.command !== undefined && path.basename(plan.command) === path.basename(commandOf(id) ?? '')
   );

@@ -22,8 +22,10 @@ import {
   pauseReasonOf,
   isRunSettled,
   type WorkflowNodeState,
+  exhaustedProviders,
   type WorkflowRun,
   type WorkflowPauseReason,
+  type WorkflowProviderLimitPolicy,
   type WorkflowRunEvent
 } from './workflowRun';
 import { deriveRunStatus, scheduleWorkflowRun } from './workflowScheduler';
@@ -31,6 +33,7 @@ import { nextActions, outstandingNodes, type WorkflowNextAction } from './workfl
 import type { AiProvider } from '../types';
 import { approvalReadiness, type GateStatus } from './workflowGates';
 import { stageSessionKey } from './workflowStageTask';
+import { providerDisplayName } from '../ai/providers/registry';
 import type { WorkflowPolicyProfile } from './workflowTypes';
 import type { WorkflowPlanInput } from './workflowRun';
 
@@ -55,6 +58,10 @@ export interface StageRow {
   /** The in-flight attempt's reported sub-phase, e.g. a deployment stage's `'deploying'`/`'verifying'` — see `WorkflowNodeState.phase`. */
   phase?: string;
   findings?: CheckFindings;
+  /** The AI that ran the latest attempt (a provider id). */
+  provider?: string;
+  /** The AI this stage is set to use: one it was switched to in this run, else its own choice. Absent means the run's. */
+  chosenProvider?: string;
 }
 
 export interface BranchGroup {
@@ -67,6 +74,8 @@ export interface BranchGroup {
 
 export interface WorkflowRunSummary {
   runId: string;
+  /** The project the run belongs to — what access checks (e.g. the phone's) scope it by. */
+  projectId: string;
   workflowName: string;
   status: WorkflowRun['status'];
   /** One sentence: why this run is where it is. */
@@ -100,6 +109,10 @@ export interface WorkflowRunSummary {
   permissionMode: 'ask' | 'auto';
   aiProvider?: AiProvider;
   aiModel?: string;
+  /** What happens when a stage's AI runs out of budget. */
+  providerLimitPolicy: WorkflowProviderLimitPolicy;
+  /** AIs that ran out of budget during this run. */
+  exhaustedProviders: string[];
   /** Whether this run is archived by the user. */
   archived?: boolean;
   archivedAt?: string;
@@ -158,7 +171,9 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
       ...(lastAttempt?.error ? { lastError: lastAttempt.error } : {}),
       ...(state && pauseReasonOf(state) ? { pause: pauseReasonOf(state) } : {}),
       ...(state?.phase ? { phase: state.phase } : {}),
-      ...(state?.findings ? { findings: state.findings } : {})
+      ...(state?.findings ? { findings: state.findings } : {}),
+      ...(lastAttempt?.provider ? { provider: lastAttempt.provider } : {}),
+      ...(chosenProviderOf(run, node) ? { chosenProvider: chosenProviderOf(run, node) } : {})
     };
   });
 
@@ -196,6 +211,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
 
   return {
     runId: run.runId,
+    projectId: run.projectId,
     workflowName: run.definition.name,
     status,
     explanation: explainRun(run, status, schedule.blocked),
@@ -225,8 +241,15 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     ...(run.aiProvider ? { aiProvider: run.aiProvider } : {}),
     ...(run.aiModel ? { aiModel: run.aiModel } : {}),
     ...(run.archived ? { archived: true, archivedAt: run.archivedAt } : {}),
-    permissionMode: run.permissionMode === 'auto' ? 'auto' : 'ask'
+    permissionMode: run.permissionMode === 'auto' ? 'auto' : 'ask',
+    providerLimitPolicy: run.providerLimitPolicy ?? 'ask',
+    exhaustedProviders: exhaustedProviders(run)
   };
+}
+
+function chosenProviderOf(run: WorkflowRun, node: WorkflowNode): string | undefined {
+  if (node.type !== 'agent-task') return undefined;
+  return run.stageProviders?.[node.id] ?? (node.agent.providerId?.trim() || undefined);
 }
 
 /** The parallel branches feeding each join, and whether they have converged. */
@@ -274,7 +297,11 @@ function explainRun(run: WorkflowRun, status: WorkflowRun['status'], blocked: st
       .sort();
     return paused.some(state => pauseReasonOf(state) === 'environment')
       ? `${names.join(', ')} could not run in this environment — for example a registry that does not serve the request, a missing command, or no network. Fix that, then retry; nothing is lost and no attempt was used.`
-      : `The AI provider's credits or usage limit were reached at ${names.join(', ')}. Restore them (or switch that stage's agent), then retry — nothing is lost and no attempt was used.`;
+      : (() => {
+          const ais = [...new Set(paused.map(state => state.attempts[state.attempts.length - 1]?.provider).filter((id): id is string => Boolean(id)))];
+          const who = ais.length ? ais.map(providerDisplayName).join(' and ') : 'The AI provider';
+          return `${who} ran out of credits or hit its usage limit at ${names.join(', ')}. Switch to another AI, or restore them and retry — nothing is lost and no attempt was used.`;
+        })();
   }
 
   // A retryable failure is described by stage name before falling back to the

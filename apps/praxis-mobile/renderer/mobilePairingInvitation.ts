@@ -5,6 +5,7 @@
  * something a person can act on.
  */
 import type { MobileConnectionErrorCode } from '@praxis/mobile-protocol';
+import { parseInstant } from './mobileTime';
 
 export interface MobileInvitationDetails {
   hostId?: string;
@@ -33,7 +34,7 @@ function splitEndpoint(endpoint: string | undefined): { address?: string; port?:
 
 export function parseMobileInvitation(raw: string, now: Date = new Date()): MobileInvitationParse {
   const value = raw.trim();
-  const expired = (expiresAt: string | undefined): boolean => Boolean(expiresAt && Date.parse(expiresAt) <= now.getTime());
+  const expired = (expiresAt: string | undefined): boolean => (parseInstant(expiresAt) ?? Infinity) <= now.getTime();
   if (HEX_KEY.test(value)) return { kind: 'key', details: { hostPublicKeyHex: value.toLowerCase() } };
   if (/^P\d+\|/.test(value)) {
     const [, hostId, key, endpoint, tokenId, expiresAt] = value.split('|');

@@ -256,11 +256,11 @@ export function createDesktopMobileHostServiceDeps(
       for (const run of runStore().forProject(projectId)) {
         const summary = summarize(run);
         if (summary.status === 'awaiting-approval') {
-          items.push({ id: `approval:${run.runId}`, kind: 'approval', hostId, projectId, runId: run.runId, createdAt: run.startedAt, resolved: false });
+          items.push({ id: `approval:${run.runId}`, kind: 'approval', hostId, projectId, runId: run.runId, summary: summary.workflowName, createdAt: run.startedAt, resolved: false });
         }
         for (const stage of summary.stages ?? []) {
           if (stage.outcome === 'failed') {
-            items.push({ id: `failure:${run.runId}:${stage.nodeId}`, kind: 'failure', hostId, projectId, runId: run.runId, nodeId: stage.nodeId, createdAt: run.startedAt, resolved: false });
+            items.push({ id: `failure:${run.runId}:${stage.nodeId}`, kind: 'failure', hostId, projectId, runId: run.runId, nodeId: stage.nodeId, summary: `${summary.workflowName} — ${stage.name}`, createdAt: run.startedAt, resolved: false });
           }
         }
       }

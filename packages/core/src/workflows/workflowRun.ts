@@ -35,6 +35,7 @@ import {
 } from './workflowTypes';
 import type { AiProvider } from '../types';
 import { findSnapshot } from './workflowStageSession';
+import { providerDisplayName } from '../ai/providers/registry';
 
 /**
  * How a run's stage sessions handle their own tool-permission requests.
@@ -61,6 +62,14 @@ export type WorkflowUncommittedChanges = 'include' | 'omit';
  */
 export type WorkflowPauseReason = 'provider-limit' | 'environment';
 
+/**
+ * What a run does when a stage's AI runs out of credits or hits its usage limit:
+ * - `ask` (the default) — pause and ask the user to switch AI, retry or stop;
+ * - `switch` — move the stage to the next AI that is set up, without asking;
+ * - `stop` — end the run, saying which AI ran out and where.
+ */
+export type WorkflowProviderLimitPolicy = 'ask' | 'switch' | 'stop';
+
 export type WorkflowRunStatus =
   | 'running'
   | 'awaiting-approval'
@@ -83,6 +92,7 @@ export type WorkflowRunEventKind =
   | 'node-reworked'
   | 'node-interrupted'
   | 'node-progress'
+  | 'node-provider-switched'
   | 'artifact-produced'
   | 'gate-decided';
 
@@ -113,6 +123,8 @@ export interface WorkflowNodeAttempt {
    * and does not spend its retry budget.
    */
   pause?: WorkflowPauseReason;
+  /** The AI that ran this attempt (a provider id), for agent stages. */
+  provider?: string;
 }
 
 export interface WorkflowNodeState {
@@ -173,6 +185,13 @@ export interface WorkflowRun {
   aiProvider?: AiProvider;
   /** Model override for stages in this run. If omitted, uses the provider's default model. */
   aiModel?: string;
+  /** What happens when a stage's AI runs out of budget. Absent means `ask`. */
+  providerLimitPolicy?: WorkflowProviderLimitPolicy;
+  /**
+   * AIs stages were switched to during this run (node id → provider), after the
+   * AI they were using ran out. Wins over the stage's own choice and the run's.
+   */
+  stageProviders?: Record<string, string>;
   /**
    * The git worktree this run's stages execute in, once acquired. Recorded on
    * the run so a restart re-attaches to the same tree instead of branching a
@@ -226,6 +245,8 @@ export type WorkflowRunCommand =
       /** Immutable upstream implementation snapshot this stage assessed. */
       assessedSnapshotRef?: string;
       findings?: CheckFindings;
+      /** The AI that ran the attempt. */
+      provider?: string;
     }
   | {
       kind: 'node-failed';
@@ -236,7 +257,16 @@ export type WorkflowRunCommand =
       findings?: CheckFindings;
       /** The attempt stopped without a verdict; see `WorkflowNodeAttempt.pause`. */
       pause?: WorkflowPauseReason;
+      /** The AI that ran the attempt. */
+      provider?: string;
     }
+  /**
+   * Moves a stage to another AI after the one it used ran out; a paused stage is
+   * queued again on it. `automatic` when the run's policy switched without asking.
+   */
+  | { kind: 'stage-provider-switched'; nodeId: string; at: string; provider: string; automatic?: boolean }
+  /** Ends the run because a stage's AI ran out of budget (policy `stop`, or the user chose to stop). */
+  | { kind: 'provider-limit-stop'; nodeId: string; at: string; detail?: string }
   /**
    * Closes a stage that was still running when its run ended (a sibling of the
    * stage that failed the run, or one orphaned by an earlier build). The only
@@ -269,6 +299,7 @@ export function createWorkflowRun(input: {
   uncommittedChanges?: WorkflowUncommittedChanges;
   aiProvider?: AiProvider;
   aiModel?: string;
+  providerLimitPolicy?: WorkflowProviderLimitPolicy;
 }): WorkflowRun {
   const nodes: Record<string, WorkflowNodeState> = {};
   for (const node of input.definition.nodes) {
@@ -295,7 +326,8 @@ export function createWorkflowRun(input: {
     ...(input.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),
     ...(input.uncommittedChanges ? { uncommittedChanges: input.uncommittedChanges } : {}),
     ...(input.aiProvider ? { aiProvider: input.aiProvider } : {}),
-    ...(input.aiModel ? { aiModel: input.aiModel } : {})
+    ...(input.aiModel ? { aiModel: input.aiModel } : {}),
+    ...(input.providerLimitPolicy && input.providerLimitPolicy !== 'ask' ? { providerLimitPolicy: input.providerLimitPolicy } : {})
   };
 
   return append(run, {
@@ -318,7 +350,7 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
   // raced the run ending; they must not resurrect it. The one deliberate
   // exception is a person retrying a stage of a *failed* run: that reopens it.
   // A cancelled run stays cancelled, and a succeeded one has nothing to retry.
-  const reopensFailedRun = command.kind === 'node-retry' && run.status === 'failed';
+  const reopensFailedRun = (command.kind === 'node-retry' || command.kind === 'stage-provider-switched') && run.status === 'failed';
   if (isRunSettled(run) && command.kind !== 'gate-decided' && command.kind !== 'node-stopped' && !reopensFailedRun) {
     return run;
   }
@@ -332,15 +364,21 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
         artifacts: command.artifacts,
         snapshotRef: command.snapshotRef,
         assessedSnapshotRef: command.assessedSnapshotRef,
-        findings: command.findings
+        findings: command.findings,
+        provider: command.provider
       });
     case 'node-failed':
       return settleNode(run, command.nodeId, 'failed', command.at, {
         error: command.error,
         exitCode: command.exitCode,
         findings: command.findings,
-        pause: command.pause
+        pause: command.pause,
+        provider: command.provider
       });
+    case 'stage-provider-switched':
+      return switchStageProvider(run, command.nodeId, command.at, command.provider, command.automatic === true);
+    case 'provider-limit-stop':
+      return stopForProviderLimit(run, command.nodeId, command.at, command.detail);
     case 'node-stopped':
       return stopNode(run, command.nodeId, command.at, command.reason);
     case 'node-timed-out':
@@ -475,6 +513,7 @@ function settleNode(
     assessedSnapshotRef?: string;
     artifacts?: Extract<WorkflowRunCommand, { kind: 'node-succeeded' }>['artifacts'];
     findings?: CheckFindings;
+    provider?: string;
   }
 ): WorkflowRun {
   const state = run.nodes[nodeId];
@@ -521,7 +560,8 @@ function settleNode(
     endedAt: at,
     ...(detail.exitCode !== undefined ? { exitCode: detail.exitCode } : {}),
     ...(error ? { error } : {}),
-    ...(effective === 'failed' && detail.pause ? { pause: detail.pause } : {})
+    ...(effective === 'failed' && detail.pause ? { pause: detail.pause } : {}),
+    ...(detail.provider ? { provider: detail.provider } : {})
   };
 
   let next = withNode(run, {
@@ -543,7 +583,7 @@ function settleNode(
       effective === 'succeeded'
         ? `${label(run, nodeId)} succeeded.`
         : detail.pause === 'provider-limit'
-          ? `${label(run, nodeId)} paused: the AI provider's credits or usage limit were reached. Restore them, then retry — this did not use an attempt.`
+          ? `${label(run, nodeId)} paused: ${detail.provider ? providerDisplayName(detail.provider) : 'the AI provider'} ran out of credits or hit its usage limit. Switch to another AI, or restore them and retry — this did not use an attempt.`
           : detail.pause === 'environment'
             ? `${label(run, nodeId)} paused: it could not run in this environment (${firstLine(error ?? 'no detail')}). Fix that, then retry — this did not use an attempt.`
             : `${label(run, nodeId)} failed: ${error ?? 'no reason given'}`
@@ -608,6 +648,59 @@ function retryNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRun {
     attempt: state.attempts.length,
     message: `${label(run, nodeId)} queued for retry (attempt ${spent + 1}${spent < maxAttempts ? ` of ${maxAttempts}` : ''}).`
   });
+}
+
+function switchStageProvider(run: WorkflowRun, nodeId: string, at: string, provider: string, automatic: boolean): WorkflowRun {
+  const state = run.nodes[nodeId];
+  const node = findNode(run, nodeId);
+  if (!state || !node || !isAgentTaskNode(node) || !provider.trim()) return run;
+  const from = state.attempts[state.attempts.length - 1]?.provider;
+  let next = append(
+    { ...run, stageProviders: { ...(run.stageProviders ?? {}), [nodeId]: provider } },
+    {
+      at,
+      kind: 'node-provider-switched',
+      nodeId,
+      message: `${label(run, nodeId)} switched ${from ? `from ${providerDisplayName(from)} ` : ''}to ${providerDisplayName(provider)}${
+        automatic ? ' automatically' : ''
+      }${from && pauseReasonOf(state) === 'provider-limit' ? ` after ${providerDisplayName(from)} ran out` : ''}.`
+    }
+  );
+  // A stage waiting on the AI that ran out goes again, now on the new one.
+  if (isPausedNode(state)) next = retryNode(next, nodeId, at);
+  return next;
+}
+
+function stopForProviderLimit(run: WorkflowRun, nodeId: string, at: string, detail?: string): WorkflowRun {
+  const state = run.nodes[nodeId];
+  if (!state || pauseReasonOf(state) !== 'provider-limit') return run;
+  const provider = state.attempts[state.attempts.length - 1]?.provider;
+  const reason = `The run could not be completed: ${provider ? providerDisplayName(provider) : 'the AI provider'} ran out of credits or hit its usage limit at ${label(run, nodeId)}${detail ? ` (${detail})` : ''}.`;
+  return append(
+    { ...run, status: 'failed', endedAt: at, endedReason: reason },
+    { at, kind: 'run-failed', nodeId, message: reason }
+  );
+}
+
+/** The AIs that ran out of budget during this run, from its paused attempts. */
+export function exhaustedProviders(run: WorkflowRun): string[] {
+  const found = new Set<string>();
+  for (const state of Object.values(run.nodes)) {
+    for (const attempt of state.attempts) {
+      if (attempt.pause === 'provider-limit' && attempt.provider) found.add(attempt.provider);
+    }
+  }
+  return [...found];
+}
+
+/**
+ * The AI a stage runs on: an AI it was switched to during the run, else the
+ * stage's own choice, else the run's, else `fallback` (the selected AI).
+ */
+export function stageProvider(run: WorkflowRun, nodeId: string, fallback: string): string {
+  const node = findNode(run, nodeId);
+  const own = node && isAgentTaskNode(node) ? node.agent.providerId?.trim() : undefined;
+  return run.stageProviders?.[nodeId] ?? (own || undefined) ?? run.aiProvider ?? fallback;
 }
 
 /**
@@ -889,6 +982,14 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
       : {}),
     ...(typeof raw.aiProvider === 'string' ? { aiProvider: raw.aiProvider as AiProvider } : {}),
     ...(typeof raw.aiModel === 'string' ? { aiModel: raw.aiModel } : {}),
+    ...(raw.providerLimitPolicy === 'switch' || raw.providerLimitPolicy === 'stop' ? { providerLimitPolicy: raw.providerLimitPolicy } : {}),
+    ...(raw.stageProviders && typeof raw.stageProviders === 'object' && !Array.isArray(raw.stageProviders)
+      ? {
+          stageProviders: Object.fromEntries(
+            Object.entries(raw.stageProviders as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim() !== '')
+          )
+        }
+      : {}),
     ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),
     ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),

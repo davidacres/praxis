@@ -818,8 +818,13 @@ export function sessionLimitNotice(session?: AgentSessionRecord): string | undef
   if (!session) return undefined;
   if (session.lastError && isProviderLimitMessage(session.lastError)) return formatErrorMessage(session.lastError);
   if (session.responseText && isProviderLimitMessage(session.responseText)) return formatErrorMessage(session.responseText);
-  const lastErrorEvent = [...(session.events ?? [])].reverse().find(e => e.type === 'error');
-  if (lastErrorEvent && isProviderLimitMessage(lastErrorEvent.summary || lastErrorEvent.detail)) {
+  // Only a limit the session has not moved past: a reply (or a new session start,
+  // as after a handover to another AI) since the error means the limit is behind it.
+  const events = session.events ?? [];
+  const lastErrorIndex = events.map(e => e.type).lastIndexOf('error');
+  const lastErrorEvent = lastErrorIndex >= 0 ? events[lastErrorIndex] : undefined;
+  const movedOn = events.slice(lastErrorIndex + 1).some(e => e.type === 'message' || e.type === 'session_start');
+  if (lastErrorEvent && !movedOn && isProviderLimitMessage(lastErrorEvent.summary || lastErrorEvent.detail)) {
     return formatErrorMessage(lastErrorEvent.summary || lastErrorEvent.detail);
   }
   if (session.providerLimitReached) {

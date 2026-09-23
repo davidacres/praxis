@@ -24,6 +24,7 @@ import {
 } from '../renderer/mobileSessionOptions';
 import { SessionComposer, type ComposerModeOption } from './SessionComposer';
 import { ProviderModelSheet } from './ProviderModelSheet';
+import { formatClock } from '../renderer/mobileTime';
 
 const DETAIL_TABS: MobileDetailTab[] = ['chat', 'progress', 'changes'];
 
@@ -287,7 +288,7 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
                     id: message.messageId,
                     author: 'user',
                     text: message.text,
-                    at: new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    at: formatClock(message.createdAt),
                     streaming: false,
                   }}
                 />

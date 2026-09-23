@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from './theme';
 import { useStore, type MobilePrimaryRoute } from './store';
+import { formatDayAndClock } from '../renderer/mobileTime';
 
 type SettingsPage = 'app' | 'server' | 'permissions';
 
@@ -36,8 +37,7 @@ const CAPABILITY_ROWS: Array<{ capability: 'view' | 'execute' | 'approve'; label
   { capability: 'approve', label: 'Approve gates and answer permission requests' },
 ];
 
-const formatWhen = (at: string | undefined): string | undefined =>
-  at ? new Date(at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : undefined;
+const formatWhen = (at: string | undefined): string | undefined => formatDayAndClock(at);
 
 function SectionLabel({ children }: { children: string }): React.JSX.Element {
   return <Text style={styles.sectionLabel}>{children}</Text>;
@@ -353,8 +353,9 @@ const styles = StyleSheet.create({
   detailContent: { padding: 12, paddingBottom: 30 },
   detailCard: { overflow: 'hidden', borderWidth: 1, borderColor: theme.border, borderRadius: 9, backgroundColor: theme.surface },
   detailRow: { minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
-  detailLabel: { color: theme.textSecondary, fontSize: 12 },
-  detailValue: { flexShrink: 1, textAlign: 'right', fontSize: 12, fontWeight: '600' },
+  // The label wraps before the value does, so a short value ("Allowed") never breaks a letter a line.
+  detailLabel: { flex: 1, color: theme.textSecondary, fontSize: 12 },
+  detailValue: { flexShrink: 1, maxWidth: '60%', textAlign: 'right', fontSize: 12, fontWeight: '600' },
   detailNote: { marginVertical: 12, paddingHorizontal: 4, color: theme.textDim, fontSize: 11, lineHeight: 17 },
   serverIdentity: { marginBottom: 4, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderColor: theme.border, borderRadius: 9, backgroundColor: theme.surface },
   serverGlyph: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: theme.accentSoft },

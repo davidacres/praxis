@@ -17,6 +17,7 @@
  *   agents editing one tree corrupt each other's work in ways no gate catches.
  */
 
+import { providerDisplayName } from '../ai/providers/registry';
 import {
   isApprovalNode,
   isJoinNode,
@@ -246,8 +247,10 @@ function describeStall(run: WorkflowRun, readyBeforeAdmission: string[]): string
   const paused = Object.values(run.nodes).filter(state => isPausedNode(state));
   if (paused.length > 0) {
     const ids = paused.map(state => state.nodeId).sort().join(', ');
+    const ais = [...new Set(paused.map(state => state.attempts[state.attempts.length - 1]?.provider).filter((id): id is string => Boolean(id)))];
+    const who = ais.length ? ais.map(providerDisplayName).join(' and ') : 'the AI provider';
     return paused.every(state => pauseReasonOf(state) === 'provider-limit')
-      ? `Paused: the AI provider's credits or usage limit were reached at ${ids}. Restore them, then retry.`
+      ? `Paused: ${who} ran out of credits or hit its usage limit at ${ids}. Switch to another AI, or restore them and retry.`
       : `Paused: ${ids} could not run in this environment. Fix that, then retry.`;
   }
 

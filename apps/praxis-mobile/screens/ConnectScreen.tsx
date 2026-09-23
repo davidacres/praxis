@@ -7,6 +7,7 @@ import { theme } from '../app/theme';
 import { loadMobileHostConfiguration, type MobileHostConfiguration } from '../app/mobileConnection';
 import { listenForMobileHosts, type DiscoveredMobileHost } from '../app/mobileDiscovery';
 import { parseMobileInvitation, type MobileInvitationDetails } from '../renderer/mobilePairingInvitation';
+import { formatClock, parseInstant } from '../renderer/mobileTime';
 
 const ACTION_HINTS = {
   rescan: 'Open Settings → Mobile access on the desktop, create a pairing invitation, and scan it here.',
@@ -66,13 +67,28 @@ export function ConnectScreen(): React.JSX.Element {
     }
     const details = parsed.details;
     setInvitation(details);
+    // A project belongs to one desktop: an invitation from another drops the old one's.
+    if (details.hostId && details.hostId !== hostId) setProjectId('');
     if (details.hostId) setHostId(details.hostId);
     if (details.hostName) setHostName(details.hostName);
     if (details.address) setAddress(details.address);
     if (details.port) setPort(String(details.port));
     if (parsed.kind === 'invitation' && parsed.expired) {
-      setFormError(`This invitation expired at ${new Date(details.expiresAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Create a new one in Settings → Mobile access on the desktop.`);
+      setFormError(`This invitation expired at ${formatClock(details.expiresAt)}. Create a new one in Settings → Mobile access on the desktop.`);
     }
+  };
+
+  /** Forgets the paired desktop and everything the form remembered about it. */
+  const forgetDesktop = (): void => {
+    disconnect({ forget: true });
+    setAddress('');
+    setPort('43100');
+    setHostId('');
+    setHostName('');
+    setProjectId('');
+    setInvitation(undefined);
+    setInvitationText('');
+    setFormError(undefined);
   };
 
   const openScanner = async (): Promise<void> => {
@@ -87,7 +103,7 @@ export function ConnectScreen(): React.JSX.Element {
     if (!hostId.trim()) return setFormError('Enter the desktop’s host ID, or scan its pairing invitation.');
     if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) return setFormError('The port must be a number from 1 to 65535.');
     if (!invitation?.hostPublicKeyHex) return setFormError('Scan or paste the desktop’s pairing invitation so this phone can pin its host key.');
-    if (invitation.expiresAt && Date.parse(invitation.expiresAt) <= Date.now()) {
+    if (invitation.expiresAt && (parseInstant(invitation.expiresAt) ?? Infinity) <= Date.now()) {
       return setFormError('This invitation has expired. Create a new one in Settings → Mobile access on the desktop.');
     }
     void connect({
@@ -146,7 +162,7 @@ export function ConnectScreen(): React.JSX.Element {
             {connectionIssue.action === 'rescan' ? (
               <>
                 <Button label="Scan pairing QR" onPress={() => void openScanner()} />
-                {hostConfig ? <Button label="Forget this desktop" kind="ghost" onPress={() => disconnect({ forget: true })} /> : null}
+                {hostConfig ? <Button label="Forget this desktop" kind="ghost" onPress={forgetDesktop} /> : null}
               </>
             ) : hostConfig ? (
               <Button label="Try again" onPress={retryConnection} />
@@ -198,7 +214,7 @@ export function ConnectScreen(): React.JSX.Element {
         {invitation?.tokenId ? (
           <Body dim>
             Invitation {invitation.tokenId}
-            {invitation.expiresAt ? ` · expires ${new Date(invitation.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+            {formatClock(invitation.expiresAt) ? ` · expires ${formatClock(invitation.expiresAt)}` : ''}
           </Body>
         ) : invitation?.hostPublicKeyHex ? <Body dim>Host key pinned. A phone the desktop already trusts reconnects without an invitation.</Body> : null}
         <Text style={styles.label}>DESKTOP ADDRESS</Text>

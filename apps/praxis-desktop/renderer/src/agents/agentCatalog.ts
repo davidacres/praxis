@@ -153,23 +153,6 @@ const RUNTIME_LABELS: Record<string, string> = {
   'antigravity-cli': 'Antigravity'
 };
 
-/** ACP launch commands → the runtime people know. */
-const ACP_COMMAND_LABELS: Record<string, string> = {
-  'claude-agent-acp': 'Claude Code',
-  'claude-code-acp': 'Claude Code',
-  'codex-acp': 'Codex',
-  copilot: 'GitHub Copilot',
-  'antigravity-acp': 'Antigravity'
-};
-
-/** "Claude Code" for a binding launched with `claude-agent-acp`; the command itself otherwise. */
-export function runtimeOfBinding(binding: Pick<DiscoveredAgent, 'manifest'>): string {
-  const entry = binding.manifest.entry;
-  const command = typeof entry === 'string' ? entry : entry.command ?? entry.url ?? '';
-  const name = command.split(/[\\/]/).pop()?.replace(/\.(cmd|exe)$/i, '') ?? '';
-  return ACP_COMMAND_LABELS[name] ?? (name || transportLabel(binding.manifest.type));
-}
-
 /** "Claude Code · project" */
 export function nativeSourceLabel(source: { ecosystem: string; scope: string }): string {
   return `${NATIVE_TOOL_LABELS[source.ecosystem] ?? source.ecosystem} · ${source.scope === 'project' ? 'project' : 'your user folder'}`;

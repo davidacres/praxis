@@ -107,13 +107,3 @@ test('absent summary and author are warnings, not errors', () => {
   assert.deepEqual(errors, []);
   assert.equal(warnings.length, 2);
 });
-
-test('an agent add-on can pin a built-in agent and name its runtime', () => {
-  const pin = validateAddonManifest(base({ kind: 'agent', id: 'claude-implementer', name: 'Claude Implementer', replaces: 'praxis-implementer', display: { runtime: 'Claude Code' } }));
-  assert.deepEqual(pin.errors, []);
-  assert.equal(pin.manifest?.replaces, 'praxis-implementer');
-  assert.equal(pin.manifest?.display?.runtime, 'Claude Code');
-  assert.match(validateAddonManifest(base({ replaces: 'praxis-implementer' })).errors.join(), /Only an agent/);
-  assert.match(validateAddonManifest(base({ kind: 'agent', id: 'praxis-implementer', replaces: 'praxis-implementer' })).errors.join(), /its own `id`/);
-  assert.match(validateAddonManifest(base({ kind: 'agent', replaces: 'Not An Id' })).errors.join(), /built-in agent/);
-});

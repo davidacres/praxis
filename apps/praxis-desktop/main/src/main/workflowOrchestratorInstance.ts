@@ -19,6 +19,7 @@ import { createWorkflowWorkspaceProvider } from './workflowWorkspace';
 import { getServiceForConnection } from './serviceRegistry';
 import { workflowLogSink } from './workflowLogSink';
 import { syncApprovalGadgets } from './workflowApprovalGadgetSync';
+import { fallbackProviderForStage } from './providerFallback';
 
 /**
  * The desktop app's workflow orchestrator (FX-BE-024).
@@ -162,6 +163,7 @@ export function getWorkflowOrchestrator(): WorkflowOrchestrator {
       runs: new WorkflowRunStore(getWorkflowBackingStore()),
       dispatcher,
       workspace: createWorkflowWorkspaceProvider(),
+      chooseFallbackProvider: fallbackProviderForStage,
       onRunChanged: run => {
         broadcastRunChanged(run);
         // A stage may have just gone `running`; make sure the tick is armed.
