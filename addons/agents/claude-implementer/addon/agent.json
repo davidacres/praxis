@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "claude-implementer",
+  "name": "Claude Implementer",
+  "type": "acp",
+  "entry": {
+    "command": "claude-agent-acp"
+  },
+  "activation": "onDemand",
+  "replaces": "praxis-implementer"
+}

@@ -177,6 +177,21 @@ export class AiSessionManager {
   }
 
   /** Update provider-owned runtime metadata after a native session is created or resumed. */
+  /**
+   * Replaces the project instructions a session's prompt carries — recomputed
+   * before each turn, because a provider handover can change which runtime
+   * (and so which instruction files it already reads) runs the session.
+   */
+  public setProjectInstructions(issueKey: string, instructions: string | undefined): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) return;
+    const next = instructions?.trim() || undefined;
+    if (record.taskDefinition.projectInstructions === next) return;
+    record.taskDefinition = { ...record.taskDefinition, ...(next ? { projectInstructions: next } : {}) };
+    if (!next) delete record.taskDefinition.projectInstructions;
+    void this.persistAgentSessions();
+  }
+
   public updateAgentRuntime(
     issueKey: string,
     runtime: Partial<

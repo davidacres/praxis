@@ -489,7 +489,11 @@ const praxis: PraxisIpc = {
     previewImport: (kind: string, sourceDir: string, scope: string) =>
       ipcRenderer.invoke('agentRuntime:previewImport', kind, sourceDir, scope),
     importItem: (kind: string, sourceDir: string, scope: string, onDuplicate: string) =>
-      ipcRenderer.invoke('agentRuntime:importItem', kind, sourceDir, scope, onDuplicate)
+      ipcRenderer.invoke('agentRuntime:importItem', kind, sourceDir, scope, onDuplicate),
+    approveNativeProject: (projectRoot: string, approved: boolean) =>
+      ipcRenderer.invoke('agentRuntime:approveNativeProject', projectRoot, approved),
+    revealNative: (itemPath: string) => ipcRenderer.invoke('agentRuntime:revealNative', itemPath),
+    copyNative: (kind: string, id: string) => ipcRenderer.invoke('agentRuntime:copyNative', kind, id)
   },
   gadgets: {
     getBlocks: (sessionId: string) => ipcRenderer.invoke('gadgets:getBlocks', sessionId),

@@ -1362,6 +1362,12 @@ export interface AgentRuntimeIpc {
     scope: CatalogScope,
     onDuplicate: 'block' | 'rename'
   ): Promise<AgentRuntimeSnapshot>;
+  /** Trusts (or stops trusting) the agents, skills and instruction files other AI tools keep in a project. */
+  approveNativeProject(projectRoot: string, approved: boolean): Promise<AgentRuntimeSnapshot>;
+  /** Shows a discovered agent, skill or instruction file in Finder / Explorer. */
+  revealNative(itemPath: string): Promise<void>;
+  /** Copies an agent or skill found in another AI tool's folder into Praxis's global folder. */
+  copyNative(kind: 'agent' | 'skill', id: string): Promise<AgentRuntimeSnapshot>;
 }
 
 // ── Integrated terminal ─────────────────────────────────────────────────────

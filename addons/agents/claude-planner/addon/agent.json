@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "claude-planner",
+  "name": "Claude Planner",
+  "type": "acp",
+  "entry": {
+    "command": "claude-agent-acp"
+  },
+  "activation": "onDemand",
+  "replaces": "praxis-planner"
+}

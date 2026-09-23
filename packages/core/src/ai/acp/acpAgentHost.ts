@@ -161,6 +161,8 @@ function permissionAction(request: AcpPermissionRequest): string {
     case 'fetch': return 'fetch content from the internet';
     case 'switch_mode': return 'switch the agent mode';
     case 'think': return 'perform an extended reasoning step';
+    // Raised by Praxis itself (`promptExternalPermission`), so its title is trusted text naming the site.
+    case 'browser-navigate': return request.title.trim() ? request.title.trim()[0]!.toLowerCase() + request.title.trim().slice(1) : 'open a site in the in-app browser';
     default: return request.name?.trim() ? `run ${request.name.trim()}` : 'perform an agent action';
   }
 }

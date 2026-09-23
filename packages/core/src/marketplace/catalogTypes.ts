@@ -60,6 +60,12 @@ export interface AddonManifest {
   author?: string;
   homepage?: string;
   /**
+   * Agent add-ons only: the built-in agent this add-on runs on its own
+   * runtime. Its instructions stay the built-in's; while installed, the
+   * built-in runs on this add-on's runtime instead of the session's.
+   */
+  replaces?: string;
+  /**
    * Optional display hints the per-kind marketplace UI can render *before* the
    * add-on is installed (the payload isn't downloaded for the browse list). A
    * `theme` add-on puts its preview colours + mode here so its catalogue card
@@ -71,6 +77,8 @@ export interface AddonManifest {
     preview?: Record<string, string>;
     /** For a theme: which appearance mode the preview represents. */
     mode?: 'light' | 'dark';
+    /** For an agent: the runtime it runs on, for people (e.g. `Claude Code`). */
+    runtime?: string;
   };
 }
 

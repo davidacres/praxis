@@ -134,3 +134,49 @@ export function skillTitle(metadata: { name: string; title?: string }): string {
     .map(word => word[0]!.toUpperCase() + word.slice(1))
     .join(' ');
 }
+
+/** Duplicated from core's `NATIVE_ECOSYSTEM_LABELS` (the renderer imports types only from core). */
+export const NATIVE_TOOL_LABELS: Record<string, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  agents: 'Shared (.agents)',
+  copilot: 'GitHub Copilot',
+  gemini: 'Gemini / Antigravity',
+  cursor: 'Cursor'
+};
+
+/** Praxis runtime ids → the names people know them by. */
+const RUNTIME_LABELS: Record<string, string> = {
+  'claude-code-cli': 'Claude Code',
+  'codex-cli': 'Codex',
+  'copilot-cli': 'GitHub Copilot',
+  'antigravity-cli': 'Antigravity'
+};
+
+/** ACP launch commands → the runtime people know. */
+const ACP_COMMAND_LABELS: Record<string, string> = {
+  'claude-agent-acp': 'Claude Code',
+  'claude-code-acp': 'Claude Code',
+  'codex-acp': 'Codex',
+  copilot: 'GitHub Copilot',
+  'antigravity-acp': 'Antigravity'
+};
+
+/** "Claude Code" for a binding launched with `claude-agent-acp`; the command itself otherwise. */
+export function runtimeOfBinding(binding: Pick<DiscoveredAgent, 'manifest'>): string {
+  const entry = binding.manifest.entry;
+  const command = typeof entry === 'string' ? entry : entry.command ?? entry.url ?? '';
+  const name = command.split(/[\\/]/).pop()?.replace(/\.(cmd|exe)$/i, '') ?? '';
+  return ACP_COMMAND_LABELS[name] ?? (name || transportLabel(binding.manifest.type));
+}
+
+/** "Claude Code · project" */
+export function nativeSourceLabel(source: { ecosystem: string; scope: string }): string {
+  return `${NATIVE_TOOL_LABELS[source.ecosystem] ?? source.ecosystem} · ${source.scope === 'project' ? 'project' : 'your user folder'}`;
+}
+
+/** "Loaded natively by Claude Code" — or undefined when no Praxis runtime reads it itself. */
+export function nativeReaders(readBy: readonly string[]): string | undefined {
+  const names = readBy.map(id => RUNTIME_LABELS[id] ?? id);
+  return names.length ? `Loaded natively by ${names.join(' and ')}` : undefined;
+}

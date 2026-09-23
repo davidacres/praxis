@@ -16,3 +16,4 @@ export * from './hostLoader';
 export * from './agentCatalog';
 export * from './agentAuthoring';
 export * from './bundledAgents';
+export * from './nativeSources';

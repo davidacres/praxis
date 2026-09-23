@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import { app } from 'electron';
 import { AgentRuntimeManager, mirrorBundledAgents, type CatalogScope } from '@praxis/core';
 import { getSettingsBackend } from './settingsBackendInstance';
+import { nativeSourceOptionsFor } from './nativeSourcesInstance';
 
 let manager: AgentRuntimeManager | undefined;
 
@@ -40,7 +41,8 @@ export function getAgentRuntimeManager(): AgentRuntimeManager {
       profileRoots: [roots.profiles.global, roots.profiles.project, roots.runtimeHosts.global, roots.runtimeHosts.project],
       trustedProfileRoots: [roots.profiles.global, roots.runtimeHosts.global],
       skillRoots: [roots.skills.global, roots.skills.project],
-      trustedSkillRoots: [roots.skills.global]
+      trustedSkillRoots: [roots.skills.global],
+      nativeSources: () => nativeSourceOptionsFor()
     });
   }
   return manager;

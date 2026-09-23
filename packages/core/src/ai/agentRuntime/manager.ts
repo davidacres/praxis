@@ -3,6 +3,15 @@ import type { DiscoveredAgent } from './manifest';
 import { discoverSkills, loadSkillInstructions, type DiscoveredSkill } from './skillRegistry';
 import { discoverAgentProfiles, type DiscoveredAgentProfile } from './profileRegistry';
 import { bundledAgentDescription, bundledSkill, isBundledAgent } from './bundledAgents';
+import {
+  MAX_INSTRUCTION_CHARS,
+  discoverNativeSources,
+  mergeById,
+  readNatively,
+  type NativeInstructionFile,
+  type NativeSourceOptions
+} from './nativeSources';
+import type { AiProvider } from '../../types';
 import { loadAgentHost, type AgentCapabilities, type AgentHostHandle } from './hostLoader';
 import {
   buildProfileContext,
@@ -29,9 +38,15 @@ export interface AgentRuntimeSnapshot {
   capabilities: Record<string, AgentCapabilities>;
   hosts: Record<string, HostRuntimeStatus>;
   refreshedAt: string;
+  /** Instruction files other AI tools keep (contents omitted; see `nativeInstructionFiles`). */
+  instructions?: Array<Omit<NativeInstructionFile, 'content'>>;
+  /** The project folder other tools' files were read from, and whether its files are approved. */
+  nativeProject?: { root: string; approved: boolean; itemCount: number };
 }
 
 export interface AgentRuntimeManagerOptions extends DiscoveryOptions {
+  /** Where to look for other AI tools' agents, skills and instructions; read at every refresh. */
+  nativeSources?: () => NativeSourceOptions | undefined | Promise<NativeSourceOptions | undefined>;
   skillRoots?: string[];
   trustedSkillRoots?: string[];
   profileRoots?: string[];
@@ -47,6 +62,36 @@ export interface ActivatedSkill {
   instructions: string;
 }
 
+/**
+ * Pins (`replaces`): a trusted host that names an existing agent becomes that
+ * agent's launch binding — the agent keeps its own instructions and runs on the
+ * pin's runtime. The pin is not an agent of its own. With several pins for one
+ * agent the first by id wins (the marketplace keeps one installed per agent).
+ */
+export function resolvePins(hosts: readonly DiscoveredAgent[], profileIds: ReadonlySet<string>): DiscoveredAgent[] {
+  const pins = hosts
+    .filter(host => host.manifest.replaces && host.trusted && host.errors.length === 0 && profileIds.has(host.manifest.replaces))
+    .sort((left, right) => left.manifest.id.localeCompare(right.manifest.id));
+  if (pins.length === 0) return [...hosts];
+  const winners = new Map<string, DiscoveredAgent>();
+  for (const pin of pins) if (!winners.has(pin.manifest.replaces!)) winners.set(pin.manifest.replaces!, pin);
+  const pinned = (target: string, pin: DiscoveredAgent): DiscoveredAgent => {
+    const { replaces: _replaces, ...manifest } = pin.manifest;
+    return {
+      ...pin,
+      manifest: { ...manifest, id: target },
+      pinnedBy: { id: pin.manifest.id, name: pin.manifest.name, manifestPath: pin.manifestPath }
+    };
+  };
+  const result = hosts
+    .filter(host => !pins.includes(host))
+    .map(host => (winners.has(host.manifest.id) ? pinned(host.manifest.id, winners.get(host.manifest.id)!) : host));
+  for (const [target, pin] of winners) {
+    if (!result.some(host => host.manifest.id === target)) result.push(pinned(target, pin));
+  }
+  return result;
+}
+
 export class AgentRuntimeManager {
   private snapshot: AgentRuntimeSnapshot = {
     agents: [],
@@ -59,6 +104,7 @@ export class AgentRuntimeManager {
   };
   private readonly hosts = new Map<string, AgentHostHandle>();
   private readonly hostStatus = new Map<string, HostRuntimeStatus>();
+  private nativeInstructions: NativeInstructionFile[] = [];
   private readonly skillModes = new Map<string, Map<string, 'native' | 'tools' | 'context'>>();
 
   public constructor(private readonly options: AgentRuntimeManagerOptions) {}
@@ -68,7 +114,7 @@ export class AgentRuntimeManager {
       ...(this.options.userAgentsPath ? [this.options.userAgentsPath] : []),
       ...(this.options.allowProjectAgents && this.options.projectAgentsPath ? [this.options.projectAgentsPath] : [])
     ];
-    const [runtimeHosts, profiles, skills] = await Promise.all([
+    const [discoveredHosts, profiles, skills] = await Promise.all([
       discoverAgents(this.options),
       discoverAgentProfiles(
         profileRoots,
@@ -97,6 +143,9 @@ export class AgentRuntimeManager {
       if (!bundled) return skill;
       return { ...skill, builtIn: true, metadata: { ...skill.metadata, title: skill.metadata.title ?? bundled.title } };
     });
+
+    const runtimeHosts = resolvePins(discoveredHosts, new Set(alignedProfiles.map(entry => entry.profile.id)));
+
     for (const runtimeHost of runtimeHosts) {
       if (alignedProfiles.some(profile => profile.profile.id === runtimeHost.manifest.id)) continue;
       alignedProfiles.push({
@@ -113,14 +162,44 @@ export class AgentRuntimeManager {
         legacy: true
       });
     }
+    // Other AI tools' agents and skills join the catalog; one entry per id.
+    const nativeOptions = await this.options.nativeSources?.();
+    const native = nativeOptions ? await discoverNativeSources(nativeOptions) : undefined;
+    this.nativeInstructions = native?.instructions ?? [];
+    const mergedProfiles = mergeById([...alignedProfiles, ...(native?.agents ?? [])], entry => entry.profile.id);
+    const mergedSkills = mergeById([...labelledSkills, ...(native?.skills ?? [])], skill => skill.metadata.name);
+
+    // An agent from another tool has no host of its own: give it one that
+    // runs on whatever runtime the session uses, like the built-in agents.
+    const hosts = [...runtimeHosts];
+    for (const entry of mergedProfiles) {
+      if (!entry.source || hosts.some(host => host.manifest.id === entry.profile.id)) continue;
+      hosts.push({
+        manifest: { schemaVersion: 1, id: entry.profile.id, name: entry.profile.name, type: 'gateway', entry: 'session' },
+        manifestPath: entry.profilePath,
+        rootPath: entry.rootPath,
+        scope: entry.scope,
+        trusted: entry.trusted,
+        errors: [],
+        followsSessionRuntime: true
+      });
+    }
+    const nativeItems = (native?.agents.length ?? 0) + (native?.skills.length ?? 0) + (native?.instructions.length ?? 0);
+    const projectItems = [...(native?.agents ?? []), ...(native?.skills ?? [])].filter(item => item.source?.scope === 'project').length
+      + (native?.instructions ?? []).filter(file => file.scope === 'project').length;
+
     this.snapshot = {
-      agents: runtimeHosts,
-      runtimeHosts,
-      profiles: alignedProfiles,
-      skills: labelledSkills,
+      agents: hosts,
+      runtimeHosts: hosts,
+      profiles: mergedProfiles,
+      skills: mergedSkills,
       capabilities: Object.fromEntries([...this.hosts].map(([id, host]) => [id, host.capabilities])),
       hosts: Object.fromEntries(this.hostStatus),
-      refreshedAt: new Date().toISOString()
+      refreshedAt: new Date().toISOString(),
+      ...(native ? { instructions: native.instructions.map(({ content, ...file }) => ({ ...file, tooLargeForSessions: content.length > MAX_INSTRUCTION_CHARS })) } : {}),
+      ...(native?.projectRoot && nativeItems > 0
+        ? { nativeProject: { root: native.projectRoot, approved: nativeOptions?.projectApproved === true, itemCount: projectItems } }
+        : {})
     };
     return this.snapshot;
   }
@@ -227,6 +306,12 @@ export class AgentRuntimeManager {
     });
     const confirmed = this.skillModes.get(hostId);
     const activations = planned.map(activation => {
+      // A skill from a tool's own folder is loaded by that tool's runtime
+      // itself — adding its instructions again would double them.
+      const source = snapshot.skills.find(candidate => candidate.metadata.name === activation.skillId)?.source;
+      if (readNatively(source, provider.id as AiProvider)) {
+        return { ...activation, mode: 'native' as const, reason: 'The runtime loads this skill from its own folder.', instructionsIncluded: false };
+      }
       const mode = confirmed?.get(activation.skillId) ?? activation.mode;
       return {
         ...activation,
@@ -256,5 +341,7 @@ export class AgentRuntimeManager {
   }
 
   public getSnapshot(): AgentRuntimeSnapshot { return this.snapshot; }
+  /** Instruction files (with contents) found at the last refresh. */
+  public nativeInstructionFiles(): readonly NativeInstructionFile[] { return this.nativeInstructions; }
   public async list(): Promise<AgentRuntimeSnapshot> { return this.snapshot.refreshedAt ? this.snapshot : this.refresh(); }
 }

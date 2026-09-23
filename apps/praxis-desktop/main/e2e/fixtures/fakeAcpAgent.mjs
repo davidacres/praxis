@@ -20,6 +20,8 @@
 //     third task is still `in_progress`, for asserting the mid-run state.
 //   - "WITH_COMMANDS": sends an `available_commands_update` with fake slash
 //     commands, including `/compact` to exercise provider capability gating.
+//   - "ECHO_PROMPT": replies with the whole prompt it received — proves what a
+//     launch (e.g. a pinned built-in agent) actually handed the runtime.
 //   - "IMAGE_ECHO": reports how many image content blocks the prompt carried
 //     and their mime types — proves the host actually forwarded pasted images
 //     as ACP image content blocks rather than dropping them.
@@ -149,6 +151,14 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
       }
     }
   });
+
+  if (promptText.includes('ECHO_PROMPT')) {
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `PROMPT_ECHO:${promptText}` } }
+    });
+    return { stopReason: 'end_turn' };
+  }
 
   if (promptText.includes('IMAGE_ECHO')) {
     const images = ctx.params.prompt.filter(block => block.type === 'image');

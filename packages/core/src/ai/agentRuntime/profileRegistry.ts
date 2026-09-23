@@ -1,3 +1,4 @@
+import type { NativeSourceRef } from './nativeSources';
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import * as path from 'node:path';
@@ -16,6 +17,10 @@ export interface DiscoveredAgentProfile {
   error?: string;
   /** Shipped with Praxis (set by the runtime manager). */
   builtIn?: boolean;
+  /** Found in another AI tool's folder rather than Praxis's own. */
+  source?: NativeSourceRef;
+  /** Other places the same id was found (the lower-precedence copies). */
+  alsoIn?: string[];
 }
 
 async function directories(root: string): Promise<string[]> {

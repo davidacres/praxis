@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEv
 import { useDialogs } from '../ui/dialogs';
 import { QrCodeSvg } from '../ui/qrCodeSvg';
 import type {
+  AddonManifest,
   AiProvider,
   AiProviderStatus,
   AgentRuntimeSnapshot,
@@ -43,7 +44,7 @@ import {
 } from '../ai/sessionNav';
 import { useSettings } from './useSettings';
 import { useKindAddons } from './marketplaceAddons';
-import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
+import { isHostShimProfile, NATIVE_TOOL_LABELS, nativeReaders, nativeSourceLabel, runtimeOfBinding, skillTitle } from '../agents/agentCatalog';
 import { BUILT_IN_GADGET_CATALOG } from '../ai/gadgets';
 import { allThemes, applySurfacePack, applyThemePreference, DEFAULT_THEME_ID, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
@@ -374,7 +375,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'ai-usage' && <AiUsageStatsSection />}
         {active === 'gadgets' && <GadgetsSection />}
         {active === 'agent-runtime' && (
-          <AgentRuntimeSection settings={settings} onNewAgentItem={onNewAgentItem} onOpenAgent={onOpenAgent} />
+          <AgentRuntimeSection settings={settings} update={update} onNewAgentItem={onNewAgentItem} onOpenAgent={onOpenAgent} />
         )}
         {active === 'workflow-templates' && <WorkflowTemplatesSection />}
         {active === 'performance' && <PerformanceSection settings={settings} update={update} />}
@@ -521,7 +522,7 @@ function NavGroup({
   );
 }
 
-type AgentRuntimeTab = 'agents' | 'skills' | 'runtimes' | 'advanced';
+type AgentRuntimeTab = 'agents' | 'skills' | 'instructions' | 'runtimes' | 'advanced';
 
 /** One agent or skill row: identity icon on the surface, title with badges, description, one action. */
 function RuntimeItem({
@@ -576,8 +577,8 @@ function RuntimeMarketplace({
 }: {
   addons: ReturnType<typeof useKindAddons>;
   kind: 'agent' | 'skill';
-  /** The built-in item an add-on with this id replaces, if any. */
-  replaces: (id: string) => string | undefined;
+  /** The built-in agent an add-on runs on its own runtime, if any: its id and name. */
+  replaces: (manifest: AddonManifest) => { id: string; name: string } | undefined;
 }) {
   const dialogs = useDialogs();
   const catalog = addons.catalog ?? [];
@@ -591,23 +592,32 @@ function RuntimeMarketplace({
   ];
 
   const install = async (entry: (typeof catalog)[number]) => {
+    const pin = replaces(entry.manifest);
+    // One add-on runs a built-in agent at a time; installing another replaces it.
+    const displaced = pin
+      ? addons.installed.filter(addon => addon.manifest.id !== entry.manifest.id && replaces(addon.manifest)?.id === pin.id)
+      : [];
     const confirmed = await dialogs.confirm({
       title: `Install ${entry.manifest.name}?`,
-      message: `This ${kind} gives Praxis agents instructions${kind === 'skill' ? ' — and any scripts it includes —' : ''} to follow when they use it. Install it only if you trust its author.`,
+      message: pin
+        ? `Praxis will run the built-in ${pin.name} — its own instructions — on ${entry.manifest.display?.runtime ?? 'this add-on’s runtime'} instead of the session’s runtime.${displaced.length ? ` ${displaced.map(addon => addon.manifest.name).join(' and ')} will be uninstalled.` : ''} Install it only if you trust its author.`
+        : `This ${kind} gives Praxis agents instructions${kind === 'skill' ? ' — and any scripts it includes —' : ''} to follow when they use it. Install it only if you trust its author.`,
       details: [`${entry.packageName} v${entry.latestVersion}`, ...(entry.manifest.author ? [`By ${entry.manifest.author}`] : [])],
       confirmLabel: 'Install'
     });
     if (confirmed) await addons.install(entry.packageName, { trust: true });
   };
-  const uninstall = async (id: string, name: string) => {
-    const replaced = replaces(id);
+  const uninstall = async (manifest: AddonManifest) => {
+    const pin = replaces(manifest);
     const confirmed = await dialogs.confirm({
-      title: `Uninstall ${name}?`,
-      message: `Agents will no longer be able to use this ${kind}.${replaced ? ` The built-in ${replaced} comes back.` : ''} You can install it again from the marketplace.`,
+      title: `Uninstall ${manifest.name}?`,
+      message: pin
+        ? `The built-in ${pin.name} goes back to running on the session’s runtime. You can install ${manifest.name} again from the marketplace.`
+        : `Agents will no longer be able to use this ${kind}. You can install it again from the marketplace.`,
       confirmLabel: 'Uninstall',
       danger: true
     });
-    if (confirmed) await addons.remove(id);
+    if (confirmed) await addons.remove(manifest.id);
   };
 
   return (
@@ -620,7 +630,7 @@ function RuntimeMarketplace({
       {addons.ready && addons.catalog === undefined && <div className="placeholder-text">Loading the catalogue…</div>}
       {rows.map(row => {
         const installed = installedById.get(row.id);
-        const replaced = replaces(row.id);
+        const pin = replaces(row.manifest);
         const busy = addons.busy === `remove:${row.id}` || (row.entry ? addons.busy === `install:${row.entry.packageName}` : false);
         return (
           <RuntimeItem
@@ -628,9 +638,17 @@ function RuntimeMarketplace({
             testId={`${kind}-marketplace-${row.id}`}
             icon={kind === 'agent' ? 'robot' : 'sparkles'}
             title={row.manifest.name}
-            badges={installed ? [installed.enabled ? 'Installed' : 'Installed · disabled'] : []}
-            description={[row.manifest.summary, replaced ? `Replaces the built-in ${replaced} while installed.` : undefined].filter(Boolean).join(' ')}
-            meta={[`v${row.version}`, row.manifest.author, row.entry?.incompatible ? 'needs a newer Praxis' : undefined].filter(Boolean).join(' · ')}
+            badges={[
+              ...(row.manifest.display?.runtime ? [row.manifest.display.runtime] : []),
+              ...(installed ? [installed.enabled ? 'Installed' : 'Installed · disabled'] : [])
+            ]}
+            description={row.manifest.summary}
+            meta={[
+              pin && !row.manifest.summary?.includes(pin.name) ? `Runs the built-in ${pin.name}` : undefined,
+              `v${row.version}`,
+              row.manifest.author,
+              row.entry?.incompatible ? 'needs a newer Praxis' : undefined
+            ].filter(Boolean).join(' · ')}
             action={
               installed ? (
                 <>
@@ -639,7 +657,7 @@ function RuntimeMarketplace({
                       Enable
                     </button>
                   )}
-                  <button className="btn btn-quiet" type="button" disabled={busy} onClick={() => void uninstall(row.id, row.manifest.name)}>
+                  <button className="btn btn-quiet" type="button" disabled={busy} onClick={() => void uninstall(row.manifest)}>
                     Uninstall
                   </button>
                 </>
@@ -669,10 +687,12 @@ function useBrowseOnce(addons: ReturnType<typeof useKindAddons>): void {
 
 function AgentRuntimeSection({
   settings,
+  update,
   onNewAgentItem,
   onOpenAgent
 }: {
   settings: AppSettings;
+  update: (patch: AppSettingsPatch) => Promise<void>;
   onNewAgentItem?: (kind: 'agent' | 'import') => void;
   onOpenAgent?: (agentId: string) => void;
 }) {
@@ -682,6 +702,39 @@ function AgentRuntimeSection({
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<AgentRuntimeTab>('agents');
+  const [nativeError, setNativeError] = useState<string>();
+  const [nativeBusy, setNativeBusy] = useState<string>();
+  const runNative = async (key: string, action: () => Promise<AgentRuntimeSnapshot | void>) => {
+    setNativeBusy(key);
+    setNativeError(undefined);
+    try {
+      const next = await action();
+      if (next) setSnapshot(next);
+    } catch (cause) {
+      setNativeError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setNativeBusy(undefined);
+    }
+  };
+  /** Show-file and Copy-to-Praxis for an item found in another AI tool's folder. */
+  const nativeActions = (kind: 'agent' | 'skill' | 'instruction', id: string, itemPath: string, trusted: boolean) => (
+    <>
+      <button className="btn btn-quiet" type="button" onClick={() => void runNative(`reveal:${itemPath}`, () => window.praxis.agentRuntime.revealNative(itemPath))}>
+        Show file
+      </button>
+      {kind !== 'instruction' && (
+        <button
+          className="btn btn-quiet"
+          type="button"
+          disabled={!trusted || nativeBusy === `copy:${id}`}
+          title={trusted ? 'Make an editable copy in Praxis; it replaces this one in Praxis' : 'Allow this project first'}
+          onClick={() => void runNative(`copy:${id}`, () => window.praxis.agentRuntime.copyNative(kind, id))}
+        >
+          Copy to Praxis
+        </button>
+      )}
+    </>
+  );
 
   const agentAddons = useKindAddons('agent');
   const skillAddons = useKindAddons('skill');
@@ -726,13 +779,18 @@ function AgentRuntimeSection({
   const skills = snapshot?.skills ?? [];
   const agentAddonIds = new Set(agentAddons.installed.map(addon => addon.manifest.id));
   const skillAddonIds = new Set(skillAddons.installed.map(addon => addon.manifest.id));
-  // A trusted marketplace agent with a built-in id replaces it on disk, so remember built-in names.
   const builtInAgentNames = new Map(profiles.filter(profile => profile.builtIn).map(profile => [profile.profile.id, profile.profile.name]));
+  // A pin names the built-in it runs; early packages reused the built-in's id instead.
+  const pinnedBuiltIn = (manifest: AddonManifest) => {
+    const id = manifest.kind === 'agent' ? manifest.replaces ?? (builtInAgentNames.has(manifest.id) ? manifest.id : undefined) : undefined;
+    return id ? { id, name: builtInAgentNames.get(id) ?? id } : undefined;
+  };
   const refreshedAt = snapshot?.refreshedAt ? new Date(snapshot.refreshedAt).toLocaleString() : 'not yet';
 
   const tabs: Array<{ id: AgentRuntimeTab; label: string; count?: number }> = [
     { id: 'agents', label: 'Agents', count: profiles.length },
     { id: 'skills', label: 'Skills', count: skills.length },
+    { id: 'instructions', label: 'Instructions', count: (snapshot?.instructions ?? []).length },
     { id: 'runtimes', label: 'Runtimes', count: runtimeProviders.length },
     { id: 'advanced', label: 'Advanced' }
   ];
@@ -777,11 +835,38 @@ function AgentRuntimeSection({
         {error && <div className="error-banner">{error}</div>}
         {!snapshot && !error && <div className="placeholder-text">Loading agent runtime…</div>}
 
+        {nativeError && <div className="error-banner">{nativeError}</div>}
+        {snapshot?.nativeProject && !snapshot.nativeProject.approved && snapshot.nativeProject.itemCount > 0 && ['agents', 'skills', 'instructions'].includes(tab) && (
+          <div className="settings-field-row" data-testid="native-project-approval">
+            <span className="runtime-item-icon" aria-hidden="true">
+              <Icon name="shield" size={16} />
+            </span>
+            <div className="settings-field-label">
+              <strong>This project has files for other AI tools</strong>
+              <div className="settings-field-help">
+                {snapshot.nativeProject.itemCount} agent, skill or instruction file{snapshot.nativeProject.itemCount === 1 ? '' : 's'} in{' '}
+                <code>{snapshot.nativeProject.root}</code>. They arrive with the repository, so Praxis will not use them until you allow this project.
+              </div>
+            </div>
+            <div className="settings-field-control">
+              <button
+                className="btn"
+                type="button"
+                disabled={nativeBusy === 'approve'}
+                onClick={() => void runNative('approve', () => window.praxis.agentRuntime.approveNativeProject(snapshot.nativeProject!.root, true))}
+              >
+                Allow this project
+              </button>
+            </div>
+          </div>
+        )}
+
         {snapshot && tab === 'agents' && (
           <>
             {[
-              { heading: 'Built-in', items: profiles.filter(profile => profile.builtIn && !agentAddonIds.has(profile.profile.id)) },
-              { heading: 'Your own', items: profiles.filter(profile => !profile.builtIn && !agentAddonIds.has(profile.profile.id)) }
+              { heading: 'Built-in', items: profiles.filter(profile => profile.builtIn && !profile.source) },
+              { heading: 'Your own', items: profiles.filter(profile => !profile.builtIn && !profile.source && !agentAddonIds.has(profile.profile.id)) },
+              { heading: 'From other AI tools', items: profiles.filter(profile => profile.source) }
             ]
               .filter(group => group.heading === 'Built-in' || group.items.length > 0)
               .map(group => (
@@ -792,7 +877,9 @@ function AgentRuntimeSection({
                     // Every agent runs on the session's runtime through the built-in
                     // gateway unless it says otherwise; only the exceptions get a line.
                     const notes = [
-                      binding && binding.manifest.type !== 'gateway' ? `${binding.manifest.type.toUpperCase()} launch binding` : undefined,
+                      binding?.pinnedBy
+                        ? `Runs on ${runtimeOfBinding(binding)} — set by ${binding.pinnedBy.name}`
+                        : binding && binding.manifest.type !== 'gateway' ? `${binding.manifest.type.toUpperCase()} launch binding` : undefined,
                       profile.legacy ? 'legacy brief.md' : undefined,
                       profile.error,
                       binding?.errors.length ? binding.errors.map(item => item.message).join('; ') : undefined
@@ -805,11 +892,17 @@ function AgentRuntimeSection({
                         title={profile.profile.name}
                         badges={[
                           ...(profile.builtIn ? ['Built-in'] : []),
-                          ...(profile.scope === 'project' ? ['Project'] : []),
+                          ...(profile.source ? [nativeSourceLabel(profile.source)] : profile.scope === 'project' ? ['Project'] : []),
+                          ...(profile.profile.toolMode === 'read-only' ? ['Read-only'] : []),
                           ...(!profile.trusted ? ['Needs approval'] : [])
                         ]}
                         description={profile.profile.description}
-                        meta={notes.join(' · ') || undefined}
+                        meta={[
+                          ...notes,
+                          ...(profile.source ? [nativeReaders(profile.source.readBy) ?? 'Runs on any runtime through Praxis'] : []),
+                          ...(profile.alsoIn?.length ? [`Also in ${profile.alsoIn.join(', ')}`] : [])
+                        ].join(' · ') || undefined}
+                        action={profile.source ? nativeActions('agent', profile.profile.id, profile.source.path, profile.trusted) : undefined}
                       />
                     );
                   })}
@@ -819,7 +912,7 @@ function AgentRuntimeSection({
             <RuntimeMarketplace
               addons={agentAddons}
               kind="agent"
-              replaces={id => profiles.find(profile => profile.builtIn && profile.profile.id === id)?.profile.name ?? builtInAgentNames.get(id)}
+              replaces={pinnedBuiltIn}
             />
           </>
         )}
@@ -827,8 +920,9 @@ function AgentRuntimeSection({
         {snapshot && tab === 'skills' && (
           <>
             {[
-              { heading: 'Built-in', items: skills.filter(skill => skill.builtIn && !skillAddonIds.has(skill.metadata.name)) },
-              { heading: 'Your own', items: skills.filter(skill => !skill.builtIn && !skillAddonIds.has(skill.metadata.name)) }
+              { heading: 'Built-in', items: skills.filter(skill => skill.builtIn && !skill.source && !skillAddonIds.has(skill.metadata.name)) },
+              { heading: 'Your own', items: skills.filter(skill => !skill.builtIn && !skill.source && !skillAddonIds.has(skill.metadata.name)) },
+              { heading: 'From other AI tools', items: skills.filter(skill => skill.source) }
             ]
               .filter(group => group.items.length > 0)
               .map(group => (
@@ -842,11 +936,16 @@ function AgentRuntimeSection({
                       title={skillTitle(skill.metadata)}
                       badges={[
                         ...(skill.builtIn ? ['Built-in'] : []),
-                        ...(skill.scope === 'project' ? ['Project'] : []),
+                        ...(skill.source ? [nativeSourceLabel(skill.source)] : skill.scope === 'project' ? ['Project'] : []),
                         ...(!skill.trusted ? ['Needs approval'] : [])
                       ]}
                       description={skill.error ? `Invalid: ${skill.error}` : skill.metadata.description}
-                      meta={skill.metadata.version ? `v${skill.metadata.version}` : undefined}
+                      meta={[
+                        ...(skill.metadata.version ? [`v${skill.metadata.version}`] : []),
+                        ...(skill.source ? [nativeReaders(skill.source.readBy) ?? 'Used on any runtime through Praxis'] : []),
+                        ...(skill.alsoIn?.length ? [`Also in ${skill.alsoIn.join(', ')}`] : [])
+                      ].join(' · ') || undefined}
+                      action={skill.source ? nativeActions('skill', skill.metadata.name, skill.source.path, skill.trusted) : undefined}
                     />
                   ))}
                 </div>
@@ -857,6 +956,64 @@ function AgentRuntimeSection({
               </p>
             )}
             <RuntimeMarketplace addons={skillAddons} kind="skill" replaces={() => undefined} />
+          </>
+        )}
+
+        {snapshot && tab === 'instructions' && (
+          <>
+            <p className="settings-field-help">
+              Always-on instructions other AI tools keep for this project and for you. A runtime that reads a file itself gets it from that tool; Praxis
+              adds the project’s files to sessions on every other runtime, so each session follows the same conventions whichever AI runs it.
+            </p>
+            <Toggle
+              label="Add project instruction files to sessions on other runtimes"
+              description="Off: each runtime only sees the files it reads itself."
+              checked={settings.ai.nativeSources.injectInstructions}
+              testId="native-inject-toggle"
+              onChange={next => void update({ ai: { nativeSources: { injectInstructions: next } } })}
+            />
+            {(['project', 'user'] as const).map(scope => {
+              // AGENTS.md first — the file most tools share — then the rest by path.
+              const files = (snapshot.instructions ?? [])
+                .filter(file => file.scope === scope)
+                .sort((a, b) => Number(b.displayPath.endsWith('AGENTS.md')) - Number(a.displayPath.endsWith('AGENTS.md')) || a.displayPath.localeCompare(b.displayPath));
+              if (files.length === 0) return null;
+              return (
+                <div key={scope}>
+                  <h4 className="settings-subsection-title">{scope === 'project' ? 'This project' : 'Your user folder'}</h4>
+                  {files.map(file => {
+                    const readers = nativeReaders(file.readBy);
+                    const approved = snapshot.nativeProject?.approved === true;
+                    const use = scope === 'user'
+                      ? 'Personal files stay with their own tool; Praxis does not add them to other runtimes.'
+                      : !file.alwaysApplies
+                        ? `Only applies to ${file.appliesTo ?? 'some files'}, so it is not added to sessions.`
+                        : !settings.ai.nativeSources.injectInstructions
+                          ? 'Not added to other runtimes (turned off above).'
+                          : file.tooLargeForSessions
+                            ? 'Too large for Praxis to add to sessions on other runtimes — only the runtimes that read it get it.'
+                          : approved
+                            ? 'Added to sessions on the other runtimes.'
+                            : 'Added to sessions on the other runtimes once you allow this project.';
+                    return (
+                      <RuntimeItem
+                        key={file.path}
+                        testId={`native-instruction-${file.displayPath}`}
+                        icon="file"
+                        title={file.displayPath}
+                        badges={[NATIVE_TOOL_LABELS[file.ecosystem] ?? file.ecosystem, ...(file.alwaysApplies ? [] : ['Path-specific'])]}
+                        description={[readers ? `${readers}.` : undefined, use].filter(Boolean).join(' ')}
+                        meta={file.bytes < 1024 ? `${file.bytes} bytes` : `${(file.bytes / 1024).toFixed(1)} KB`}
+                        action={nativeActions('instruction', file.path, file.path, true)}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {(snapshot.instructions ?? []).length === 0 && (
+              <div className="placeholder-text">No instruction files from other AI tools (AGENTS.md, CLAUDE.md, GEMINI.md, …) were found.</div>
+            )}
           </>
         )}
 
@@ -884,6 +1041,58 @@ function AgentRuntimeSection({
 
         {snapshot && tab === 'advanced' && (
           <>
+            <h4 className="settings-subsection-title">Other AI tools</h4>
+            <p className="settings-field-help">
+              Praxis reads agents, skills and instructions these tools keep in the project (the folder with <code>.git</code>) and in your user folder,
+              in place — nothing is copied.
+            </p>
+            {Object.entries(NATIVE_TOOL_LABELS).map(([ecosystem, label]) => (
+              <Toggle
+                key={ecosystem}
+                label={`Read ${label} files`}
+                checked={settings.ai.nativeSources.ecosystems[ecosystem as keyof typeof settings.ai.nativeSources.ecosystems] !== false}
+                testId={`native-ecosystem-${ecosystem}`}
+                onChange={next =>
+                  void update({ ai: { nativeSources: { ecosystems: { [ecosystem]: next } } } }).then(() => refresh())
+                }
+              />
+            ))}
+            <FieldRow label="Extra skill folders" description="One folder per line; each holds skill folders with a SKILL.md." stacked>
+              <DebouncedTextArea
+                ariaLabel="Extra skill folders"
+                value={settings.ai.nativeSources.extraSkillPaths.join('\n')}
+                placeholder="/path/to/skills"
+                onCommit={value =>
+                  void update({ ai: { nativeSources: { extraSkillPaths: value.split('\n').map(line => line.trim()).filter(Boolean) } } }).then(() => refresh())
+                }
+              />
+            </FieldRow>
+            <FieldRow label="Extra agent folders" description="One folder per line; each holds agent .md files (Claude, Gemini or Copilot format)." stacked>
+              <DebouncedTextArea
+                ariaLabel="Extra agent folders"
+                value={settings.ai.nativeSources.extraAgentPaths.join('\n')}
+                placeholder="/path/to/agents"
+                onCommit={value =>
+                  void update({ ai: { nativeSources: { extraAgentPaths: value.split('\n').map(line => line.trim()).filter(Boolean) } } }).then(() => refresh())
+                }
+              />
+            </FieldRow>
+            {settings.ai.nativeSources.approvedProjects.map(root => (
+              <div className="settings-field-row" key={root} data-testid="native-approved-project">
+                <div className="settings-field-label">
+                  <strong>Allowed project</strong>
+                  <div className="settings-field-help">
+                    <code>{root}</code>
+                  </div>
+                </div>
+                <div className="settings-field-control">
+                  <button className="btn btn-quiet" type="button" onClick={() => void runNative(`revoke:${root}`, () => window.praxis.agentRuntime.approveNativeProject(root, false))}>
+                    Stop using its files
+                  </button>
+                </div>
+              </div>
+            ))}
+
             <div className="settings-field-row">
               <div className="settings-field-label">
                 <strong>Custom launch bindings</strong>

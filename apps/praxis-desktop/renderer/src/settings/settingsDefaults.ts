@@ -86,7 +86,14 @@ export const DEFAULT_APP_SETTINGS = {
     defaultModel: '',
     agentName: '',
     spendLimit: 0,
-    browserTools: { enabled: false, allowedHosts: [] as string[] }
+    browserTools: { enabled: false, allowedHosts: [] as string[] },
+    nativeSources: {
+      ecosystems: {} as Record<string, boolean>,
+      approvedProjects: [] as string[],
+      injectInstructions: true,
+      extraSkillPaths: [] as string[],
+      extraAgentPaths: [] as string[]
+    }
   },
   jira: {
     siteUrl: '',
