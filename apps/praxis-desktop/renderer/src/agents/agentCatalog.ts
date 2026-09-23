@@ -121,3 +121,16 @@ export function transportLabel(type: DiscoveredAgent['manifest']['type']): strin
   };
   return labels[type] ?? type;
 }
+
+/**
+ * A skill's display name: its `title`, else its identifier in title case
+ * (`praxis-test-contracts` → `Praxis Test Contracts`).
+ */
+export function skillTitle(metadata: { name: string; title?: string }): string {
+  if (metadata.title?.trim()) return metadata.title.trim();
+  return metadata.name
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map(word => word[0]!.toUpperCase() + word.slice(1))
+    .join(' ');
+}

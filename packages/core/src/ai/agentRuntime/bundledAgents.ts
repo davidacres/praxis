@@ -230,6 +230,8 @@ export const AVAILABLE_AGENT_DEFINITIONS: Record<string, BundledAgentDefinition>
 
 export interface AvailableSkillDefinition {
   name: string;
+  /** Display name in proper case. */
+  title: string;
   description: string;
   triggers: string[];
   version?: string;
@@ -243,11 +245,13 @@ export interface AvailableSkillDefinition {
 export const AVAILABLE_SKILL_DEFINITIONS: Record<string, AvailableSkillDefinition> = {
   'praxis-test-contracts': {
     name: 'praxis-test-contracts',
+    title: 'Test Contract Authoring',
     description: 'Author, validate, and review structured English Praxis Test contracts linked to automated tests.',
     triggers: ['praxis test', 'test contract', 'qa catalog', 'e2e coverage', 'test coverage'],
     version: '1.0.0',
     instructions: `---
 name: praxis-test-contracts
+title: Test Contract Authoring
 description: "Author, validate, and review structured English Praxis Test contracts linked to automated tests."
 triggers: praxis test, test contract, qa catalog, e2e coverage, test coverage
 version: 1.0.0
@@ -272,11 +276,13 @@ The catalog is an index of the complete automated suite. Curated contracts may a
   },
   'dotnet-solid-dry': {
     name: 'dotnet-solid-dry',
+    title: '.NET SOLID & DRY Review',
     description: 'C# and .NET code review principles focusing on SOLID design and DRY architecture.',
     triggers: ['csharp', 'dotnet', 'solid', 'dry', 'c#'],
     version: '1.0.0',
     instructions: `---
 name: dotnet-solid-dry
+title: .NET SOLID & DRY Review
 description: "C# and .NET code review principles focusing on SOLID design and DRY architecture."
 triggers: csharp, dotnet, solid, dry, c#
 version: 1.0.0
@@ -298,6 +304,16 @@ When reviewing .NET and C# code, evaluate:
 /**
  * Installs an available agent definition into the given target directory (e.g. userData/agents).
  */
+/** True for agents shipped with Praxis. */
+export function isBundledAgent(id: string): boolean {
+  return id in AVAILABLE_AGENT_DEFINITIONS;
+}
+
+/** The built-in skill definition for `name`, if Praxis ships one. */
+export function bundledSkill(name: string): AvailableSkillDefinition | undefined {
+  return AVAILABLE_SKILL_DEFINITIONS[name];
+}
+
 /** The description a built-in agent shows when its AGENT.md predates descriptions. */
 export function bundledAgentDescription(id: string): string | undefined {
   return AVAILABLE_AGENT_DEFINITIONS[id]?.description;

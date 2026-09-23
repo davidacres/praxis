@@ -14,6 +14,8 @@ export interface DiscoveredAgentProfile {
   trusted: boolean;
   legacy: boolean;
   error?: string;
+  /** Shipped with Praxis (set by the runtime manager). */
+  builtIn?: boolean;
 }
 
 async function directories(root: string): Promise<string[]> {

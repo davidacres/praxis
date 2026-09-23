@@ -66,7 +66,7 @@ import { DeploymentsPage } from '../deployments/DeploymentsPage';
 import { AgentDetailPage } from '../agents/AgentDetailPage';
 import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
 import { CreateAgentDialog, CreateAgentProfileDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
-import { isHostShimProfile } from '../agents/agentCatalog';
+import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
 import type { ActivationMap, CatalogSelection, LifecycleAction } from '../agents/agentSelection';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 import { useDialogs } from '../ui/dialogs';
@@ -1330,7 +1330,7 @@ export function App() {
         entries.push({ id: `host:${host.manifest.id}`, label: host.manifest.name, hint: 'Launch binding (advanced)', group: 'Agent Hub', icon: 'zap', run: () => navigate({ feature: 'agents', agentId: host.manifest.id }) });
       });
     (agentSnapshot?.skills ?? []).forEach(skill => {
-      entries.push({ id: `skill:${skill.metadata.name}`, label: skill.metadata.name, hint: 'Skill', group: 'Agent Hub', icon: 'sparkles', run: () => navigate({ feature: 'agents', skillName: skill.metadata.name }) });
+      entries.push({ id: `skill:${skill.metadata.name}`, label: skillTitle(skill.metadata), hint: 'Skill', group: 'Agent Hub', icon: 'sparkles', run: () => navigate({ feature: 'agents', skillName: skill.metadata.name }) });
     });
     const settingsPages: Array<[SettingsCategory, string]> = [
       ['overview', 'Settings'], ['startup', 'Startup'], ['appearance', 'Board settings'],

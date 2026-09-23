@@ -1,7 +1,8 @@
 ---
 name: mobile-device-testing
+title: Mobile Device Testing
 description: Run automated UI tests of the Praxis mobile app on an iOS simulator or a physical iPhone — device setup checks, Release build and install, XCUITest-driven taps and typing, and screenshot/accessibility-tree evidence. Use when asked to test, verify, reproduce or demonstrate anything in the Praxis mobile app on a simulator or phone.
-version: 1.0.1
+version: 1.0.2
 triggers: test on phone, test on iphone, test on device, test on simulator, ios simulator, physical device, real phone, device testing, ui automation, xcuitest, mobile e2e, drive the app, control the phone
 ---
 

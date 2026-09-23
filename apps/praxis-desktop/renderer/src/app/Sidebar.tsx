@@ -12,7 +12,7 @@ import type {
   WorkspaceRecord
 } from '@praxis/core';
 import { agentStateLabel, agentStateLaneClass, isTerminalAgentState } from '../ai/aiSessionState';
-import { isHostShimProfile } from '../agents/agentCatalog';
+import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
 import { isSynthesizedKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
 import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
@@ -1417,7 +1417,7 @@ function AgentsNav({
                     onClick={() => onSelectSkill(skill.metadata.name)}
                   >
                     <span className="tree-icon"><Icon name="sparkles" size={14} /></span>
-                    <span className="tree-label">{skill.metadata.name}</span>
+                    <span className="tree-label">{skillTitle(skill.metadata)}</span>
                     <span className="agent-nav-badges">
                       {skill.scope === 'project' && <span className="agent-nav-project" title="Defined by this project" aria-label="Project" data-testid="agent-nav-project-tag"><Icon name="folder" size={12} /></span>}
                       {skill.error ? (

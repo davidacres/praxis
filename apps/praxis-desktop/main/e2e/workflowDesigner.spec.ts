@@ -230,7 +230,7 @@ test('builds an agent handoff stage from the palette and attaches a specialist s
   // Dropping a skill on that stage binds the specialist guidance and pins its version.
   await audit.dragTo(reviewerStage);
   await expect(reviewerStage).toContainText('code-audit');
-  await expect(inspectorOf(page).getByLabel('code-audit')).toBeChecked();
+  await expect(inspectorOf(page).getByLabel('Code Audit')).toBeChecked();
   await expect(page.getByRole('main')).toHaveScreenshot('workflow-designer-composition.png');
 });
 

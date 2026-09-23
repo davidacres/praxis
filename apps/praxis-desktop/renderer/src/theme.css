@@ -5441,6 +5441,10 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .settings-field-row--stacked { flex-direction: column; gap: var(--space-2); }
 .settings-field-row--stacked > .settings-field-control { width: 100%; margin-left: 0; align-items: stretch; }
 
+/* Agent Runtime lists: identity icon on the surface (no tile), then title + badges. */
+.runtime-item-icon { flex: 0 0 auto; margin-top: 2px; color: var(--text-secondary); }
+.runtime-item-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
 .settings-field-help {
   margin-top: 2px;
   font-size: var(--text-xs);

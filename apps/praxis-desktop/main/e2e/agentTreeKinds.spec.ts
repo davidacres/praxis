@@ -64,7 +64,7 @@ test('Agent Hub holds Agents and Skills sub-headers, tags project items and has 
 
   // A project's own skill sorts first and is tagged; the user's own are untagged.
   const skillRows = page.getByTestId('skill-nav-item');
-  await expect(skillRows.first()).toContainText('project-only');
+  await expect(skillRows.first()).toContainText('Project Only');
   await expect(skillRows.first().getByTestId('agent-nav-project-tag')).toBeVisible();
   await expect(skillRows.nth(1).getByTestId('agent-nav-project-tag')).toHaveCount(0);
   // The tag must not crowd the name out: the whole name stays readable even with an "approval" badge beside it.
