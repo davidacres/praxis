@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
+import { useResizable } from '../app/useResizable';
 import { useDialogs } from '../ui/dialogs';
 import { QrCodeSvg } from '../ui/qrCodeSvg';
 import type {
@@ -278,6 +279,14 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
   const [resetConfirmation, setResetConfirmation] = useState<'defaults' | 'sessions' | 'project-data' | 'appearance'>();
   const { settings, update, error } = useSettings();
 
+  const nav = useResizable({
+    storageKey: 'praxis:settings:nav-width:v1',
+    initial: 220,
+    min: 160,
+    max: 420,
+    side: 'left'
+  });
+
   const resetToDefaults = async () => {
     await update({ ...DEFAULT_APP_SETTINGS });
     setResetConfirmation('sessions');
@@ -345,7 +354,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
 
   return (
     <div className="settings-page">
-      <nav className="settings-nav" aria-label="Settings categories">
+      <nav className="settings-nav" aria-label="Settings categories" style={{ width: nav.size }}>
         {NAV.map(entry =>
           entry.type === 'item' ? (
             <NavItem
@@ -359,6 +368,12 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
           )
         )}
       </nav>
+      <div
+        className={`splitter${nav.dragging ? ' dragging' : ''}`}
+        aria-label="Resize settings navigation"
+        data-testid="settings-nav-splitter"
+        {...nav.handleProps}
+      />
       <div className="settings-content">
         {error && <div className="error-banner">{error}</div>}
         {active === 'overview' && (

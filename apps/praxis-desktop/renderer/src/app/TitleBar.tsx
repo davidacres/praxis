@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceRecord } from '@praxis/core';
 import type { SidebarMode } from './Sidebar';
-import { Icon } from '../ui/Icon';
+import { Icon, type IconName } from '../ui/Icon';
 import { PraxisWordmark } from './StartupSplash';
 import {
   BoardFilterBar,
@@ -18,7 +18,7 @@ export interface TitleBarBoardFilter extends BoardFilterPresentation {
 export interface TitleBarProps {
   appVersion?: string;
   contextLabel: string;
-  contextDetail: string;
+  contextIcon?: IconName;
   workspaces?: WorkspaceRecord[];
   activeWorkspaceId?: string;
   onSelectWorkspace?: (workspaceId: string) => void;
@@ -64,7 +64,7 @@ export interface TitleBarProps {
 export function TitleBar({
   appVersion,
   contextLabel,
-  contextDetail,
+  contextIcon,
   workspaces,
   activeWorkspaceId,
   onSelectWorkspace,
@@ -393,10 +393,8 @@ export function TitleBar({
               aria-expanded={filterOpen}
               onClick={() => setFilterOpen(open => !open)}
             >
-              <Icon name="ticket" size={13} />
+              <Icon name={contextIcon ?? 'ticket'} size={13} />
               <span className="titlebar-context-label">{contextLabel}</span>
-              <span className="titlebar-context-sep">·</span>
-              <span className="titlebar-context-detail">{contextDetail}</span>
               {activeFilterCount > 0 && (
                 <span className="titlebar-filter-badge" data-testid="titlebar-filter-count">
                   {activeFilterCount}
@@ -431,12 +429,10 @@ export function TitleBar({
           <div
             className="titlebar-context"
             data-testid="titlebar-context"
-            title={`${contextLabel} · ${contextDetail}`}
+            title={contextLabel}
           >
-            <Icon name="ticket" size={13} />
+            <Icon name={contextIcon ?? 'ticket'} size={13} />
             <span className="titlebar-context-label">{contextLabel}</span>
-            <span className="titlebar-context-sep">·</span>
-            <span className="titlebar-context-detail">{contextDetail}</span>
           </div>
         )}
 
