@@ -31,7 +31,7 @@ import { BottomPanel } from './BottomPanel';
 import { SessionInspector } from '../ai/SessionInspector';
 import { SessionsPage } from '../ai/SessionsPage';
 import { SessionFocusTabs } from '../ai/SessionFocusTabs';
-import { Icon } from '../ui/Icon';
+import { Icon, type IconName } from '../ui/Icon';
 import { backendModeMeta } from '../board/boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from '../board/boardTransitionMatch';
@@ -159,6 +159,17 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   git: 'Git Graph',
   run: 'Run',
   deployments: 'Deployments'
+};
+
+const FEATURE_ICONS: Record<FeatureId, IconName> = {
+  overview: 'home',
+  sessions: 'robot',
+  connections: 'plug',
+  agents: 'zap',
+  workflows: 'git-branch',
+  git: 'git-branch',
+  run: 'play',
+  deployments: 'radio-tower'
 };
 
 /** Legacy single-slot key. Still read once per workspace as a fallback so an
@@ -569,7 +580,7 @@ export function App() {
     storageKey: 'tm-pane-sidebar',
     initial: 260,
     min: 180,
-    max: 460,
+    max: 800,
     side: 'left'
   });
   const aux = useResizable({
@@ -1419,6 +1430,7 @@ export function App() {
       || whatsNewOpen
       || projectWizardMode
   );
+  const routedProject = route.projectId ? projects.find(p => p.id === route.projectId) : undefined;
   const contextLabel = onboardingProjectWizard
     ? projectWizardMode === 'existing' ? 'Create from folder' : 'Create project'
     : gettingStarted
@@ -1427,17 +1439,32 @@ export function App() {
     ? route.newIssueType === 'Idea'
       ? 'New idea'
       : 'New issue'
-    : selectedProject ? selectedProject.name
     : route.feature
-      ? FEATURE_TITLES[route.feature]
-      : selectedBoard?.name ?? 'New session';
-  const contextDetail = onboardingProjectWizard
-    ? activeWorkspace?.name ?? 'Praxis'
+    ? FEATURE_TITLES[route.feature]
+    : route.boardId && selectedBoard
+    ? selectedBoard.name
+    : routedProject
+    ? routedProject.name
+    : selectedBoard?.name ?? selectedProject?.name ?? 'New session';
+  const contextIcon: IconName = onboardingProjectWizard
+    ? 'folder-open'
     : gettingStarted
-    ? 'Praxis'
+    ? 'home'
+    : route.newIssue
+    ? route.newIssueType === 'Idea'
+      ? 'lightbulb'
+      : 'plus'
     : route.feature
-    ? 'Praxis'
-    : connection?.name ?? backendModeMeta(selectedBoard?.connectionId ? undefined : 'demo').label;
+    ? FEATURE_ICONS[route.feature]
+    : route.boardId && selectedBoard
+    ? 'columns'
+    : routedProject
+    ? ((routedProject.icon as IconName) ?? 'folder-open')
+    : selectedBoard
+    ? 'columns'
+    : selectedProject
+    ? ((selectedProject.icon as IconName) ?? 'folder-open')
+    : 'robot';
   const selectedBoardFilters =
     boardFilterState && boardFilterState.boardId === selectedBoard?.id
       ? boardFilterState.value
@@ -1979,7 +2006,7 @@ export function App() {
       <TitleBar
         appVersion={appVersion}
         contextLabel={contextLabel}
-        contextDetail={contextDetail}
+        contextIcon={contextIcon}
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
         onSelectWorkspace={openWorkspace}
