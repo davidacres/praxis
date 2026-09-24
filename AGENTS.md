@@ -1009,6 +1009,12 @@ agent sessions that write plan files.
 Re-check after editing plans by running `parsePlanFolder` over the repo — if
 the feature/story/task counts move unexpectedly, something stopped parsing.
 
+## Repo skills are edited in `.agents/skills` only
+
+`.github/skills` (Copilot) and `.claude/skills` (Claude Code) are generated copies.
+Edit `.agents/skills`, then run `npm run skills:sync`; CI runs `npm run test:skills`
+and fails on drift. Copies, not symlinks, so Windows checkouts work.
+
 ## Build and test
 
 Root scripts are prefixed by the surface they act on. `build` and `test` with no
