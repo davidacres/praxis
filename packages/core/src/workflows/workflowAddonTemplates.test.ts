@@ -8,6 +8,8 @@ import { advanceJoins, deriveRunStatus, scheduleWorkflowRun } from './workflowSc
 import { approveStage, skipApproval } from './workflowGates';
 import { nodeOutputs, type WorkflowDefinition } from './workflowTypes';
 import { AVAILABLE_SKILL_DEFINITIONS } from '../ai/agentRuntime/bundledAgents';
+import { builtInWorkflowTemplates, fullSdlcMarketplaceTemplates } from './workflowTemplates';
+import { sdlcLoopMarketplaceTemplates } from './sdlcLoopTemplates';
 
 // Compiled to packages/core/out/workflows; the add-ons live at the repo root.
 const ADDON_WORKFLOWS = path.resolve(__dirname, '../../../../addons/workflows');
@@ -36,6 +38,18 @@ test('every skill an add-on template names ships with the app, so instantiating 
         const skill = AVAILABLE_SKILL_DEFINITIONS[name];
         assert.ok(skill, `${id}/${node.id}: skill "${name}" is not in AVAILABLE_SKILL_DEFINITIONS`);
         assert.match(skill.instructions, new RegExp(`^---\\nname: ${name}\\n`), `${name}: SKILL.md frontmatter name`);
+      }
+    }
+  }
+});
+
+test('every skill a code-defined template names ships with the app', () => {
+  const templates = [...builtInWorkflowTemplates(), ...fullSdlcMarketplaceTemplates(), ...sdlcLoopMarketplaceTemplates()];
+  for (const definition of templates) {
+    for (const node of definition.nodes) {
+      if (node.type !== 'agent-task') continue;
+      for (const name of node.agent.skillNames ?? []) {
+        assert.ok(AVAILABLE_SKILL_DEFINITIONS[name], `${definition.id}/${node.id}: skill "${name}" is not in AVAILABLE_SKILL_DEFINITIONS`);
       }
     }
   }

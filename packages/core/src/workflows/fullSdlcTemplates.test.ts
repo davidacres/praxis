@@ -13,6 +13,19 @@ import { validateWorkflow } from './workflowValidation';
 import { getBundledAgentManifests } from '../ai/agentRuntime/bundledAgents';
 import { discoverAgentProfiles } from '../ai/agentRuntime/profileRegistry';
 
+
+/** A skill as the live catalog reports it once installed. */
+function installedSkill(name: string) {
+  return {
+    metadata: { name, description: name, triggers: [] },
+    skillPath: `/skills/${name}`,
+    instructionsPath: `/skills/${name}/SKILL.md`,
+    fingerprint: name,
+    scope: 'global' as const,
+    trusted: true
+  };
+}
+
 test('TASK-248: fullSdlcTemplate passes workflow validation', () => {
   const template = fullSdlcTemplate('node');
   const result = validateWorkflow(template);
@@ -59,7 +72,7 @@ test('TASK-248: assessTemplateReadiness against bundled agents reports structure
   const readiness = assessTemplateReadiness(template, {
     agents: bundled,
     profiles,
-    skills: [],
+    skills: ['verification-report', 'visual-verification'].map(installedSkill),
     capabilities: {}
   });
 
@@ -182,7 +195,7 @@ test('full-sdlc-dotnet identifies agent dependencies and reports autoInstallable
   const bundled = getBundledAgentManifests();
   const catalog = {
     agents: bundled, // contains planner, implementer, reviewer, etc. but not csharp reviewer
-    skills: [],
+    skills: ['verification-report', 'visual-verification'].map(installedSkill),
     capabilities: {}
   };
 
