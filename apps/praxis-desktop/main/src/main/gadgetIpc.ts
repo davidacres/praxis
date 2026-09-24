@@ -8,6 +8,7 @@ import {
   resolveApprovalTarget,
   WorkflowRunStore,
   type GadgetAction,
+  type GadgetActionResult,
   type GadgetExecutionContext,
   type GadgetSubmitRequest,
   type RawChatBlockInput,
@@ -18,10 +19,19 @@ import { getWorkflowBackingStore, getWorkflowPolicyStore } from './workflowStore
 import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
 import { applyTicketReview } from './ticketReviewApply';
 
+const gadgetListeners = new Set<(sessionId: string) => void>();
+
+/** Called whenever a session's gadgets change, from any surface — the phone re-projects the session on it. */
+export function onDidChangeGadgets(listener: (sessionId: string) => void): () => void {
+  gadgetListeners.add(listener);
+  return () => gadgetListeners.delete(listener);
+}
+
 function broadcast(sessionId: string): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send('gadgets:changed', sessionId);
   }
+  for (const listener of gadgetListeners) listener(sessionId);
 }
 
 function runStore(): WorkflowRunStore {
@@ -39,12 +49,12 @@ function policyFor(projectId: string): WorkflowPolicyProfile | undefined {
  * is — a stale gadget answered after the run moved on is refused here exactly
  * as `workflows:approveRun` would refuse it, not applied blind.
  */
-async function approveWorkflowFromGadget(runId: string, nodeId: string): Promise<{ outcome: unknown; message: string }> {
+async function approveWorkflowFromGadget(runId: string, nodeId: string, actor: string): Promise<{ outcome: unknown; message: string }> {
   const run = runStore().get(runId);
   if (!run) throw new Error('That workflow run is no longer open on this host.');
 
   const approval = resolveApprovalTarget(run, nodeId);
-  const result = approveStage(run, approval.id, { actor: 'desktop-user', at: new Date().toISOString() }, policyFor(run.projectId));
+  const result = approveStage(run, approval.id, { actor, at: new Date().toISOString() }, policyFor(run.projectId));
   if (!result.ok) throw new Error(result.reason ?? 'Approval was refused.');
 
   await getWorkflowOrchestrator().updateRun(runId, () => result.run);
@@ -75,7 +85,7 @@ async function approveWorkflowFromGadget(runId: string, nodeId: string): Promise
  * Everything else still only turns the recorded answer into the user-facing
  * confirmation, and lets the ledger be the durable evidence.
  */
-async function executeGadgetAction({ envelope, action, record }: GadgetExecutionContext) {
+async function executeGadgetAction({ envelope, action, record }: GadgetExecutionContext, actor: string) {
   const descriptor = envelope.actions.find(candidate => candidate.actionId === action.actionId);
   const label = descriptor?.label ?? action.actionId;
 
@@ -83,7 +93,7 @@ async function executeGadgetAction({ envelope, action, record }: GadgetExecution
     const { nodeId } = envelope.payload;
     const runId = envelope.scope.workId;
     if (action.value.confirmed && runId && nodeId) {
-      return approveWorkflowFromGadget(runId, nodeId);
+      return approveWorkflowFromGadget(runId, nodeId, actor);
     }
   }
 
@@ -116,6 +126,75 @@ async function executeGadgetAction({ envelope, action, record }: GadgetExecution
   }
 }
 
+/**
+ * Records and carries out an answer to a gadget — the one path for the desktop
+ * and the phone alike. `actor` is who answered; it is what an approval records.
+ */
+export async function submitGadgetAction(request: GadgetSubmitRequest, actor: string): Promise<GadgetActionResult> {
+  const gadgets = getGadgetService();
+  const now = new Date().toISOString();
+
+  // The value crosses a process boundary from a renderer, so it is narrowed
+  // before anything downstream is allowed to assume its shape.
+  if (!isGadgetActionValue(request?.value)) {
+    return {
+      version: 1,
+      gadgetId: request?.gadgetId ?? '',
+      actionId: request?.actionId ?? '',
+      correlationId: request?.correlationId ?? randomUUID(),
+      idempotencyKey: request?.idempotencyKey ?? randomUUID(),
+      status: 'rejected' as const,
+      at: now,
+      error: { code: 'value-invalid' as const, message: 'That answer was not in a form the host understands.', retryable: false }
+    };
+  }
+
+  const scope = resolveSessionScope(request.sessionId);
+  const envelope = gadgets.findGadget(request.sessionId, request.gadgetId);
+  if (!scope || !envelope) {
+    return {
+      version: 1,
+      gadgetId: request.gadgetId,
+      actionId: request.actionId,
+      correlationId: request.correlationId ?? randomUUID(),
+      idempotencyKey: request.idempotencyKey ?? randomUUID(),
+      status: 'rejected' as const,
+      at: now,
+      error: {
+        code: (scope ? 'gadget-not-found' : 'scope-mismatch') as 'gadget-not-found' | 'scope-mismatch',
+        message: scope ? 'This gadget is no longer available.' : 'That session is no longer open on this host.',
+        retryable: false
+      }
+    };
+  }
+
+  // The scope on the action is the envelope's own, not anything the renderer
+  // supplied — a client cannot retarget an approval by rewriting its request.
+  const action: GadgetAction = {
+    version: envelope.version,
+    gadgetId: request.gadgetId,
+    actionId: request.actionId,
+    scope: envelope.scope,
+    idempotencyKey: request.idempotencyKey || randomUUID(),
+    correlationId: request.correlationId || randomUUID(),
+    submittedAt: now,
+    value: request.value
+  };
+
+  const result = await gadgets.submit(
+    action,
+    {
+      hostId: scope.hostId,
+      sessionId: scope.sessionId,
+      projectId: scope.projectId,
+      workId: scope.workId
+    },
+    context => executeGadgetAction(context, actor)
+  );
+  broadcast(request.sessionId);
+  return result;
+}
+
 export function registerGadgetIpc(): void {
   ipcMain.handle('gadgets:getBlocks', async (_event, sessionId: string) =>
     getGadgetService().getBlocks(sessionId)
@@ -141,70 +220,7 @@ export function registerGadgetIpc(): void {
     return published;
   });
 
-  ipcMain.handle('gadgets:submit', async (_event, request: GadgetSubmitRequest) => {
-    const gadgets = getGadgetService();
-    const now = new Date().toISOString();
-
-    // The value crosses a process boundary from a renderer, so it is narrowed
-    // before anything downstream is allowed to assume its shape.
-    if (!isGadgetActionValue(request?.value)) {
-      return {
-        version: 1,
-        gadgetId: request?.gadgetId ?? '',
-        actionId: request?.actionId ?? '',
-        correlationId: request?.correlationId ?? randomUUID(),
-        idempotencyKey: request?.idempotencyKey ?? randomUUID(),
-        status: 'rejected' as const,
-        at: now,
-        error: { code: 'value-invalid' as const, message: 'That answer was not in a form the host understands.', retryable: false }
-      };
-    }
-
-    const scope = resolveSessionScope(request.sessionId);
-    const envelope = gadgets.findGadget(request.sessionId, request.gadgetId);
-    if (!scope || !envelope) {
-      return {
-        version: 1,
-        gadgetId: request.gadgetId,
-        actionId: request.actionId,
-        correlationId: request.correlationId ?? randomUUID(),
-        idempotencyKey: request.idempotencyKey ?? randomUUID(),
-        status: 'rejected' as const,
-        at: now,
-        error: {
-          code: (scope ? 'gadget-not-found' : 'scope-mismatch') as 'gadget-not-found' | 'scope-mismatch',
-          message: scope ? 'This gadget is no longer available.' : 'That session is no longer open on this host.',
-          retryable: false
-        }
-      };
-    }
-
-    // The scope on the action is the envelope's own, not anything the renderer
-    // supplied — a client cannot retarget an approval by rewriting its request.
-    const action: GadgetAction = {
-      version: envelope.version,
-      gadgetId: request.gadgetId,
-      actionId: request.actionId,
-      scope: envelope.scope,
-      idempotencyKey: request.idempotencyKey || randomUUID(),
-      correlationId: request.correlationId || randomUUID(),
-      submittedAt: now,
-      value: request.value
-    };
-
-    const result = await gadgets.submit(
-      action,
-      {
-        hostId: scope.hostId,
-        sessionId: scope.sessionId,
-        projectId: scope.projectId,
-        workId: scope.workId
-      },
-      executeGadgetAction
-    );
-    broadcast(request.sessionId);
-    return result;
-  });
+  ipcMain.handle('gadgets:submit', async (_event, request: GadgetSubmitRequest) => submitGadgetAction(request, 'desktop-user'));
 
   ipcMain.handle('gadgets:replay', async (_event, afterSequence: number) =>
     getGadgetService().replay(Number.isFinite(afterSequence) ? afterSequence : 0)

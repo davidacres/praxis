@@ -92,12 +92,15 @@ export class GadgetService {
     // A gadget that re-publishes the same `gadgetId` replaces its block in
     // place, so a streaming progress update does not append a new surface on
     // every tick.
+    // A block that re-uses a `blockId` replaces it too — a refused gadget comes back as a
+    // `fallback` block under the same id, and re-parsing its message (which the desktop and the
+    // phone's host projection both do) must not stack a second copy.
     const merged = [...existing];
     for (const block of published) {
       const index =
         block.type === 'gadget'
-          ? merged.findIndex(candidate => candidate.type === 'gadget' && candidate.gadget.gadgetId === block.gadget.gadgetId)
-          : -1;
+          ? merged.findIndex(candidate => (candidate.type === 'gadget' && candidate.gadget.gadgetId === block.gadget.gadgetId) || candidate.blockId === block.blockId)
+          : merged.findIndex(candidate => candidate.blockId === block.blockId);
       if (index === -1) merged.push(block);
       else merged[index] = block;
     }

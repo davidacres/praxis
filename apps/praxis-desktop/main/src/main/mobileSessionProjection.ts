@@ -1,3 +1,4 @@
+import { gadgetMessageKey, isConversationEvent, mayContainGadget, stripGadgetFences } from '@praxis/core';
 import type {
   AgentSessionRecord,
   MobileAppearance,
@@ -5,6 +6,7 @@ import type {
   MobileHostEvent,
   MobileSessionEvent,
   MobileSessionLifecycle,
+  MobileGadgetView,
   MobileSessionMessage,
   MobilePendingPermission,
   MobileSessionSnapshot,
@@ -64,7 +66,20 @@ export function mobileSessionSummary(record: AgentSessionRecord): MobileSessionS
   };
 }
 
-function persistedMessages(record: AgentSessionRecord): MobileSessionMessage[] {
+/**
+ * Resolves the gadgets an assistant message asked for, published under the
+ * same key the desktop uses (`gadgetMessageKey`), so both surfaces show and
+ * answer one gadget. Injected so the projection stays a pure function in tests.
+ */
+export type MobileGadgetResolver = (
+  sessionId: string,
+  messageKey: string,
+  text: string,
+) => { gadgets: readonly MobileGadgetView[]; unrendered: number };
+
+const UNRENDERED_NOTE = '_A gadget in this message could not be shown on the phone. Open the session on the desktop to see it._';
+
+function persistedMessages(record: AgentSessionRecord, resolveGadgets?: MobileGadgetResolver): MobileSessionMessage[] {
   const initialGoal = record.taskDefinition.goal.trim();
   const messages: MobileSessionMessage[] = initialGoal
     ? [{ id: `${record.sessionId}:initial`, role: 'user', text: initialGoal, at: record.startedAt, status: 'complete' }]
@@ -74,7 +89,10 @@ function persistedMessages(record: AgentSessionRecord): MobileSessionMessage[] {
   // carries workspace paths and transcript excerpts, so the phone gets only
   // the event's one-line summary and never the brief itself.
   const handoverBriefs = new Set<string>();
+  // Counted exactly as the desktop's conversation view counts, before any event is skipped here.
+  let conversationIndex = -1;
   record.events.forEach((event, index) => {
+    if (isConversationEvent(event)) conversationIndex += 1;
     if (event.type === 'provider_handover' || event.type === 'model_change') {
       if (event.type === 'provider_handover' && event.detail?.trim()) handoverBriefs.add(event.detail.trim());
       messages.push({ id: `${record.sessionId}:event:${index}`, role: 'system', text: event.summary.trim(), at: event.timestamp, status: 'complete' });
@@ -87,14 +105,24 @@ function persistedMessages(record: AgentSessionRecord): MobileSessionMessage[] {
         : event.type === 'error'
           ? 'system'
           : undefined;
-    const text = (event.detail || event.summary).trim();
-    if (!role || !text) return;
-    if (role === 'user' && handoverBriefs.has(text)) return;
-    if (role === 'user' && messages.some(message => message.role === 'user' && message.text === text)) return;
+    const raw = (event.detail || event.summary).trim();
+    if (!role || !raw) return;
+    if (role === 'user' && handoverBriefs.has(raw)) return;
+    if (role === 'user' && messages.some(message => message.role === 'user' && message.text === raw)) return;
+    const hasGadget = role === 'assistant' && mayContainGadget(raw);
+    const resolved = hasGadget && resolveGadgets
+      ? resolveGadgets(record.sessionId, gadgetMessageKey(conversationIndex), raw)
+      : { gadgets: [], unrendered: 0 };
+    const gadgets = resolved.gadgets;
+    // The fences are drawn as gadgets; left in, the phone would show their JSON.
+    const stripped = hasGadget ? stripGadgetFences(raw) : raw;
+    const text = resolved.unrendered > 0 ? [stripped, UNRENDERED_NOTE].filter(Boolean).join('\n\n') : stripped;
+    if (!text && gadgets.length === 0) return;
     messages.push({
       id: `${record.sessionId}:event:${index}`,
       role,
       text: boundedText(text, MAX_MOBILE_MESSAGE_CHARS),
+      ...(gadgets.length ? { gadgets } : {}),
       at: event.timestamp,
       status: event.type === 'error' ? 'failed' : 'complete',
       ...(event.reasoning ? { reasoning: boundedText(event.reasoning, MAX_MOBILE_REASONING_CHARS) } : {}),
@@ -105,11 +133,27 @@ function persistedMessages(record: AgentSessionRecord): MobileSessionMessage[] {
   return messages.length > MAX_MOBILE_MESSAGES ? messages.slice(-MAX_MOBILE_MESSAGES) : messages;
 }
 
-export function mobileSessionSnapshot(record: AgentSessionRecord, sequence = record.events.length): MobileSessionSnapshot {
+/**
+ * A streaming reply with its gadget fences removed. A fence still being written
+ * is cut off too: its half-JSON is noise, and the gadget arrives with the
+ * finished message.
+ */
+function streamingText(text: string): string {
+  const stripped = stripGadgetFences(text);
+  const open = stripped.search(/```[ \t]*praxis-gadget/);
+  return (open === -1 ? stripped : stripped.slice(0, open)).trim();
+}
+
+export function mobileSessionSnapshot(
+  record: AgentSessionRecord,
+  sequence = record.events.length,
+  resolveGadgets?: MobileGadgetResolver,
+): MobileSessionSnapshot {
   const summary = mobileSessionSummary(record);
-  const messages = persistedMessages(record);
+  const messages = persistedMessages(record, resolveGadgets);
   const active = summary.lifecycle === 'active' || summary.lifecycle === 'awaiting-input';
-  const responseText = record.responseText?.trim();
+  const rawResponse = record.responseText?.trim();
+  const responseText = rawResponse ? streamingText(rawResponse) : undefined;
   const last = messages[messages.length - 1];
   const pendingPermissions: MobilePendingPermission[] = [];
   record.events.forEach((event, index) => {
@@ -161,6 +205,7 @@ export function appendMobileSessionEvent(
   ledger: Pick<MobileCommandLedger, 'appendEvent' | 'latestSequence'>,
   hostId: string,
   record: AgentSessionRecord,
+  resolveGadgets?: MobileGadgetResolver,
 ): number {
   const sequence = ledger.latestSequence() + 1;
   ledger.appendEvent<MobileSessionEvent>({
@@ -174,7 +219,7 @@ export function appendMobileSessionEvent(
       sessionId: record.sessionId,
       ...(record.workflowRunId ? { runId: record.workflowRunId } : {}),
     },
-    event: { type: 'session.snapshot', snapshot: mobileSessionSnapshot(record, sequence) },
+    event: { type: 'session.snapshot', snapshot: mobileSessionSnapshot(record, sequence, resolveGadgets) },
   });
   return sequence;
 }

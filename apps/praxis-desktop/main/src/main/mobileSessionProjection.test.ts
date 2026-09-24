@@ -74,3 +74,61 @@ test('a provider handover reaches the phone as a notice, never as the brief with
   ]);
   assert.doesNotMatch(JSON.stringify(snapshot), /Working directory|\/Users\/someone/);
 });
+
+const GADGET_REPLY = [
+  'Two ways to fix it.',
+  '```praxis-gadget',
+  '{"kind":"choice","payload":{"question":"Which fix?","options":[{"value":"a","label":"Patch"}]},"actions":[]}',
+  '```',
+].join('\n');
+
+test('a gadget reply reaches the phone as prose plus the gadget, keyed as the desktop keys it', () => {
+  const seen: Array<[string, string]> = [];
+  const snapshot = mobileSessionSnapshot(
+    record({
+      state: 'completed',
+      responseText: undefined,
+      events: [
+        { timestamp: '2026-09-22T09:00:00.000Z', type: 'user_input_completed', summary: 'Hello' },
+        { timestamp: '2026-09-22T09:00:00.500Z', type: 'tool_start', summary: 'read file' },
+        { timestamp: '2026-09-22T09:00:01.000Z', type: 'message', summary: 'Looking', detail: 'Looking' },
+        { timestamp: '2026-09-22T09:00:02.000Z', type: 'message', summary: 'Two ways', detail: GADGET_REPLY },
+      ],
+    }),
+    3,
+    (sessionId, key) => {
+      seen.push([sessionId, key]);
+      return {
+        gadgets: [{
+          state: 'active',
+          gadget: {
+            version: 1, gadgetId: `${key}-1`, kind: 'choice', scope: { hostId: 'h', sessionId }, issuedAt: '2026-09-22T09:00:02.000Z', fallbackText: 'Which fix?',
+            payload: { question: 'Which fix?', options: [{ value: 'a', label: 'Patch' }] }, actions: [],
+          },
+        }],
+        unrendered: 0,
+      };
+    },
+  );
+  // The desktop counts only conversation events: Hello = 0, Looking = 1, the gadget reply = 2 (the tool event is not counted).
+  assert.deepEqual(seen, [['s1', 'msg-2']]);
+  const last = snapshot.messages[snapshot.messages.length - 1];
+  assert.equal(last.text, 'Two ways to fix it.');
+  assert.equal(last.gadgets?.length, 1);
+  assert.equal(last.gadgets?.[0].gadget.gadgetId, 'msg-2-1');
+});
+
+test('a gadget the host could not render leaves a note instead of vanishing', () => {
+  const snapshot = mobileSessionSnapshot(
+    record({ state: 'completed', responseText: undefined, events: [{ timestamp: '2026-09-22T09:00:02.000Z', type: 'message', summary: 'x', detail: GADGET_REPLY }] }),
+    1,
+    () => ({ gadgets: [], unrendered: 1 }),
+  );
+  assert.match(snapshot.messages[snapshot.messages.length - 1].text, /could not be shown on the phone/);
+});
+
+test('a streaming reply hides a gadget fence that is still being written', () => {
+  const snapshot = mobileSessionSnapshot(record({ responseText: 'Here is the choice.\n```praxis-gadget\n{"kind":"cho' }), 2);
+  const streaming = snapshot.messages.find(message => message.status === 'streaming');
+  assert.equal(streaming?.text, 'Here is the choice.');
+});
