@@ -1,6 +1,6 @@
 # [P0] Restrict marketplace tarball fetches to the configured registry origin
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:51.172Z
 **Type:** Bug
 **Priority:** Highest
@@ -55,4 +55,6 @@ If any genuinely published add-on is served from a host other than `registryBase
 
 
 ## Comments
+
+- 2026-09-24: Done. Token only sent to the configured registry/API origins (https, loopback excepted); catalogue checks tarball integrity before parsing; manifest reader caps inflation at 64 MB. Tests in packages/core/src/marketplace.
 

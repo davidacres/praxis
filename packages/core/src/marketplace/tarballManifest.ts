@@ -15,8 +15,19 @@ import { gunzipSync } from 'node:zlib';
  * add-on is silently invisible to the catalogue, regardless of how correctly
  * it was authored. This is the fallback that recovers it.
  */
-export function readPraxisManifestFromTarball(tarball: Uint8Array): unknown {
-  const tar = gunzipSync(tarball);
+/** An add-on is a manifest and a few files; anything that inflates past this is not one. */
+export const MAX_UNPACKED_TARBALL_BYTES = 64 * 1024 * 1024;
+
+export function readPraxisManifestFromTarball(tarball: Uint8Array, maxUnpackedBytes = MAX_UNPACKED_TARBALL_BYTES): unknown {
+  let tar: Buffer;
+  try {
+    tar = gunzipSync(tarball, { maxOutputLength: maxUnpackedBytes });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE' || error instanceof RangeError) {
+      throw new Error(`The add-on tarball unpacks to more than ${Math.round(maxUnpackedBytes / 1024 / 1024)} MB; it is not a valid add-on.`);
+    }
+    throw error;
+  }
   let offset = 0;
   while (offset + 512 <= tar.length) {
     const header = tar.subarray(offset, offset + 512);

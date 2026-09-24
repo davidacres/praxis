@@ -184,5 +184,46 @@ test('downloadTarball throws a formatted error on a bad response', async () => {
     { owner: 'acme', ownerType: 'user', token: 't' },
     fakeFetch(() => new Response('nope', { status: 404, statusText: 'Not Found' }))
   );
-  await assert.rejects(() => client.downloadTarball('https://x/y.tgz'), /not found \(404\)/);
+  await assert.rejects(() => client.downloadTarball('https://npm.pkg.github.com/download/y.tgz'), /not found \(404\)/);
+});
+
+test('the marketplace token is only ever sent to the configured origins', async () => {
+  const requested: Array<{ url: string; authorization: string | undefined }> = [];
+  const client = new GitHubPackagesRegistryClient(
+    { owner: 'acme', ownerType: 'user', token: 'secret-token' },
+    fakeFetch((url, init) => {
+      requested.push({ url, authorization: (init?.headers as Record<string, string> | undefined)?.Authorization });
+      return new Response(new Uint8Array([1, 2, 3]));
+    })
+  );
+  // A packument can name any tarball URL; one on another host is refused before any request.
+  await assert.rejects(() => client.downloadTarball('https://attacker.example/pkg.tgz'), /Refusing an add-on tarball from https:\/\/attacker\.example/);
+  await assert.rejects(() => client.downloadTarball('http://npm.pkg.github.com/pkg.tgz'), /Refusing/);
+  assert.equal(requested.length, 0);
+  // The registry's own origin still works.
+  assert.equal((await client.downloadTarball('https://npm.pkg.github.com/download/@acme/p/1.0.0/abc')).length, 3);
+  assert.equal(requested[0]?.authorization, 'Bearer secret-token');
+});
+
+test('a Link header pointing at another host ends pagination with an error, not a leaked token', async () => {
+  const requested: string[] = [];
+  const client = new GitHubPackagesRegistryClient(
+    { owner: 'acme', ownerType: 'user', token: 'secret-token' },
+    fakeFetch(url => {
+      requested.push(url);
+      return json([], { headers: { 'content-type': 'application/json', link: '<https://attacker.example/page2>; rel="next"' } });
+    })
+  );
+  await assert.rejects(() => client.listAddonPackages(), /Refusing the next page of marketplace packages from https:\/\/attacker\.example/);
+  assert.equal(requested.length, 1);
+});
+
+test('marketplace endpoints must be https, except a loopback registry', () => {
+  assert.throws(
+    () => new GitHubPackagesRegistryClient({ owner: 'a', ownerType: 'user', token: 't', registryBaseUrl: 'http://registry.example' }),
+    /must use https:/
+  );
+  assert.doesNotThrow(
+    () => new GitHubPackagesRegistryClient({ owner: 'a', ownerType: 'user', token: 't', registryBaseUrl: 'http://127.0.0.1:4873', apiBaseUrl: 'http://127.0.0.1:4873' })
+  );
 });
