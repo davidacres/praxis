@@ -1,6 +1,6 @@
 # [P0] Pass github.ref_name through the environment and scope the release workflow token
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:52.282Z
 **Type:** Bug
 **Priority:** Highest
@@ -58,4 +58,6 @@ PowerShell quoting differs from bash and the step uses backtick line continuatio
 
 
 ## Comments
+
+- 2026-09-24: Done. github.ref_name reaches release scripts only through a RELEASE_TAG env var; build-release.yml gains permissions: contents: write, publish-packages.yml moves contents: read to write so its gh release create can succeed.
 

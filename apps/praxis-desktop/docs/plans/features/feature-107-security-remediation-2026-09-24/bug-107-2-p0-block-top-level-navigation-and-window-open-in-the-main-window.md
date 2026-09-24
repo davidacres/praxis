@@ -1,6 +1,6 @@
 # [P0] Block top-level navigation and window.open in the main window
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:51.539Z
 **Type:** Bug
 **Priority:** Highest
@@ -59,4 +59,6 @@ None.
 
 
 ## Comments
+
+- 2026-09-24: Done. Main window blocks will-navigate / will-redirect away from its own renderer and denies every window.open; http(s)/mailto targets open in the OS browser instead (apps/praxis-desktop/main/src/main/index.ts). The in-app browser and preview views are unchanged.
 

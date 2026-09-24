@@ -17,6 +17,13 @@ artifacts/
 # VS Code extension test runner (downloaded VS Code + user data)
 .vscode-test/
 
+# Per-machine editor settings. This file once carried GitLab tokens (see PRX-F107);
+# credentials belong in the app's secret store, never in a tracked file.
+.vscode/settings.json
+
+# Captured provider traffic (request headers carry credentials).
+*-capture.json
+
 # Local scratch dir used by ad-hoc extension test runs
 .praxis-test/
 

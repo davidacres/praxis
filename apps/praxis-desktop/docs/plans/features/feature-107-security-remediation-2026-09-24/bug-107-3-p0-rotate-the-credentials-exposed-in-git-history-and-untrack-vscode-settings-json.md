@@ -1,6 +1,6 @@
 # [P0] Rotate the credentials exposed in git history and untrack .vscode/settings.json
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:51.911Z
 **Type:** Bug
 **Priority:** Highest
@@ -58,4 +58,6 @@ Rotation breaks whatever CI job or local tooling consumes those credentials — 
 
 
 ## Comments
+
+- 2026-09-24: Done. Owner revoked both GitLab PATs and the GitHub PAT that was in the history of e2e/marketplace.spec.ts and verify-marketplace.spec.ts (commits 00b19eb6, ee4eb290, e15ef096 — missed by the review). The Jira value was an OAuth client ID (public) and the AWS capture held only an access-key ID and expired signatures. .vscode/settings.json untracked and ignored, *-capture.json ignored. History rewrite not needed now the tokens are dead.
 
