@@ -163,7 +163,7 @@ export function sdlcLoopTemplate(variant: SdlcLoopStackVariant = 'node'): Workfl
         x: 380,
         y: 160,
         inputs: ['plan-doc', 'bdd-scenarios'],
-        agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
+        agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full', skillNames: ['verification-report', 'visual-verification'] },
         instructions:
           'Implement the plan, wiring the BDD scenarios to real behaviour and making them pass. Run automated tests to verify your changes and fix any broken or outdated tests before committing clean changes and reporting the ref.',
         outputs: [{ id: 'change-diff', kind: 'diff', required: true }],
@@ -311,7 +311,7 @@ export function sdlcLoopTemplate(variant: SdlcLoopStackVariant = 'node'): Workfl
         x: 600,
         y: 360,
         inputs: ['change-diff'],
-        agent: { agentId: 'praxis-security-analyst', profileId: 'praxis-security-analyst', hostId: 'praxis-security-analyst', scope: 'global', toolMode: 'read-only' },
+        agent: { agentId: 'praxis-security-analyst', profileId: 'praxis-security-analyst', hostId: 'praxis-security-analyst', scope: 'global', toolMode: 'read-only', skillNames: ['electron-hardening', 'ci-workflow-hardening'] },
         instructions:
           'Review the change for security issues the scanners cannot see: authorization gaps, injection via new inputs, unsafe deserialization, and business-logic abuse. ' +
           REVIEW_FINDINGS_INSTRUCTIONS,
