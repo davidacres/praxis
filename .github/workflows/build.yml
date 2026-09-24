@@ -47,6 +47,9 @@ jobs:
       - name: Core unit tests
         run: npm run test:core
 
+      - name: Repo skill mirrors match .agents/skills
+        run: npm run test:skills
+
       - name: Desktop Git and persistence tests
         run: npm run test:desktop:git
 
