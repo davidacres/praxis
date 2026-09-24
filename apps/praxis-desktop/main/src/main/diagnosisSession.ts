@@ -1,6 +1,7 @@
 import {
   createDiagnosisSession as createDiagnosisSessionCore,
-  PROVIDER_DESCRIPTORS,
+  getProviderDescriptor,
+  providerNeedsApiKey,
   readEvidenceBundle,
   readEvidenceContent,
   type AgentTaskDefinition,
@@ -15,7 +16,8 @@ import {
   getAcpAgentHost,
   getVercelAgentService,
   resolveAcpStartOptions,
-  resolveConnectionOptions
+  resolveConnectionOptions,
+  assertCanRunAgentSession
 } from './aiInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
@@ -51,7 +53,7 @@ export class ElectronDiagnosisSessionPort implements DiagnosisSessionPort {
   public async start(prompt: string, workingDirectory: string): Promise<string> {
     const settings = getSettingsBackend().read();
     const provider = settings.ai.activeProvider;
-    const descriptor = PROVIDER_DESCRIPTORS[provider];
+    const descriptor = getProviderDescriptor(provider);
 
     // A synthetic issue, same convention as workflowAgentStage.ts: the
     // session store is issue-keyed, and a diagnosis attempt is not a ticket.
@@ -80,7 +82,8 @@ export class ElectronDiagnosisSessionPort implements DiagnosisSessionPort {
       });
     }
     const gateway = await resolveConnectionOptions(provider);
-    if (!gateway.apiKey) throw new Error(`No ${descriptor.label} API key configured for diagnosis sessions.`);
+    if (!gateway.apiKey && providerNeedsApiKey(provider)) throw new Error(`No ${descriptor.label} API key configured for diagnosis sessions.`);
+    assertCanRunAgentSession(provider);
     return getVercelAgentService().startTask(issue, taskDefinition, {
       apiKey: gateway.apiKey,
       gatewayUrl: gateway.gatewayUrl,

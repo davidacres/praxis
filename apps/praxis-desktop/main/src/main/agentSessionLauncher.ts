@@ -1,7 +1,8 @@
 import * as path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import {
-  PROVIDER_DESCRIPTORS,
+  getProviderDescriptor,
+  providerNeedsApiKey,
   type AgentBinding,
   type AgentTaskDefinition,
   type AgentToolMode,
@@ -18,7 +19,8 @@ import {
   getAiSessionManager,
   getVercelAgentService,
   resolveAcpStartOptions,
-  resolveConnectionOptions
+  resolveConnectionOptions,
+  assertCanRunAgentSession
 } from './aiInstance';
 import { effectiveRuntime, sessionInstructionsFor, sessionWorkingStyle } from './nativeSourcesInstance';
 
@@ -104,7 +106,7 @@ export async function compileAgentHostLaunch(
   // Built-in agents, agents found in other AI tools' folders and copies of
   // them (`entry: "session"`) all run on the session's own runtime.
   if (isBundledAgentHost(host.manifest.id) || host.followsSessionRuntime || host.manifest.entry === 'session') {
-    if (PROVIDER_DESCRIPTORS[provider].kind === 'api') {
+    if (getProviderDescriptor(provider).kind === 'api') {
       return { state: 'gateway', hostId: host.manifest.id };
     }
     return { state: 'acp', hostId: host.manifest.id, ...resolveAcpStartOptions(provider) };
@@ -126,11 +128,11 @@ export async function compileAgentHostLaunch(
   // an explicit adapter, not a fallback: a gateway manifest opts into the
   // provider-backed transport and must name a compatible API provider.
   if (host.manifest.type === 'gateway') {
-    if (PROVIDER_DESCRIPTORS[provider].kind !== 'api') {
+    if (getProviderDescriptor(provider).kind !== 'api') {
       return {
         state: 'unsupported',
         hostId: host.manifest.id,
-        reason: `Gateway host "${host.manifest.id}" requires an API provider; "${PROVIDER_DESCRIPTORS[provider].label}" is CLI-hosted.`
+        reason: `Gateway host "${host.manifest.id}" requires an API provider; "${getProviderDescriptor(provider).label}" is CLI-hosted.`
       };
     }
     return { state: 'gateway', hostId: host.manifest.id };
@@ -159,7 +161,7 @@ export async function prepareAgentLaunch(input: {
   if (!profileId || !hostId) {
     return {
       provider: input.provider,
-      plan: PROVIDER_DESCRIPTORS[input.provider].kind === 'cli-agent'
+      plan: getProviderDescriptor(input.provider).kind === 'cli-agent'
         ? { state: 'acp', ...resolveAcpStartOptions(input.provider) }
         : { state: 'gateway' },
       skillActivations: []
@@ -217,9 +219,10 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
     throw new Error(prepared.plan.reason ?? 'The selected agent host cannot be launched.');
   }
   const connection = await resolveConnectionOptions(input.provider);
-  if (!connection.apiKey) {
-    throw new Error(`No ${PROVIDER_DESCRIPTORS[input.provider].label} API key configured for this session.`);
+  if (!connection.apiKey && providerNeedsApiKey(input.provider)) {
+    throw new Error(`No ${getProviderDescriptor(input.provider).label} API key configured for this session.`);
   }
+  assertCanRunAgentSession(input.provider);
   await getVercelAgentService().startTask(input.issue, input.taskDefinition, {
     apiKey: connection.apiKey,
     gatewayUrl: connection.gatewayUrl,
@@ -276,9 +279,10 @@ export async function continueAgentTask(
     throw new Error(prepared.plan.reason ?? 'The selected agent host cannot be continued.');
   }
   const connection = await resolveConnectionOptions(provider);
-  if (!connection.apiKey) {
-    throw new Error(`No ${PROVIDER_DESCRIPTORS[provider].label} API key configured for this session.`);
+  if (!connection.apiKey && providerNeedsApiKey(provider)) {
+    throw new Error(`No ${getProviderDescriptor(provider).label} API key configured for this session.`);
   }
+  assertCanRunAgentSession(provider);
   await getVercelAgentService().resumeTask(input.issueKey, {
     provider,
     apiKey: connection.apiKey,

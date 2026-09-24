@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-138
 title: "OpenAI-compatible preset catalog and wire options"
-status: Proposed
+status: Complete
 feature: FX-BF-044
 updated: 2026-09-24
 dependencies: [FX-BE-137]
@@ -72,3 +72,14 @@ make one adapter serve many hosts correctly.
   sends `api-key: <key>` and no bearer.
 - Preset catalog test: ids unique, URLs parse, no header name matches the
   secret pattern.
+
+## Delivered
+
+Presets, auth styles, extra headers, the stream-usage flag, exact API paths, the manual-model
+fallback and the Vercel caching-hint fix are in. `gatewayOptionsFor` builds `GatewayOptions` for
+any API provider so no caller hand-assembles them. Differences: the IPC is
+`ai.listProviderPresets()` (presets only) — built-ins are still described to the renderer by its
+`AI_PROVIDERS` literal, so the Antigravity command drift noted above is **not** resolved.
+Preset URLs are taken from each vendor's OpenAI-compatibility documentation and were not
+exercised against the live services from this environment. Tests: `wire.test.ts`,
+`customProviders.test.ts`.

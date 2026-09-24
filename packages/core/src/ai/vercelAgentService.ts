@@ -26,7 +26,8 @@ import {
   type GatewayToolDefinition,
   type TokenUsage
 } from './gateway';
-import { PROVIDER_DESCRIPTORS, resolveProviderAdapter } from './providers/registry';
+import { gatewayOptionsFor, getProviderDescriptor, resolveProviderAdapter } from './providers/registry';
+import { providerNeedsApiKey } from './providerSecrets';
 import { localToolDefinitionsForMode, LocalToolExecutor, type PermissionDecision } from './tools';
 import { shouldAutoAllowToolPermission } from './tools/shellAllowlist';
 import { isProviderLimitError, extractProviderLimitMessage } from './providerLimitError';
@@ -145,7 +146,7 @@ export class VercelAgentService {
 
   /** Narrows to an `'api'`-kind descriptor — `'cli-agent'` providers never reach this service. */
   private requireApiDescriptor(provider: AiProvider) {
-    const descriptor = PROVIDER_DESCRIPTORS[provider];
+    const descriptor = getProviderDescriptor(provider);
     if (descriptor.kind !== 'api') {
       throw new Error(`${descriptor.label} is a CLI-hosted provider — use AcpAgentHost, not VercelAgentService.`);
     }
@@ -186,10 +187,10 @@ export class VercelAgentService {
       return { url, apiKey };
     }
     const apiKey = options.apiKey?.trim();
-    if (!apiKey) {
+    if (!apiKey && providerNeedsApiKey(provider)) {
       throw new Error(`${descriptor.label} API key is not configured.`);
     }
-    return { url: options.gatewayUrl?.trim() || descriptor.defaultBaseUrl, apiKey, apiPath: descriptor.apiPath };
+    return gatewayOptionsFor(provider, options.gatewayUrl, apiKey || undefined);
   }
 
   private loadWorkflowInstructionsForPrompt(
@@ -591,7 +592,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     this.sessionManager.updateAgentState(issue.key, 'planning');
     this.appendEvent(
       issue.key,
-      evt('session_start', `${PROVIDER_DESCRIPTORS[provider].label} agent session started`)
+      evt('session_start', `${getProviderDescriptor(provider).label} agent session started`)
     );
 
     task.timeoutHandle = setTimeout(() => {

@@ -6,7 +6,10 @@ import {
   clearProviderApiKey,
   discoverWorkspaceAgentWorkflows,
   GitWorktreeManager,
-  PROVIDER_DESCRIPTORS,
+  PROVIDER_PRESETS,
+  findProviderDescriptor,
+  getProviderDescriptor,
+  providerNeedsApiKey,
   PathSandboxError,
   isLatestEditToPath,
   resolveSandboxedPath,
@@ -24,6 +27,8 @@ import {
   type AiHandoverInput,
   type AiStartConversationInput,
   type AiProvider,
+  type CustomProviderConfig,
+  type SaveCustomProviderInput,
   buildHandoverEnvelope,
   type IssueDetails,
   type IssueTrackerService,
@@ -47,8 +52,12 @@ import {
   listApiModelOptions,
   listCliModelOptions,
   probeProviderCapability,
+  removeCustomProvider,
   resolveConnectionOptions,
   respondToActivePermission,
+  assertCanRunAgentSession,
+  saveCustomProvider,
+  testCustomProvider,
   testProviderConnection
 } from './aiInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
@@ -300,7 +309,7 @@ function mergeToolExtensions(...parts: Array<ToolExtension | undefined>): ToolEx
 
 /** Rejects a model the provider's current catalog does not list (an unreadable catalog is not a rejection). */
 async function assertModelAvailable(provider: AiProvider, model: string): Promise<void> {
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const descriptor = getProviderDescriptor(provider);
   const options = descriptor.kind === 'cli-agent'
     ? await listCliModelOptions(provider).catch(() => undefined)
     : await listApiModelOptions(provider).catch(() => undefined);
@@ -328,7 +337,7 @@ export async function updateSessionModel(issueKey: string, model: string): Promi
   const provider = record.provider ?? getSettingsBackend().read().ai.activeProvider;
   await assertModelAvailable(provider, trimmed);
   if (record.model === trimmed) return record;
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const descriptor = getProviderDescriptor(provider);
   return sessionManager.transitionAgentRuntime(issueKey, {
     provider,
     model: trimmed,
@@ -347,8 +356,9 @@ export async function handoverSession(issueKey: string, input: AiHandoverInput):
     throw new Error('Wait for the session to finish this turn before handing over.');
   }
   const targetProvider = input.provider;
-  const descriptor = PROVIDER_DESCRIPTORS[targetProvider];
+  const descriptor = findProviderDescriptor(targetProvider);
   if (!descriptor) throw new Error('Unknown provider.');
+  assertCanRunAgentSession(targetProvider);
   const model = input.model?.trim() || undefined;
   if (model) await assertModelAvailable(targetProvider, model);
   if (input.briefEdits) {
@@ -559,6 +569,24 @@ export function registerAiIpc(): void {
     await resetProviderApiKeys(getSecretsStore());
   });
 
+  ipcMain.handle('ai:listProviderPresets', async () => [...PROVIDER_PRESETS]);
+
+  ipcMain.handle(
+    'ai:testCustomProvider',
+    async (_event: Electron.IpcMainInvokeEvent, draft: CustomProviderConfig, options?: { apiKey?: string; model?: string }) =>
+      testCustomProvider(draft, options ?? {})
+  );
+
+  ipcMain.handle(
+    'ai:saveCustomProvider',
+    async (_event: Electron.IpcMainInvokeEvent, input: SaveCustomProviderInput) => saveCustomProvider(input)
+  );
+
+  ipcMain.handle(
+    'ai:removeCustomProvider',
+    async (_event: Electron.IpcMainInvokeEvent, id: AiProvider) => removeCustomProvider(id)
+  );
+
   // Back-compat: applies to the currently active provider.
   ipcMain.handle('ai:setApiKey', async (_event: Electron.IpcMainInvokeEvent, value: string) => {
     const settings = getSettingsBackend().read();
@@ -669,7 +697,7 @@ export function registerAiIpc(): void {
         throw new Error('Set an analysis system prompt under Settings → AI Provider first.');
       }
       const provider = input.provider ?? settings.ai.activeProvider;
-      const descriptor = PROVIDER_DESCRIPTORS[provider];
+      const descriptor = getProviderDescriptor(provider);
       const profileId = input.profileId ?? input.agentId;
       const hostId = input.hostId ?? input.agentId;
 
@@ -683,9 +711,10 @@ export function registerAiIpc(): void {
       const gateway = !hasAgentBinding && descriptor.kind === 'api'
         ? await resolveConnectionOptions(provider)
         : undefined;
-      if (!hasAgentBinding && descriptor.kind === 'api' && !gateway?.apiKey) {
+      if (!hasAgentBinding && descriptor.kind === 'api' && !gateway?.apiKey && providerNeedsApiKey(provider)) {
         throw new Error(`No ${descriptor.label} API key configured. Add one under Settings → AI Provider.`);
       }
+      if (!hasAgentBinding) assertCanRunAgentSession(provider);
 
       let issue: IssueDetails;
       let issueService: Awaited<ReturnType<typeof getServiceForConnection>> | undefined;
@@ -913,7 +942,7 @@ export function registerAiIpc(): void {
       const record = sessionManager.getAgentSession(issueKey);
       if (!record) throw new Error(`No agent session found for ${issueKey}.`);
       const provider = record.provider ?? getSettingsBackend().read().ai.activeProvider;
-      const descriptor = PROVIDER_DESCRIPTORS[provider];
+      const descriptor = getProviderDescriptor(provider);
       if (descriptor.kind !== 'cli-agent') {
         throw new Error('Session modes are only available for ACP-hosted agents (Claude Code, Codex, GitHub Copilot).');
       }
@@ -963,7 +992,8 @@ export function registerAiIpc(): void {
     'ai:startConversation',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, input: AiStartConversationInput) => {
       if (!input || !['consult', 'debate', 'pair'].includes(input.mode)) throw new Error('Choose a conversation mode.');
-      if (!input.provider || !PROVIDER_DESCRIPTORS[input.provider]) throw new Error('Choose a valid second AI provider.');
+      if (!input.provider || !findProviderDescriptor(input.provider)) throw new Error('Choose a valid second AI provider.');
+      assertCanRunAgentSession(input.provider);
       const record = sessionManager.getAgentSession(issueKey);
       if (!record) throw new Error(`No agent session found for ${issueKey}.`);
       if (hasActiveTask(issueKey)) throw new Error('Wait for the current session turn to finish before bringing in another AI.');

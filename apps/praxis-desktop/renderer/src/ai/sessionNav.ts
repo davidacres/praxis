@@ -1,6 +1,6 @@
 import type { AgentEventSummary, AgentSessionRecord, AiProvider, Connection } from '@praxis/core';
 import { isTerminalAgentState } from './aiSessionState';
-import { PROVIDER_LABELS } from './modelProviders';
+import { providerLabel } from './modelProviders';
 
 /**
  * Naming and classification for an agent session, shared by the three surfaces
@@ -655,7 +655,7 @@ export function summariseSpendByProviderModel(sessions: readonly AgentSessionRec
   const groups = new Map<string, AgentSessionRecord[]>();
   for (const session of sessions) {
     const label = session.provider
-      ? `${PROVIDER_LABELS[session.provider] ?? session.provider}${session.model ? ` · ${session.model}` : ''}`
+      ? `${providerLabel(session.provider) ?? session.provider}${session.model ? ` · ${session.model}` : ''}`
       : 'Unknown provider';
     (groups.get(label) ?? groups.set(label, []).get(label)!).push(session);
   }

@@ -93,8 +93,9 @@ test('each provider is one row with a switch; the default and unconfigured ones 
   const win = await launchWithTwoProviders();
   await openAiSettings(win);
 
+  // Only providers in use are rows (FX-BF-044): the default gateway and the configured Anthropic.
   const rows = win.getByTestId('ai-provider-list').locator('[data-testid^="ai-provider-row-"]');
-  expect(await rows.count()).toBeGreaterThanOrEqual(5);
+  await expect(rows).toHaveCount(2);
 
   // The default (gateway) is on and cannot be turned off without choosing another default.
   const gateway = win.getByTestId('ai-provider-enabled-vercel-gateway');
@@ -107,7 +108,12 @@ test('each provider is one row with a switch; the default and unconfigured ones 
   await expect(anthropicSwitch).toHaveAttribute('aria-checked', 'true');
   await expect(anthropicSwitch).toBeEnabled();
 
-  // OpenAI has no key: off, and its switch says so and leads into setup rather than being dead.
+  // OpenAI has no key, so it is not a row until picked from Add provider; then it is off, and its
+  // switch says so and leads into setup rather than being dead.
+  await expect(win.getByTestId('ai-provider-row-openai')).toHaveCount(0);
+  await win.getByTestId('ai-add-provider').click();
+  await win.getByTestId('add-provider-tile-openai').click();
+  await win.getByTestId('ai-provider-row-vercel-gateway').locator('.ai-provider-head').click();
   const openai = win.getByTestId('ai-provider-enabled-openai');
   await expect(openai).toHaveAttribute('aria-checked', 'false');
   await expect(openai).toBeEnabled();
@@ -183,8 +189,9 @@ test('making another provider the default frees the previous default to be switc
 test('pressing the switch on a provider that is not set up opens its setup, and it turns on once a key is saved', async () => {
   const win = await launchWithTwoProviders();
   // Point OpenAI at a closed local port so the key check that follows a save fails fast and offline.
+  // `added` puts the unconfigured provider on the list, as picking it from Add provider does.
   await win.evaluate(async () => {
-    await window.praxis.settings.set({ ai: { providers: { openai: { baseUrl: 'http://127.0.0.1:9' } } } });
+    await window.praxis.settings.set({ ai: { providers: { openai: { baseUrl: 'http://127.0.0.1:9', added: true } } } });
   });
   await openAiSettings(win);
 

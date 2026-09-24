@@ -76,9 +76,10 @@ test('AI provider settings store the API key in the keychain and persist across 
   // The key must NOT land in the plain settings file (which now exists,
   // written by the gateway URL/model commits above).
   const fs = await import('node:fs');
+  // Both fields commit on their own debounce; wait until both are on disk, not just the first write.
   await expect
-    .poll(() => fs.existsSync(app!.settingsPath) && fs.readFileSync(app!.settingsPath, 'utf8'))
-    .toBeTruthy();
+    .poll(() => (fs.existsSync(app!.settingsPath) ? fs.readFileSync(app!.settingsPath, 'utf8') : ''))
+    .toMatch(/gateway\.example\.test[\s\S]*mock\/model|mock\/model[\s\S]*gateway\.example\.test/);
   const settingsRaw = fs.readFileSync(app.settingsPath, 'utf8');
   expect(settingsRaw).not.toContain('e2e-secret-key');
 

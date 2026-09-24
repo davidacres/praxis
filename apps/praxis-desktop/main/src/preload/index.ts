@@ -39,6 +39,7 @@ import type { ReconciledService, RunLogLine, RunServiceStatus } from '@praxis/co
 import type { BrowserDiagnosticsBundle } from '@praxis/core';
 import type { CreateDiagnosisSessionResult, PreviewVerificationCheck, PreviewVerificationOutcome } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
+import type { CustomProviderConfig, SaveCustomProviderInput } from '@praxis/core';
 import type { WorkflowDefinition, WorkflowPlanInput, WorkflowPolicyProfile } from '@praxis/core';
 import type { DeploymentProfile, DeploymentProfileIssue, PublishedArtifact } from '@praxis/core';
 import type { CredentialBindingStatus } from '@praxis/core';
@@ -227,6 +228,11 @@ const praxis: PraxisIpc = {
     testProviderApiKey: (provider: AiProvider) =>
       ipcRenderer.invoke('ai:testProviderApiKey', provider),
     resetProviderApiKeys: () => ipcRenderer.invoke('ai:resetProviderApiKeys'),
+    listProviderPresets: () => ipcRenderer.invoke('ai:listProviderPresets'),
+    testCustomProvider: (draft: CustomProviderConfig, options?: { apiKey?: string; model?: string }) =>
+      ipcRenderer.invoke('ai:testCustomProvider', draft, options),
+    saveCustomProvider: (input: SaveCustomProviderInput) => ipcRenderer.invoke('ai:saveCustomProvider', input),
+    removeCustomProvider: (id: AiProvider) => ipcRenderer.invoke('ai:removeCustomProvider', id),
     listSessions: () => ipcRenderer.invoke('ai:listSessions'),
     loadImagePreview: (issueKey: string, filePath: string) =>
       ipcRenderer.invoke('ai:loadImagePreview', issueKey, filePath) as Promise<string | undefined>,

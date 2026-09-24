@@ -1,7 +1,8 @@
 import type { AiSettings } from '../config/appSettings';
 import type { SecretsStore } from '../host/secrets';
 import type { AiProvider } from '../types';
-import { PROVIDER_DESCRIPTORS } from './providers/registry';
+import { getProviderDescriptor, listCustomProviderIds } from './providers/registry';
+import { isCustomProviderId } from './providers/customProviders';
 import { isExecutableAvailable } from './cliProbe';
 import {
   clearVercelApiKey,
@@ -18,7 +19,19 @@ import {
  * previously-stored keys keep resolving without a migration step.
  */
 export function secretKeyForProvider(provider: AiProvider): string {
-  return provider === 'vercel-gateway' ? SECRET_VERCEL_API_KEY : `praxis.${provider}ApiKey`;
+  if (provider === 'vercel-gateway') return SECRET_VERCEL_API_KEY;
+  // One keychain entry per endpoint, never shared between two endpoints of the same preset.
+  if (isCustomProviderId(provider)) return `praxis.customProvider.${provider.slice('custom:'.length)}.apiKey`;
+  return `praxis.${provider}ApiKey`;
+}
+
+/**
+ * Whether an API provider needs a key before it can be called. Only a custom
+ * endpoint set to "No key" (a local runtime) does not; CLI providers never do.
+ */
+export function providerNeedsApiKey(provider: AiProvider): boolean {
+  const descriptor = getProviderDescriptor(provider);
+  return descriptor.kind === 'api' && descriptor.custom?.auth.kind !== 'none';
 }
 
 /** Providers whose credentials are stored in the AI provider secrets namespace. */
@@ -26,7 +39,7 @@ const API_KEY_PROVIDERS: AiProvider[] = ['vercel-gateway', 'openai', 'anthropic'
 
 /** Clears all AI provider keys without touching connection or OAuth secrets. */
 export async function resetProviderApiKeys(secrets: SecretsStore): Promise<void> {
-  await Promise.all(API_KEY_PROVIDERS.map(provider => clearProviderApiKey(secrets, provider)));
+  await Promise.all([...API_KEY_PROVIDERS, ...listCustomProviderIds()].map(provider => clearProviderApiKey(secrets, provider)));
 }
 
 export async function getStoredProviderApiKey(
@@ -105,6 +118,12 @@ function recommendationProviderConfig(provider: AiProvider, ai: AiSettings): { b
   return { baseUrl: config?.baseUrl?.trim() || undefined, model: config?.defaultModel?.trim() || undefined };
 }
 
+/** The key to call `provider` with: `{ ready: false }` when one is needed and missing. */
+async function apiCredentials(secrets: SecretsStore, provider: AiProvider): Promise<{ ready: boolean; apiKey?: string }> {
+  const apiKey = await resolveProviderApiKey(secrets, provider);
+  return { ready: Boolean(apiKey) || !providerNeedsApiKey(provider), apiKey };
+}
+
 /**
  * Picks which provider a one-shot AI "recommendation" completion
  * (workflow template pick, workflow agent-for-stage pick) should use, and
@@ -125,7 +144,7 @@ export async function resolveRecommendationProvider(
 ): Promise<RecommendationProviderChoice> {
   const explicit = ai.recommendationProvider;
   if (explicit) {
-    const descriptor = PROVIDER_DESCRIPTORS[explicit];
+    const descriptor = getProviderDescriptor(explicit);
     if (ai.providers[explicit]?.enabled === false) {
       throw new Error(
         `${descriptor.label} is turned off — enable it in Settings → AI Provider, or change the Recommendations provider setting.`
@@ -140,28 +159,29 @@ export async function resolveRecommendationProvider(
       }
       return { provider: explicit, ...recommendationProviderConfig(explicit, ai) };
     }
-    const apiKey = await resolveProviderApiKey(secrets, explicit);
-    if (!apiKey) {
+    const { ready, apiKey } = await apiCredentials(secrets, explicit);
+    if (!ready) {
       throw new Error(
-        `${PROVIDER_DESCRIPTORS[explicit].label} is not configured — add an API key in Settings → AI, or change the Recommendations provider setting.`
+        `${descriptor.label} is not configured — add an API key in Settings → AI, or change the Recommendations provider setting.`
       );
     }
-    return { provider: explicit, apiKey, ...recommendationProviderConfig(explicit, ai) };
+    return { provider: explicit, ...(apiKey ? { apiKey } : {}), ...recommendationProviderConfig(explicit, ai) };
   }
 
   const tried = new Set<AiProvider>();
-  const ordered = [ai.activeProvider, ...RECOMMENDATION_CANDIDATE_PROVIDERS].filter(provider => {
+  const candidates = [...RECOMMENDATION_CANDIDATE_PROVIDERS, ...listCustomProviderIds()];
+  const ordered = [ai.activeProvider, ...candidates].filter(provider => {
     if (ai.providers[provider]?.enabled === false) {
       return false;
     }
-    if (!RECOMMENDATION_CANDIDATE_PROVIDERS.includes(provider) || tried.has(provider)) {
+    if (!candidates.includes(provider) || tried.has(provider)) {
       return false;
     }
     tried.add(provider);
     return true;
   });
   for (const provider of ordered) {
-    const descriptor = PROVIDER_DESCRIPTORS[provider];
+    const descriptor = getProviderDescriptor(provider);
     if (descriptor.kind === 'cli-agent') {
       const command = ai.providers[provider]?.cliPath?.trim() || descriptor.defaultCommand;
       if (command && (await isExecutableAvailable(command))) {
@@ -169,9 +189,9 @@ export async function resolveRecommendationProvider(
       }
       continue;
     }
-    const apiKey = await resolveProviderApiKey(secrets, provider);
-    if (apiKey) {
-      return { provider, apiKey, ...recommendationProviderConfig(provider, ai) };
+    const { ready, apiKey } = await apiCredentials(secrets, provider);
+    if (ready) {
+      return { provider, ...(apiKey ? { apiKey } : {}), ...recommendationProviderConfig(provider, ai) };
     }
   }
   throw new Error('No AI provider is configured — add an API key or an available ACP host in Settings → AI to use recommendations.');

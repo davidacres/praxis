@@ -5,6 +5,7 @@ export {
   isRetryableGatewayHttpStatus,
   GatewayHttpError,
   endpoint,
+  buildHeaders,
   isZaiHost,
   alternateZaiApiPath,
   type GatewayOptions,
