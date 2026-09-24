@@ -303,8 +303,12 @@ test('instantiating Full SDLC (.NET) identifies and installs missing agent depen
   await dotnetItem.click();
 
   // Check dependency identification
-  await expect(dialog.getByText('csharp-dotnet-code-reviewer', { exact: true })).toBeVisible();
-  await expect(dialog.getByText('Installs on selection')).toBeVisible();
+  const csharpDep = dialog.locator('.wf-dep-item').filter({ hasText: 'csharp-dotnet-code-reviewer' });
+  await expect(csharpDep.getByText('Installs on selection')).toBeVisible();
+  // The implementer is installed, but its built-in skills are not yet, so its row installs too.
+  const implementerDep = dialog.locator('.wf-dep-item').filter({ hasText: 'praxis-implementer' });
+  await expect(implementerDep.getByText('Installs on selection')).toBeVisible();
+  await expect(implementerDep.getByText('Skills: verification-report, visual-verification')).toBeVisible();
   await expect(dialog.getByText(/Missing agent dependencies will be installed automatically/)).toBeVisible();
 
   // Click Use
