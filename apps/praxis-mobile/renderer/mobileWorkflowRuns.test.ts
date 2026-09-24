@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { MobileRunSnapshot, MobileRunStage } from '@praxis/core';
 import {
+  approvalContext,
   currentStage,
   isStageSessionKey,
   mergeRun,
@@ -88,4 +89,28 @@ test('statuses read the way the desktop monitor does', () => {
   assert.match(stageWithoutSession(stage('qa', { type: 'check', lane: 'running' })), /check/);
   assert.match(stageWithoutSession(stage('approve', { type: 'approval', lane: 'awaiting' })), /waiting for a person/);
   assert.match(stageWithoutSession(stage('qa', { type: 'check' })), /not started/);
+});
+
+test('approval context lists the steps before the gate, their outcomes and findings', () => {
+  const stage = (overrides: Record<string, unknown>) => ({ nodeId: 'x', name: 'x', type: 'check', lane: 'done', attempts: 1, ...overrides });
+  const context = approvalContext({
+    runId: 'r', projectId: 'p', workflowName: 'Release', status: 'awaiting-approval', paused: false, explanation: 'Waiting for approval.',
+    startedAt: 't', canApprove: true, sequence: 1,
+    stages: [
+      stage({ nodeId: 'impl', name: 'Implement', type: 'agent-task', attempts: 2 }),
+      stage({ nodeId: 'sast', name: 'SAST', findingsSummary: { high: 1, low: 3 } }),
+      stage({ nodeId: 'join', name: 'Gates', type: 'join' }),
+      stage({ nodeId: 'tests', name: 'Tests', lane: 'failed', exitCode: 1 }),
+      stage({ nodeId: 'approve', name: 'Approve release', type: 'approval', lane: 'awaiting', prompt: 'Check the SAST report.', gate: 'release' }),
+      stage({ nodeId: 'deploy', name: 'Deploy', type: 'deployment', lane: 'idle' }),
+    ] as never,
+  });
+  assert.equal(context?.stageName, 'Approve release');
+  assert.equal(context?.prompt, 'Check the SAST report.');
+  assert.deepEqual(context?.steps.map(step => [step.name, step.label, step.detail]), [
+    ['Implement', 'Done', '2 attempts'],
+    ['SAST', 'Done', undefined],
+    ['Tests', 'Failed', 'exit 1'],
+  ]);
+  assert.deepEqual(context?.findings, [{ severity: 'low', count: 3 }, { severity: 'high', count: 1 }]);
 });

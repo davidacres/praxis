@@ -16,7 +16,14 @@
 import {
   MOBILE_HOST_SURFACE_REVISION,
   MOBILE_PROTOCOL_VERSION,
+  describeGadgetAnswer,
+  isGadgetActionValue,
+  type AnyGadgetEnvelope,
+  type GadgetActionResult,
   type MobileCaller,
+  type MobileFileDiff,
+  type MobileGadgetSubmitPayload,
+  type MobileSessionChanges,
   type MobileCommand,
   type MobileCommandOperation,
   type MobileDeviceAccess,
@@ -86,6 +93,13 @@ export interface MobileHostServiceDeps {
   listRuns(projectId: string): Promise<readonly MobileRunSnapshot[]>;
   getRun(runId: string): Promise<unknown | undefined>;
   listRunChanges(runId: string): Promise<unknown>;
+  /** The session's working-tree changes (relative paths only). */
+  sessionChanges(sessionId: string): Promise<MobileSessionChanges>;
+  /** One changed file's bounded diff; refused for a path the session's status does not list. */
+  sessionFileDiff(sessionId: string, path: string): Promise<MobileFileDiff>;
+  /** The gadget as the host holds it, so its action's effect can be checked against the caller. */
+  findGadget(sessionId: string, gadgetId: string): AnyGadgetEnvelope | undefined;
+  submitGadget(sessionId: string, payload: MobileGadgetSubmitPayload, actor: string): Promise<GadgetActionResult>;
   listAttention(projectId: string): Promise<readonly unknown[]>;
 
   createSession(input: { projectId: string; title: string; message: string; provider: string; model?: string; mode: MobileSessionMode }): Promise<MobileSessionSnapshot>;
@@ -93,6 +107,7 @@ export interface MobileHostServiceDeps {
   cancelRun(runId: string, reason: string | undefined, actor: string): Promise<unknown>;
   retryStage(runId: string, nodeId: string, actor: string): Promise<unknown>;
   approveRun(runId: string, actor: string, note: string | undefined): Promise<unknown>;
+  rejectRun(runId: string, actor: string, reason: string): Promise<unknown>;
   continueSession(sessionId: string, message: string, actor: string): Promise<unknown>;
   /** Applies validated between-turn changes: mode, then model, then (last, as it starts a turn) a provider handover. */
   configureSession(sessionId: string, change: MobileSessionRuntimeChange, actor: string): Promise<MobileSessionSnapshot>;
@@ -111,6 +126,24 @@ function requireTarget(request: MobileReadRequest | MobileCommand, key: 'project
     throw new Error(`${request.operation} requires target.${key}.`);
   }
   return value;
+}
+
+function readGadgetSubmitPayload(command: MobileCommand): MobileGadgetSubmitPayload {
+  const gadgetId = payloadField(command, 'gadgetId');
+  const actionId = payloadField(command, 'actionId');
+  const idempotencyKey = payloadField(command, 'idempotencyKey');
+  const value = payloadField(command, 'value');
+  if (typeof gadgetId !== 'string' || !gadgetId.trim() || typeof actionId !== 'string' || !actionId.trim()) {
+    throw new Error('gadgets.submit requires payload.gadgetId and payload.actionId.');
+  }
+  if (!isGadgetActionValue(value)) throw new Error('That answer was not in a form the desktop understands.');
+  return {
+    gadgetId: gadgetId.trim(),
+    actionId: actionId.trim(),
+    value,
+    // The command id is already unique per logical submission and reused on retry.
+    idempotencyKey: typeof idempotencyKey === 'string' && idempotencyKey.trim() ? idempotencyKey.trim() : command.commandId,
+  };
 }
 
 function payloadField(command: MobileCommand, key: string): unknown {
@@ -300,6 +333,12 @@ export function createMobileHostReads(deps: MobileHostServiceDeps, commandOperat
       return requireRunInProject(deps, runId, requireTarget(request, 'projectId'));
     },
     'changes.get': async (request: MobileReadRequest) => {
+      if (request.target.sessionId?.trim()) {
+        const sessionId = request.target.sessionId.trim();
+        await requireSessionInProject(deps, sessionId, requireTarget(request, 'projectId'));
+        const path = request.params?.path?.trim();
+        return path ? deps.sessionFileDiff(sessionId, path) : deps.sessionChanges(sessionId);
+      }
       const runId = requireTarget(request, 'runId');
       await requireRunInProject(deps, runId, requireTarget(request, 'projectId'));
       return deps.listRunChanges(runId);
@@ -386,6 +425,33 @@ export function createMobileHostExecutionHandlers(deps: MobileHostServiceDeps): 
       await requireRunInProject(deps, runId, requireTarget(command, 'projectId'));
       const note = payloadField(command, 'note');
       return deps.approveRun(runId, mobileActorFor(command.caller), typeof note === 'string' ? note : undefined);
+    },
+    'workflowGates.reject': async (command: MobileCommand) => {
+      const runId = requireTarget(command, 'runId');
+      await requireRunInProject(deps, runId, requireTarget(command, 'projectId'));
+      const reason = payloadField(command, 'reason');
+      if (typeof reason !== 'string' || !reason.trim()) throw new Error('Say why you are rejecting — the reason is recorded on the run.');
+      return deps.rejectRun(runId, mobileActorFor(command.caller), reason.trim().slice(0, 2_000));
+    },
+    'gadgets.submit': async (command: MobileCommand) => {
+      const sessionId = requireTarget(command, 'sessionId');
+      await requireSessionInProject(deps, sessionId, requireTarget(command, 'projectId'));
+      const payload = readGadgetSubmitPayload(command);
+      const envelope = deps.findGadget(sessionId, payload.gadgetId);
+      if (!envelope) throw new Error('This gadget is no longer available on the desktop.');
+      const descriptor = envelope.actions.find(candidate => candidate.actionId === payload.actionId);
+      // Answering is a conversational turn (execute); an answer that approves or changes something also needs approve.
+      if (descriptor && descriptor.effect !== 'informational' && !command.caller.capabilities.includes('approve')) {
+        throw new Error('This phone is not allowed to approve. Grant it the approve permission in Settings › Mobile access on the desktop.');
+      }
+      const actor = mobileActorFor(command.caller);
+      const result = await deps.submitGadget(sessionId, payload, actor);
+      // As on the desktop: an open decision is reported to the agent as the next turn.
+      const followUp = result.status === 'completed' || result.status === 'accepted'
+        ? describeGadgetAnswer(envelope, payload.actionId, payload.value)
+        : undefined;
+      if (followUp) await deps.continueSession(sessionId, followUp, actor);
+      return result;
     },
   };
 }

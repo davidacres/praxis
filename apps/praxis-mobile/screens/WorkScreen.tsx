@@ -16,7 +16,11 @@ import { SvgXml } from 'react-native-svg';
 import type { MobileMotifAnchor } from '@praxis/core';
 import { currentAppearance, mobileScale, theme, themedStyles } from '../app/theme';
 import { fitCornerMotifSvg, motifSpreadScale, tiledMotifSvg } from '../renderer/mobileTheme';
-import { useStore, type MobileTranscriptMessage } from '../app/store';
+import { useStore } from '../app/store';
+import { ChatMessage, Transcript, type TranscriptMessage } from '../app/Transcript';
+import { ChangesView } from './ChangesView';
+import { recordDiagnostic } from '../app/diagnostics';
+import type { MobileFollowUp } from '../renderer/mobileFollowUp';
 import {
   DEFAULT_SESSION_SELECTION,
   effectiveSelection,
@@ -110,26 +114,6 @@ function EmptySession({ onOpenSidebar }: { onOpenSidebar: () => void }): React.J
   );
 }
 
-export function ChatMessage({ message }: { message: MobileTranscriptMessage }): React.JSX.Element {
-  if (message.author === 'system') {
-    return (
-      <View accessibilityRole="text" style={styles.notice}>
-        <Text style={styles.noticeText}>{message.text} · {message.at}</Text>
-      </View>
-    );
-  }
-  const user = message.author === 'user';
-  return (
-    <View style={[styles.message, user ? styles.messageUser : styles.messageAssistant]}>
-      <View style={styles.messageHeader}>
-        <Text style={styles.messageAuthor}>{user ? 'YOU' : 'AI AGENT'}</Text>
-        <Text style={styles.messageTime}>{message.streaming ? 'STREAMING' : message.at}</Text>
-      </View>
-      <Text selectable style={styles.messageText}>{message.text}</Text>
-    </View>
-  );
-}
-
 export function SessionHeader({ title, onOpenSidebar }: {
   title: string;
   onOpenSidebar: () => void;
@@ -179,9 +163,37 @@ const UNSUPPORTED_MODES: ComposerModeOption[] = [
   { mode: 'review', available: false, unavailableMessage: 'Choosing a mode from the phone needs a newer Praxis desktop.' },
 ];
 
+type TranscriptItem =
+  | { kind: 'message'; key: string; message: TranscriptMessage }
+  | { kind: 'followUp'; key: string; followUp: MobileFollowUp };
+
+/** A message the phone sent that the desktop has not taken yet — sending, or failed with Retry. */
+function PendingFollowUp({ followUp, canRetry, onRetry }: { followUp: MobileFollowUp; canRetry: boolean; onRetry: () => void }): React.JSX.Element {
+  return (
+    <>
+      <ChatMessage message={{ id: followUp.messageId, author: 'user', text: followUp.text, at: formatClock(followUp.createdAt), streaming: false }} />
+      {followUp.state === 'failed' ? (
+        <View accessibilityRole="alert" style={[styles.message, styles.messageFailed]}>
+          <Text style={styles.messageAuthor}>NOT SENT</Text>
+          <Text style={styles.messageText}>{followUp.result ?? 'The desktop did not accept this message.'}</Text>
+          <Button label="Retry" kind="ghost" disabled={!canRetry} onPress={onRetry} />
+        </View>
+      ) : (
+        <View style={[styles.message, styles.messageAssistant]}>
+          <View style={styles.messageHeader}>
+            <Text style={styles.messageAuthor}>AI AGENT</Text>
+            <Text style={styles.messageTime}>SENDING</Text>
+          </View>
+          <Text style={[styles.messageText, styles.messagePending]}>Sending to the desktop…</Text>
+        </View>
+      )}
+    </>
+  );
+}
+
 function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: () => void }): React.JSX.Element {
   const {
-    work, shell, host, setDetail, transcriptFor, followUps, workflows, runs, sendFollowUp, retryFollowUp, cancelSession, startWorkflow, loadRun,
+    work, shell, host, transcriptFor, followUps, workflows, runs, workflowRuns, sendFollowUp, retryFollowUp, cancelSession, startWorkflow, loadRun, answerGadget,
     providers, models, loadModels, refreshProviders, updateDraftSelection, usageFor, refreshUsage, hostInfo, configureSession,
   } = useStore();
   const [pendingHandover, setPendingHandover] = useState<string | undefined>(undefined);
@@ -193,11 +205,9 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
   const [draft, setDraft] = useState('');
   const [composerError, setComposerError] = useState<string | undefined>(undefined);
   const [picker, setPicker] = useState<'provider' | 'model' | undefined>(undefined);
-  const transcriptRef = useRef<ScrollView | null>(null);
   const itemFollowUps = followUps.filter(message => message.workId === workId);
   const run = item.runId ? runs[item.runId] : undefined;
   const messages = transcriptFor(item.sessionId);
-  const lastLength = messages[messages.length - 1]?.text.length ?? 0;
 
   const catalog = providers.value;
   const selection = item.draft ? effectiveSelection(catalog, item.selection ?? DEFAULT_SESSION_SELECTION, models[item.selection?.provider ?? '']?.value) : undefined;
@@ -243,18 +253,17 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
     ? `Reconnecting to ${host.hostName || 'the desktop'}… you can send again once it is back.`
     : !verdict.ok ? verdict.message : undefined;
 
-  useEffect(() => {
-    if (detail !== 'chat') return;
-    const timer = setTimeout(() => transcriptRef.current?.scrollToEnd({ animated: true }), 80);
-    return () => clearTimeout(timer);
-  }, [detail, itemFollowUps.length, messages.length, lastLength]);
-
+  // The run's progress is re-read when its live snapshot moves on, not on a timer.
+  const runSequence = item.runId ? workflowRuns.find(candidate => candidate.runId === item.runId)?.sequence : undefined;
   useEffect(() => {
     if (detail === 'chat' || !item.runId) return;
-    void loadRun(item.runId);
-    const timer = setInterval(() => void loadRun(item.runId!), 3_000);
-    return () => clearInterval(timer);
-  }, [detail, item.runId, loadRun]);
+    void loadRun(item.runId).catch(error => recordDiagnostic('Loading workflow progress', error));
+  }, [detail, item.runId, runSequence, loadRun]);
+
+  const transcriptItems = React.useMemo<TranscriptItem[]>(() => [
+    ...messages.map(message => ({ kind: 'message' as const, key: message.id, message })),
+    ...itemFollowUps.map(followUp => ({ kind: 'followUp' as const, key: followUp.messageId, followUp })),
+  ], [messages, itemFollowUps]);
 
   // Show the model by name (and validate a draft's choice), so load the provider's list once.
   useEffect(() => {
@@ -264,7 +273,7 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
   // When a turn finishes, re-read the desktop's totals (the stream already carries them; this confirms).
   const previousStatus = useRef(item.status);
   useEffect(() => {
-    if (!item.draft && previousStatus.current === 'active' && item.status !== 'active') void refreshUsage(item.sessionId).catch(() => undefined);
+    if (!item.draft && previousStatus.current === 'active' && item.status !== 'active') void refreshUsage(item.sessionId).catch(error => recordDiagnostic('Refreshing usage', error));
     previousStatus.current = item.status;
   }, [item.draft, item.sessionId, item.status, refreshUsage]);
 
@@ -286,48 +295,26 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
 
       {detail === 'chat' ? (
         <>
-          <ScrollView
-            ref={transcriptRef}
-            contentContainerStyle={styles.transcript}
-            keyboardDismissMode="interactive"
-            keyboardShouldPersistTaps="handled"
-          >
-            {item.draft && messages.length === 0 && itemFollowUps.length === 0 ? (
+          <Transcript
+            data={transcriptItems}
+            keyOf={entry => entry.key}
+            resetKey={item.workId}
+            header={item.draft && messages.length === 0 && itemFollowUps.length === 0 ? (
               <View style={styles.draftIntro}>
                 <Text style={styles.emptyTitle}>New chat</Text>
                 <Text style={styles.emptyText}>Choose the provider, model and mode below, then send your first message. The session runs on {host.hostName || 'the desktop'}.</Text>
               </View>
             ) : null}
-            {messages.map(message => <ChatMessage key={message.id} message={message} />)}
-            {itemFollowUps.map(message => (
-              <React.Fragment key={message.messageId}>
-                <ChatMessage
-                  message={{
-                    id: message.messageId,
-                    author: 'user',
-                    text: message.text,
-                    at: formatClock(message.createdAt),
-                    streaming: false,
-                  }}
-                />
-                {message.state === 'failed' ? (
-                  <View accessibilityRole="alert" style={[styles.message, styles.messageFailed]}>
-                    <Text style={styles.messageAuthor}>NOT SENT</Text>
-                    <Text style={styles.messageText}>{message.result ?? 'The desktop did not accept this message.'}</Text>
-                    <Button label="Retry" kind="ghost" disabled={shell.connection !== 'ready'} onPress={() => void retryFollowUp(message.messageId)} />
-                  </View>
-                ) : (
-                  <View style={[styles.message, styles.messageAssistant]}>
-                    <View style={styles.messageHeader}>
-                      <Text style={styles.messageAuthor}>AI AGENT</Text>
-                      <Text style={styles.messageTime}>SENDING</Text>
-                    </View>
-                    <Text style={[styles.messageText, styles.messagePending]}>Sending to the desktop…</Text>
-                  </View>
-                )}
-              </React.Fragment>
-            ))}
-          </ScrollView>
+            renderItem={entry => entry.kind === 'message' ? (
+              <ChatMessage
+                message={entry.message}
+                connected={shell.connection === 'ready'}
+                onAnswer={(gadget, action, value) => answerGadget(item.sessionId, gadget, action, value)}
+              />
+            ) : (
+              <PendingFollowUp followUp={entry.followUp} canRetry={shell.connection === 'ready'} onRetry={() => void retryFollowUp(entry.followUp.messageId)} />
+            )}
+          />
           <SessionComposer
             value={draft}
             onChange={setDraft}
@@ -353,7 +340,7 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
             modeOptions={modeOptions}
             onChangeMode={next => item.draft ? updateDraftSelection(item.workId, { mode: next }) : applyChange({ mode: next })}
             usage={usageFor(item)}
-            onRefreshUsage={item.draft ? undefined : () => void refreshUsage(item.sessionId).catch(() => undefined)}
+            onRefreshUsage={item.draft ? undefined : () => void refreshUsage(item.sessionId).catch(error => recordDiagnostic('Refreshing usage', error))}
             workflows={workflows}
             onStartWorkflow={shell.connection === 'ready'
               ? workflowId => void startWorkflow(workflowId, item.title).catch(error => setComposerError(error instanceof Error ? error.message : String(error)))
@@ -420,19 +407,9 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
             </Card>
           )}
 
-          {detail === 'changes' && (
-            <Card>
-              {!item.runId ? <Body dim>No workflow run is attached to this session.</Body> : null}
-              {item.runId && !run ? <Body dim>Loading workflow artifacts…</Body> : null}
-              {run && run.stages.every(stage => stage.artifacts.length === 0) ? <Body dim>No workflow artifacts have been produced yet.</Body> : null}
-              {run?.stages.flatMap(stage => stage.artifacts.map(artifact => (
-                <View key={`${stage.nodeId}:${artifact.contractId}:${artifact.path ?? artifact.kind}`} style={styles.rowBetween}>
-                  <Body>{artifact.path ?? artifact.contractId}</Body>
-                  <Body dim>{artifact.kind}</Body>
-                </View>
-              )))}
-            </Card>
-          )}
+          {detail === 'changes' && (item.draft
+            ? <Card><Body dim>Send the first message to start a session; its changes appear here.</Body></Card>
+            : <ChangesView sessionId={item.sessionId} {...(item.runId ? { runId: item.runId } : {})} {...(run ? { run } : {})} />)}
         </ScrollView>
       )}
     </View>

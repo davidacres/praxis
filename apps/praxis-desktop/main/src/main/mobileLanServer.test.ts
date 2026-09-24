@@ -43,6 +43,8 @@ function fixtureApp(onRead?: (request: MobileReadRequest) => void): MobileHostAp
       'workflowRuns.retryStage': async () => ({ ok: true }),
       'permissions.respond': async () => ({ ok: true }),
       'workflowGates.approve': async () => ({ ok: true }),
+      'workflowGates.reject': async () => ({ ok: true }),
+      'gadgets.submit': async () => ({ ok: true }),
     },
     ledger: new InMemoryMobileCommandLedger(),
     payloadDigest: () => 'digest',

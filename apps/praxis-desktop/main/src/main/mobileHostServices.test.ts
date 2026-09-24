@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   MOBILE_PROTOCOL_VERSION,
+  type AnyGadgetEnvelope,
   type MobileCaller,
   type MobileCommand,
   type MobileModelCatalog,
@@ -49,6 +50,21 @@ function fakeModelCatalog(provider: string): MobileModelCatalog {
 }
 
 const caller: MobileCaller = { deviceId: 'phone-1', subject: 'dave', capabilities: ['view', 'execute', 'approve'] };
+const viewAndExecute: MobileCaller = { deviceId: 'phone-2', capabilities: ['view', 'execute'] };
+
+const GADGET_SCOPE = { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' };
+const FAKE_GADGETS: Record<string, AnyGadgetEnvelope> = {
+  'msg-3-1': {
+    version: 1, gadgetId: 'msg-3-1', kind: 'choice', scope: GADGET_SCOPE, issuedAt: '2026-09-24T10:00:00.000Z', fallbackText: 'Pick one',
+    payload: { question: 'Which fix?', options: [{ value: 'a', label: 'Patch it' }, { value: 'b', label: 'Rewrite it' }] },
+    actions: [{ actionId: 'answer', label: 'Answer', effect: 'informational' }],
+  },
+  'msg-5-1': {
+    version: 1, gadgetId: 'msg-5-1', kind: 'approval', scope: GADGET_SCOPE, issuedAt: '2026-09-24T10:00:00.000Z', fallbackText: 'Approve?',
+    payload: { title: 'Ship it', summary: 'All gates passed', gate: 'release' },
+    actions: [{ actionId: 'approve', label: 'Approve', effect: 'approval', gate: 'release' }],
+  },
+};
 const deviceOnly: MobileCaller = { deviceId: 'phone-1', capabilities: ['view', 'execute', 'approve'] };
 
 interface Recorder {
@@ -117,6 +133,26 @@ function recorder(overrides: Partial<MobileHostServiceDeps> = {}): Recorder {
     listRunChanges: async runId => {
       note('listRunChanges', runId);
       return { runId, files: [] };
+    },
+    sessionChanges: async sessionId => {
+      note('sessionChanges', sessionId);
+      return { sessionId, repository: true, files: [{ path: 'src/a.ts', status: 'modified', reportedBySession: true }] };
+    },
+    sessionFileDiff: async (sessionId, path) => {
+      note('sessionFileDiff', sessionId, path);
+      return { path, binary: false, additions: 1, deletions: 0, hunks: [], truncated: false };
+    },
+    findGadget: (sessionId, gadgetId) => {
+      note('findGadget', sessionId, gadgetId);
+      return FAKE_GADGETS[gadgetId];
+    },
+    submitGadget: async (sessionId, payload, actor) => {
+      note('submitGadget', sessionId, payload, actor);
+      return { version: 1, gadgetId: payload.gadgetId, actionId: payload.actionId, correlationId: 'c1', idempotencyKey: payload.idempotencyKey, status: 'completed', at: '2026-09-24T10:00:00.000Z' };
+    },
+    rejectRun: async (runId, actor, reason) => {
+      note('rejectRun', runId, actor, reason);
+      return { runId, status: 'failed' };
     },
     listAttention: async projectId => {
       note('listAttention', projectId);
@@ -279,7 +315,7 @@ test('host.info advertises the current surface and the live event cursor', async
   const info = await createMobileHostReads(deps, ['sessions.create'])['host.info'](read('host.info', { hostId: 'host-mac' })) as {
     surfaceRevision: number; readOperations: string[]; commandOperations: string[]; latestSequence: number; hostEpoch: string;
   };
-  assert.equal(info.surfaceRevision, 4);
+  assert.equal(info.surfaceRevision, 5);
   for (const operation of ['providers.list', 'models.list', 'sessions.usage', 'access.get', 'host.info']) assert.ok(info.readOperations.includes(operation), operation);
   assert.deepEqual(info.commandOperations, ['sessions.create']);
   assert.equal(info.latestSequence, 41);
@@ -366,7 +402,7 @@ test('access.get reports the verified caller grant, not a claimed one', async ()
   const access = await createMobileHostReads(deps)['access.get'](read('access.get', { hostId: 'host-mac' }));
   assert.deepEqual(access, {
     deviceId: 'phone-1', capabilities: ['view', 'execute', 'approve'], label: 'Dave’s iPhone', projects: [{ projectId: 'p1', name: 'Praxis' }],
-    hostName: 'Dave Mac', accessMode: 'local-only', pairedAt: '2026-09-20T09:00:00.000Z', transport: 'noise-ik', protocolVersion: 1, surfaceRevision: 4,
+    hostName: 'Dave Mac', accessMode: 'local-only', pairedAt: '2026-09-20T09:00:00.000Z', transport: 'noise-ik', protocolVersion: 1, surfaceRevision: 5,
   });
 });
 
@@ -399,4 +435,70 @@ test('sessions.configure hands over, changes model or switches mode between turn
     /Wait for the current turn to finish/,
   );
   assert.equal(busy.calls.filter(c => c[0] === 'configureSession').length, 0);
+});
+
+test('gadgets.submit records the answer as the verified actor and reports an open decision to the agent', async () => {
+  const { calls, deps } = recorder();
+  const handlers = createMobileHostExecutionHandlers(deps);
+  await handlers['gadgets.submit'](command('gadgets.submit', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, {
+    gadgetId: 'msg-3-1', actionId: 'answer', value: { kind: 'choice', selected: 'b' },
+  }));
+  const submitted = calls.find(c => c[0] === 'submitGadget');
+  assert.deepEqual(submitted, ['submitGadget', 's1', { gadgetId: 'msg-3-1', actionId: 'answer', value: { kind: 'choice', selected: 'b' }, idempotencyKey: 'cmd-abc1234' }, 'dave']);
+  assert.deepEqual(calls.find(c => c[0] === 'continueSession'), ['continueSession', 's1', 'Gadget response — "Which fix?": Rewrite it.', 'dave']);
+});
+
+test('gadgets.submit refuses an approval-effect answer from a phone without the approve permission', async () => {
+  const { calls, deps } = recorder();
+  const handlers = createMobileHostExecutionHandlers(deps);
+  await assert.rejects(
+    handlers['gadgets.submit'](command('gadgets.submit', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, {
+      gadgetId: 'msg-5-1', actionId: 'approve', value: { kind: 'confirmation', confirmed: true },
+    }, viewAndExecute)),
+    /not allowed to approve/,
+  );
+  assert.equal(calls.some(c => c[0] === 'submitGadget'), false);
+  // With approve it goes through, and an approval is not echoed to the agent as a chat turn.
+  await handlers['gadgets.submit'](command('gadgets.submit', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, {
+    gadgetId: 'msg-5-1', actionId: 'approve', value: { kind: 'confirmation', confirmed: true },
+  }));
+  assert.equal(calls.some(c => c[0] === 'submitGadget'), true);
+  assert.equal(calls.some(c => c[0] === 'continueSession'), false);
+});
+
+test('gadgets.submit rejects a malformed value before reaching the desktop', async () => {
+  const { calls, deps } = recorder();
+  const handlers = createMobileHostExecutionHandlers(deps);
+  await assert.rejects(
+    handlers['gadgets.submit'](command('gadgets.submit', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, {
+      gadgetId: 'msg-3-1', actionId: 'answer', value: { kind: 'choice' },
+    })),
+    /not in a form the desktop understands/,
+  );
+  assert.equal(calls.some(c => c[0] === 'submitGadget'), false);
+});
+
+test('workflowGates.reject requires a reason and records the verified actor', async () => {
+  const { calls, deps } = recorder();
+  const handlers = createMobileHostExecutionHandlers(deps);
+  await assert.rejects(
+    handlers['workflowGates.reject'](command('workflowGates.reject', { hostId: 'host-mac', projectId: 'p1', runId: 'r1' }, { reason: '  ' })),
+    /Say why/,
+  );
+  await handlers['workflowGates.reject'](command('workflowGates.reject', { hostId: 'host-mac', projectId: 'p1', runId: 'r1' }, { reason: ' tests are missing ' }));
+  assert.deepEqual(calls.find(c => c[0] === 'rejectRun'), ['rejectRun', 'r1', 'dave', 'tests are missing']);
+});
+
+test('changes.get with a session target reads that session\'s working tree, or one file\'s diff', async () => {
+  const { calls, deps } = recorder();
+  const reads = createMobileHostReads(deps);
+  const base = { protocolVersion: MOBILE_PROTOCOL_VERSION, requestId: 'req-1', caller, operation: 'changes.get' as const };
+  await reads['changes.get']!({ ...base, target: { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' } });
+  await reads['changes.get']!({ ...base, target: { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, params: { path: 'src/a.ts' } });
+  assert.deepEqual(calls.find(c => c[0] === 'sessionChanges'), ['sessionChanges', 's1']);
+  assert.deepEqual(calls.find(c => c[0] === 'sessionFileDiff'), ['sessionFileDiff', 's1', 'src/a.ts']);
+  await assert.rejects(
+    reads['changes.get']!({ ...base, target: { hostId: 'host-mac', projectId: 'p2', sessionId: 's1' } }),
+    /not found in project p2/,
+  );
 });
