@@ -9,20 +9,26 @@
  * Usage: invoked automatically as `npm run copy-renderer`, and is also called
  * from scripts/build-app.ps1 when building from PowerShell.
  */
+const { execSync } = require('node:child_process');
 const { cpSync, rmSync, existsSync, mkdirSync } = require('node:fs');
 const { join } = require('node:path');
 
 // Source: the renderer workspace's Vite build. Destination: a staging directory
 // inside the main-process package. Both are called "renderer" but only the
 // second is the one electron-builder packs, so they are named apart here.
-const rendererBuild = join(__dirname, '..', '..', 'renderer', 'dist');
+const rendererDir = join(__dirname, '..', '..', 'renderer');
+const rendererBuild = join(rendererDir, 'dist');
 const stagingDir = join(__dirname, '..', 'renderer');
 
 if (!existsSync(rendererBuild)) {
-  throw new Error(
-    `Renderer build not found at ${rendererBuild}. ` +
-      "Run 'npm run build' in apps/praxis-desktop/renderer first."
-  );
+  console.log(`Renderer build not found at ${rendererBuild}, building renderer...`);
+  try {
+    execSync('npm run build', { cwd: rendererDir, stdio: 'inherit' });
+  } catch (error) {
+    throw new Error(
+      `Failed to build renderer at ${rendererDir}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 if (existsSync(stagingDir)) {

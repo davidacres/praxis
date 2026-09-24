@@ -12,7 +12,7 @@
   "scripts": {
     "check-types": "npm run check-types --workspaces --if-present",
     "build": "npm run build:core && npm run build:mobile-protocol && npm run build:renderer && npm run desktop:copy-renderer && npm run build:desktop",
-    "test": "npm run test:core && npm run test:praxis-contracts && npm run test:mobile-protocol && npm run test:mobile && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop:mobile && npm run test:desktop && npm run test:desktop:themes",
+    "test": "npm run build && npm run test:core && npm run test:praxis-contracts && npm run test:mobile-protocol && npm run test:mobile && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop:mobile && npm run test:desktop && npm run test:desktop:themes",
     "build:core": "npm run compile --workspace=@praxis/core",
     "test:core": "npm test --workspace=@praxis/core",
     "build:mobile-protocol": "npm run compile --workspace=@praxis/mobile-protocol",
