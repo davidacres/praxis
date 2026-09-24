@@ -36,10 +36,33 @@ function projectFolderFor(run: WorkflowRun): string | undefined {
   return getProjectStore().get(run.projectId)?.workspaceFolder?.trim() || undefined;
 }
 
-function broadcastRunChanged(run: WorkflowRun): void {
+const runChangeListeners = new Set<(runId: string) => void>();
+
+/**
+ * Every change to a workflow run — the orchestrator's own, and a delete or archive made
+ * outside it — so a surface other than the desktop windows (the paired phone) follows it.
+ */
+export function onDidChangeWorkflowRun(listener: (runId: string) => void): () => void {
+  runChangeListeners.add(listener);
+  return () => runChangeListeners.delete(listener);
+}
+
+/** Tells the desktop windows and every `onDidChangeWorkflowRun` listener that a run changed. */
+export function notifyWorkflowRunChanged(runId: string): void {
   for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.webContents.send('workflows:runChanged', run.runId);
+    if (!window.isDestroyed()) window.webContents.send('workflows:runChanged', runId);
   }
+  for (const listener of runChangeListeners) {
+    try {
+      listener(runId);
+    } catch {
+      /* a listener's failure never blocks the run */
+    }
+  }
+}
+
+function broadcastRunChanged(run: WorkflowRun): void {
+  notifyWorkflowRunChanged(run.runId);
 }
 
 const STAGE_ICON: Partial<Record<StageRow['outcome'], string>> = {
