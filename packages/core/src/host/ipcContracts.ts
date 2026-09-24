@@ -78,6 +78,7 @@ import type {
   AgentWorkflowReference,
   IssueWorkflowAssignment
 } from '../ai/agentTypes';
+import type { ProviderCapabilityProbe, ProviderPreflightState } from '../ai/providers/providerPreflight';
 import type { PermissionDecision } from '../ai/tools';
 import type { LprResult } from '../ai/aiReviewService';
 import type {
@@ -645,6 +646,8 @@ export interface AiProviderStatus {
   agentName: string;
   /** Issue keys with a currently running agent task. */
   activeTasks: string[];
+  /** Lightweight local CLI preflight; API providers do not carry this field. */
+  preflight?: ProviderPreflightState;
 }
 
 export interface AiDelegateInput {
@@ -723,6 +726,8 @@ export interface AiIpc {
   setApiKey(value: string): Promise<AiProviderStatus>;
   /** Every configured provider's status snapshot, for the settings UI and the session picker. */
   listProviderStatuses(): Promise<AiProviderStatus[]>;
+  /** Runs the ACP handshake for a CLI provider without creating a session or sending a prompt. */
+  probeProviderCapability(provider: AiProvider): Promise<ProviderCapabilityProbe | undefined>;
   /**
    * The available models for a `hostKind: 'acp'` provider (Claude Code,
    * Codex), read live from the agent's `session/new` response — a

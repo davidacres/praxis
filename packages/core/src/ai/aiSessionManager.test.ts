@@ -52,6 +52,29 @@ test('updateAgentRuntime persists Agent Hub attribution', () => {
   mgr.updateAgentRuntime('SESSION-abc', {
     runtimeLaunch: { adapter: 'acp', transport: 'acp', hostId: 'praxis-reviewer', command: '/agents/reviewer' }
   });
+
+  test('updateAgentRuntime persists an ACP capability manifest and provider version', () => {
+    const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('not_started') }));
+    mgr.updateAgentRuntime('SESSION-abc', {
+      providerVersion: '1.2.3',
+      providerCapabilities: {
+        protocol: 'acp',
+        sessionResume: true,
+        sessionLoad: false,
+        sessionClose: true,
+        mcpHttp: true
+      }
+    });
+
+    assert.deepEqual(mgr.getAgentSession('SESSION-abc')?.providerCapabilities, {
+      protocol: 'acp',
+      sessionResume: true,
+      sessionLoad: false,
+      sessionClose: true,
+      mcpHttp: true
+    });
+    assert.equal(mgr.getAgentSession('SESSION-abc')?.providerVersion, '1.2.3');
+  });
   assert.deepEqual(record?.runtimeLaunch, {
     adapter: 'acp',
     transport: 'acp',

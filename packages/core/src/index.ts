@@ -20,6 +20,7 @@ export * from './ai/providers/geminiWire';
 export * from './ai/providers/geminiAdapter';
 export * from './ai/acp/acpAgentHost';
 export * from './ai/cliProbe';
+export * from './ai/providers/providerPreflight';
 export * from './ai/agentTypes';
 export * from './ai/sessionHandover';
 export * from './ai/agentContracts';
