@@ -54,6 +54,10 @@ test('prepareDeliveryWorktree creates a branch and checkout, then removeDelivery
       WorktreeConflictError
     );
 
+    const reused = await manager.prepareDeliveryWorktree(issue, 'main', repo, { reuseExisting: true });
+    assert.equal(reused.worktreePath, prepared.worktreePath);
+    assert.equal(reused.branchName, prepared.branchName);
+
     await manager.removeDeliveryWorktree(repo, {
       worktreePath: prepared.worktreePath,
       branchName: prepared.branchName

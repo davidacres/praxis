@@ -127,6 +127,8 @@ export class GitWorktreeManager {
       requireCleanBase?: boolean;
       /** Branch from a snapshot of the checkout's uncommitted work instead of committed HEAD alone. */
       includeUncommitted?: boolean;
+      /** Reuse an existing worktree directory if it is already checked out to the expected branch. */
+      reuseExisting?: boolean;
     }
   ): Promise<PreparedWorktree> {
     const repoRoot = await readStdout('git', ['rev-parse', '--show-toplevel'], workspacePath);
@@ -140,21 +142,37 @@ export class GitWorktreeManager {
 
     await fs.mkdir(worktreeRoot, { recursive: true });
 
+    let reused = false;
     try {
       await fs.access(worktreePath);
-      if (options?.forceClean) {
-        this.output.appendLine(`[Delivery] Force-cleaning existing worktree ${worktreeName}.`);
-        await this.removeWorktree(repoRoot, worktreePath, worktreeName);
-      } else {
-        throw new WorktreeConflictError(worktreePath, worktreeName);
+      if (options?.reuseExisting) {
+        const currentBranch = await readStdout('git', ['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath).catch(() => '');
+        if (currentBranch === worktreeName) {
+          reused = true;
+          this.output.appendLine(`[Delivery] Reusing existing worktree ${worktreeName} at ${worktreePath}.`);
+        }
+      }
+      if (!reused) {
+        if (options?.forceClean) {
+          this.output.appendLine(`[Delivery] Force-cleaning existing worktree ${worktreeName}.`);
+          await this.removeWorktree(repoRoot, worktreePath, worktreeName);
+        } else {
+          throw new WorktreeConflictError(worktreePath, worktreeName);
+        }
       }
     } catch (error) {
       if (error instanceof WorktreeConflictError) {
         throw error;
       }
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !reused) {
         throw error;
       }
+    }
+
+    if (reused) {
+      await this.ensureSymlinkSupport(repoRoot);
+      await this.replicateGithubSymlinks(repoRoot, worktreePath);
+      return { repoRoot, worktreeRoot, worktreePath, worktreeName, branchName: worktreeName, baseBranch };
     }
 
     // A branch that already exists is a run's earlier work (its worktree was released when the run
