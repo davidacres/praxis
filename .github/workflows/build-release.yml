@@ -6,8 +6,10 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# Build jobs run npm ci and third-party build scripts, so they get a read-only
+# token. Only the release job, which runs no project code, can write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-mac:
@@ -39,14 +41,15 @@ jobs:
       - name: Build DMG installer
         run: npm run dist:mac --workspace=@praxis/desktop-main
 
-      - name: Upload DMG to Release
-        run: |
-          gh release upload "$RELEASE_TAG" \
-            apps/praxis-desktop/main/dist/Praxis-*-arm64.dmg \
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-mac
+          path: |
+            apps/praxis-desktop/main/dist/Praxis-*-arm64.dmg
             apps/praxis-desktop/main/dist/Praxis-*-arm64.dmg.blockmap
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if-no-files-found: error
+          retention-days: 1
 
   build-win:
     runs-on: windows-latest
@@ -77,12 +80,37 @@ jobs:
       - name: Build Windows installer
         run: npm run dist:win --workspace=@praxis/desktop-main
 
-      - name: Upload Windows installer to Release
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-win
+          path: |
+            apps/praxis-desktop/main/dist/Praxis-*-setup.exe
+            apps/praxis-desktop/main/dist/Praxis-*-setup.exe.blockmap
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs: [build-mac, build-win]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          path: dist
+          merge-multiple: true
+
+      - name: Upload installers to Release
         run: |
-          gh release upload $env:RELEASE_TAG `
-            "apps/praxis-desktop/main/dist/Praxis-*-setup.exe" `
-            "apps/praxis-desktop/main/dist/Praxis-*-setup.exe.blockmap"
+          gh release upload "$RELEASE_TAG" \
+            dist/Praxis-*-arm64.dmg \
+            dist/Praxis-*-arm64.dmg.blockmap \
+            dist/Praxis-*-setup.exe \
+            dist/Praxis-*-setup.exe.blockmap
         env:
           RELEASE_TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
