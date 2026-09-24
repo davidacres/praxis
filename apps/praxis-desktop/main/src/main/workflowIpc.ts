@@ -76,7 +76,7 @@ import { getProjectStore } from './projectStoreInstance';
 import { getAgentRuntimeManager, getAgentRuntimeRoots } from './agentRuntimeInstance';
 import { getAiSessionManager, getAcpAgentHost, resolveAcpStartOptions } from './aiInstance';
 import { marketplaceWorkflowTemplates } from './marketplaceInstance';
-import { getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
+import { getWorkflowOrchestrator, notifyWorkflowRunChanged, writeBackToIssue } from './workflowOrchestratorInstance';
 import { deleteAgentSession } from './deleteAgentSession';
 import { deleteRunWork, inspectRunWork, repositoryRoot } from './runWork';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
@@ -86,7 +86,7 @@ import { getSettingsBackend } from './settingsBackendInstance';
 import { getAiUsageLog } from './aiUsageLogInstance';
 import { getWorkflowRecommendationCache } from './workflowRecommendationCacheInstance';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
-import { assertWorkflowBaseReady, commitWorkflowBase, workflowBlockingFiles } from './workflowWorkspace';
+import { assertWorkflowBaseReady, commitWorkflowBase, createWorkflowWorkspaceProvider, workflowBlockingFiles } from './workflowWorkspace';
 import {
   getWorkflowPolicyStore,
   getWorkflowStore,
@@ -1020,9 +1020,7 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       });
     }
     await runStore().remove(runId);
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send('workflows:runChanged', runId);
-    }
+    notifyWorkflowRunChanged(runId);
   });
 
   ipcMain.handle('workflows:archiveRun', async (_event, runId: string, archived: boolean): Promise<WorkflowRunSummary> => {
@@ -1032,9 +1030,7 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       throw new Error('Wait for this run to finish before archiving it.');
     }
     const updated = await runStore().setArchived(runId, archived);
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send('workflows:runChanged', runId);
-    }
+    notifyWorkflowRunChanged(runId);
     return summarize(updated);
   });
 
@@ -1132,10 +1128,21 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
         return { ok: false, reason: 'no-evidence', message: `Stage ${nodeId} is not a check stage.` };
       }
       const project = getProjectStore().get(run.projectId);
+      let workingDirectory = project?.workspaceFolder?.trim() || undefined;
+      if (run.worktreePath && fs.existsSync(run.worktreePath)) {
+        workingDirectory = run.worktreePath;
+      } else if (project?.workspaceFolder?.trim()) {
+        try {
+          const workspace = createWorkflowWorkspaceProvider();
+          workingDirectory = await workspace.acquire(run);
+        } catch {
+          // Fall back to project workspace folder if worktree cannot be re-acquired
+        }
+      }
       return startDiagnosisSessionFromEvidence({
         key: { projectId: run.projectId, runId, nodeId, attempt },
         node,
-        workingDirectory: project?.workspaceFolder?.trim() || undefined,
+        workingDirectory,
         toolMode: project?.defaultAiToolMode ?? 'full'
       });
     }

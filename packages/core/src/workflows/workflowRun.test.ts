@@ -358,6 +358,29 @@ test('a stale gate offers rework from the implementation snapshot that caused it
   );
 });
 
+test('a failed gate offers rework from the implementation stage that fed it, even when the run failed', () => {
+  let run = succeed(newRun(), 'plan', 1);
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'implement', at: T(2) });
+  run = applyWorkflowRunCommand(run, {
+    kind: 'node-succeeded',
+    nodeId: 'implement',
+    at: T(3),
+    snapshotRef: 'sha-impl',
+    artifacts: [{ contractId: 'change-diff', kind: 'diff' }]
+  });
+  run = advanceJoins(run, T(3));
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'qa', at: T(4) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'qa', at: T(5), error: 'test failed' });
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'qa', at: T(6) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'qa', at: T(7), error: 'test failed again' });
+
+  assert.equal(run.status, 'failed');
+  const rework = nextActions(run).filter(action => action.kind === 'rework-stage');
+  assert.equal(rework.length, 1);
+  assert.equal(rework[0].nodeId, 'implement');
+  assert.match(rework[0].label, /qa failed/);
+});
+
 // ── Retry ────────────────────────────────────────────────────────────────
 
 test('a failed stage within its attempt budget is retryable and keeps its history', () => {
