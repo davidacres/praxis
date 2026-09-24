@@ -417,3 +417,16 @@ test('published blocks and ledger survive a restart together', async () => {
   const replayed = await reopened.submit(action(), SCOPE_CONTEXT, async () => ({}));
   assert.equal(replayed.replay, true);
 });
+
+test('re-publishing the same message replaces its blocks, including a refused gadget\'s fallback', () => {
+  const service = new GadgetService({ hostId: 'host-1', now: () => '2026-09-24T10:00:00.000Z' });
+  const scope = { hostId: 'host-1', sessionId: 's-1' };
+  const inputs = [
+    { type: 'gadget' as const, blockId: 'msg-2-1', gadget: { version: GADGET_CONTRACT_VERSION, gadgetId: 'msg-2-1', kind: 'hologram', scope, issuedAt: '2026-09-24T10:00:00.000Z' } },
+    { type: 'gadget' as const, blockId: 'msg-2-2', gadget: { version: GADGET_CONTRACT_VERSION, gadgetId: 'msg-2-2', kind: 'choice', scope, issuedAt: '2026-09-24T10:00:00.000Z', fallbackText: 'Pick', payload: { question: 'Which?', options: [{ value: 'a', label: 'A' }] }, actions: [] } },
+  ];
+  service.publish('s-1', inputs);
+  service.publish('s-1', inputs);
+  const blocks = service.getBlocks('s-1');
+  assert.deepEqual(blocks.map(block => [block.blockId, block.type]), [['msg-2-1', 'fallback'], ['msg-2-2', 'gadget']]);
+});

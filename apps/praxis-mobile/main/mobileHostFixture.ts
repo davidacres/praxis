@@ -33,9 +33,9 @@ export interface FixtureSession {
 export interface FixtureRun {
   runId: string;
   workflowId: string;
-  status: 'running' | 'awaiting-approval' | 'approved' | 'cancelled';
+  status: 'running' | 'awaiting-approval' | 'approved' | 'cancelled' | 'failed';
   stage: string;
-  gate: 'pending' | 'passed';
+  gate: 'pending' | 'passed' | 'rejected';
 }
 
 export interface FixtureAttentionItem {
@@ -161,6 +161,18 @@ export function createMobileHostFixture(now: () => string = () => new Date().toI
       for (const item of state.attention) if (item.runId === state.run.runId) item.resolved = true;
       emit({ kind: 'gate.approved', runId: state.run.runId, stage: state.run.stage }, { runId: state.run.runId });
       return { runId: state.run.runId, gate: state.run.gate, status: state.run.status };
+    },
+    'workflowGates.reject': async (command: MobileCommand) => {
+      const reason = String((command.payload as { reason?: unknown } | undefined)?.reason ?? '').trim();
+      if (!reason) throw new Error('A rejection must say why.');
+      state.run.gate = 'rejected';
+      state.run.status = 'failed';
+      for (const item of state.attention) if (item.runId === state.run.runId) item.resolved = true;
+      emit({ kind: 'gate.rejected', runId: state.run.runId, stage: state.run.stage, reason }, { runId: state.run.runId });
+      return { runId: state.run.runId, gate: state.run.gate, status: state.run.status };
+    },
+    'gadgets.submit': async () => {
+      throw new Error('The fixture host issues no gadgets.');
     },
   };
 

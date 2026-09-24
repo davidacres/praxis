@@ -13,6 +13,12 @@
         {
           "cameraPermission": "Allow Praxis to scan a pairing code shown by your desktop."
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Praxis asks for Face ID before you approve a workflow or allow an agent to act from your phone."
+        }
       ]
     ],
     "ios": {

@@ -6,6 +6,7 @@ import { saveMobileDisplayMode } from './mobileConnection';
 import { useStore, type MobilePrimaryRoute } from './store';
 import { formatDayAndClock } from '../renderer/mobileTime';
 import { PraxisWordmark } from './PraxisWordmark';
+import { clearDiagnostics, useDiagnostics } from './diagnostics';
 import { isStageSessionKey, runCaption, runStageSessionKeys, runStatus } from '../renderer/mobileWorkflowRuns';
 
 type SettingsPage = 'app' | 'server' | 'permissions';
@@ -91,6 +92,31 @@ function DetailRow({ label, value, tone }: { label: string; value: string; tone?
   );
 }
 
+/** What went wrong talking to the desktop recently, so a failure is findable rather than silent. */
+function DiagnosticsSection(): React.JSX.Element {
+  const entries = useDiagnostics();
+  return (
+    <>
+      <SectionLabel>DIAGNOSTICS</SectionLabel>
+      <View style={styles.detailCard}>
+        {entries.length === 0 ? <DetailRow label="Recent problems" value="None" tone="ok" /> : null}
+        {entries.slice(0, 12).map((entry, index) => (
+          <View key={`${entry.at}:${index}`} style={styles.detailRow}>
+            <Text style={styles.detailLabel}>{formatDayAndClock(entry.at)} · {entry.what}</Text>
+            <Text selectable style={[styles.detailValue, { color: theme.warn }]}>{entry.message}</Text>
+          </View>
+        ))}
+      </View>
+      {entries.length > 0 ? (
+        <Pressable accessibilityRole="button" onPress={clearDiagnostics} style={({ pressed }) => [styles.displayMode, pressed && styles.navRowPressed]}>
+          <Text style={styles.displayModeTitle}>Clear</Text>
+        </Pressable>
+      ) : null}
+      <Text style={styles.detailNote}>Background refreshes and screens that fail are listed here, newest first. Nothing is sent anywhere.</Text>
+    </>
+  );
+}
+
 function SettingsDetail({ page, onBack }: { page: SettingsPage; onBack: () => void }): React.JSX.Element {
   const { host, shell, hostInfo, hostConfig, access, connectionIssue, retryConnection, disconnect } = useStore();
   const title = SETTINGS.find(item => item.id === page)?.label ?? 'Settings';
@@ -136,9 +162,15 @@ function SettingsDetail({ page, onBack }: { page: SettingsPage; onBack: () => vo
             <SectionLabel>NOTIFICATIONS</SectionLabel>
             <View style={styles.detailCard}>
               <DetailRow label="Push notifications" value="Not available" />
-              <DetailRow label="Attention while open" value="Refreshes every 5s" />
+              <DetailRow label="Attention while open" value="Live from the desktop" />
             </View>
-            <Text style={styles.detailNote}>Praxis mobile does not send notifications yet. Attention requests and session updates arrive only while the app is open and connected.</Text>
+            <Text style={styles.detailNote}>Praxis mobile does not send notifications yet. Attention requests and session updates arrive live while the app is open and connected.</Text>
+            <SectionLabel>SECURITY</SectionLabel>
+            <View style={styles.detailCard}>
+              <DetailRow label="Approvals and allowing agents" value="Face ID or passcode" />
+            </View>
+            <Text style={styles.detailNote}>Approving a run, rejecting one, allowing an agent to act, or answering a question that changes something asks you to confirm it is you. One check covers a minute of decisions.</Text>
+            <DiagnosticsSection />
           </>
         )}
         {page === 'server' && (

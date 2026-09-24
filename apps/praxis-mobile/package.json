@@ -19,6 +19,7 @@
     "@praxis/mobile-protocol": "*",
     "expo": "~57.0.21",
     "expo-camera": "~57.0.5",
+    "expo-local-authentication": "~57.0.3",
     "expo-secure-store": "~57.0.4",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",

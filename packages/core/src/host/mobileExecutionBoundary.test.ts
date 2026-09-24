@@ -23,6 +23,8 @@ test('dispatches only through the injected execution handler',async()=>{
   'workflowRuns.retryStage':async()=>undefined,
   'permissions.respond':async()=>undefined,
   'workflowGates.approve':async()=>undefined,
+  'workflowGates.reject':async()=>undefined,
+  'gadgets.submit':async()=>undefined,
  });
  assert.deepEqual(result,{ok:true,value:{accepted:true}});
  assert.equal(received,'praxis');
@@ -38,6 +40,8 @@ test('returns a typed conflict when the host handler rejects',async()=>{
   'workflowRuns.retryStage':async()=>undefined,
   'permissions.respond':async()=>undefined,
   'workflowGates.approve':async()=>undefined,
+  'workflowGates.reject':async()=>undefined,
+  'gadgets.submit':async()=>undefined,
  });
  assert.equal(result.ok,false);
  if(!result.ok) assert.equal(result.error.code,'command-conflict');
