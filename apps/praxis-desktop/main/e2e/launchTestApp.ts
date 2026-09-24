@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
@@ -9,6 +10,18 @@ export interface TestApp {
   userDataDir: string;
   /** Per-test settings file the app reads/writes instead of the real shared one. */
   settingsPath: string;
+}
+
+async function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, '127.0.0.1', () => {
+      const address = srv.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      srv.close(() => resolve(port));
+    });
+    srv.on('error', reject);
+  });
 }
 
 /**
@@ -66,13 +79,30 @@ export async function launchTestApp(
 ): Promise<TestApp> {
   const userDataDir = reuse?.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-e2e-'));
   const settingsPath = reuse?.settingsPath ?? path.join(userDataDir, 'test-settings.json');
-  if (seedSettings) {
-    fs.writeFileSync(settingsPath, JSON.stringify(seedSettings, null, 2));
+  const freeMobilePort = reuse ? undefined : await findFreePort();
+  if (!reuse || seedSettings) {
+    const baseSettings: Record<string, unknown> = freeMobilePort
+      ? { mobileAccess: { listenPort: freeMobilePort } }
+      : {};
+    const mergedSettings = seedSettings
+      ? {
+          ...baseSettings,
+          ...seedSettings,
+          mobileAccess: {
+            ...(baseSettings.mobileAccess as Record<string, unknown> | undefined),
+            ...(typeof seedSettings.mobileAccess === 'object' && seedSettings.mobileAccess !== null
+              ? (seedSettings.mobileAccess as Record<string, unknown>)
+              : {})
+          }
+        }
+      : baseSettings;
+    fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2));
   }
 
   const env: Record<string, string> = {
     ...process.env,
     PRAXIS_SETTINGS_PATH: settingsPath,
+    ...(freeMobilePort ? { PRAXIS_MOBILE_PORT: String(freeMobilePort) } : {}),
     // Full-tools AI sessions require a working folder; give every test profile
     // one (its own isolated user-data dir) unless a test overrides it.
     PRAXIS_AI_WORKING_DIR: userDataDir,

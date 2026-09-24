@@ -49,9 +49,17 @@ async function createLanServer(): Promise<void> {
   attachMobileLanServer(lanServer);
 }
 
+function configuredMobilePort(settingsPort: number | undefined): number | undefined {
+  const envPort = process.env.PRAXIS_MOBILE_PORT ? Number(process.env.PRAXIS_MOBILE_PORT) : undefined;
+  if (envPort && Number.isFinite(envPort) && envPort > 0) {
+    return envPort;
+  }
+  return settingsPort;
+}
+
 async function applyMobileAccessFromSettings(): Promise<void> {
   const settings = getSettingsBackend().read().mobileAccess;
-  const change = resolveMobileListenerChange(current, settings);
+  const change = resolveMobileListenerChange(current, settings, configuredMobilePort(settings.listenPort));
   current = change.listener;
 
   if (change.bind || change.unbind || change.dropConnections) {
@@ -93,7 +101,7 @@ async function refreshDiscoveryAdvertisement(): Promise<void> {
       hostId,
       displayName: settings.hostName.trim() || os.hostname() || 'Praxis desktop',
       fingerprint: fingerprintMobileHostKey(publicKeyHex),
-      port: lanServer.port ?? settings.listenPort,
+      port: lanServer.port ?? configuredMobilePort(settings.listenPort) ?? 43100,
       addresses: lanInterfaces().map(item => item.address),
     });
   } catch (error) {
