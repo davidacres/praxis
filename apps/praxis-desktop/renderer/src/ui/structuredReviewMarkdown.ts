@@ -80,7 +80,7 @@ function parseReview(value: string): StructuredReview | undefined {
 
 function renderReview(review: StructuredReview): string {
   const lines = [
-    '### Code review',
+    '### Structured findings',
     '',
     review.summary.trim(),
     '',

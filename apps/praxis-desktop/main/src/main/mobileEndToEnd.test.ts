@@ -87,6 +87,7 @@ function fakeDesktop() {
       return record ? mobileSessionSnapshot(record, ledger.latestSequence()) : undefined;
     },
     listWorkflows: async () => [],
+    listRuns: async () => [],
     getRun: async () => undefined,
     listRunChanges: async () => ({}),
     listAttention: async () => [],

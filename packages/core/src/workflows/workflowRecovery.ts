@@ -13,7 +13,7 @@
  * risk building on a half-finished change.
  */
 
-import { isAgentTaskNode, isCheckNode, isDeploymentNode, isTerminalOutcome } from './workflowTypes';
+import { isAgentTaskNode, isApprovalNode, isCheckNode, isDeploymentNode, isMergeNode, isTerminalOutcome } from './workflowTypes';
 import {
   applyWorkflowRunCommand,
   attemptsSpent,
@@ -80,7 +80,7 @@ export function findTimedOutNodes(run: WorkflowRun, now: string): string[] {
     .filter(state => {
       const node = run.definition.nodes.find(candidate => candidate.id === state.nodeId);
       const timeoutMs =
-        node && (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node)) ? node.timeoutMs : undefined;
+        node && (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) || isMergeNode(node)) ? node.timeoutMs : undefined;
       if (!timeoutMs) return false;
       const startedAt = Date.parse(state.attempts[state.attempts.length - 1]?.startedAt ?? '');
       return !Number.isNaN(startedAt) && nowMs - startedAt > timeoutMs;
@@ -94,6 +94,7 @@ export type WorkflowNextAction =
   | { kind: 'retry-stage'; nodeId: string; label: string; attemptsUsed: number; maxAttempts: number }
   | { kind: 'rework-stage'; nodeId: string; label: string }
   | { kind: 'approve'; nodeId: string; label: string }
+  | { kind: 'skip-approval'; nodeId: string; label: string }
   | { kind: 'cancel-run'; label: string }
   | { kind: 'none'; label: string };
 
@@ -115,7 +116,7 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
       .map(state => {
         const node = run.definition.nodes.find(candidate => candidate.id === state.nodeId);
         const maxAttempts =
-          (node && (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node)) ? node.maxAttempts : undefined) ?? 1;
+          (node && (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) || isMergeNode(node)) ? node.maxAttempts : undefined) ?? 1;
         return {
           kind: 'retry-stage' as const,
           nodeId: state.nodeId,
@@ -168,6 +169,10 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
 
   for (const nodeId of schedule.awaitingApproval) {
     actions.push({ kind: 'approve', nodeId, label: `Approve at ${label(nodeId)}` });
+    const approval = run.definition.nodes.find(node => node.id === nodeId);
+    if (approval && isApprovalNode(approval) && approval.optional) {
+      actions.push({ kind: 'skip-approval', nodeId, label: `Skip ${label(nodeId)}` });
+    }
   }
   for (const nodeId of schedule.ready) {
     actions.push({ kind: 'start-stage', nodeId, label: `Start ${label(nodeId)}` });

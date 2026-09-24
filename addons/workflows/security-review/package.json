@@ -1,0 +1,22 @@
+{
+  "name": "@davidacres/praxis-addon-security-review",
+  "version": "1.0.0",
+  "description": "Whole-codebase security review workflow: a severity-ranked report with structured findings and, on approval, a prioritised remediation plan created on the project board.",
+  "author": "davidacres",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davidacres/praxis.git",
+    "directory": "addons/workflows/security-review"
+  },
+  "praxis": {
+    "schemaVersion": 1,
+    "kind": "workflow-template",
+    "id": "security-review",
+    "name": "Security Review",
+    "summary": "Maps the attack surface, runs Semgrep, Gitleaks and OSV-Scanner when installed, and writes a severity-ranked report with structured findings. Approve to create a P0\u2013P3 remediation plan on your board, or skip. macOS/Linux.",
+    "author": "davidacres",
+    "contentVersion": "1.0.0",
+    "minAppVersion": "0.3.0"
+  }
+}

@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from 'react-dom';
 import type { AiProvider, WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { StageArtifacts } from './StageArtifacts';
 import { PROVIDER_LABELS, providerIconName } from '../ai/modelProviders';
 import { isProviderUsable } from '../ai/providerAvailability';
 import { useDeleteRun } from './useDeleteRun';
 import { WorkflowPipelineVertical } from './WorkflowPipelineVertical';
 import { WorkflowRunsBrowser } from './WorkflowRunsBrowser';
+import { WorkflowStageSummary } from './WorkflowStageSummary';
 import { ChipSelect } from '../ui/ChipSelect';
 
 /**
@@ -90,6 +92,8 @@ export interface WorkflowRunPageProps {
   /** Ask the shell to reveal the right pane. */
   onRequireAux?: () => void;
   onOpenSession?: (sessionKey: string) => void;
+  /** Opens an item on the project's board — a plan a stage published there. */
+  onOpenBoardItem?: (issueKey: string) => void;
   /** Opens the project's Policies page, offered when a bypass is blocked for lack of one. */
   onOpenPolicies?: () => void;
   /** Opens the start-run dialog — the empty state's way forward. */
@@ -112,6 +116,7 @@ export function WorkflowRunPage({
   auxSlot,
   onRequireAux,
   onOpenSession,
+  onOpenBoardItem,
   onOpenPolicies,
   onStartRun,
   onRunGone,
@@ -271,6 +276,7 @@ export function WorkflowRunPage({
   const canCancel = run?.actions.some(a => a.kind === 'cancel-run') ?? false;
   const reworkActions = run?.actions.filter(action => action.kind === 'rework-stage') ?? [];
   const approveActions = run?.actions.filter(action => action.kind === 'approve') ?? [];
+  const skipActions = run?.actions.filter(action => action.kind === 'skip-approval') ?? [];
   /** Retry actions for the steps stopped by the AI provider's limit. */
   const pausedRetries = (run?.actions ?? []).filter(
     (action): action is Extract<WorkflowRunSummary['actions'][number], { kind: 'retry-stage' }> =>
@@ -392,17 +398,23 @@ export function WorkflowRunPage({
             <div className="wf-run-session" data-testid="wf-run-session" key={stage.sessionKey}>
               {renderSession(stage.sessionKey)}
             </div>
+          ) : stage ? (
+            <div className="wf-run-nosession-host" data-testid="wf-run-nosession">
+              <WorkflowStageSummary
+                run={run}
+                stage={stage}
+                onApprove={nodeId =>
+                  void act(() => window.praxis.workflows.approveRun(run.runId, 'desktop-user', undefined, nodeId))
+                }
+                onRetry={nodeId => void act(() => window.praxis.workflows.retryStage(run.runId, nodeId))}
+                onDiagnose={() => void startDiagnosis()}
+                diagnosing={diagnosing}
+              />
+            </div>
           ) : (
             <div className="empty-state" data-testid="wf-run-nosession">
-              <Icon name={stage?.type === 'check' ? 'terminal' : 'robot'} size={26} />
-              <strong>{stage ? stage.name : 'No steps yet'}</strong>
-              {stage && (
-                <span>
-                  {stage.type === 'agent-task'
-                    ? 'This step has no session yet. It appears here as soon as the step starts.'
-                    : `A ${stage.type} step runs without a conversation — its result and log are in the run panel.`}
-                </span>
-              )}
+              <Icon name="robot" size={26} />
+              <strong>No steps yet</strong>
               <span className="rail-sub">{run.explanation}</span>
             </div>
           )}
@@ -558,6 +570,18 @@ export function WorkflowRunPage({
                       </button>
                     ))
                   )}
+                  {skipActions.map(action => (
+                    <button
+                      key={action.nodeId}
+                      type="button"
+                      className="btn"
+                      data-testid="wf-skip-approval"
+                      title="Skips this step and everything after it; the run finishes on what has already run."
+                      onClick={() => void act(() => window.praxis.workflows.skipApproval(run.runId, action.nodeId, 'desktop-user'))}
+                    >
+                      {skipActions.length > 1 ? action.label : 'Skip'}
+                    </button>
+                  ))}
                   <button
                     type="button"
                     className="btn btn-compact"
@@ -628,15 +652,7 @@ export function WorkflowRunPage({
                       </p>
                     )}
 
-                    {stage.artifacts.length > 0 && (
-                      <ul className="wf-stage-artifacts">
-                        {stage.artifacts.map(artifact => (
-                          <li key={artifact.contractId}>
-                            {artifact.kind}: {artifact.contractId}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    <StageArtifacts key={stage.nodeId} runId={run.runId} stage={stage} onOpenBoardItem={onOpenBoardItem} />
 
                     {stage.findings && (
                       <div className="wf-findings-section" data-testid="wf-findings-section">

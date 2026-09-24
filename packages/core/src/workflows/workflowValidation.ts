@@ -12,6 +12,7 @@
 
 import type { AgentToolMode } from '../ai/agentTypes';
 import { isModelTier } from './stageModel';
+import type { FindingWaiver } from './waiverRegister';
 import {
   WORKFLOW_SCHEMA_VERSION,
   isAgentTaskNode,
@@ -19,8 +20,14 @@ import {
   isCheckNode,
   isDeploymentNode,
   isJoinNode,
+  isMergeNode,
   nodeGate,
   nodeOutputs,
+  type CheckFindingSeverity,
+  type CheckResultAdapterKind,
+  type GateThresholdCondition,
+  type MetricThresholdCondition,
+  type WorkflowApprovalNode,
   type WorkflowArtifactContract,
   type WorkflowArtifactKind,
   type WorkflowCapabilityRequirement,
@@ -54,11 +61,14 @@ export interface WorkflowMigrationResult {
   errors: WorkflowIssue[];
 }
 
-const NODE_TYPES = new Set(['agent-task', 'check', 'deployment', 'approval', 'join']);
+const NODE_TYPES = new Set(['agent-task', 'check', 'deployment', 'approval', 'join', 'merge']);
 const EDGE_OUTCOMES = new Set<WorkflowEdgeOutcome>(['success', 'failure', 'always']);
 const GATE_KINDS = new Set<WorkflowGateKind>(['review', 'qa', 'security']);
 const ARTIFACT_KINDS = new Set<WorkflowArtifactKind>(['plan', 'diff', 'report', 'test-results', 'log', 'note', 'findings']);
 const TOOL_MODES = new Set(['read-only', 'full', 'project-only']);
+const ADAPTERS = new Set<CheckResultAdapterKind>(['sarif', 'junit', 'lcov', 'cobertura', 'npm-audit', 'osv-scanner']);
+const SEVERITIES = new Set(['info', 'low', 'medium', 'high', 'critical']);
+const METRIC_OPERATORS = new Set(['>=', '<=', '>', '<', '==']);
 const SCOPES = new Set<WorkflowScope>(['global', 'project']);
 
 const isText = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
@@ -208,6 +218,16 @@ function normalizeNode(value: unknown): WorkflowNode {
       if (GATE_KINDS.has(raw.satisfiesGate as WorkflowGateKind)) node.satisfiesGate = raw.satisfiesGate as WorkflowGateKind;
       if (typeof raw.timeoutMs === 'number') node.timeoutMs = raw.timeoutMs;
       if (typeof raw.maxAttempts === 'number') node.maxAttempts = raw.maxAttempts;
+      // How a scanner's report becomes findings. Dropping these on save meant a SARIF-producing
+      // check never had its findings parsed, so the security gate judged nothing.
+      if (ADAPTERS.has(raw.adapter as CheckResultAdapterKind)) node.adapter = raw.adapter as CheckResultAdapterKind;
+      if (isText(raw.reportPath)) node.reportPath = raw.reportPath;
+      if (isObject(raw.observe) && typeof raw.observe.enabled === 'boolean') {
+        node.observe = {
+          enabled: raw.observe.enabled,
+          ...(raw.observe.provider === 'github-actions' || raw.observe.provider === 'gitlab-ci' ? { provider: raw.observe.provider } : {})
+        };
+      }
       return node;
     }
     case 'deployment': {
@@ -232,10 +252,27 @@ function normalizeNode(value: unknown): WorkflowNode {
           : [],
         // Bypass is opt-in: an unreadable flag must not widen what an
         // approver is allowed to override.
-        allowBypass: raw.allowBypass === true
+        allowBypass: raw.allowBypass === true,
+        // Skipping is opt-in for the same reason.
+        ...(raw.optional === true ? { optional: true } : {}),
+        // The thresholds are the gate: dropping them on save let every severity through.
+        ...normalizeGateThresholds(raw.gateThresholds),
+        ...(Array.isArray(raw.waivers) ? { waivers: raw.waivers.filter(isObject) as unknown as FindingWaiver[] } : {})
       };
     case 'join':
       return { ...base, type: 'join', mode: raw.mode === 'all-required' ? 'all-required' : 'all' };
+    case 'merge': {
+      const node: WorkflowNode = {
+        ...base,
+        type: 'merge'
+      };
+      if (typeof raw.targetBranch === 'string') node.targetBranch = raw.targetBranch;
+      if (raw.noFastForward === false) node.noFastForward = false;
+      if (raw.onConflict === 'fail' || raw.onConflict === 'ai-resolve') node.onConflict = raw.onConflict;
+      if (typeof raw.timeoutMs === 'number') node.timeoutMs = raw.timeoutMs;
+      if (typeof raw.maxAttempts === 'number') node.maxAttempts = raw.maxAttempts;
+      return node;
+    }
     default:
       // Preserve the unusable node so validation can name it rather than
       // silently shrinking the graph under the author's feet.
@@ -251,7 +288,32 @@ function normalizeArtifact(value: unknown): WorkflowArtifactContract {
     required: raw.required !== false
   };
   if (isText(raw.description)) artifact.description = raw.description;
+  if (raw.publishTo === 'board') artifact.publishTo = 'board';
+  if (ADAPTERS.has(raw.adapter as CheckResultAdapterKind)) artifact.adapter = raw.adapter as CheckResultAdapterKind;
   return artifact;
+}
+
+function normalizeGateThresholds(value: unknown): Pick<WorkflowApprovalNode, 'gateThresholds'> {
+  if (!isObject(value)) return {};
+  const thresholds: NonNullable<WorkflowApprovalNode['gateThresholds']> = {};
+  for (const [gate, conditions] of Object.entries(value)) {
+    if (!GATE_KINDS.has(gate as WorkflowGateKind) || !Array.isArray(conditions)) continue;
+    const kept = conditions.filter(isObject).flatMap((condition): GateThresholdCondition[] => {
+      if (condition.type === 'metric' && isText(condition.metric) && METRIC_OPERATORS.has(condition.operator as string) && typeof condition.value === 'number') {
+        return [{ type: 'metric', metric: condition.metric, operator: condition.operator as MetricThresholdCondition['operator'], value: condition.value }];
+      }
+      if (condition.type === 'severity' && typeof condition.maxCount === 'number') {
+        return [{
+          type: 'severity',
+          maxCount: condition.maxCount,
+          ...(SEVERITIES.has(condition.severityLevel as string) ? { severityLevel: condition.severityLevel as CheckFindingSeverity } : {})
+        }];
+      }
+      return [];
+    });
+    if (kept.length > 0) thresholds[gate as WorkflowGateKind] = kept;
+  }
+  return Object.keys(thresholds).length > 0 ? { gateThresholds: thresholds } : {};
 }
 
 function normalizeEdge(value: unknown): WorkflowEdge {
@@ -329,6 +391,7 @@ function validateNodes(definition: WorkflowDefinition, errors: WorkflowIssue[]):
     if (isAgentTaskNode(node)) validateAgentTaskNode(node, at, errors);
     if (isCheckNode(node)) validateCheckNode(node, at, errors);
     if (isDeploymentNode(node)) validateDeploymentNode(node, at, errors);
+    if (isMergeNode(node)) validateMergeNode(node, at, errors);
     if (isApprovalNode(node) && !isText(node.prompt)) {
       errors.push({ path: `${at}.prompt`, message: 'An approval node needs a prompt.' });
     }
@@ -336,6 +399,19 @@ function validateNodes(definition: WorkflowDefinition, errors: WorkflowIssue[]):
   });
 
   return nodesById;
+}
+
+function validateMergeNode(
+  node: Extract<WorkflowNode, { type: 'merge' }>,
+  at: string,
+  errors: WorkflowIssue[]
+): void {
+  if (node.maxAttempts !== undefined && node.maxAttempts < 1) {
+    errors.push({ path: `${at}.maxAttempts`, message: 'maxAttempts must be 1 or greater.' });
+  }
+  if (node.timeoutMs !== undefined && node.timeoutMs <= 0) {
+    errors.push({ path: `${at}.timeoutMs`, message: 'timeoutMs must be greater than zero.' });
+  }
 }
 
 function validateAgentTaskNode(
@@ -429,6 +505,9 @@ function validateNodeOutputs(node: WorkflowNode, at: string, errors: WorkflowIss
     else seen.add(artifact.id);
     if (!ARTIFACT_KINDS.has(artifact.kind)) {
       errors.push({ path: `${path}.kind`, message: `Unsupported artifact kind: ${String(artifact.kind)}` });
+    }
+    if (artifact.publishTo === 'board' && (artifact.kind !== 'plan' || node.type !== 'agent-task')) {
+      errors.push({ path: `${path}.publishTo`, message: 'Only a plan output of an agent stage can be published to the board.' });
     }
   });
 }
@@ -750,7 +829,7 @@ function validatePolicy(
 
   definition.nodes.forEach((node, index) => {
     const maxAttempts =
-      isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) ? node.maxAttempts : undefined;
+      isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) || isMergeNode(node) ? node.maxAttempts : undefined;
     if (maxAttempts !== undefined && maxAttempts > policy.maxAttemptsPerNode) {
       errors.push({
         path: `nodes[${index}].maxAttempts`,

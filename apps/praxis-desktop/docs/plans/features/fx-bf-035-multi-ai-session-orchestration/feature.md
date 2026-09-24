@@ -105,3 +105,19 @@ Status: Cancelled · Duration: 30m 43s
 - ⏭️ Security scan: cancelled
 
 Deleted by the user.
+
+**PRX-F35** — 2026-09-24T07:52:08.369Z
+**Workflow run failed: Governed delivery — FX-BF-035: Multi-AI session orchestration across Claude, Codex and Copilot**
+
+Status: Failed · Duration: 8h 23m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.

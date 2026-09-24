@@ -14,13 +14,20 @@ import {
   stageSessionKey,
   chooseStageModel,
   formatUpstreamReports,
+  formatUpstreamLogs,
+  parsePublishablePlan,
+  planIssueInputs,
+  projectConnectionId,
+  nodeOutputs,
   stageProvider,
   type FinishedStageSession,
   type AiProvider,
   type IssueDetails,
   type StageDispatchContext,
   type StageOutcome,
-  type WorkflowAgentTaskNode
+  type WorkflowAgentTaskNode,
+  type WorkflowBoardReference,
+  type WorkflowRun
 } from '@praxis/core';
 import {
   abortActiveTask,
@@ -31,6 +38,7 @@ import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { getWorkflowPolicyStore } from './workflowStoreInstance';
 import { getProjectStore } from './projectStoreInstance';
+import { getServiceForConnection } from './serviceRegistry';
 import { workflowLogSink } from './workflowLogSink';
 import { launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 
@@ -164,6 +172,21 @@ export async function runWorkflowAgentStage(
   );
   if (upstream) taskDefinition.scope += `\n\n${upstream}`;
 
+  // A check's log lives in the evidence store, outside the worktree the agent's file tools are
+  // confined to — so it travels inline, or the stage would be told of output it cannot read.
+  const logs = formatUpstreamLogs(
+    await Promise.all(
+      stageContext.inputs
+        .filter(input => input.kind === 'log' && input.path)
+        .map(async input => ({
+          contractId: input.contractId,
+          stageName: workflowRun.definition.nodes.find(candidate => candidate.id === input.nodeId)?.name ?? input.nodeId,
+          text: await readFile(input.path as string, 'utf8').catch(() => '')
+        }))
+    )
+  );
+  if (logs) taskDefinition.scope += `\n\n${logs}`;
+
   // Attempts that judged the stage and failed. The one launching now is not among them, and one
   // that stopped without a verdict (provider limit, environment) never spent the stage.
   const failedAttempts = (workflowRun.nodes[node.id]?.attempts ?? []).filter(
@@ -262,13 +285,60 @@ export async function runWorkflowAgentStage(
     ? await freezeWorktree(worktreePath, context.stageName)
     : undefined;
 
-  return {
-    ...stageOutcomeFromSession(node, {
-      ...finished,
-      ...(snapshotRef ? { snapshotRef } : {})
-    }),
-    provider
-  };
+  const outcome = stageOutcomeFromSession(node, {
+    ...finished,
+    ...(snapshotRef ? { snapshotRef } : {})
+  });
+  return { ...(await publishPlanOutputs(node, workflowRun, outcome, finished.responseText)), provider };
+}
+
+/**
+ * Creates a stage's `publishTo: 'board'` plan on the run's project board once the stage has
+ * succeeded, and records the feature's key on the artifact. A plan that cannot be read or created
+ * fails the stage with the reason, so a retry is told exactly what to fix.
+ */
+async function publishPlanOutputs(
+  node: WorkflowAgentTaskNode,
+  run: WorkflowRun,
+  outcome: StageOutcome,
+  responseText: string | undefined
+): Promise<StageOutcome> {
+  const contracts = nodeOutputs(node).filter(contract => contract.publishTo === 'board');
+  if (outcome.status !== 'succeeded' || contracts.length === 0) return outcome;
+  try {
+    const reference = await publishPlanToBoard(run, responseText);
+    workflowLogSink.appendLine(`[workflow ${run.runId}] ${node.name} created plan ${reference.key} with ${reference.itemKeys.length} items on the board.`);
+    return {
+      ...outcome,
+      artifacts: (outcome.artifacts ?? []).map(artifact =>
+        contracts.some(contract => contract.id === artifact.contractId) ? { ...artifact, reference } : artifact
+      )
+    };
+  } catch (error) {
+    return { status: 'failed', error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function publishPlanToBoard(run: WorkflowRun, responseText: string | undefined): Promise<WorkflowBoardReference> {
+  const plan = parsePublishablePlan(responseText);
+  const service = await getServiceForConnection(projectConnectionId(run.projectId));
+  const projectKey = getProjectStore().get(run.projectId)?.key ?? (await service.getProjects())[0]?.key;
+  if (!projectKey) throw new Error('The run\'s project has no board to create the plan on.');
+  const inputs = planIssueInputs(plan, projectKey);
+  const feature = await service.createIssue(inputs.feature).catch(error => {
+    throw new Error(`Could not create the plan on the board: ${error instanceof Error ? error.message : String(error)}`);
+  });
+  const itemKeys: string[] = [];
+  for (const item of inputs.items(feature.key)) {
+    try {
+      itemKeys.push((await service.createIssue(item)).key);
+    } catch (error) {
+      throw new Error(
+        `Plan ${feature.key} was created, but only ${itemKeys.length} of ${plan.items.length} items were added before the board refused "${item.summary}": ${error instanceof Error ? error.message : String(error)}. Finish or delete ${feature.key} on the board before retrying, or the retry creates a second plan.`
+      );
+    }
+  }
+  return { key: feature.key, title: feature.summary, itemKeys };
 }
 
 export async function cancelWorkflowAgentStage(runId: string, nodeId: string): Promise<void> {

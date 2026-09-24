@@ -109,6 +109,7 @@ export * from './workflows/workflowRecovery';
 export * from './workflows/workflowPreflight';
 export * from './workflows/workflowStageSession';
 export * from './workflows/workflowStageTask';
+export * from './workflows/workflowPlanPublishing';
 export * from './workflows/workflowGates';
 export * from './workflows/workflowApprovalGadgets';
 export * from './workflows/workflowTemplates';

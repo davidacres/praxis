@@ -28,6 +28,7 @@ import {
   type MobileProviderCatalog,
   type MobileReadOperation,
   type MobileReadRequest,
+  type MobileRunSnapshot,
   type MobileSessionMode,
   type MobileSessionSnapshot,
   type MobileSessionSummary,
@@ -81,6 +82,8 @@ export interface MobileHostServiceDeps {
   listSessions(projectId?: string): Promise<readonly MobileSessionSummary[]>;
   getSession(sessionId: string): Promise<MobileSessionSnapshot | undefined>;
   listWorkflows(projectId: string): Promise<readonly { workflowId: string; name: string; trigger: string }[]>;
+  /** The project's workflow runs, newest first, archived ones left out. */
+  listRuns(projectId: string): Promise<readonly MobileRunSnapshot[]>;
   getRun(runId: string): Promise<unknown | undefined>;
   listRunChanges(runId: string): Promise<unknown>;
   listAttention(projectId: string): Promise<readonly unknown[]>;
@@ -291,6 +294,7 @@ export function createMobileHostReads(deps: MobileHostServiceDeps, commandOperat
       return requireSessionInProject(deps, sessionId, requireTarget(request, 'projectId'));
     },
     'workflows.list': async (request: MobileReadRequest) => deps.listWorkflows(requireTarget(request, 'projectId')),
+    'workflowRuns.list': async (request: MobileReadRequest) => deps.listRuns(requireTarget(request, 'projectId')),
     'workflowRuns.get': async (request: MobileReadRequest) => {
       const runId = requireTarget(request, 'runId');
       return requireRunInProject(deps, runId, requireTarget(request, 'projectId'));

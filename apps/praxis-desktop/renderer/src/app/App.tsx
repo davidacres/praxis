@@ -1653,6 +1653,10 @@ export function App() {
             auxSlot={auxSlotEl}
             onRequireAux={requireAux}
             onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
+            onOpenBoardItem={issueKey => {
+              const board = workspaceBoards.find(candidate => candidate.connectionId === `project:${selectedProject.id}`);
+              if (board) navigate({ boardId: board.id, issueKey });
+            }}
             onOpenPolicies={() => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'policies' })}
             onRunGone={() => navigate({ projectId: selectedProject.id, feature: 'workflows' })}
             onSelectRun={runId => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'runs', workflowRunId: runId || undefined })}
