@@ -7,7 +7,7 @@
 // `mockGitHubApi.ts` server, `pat` inline (the fallback
 // `GitHubConfigStore.getGitHubApiKey()` reads before the OS secret store —
 // necessary here because `connection:setSecret` needs `safeStorage`, which
-// this sandbox has no keychain backend for; see AGENTS.md).
+// this sandbox has no keychain backend for; see packages/core/src/marketplace/AGENTS.md).
 //
 // GitHub is `autoSynthesizesBoard('github')` — one repository is one board,
 // same "no picker" model as folder/demo — so unlike GitLab's manually-tracked
