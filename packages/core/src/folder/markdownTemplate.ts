@@ -130,6 +130,10 @@ export interface GenerateOptions {
   createdAt?: string;
   parentKey?: string;
   model?: string;
+  /** Header field values that replace a rule's default on creation, by field name (e.g. `Priority`). */
+  fieldValues?: Record<string, string>;
+  /** Section bodies that replace a rule's default body on creation, by section name. */
+  sectionBodies?: Record<string, string>;
 }
 
 function buildDefaultDescription(issueType: IssueType): string {
@@ -182,7 +186,7 @@ export function generateIssueMarkdown(
         if (!value) { continue; }
         break;
       default:
-        value = rule.defaultValue ?? '';
+        value = opts.fieldValues?.[rule.name]?.trim() || (rule.defaultValue ?? '');
         break;
     }
     lines.push(`**${rule.name}:**${value ? ` ${value}` : ''}`);
@@ -218,6 +222,8 @@ export function generateIssueMarkdown(
       lines.push(opts.description?.trim() || buildDefaultDescription(issueType));
     } else if (rule.name === 'Research Transcript') {
       lines.push(opts.ideaTranscript?.trim() || '');
+    } else if (opts.sectionBodies?.[rule.name]?.trim()) {
+      lines.push(opts.sectionBodies[rule.name].trim(), '');
     } else {
       lines.push(...rule.defaultBody);
     }

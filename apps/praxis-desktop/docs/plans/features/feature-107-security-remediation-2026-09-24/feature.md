@@ -3,7 +3,7 @@
 **Status:** 📋 Proposed
 **Created:** 2026-09-24T15:41:50.591Z
 **Type:** Feature
-**Priority:** Medium
+**Priority:** Highest
 
 ## Description
 Prioritised remediation of the 19 findings in the Security Review of Praxis at commit `ab05ede`. No code has been changed; this plan is the work breakdown.

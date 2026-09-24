@@ -9,7 +9,7 @@ Runs a security review of a project's whole codebase and writes a report. If you
 3. When the run pauses on **Create remediation plan?**, open the **Security review** stage:
    - **Findings** are grouped by severity, each with file:line and a fix.
    - **Read report**, **Copy**, and **Save as Markdown…** give you the full report.
-4. Choose **Approve** to create the plan on the project's board, or **Skip** if the report is all you need. The run page shows the plan's id (e.g. `AUDIT-F03`) with **Open on board**. On a folder-backed project the plan is written as markdown files in `docs/plans`.
+4. Choose **Approve** to create the plan on the project's board, or **Skip** if the report is all you need. The run page shows the plan's id (e.g. `AUDIT-F03`) with **Open on board**. On a folder-backed project the plan is written as markdown files in `docs/plans`. Each item's priority (P0–P3 as Highest…Low) and severity are set, and each vulnerability is filed as a Bug with its exploit steps, expected behaviour and actual behaviour filled in.
 
 ## Stages
 

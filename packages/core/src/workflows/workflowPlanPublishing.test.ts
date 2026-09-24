@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parsePublishablePlan, planIssueInputs, PUBLISHABLE_PLAN_INSTRUCTIONS } from './workflowPlanPublishing';
-import { buildStageTaskDefinition, formatUpstreamLogs, stageOutcomeFromSession } from './workflowStageTask';
+import { buildStageTaskDefinition, formatUpstreamLogs, formatUpstreamReports, stageOutcomeFromSession } from './workflowStageTask';
 import { parseReviewFindings } from '../ai/aiReviewService';
 import { validateWorkflow, normalizeWorkflow } from './workflowValidation';
 import { fullSdlcMarketplaceTemplates } from './workflowTemplates';
+import { generateIssueMarkdown } from '../folder/markdownTemplate';
 import type { WorkflowAgentTaskNode, WorkflowDefinition } from './workflowTypes';
 
 const planBlock = (plan: unknown) => `Here is the plan overview.\n\n\`\`\`praxis-plan\n${JSON.stringify(plan)}\n\`\`\`\n`;
@@ -13,7 +14,7 @@ const PLAN = {
   feature: { title: 'Security remediation — 2026-09-24', description: '## Summary\nThree items.' },
   items: [
     { type: 'Task', priority: 'P2', title: 'Pin CI actions to commit SHAs', description: 'Change `.github/workflows/*.yml`.' },
-    { type: 'bug', priority: 'p0', title: '[P0] Parameterise the order search query', description: 'SEC-001.' },
+    { type: 'bug', priority: 'p0', severity: 'critical', title: '[P0] Parameterise the order search query', description: 'SEC-001.', steps: '1. GET /orders?id=1 OR 1=1', expected: 'One order.', actual: 'Every order.' },
     { type: 'Story', priority: 'P0', title: 'Validate uploaded archive paths', description: 'SEC-002.' }
   ]
 };
@@ -48,7 +49,8 @@ test('planIssueInputs creates the feature, then items in priority order under it
     projectKey: 'AUDIT',
     issueType: 'Feature',
     summary: 'Security remediation — 2026-09-24',
-    description: '## Summary\nThree items.'
+    description: '## Summary\nThree items.',
+    priority: 'Highest'
   });
   const items = inputs.items('AUDIT-F03');
   assert.deepEqual(
@@ -57,6 +59,16 @@ test('planIssueInputs creates the feature, then items in priority order under it
   );
   assert.ok(items.every(item => item.parentKey === 'AUDIT-F03' && item.projectKey === 'AUDIT'));
   assert.match(items[0].description ?? '', /^\*\*Priority:\*\* P0 · Part of plan AUDIT-F03: Security remediation — 2026-09-24\n\nSEC-001\.$/);
+  // The board's own fields carry the plan's priority and the finding's severity, and a Bug's
+  // template sections carry its reproduction instead of staying empty.
+  assert.deepEqual(
+    items.map(item => [item.priority, item.severity, item.sections]),
+    [
+      ['Highest', 'Critical', { 'Steps to Reproduce': '1. GET /orders?id=1 OR 1=1', 'Expected Behavior': 'One order.', 'Actual Behavior': 'Every order.' }],
+      ['Highest', undefined, undefined],
+      ['Medium', undefined, undefined]
+    ]
+  );
 });
 
 const agentNode = (outputs: WorkflowAgentTaskNode['outputs']): WorkflowAgentTaskNode => ({
@@ -184,4 +196,28 @@ test('saving a workflow keeps its gate thresholds, waivers and scanner adapters'
     checked += template.nodes.filter(node => (node.type === 'approval' && node.gateThresholds) || (node.type === 'check' && node.reportPath)).length;
   }
   assert.ok(checked > 0, 'the templates exercise thresholds and report paths');
+});
+
+test('a folder board writes a plan item\'s priority, severity and bug sections into its markdown', () => {
+  const markdown = generateIssueMarkdown('Bug', '[P0] Parameterise the order search query', {
+    description: 'SEC-001.',
+    fieldValues: { Priority: 'Highest', Severity: 'Critical' },
+    sectionBodies: { 'Steps to Reproduce': '1. GET /orders?id=1 OR 1=1', 'Actual Behavior': 'Every order.' }
+  });
+  assert.match(markdown, /\*\*Priority:\*\* Highest/);
+  assert.match(markdown, /\*\*Severity:\*\* Critical/);
+  assert.match(markdown, /## Steps to Reproduce\n1\. GET \/orders\?id=1 OR 1=1\n/);
+  assert.match(markdown, /## Actual Behavior\nEvery order\.\n/);
+  // A section with no body given keeps the template default.
+  assert.match(markdown, /## Expected Behavior\n\n/);
+});
+
+test('a report too long to inline names the file that holds all of it', () => {
+  const text = `HEAD${'x'.repeat(100)}TAIL`;
+  const withFile = formatUpstreamReports([{ contractId: 'security-report', stageName: 'Security review', text, fullTextPath: '.praxis-run/security-report.md' }], 40);
+  assert.match(withFile ?? '', /### "security-report" from Security review \(full text: `\.praxis-run\/security-report\.md`\)/);
+  assert.match(withFile ?? '', /characters omitted — read the whole report from `\.praxis-run\/security-report\.md`/);
+  // A report that fits is inlined whole and needs no file.
+  const short = formatUpstreamReports([{ contractId: 'r', stageName: 'S', text: 'short', fullTextPath: '.praxis-run/r.md' }], 40);
+  assert.doesNotMatch(short ?? '', /full text/);
 });
