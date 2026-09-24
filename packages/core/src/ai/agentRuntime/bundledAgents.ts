@@ -1,7 +1,7 @@
 /**
  * Bundled trusted agent manifests and briefs (FX-BE-090 / TASK-247).
  *
- * Ships four canonical agents in the app image:
+ * Ships five canonical agents in the app image:
  * - praxis-planner
  * - praxis-implementer
  * - praxis-reviewer
@@ -20,7 +20,9 @@ import {
 } from '../aiReviewService';
 
 export const STRUCTURED_SECURITY_REVIEW_SYSTEM_PROMPT = `You are a security engineer performing a structured security review.
-Analyze the implementation context and diff for security vulnerabilities:
+Analyze the code in scope for security vulnerabilities. The scope is what the task gives you: a diff and its
+implementation context, or the whole codebase when the task asks for a full review. Apply any attached skills'
+checklists where they fit the project's stack.
 1. OWASP Top 10 vulnerabilities (injection, XSS, CSRF, etc.)
 2. Authentication and authorization issues
 3. Data exposure or sensitive data leakage
@@ -298,6 +300,158 @@ When reviewing .NET and C# code, evaluate:
 5. **Dependency Inversion Principle (DIP)**: Depend on abstractions, not concrete implementations. Verify dependency injection usage.
 6. **Don't Repeat Yourself (DRY)**: Eliminate duplicated logic and boilerplate across the solution.
 `
+  },
+  'visual-verification': {
+    name: 'visual-verification',
+    title: 'Visual Verification',
+    description: 'Verify a UI change by capturing and inspecting the affected screens, and treat snapshot updates as reviewed decisions.',
+    triggers: ['ui', 'layout', 'css', 'screenshot', 'snapshot', 'visual', 'theme', 'styling'],
+    version: '1.0.0',
+    instructions: `---
+name: visual-verification
+title: Visual Verification
+description: "Verify a UI change by capturing and inspecting the affected screens, and treat snapshot updates as reviewed decisions."
+triggers: ui, layout, css, screenshot, snapshot, visual, theme, styling
+version: 1.0.0
+---
+
+# Visual Verification
+
+Applies when a change touches anything rendered: layout, spacing, type scale, colour, theming, copy
+length, empty/error states. If nothing rendered changed, say so and stop.
+
+**A green test suite does not prove the UI looks right.** Wrapped labels, collapsed flex rows and
+misplaced overlays pass every assertion.
+
+1. **Capture the surfaces you changed**, using the project's screenshot or e2e specs where they exist
+   (for example Playwright page.screenshot or toHaveScreenshot), in the states that matter: empty,
+   populated, error, narrow width, and each theme the app supports.
+2. **Open and look at every capture.** State what you checked in each: alignment, truncation, wrapping,
+   overlap, contrast, focus rings. Do not describe an image you did not open.
+3. **Check captures are fresh.** Informational screenshots are overwritten only when their spec runs;
+   confirm the file was written by this run before relying on it.
+4. **Snapshot baselines are decisions, not chores.** Before accepting an updated baseline, open the
+   actual, expected and diff images, say what changed, and confirm it is the intended change and not a
+   regression. Never bulk-update snapshots to make a suite pass.
+5. **Report** the captures inspected, anything wrong you found and fixed, and any surface you could
+   not capture and why.`
+  },
+  'verification-report': {
+    name: 'verification-report',
+    title: 'Verification Report',
+    description: 'End an implementation or test stage with a factual report of what was verified, how, and what was not.',
+    triggers: ['verify', 'verification', 'test report', 'done', 'definition of done', 'evidence'],
+    version: '1.0.0',
+    instructions: `---
+name: verification-report
+title: Verification Report
+description: "End an implementation or test stage with a factual report of what was verified, how, and what was not."
+triggers: verify, verification, test report, done, definition of done, evidence
+version: 1.0.0
+---
+
+# Verification Report
+
+Finish every implementation or test stage with this report. It is the evidence the next stage and the
+reviewer rely on, so it must be factual: report only what you ran and saw.
+
+## Changes
+What changed and why, by file or area.
+
+## Automated checks
+For each command you ran (build, lint, typecheck, unit, e2e): the exact command, the result, and the
+pass/fail/skip counts. Paste failures verbatim. "Build succeeded" is not verification of behaviour.
+
+## Snapshots
+Every snapshot baseline added or updated, with what changed and why it is intended. "None" if none.
+
+## Manual and visual checks
+What you exercised by hand or by inspecting captures, and what you saw.
+
+## Not verified
+Anything you could not run or check, and the concrete reason (missing tool, credentials, hardware).
+Do not claim a check you did not perform. If the suite is runnable, run it rather than listing it here.
+
+## Risks
+Behaviour that changed beyond the ticket, compatibility concerns, follow-ups.`
+  },
+  'electron-hardening': {
+    name: 'electron-hardening',
+    title: 'Electron Hardening Review',
+    description: 'Security checklist for Electron apps: window and navigation lockdown, IPC, CSP, token handling and update integrity.',
+    triggers: ['electron', 'browserwindow', 'ipc', 'preload', 'desktop app security'],
+    version: '1.0.0',
+    instructions: `---
+name: electron-hardening
+title: Electron Hardening Review
+description: "Security checklist for Electron apps: window and navigation lockdown, IPC, CSP, token handling and update integrity."
+triggers: electron, browserwindow, ipc, preload, desktop app security
+version: 1.0.0
+---
+
+# Electron Hardening Review
+
+Applies only if the project depends on electron. If it does not, report "not applicable" and stop.
+For each item, cite the file and line that satisfies it, or raise a finding.
+
+1. **webPreferences** on every BrowserWindow / WebContentsView: contextIsolation true, nodeIntegration
+   false, sandbox true, webSecurity not disabled, allowRunningInsecureContent not enabled.
+2. **Navigation.** Windows that show the app's own UI block will-navigate and will-redirect to anything
+   but their own renderer, and setWindowOpenHandler denies new windows. URLs passed to
+   shell.openExternal are restricted to an allowlist of schemes (http, https, mailto) and never built
+   from unvalidated renderer input. Views that load remote content on purpose use their own session
+   partition and get no privileged preload.
+3. **IPC.** The preload exposes a narrow, typed API through contextBridge; it never exposes ipcRenderer
+   or Node APIs directly. Main-process handlers validate arguments and, for sensitive channels, the
+   sender frame. No handler runs shell commands or touches arbitrary paths from renderer input.
+4. **CSP.** The renderer has a Content-Security-Policy without unsafe-eval; script-src, connect-src and
+   img-src are as narrow as the app allows.
+5. **Credentials.** Tokens live in the main process (OS keychain / safeStorage), never in the renderer,
+   localStorage or tracked files. A bearer token is sent only to the origin it belongs to; URLs taken
+   from remote data (redirects, pagination Link headers, download URLs in metadata) are origin-checked
+   before the token is attached.
+6. **Downloads and updates.** Downloaded packages are checked against an integrity hash or signature
+   before they are unpacked or run; decompression has a size limit; auto-update feeds use https and
+   signed artifacts.
+7. **Fuses and flags.** RunAsNode and Node CLI inspect options are disabled in release builds where the
+   app does not need them; no debug or remote-debugging switches ship enabled.`
+  },
+  'ci-workflow-hardening': {
+    name: 'ci-workflow-hardening',
+    title: 'CI Workflow Hardening Review',
+    description: 'Security checklist for CI/CD pipelines (GitHub Actions, GitLab CI): script injection, token scope, untrusted code and secrets.',
+    triggers: ['github actions', 'workflow', 'ci', 'gitlab ci', 'pipeline', 'release'],
+    version: '1.0.0',
+    instructions: `---
+name: ci-workflow-hardening
+title: CI Workflow Hardening Review
+description: "Security checklist for CI/CD pipelines (GitHub Actions, GitLab CI): script injection, token scope, untrusted code and secrets."
+triggers: github actions, workflow, ci, gitlab ci, pipeline, release
+version: 1.0.0
+---
+
+# CI Workflow Hardening Review
+
+Applies to .github/workflows/*.yml and .gitlab-ci.yml (and files they include). If there are none,
+report "not applicable" and stop. For each item, cite the file and line or raise a finding.
+
+1. **Script injection.** Values an outsider can influence (branch and tag names, PR/issue titles and
+   bodies, commit messages, head_ref) are never interpolated into a run/script line with
+   expression syntax. Pass them through an environment variable and quote it.
+2. **Token scope.** The workflow-level permissions default to read. Write scopes are granted per job,
+   only to jobs that need them. A job that runs dependency installs or build scripts does not hold a
+   write-capable token; publishing and release uploads happen in a separate job that runs no project
+   code.
+3. **Untrusted code.** pull_request_target and workflow_run triggers never check out and run the
+   contributor's code with secrets or write tokens available.
+4. **Third-party actions** are pinned to a full commit SHA (actions owned by the platform may use a
+   version tag).
+5. **Secrets** are not echoed, not written to artifacts or caches, and not available to jobs triggered
+   from forks. GitLab: sensitive variables are protected and masked.
+6. **Failure masking.** Security, signing and release steps do not use continue-on-error (or
+   allow_failure) in a way that hides a real failure.
+7. **Tracked credentials.** Editor settings, .env files and captured traffic files are ignored, not
+   tracked; any credential found in history is reported for rotation.`
   }
 };
 

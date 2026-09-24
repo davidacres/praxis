@@ -7,6 +7,7 @@ import { createWorkflowRun, applyWorkflowRunCommand, normalizeWorkflowRun, type 
 import { advanceJoins, deriveRunStatus, scheduleWorkflowRun } from './workflowScheduler';
 import { approveStage, skipApproval } from './workflowGates';
 import { nodeOutputs, type WorkflowDefinition } from './workflowTypes';
+import { AVAILABLE_SKILL_DEFINITIONS } from '../ai/agentRuntime/bundledAgents';
 
 // Compiled to packages/core/out/workflows; the add-ons live at the repo root.
 const ADDON_WORKFLOWS = path.resolve(__dirname, '../../../../addons/workflows');
@@ -23,6 +24,20 @@ test('every workflow add-on template normalizes and validates', () => {
   for (const id of ids) {
     const result = validateWorkflow(loadAddonTemplate(id));
     assert.equal(result.valid, true, `${id}: ${JSON.stringify(result.errors)}`);
+  }
+});
+
+test('every skill an add-on template names ships with the app, so instantiating it can install the skill', () => {
+  const ids = fs.readdirSync(ADDON_WORKFLOWS).filter(id => fs.existsSync(path.join(ADDON_WORKFLOWS, id, 'addon', 'template.json')));
+  for (const id of ids) {
+    for (const node of loadAddonTemplate(id).nodes) {
+      if (node.type !== 'agent-task') continue;
+      for (const name of node.agent.skillNames ?? []) {
+        const skill = AVAILABLE_SKILL_DEFINITIONS[name];
+        assert.ok(skill, `${id}/${node.id}: skill "${name}" is not in AVAILABLE_SKILL_DEFINITIONS`);
+        assert.match(skill.instructions, new RegExp(`^---\\nname: ${name}\\n`), `${name}: SKILL.md frontmatter name`);
+      }
+    }
   }
 });
 
