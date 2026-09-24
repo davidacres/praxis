@@ -46,7 +46,8 @@
         "scope": "global",
         "toolMode": "full",
         "skillNames": [
-          "verification-report"
+          "verification-report",
+          "visual-verification"
         ]
       },
       "instructions": "Implement changes matching plan specifications and commit changes to the branch.",

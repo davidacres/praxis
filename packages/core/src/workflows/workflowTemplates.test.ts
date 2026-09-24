@@ -59,7 +59,7 @@ function skill(name: string): DiscoveredSkill {
 const fullCatalog: AgentCatalogSnapshot = {
   agents: [agent('praxis-planner'), agent('praxis-implementer'), agent('praxis-reviewer'), agent('praxis-test-author')],
   profiles: [profile('praxis-planner'), profile('praxis-implementer'), profile('praxis-reviewer'), profile('praxis-test-author')],
-  skills: [skill('praxis-test-contracts')],
+  skills: ['praxis-test-contracts', 'verification-report', 'visual-verification'].map(skill),
   capabilities: {}
 };
 
