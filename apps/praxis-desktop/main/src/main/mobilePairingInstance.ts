@@ -129,7 +129,9 @@ export async function snapshotMobilePairing(): Promise<MobilePairingSnapshot> {
   const hostName = settings.hostName.trim() || os.hostname() || 'Praxis desktop';
   const interfaces = lanInterfaces();
   const addresses = interfaces.map(item => item.address);
-  const port = lanServer?.port ?? settings.listenPort ?? DEFAULT_MOBILE_LISTENER_PORT;
+  const envPort = process.env.PRAXIS_MOBILE_PORT ? Number(process.env.PRAXIS_MOBILE_PORT) : undefined;
+  const configuredPort = envPort && Number.isFinite(envPort) && envPort > 0 ? envPort : settings.listenPort;
+  const port = lanServer?.port ?? configuredPort ?? DEFAULT_MOBILE_LISTENER_PORT;
   const endpoints = (addresses.length ? addresses : ['127.0.0.1']).map(address => ({ address, port }));
   const invitation = getMobilePairingRegistry().activeInvitation(new Date().toISOString(), {
     displayName: hostName,
