@@ -1,4 +1,5 @@
 /** Browser-safe protocol contracts for a mobile client controlling a running Praxis host. */
+import type { AnyGadgetEnvelope, GadgetActionStatus, GadgetActionValue, GadgetLifecycleState } from '../ai/gadgets/contracts';
 export const MOBILE_PROTOCOL_VERSION = 1 as const;
 export type MobileCapability = 'view' | 'execute' | 'approve';
 /**
@@ -7,18 +8,20 @@ export type MobileCapability = 'view' | 'execute' | 'approve';
  * `sessions.usage`, `access.get` and the `mode` / validated `provider` /
  * `model` fields of `sessions.create`; revision 3 added `sessions.configure`
  * (between-turn provider handover, model change and mode switch); revision 4 added `host.info`
- * `appearance` and the `host.appearance` event, so the phone wears the desktop's theme. A phone reads `host.info` first and
- * treats a missing operation (an older desktop) as "unsupported", not an error.
+ * `appearance` and the `host.appearance` event, so the phone wears the desktop's theme; revision 5 added
+ * gadgets on session messages and `gadgets.submit`, `workflowGates.reject`, and a session's working-tree
+ * changes through `changes.get` (`target.sessionId`, optionally `params.path` for one file's diff). A phone
+ * reads `host.info` first and treats a missing operation (an older desktop) as "unsupported", not an error.
  */
-export const MOBILE_HOST_SURFACE_REVISION = 4 as const;
+export const MOBILE_HOST_SURFACE_REVISION = 5 as const;
 export type MobileReadOperation = 'hosts.list' | 'host.info' | 'projects.snapshot' | 'work.list' | 'sessions.list' | 'sessions.get' | 'sessions.usage' | 'workflows.list' | 'workflowRuns.list' | 'workflowRuns.get' | 'changes.get' | 'attention.list' | 'providers.list' | 'models.list' | 'access.get';
-export type MobileCommandOperation = 'sessions.create' | 'sessions.continue' | 'sessions.cancel' | 'sessions.configure' | 'workflowRuns.start' | 'workflowRuns.cancel' | 'workflowRuns.retryStage' | 'permissions.respond' | 'workflowGates.approve';
+export type MobileCommandOperation = 'sessions.create' | 'sessions.continue' | 'sessions.cancel' | 'sessions.configure' | 'workflowRuns.start' | 'workflowRuns.cancel' | 'workflowRuns.retryStage' | 'permissions.respond' | 'workflowGates.approve' | 'workflowGates.reject' | 'gadgets.submit';
 export type MobileOperation = MobileReadOperation | MobileCommandOperation;
 export interface MobileCaller { deviceId: string; subject?: string; capabilities: readonly MobileCapability[]; }
 export interface MobileTarget { hostId: string; projectId?: string; sessionId?: string; runId?: string; requestId?: string; }
 export interface MobileCommand<TPayload = unknown> { protocolVersion: typeof MOBILE_PROTOCOL_VERSION; commandId: string; issuedAt: string; caller: MobileCaller; target: MobileTarget; operation: MobileCommandOperation; expectedVersion?: number; payload: TPayload; }
-/** Operation-specific read arguments. Only `models.list` uses them today. */
-export interface MobileReadParams { provider?: string; refresh?: boolean; }
+/** Operation-specific read arguments: `models.list` (provider, refresh) and `changes.get` (path). */
+export interface MobileReadParams { provider?: string; refresh?: boolean; path?: string; }
 export interface MobileReadRequest { protocolVersion: typeof MOBILE_PROTOCOL_VERSION; requestId: string; caller: MobileCaller; target: MobileTarget; operation: MobileReadOperation; cursor?: string; limit?: number; params?: MobileReadParams; }
 export interface MobileEventCursor { hostId: string; projectId?: string; sequence: number; }
 export interface MobileEventEnvelope<TEvent = unknown> { protocolVersion: typeof MOBILE_PROTOCOL_VERSION; eventId: string; sequence: number; emittedAt: string; target: MobileTarget; event: TEvent; }
@@ -245,6 +248,52 @@ export interface MobileSessionMessage {
   reasoning?: string;
   model?: string;
   toolNames?: readonly string[];
+  /**
+   * Gadgets the message asked for, in order (revision 5). Their fenced JSON is removed from
+   * `text`, so a phone that cannot draw one shows its `gadget.fallbackText` instead.
+   */
+  gadgets?: readonly MobileGadgetView[];
+}
+/** A gadget as the host resolves it now: the envelope, whether it still accepts an answer, and the answer's outcome. */
+export interface MobileGadgetView {
+  gadget: AnyGadgetEnvelope;
+  state: GadgetLifecycleState;
+  result?: { status: GadgetActionStatus; message?: string };
+}
+/** `gadgets.submit` payload. Scope comes from the host's own record of the gadget, never from the phone. */
+export interface MobileGadgetSubmitPayload {
+  gadgetId: string;
+  actionId: string;
+  value: GadgetActionValue;
+  /** Stable per logical answer, so a retried command cannot record it twice. */
+  idempotencyKey: string;
+}
+/** A file in a session's working tree that differs from HEAD (`changes.get` with `target.sessionId`). */
+export interface MobileChangedFile {
+  path: string;
+  status: 'added' | 'modified' | 'deleted' | 'renamed' | 'conflicted';
+  additions?: number;
+  deletions?: number;
+  /** The session's own tools reported editing it; other changes were already in the tree. */
+  reportedBySession: boolean;
+}
+export interface MobileSessionChanges {
+  sessionId: string;
+  /** False when the session's folder is not a git repository — nothing to compare. */
+  repository: boolean;
+  branch?: string;
+  files: readonly MobileChangedFile[];
+}
+export interface MobileDiffLine { kind: 'context' | 'add' | 'delete'; text: string; oldLine?: number; newLine?: number }
+/** One file's working-tree diff (`changes.get` with `params.path`), bounded for a phone. */
+export interface MobileFileDiff {
+  path: string;
+  binary: boolean;
+  additions: number;
+  deletions: number;
+  hunks: readonly { header: string; lines: readonly MobileDiffLine[] }[];
+  /** Lines were dropped to stay within the phone's bound. */
+  truncated: boolean;
 }
 export interface MobilePendingPermission {
   requestId: string;
@@ -333,10 +382,12 @@ const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const CAPABILITY_BY_OPERATION: Record<MobileOperation, MobileCapability> = {
   'hosts.list':'view','host.info':'view','sessions.usage':'view','providers.list':'view','models.list':'view','access.get':'view','projects.snapshot':'view','work.list':'view','sessions.list':'view','sessions.get':'view','workflows.list':'view','workflowRuns.list':'view','workflowRuns.get':'view','changes.get':'view','attention.list':'view',
-  'sessions.create':'execute','sessions.continue':'execute','sessions.configure':'execute','sessions.cancel':'execute','workflowRuns.start':'execute','workflowRuns.cancel':'execute','workflowRuns.retryStage':'execute','permissions.respond':'approve','workflowGates.approve':'approve',
+  'sessions.create':'execute','sessions.continue':'execute','sessions.configure':'execute','sessions.cancel':'execute','workflowRuns.start':'execute','workflowRuns.cancel':'execute','workflowRuns.retryStage':'execute','permissions.respond':'approve','workflowGates.approve':'approve','workflowGates.reject':'approve',
+  // Answering a gadget is a turn in the conversation; an approval-effect answer additionally needs `approve`, checked by the host.
+  'gadgets.submit':'execute',
 };
 export function mobileCapabilityFor(operation: MobileOperation): MobileCapability { return CAPABILITY_BY_OPERATION[operation]; }
-export function mobileOperationRequiresMutation(operation: MobileOperation): boolean { return operation in {'sessions.create':true,'sessions.continue':true,'sessions.configure':true,'sessions.cancel':true,'workflowRuns.start':true,'workflowRuns.cancel':true,'workflowRuns.retryStage':true,'permissions.respond':true,'workflowGates.approve':true}; }
+export function mobileOperationRequiresMutation(operation: MobileOperation): boolean { return operation in {'sessions.create':true,'sessions.continue':true,'sessions.configure':true,'sessions.cancel':true,'workflowRuns.start':true,'workflowRuns.cancel':true,'workflowRuns.retryStage':true,'permissions.respond':true,'workflowGates.approve':true,'workflowGates.reject':true,'gadgets.submit':true}; }
 export function callerHasCapability(caller: MobileCaller, operation: MobileOperation): boolean { return caller.capabilities.includes(mobileCapabilityFor(operation)); }
 export function createMobileCommand<TPayload>(input: Omit<MobileCommand<TPayload>, 'protocolVersion'>): MobileCommand<TPayload> { const command={protocolVersion:MOBILE_PROTOCOL_VERSION,...input}; const validation=validateMobileCommand(command); if(!validation.ok) throw new Error(validation.error.message); return command; }
 export function validateMobileCommand(command: MobileCommand): {ok:true}|{ok:false;error:MobileProtocolError} {
