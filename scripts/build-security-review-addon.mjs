@@ -70,7 +70,9 @@ const secrets = sh([
 const dependencies = sh([
   'ran=0',
   'if command -v osv-scanner >/dev/null 2>&1; then',
-  '  osv-scanner --recursive .',
+  // --no-ignore: a run works in a worktree under the repo (e.g. .worktrees/), which the repo's own
+  // .gitignore usually ignores, and osv-scanner honours it and would otherwise scan nothing.
+  '  osv-scanner --recursive --no-ignore .',
   '  echo "[osv-scanner exited $?]"',
   '  ran=1',
   'else',

@@ -322,7 +322,9 @@ async function publishPlanOutputs(
 async function publishPlanToBoard(run: WorkflowRun, responseText: string | undefined): Promise<WorkflowBoardReference> {
   const plan = parsePublishablePlan(responseText);
   const service = await getServiceForConnection(projectConnectionId(run.projectId));
-  const projectKey = getProjectStore().get(run.projectId)?.key ?? (await service.getProjects())[0]?.key;
+  // The board's own key: a folder board's `board.praxis.json` can name a different key from the
+  // Praxis project's, and the board refuses items filed under any other.
+  const projectKey = (await service.getProjects())[0]?.key ?? getProjectStore().get(run.projectId)?.key;
   if (!projectKey) throw new Error('The run\'s project has no board to create the plan on.');
   const inputs = planIssueInputs(plan, projectKey);
   const feature = await service.createIssue(inputs.feature).catch(error => {
