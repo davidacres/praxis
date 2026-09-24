@@ -14,7 +14,30 @@ workflow: the phone must receive a self-contained Release build.
 Expo Go is not sufficient. Praxis uses native TCP/UDP, camera, and secure
 storage modules.
 
-## Xcode deployment
+## Automated script deployment (Recommended)
+
+Deploy to the connected physical iPhone in one command:
+
+```sh
+./scripts/deploy-iphone.sh
+# or via npm:
+npm run mobile:deploy
+```
+
+The script automatically:
+1. Detects connected physical iPhones and their Xcode UDID / CoreDevice ID.
+2. Builds the core dependencies (`@praxis/core` and `@praxis/mobile-protocol`).
+3. Compiles the iOS project in **Release** configuration.
+4. Verifies the embedded `main.jsbundle` is present (preventing the blank screen bug).
+5. Installs the app onto the phone and launches it.
+
+Options:
+- `--skip-build`: Skip recompilation and install the current Release build immediately.
+- `--clean`: Clean the build cache before building.
+- `--no-launch`: Install without launching.
+- `--device <id>`: Target a specific device if multiple are connected.
+
+## Manual Xcode deployment
 
 1. Open `apps/praxis-mobile/ios/Praxis.xcworkspace` in Xcode. Open the
    workspace, not `Praxis.xcodeproj` directly.

@@ -12,12 +12,13 @@
     "check-types": "tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p .",
     "compile": "tsc -p tsconfig.test.json",
     "test": "tsc -p tsconfig.test.json && node --test \"out/**/*.test.js\"",
-    "fixture": "tsc -p tsconfig.test.json && node out/main/runFixtureJourney.js"
+    "fixture": "tsc -p tsconfig.test.json && node out/main/runFixtureJourney.js",
+    "deploy": "../../scripts/deploy-iphone.sh"
   },
   "dependencies": {
     "@praxis/core": "*",
     "@praxis/mobile-protocol": "*",
-    "expo": "~57.0.21",
+    "expo": "57.0.24",
     "expo-camera": "~57.0.5",
     "expo-local-authentication": "~57.0.3",
     "expo-secure-store": "~57.0.4",
