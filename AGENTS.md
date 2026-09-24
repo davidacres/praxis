@@ -433,10 +433,16 @@ run is `workflows:deleteRun`), and archived sessions are restored one by one fro
 - **Check logs travel inline.** A check's log lives in the evidence store, outside the worktree that
   gateway agents' file tools are sandboxed to (`resolveSandboxedPath`), so `workflowAgentStage` inlines
   `log` inputs (`formatUpstreamLogs`) the same way reports are inlined (`formatUpstreamReports`, 24k cap).
+  A report past that cap is also written whole to `<worktree>/.praxis-run/<contract>.md` and the brief
+  names it, but **only for a read-only, non-mutating stage** (it could otherwise be committed by a
+  freeze); the folder is removed when the session ends. Real review reports run to ~70k characters.
 - **`publishTo: 'board'` on a `plan` output** creates the plan on the run's project board: the stage ends
   with a `praxis-plan` block (`workflowPlanPublishing.ts`), and the app creates a feature plus items via the
   project connection's `createIssue` (real plan markdown for a folder-backed project) and records the
   feature key on `WorkflowArtifactRef.reference`.
+  `CreateIssueInput.priority` / `severity` / `sections` carry P0–P3 (as Highest…Low), severity and a
+  Bug's steps/expected/actual into the folder template; other boards ignore them. Leave template
+  sections present: `FolderService`'s upgrade pass re-adds any missing one on every load.
 - **`optional: true` on an approval** offers **Skip** (`skipApproval`), which skips everything after it.
   It is opt-in so that a delivery sign-off can never be skipped.
 - **`advanceJoins` also settles branches that can no longer run** (the scheduler's `skip` list), except

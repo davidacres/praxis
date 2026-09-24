@@ -151,14 +151,21 @@ function buildIssueMarkdown(
   ideaTranscript: string | undefined,
   createdAtIso: string,
   parentKey?: string,
-  model?: string
+  model?: string,
+  extras?: Pick<CreateIssueInput, 'priority' | 'severity' | 'sections'>
 ): string {
+  const fieldValues = {
+    ...(extras?.priority?.trim() ? { Priority: extras.priority.trim() } : {}),
+    ...(extras?.severity?.trim() ? { Severity: extras.severity.trim() } : {})
+  };
   return generateIssueMarkdown(issueType as IssueType, title, {
     description,
     ideaTranscript,
     createdAt: createdAtIso,
     parentKey,
-    model
+    model,
+    ...(Object.keys(fieldValues).length > 0 ? { fieldValues } : {}),
+    ...(extras?.sections ? { sectionBodies: extras.sections } : {})
   });
 }
 
@@ -631,7 +638,8 @@ export class FolderService implements IssueTrackerService {
           undefined,
           createdAt,
           undefined,
-          defaultModel
+          defaultModel,
+          input
         )
       );
 
@@ -684,7 +692,8 @@ export class FolderService implements IssueTrackerService {
         issueType === 'Idea' ? ideaTranscript : undefined,
         createdAt,
         parentFeature.key,
-        defaultModel
+        defaultModel,
+        input
       )
     );
     await this.writeFeatureItemTableRow(

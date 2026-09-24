@@ -13,12 +13,20 @@ import type { CreateIssueInput } from '../types';
 export type PlanPriority = 'P0' | 'P1' | 'P2' | 'P3';
 export type PlanItemType = 'Story' | 'Task' | 'Bug';
 
+export type PlanSeverity = 'Critical' | 'High' | 'Medium' | 'Low';
+
 export interface PublishablePlanItem {
   type: PlanItemType;
   title: string;
   priority: PlanPriority;
   /** Markdown. */
   description: string;
+  /** The worst severity among the findings the item resolves. */
+  severity?: PlanSeverity;
+  /** A Bug's reproduction, as its board template asks for: how it is exploited, what should happen, what does. */
+  steps?: string;
+  expected?: string;
+  actual?: string;
 }
 
 export interface PublishablePlan {
@@ -27,6 +35,9 @@ export interface PublishablePlan {
 }
 
 const PRIORITIES: readonly PlanPriority[] = ['P0', 'P1', 'P2', 'P3'];
+const SEVERITIES: readonly PlanSeverity[] = ['Critical', 'High', 'Medium', 'Low'];
+/** How a plan priority reads in a board's own `Priority` field. */
+const BOARD_PRIORITY: Record<PlanPriority, string> = { P0: 'Highest', P1: 'High', P2: 'Medium', P3: 'Low' };
 const TYPES: readonly PlanItemType[] = ['Story', 'Task', 'Bug'];
 const MAX_ITEMS = 60;
 const MAX_TITLE = 120;
@@ -38,7 +49,8 @@ export const PUBLISHABLE_PLAN_INSTRUCTIONS = [
   '{',
   '  "feature": { "title": "Short plan title", "description": "Markdown: goal, scope, how the items were prioritised" },',
   '  "items": [',
-  '    { "type": "Story" | "Task" | "Bug", "priority": "P0" | "P1" | "P2" | "P3", "title": "Short imperative title", "description": "Markdown: what to change and where, how to verify it, effort, dependencies" }',
+  '    { "type": "Story" | "Task" | "Bug", "priority": "P0" | "P1" | "P2" | "P3", "severity": "Critical" | "High" | "Medium" | "Low", "title": "Short imperative title", "description": "Markdown: what to change and where, how to verify it, effort, dependencies",',
+  '      "steps": "Bug only — markdown steps that show the problem", "expected": "Bug only — the correct behaviour", "actual": "Bug only — what happens today" }',
   '  ]',
   '}',
   '```',
@@ -75,11 +87,16 @@ export function parsePublishablePlan(responseText: string | undefined): Publisha
     if (!title) throw new Error(`Plan item ${index + 1} has no title.`);
     const priority = text(entry.priority).toUpperCase() as PlanPriority;
     const type = TYPES.find(candidate => candidate.toLowerCase() === text(entry.type).toLowerCase()) ?? 'Task';
+    const severity = SEVERITIES.find(candidate => candidate.toLowerCase() === text(entry.severity).toLowerCase());
     return {
       type,
       title: clip(title.replace(/^\[?P[0-3]\]?[\s:·-]*/i, ''), MAX_TITLE),
       priority: PRIORITIES.includes(priority) ? priority : 'P2',
-      description: text(entry.description)
+      description: text(entry.description),
+      ...(severity ? { severity } : {}),
+      ...(type === 'Bug' && text(entry.steps) ? { steps: text(entry.steps) } : {}),
+      ...(type === 'Bug' && text(entry.expected) ? { expected: text(entry.expected) } : {}),
+      ...(type === 'Bug' && text(entry.actual) ? { actual: text(entry.actual) } : {})
     };
   });
 
@@ -96,7 +113,14 @@ export function planIssueInputs(
     .sort((a, b) => PRIORITIES.indexOf(a.item.priority) - PRIORITIES.indexOf(b.item.priority) || a.index - b.index)
     .map(entry => entry.item);
   return {
-    feature: { projectKey, issueType: 'Feature', summary: plan.feature.title, description: plan.feature.description },
+    feature: {
+      projectKey,
+      issueType: 'Feature',
+      summary: plan.feature.title,
+      description: plan.feature.description,
+      // A plan is as urgent as its most urgent item.
+      priority: BOARD_PRIORITY[ordered[0]?.priority ?? 'P2']
+    },
     items: featureKey =>
       ordered.map(item => ({
         projectKey,
@@ -104,7 +128,20 @@ export function planIssueInputs(
         summary: `[${item.priority}] ${item.title}`,
         // Boards without a parent/child model still show which plan an item belongs to.
         description: `**Priority:** ${item.priority} · Part of plan ${featureKey}: ${plan.feature.title}\n\n${item.description}`.trim(),
-        parentKey: featureKey
+        parentKey: featureKey,
+        // Folder boards write these into the item's own header and template sections; other
+        // boards ignore them, and the description above already carries the priority.
+        priority: BOARD_PRIORITY[item.priority],
+        ...(item.severity ? { severity: item.severity } : {}),
+        ...(item.type === 'Bug' && (item.steps || item.expected || item.actual)
+          ? {
+              sections: {
+                ...(item.steps ? { 'Steps to Reproduce': item.steps } : {}),
+                ...(item.expected ? { 'Expected Behavior': item.expected } : {}),
+                ...(item.actual ? { 'Actual Behavior': item.actual } : {})
+              }
+            }
+          : {})
       }))
   };
 }

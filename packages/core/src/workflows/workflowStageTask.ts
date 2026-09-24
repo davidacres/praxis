@@ -213,6 +213,11 @@ export interface UpstreamReport {
   /** The producing stage's display name. */
   stageName: string;
   text: string;
+  /**
+   * Where the whole report can be read, relative to the stage's working directory, when it is
+   * too long to inline. Without one, a long report reaches the stage with its middle cut out.
+   */
+  fullTextPath?: string;
 }
 
 /**
@@ -236,8 +241,10 @@ export function formatUpstreamReports(reports: readonly UpstreamReport[], maxCha
     const shown =
       text.length <= maxChars
         ? text
-        : `${text.slice(0, Math.floor(maxChars / 2)).trimEnd()}\n\n[… ${text.length - maxChars} characters omitted …]\n\n${text.slice(text.length - Math.floor(maxChars / 2)).trimStart()}`;
-    return `### "${report.contractId}" from ${report.stageName}\n${shown}`;
+        : `${text.slice(0, Math.floor(maxChars / 2)).trimEnd()}\n\n[… ${text.length - maxChars} characters omitted${
+            report.fullTextPath ? ` — read the whole report from \`${report.fullTextPath}\` before relying on any part of it` : ''
+          } …]\n\n${text.slice(text.length - Math.floor(maxChars / 2)).trimStart()}`;
+    return `### "${report.contractId}" from ${report.stageName}${report.fullTextPath && text.length > maxChars ? ` (full text: \`${report.fullTextPath}\`)` : ''}\n${shown}`;
   });
   return `Reports from earlier stages (use these rather than re-deriving them):\n\n${blocks.join('\n\n')}`;
 }
