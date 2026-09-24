@@ -167,7 +167,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         y: 160,
         inputs: ['plan-doc'],
         agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
-        instructions: 'Implement the plan. Commit the change and report the ref.',
+        instructions: 'Implement the plan. Run automated tests to verify your changes, fix any broken or outdated tests, commit the clean change, and report the ref.',
         outputs: [{ id: 'change-diff', kind: 'diff', required: true, description: 'The implemented change.' }],
         mutatesWorktree: true,
         maxAttempts: 2
@@ -180,7 +180,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         y: 160,
         inputs: ['change-diff'],
         agent: { agentId: 'praxis-test-author', profileId: 'praxis-test-author', hostId: 'praxis-test-author', scope: 'global', toolMode: 'project-only', skillNames: ['praxis-test-contracts'] },
-        instructions: 'Inventory the automated QA tests, author or update the structured English Praxis Test catalog, and run its deterministic validator. Report the exact test count, coverage links, and any stale or ambiguous contracts.',
+        instructions: 'Inventory the automated QA tests, author or update the structured English Praxis Test catalog, and run its deterministic validator. Ensure automated tests pass and report the exact test count, coverage links, and any stale or ambiguous contracts.',
         outputs: [{ id: 'test-contracts', kind: 'report', required: true, description: 'The validated Praxis Test catalog and coverage report.' }],
         mutatesWorktree: true,
         maxAttempts: 2
@@ -407,7 +407,7 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         y: 160,
         inputs: ['plan-doc'],
         agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
-        instructions: 'Implement changes matching plan specifications and commit changes to the branch.',
+        instructions: 'Implement changes matching plan specifications, verify changes by running automated tests and fixing any broken or outdated tests, and commit clean changes to the branch.',
         outputs: [{ id: 'change-diff', kind: 'diff', required: true }],
         mutatesWorktree: true,
         maxAttempts: 3
