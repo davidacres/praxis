@@ -10,6 +10,8 @@ import { ConnectScreen } from './screens/ConnectScreen';
 import { WorkScreen } from './screens/WorkScreen';
 import { AttentionScreen } from './screens/AttentionScreen';
 import { ActivityScreen } from './screens/ActivityScreen';
+import { ErrorBoundary } from './app/ErrorBoundary';
+import { StaleBanner } from './app/ui';
 
 function Shell(): React.JSX.Element {
   const { shell } = useStore();
@@ -22,12 +24,17 @@ function Shell(): React.JSX.Element {
   const route = shell.navigation.primary;
   return (
     <View style={styles.shell}>
+      <StaleBanner />
       <View style={styles.content}>
-        {route === 'work' && <WorkScreen onOpenSidebar={() => setSidebarOpen(true)} />}
-        {route === 'attention' && <AttentionScreen onOpenSidebar={() => setSidebarOpen(true)} />}
-        {route === 'activity' && <ActivityScreen onOpenSidebar={() => setSidebarOpen(true)} />}
+        <ErrorBoundary area={route === 'work' ? 'this conversation' : route === 'attention' ? 'the Attention screen' : 'the Activity screen'} resetKey={`${route}:${shell.navigation.detail}`}>
+          {route === 'work' && <WorkScreen onOpenSidebar={() => setSidebarOpen(true)} />}
+          {route === 'attention' && <AttentionScreen onOpenSidebar={() => setSidebarOpen(true)} />}
+          {route === 'activity' && <ActivityScreen onOpenSidebar={() => setSidebarOpen(true)} />}
+        </ErrorBoundary>
       </View>
-      <AppSidebar visible={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <ErrorBoundary area="the menu">
+        <AppSidebar visible={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      </ErrorBoundary>
     </View>
   );
 }
@@ -43,7 +50,9 @@ export default function App(): React.JSX.Element {
       <StoreProvider>
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
           <StatusBar barStyle={statusBarStyle()} backgroundColor={theme.bg} />
-          <Shell />
+          <ErrorBoundary area="Praxis">
+            <Shell />
+          </ErrorBoundary>
         </SafeAreaView>
       </StoreProvider>
     </SafeAreaProvider>

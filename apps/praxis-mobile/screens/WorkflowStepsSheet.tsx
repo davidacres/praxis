@@ -7,6 +7,7 @@ import { useStore } from '../app/store';
 import { providerOption } from '../renderer/mobileSessionOptions';
 import { runStatus, stageStatus } from '../renderer/mobileWorkflowRuns';
 import { StatusPill, toneColor } from './runVisuals';
+import { ApprovalPanel } from '../app/ApprovalPanel';
 
 interface WorkflowStepsSheetProps {
   visible: boolean;
@@ -20,7 +21,7 @@ interface WorkflowStepsSheetProps {
 /** A run's steps and how each stands, from the stage bar; picking one shows its conversation. */
 export function WorkflowStepsSheet({ visible, run, viewedNodeId, onSelectStage, onClose }: WorkflowStepsSheetProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
-  const { providers, hostInfo, shell, approve, retryStage } = useStore();
+  const { providers, hostInfo, shell, retryStage } = useStore();
   const [busy, setBusy] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const status = runStatus(run);
@@ -56,14 +57,9 @@ export function WorkflowStepsSheet({ visible, run, viewedNodeId, onSelectStage, 
           <Text style={styles.explanation}>{run.explanation}</Text>
           {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
           {run.canApprove && canCommand('workflowGates.approve') ? (
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy !== undefined}
-              onPress={() => act('approve', () => approve(run.runId))}
-              style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
-            >
-              {busy === 'approve' ? <ActivityIndicator color={theme.onAccent} size="small" /> : <Text style={styles.primaryText}>Approve run</Text>}
-            </Pressable>
+            <View style={styles.approval}>
+              <ApprovalPanel runId={run.runId} run={run} />
+            </View>
           ) : null}
 
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
@@ -140,8 +136,7 @@ const styles = themedStyles(() => StyleSheet.create({
   headerButtonText: { color: theme.textDim, fontSize: 19, fontWeight: '300' },
   explanation: { marginTop: mobileScale(10), marginBottom: mobileScale(8), color: theme.textSecondary, fontSize: mobileScale(12), lineHeight: mobileScale(17) },
   error: { marginBottom: mobileScale(8), color: theme.danger, fontSize: mobileScale(12), lineHeight: mobileScale(17) },
-  primary: { minHeight: mobileScale(42), marginBottom: mobileScale(8), alignItems: 'center', justifyContent: 'center', borderRadius: mobileScale(9), backgroundColor: theme.accent },
-  primaryText: { color: theme.onAccent, fontSize: mobileScale(13), fontWeight: '700' },
+  approval: { marginBottom: mobileScale(8) },
   list: { flexGrow: 0 },
   listContent: { paddingBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'stretch', gap: mobileScale(8), borderRadius: mobileScale(9) },

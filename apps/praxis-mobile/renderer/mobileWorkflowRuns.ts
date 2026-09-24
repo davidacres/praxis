@@ -116,3 +116,49 @@ export function stageWithoutSession(stage: MobileRunStage): string {
     default: return `${stage.name} has no conversation yet.`;
   }
 }
+
+export interface ApprovalContext {
+  /** The approval step waiting on a person. */
+  stageName: string;
+  /** What the workflow asks the approver to check, when it says. */
+  prompt?: string;
+  gate?: string;
+  /** One sentence from the desktop: why the run is where it is. */
+  explanation: string;
+  /** Every step before the approval, with how it ended — the evidence the decision rests on. */
+  steps: Array<{ name: string; label: string; tone: RunTone; detail?: string }>;
+  /** Findings across those steps, by severity, highest counts first. */
+  findings: Array<{ severity: string; count: number }>;
+}
+
+/**
+ * What a person needs in front of them to approve a run from a phone: the
+ * steps that ran and how they ended, what they found, and what the gate asks —
+ * so an approval is a decision, not a tap.
+ */
+export function approvalContext(run: MobileRunSnapshot): ApprovalContext | undefined {
+  const index = run.stages.findIndex(stage => stage.lane === 'awaiting');
+  const approval = index >= 0 ? run.stages[index]! : undefined;
+  if (!approval) return undefined;
+  const before = run.stages.slice(0, index).filter(stage => stage.type !== 'join');
+  const totals = new Map<string, number>();
+  for (const stage of before) {
+    for (const [severity, count] of Object.entries(stage.findingsSummary ?? {})) {
+      if (count > 0) totals.set(severity, (totals.get(severity) ?? 0) + count);
+    }
+  }
+  return {
+    stageName: approval.name,
+    ...(approval.prompt ? { prompt: approval.prompt } : {}),
+    ...(approval.gate ? { gate: approval.gate } : {}),
+    explanation: run.explanation,
+    steps: before.map(stage => {
+      const status = stageStatus(stage);
+      const detail = stage.lastError
+        ?? (stage.exitCode !== undefined && stage.exitCode !== 0 ? `exit ${stage.exitCode}` : undefined)
+        ?? (stage.attempts > 1 ? `${stage.attempts} attempts` : undefined);
+      return { name: stage.name, label: status.label, tone: status.tone, ...(detail ? { detail } : {}) };
+    }),
+    findings: [...totals.entries()].map(([severity, count]) => ({ severity, count })).sort((left, right) => right.count - left.count),
+  };
+}

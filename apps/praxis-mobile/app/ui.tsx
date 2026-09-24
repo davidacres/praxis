@@ -2,6 +2,9 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { mobileScale, theme, themedStyles } from './theme';
 import { useStore } from './store';
+import { useSyncState } from './diagnostics';
+import { describeStaleness } from '../renderer/mobileDiagnostics';
+import { formatClock } from '../renderer/mobileTime';
 
 export function Screen({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent}>{children}</ScrollView>;
@@ -50,6 +53,22 @@ export function ConnectionBadge(): React.JSX.Element {
     >
       <View style={[styles.connectionDot, { backgroundColor: tone }]} />
       <Text style={styles.connectionText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Shown while a background refresh is failing: what is on screen may be out of
+ * date, and the person should know rather than act on it as if current.
+ */
+export function StaleBanner(): React.JSX.Element | null {
+  const sync = useSyncState();
+  const { shell, retryConnection } = useStore();
+  const text = describeStaleness(sync, formatClock);
+  if (!text || shell.connection !== 'ready') return null;
+  return (
+    <Pressable accessibilityRole="alert" accessibilityHint="Reconnects to the desktop" onPress={retryConnection} style={styles.stale}>
+      <Text style={styles.staleText}>{text} Tap to reconnect.</Text>
     </Pressable>
   );
 }
@@ -126,6 +145,8 @@ const styles = themedStyles(() => StyleSheet.create({
   connectionState: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   connectionDot: { width: 6, height: 6, borderRadius: 3 },
   connectionText: { color: theme.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 0.6 },
+  stale: { paddingHorizontal: mobileScale(12), paddingVertical: mobileScale(8), backgroundColor: theme.warnSoft, borderBottomWidth: 1, borderBottomColor: theme.warn },
+  staleText: { color: theme.text, fontSize: mobileScale(12.5), lineHeight: mobileScale(18) },
   body: { color: theme.text, fontSize: mobileScale(15), lineHeight: mobileScale(21) },
   bodyDim: { color: theme.textDim },
   pill: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 999, paddingHorizontal: mobileScale(10), paddingVertical: mobileScale(3) },
