@@ -98,6 +98,7 @@ export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
         folder,
         {
           forceClean: false,
+          reuseExisting: true,
           // A Git worktree starts from a commit, not from the files currently visible in the main
           // checkout. Silently dropping those files makes workflow QA test an older product than the
           // one the user just ran. Refuse that ambiguous base and tell them how to make it durable.
