@@ -90,6 +90,11 @@ function fakeDesktop() {
     listRuns: async () => [],
     getRun: async () => undefined,
     listRunChanges: async () => ({}),
+    sessionChanges: async sessionId => ({ sessionId, repository: false, files: [] }),
+    sessionFileDiff: async () => { throw new Error('No changes in this fixture.'); },
+    findGadget: () => undefined,
+    submitGadget: async () => { throw new Error('No gadgets in this fixture.'); },
+    rejectRun: async () => ({}),
     listAttention: async () => [],
     createSession: async input => {
       launches.push({ provider: input.provider, ...(input.model ? { model: input.model } : {}), mode: input.mode, message: input.message });
@@ -210,7 +215,7 @@ test('the phone lists providers and models, and the desktop launches exactly the
   const phone = nodeClient(server.port!, hostKey, phoneKey);
   try {
     const mirror = await phoneMirror(phone);
-    assert.equal(mirror.info.surfaceRevision, 4);
+    assert.equal(mirror.info.surfaceRevision, 5);
 
     // (1) the real provider list reaches the phone — availability, labels, no secrets
     const providers = await phone.read<MobileProviderCatalog>(read('providers.list'));

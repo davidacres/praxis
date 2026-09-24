@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { mobileScale, theme, themedStyles } from '../app/theme';
 import { useStore } from '../app/store';
@@ -11,7 +11,10 @@ import {
   stepPosition,
   viewedStage,
 } from '../renderer/mobileWorkflowRuns';
-import { ChatMessage, MotifBackdrop, SessionHeader } from './WorkScreen';
+import { MotifBackdrop, SessionHeader } from './WorkScreen';
+import { ChatMessage, Transcript } from '../app/Transcript';
+import { ApprovalPanel } from '../app/ApprovalPanel';
+import { recordDiagnostic } from '../app/diagnostics';
 import { WorkflowStepsSheet } from './WorkflowStepsSheet';
 import { StatusPill, toneBackground, toneColor } from './runVisuals';
 
@@ -22,12 +25,10 @@ import { StatusPill, toneBackground, toneColor } from './runVisuals';
  * from stage to stage unless a step is picked in the sheet.
  */
 export function RunDetail({ runId, onOpenSidebar }: { runId: string; onOpenSidebar: () => void }): React.JSX.Element | null {
-  const { workflowRuns, transcriptFor, sessionFor, loadSession, providers, work, usageFor, shell, approve, hostInfo } = useStore();
+  const { workflowRuns, transcriptFor, sessionFor, loadSession, providers, work, usageFor, shell, canCommand, answerGadget } = useStore();
   const run = workflowRuns.find(candidate => candidate.runId === runId);
   const [pinned, setPinned] = useState<string | undefined>(undefined);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [busy, setBusy] = useState<string | undefined>(undefined);
-  const transcriptRef = useRef<ScrollView | null>(null);
 
   // A different run starts back on "follow live".
   useEffect(() => setPinned(undefined), [runId]);
@@ -37,25 +38,11 @@ export function RunDetail({ runId, onOpenSidebar }: { runId: string; onOpenSideb
   const following = !pinned || pinned === live?.nodeId;
   const session = stage?.sessionId ? sessionFor(stage.sessionId) : undefined;
   const messages = stage?.sessionId ? transcriptFor(stage.sessionId) : [];
-  const lastLength = messages[messages.length - 1]?.text.length ?? 0;
-
-  const canCommand = (operation: 'workflowGates.approve' | 'workflowRuns.retryStage'): boolean =>
-    shell.connection === 'ready' && Boolean(hostInfo?.commandOperations.includes(operation));
-
-  const act = (key: string, action: () => Promise<void>): void => {
-    setBusy(key);
-    void action().finally(() => setBusy(undefined));
-  };
 
   // A stage session the phone has not seen yet (it started while the list was loading).
   useEffect(() => {
-    if (stage?.sessionId && !session && shell.connection === 'ready') void loadSession(stage.sessionId).catch(() => undefined);
+    if (stage?.sessionId && !session && shell.connection === 'ready') void loadSession(stage.sessionId).catch(error => recordDiagnostic('Loading a stage conversation', error));
   }, [stage?.sessionId, session, shell.connection, loadSession]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => transcriptRef.current?.scrollToEnd({ animated: true }), 80);
-    return () => clearTimeout(timer);
-  }, [stage?.nodeId, messages.length, lastLength]);
 
   if (!run || !stage) return null;
 
@@ -88,10 +75,22 @@ export function RunDetail({ runId, onOpenSidebar }: { runId: string; onOpenSideb
         ) : null}
       </View>
 
-      <ScrollView ref={transcriptRef} contentContainerStyle={stage.sessionId && messages.length > 0 ? styles.transcript : styles.summaryContainer}>
-        {stage.sessionId && messages.length > 0 ? (
-          messages.map(message => <ChatMessage key={message.id} message={message} />)
-        ) : (
+      {stage.sessionId && messages.length > 0 ? (
+        <Transcript
+          data={messages}
+          keyOf={message => message.id}
+          resetKey={`${runId}:${stage.nodeId}`}
+          renderItem={message => (
+            <ChatMessage
+              message={message}
+              connected={shell.connection === 'ready'}
+              onAnswer={(gadget, action, value) => answerGadget(stage.sessionId!, gadget, action, value)}
+            />
+          )}
+        />
+      ) : (
+      <ScrollView contentContainerStyle={styles.summaryContainer}>
+        {(
           <View style={styles.summaryStack}>
             {/* Step Card */}
             <View style={styles.summaryCard}>
@@ -150,28 +149,14 @@ export function RunDetail({ runId, onOpenSidebar }: { runId: string; onOpenSideb
             {/* Approval / Merge Action Card */}
             {(stage.type === 'approval' || stage.type === 'merge') ? (
               <View style={styles.summaryCard}>
-                <Text style={styles.summaryPrompt}>
-                  {stage.prompt ||
-                    (stage.type === 'merge'
-                      ? 'All quality gates and checks passed. Merge changes into the base branch?'
-                      : 'All quality gates and checks passed. Sign off on delivery?')}
-                </Text>
-                {run.canApprove && canCommand('workflowGates.approve') ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={busy !== undefined}
-                    onPress={() => act('approve', () => approve(run.runId))}
-                    style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}
-                  >
-                    {busy === 'approve' ? (
-                      <ActivityIndicator color={theme.onAccent} size="small" />
-                    ) : (
-                      <Text style={styles.primaryActionText}>
-                        {stage.type === 'merge' ? 'Confirm and Merge' : 'Approve Delivery'}
-                      </Text>
-                    )}
-                  </Pressable>
-                ) : null}
+                {run.canApprove && stage.lane === 'awaiting' && canCommand('workflowGates.approve') ? (
+                  // The panel shows the prompt with the steps and findings the decision rests on.
+                  <ApprovalPanel runId={run.runId} run={run} />
+                ) : (
+                  <Text style={styles.summaryPrompt}>
+                    {stage.prompt || (stage.type === 'merge' ? 'Merge the changes into the base branch?' : 'Sign off on delivery?')}
+                  </Text>
+                )}
               </View>
             ) : null}
 
@@ -182,6 +167,7 @@ export function RunDetail({ runId, onOpenSidebar }: { runId: string; onOpenSideb
           </View>
         )}
       </ScrollView>
+      )}
 
       {/* In place of a chat's composer: where the run is. Opens the steps. */}
       <View style={styles.barShell}>
@@ -284,15 +270,6 @@ const styles = themedStyles(() => StyleSheet.create({
   errorCard: { borderColor: theme.danger },
   errorTitle: { color: theme.danger, fontSize: mobileScale(12), fontWeight: '700' },
   summaryPrompt: { color: theme.text, fontSize: mobileScale(13), lineHeight: mobileScale(18) },
-  primaryAction: {
-    backgroundColor: theme.accent,
-    borderRadius: mobileScale(8),
-    paddingVertical: mobileScale(12),
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: mobileScale(6),
-  },
-  primaryActionText: { color: theme.onAccent, fontSize: mobileScale(13), fontWeight: '700' },
   placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: mobileScale(10), paddingHorizontal: mobileScale(24), paddingVertical: mobileScale(40) },
   placeholderText: { color: theme.textDim, fontSize: mobileScale(13), lineHeight: mobileScale(19), textAlign: 'center' },
   placeholderError: { color: theme.warn, fontSize: mobileScale(11), lineHeight: mobileScale(16), textAlign: 'center' },
