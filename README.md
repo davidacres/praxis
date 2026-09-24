@@ -131,13 +131,24 @@ Normal launches start without sample data.
 ### Build installers
 
 ```bash
+# macOS
 npm run app:build:mac        # compile app + prepare renderer (no electron-builder)
-npm run app:installer:mac    # electron-builder -> apps/praxis-desktop/main/dist/
+npm run app:installer:mac    # electron-builder -> apps/praxis-desktop/main/dist/ (*.dmg)
+
+# Linux
+npm run app:build:linux      # compile app + prepare renderer (no electron-builder)
+npm run app:installer:linux  # electron-builder -> apps/praxis-desktop/main/dist/ (*.AppImage, *.deb)
+# Or use the script directly:
+./scripts/build-installer.sh --target linux      # AppImage + deb
+./scripts/build-installer.sh --target appimage   # AppImage only
+./scripts/build-installer.sh --target deb        # deb only
+
+# Windows (PowerShell)
+npm run app:build:win
+npm run app:installer:win    # electron-builder -> apps/praxis-desktop/main/dist/ (*-setup.exe)
 ```
 
-`app:build:win` / `app:installer:win` on Windows. The macOS DMG and Windows
-assisted installer share the app's warm charcoal, parchment, and terracotta
-visual language.
+The macOS DMG, Linux packages, and Windows assisted installer share the app's warm charcoal, parchment, and terracotta visual language.
 
 ### Signing and updates
 

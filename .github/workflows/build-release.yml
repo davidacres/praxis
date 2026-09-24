@@ -90,8 +90,47 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Build renderer
+        run: npm run build:renderer
+
+      - name: Copy renderer
+        run: npm run desktop:copy-renderer
+
+      - name: Build desktop
+        run: npm run build:desktop
+
+      - name: Build Linux installer
+        run: npm run dist:linux --workspace=@praxis/desktop-main
+
+      - name: Upload Linux installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-linux
+          path: |
+            apps/praxis-desktop/main/dist/Praxis-*.AppImage
+            apps/praxis-desktop/main/dist/Praxis-*.deb
+          if-no-files-found: error
+          retention-days: 1
+
   release:
-    needs: [build-mac, build-win]
+    needs: [build-mac, build-win, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -109,7 +148,9 @@ jobs:
             dist/Praxis-*-arm64.dmg \
             dist/Praxis-*-arm64.dmg.blockmap \
             dist/Praxis-*-setup.exe \
-            dist/Praxis-*-setup.exe.blockmap
+            dist/Praxis-*-setup.exe.blockmap \
+            dist/Praxis-*.AppImage \
+            dist/Praxis-*.deb
         env:
           RELEASE_TAG: ${{ github.ref_name }}
           GH_REPO: ${{ github.repository }}
