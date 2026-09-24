@@ -118,6 +118,8 @@ export class MarketplaceService {
     if (versionEntry?.praxis === undefined && versionEntry?.dist.tarball) {
       try {
         const tarball = await this.client.downloadTarball(versionEntry.dist.tarball);
+        // Bytes the registry vouches for, or nothing: never parse a tarball its hash does not match.
+        assertTarballIntegrity(tarball, versionEntry.dist);
         const fromTarball = validateAddonManifest(readPraxisManifestFromTarball(tarball));
         manifest = fromTarball.manifest;
         errors = fromTarball.errors;

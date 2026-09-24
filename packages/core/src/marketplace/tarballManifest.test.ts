@@ -59,3 +59,9 @@ test('readPraxisManifestFromTarball returns undefined when package/package.json 
   const tarball = buildTarball({ 'package/README.md': '# nothing here' });
   assert.equal(readPraxisManifestFromTarball(tarball), undefined);
 });
+
+test('readPraxisManifestFromTarball refuses a tarball that inflates past the cap', () => {
+  // A few KB of zeros compresses to almost nothing and would inflate far past a small cap.
+  const bomb = gzipSync(Buffer.alloc(2 * 1024 * 1024));
+  assert.throws(() => readPraxisManifestFromTarball(bomb, 1024 * 1024), /unpacks to more than 1 MB/);
+});

@@ -73,6 +73,41 @@ function trimSlashes(value: string): string {
   return value.replace(/\/+$/, '');
 }
 
+/**
+ * The origin of a configured endpoint. Only `https:` is accepted, except on a loopback host (a local
+ * or test registry) — the bearer token travels on every request to it.
+ */
+function endpointOrigin(url: string, label: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`The marketplace ${label} "${url}" is not a valid URL.`);
+  }
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !(loopback && parsed.protocol === 'http:')) {
+    throw new Error(`The marketplace ${label} must use https: (got ${parsed.protocol}//${parsed.host}).`);
+  }
+  return parsed.origin;
+}
+
+/**
+ * Refuses a URL on any origin but the expected one, before a request is made. A packument's
+ * `dist.tarball` and a `Link` header are data the registry (or a package publisher) controls;
+ * following one to another host would hand that host the user's GitHub token.
+ */
+function assertSameOrigin(url: string, expectedOrigin: string, what: string): void {
+  let origin: string;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    throw new Error(`Refusing ${what}: "${url}" is not a valid URL.`);
+  }
+  if (origin !== expectedOrigin) {
+    throw new Error(`Refusing ${what} from ${origin}: only ${expectedOrigin} is trusted with the marketplace token.`);
+  }
+}
+
 /** `@scope/name` → `@scope%2Fname`; unscoped names pass through. */
 export function encodePackumentPath(packageName: string): string {
   if (packageName.startsWith('@')) {
@@ -170,6 +205,8 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
   private readonly prefix: string;
   private readonly apiBaseUrl: string;
   private readonly registryBaseUrl: string;
+  private readonly apiOrigin: string;
+  private readonly registryOrigin: string;
 
   public constructor(
     private readonly config: GitHubPackagesConfig,
@@ -178,6 +215,8 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
     this.prefix = config.packageNamePrefix ?? DEFAULT_ADDON_PACKAGE_PREFIX;
     this.apiBaseUrl = trimSlashes(config.apiBaseUrl ?? DEFAULT_API_BASE_URL);
     this.registryBaseUrl = trimSlashes(config.registryBaseUrl ?? DEFAULT_REGISTRY_BASE_URL);
+    this.apiOrigin = endpointOrigin(this.apiBaseUrl, 'API URL');
+    this.registryOrigin = endpointOrigin(this.registryBaseUrl, 'registry URL');
   }
 
   public async listAddonPackages(): Promise<RegistryPackageRef[]> {
@@ -192,6 +231,7 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
 
     const refs: RegistryPackageRef[] = [];
     while (url) {
+      assertSameOrigin(url, this.apiOrigin, 'the next page of marketplace packages');
       const response = await this.fetchImpl(url, {
         headers: {
           Accept: 'application/vnd.github+json',
@@ -270,6 +310,7 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
   }
 
   public async downloadTarball(tarballUrl: string): Promise<Uint8Array> {
+    assertSameOrigin(tarballUrl, this.registryOrigin, 'an add-on tarball');
     const response = await this.fetchImpl(tarballUrl, {
       headers: { Authorization: `Bearer ${this.config.token}` }
     });
