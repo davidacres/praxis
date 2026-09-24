@@ -165,7 +165,7 @@ export function sdlcLoopTemplate(variant: SdlcLoopStackVariant = 'node'): Workfl
         inputs: ['plan-doc', 'bdd-scenarios'],
         agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
         instructions:
-          'Implement the plan, wiring the BDD scenarios to real behaviour and making them pass. Commit the change and report the ref.',
+          'Implement the plan, wiring the BDD scenarios to real behaviour and making them pass. Run automated tests to verify your changes and fix any broken or outdated tests before committing clean changes and reporting the ref.',
         outputs: [{ id: 'change-diff', kind: 'diff', required: true }],
         mutatesWorktree: true,
         maxAttempts: 3

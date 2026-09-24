@@ -125,10 +125,41 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
         };
       });
 
+  const reworkActions = (): WorkflowNextAction[] => {
+    const reworkSources = new Map<string, { stale: string[]; failed: string[] }>();
+    for (const approval of run.definition.nodes.filter(node => node.type === 'approval')) {
+      for (const gate of evaluateGates(run, approval.id)) {
+        if (!gate.nodeId) continue;
+        if (gate.state !== 'stale' && gate.state !== 'failed') continue;
+        const source = findSnapshot(run, gate.nodeId)?.producedByNodeId;
+        if (!source) continue;
+        const current = reworkSources.get(source) ?? { stale: [], failed: [] };
+        if (gate.state === 'stale') current.stale.push(gate.gate);
+        if (gate.state === 'failed') current.failed.push(gate.gate);
+        reworkSources.set(source, current);
+      }
+    }
+    const result: WorkflowNextAction[] = [];
+    for (const [nodeId, reasons] of reworkSources) {
+      const parts: string[] = [];
+      const failedGates = [...new Set(reasons.failed)];
+      const staleGates = [...new Set(reasons.stale)];
+      if (failedGates.length > 0) parts.push(`${failedGates.join(', ')} failed`);
+      if (staleGates.length > 0) parts.push(`${staleGates.join(', ')} stale`);
+      result.push({
+        kind: 'rework-stage',
+        nodeId,
+        label: `Start a new revision from ${label(nodeId)} (${parts.join(', ')})`
+      });
+    }
+    return result;
+  };
+
   if (isRunSettled(run)) {
     return [
       { kind: 'none', label: `Run ${run.status}${run.endedReason ? `: ${run.endedReason}` : '.'}` },
-      ...(run.status === 'failed' ? retryActions() : [])
+      ...(run.status === 'failed' ? retryActions() : []),
+      ...(run.status === 'failed' ? reworkActions() : [])
     ];
   }
 
@@ -143,23 +174,7 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
   }
 
   actions.push(...retryActions());
-
-  const reworkSources = new Map<string, string[]>();
-  for (const approval of run.definition.nodes.filter(node => node.type === 'approval')) {
-    for (const gate of evaluateGates(run, approval.id)) {
-      if (gate.state !== 'stale' || !gate.nodeId) continue;
-      const source = findSnapshot(run, gate.nodeId)?.producedByNodeId;
-      if (!source) continue;
-      reworkSources.set(source, [...(reworkSources.get(source) ?? []), gate.gate]);
-    }
-  }
-  for (const [nodeId, gates] of reworkSources) {
-    actions.push({
-      kind: 'rework-stage',
-      nodeId,
-      label: `Start a new revision from ${label(nodeId)} (${[...new Set(gates)].join(', ')} stale)`
-    });
-  }
+  actions.push(...reworkActions());
 
   if (schedule.running.length > 0 || actions.length > 0) {
     actions.push({ kind: 'cancel-run', label: 'Cancel run' });

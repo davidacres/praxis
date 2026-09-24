@@ -208,7 +208,15 @@ async function resolveEvidenceSource(cwd: string): Promise<WorkflowEvidenceSourc
 }
 
 function tail(output: string): string {
-  return output.length > OUTPUT_TAIL ? `…${output.slice(-OUTPUT_TAIL)}` : output;
+  const failureMarkers = ['\n  1) ', '\n✖ failing tests:', '\nFAIL ', '\nFAILED '];
+  for (const marker of failureMarkers) {
+    const idx = output.lastIndexOf(marker);
+    if (idx !== -1 && output.length - idx <= 12000) {
+      return `…${output.slice(idx)}`;
+    }
+  }
+  const limit = 8000;
+  return output.length > limit ? `…${output.slice(-limit)}` : output;
 }
 
 /**
