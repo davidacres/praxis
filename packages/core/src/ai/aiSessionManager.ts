@@ -210,6 +210,8 @@ export class AiSessionManager {
         | 'workingDirectory'
         | 'toolMode'
         | 'runtimeSessionId'
+        | 'providerCapabilities'
+        | 'providerVersion'
         | 'runtimeLaunch'
         | 'connectionId'
         | 'projectId'
@@ -244,6 +246,8 @@ export class AiSessionManager {
       const open = record.runtimeEpochs?.find(epoch => !epoch.endedAt);
       if (open) open.runtimeSessionId = runtime.runtimeSessionId;
     }
+    if (runtime.providerCapabilities !== undefined) record.providerCapabilities = runtime.providerCapabilities;
+    if (runtime.providerVersion !== undefined) record.providerVersion = runtime.providerVersion.trim() || undefined;
     if (runtime.runtimeLaunch !== undefined) record.runtimeLaunch = runtime.runtimeLaunch;
     if (runtime.autoApprovePermissions !== undefined) record.autoApprovePermissions = runtime.autoApprovePermissions || undefined;
     if (runtime.parentSessionKey !== undefined) record.parentSessionKey = runtime.parentSessionKey.trim() || undefined;

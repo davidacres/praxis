@@ -1,4 +1,5 @@
 import type { AiProvider } from '../types';
+import type { ProviderCapabilityManifest } from './providers/providerPreflight';
 import type { TokenUsage, WireImageAttachment } from './gateway';
 
 // ── Agent Task State Machine ─────────────────────────────────────────────
@@ -409,6 +410,10 @@ export interface AgentSessionRecord {
   toolMode?: AgentToolMode;
   /** Provider-owned identifier used when the runtime supports native resume. */
   runtimeSessionId?: string;
+  /** ACP features the provider advertised when this session connected. */
+  providerCapabilities?: ProviderCapabilityManifest;
+  /** CLI version observed at session launch, when the provider prints one. */
+  providerVersion?: string;
   /** What actually launched this session; distinct from selected Agent Hub attribution. */
   runtimeLaunch?: AgentRuntimeLaunch;
   /** Tracker connection bound when this issue session was created. */
