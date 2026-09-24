@@ -42,6 +42,10 @@ const REPORT = [
   'db.query(`SELECT * FROM orders WHERE id = ${id}`);',
   '```',
   '### SEC-002 Missing rate limit on login (Medium, CWE-307)',
+  '## Scanner triage',
+  // Real reports run far past the inline cap; this one does too, so the plan stage must be
+  // handed the whole report as a file.
+  ...Array.from({ length: 400 }, (_, index) => `- Semgrep result ${index + 1} in test fixtures: dismissed, not reachable from any entry point.`),
   '## Findings register',
   '| ID | Severity | Title | CWE | Location | Effort |',
   '|---|---|---|---|---|---|',
@@ -65,18 +69,38 @@ const PLAN = [
     feature: { title: 'Security remediation — 2026-09-24', description: '## Summary\nP0: 1 · P2: 1.\n\n## Coverage\n| Finding | Item |\n|---|---|\n| SEC-001 | Parameterise the order search query |\n| SEC-002 | Rate-limit login attempts |' },
     items: [
       { type: 'Task', priority: 'P2', title: 'Rate-limit login attempts', description: '### Findings\nSEC-002\n### Verification\nA test proves the 6th failed login is refused.' },
-      { type: 'Bug', priority: 'P0', title: 'Parameterise the order search query', description: '### Findings\nSEC-001 (src/orders.ts:12)\n### Change\nUse a bound parameter.' }
+      {
+        type: 'Bug',
+        priority: 'P0',
+        severity: 'Critical',
+        title: 'Parameterise the order search query',
+        description: '### Findings\nSEC-001 (src/orders.ts:12)\n### Change\nUse a bound parameter.',
+        steps: '1. Request `/orders?id=1 OR 1=1`.',
+        expected: 'Only order 1 is returned.',
+        actual: 'Every order is returned.'
+      }
     ]
   }),
   '```'
 ].join('\n');
+
+/** The whole report as the plan stage could read it from its worktree, captured while it ran. */
+let reportFileDuringPlan: string | undefined;
+let repoUnderTest = '';
 
 /** Each stage is answered by name, as its brief opens with `You are running the "<name>" stage`. */
 function replyFor(body: string): string | undefined {
   const text = JSON.stringify(JSON.parse(body).messages ?? []);
   if (text.includes('running the \\"Attack surface\\" stage')) return RECON;
   if (text.includes('running the \\"Security review\\" stage')) return REPORT;
-  if (text.includes('running the \\"Remediation plan\\" stage')) return PLAN;
+  if (text.includes('running the \\"Remediation plan\\" stage')) {
+    const worktrees = path.join(repoUnderTest, '.worktrees');
+    for (const name of fs.existsSync(worktrees) ? fs.readdirSync(worktrees) : []) {
+      const file = path.join(worktrees, name, '.praxis-run', 'security-report.md');
+      if (fs.existsSync(file)) reportFileDuringPlan = fs.readFileSync(file, 'utf8');
+    }
+    return PLAN;
+  }
   return undefined;
 }
 
@@ -138,6 +162,8 @@ async function startSecurityReview(page: Page, repo: string): Promise<{ runId: s
 async function launch(): Promise<{ page: Page; repo: string }> {
   mock = await startMockGatewayServer({ mode: 'complete', replyFor });
   const repo = createRepository();
+  repoUnderTest = repo;
+  reportFileDuringPlan = undefined;
   app = await launchTestApp(
     { ai: { activeProvider: 'vercel-gateway', workingDirectory: repo } },
     undefined,
@@ -212,6 +238,23 @@ test('Security Review: findings, readable report, and an approved plan created o
   const itemTexts = planFiles.filter(file => file.endsWith('.md') && !file.endsWith('feature.md')).map(file => fs.readFileSync(path.join(features, planDir!, file), 'utf8'));
   expect(itemTexts.some(text => text.includes('[P0] Parameterise the order search query') && text.includes(`Part of plan ${plan!.key}`))).toBe(true);
   expect(itemTexts.some(text => text.includes('[P2] Rate-limit login attempts'))).toBe(true);
+
+  // The bug reads as a bug report on the board: its priority, severity and reproduction are filled.
+  const bug = itemTexts.find(text => text.includes('[P0] Parameterise the order search query'))!;
+  expect(bug).toContain('**Priority:** Highest');
+  expect(bug).toContain('**Severity:** Critical');
+  expect(bug).toMatch(/## Steps to Reproduce\n1\. Request `\/orders\?id=1 OR 1=1`\./);
+  expect(bug).toMatch(/## Actual Behavior\nEvery order is returned\./);
+
+  // The report was too long to inline, so the plan stage was pointed at the whole of it in its
+  // worktree, and the file was gone once the stage finished.
+  const planRequest = mock!.requests.find(request => request.body.includes('running the \\"Remediation plan\\" stage'));
+  expect(planRequest?.body).toContain('.praxis-run/security-report.md');
+  expect(reportFileDuringPlan).toContain('Semgrep result 400 in test fixtures');
+  const worktrees = path.join(repo, '.worktrees');
+  for (const name of fs.existsSync(worktrees) ? fs.readdirSync(worktrees) : []) {
+    expect(fs.existsSync(path.join(worktrees, name, '.praxis-run'))).toBe(false);
+  }
 
   // The plan opens on the project's board.
   await panel.getByRole('button', { name: 'Open on board' }).click();

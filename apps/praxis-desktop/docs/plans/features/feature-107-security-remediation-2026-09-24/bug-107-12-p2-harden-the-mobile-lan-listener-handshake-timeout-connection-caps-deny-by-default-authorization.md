@@ -4,7 +4,7 @@
 **Created:** 2026-09-24T15:41:55.444Z
 **Type:** Bug
 **Priority:** Medium
-**Severity:** Medium
+**Severity:** Low
 **Reported By:**
 **Parent:** PRX-F107
 

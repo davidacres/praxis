@@ -3,7 +3,7 @@
 **Status:** 📋 Proposed
 **Created:** 2026-09-24T15:41:56.900Z
 **Type:** Task
-**Priority:** Medium
+**Priority:** Low
 **Parent:** PRX-F107
 
 ## Description

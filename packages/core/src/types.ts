@@ -272,6 +272,12 @@ export interface CreateIssueInput {
    * creates the requested item under it. Ignored by other backends.
    */
   newParentSummary?: string;
+  /** Folder-backed only: the `**Priority:**` value (e.g. Highest, High, Medium, Low). Ignored elsewhere. */
+  priority?: string;
+  /** Folder-backed only: a Bug's `**Severity:**` value. Ignored elsewhere. */
+  severity?: string;
+  /** Folder-backed only: bodies for template sections by heading (e.g. `Steps to Reproduce`). Ignored elsewhere. */
+  sections?: Record<string, string>;
 }
 
 export interface UpdateIssueInput {

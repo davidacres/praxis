@@ -3,8 +3,8 @@
 **Status:** 📋 Proposed
 **Created:** 2026-09-24T15:41:51.911Z
 **Type:** Bug
-**Priority:** Medium
-**Severity:** Medium
+**Priority:** Highest
+**Severity:** High
 **Reported By:**
 **Parent:** PRX-F107
 

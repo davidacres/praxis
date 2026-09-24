@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import {
@@ -14,6 +14,7 @@ import {
   stageSessionKey,
   chooseStageModel,
   formatUpstreamReports,
+  UPSTREAM_REPORT_MAX_CHARS,
   formatUpstreamLogs,
   parsePublishablePlan,
   planIssueInputs,
@@ -161,14 +162,29 @@ export async function runWorkflowAgentStage(
 
   // Hand the stage what earlier stages concluded, so it does not start cold and re-derive it. A report
   // artifact has no file; its text is the producing stage session's final response.
+  // A report too long to inline is also written, whole, into the worktree for the stage to read —
+  // real review reports run well past the cap, and a planner working from a report with its middle
+  // cut out plans half the findings. Only for a stage that can neither write nor commit, so the
+  // file can never end up in a change; it is removed when the session ends.
+  const canReadRunFiles = !node.mutatesWorktree && preflight.binding.toolMode === 'read-only';
   const upstream = formatUpstreamReports(
-    stageContext.inputs
-      .filter(input => !input.path)
-      .map(input => ({
-        contractId: input.contractId,
-        stageName: workflowRun.definition.nodes.find(candidate => candidate.id === input.nodeId)?.name ?? input.nodeId,
-        text: getAiSessionManager().getAgentSession(stageSessionKey(workflowRun.runId, input.nodeId))?.responseText ?? ''
-      }))
+    await Promise.all(
+      stageContext.inputs
+        .filter(input => !input.path)
+        .map(async input => {
+          const text = getAiSessionManager().getAgentSession(stageSessionKey(workflowRun.runId, input.nodeId))?.responseText ?? '';
+          const fullTextPath =
+            canReadRunFiles && text.trim().length > UPSTREAM_REPORT_MAX_CHARS
+              ? await writeRunFile(worktreePath, `${input.contractId}.md`, text)
+              : undefined;
+          return {
+            contractId: input.contractId,
+            stageName: workflowRun.definition.nodes.find(candidate => candidate.id === input.nodeId)?.name ?? input.nodeId,
+            text,
+            ...(fullTextPath ? { fullTextPath } : {})
+          };
+        })
+    )
   );
   if (upstream) taskDefinition.scope += `\n\n${upstream}`;
 
@@ -241,6 +257,7 @@ export async function runWorkflowAgentStage(
     skillActivations = prepared.skillActivations;
   } catch (error) {
     settled.cancel();
+    await removeRunFiles(worktreePath);
     // A launch refused for credits/quota/budget is the account's problem, not the stage's:
     // pause the run rather than spend the stage's attempt on it.
     const isLimit = isProviderLimitError(error);
@@ -281,6 +298,7 @@ export async function runWorkflowAgentStage(
   }
 
   const finished = await settled.promise;
+  await removeRunFiles(worktreePath);
   const snapshotRef = node.mutatesWorktree && !dispatch.signal?.aborted && finished.state === 'completed'
     ? await freezeWorktree(worktreePath, context.stageName)
     : undefined;
@@ -341,6 +359,26 @@ async function publishPlanToBoard(run: WorkflowRun, responseText: string | undef
     }
   }
   return { key: feature.key, title: feature.summary, itemKeys };
+}
+
+/** Files a stage is handed for the length of its session, inside its worktree. */
+const RUN_FILES_DIR = '.praxis-run';
+
+/** Writes a run file and returns its path relative to the worktree, or undefined if it could not. */
+async function writeRunFile(worktreePath: string, name: string, text: string): Promise<string | undefined> {
+  try {
+    const dir = path.join(worktreePath, RUN_FILES_DIR);
+    await mkdir(dir, { recursive: true });
+    const safeName = name.replace(/[^A-Za-z0-9._-]/g, '-');
+    await writeFile(path.join(dir, safeName), text.endsWith('\n') ? text : `${text}\n`, 'utf8');
+    return `${RUN_FILES_DIR}/${safeName}`;
+  } catch {
+    return undefined;
+  }
+}
+
+async function removeRunFiles(worktreePath: string): Promise<void> {
+  await rm(path.join(worktreePath, RUN_FILES_DIR), { recursive: true, force: true }).catch(() => undefined);
 }
 
 export async function cancelWorkflowAgentStage(runId: string, nodeId: string): Promise<void> {
