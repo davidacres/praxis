@@ -67,6 +67,42 @@ carry none and the phone only sees its granted project. Tests: `mobileRunProject
 sidebar runs, run view, steps sheet, a stage's conversation, Retry and Approve from the phone, and
 the live status change after each.
 
+## Host surface revision 5 (2026-09-24)
+
+- **Agent replies are markdown; gadgets are native.** `renderer/mobileMarkdown.ts` parses
+  (headings, code, lists, tables, quotes, inline); `app/Markdown.tsx` draws. The host strips
+  `praxis-gadget` fences from `MobileSessionMessage.text` and sends the resolved gadgets on
+  `message.gadgets`, published under the desktop's own key (`msg-<conversation index>`) so
+  both surfaces show and answer **one** gadget. `app/GadgetView.tsx` draws every kind;
+  unknown kinds fall back to `fallbackText`. Answers go through `gadgets.submit`, which uses
+  the desktop's `submitGadgetAction` (the same executor, actor = the phone) and reports an
+  open decision to the agent as the next turn, as the desktop does.
+- **Acting needs the person.** Approve, reject, "Allow once" and any gadget answer whose
+  action is not informational ask for Face ID / passcode first (`app/confirmIdentity.ts`,
+  one check covers 60 s; a phone with no lock gets an explicit confirmation). The host
+  refuses a non-informational gadget answer from a phone without `approve`.
+- **Approvals show their evidence** (`ApprovalPanel`, from `approvalContext`): the steps
+  before the gate and how each ended, findings by severity, the gate's prompt. **Reject**
+  (`workflowGates.reject`) requires a reason, recorded on the run.
+- **Changes tab** reads the session's working tree (`changes.get` with `target.sessionId`;
+  `params.path` for one file's diff, served only for paths `git status` lists, bounded to
+  600 lines). No repository path leaves the desktop.
+- **Live, not polled.** Approval and failure attention derive from `run.snapshot` events,
+  permissions from session snapshots; `attention.list` is a 60 s safety net (5 s against a
+  desktop without run events). A run's progress re-reads when its snapshot moves on.
+- **Failures are visible.** Background read failures go to `app/diagnostics.ts` — a banner
+  while a refresh is failing, a list under App settings → Diagnostics. `ErrorBoundary`
+  wraps each screen and the menu.
+- **Transcript** is an inverted `FlatList` (`app/Transcript.tsx`) that follows new output
+  only while at the bottom, with a "N new · Jump to latest" chip otherwise.
+- **Store** is split under `app/store/` (provider, actions, projections, types);
+  `app/store.tsx` is the barrel screens import.
+
+Tests: `npm run test:mobile` (markdown, gadget logic, follow, attention, diagnostics, approval
+context), `npm run test:desktop:mobile` (gadget submit/permission refusal, reject, session
+changes and diff bounds, gadget projection and keys). Not yet run on a device: every item
+above needs the physical-device pass (`expo-local-authentication` needs a new native build).
+
 ## Resume here (2026-09-22)
 
 Build a native development client (`expo run:ios` / `expo run:android`; Expo Go
