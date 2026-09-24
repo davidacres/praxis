@@ -18,9 +18,14 @@
     "dist:win": "electron-builder --win nsis --x64 --publish never",
     "dist:win:publish": "electron-builder --win nsis --x64 --publish always",
     "dist:win:ia32": "electron-builder --win nsis --ia32 --publish never",
+    "dist:linux": "electron-builder --linux AppImage deb --publish never",
+    "dist:linux:publish": "electron-builder --linux AppImage deb --publish always",
+    "dist:linux:appimage": "electron-builder --linux AppImage --publish never",
+    "dist:linux:deb": "electron-builder --linux deb --publish never",
     "predist": "npm run copy-renderer",
     "predist:mac": "npm run copy-renderer",
     "predist:win": "npm run copy-renderer",
+    "predist:linux": "npm run copy-renderer",
     "rebuild-terminal": "npm rebuild node-pty --build-from-source",
     "start": "npm run compile && electron .",
     "test:e2e": "npm run copy-renderer && npm run compile && npx playwright test",
@@ -120,6 +125,22 @@
       "artifactName": "${productName}-${version}-setup.${ext}",
       "deleteAppDataOnUninstall": false,
       "createStartMenuShortcut": true
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "maintainer": "Praxis"
+    },
+    "deb": {
+      "depends": [
+        "libnotify4",
+        "libxtst6",
+        "libnss3"
+      ]
     }
   }
 }
