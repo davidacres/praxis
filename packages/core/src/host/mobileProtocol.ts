@@ -291,6 +291,12 @@ export interface MobileRunStage {
   lastError?: string;
   /** Stopped without a verdict: the AI ran out of budget, or the stage's tooling could not run. */
   pause?: 'provider-limit' | 'environment';
+  command?: string;
+  exitCode?: number;
+  gate?: string;
+  metrics?: Record<string, number | string>;
+  findingsSummary?: Record<string, number>;
+  prompt?: string;
 }
 /**
  * A workflow run as the phone shows it (`workflowRuns.list`, `run.snapshot`): the steps and

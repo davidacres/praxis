@@ -59,6 +59,7 @@ Results land in `.run/` (gitignored): `tree.txt` (full accessibility tree),
 | `tap:<label>` | Tap the element whose accessibility label or identifier is exactly `<label>` |
 | `tapprefix:<text>` | Tap the first element whose label starts with `<text>` |
 | `type:<text>` | Type into the focused field (tap it first) |
+| `clear:<label>` | Focus the field labelled `<label>` and delete its text |
 | `wait:<seconds>` | Pause, e.g. for a streamed reply |
 | `home` / `activate` | Background the app / bring it back |
 | `swipeup` / `swipedown` | Scroll |

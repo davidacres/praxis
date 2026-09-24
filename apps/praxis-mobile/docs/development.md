@@ -52,6 +52,21 @@ Not yet done on a device: network loss, revocation, host-key reset and a fresh
 pairing (covered by integration tests only), Android, push notifications (the
 app says they are unavailable) and theme selection on mobile.
 
+## Workflow runs on the phone (2026-09-24)
+
+The sidebar lists the project's workflow runs (`workflowRuns.list`, kept live by
+`run.snapshot` / `run.removed` events). Opening one shows the conversation of the stage the run
+is at — its AI and model in the strip under the header — with a stage bar where a chat has its
+composer; the bar opens the steps sheet (status and AI per step, Approve, Retry). The view follows
+the run from stage to stage unless a step is picked. A run's stage sessions leave the chat list.
+
+Host side: `mobileRunProjection.ts` (desktop main) projects the monitor's summary and picks the
+current stage; a stage session takes its run's project (`withRunProject`), since stage records
+carry none and the phone only sees its granted project. Tests: `mobileRunProjection.test.ts`,
+`renderer/mobileWorkflowRuns.test.ts`. Checked in the iOS Simulator against an isolated desktop:
+sidebar runs, run view, steps sheet, a stage's conversation, Retry and Approve from the phone, and
+the live status change after each.
+
 ## Resume here (2026-09-22)
 
 Build a native development client (`expo run:ios` / `expo run:android`; Expo Go

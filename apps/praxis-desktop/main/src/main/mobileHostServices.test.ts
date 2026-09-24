@@ -106,6 +106,10 @@ function recorder(overrides: Partial<MobileHostServiceDeps> = {}): Recorder {
       note('listWorkflows', projectId);
       return [{ workflowId: 'governed-delivery', name: 'Governed delivery', trigger: 'manual' }];
     },
+    listRuns: async projectId => {
+      note('listRuns', projectId);
+      return [];
+    },
     getRun: async id => {
       note('getRun', id);
       return id === 'r1' ? { runId: 'r1', projectId: 'p1', status: 'awaiting-approval' } : undefined;
@@ -190,10 +194,12 @@ test('reads route to the matching dependency and pass through scope', async () =
   await reads['work.list'](read('work.list', { hostId: 'host-mac', projectId: 'p1' }));
   await reads['sessions.list'](read('sessions.list', { hostId: 'host-mac', projectId: 'p1' }));
   await reads['workflows.list'](read('workflows.list', { hostId: 'host-mac', projectId: 'p1' }));
+  await reads['workflowRuns.list'](read('workflowRuns.list', { hostId: 'host-mac', projectId: 'p1' }));
   await reads['attention.list'](read('attention.list', { hostId: 'host-mac', projectId: 'p1' }));
   await reads['changes.get'](read('changes.get', { hostId: 'host-mac', projectId: 'p1', runId: 'r1' }));
 
-  assert.deepEqual(calls.filter(c => !['getProject', 'getSession', 'getRun'].includes(c[0])).map(c => c[0]), ['listWork', 'listSessions', 'listWorkflows', 'listAttention', 'listRunChanges']);
+  assert.deepEqual(calls.filter(c => !['getProject', 'getSession', 'getRun'].includes(c[0])).map(c => c[0]), ['listWork', 'listSessions', 'listWorkflows', 'listRuns', 'listAttention', 'listRunChanges']);
+  assert.deepEqual(calls.find(c => c[0] === 'listRuns'), ['listRuns', 'p1']);
   assert.deepEqual(calls.find(c => c[0] === 'listWork'), ['listWork', 'p1']);
 });
 

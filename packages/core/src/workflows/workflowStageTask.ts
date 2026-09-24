@@ -15,7 +15,9 @@
 
 import type { AgentTaskDefinition } from '../ai/agentTypes';
 import { isProviderLimitError, extractProviderLimitMessage } from '../ai/providerLimitError';
-import { nodeOutputs, type WorkflowAgentTaskNode, type WorkflowArtifactKind } from './workflowTypes';
+import { nodeOutputs, type CheckFindings, type WorkflowAgentTaskNode, type WorkflowArtifactKind } from './workflowTypes';
+import { parseReviewFindings } from '../ai/aiReviewService';
+import { PUBLISHABLE_PLAN_INSTRUCTIONS } from './workflowPlanPublishing';
 import type { StageOutcome } from './workflowOrchestrator';
 import type { WorkflowStageContext } from './workflowStageSession';
 
@@ -65,7 +67,13 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
       .filter((line): line is string => Boolean(line))
       .join('\n\n'),
     scope,
-    definitionOfDone: `Produce every required artifact before finishing:\n${outputs}`,
+    definitionOfDone: [
+      `Produce every required artifact before finishing:\n${outputs}`,
+      context.expectedOutputs.some(output => output.kind === 'findings') ? FINDINGS_BLOCK_INSTRUCTIONS : undefined,
+      context.expectedOutputs.some(output => output.publishTo === 'board') ? PUBLISHABLE_PLAN_INSTRUCTIONS : undefined
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join('\n\n'),
     ...(context.workflowPack
       ? {
           workflow: context.workflowPack.reference,
@@ -78,6 +86,15 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
     ]
   };
 }
+
+/** How a stage delivers a `findings` output: the block `parseReviewFindings` reads. */
+export const FINDINGS_BLOCK_INSTRUCTIONS = [
+  'A findings output is delivered as the last fenced ```json block of your response, in this shape:',
+  '```json',
+  '{ "summary": "One-paragraph assessment", "findings": [ { "file": "path/from/repo/root", "line": 42, "severity": "critical" | "high" | "medium" | "low" | "info", "category": "e.g. security", "message": "What is wrong and why it matters", "suggestion": "The concrete fix" } ] }',
+  '```',
+  'Use an empty "findings" array when there are none. Prose alone does not count.'
+].join('\n');
 
 /** What the desktop app reports about a session that has stopped. */
 export interface FinishedStageSession {
@@ -155,9 +172,27 @@ export function stageOutcomeFromSession(
     }
   }
 
+  // A findings output is the structured JSON findings block at the end of the stage's response.
+  // Without one the stage has not delivered what it declared, and the engine fails it as such.
+  let findings: CheckFindings | undefined;
+  const findingsContracts = nodeOutputs(node).filter(contract => contract.kind === 'findings');
+  if (findingsContracts.length > 0 && session.responseText?.trim()) {
+    try {
+      findings = parseReviewFindings(session.responseText).findings;
+      for (const contract of findingsContracts) {
+        if (!artifacts.some(artifact => artifact.contractId === contract.id)) {
+          artifacts.push({ contractId: contract.id, kind: contract.kind });
+        }
+      }
+    } catch {
+      findings = undefined;
+    }
+  }
+
   return {
     status: 'succeeded',
     artifacts,
+    ...(findings ? { findings } : {}),
     ...(session.snapshotRef ? { snapshotRef: session.snapshotRef } : {})
   };
 }
@@ -180,8 +215,11 @@ export interface UpstreamReport {
   text: string;
 }
 
-/** Enough for a reviewer to work from, small enough not to become the prompt. */
-export const UPSTREAM_REPORT_MAX_CHARS = 6000;
+/**
+ * Enough for a whole review report to arrive intact, small enough not to become the prompt. A
+ * report longer than this keeps its head (the summary) and its tail (the register and verdict).
+ */
+export const UPSTREAM_REPORT_MAX_CHARS = 24000;
 
 /**
  * The upstream reports a stage is handed inline, so it starts from what the previous stages concluded
@@ -202,4 +240,33 @@ export function formatUpstreamReports(reports: readonly UpstreamReport[], maxCha
     return `### "${report.contractId}" from ${report.stageName}\n${shown}`;
   });
   return `Reports from earlier stages (use these rather than re-deriving them):\n\n${blocks.join('\n\n')}`;
+}
+
+/** An upstream check's captured output, read from its evidence file. */
+export interface UpstreamLog {
+  contractId: string;
+  stageName: string;
+  text: string;
+}
+
+/** Per log: scanner output is dense, and its tail holds the tool's own summary and exit line. */
+export const UPSTREAM_LOG_MAX_CHARS = 12000;
+
+/**
+ * The upstream check logs a stage is handed inline. A log is a file in the app's evidence store,
+ * outside the run's worktree, where an agent's file tools cannot reach — so a stage told only the
+ * path could never read what the checks found. Capped the same way as reports.
+ */
+export function formatUpstreamLogs(logs: readonly UpstreamLog[], maxChars = UPSTREAM_LOG_MAX_CHARS): string | undefined {
+  const usable = logs.filter(log => log.text.trim());
+  if (usable.length === 0) return undefined;
+  const blocks = usable.map(log => {
+    const text = log.text.trim();
+    const shown =
+      text.length <= maxChars
+        ? text
+        : `${text.slice(0, Math.floor(maxChars / 2)).trimEnd()}\n\n[… ${text.length - maxChars} characters omitted …]\n\n${text.slice(text.length - Math.floor(maxChars / 2)).trimStart()}`;
+    return `### "${log.contractId}" from ${log.stageName}\n\`\`\`text\n${shown}\n\`\`\``;
+  });
+  return `Output of earlier check stages (already captured — do not try to open their files):\n\n${blocks.join('\n\n')}`;
 }

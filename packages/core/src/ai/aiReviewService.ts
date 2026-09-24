@@ -1344,8 +1344,21 @@ export function parseReviewFindings(content: string): {
     throw new Error('Reviewer output is empty; expected structured JSON findings.');
   }
 
+  // A report can quote code in fenced blocks before its findings block, so the findings are the
+  // last fenced block that is a JSON object with a `findings` array — not simply the first block.
+  const findingsBlock = [...content.matchAll(/```[^\n`]*\n([\s\S]*?)```/g)]
+    .map(match => match[1].trim())
+    .reverse()
+    .find(block => {
+      try {
+        const value = JSON.parse(block) as unknown;
+        return !!value && typeof value === 'object' && Array.isArray((value as { findings?: unknown }).findings);
+      } catch {
+        return false;
+      }
+    });
   const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  let jsonText = jsonMatch ? jsonMatch[1].trim() : content.trim();
+  let jsonText = findingsBlock ?? (jsonMatch ? jsonMatch[1].trim() : content.trim());
 
   if (!jsonText.startsWith('{') && !jsonText.startsWith('[')) {
     const start = content.indexOf('{');

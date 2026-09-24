@@ -163,6 +163,12 @@ export interface WorkflowArtifactContract {
   description?: string;
   /** Optional named adapter for check results */
   adapter?: CheckResultAdapterKind;
+  /**
+   * `board` (a `plan` output of an agent stage only): the stage ends its response with a
+   * `PRAXIS_PLAN` block and the app creates it on the run's project board — a feature and its
+   * work items — recording the feature's key on the artifact (`WorkflowArtifactRef.reference`).
+   */
+  publishTo?: 'board';
 }
 
 // ── Gates ────────────────────────────────────────────────────────────────
@@ -300,6 +306,12 @@ export interface WorkflowApprovalNode extends WorkflowNodeBase {
   requiredGates: WorkflowGateKind[];
   /** Whether an approver may override a failing gate with a written reason. */
   allowBypass: boolean;
+  /**
+   * The approval offers the next steps as an option rather than a sign-off: a person may
+   * **skip** it, which skips everything that follows and lets the run finish as succeeded.
+   * Opt-in, so a delivery sign-off can never be skipped past.
+   */
+  optional?: boolean;
   /** Gate-level threshold conditions that must be met */
   gateThresholds?: Partial<Record<WorkflowGateKind, GateThresholdCondition[]>>;
   /** Optional active waivers applied to suppress matching findings */
@@ -320,12 +332,25 @@ export interface WorkflowJoinNode extends WorkflowNodeBase {
   mode: 'all' | 'all-required';
 }
 
+export interface WorkflowMergeNode extends WorkflowNodeBase {
+  type: 'merge';
+  /** Target branch to merge into; defaults to base branch ('main'). */
+  targetBranch?: string;
+  /** Whether merge uses --no-ff commit (default true). */
+  noFastForward?: boolean;
+  /** Handling on conflict: 'fail' or 'ai-resolve' (default 'ai-resolve'). */
+  onConflict?: 'fail' | 'ai-resolve';
+  timeoutMs?: number;
+  maxAttempts?: number;
+}
+
 export type WorkflowNode =
   | WorkflowAgentTaskNode
   | WorkflowCheckNode
   | WorkflowDeploymentNode
   | WorkflowApprovalNode
-  | WorkflowJoinNode;
+  | WorkflowJoinNode
+  | WorkflowMergeNode;
 
 export type WorkflowNodeType = WorkflowNode['type'];
 
@@ -451,7 +476,18 @@ export interface WorkflowArtifactRef {
   kind: WorkflowArtifactKind;
   /** Workspace-relative when the artifact is a file on disk. */
   path?: string;
+  /** Where the artifact was published on the project board (a `publishTo: 'board'` plan). */
+  reference?: WorkflowBoardReference;
   createdAt: string;
+}
+
+/** A plan published to a project board: the feature that holds it, and its work items. */
+export interface WorkflowBoardReference {
+  /** The feature's issue key — the plan's id on the board. */
+  key: string;
+  title: string;
+  /** Keys of the work items created under it, in plan order. */
+  itemKeys: string[];
 }
 
 /**
@@ -492,7 +528,11 @@ export function isJoinNode(node: WorkflowNode): node is WorkflowJoinNode {
   return node.type === 'join';
 }
 
-/** Nodes that declare artifact outputs. Approval and join stages produce none. */
+export function isMergeNode(node: WorkflowNode): node is WorkflowMergeNode {
+  return node.type === 'merge';
+}
+
+/** Nodes that declare artifact outputs. Approval, merge and join stages produce none. */
 export function nodeOutputs(node: WorkflowNode): WorkflowArtifactContract[] {
   return isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) ? node.outputs : [];
 }
@@ -510,6 +550,7 @@ export function nodeGate(node: WorkflowNode): WorkflowGateKind | undefined {
 export function nodeMutatesWorktree(node: WorkflowNode): boolean {
   if (isAgentTaskNode(node)) return node.mutatesWorktree;
   if (isCheckNode(node)) return node.mutatesWorktree === true;
+  if (isMergeNode(node)) return true;
   // A deployment stage ships an already-built artifact; it never touches the
   // implementation worktree, so — like approval and join — it always fans out.
   return false;

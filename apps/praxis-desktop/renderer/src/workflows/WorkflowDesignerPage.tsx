@@ -1093,13 +1093,7 @@ function NodeInspector({
           <Field label="Command" stacked>
             <input value={node.command} placeholder="npm" onChange={event => set({ command: event.target.value })} />
           </Field>
-          <Field label="Arguments" stacked hint="Space-separated">
-            <input
-              value={(node.args ?? []).join(' ')}
-              placeholder="run test"
-              onChange={event => set({ args: event.target.value.split(/\s+/).filter(Boolean) })}
-            />
-          </Field>
+          <CheckArgumentsField command={node.command} args={node.args ?? []} onChange={args => set({ args })} />
           <GateSelect value={node.satisfiesGate} onChange={gate => set({ satisfiesGate: gate })} />
         </>
       )}
@@ -1976,5 +1970,78 @@ function Field({
       </Wrapper>
       {hint && stacked && <span className="hint wf-field-hint">{hint}</span>}
     </div>
+  );
+}
+
+const SHELLS = new Set(['sh', 'bash', 'zsh']);
+
+/**
+ * A check's arguments. Plain arguments edit as one space-separated line; a shell script
+ * (`sh -c <script>`) edits as the script itself; anything else holding spaces edits as a JSON
+ * list — splitting those on spaces would silently rewrite the command on the first keystroke.
+ */
+function CheckArgumentsField({
+  command,
+  args,
+  onChange
+}: {
+  command: string;
+  args: string[];
+  onChange: (args: string[]) => void;
+}) {
+  const [draft, setDraft] = useState<string | undefined>();
+  const [invalid, setInvalid] = useState(false);
+
+  if (SHELLS.has(command.trim()) && args[0] === '-c' && args.length === 2) {
+    return (
+      <Field label="Script" stacked hint={`Run with ${command.trim()} -c`}>
+        <textarea
+          className="wf-check-script"
+          aria-label="Script"
+          rows={10}
+          spellCheck={false}
+          value={args[1]}
+          onChange={event => onChange(['-c', event.target.value])}
+        />
+      </Field>
+    );
+  }
+
+  if (args.some(arg => /\s/.test(arg))) {
+    return (
+      <Field label="Arguments" stacked hint={invalid ? 'Not a JSON list of strings — not saved' : 'JSON list, one string per argument'}>
+        <textarea
+          aria-label="Arguments"
+          rows={4}
+          spellCheck={false}
+          value={draft ?? JSON.stringify(args)}
+          onChange={event => {
+            setDraft(event.target.value);
+            try {
+              const parsed = JSON.parse(event.target.value) as unknown;
+              if (!Array.isArray(parsed) || !parsed.every(item => typeof item === 'string')) throw new Error('not a string list');
+              setInvalid(false);
+              onChange(parsed);
+            } catch {
+              setInvalid(true);
+            }
+          }}
+          onBlur={() => {
+            setDraft(undefined);
+            setInvalid(false);
+          }}
+        />
+      </Field>
+    );
+  }
+
+  return (
+    <Field label="Arguments" stacked hint="Space-separated">
+      <input
+        value={args.join(' ')}
+        placeholder="run test"
+        onChange={event => onChange(event.target.value.split(/\s+/).filter(Boolean))}
+      />
+    </Field>
   );
 }

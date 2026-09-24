@@ -23,6 +23,15 @@ final class DriverTests: XCTestCase {
         if element.waitForExistence(timeout: 8) { element.tap(); print("DRIVER tapped \(arg)") } else { print("DRIVER NOT FOUND \(arg)") }
       case "type":
         app.typeText(arg); print("DRIVER typed")
+      case "clear":
+        // Focus the field labelled <arg> and delete its current text.
+        let field = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@ OR identifier == %@", arg, arg)).firstMatch
+        if field.waitForExistence(timeout: 8) {
+          field.tap()
+          let current = (field.value as? String) ?? ""
+          field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 8))
+          print("DRIVER cleared \(arg)")
+        } else { print("DRIVER NOT FOUND \(arg)") }
       case "wait":
         Thread.sleep(forTimeInterval: Double(arg) ?? 1)
       case "home": XCUIDevice.shared.press(.home)

@@ -11,6 +11,8 @@ import type {
   MobileProviderCatalog,
   MobileReadOperation,
   MobileReadRequest,
+  MobileRunEvent,
+  MobileRunSnapshot,
   MobileSessionEvent,
   MobileSessionMode,
   MobileSessionSnapshot,
@@ -55,6 +57,7 @@ import {
   type MobileHostConfiguration,
 } from './mobileConnection';
 import { formatClock } from '../renderer/mobileTime';
+import { isStageSessionKey, mergeRun, removeRun, replaceRuns } from '../renderer/mobileWorkflowRuns';
 
 export { MOBILE_PRIMARY_ROUTES };
 export type { MobilePrimaryRoute, MobileDetailTab };
@@ -114,7 +117,12 @@ interface Store {
   followUps: MobileFollowUp[];
   workflows: MobileWorkflowChoice[];
   runs: Record<string, MobileRunSummary>;
+  /** The project's workflow runs, newest first — live from `run.snapshot` events. */
+  workflowRuns: MobileRunSnapshot[];
+  /** False against a desktop too old to list runs. */
+  runsSupported: boolean;
   openWorkId: string | undefined;
+  openRunId: string | undefined;
   connectionIssue: MobileConnectionIssue | undefined;
   pairing: { message: string; deviceLabel?: string } | undefined;
   providers: Remote<MobileProviderCatalog>;
@@ -129,6 +137,11 @@ interface Store {
   setRoute(primary: MobilePrimaryRoute): void;
   setDetail(detail: MobileDetailTab): void;
   openWork(workId: string | undefined): void;
+  openRun(runId: string | undefined): void;
+  /** A stage's session record, for its AI and model — read from the desktop if the phone has not seen it. */
+  sessionFor(sessionId: string): MobileSessionSnapshot | undefined;
+  loadSession(sessionId: string): Promise<void>;
+  retryStage(runId: string, nodeId: string): Promise<void>;
   startNewChat(): void;
   transcriptFor(sessionId: string): MobileTranscriptMessage[];
   usageFor(item: MobileWorkItem): MobileUsageView;
@@ -229,7 +242,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
   const [followUps, setFollowUps] = useState<MobileFollowUp[]>([]);
   const [workflows, setWorkflows] = useState<MobileWorkflowChoice[]>([]);
   const [runs, setRuns] = useState<Record<string, MobileRunSummary>>({});
+  const [workflowRuns, setWorkflowRuns] = useState<MobileRunSnapshot[]>([]);
+  const [runsSupported, setRunsSupported] = useState(false);
   const [openWorkId, setOpenWorkId] = useState<string | undefined>(undefined);
+  const [openRunId, setOpenRunId] = useState<string | undefined>(undefined);
   const [connectionIssue, setConnectionIssue] = useState<MobileConnectionIssue | undefined>(undefined);
   const [pairing, setPairing] = useState<{ message: string; deviceLabel?: string } | undefined>(undefined);
   const [providers, setProviders] = useState<Remote<MobileProviderCatalog>>({ status: 'idle' });
@@ -292,9 +308,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
 
   const applyEvent = useCallback((envelope: MobileEventEnvelope): void => {
     if (!cursorRef.current.observe(envelope.sequence)) return;
-    const event = envelope.event as MobileSessionEvent | MobileHostEvent;
+    const event = envelope.event as MobileSessionEvent | MobileHostEvent | MobileRunEvent;
     if (event.type === 'host.appearance') {
       wearDesktopAppearance(event.appearance);
+      return;
+    }
+    if (event.type === 'run.snapshot') {
+      setWorkflowRuns(previous => mergeRun(previous, event.run));
+      return;
+    }
+    if (event.type === 'run.removed') {
+      setWorkflowRuns(previous => removeRun(previous, event.runId));
+      setOpenRunId(current => (current === event.runId ? undefined : current));
       return;
     }
     if (event.type === 'session.snapshot') applySnapshot(event.snapshot);
@@ -380,10 +405,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
       return next;
     });
     setWork(previous => [...previous.filter(item => item.draft), ...sessions.map(workFromSession)]);
-    setOpenWorkId(current => current && (sessions.some(session => session.sessionKey === current) || current.startsWith('draft-')) ? current : sessions[0]?.sessionKey);
+    // Land on a chat, not on one of a workflow run's stage sessions (those open through their run).
+    const firstChat = sessions.find(session => !isStageSessionKey(session.sessionKey, session.runId));
+    setOpenWorkId(current => current && (sessions.some(session => session.sessionKey === current) || current.startsWith('draft-')) ? current : firstChat?.sessionKey);
 
     const choices = await connection.read<MobileWorkflowChoice[]>(readRequest('workflows.list', target));
     setWorkflows(choices.filter(choice => choice.trigger !== 'ticket'));
+    const listsRuns = Boolean(info?.readOperations.includes('workflowRuns.list'));
+    setRunsSupported(listsRuns);
+    if (listsRuns) {
+      const listed = await connection.read<MobileRunSnapshot[]>(readRequest('workflowRuns.list', target));
+      setWorkflowRuns(previous => replaceRuns(previous, listed));
+      setOpenRunId(current => (current && listed.some(run => run.runId === current) ? current : undefined));
+    } else {
+      setWorkflowRuns([]);
+      setOpenRunId(undefined);
+    }
     setAttention(await connection.read<MobileAttentionItem[]>(readRequest('attention.list', target)));
 
     if (info?.readOperations.includes('providers.list')) {
@@ -599,7 +636,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
       followUps,
       workflows,
       runs,
+      workflowRuns,
+      runsSupported,
       openWorkId,
+      openRunId,
       connectionIssue,
       pairing,
       providers,
@@ -645,6 +685,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
         setFollowUps([]);
         setWorkflows([]);
         setRuns({});
+        setWorkflowRuns([]);
+        setRunsSupported(false);
+        setOpenRunId(undefined);
         setProviders({ status: 'idle' });
         setModels({});
         setAccess({ status: 'idle' });
@@ -660,8 +703,37 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
       },
       setRoute: primary => nav(state => selectMobileRoute(state, primary)),
       setDetail: detail => nav(state => selectMobileDetail(state, detail)),
-      openWork: workId => setOpenWorkId(workId),
+      openWork: workId => {
+        setOpenWorkId(workId);
+        if (workId) setOpenRunId(undefined);
+      },
+      openRun: runId => {
+        setOpenRunId(runId);
+        if (runId) {
+          setOpenWorkId(undefined);
+          nav(state => selectMobileDetail(selectMobileRoute(state, 'work'), 'chat'));
+        }
+      },
+      sessionFor: sessionId => snapshots[sessionId],
+      loadSession: async sessionId => {
+        const connection = connectionRef.current;
+        if (!connection || phaseRef.current !== 'ready') return;
+        const snapshot = await connection.read<MobileSessionSnapshot>(readRequest('sessions.get', target({ sessionId })));
+        applySnapshot(snapshot);
+      },
+      retryStage: async (runId, nodeId) => {
+        await requireConnection().command({
+          protocolVersion: 1,
+          commandId: commandId('retry'),
+          issuedAt: new Date().toISOString(),
+          caller,
+          target: target({ runId }),
+          operation: 'workflowRuns.retryStage',
+          payload: { nodeId },
+        });
+      },
       startNewChat: () => {
+        setOpenRunId(undefined);
         const id = `draft-${Date.now().toString(36)}`;
         const item: MobileWorkItem = { workId: id, title: 'New chat', status: 'idle', sessionId: id, mode: 'chat', draft: true, selection: DEFAULT_SESSION_SELECTION };
         setWork(list => [item, ...list]);
@@ -808,7 +880,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }): Reac
         setRuns(previous => ({ ...previous, [runId]: summary }));
       },
     };
-  }, [shell, autoConnectEnabled, host, hostInfo, hostConfig, project, work, attention, followUps, workflows, runs, openWorkId, connectionIssue, pairing, providers, models, access, snapshots, usageReads, applySnapshot, openConnection, setPhase]);
+  }, [shell, autoConnectEnabled, host, hostInfo, hostConfig, project, work, attention, followUps, workflows, runs, workflowRuns, runsSupported, openWorkId, openRunId, connectionIssue, pairing, providers, models, access, snapshots, usageReads, applySnapshot, openConnection, setPhase]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

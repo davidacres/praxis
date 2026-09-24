@@ -27,9 +27,12 @@ import {
 import { SessionComposer, type ComposerModeOption } from './SessionComposer';
 import { ProviderModelSheet } from './ProviderModelSheet';
 import { formatClock } from '../renderer/mobileTime';
+import { RunDetail } from './RunScreen';
 
 export function WorkScreen({ onOpenSidebar }: { onOpenSidebar: () => void }): React.JSX.Element {
-  const { work, openWorkId } = useStore();
+  const { work, openWorkId, openRunId, workflowRuns } = useStore();
+  const run = openRunId ? workflowRuns.find(candidate => candidate.runId === openRunId) : undefined;
+  if (run) return <RunDetail runId={run.runId} onOpenSidebar={onOpenSidebar} />;
   const open = work.find(item => item.workId === openWorkId);
   return open ? <WorkDetail workId={open.workId} onOpenSidebar={onOpenSidebar} /> : <EmptySession onOpenSidebar={onOpenSidebar} />;
 }
@@ -47,7 +50,7 @@ const CORNER_PLACEMENT: Record<Exclude<MobileMotifAnchor, 'center'>, object> = {
  * paints, at the same size and corners. With no motif on the desktop there is
  * none here; only a desktop too old to send its theme gets the stock hexagons.
  */
-function MotifBackdrop(): React.JSX.Element {
+export function MotifBackdrop(): React.JSX.Element {
   const appearance = currentAppearance();
   const [box, setBox] = useState({ width: 0, height: 0 });
   const motif = appearance?.motif;
@@ -107,7 +110,7 @@ function EmptySession({ onOpenSidebar }: { onOpenSidebar: () => void }): React.J
   );
 }
 
-function ChatMessage({ message }: { message: MobileTranscriptMessage }): React.JSX.Element {
+export function ChatMessage({ message }: { message: MobileTranscriptMessage }): React.JSX.Element {
   if (message.author === 'system') {
     return (
       <View accessibilityRole="text" style={styles.notice}>
@@ -127,7 +130,7 @@ function ChatMessage({ message }: { message: MobileTranscriptMessage }): React.J
   );
 }
 
-function SessionHeader({ title, onOpenSidebar }: {
+export function SessionHeader({ title, onOpenSidebar }: {
   title: string;
   onOpenSidebar: () => void;
 }): React.JSX.Element {

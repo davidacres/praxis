@@ -51,6 +51,8 @@ export async function startMockGatewayServer(options: {
    *  workflow run that must end with a DELIVERY_RESULT / FEATURE_DECOMPOSITION_RESULT
    *  JSON block for the completion watcher to parse). */
   reply?: string;
+  /** Per-request reply chosen from the raw request body (e.g. by workflow stage); falls back to `reply`. */
+  replyFor?: (body: string) => string | undefined;
   /** `/v1/models` response — defaults to a single `mock/model` entry.
    *  `context_length` is what the app reads to size the context indicator. */
   models?: Array<{ id: string; name?: string; context_length?: number }>;
@@ -115,7 +117,7 @@ export async function startMockGatewayServer(options: {
                     }
                   }))
                 }
-              : { role: 'assistant', content: reply },
+              : { role: 'assistant', content: options.replyFor?.(body) ?? reply },
             finish_reason: null
           }]
         }));

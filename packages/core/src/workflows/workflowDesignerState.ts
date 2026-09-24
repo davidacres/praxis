@@ -86,6 +86,8 @@ export function newNode(type: WorkflowNodeType, at: { x: number; y: number }): W
       return { ...base, type: 'approval', name: 'Approval', prompt: '', requiredGates: [], allowBypass: false };
     case 'join':
       return { ...base, type: 'join', name: 'Join', mode: 'all' };
+    case 'merge':
+      return { ...base, type: 'merge', name: 'Merge to main', onConflict: 'ai-resolve' };
   }
 }
 

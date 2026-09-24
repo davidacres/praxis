@@ -118,7 +118,8 @@ export function scheduleWorkflowRun(run: WorkflowRun): WorkflowSchedule {
 }
 
 /**
- * Settles every converged join, repeatedly, until none remain.
+ * Settles every converged join — and every node on a branch that can no longer be taken —
+ * repeatedly, until none remain.
  *
  * Joins can chain — one join feeding another — and a join carries no work, so
  * resolving them in a loop keeps the orchestrator's step function to "advance
@@ -129,11 +130,23 @@ export function advanceJoins(run: WorkflowRun, at: string): WorkflowRun {
   // Bounded by node count: each pass settles at least one join, and a settled
   // join never becomes pending again.
   for (let pass = 0; pass < run.definition.nodes.length; pass += 1) {
-    const { autoAdvance } = scheduleWorkflowRun(next);
-    if (autoAdvance.length === 0) return next;
+    const schedule = scheduleWorkflowRun(next);
+    const { autoAdvance } = schedule;
+    // Only a branch closed by a decision that stands — a skipped approval, a success that took the
+    // other edge — is settled here. One closed by a failure stays pending: a person can retry the
+    // failed stage, which reopens it.
+    const skip = schedule.skip.filter(({ nodeId }) =>
+      !next.definition.edges.some(edge => edge.to === nodeId && next.nodes[edge.from]?.outcome === 'failed')
+    );
+    if (autoAdvance.length === 0 && skip.length === 0) return next;
     for (const nodeId of autoAdvance) {
       next = applyWorkflowRunCommand(next, { kind: 'node-started', nodeId, at });
       next = applyWorkflowRunCommand(next, { kind: 'node-succeeded', nodeId, at });
+    }
+    // A branch that was not taken can never run. Recording it as skipped is what lets the run
+    // settle — left pending, it would hold a finished run at "running" forever.
+    for (const { nodeId, reason } of skip) {
+      next = applyWorkflowRunCommand(next, { kind: 'node-skipped', nodeId, at, reason });
     }
   }
   return next;

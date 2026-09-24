@@ -6,6 +6,7 @@ import { saveMobileDisplayMode } from './mobileConnection';
 import { useStore, type MobilePrimaryRoute } from './store';
 import { formatDayAndClock } from '../renderer/mobileTime';
 import { PraxisWordmark } from './PraxisWordmark';
+import { isStageSessionKey, runCaption, runStageSessionKeys, runStatus } from '../renderer/mobileWorkflowRuns';
 
 type SettingsPage = 'app' | 'server' | 'permissions';
 
@@ -213,7 +214,10 @@ function toneColor(tone: 'ok' | 'warn' | 'danger'): string {
 }
 
 export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Element {
-  const { shell, work, openWorkId, setRoute, setDetail, openWork, startNewChat, attention, hostInfo } = useStore();
+  const { shell, work, openWorkId, openRunId, workflowRuns, runsSupported, openRun, setRoute, setDetail, openWork, startNewChat, attention, hostInfo } = useStore();
+  // A run's stage sessions are reached through the run, as on the desktop — not as loose chats.
+  const stageKeys = runStageSessionKeys(workflowRuns);
+  const chats = work.filter(item => item.draft || (!stageKeys.has(item.workId) && !isStageSessionKey(item.workId, item.runId)));
   const insets = useSafeAreaInsets();
   const [settingsPage, setSettingsPage] = useState<SettingsPage | undefined>();
   const unresolved = attention.filter(item => !item.resolved).length;
@@ -231,6 +235,11 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
   const openSession = (workId: string): void => {
     setRoute('work');
     openWork(workId);
+    onClose();
+  };
+
+  const showRun = (runId: string): void => {
+    openRun(runId);
     onClose();
   };
 
@@ -257,16 +266,40 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
                     key={route.id}
                     icon={route.icon}
                     label={route.label}
-                    active={shell.navigation.primary === route.id && !openWorkId}
+                    active={shell.navigation.primary === route.id && !openWorkId && !openRunId}
                     badge={route.id === 'attention' && unresolved > 0 ? String(unresolved) : undefined}
                     onPress={() => navigate(route.id)}
                   />
                 ))}
 
+                {runsSupported ? (
+                  <>
+                    <View style={styles.sectionHeading}>
+                      <SectionLabel>WORKFLOW RUNS</SectionLabel>
+                      <Text style={[styles.sectionCount, styles.sectionCountSpaced]}>{workflowRuns.length}</Text>
+                    </View>
+                    {workflowRuns.length === 0 ? (
+                      <Text style={styles.emptyNote}>No workflow runs in this project yet. Start one from a chat’s workflow menu or on the desktop.</Text>
+                    ) : workflowRuns.map(run => {
+                      const status = runStatus(run);
+                      return (
+                        <NavRow
+                          key={run.runId}
+                          icon={status.icon}
+                          label={run.workflowName}
+                          caption={runCaption(run)}
+                          active={openRunId === run.runId}
+                          onPress={() => showRun(run.runId)}
+                        />
+                      );
+                    })}
+                  </>
+                ) : null}
+
                 <View style={styles.sectionHeading}>
                   <SectionLabel>SESSIONS</SectionLabel>
                   <View style={styles.sessionHeadingActions}>
-                    <Text style={styles.sectionCount}>{work.length}</Text>
+                    <Text style={styles.sectionCount}>{chats.length}</Text>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="New chat"
@@ -281,7 +314,7 @@ export function AppSidebar({ visible, onClose }: AppSidebarProps): React.JSX.Ele
                     </Pressable>
                   </View>
                 </View>
-                {work.map(item => {
+                {chats.map(item => {
                   const active = openWorkId === item.workId;
                   const live = item.status === 'active' || item.status === 'awaiting-input';
                   return (
@@ -360,6 +393,8 @@ const styles = themedStyles(() => StyleSheet.create({
   sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sessionHeadingActions: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 7 },
   sectionCount: { color: theme.textDim, fontSize: 10 },
+  sectionCountSpaced: { marginTop: 8, marginRight: 8 },
+  emptyNote: { paddingHorizontal: mobileScale(8), paddingBottom: mobileScale(6), color: theme.textDim, fontSize: mobileScale(11), lineHeight: mobileScale(16) },
   newChatButton: { height: 28, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: theme.border, borderRadius: 7, backgroundColor: theme.surface },
   newChatGlyph: { color: theme.accent, fontSize: 15, lineHeight: 17 },
   newChatLabel: { color: theme.textSecondary, fontSize: 10, fontWeight: '700' },

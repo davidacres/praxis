@@ -4,6 +4,7 @@ import {
   WorkflowOrchestrator,
   WorkflowRunStore,
   isCheckNode,
+  isMergeNode,
   isRunSettled,
   summarizeWorkflowRun,
   type StageDispatcher,
@@ -13,6 +14,7 @@ import {
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { runWorkflowCheck } from './workflowCheckRunner';
+import { runWorkflowMerge } from './workflowMergeRunner';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
 import { canDispatchAgentStage, cancelWorkflowAgentStage, runWorkflowAgentStage } from './workflowAgentStage';
 import { createWorkflowWorkspaceProvider } from './workflowWorkspace';
@@ -141,10 +143,13 @@ const dispatcher: StageDispatcher = {
     // configured provider. A stage this declines stays `ready` for the monitor
     // rather than being claimed and failed.
     if (!projectFolderFor(run)) return false;
-    return isCheckNode(node) || canDispatchAgentStage();
+    return isCheckNode(node) || isMergeNode(node) || canDispatchAgentStage();
   },
   runCheck(node, context) {
     return runWorkflowCheck(node, context, projectFolderFor(context.run), evidenceStorageRoot());
+  },
+  runMerge(node, context) {
+    return runWorkflowMerge(node, context, projectFolderFor(context.run), evidenceStorageRoot());
   },
   runAgentStage(node, context, onSession) {
     return runWorkflowAgentStage(node, context, onSession);
