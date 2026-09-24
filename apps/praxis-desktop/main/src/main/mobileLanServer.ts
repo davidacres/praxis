@@ -157,12 +157,27 @@ export class MobileLanServer {
   }
 
   async stop(): Promise<void> {
-    for (const peer of this.peers) peer.closeWith(mobileConnectionStatus('host-shutdown'));
+    for (const peer of [...this.peers]) {
+      peer.closeWith(mobileConnectionStatus('host-shutdown'));
+      peer.socket.destroy();
+    }
     this.peers.clear();
     const server = this.server;
     this.server = undefined;
     this.boundPort = undefined;
-    if (server) await new Promise<void>(resolve => server.close(() => resolve()));
+    if (server) {
+      (server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(() => {
+          (server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
+          resolve();
+        }, 500);
+        server.close(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
   }
 
   applyPolicy(policy: MobileAccessPolicy, dropConnections: boolean): void {
