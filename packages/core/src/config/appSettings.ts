@@ -1,6 +1,7 @@
 import { parseHexRgb } from '../ui/hexColor';
 import { NATIVE_ECOSYSTEMS, type NativeEcosystem } from '../ai/agentRuntime/nativeSources';
-import type { AiProvider } from '../types';
+import type { AiProvider, BuiltInAiProvider } from '../types';
+import { sanitizeCustomProviders, type CustomProviderConfig } from '../ai/providers/customProviders';
 import type { MobileAccessMode } from '../host/mobileAccessPolicy';
 import type { MobileAccessSettings } from '../host/mobileAccessAdministration';
 
@@ -98,6 +99,13 @@ export interface AiProviderConfig {
    * provider off. Sessions already running on it are unaffected.
    */
   enabled?: boolean;
+  /**
+   * Picked from Settings → AI Provider → Add provider. The Providers tab lists
+   * a provider when it is configured, the default, or `added` — so an
+   * unconfigured built-in stays in the catalog until someone asks for it.
+   * Custom endpoints are always listed; this flag is for built-ins.
+   */
+  added?: boolean;
 }
 
 export interface AiSettings {
@@ -152,6 +160,13 @@ export interface AiSettings {
    * providers only.
    */
   providers: Partial<Record<AiProvider, AiProviderConfig>>;
+  /**
+   * User-added OpenAI-compatible endpoints (FX-BF-044). Omitted when there are
+   * none, so a settings file written before this existed round-trips unchanged.
+   * Per-endpoint `enabled` / `defaultModel` / `enabledModelIds` / `added` live in
+   * `providers[id]` exactly as for a built-in.
+   */
+  customProviders?: CustomProviderConfig[];
   /**
    * The in-app browser the AI can drive (navigate / read / click / type) during
    * a full-tools session. Off by default: it lets a model fetch arbitrary web
@@ -208,7 +223,7 @@ export interface NativeSourceSettings {
   extraAgentPaths: string[];
 }
 
-const KNOWN_AI_PROVIDERS: readonly AiProvider[] = [
+const KNOWN_AI_PROVIDERS: readonly BuiltInAiProvider[] = [
   'vercel-gateway',
   'openai',
   'anthropic',
@@ -954,16 +969,17 @@ function readTerminalCursorStyle(value: unknown, fallback: TerminalCursorStyle):
   return value === 'block' || value === 'underline' || value === 'bar' ? value : fallback;
 }
 
-function readAiProvider(value: unknown, fallback: AiProvider): AiProvider {
-  return typeof value === 'string' && (KNOWN_AI_PROVIDERS as readonly string[]).includes(value)
-    ? (value as AiProvider)
-    : fallback;
+/** Built-ins plus the ids of the endpoints actually present — a stale `custom:` id is not a provider. */
+function knownProviderIds(customProviders: readonly CustomProviderConfig[]): string[] {
+  return [...KNOWN_AI_PROVIDERS, ...customProviders.map(provider => provider.id)];
 }
 
-function readOptionalAiProvider(value: unknown): AiProvider | undefined {
-  return typeof value === 'string' && (KNOWN_AI_PROVIDERS as readonly string[]).includes(value)
-    ? (value as AiProvider)
-    : undefined;
+function readAiProvider(value: unknown, fallback: AiProvider, known: readonly string[]): AiProvider {
+  return typeof value === 'string' && known.includes(value) ? (value as AiProvider) : fallback;
+}
+
+function readOptionalAiProvider(value: unknown, known: readonly string[]): AiProvider | undefined {
+  return typeof value === 'string' && known.includes(value) ? (value as AiProvider) : undefined;
 }
 
 /** Provider → tier → model id; anything that is not a non-empty string is dropped. */
@@ -982,12 +998,12 @@ function readModelTiers(value: unknown): NonNullable<AiSettings['modelTiers']> {
   return result;
 }
 
-function readAiProviderConfigs(value: unknown): Partial<Record<AiProvider, AiProviderConfig>> {
+function readAiProviderConfigs(value: unknown, known: readonly string[]): Partial<Record<AiProvider, AiProviderConfig>> {
   if (!isRecord(value)) {
     return {};
   }
   const out: Partial<Record<AiProvider, AiProviderConfig>> = {};
-  for (const id of KNOWN_AI_PROVIDERS) {
+  for (const id of known as readonly AiProvider[]) {
     const raw = value[id];
     if (!isRecord(raw)) {
       continue;
@@ -1010,6 +1026,9 @@ function readAiProviderConfigs(value: unknown): Partial<Record<AiProvider, AiPro
     }
     if (typeof raw.enabled === 'boolean') {
       config.enabled = raw.enabled;
+    }
+    if (raw.added === true) {
+      config.added = true;
     }
     if (Object.keys(config).length > 0) {
       out[id] = config;
@@ -1083,6 +1102,8 @@ function readPriorityColors(value: unknown): Record<string, string> {
  * or an empty record on first launch; nothing throws.
  */
 export function sanitizeAppSettings(raw: unknown): AppSettings {
+  const customProviders = isRecord(raw) && isRecord(raw.ai) ? sanitizeCustomProviders(raw.ai.customProviders) : [];
+  const knownProviders = knownProviderIds(customProviders);
   const ai: AiSettings = isRecord(raw) && isRecord(raw.ai)
     ? {
         gatewayUrl: readString(raw.ai.gatewayUrl, DEFAULT_APP_SETTINGS.ai.gatewayUrl),
@@ -1095,10 +1116,11 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
           raw.ai.analysisGateEnabled,
           DEFAULT_APP_SETTINGS.ai.analysisGateEnabled
         ),
-        activeProvider: readAiProvider(raw.ai.activeProvider, DEFAULT_APP_SETTINGS.ai.activeProvider),
-        recommendationProvider: readOptionalAiProvider(raw.ai.recommendationProvider),
+        activeProvider: readAiProvider(raw.ai.activeProvider, DEFAULT_APP_SETTINGS.ai.activeProvider, knownProviders),
+        recommendationProvider: readOptionalAiProvider(raw.ai.recommendationProvider, knownProviders),
         modelTiers: readModelTiers(raw.ai.modelTiers),
-        providers: readAiProviderConfigs(raw.ai.providers),
+        providers: readAiProviderConfigs(raw.ai.providers, knownProviders),
+        ...(customProviders.length > 0 ? { customProviders } : {}),
         browserTools: readBrowserTools(raw.ai.browserTools),
         nativeSources: readNativeSources(raw.ai.nativeSources),
         workingStyle: readWorkingStyle(raw.ai.workingStyle)
@@ -1323,10 +1345,11 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
 /** Merges per-provider config one level deep, so a patch touching one field of one provider doesn't drop its others. */
 function mergeAiProviderConfigs(
   base: Partial<Record<AiProvider, AiProviderConfig>>,
-  patch: Partial<Record<AiProvider, AiProviderConfig>>
+  patch: Partial<Record<AiProvider, AiProviderConfig>>,
+  known: readonly string[]
 ): Partial<Record<AiProvider, AiProviderConfig>> {
   const out: Partial<Record<AiProvider, AiProviderConfig>> = { ...base };
-  for (const id of KNOWN_AI_PROVIDERS) {
+  for (const id of known as readonly AiProvider[]) {
     const patchConfig = patch[id];
     if (patchConfig) {
       out[id] = { ...base[id], ...patchConfig };
@@ -1375,13 +1398,18 @@ function mirrorActiveLook(appearance: AppearanceSettings, patch: AppSettingsPatc
 
 /** Deep-merge a patch over a base — returns a new object, never mutating inputs. */
 export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): AppSettings {
+  // A list, not a map: a patch carrying `customProviders` replaces it wholesale.
+  const customProviders = patch.ai && 'customProviders' in patch.ai
+    ? sanitizeCustomProviders(patch.ai.customProviders)
+    : base.ai.customProviders ?? [];
   const ai: AiSettings = {
     ...base.ai,
     ...(patch.ai ?? {}),
     providers: isRecord(patch.ai?.providers)
       ? mergeAiProviderConfigs(
           base.ai.providers,
-          patch.ai!.providers as Partial<Record<AiProvider, AiProviderConfig>>
+          patch.ai!.providers as Partial<Record<AiProvider, AiProviderConfig>>,
+          knownProviderIds(customProviders)
         )
       : base.ai.providers,
     browserTools: isRecord(patch.ai?.browserTools)
@@ -1396,6 +1424,23 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
       : base.ai.nativeSources,
     workingStyle: isRecord(patch.ai?.workingStyle) ? { ...base.ai.workingStyle, ...patch.ai!.workingStyle } : base.ai.workingStyle
   };
+  if (customProviders.length > 0) ai.customProviders = customProviders;
+  else delete ai.customProviders;
+  // Removing an endpoint must not leave a setting pointing at it.
+  const removed = (base.ai.customProviders ?? []).filter(old => !customProviders.some(kept => kept.id === old.id));
+  if (removed.length > 0) {
+    const providers = { ...ai.providers };
+    for (const { id } of removed) {
+      delete providers[id];
+      if (ai.activeProvider === id) ai.activeProvider = DEFAULT_APP_SETTINGS.ai.activeProvider;
+      if (ai.recommendationProvider === id) ai.recommendationProvider = undefined;
+      if (ai.modelTiers?.[id]) {
+        const { [id]: _dropped, ...rest } = ai.modelTiers;
+        ai.modelTiers = rest;
+      }
+    }
+    ai.providers = providers;
+  }
 
   const jira: JiraSettings = {
     ...base.jira,

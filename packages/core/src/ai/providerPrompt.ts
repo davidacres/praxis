@@ -16,7 +16,7 @@
 import type { AiProvider } from '../types';
 import type { ChatCompletionResult, TokenUsage } from './gateway';
 import { toWireModelId } from './gateway/modelIds';
-import { PROVIDER_DESCRIPTORS, resolveProviderAdapter } from './providers/registry';
+import { gatewayOptionsFor, getProviderDescriptor, resolveProviderAdapter } from './providers/registry';
 
 export class AnalysisCancelledError extends Error {
   constructor(message = 'Analysis cancelled.') {
@@ -48,7 +48,7 @@ export async function runProviderPrompt(
     throw new AnalysisCancelledError();
   }
 
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const descriptor = getProviderDescriptor(provider);
   if (descriptor.kind !== 'api') {
     throw new Error(`Provider '${provider}' has no direct completion endpoint to call this way.`);
   }
@@ -56,7 +56,7 @@ export async function runProviderPrompt(
 
   const requestedModel = options.model?.trim() || descriptor.defaultModel;
   const model = provider === 'vercel-gateway' ? toWireModelId(requestedModel) : requestedModel;
-  const gateway = { url: options.baseUrl?.trim() || descriptor.defaultBaseUrl, apiKey: options.apiKey, apiPath: descriptor.apiPath };
+  const gateway = gatewayOptionsFor(provider, options.baseUrl, options.apiKey);
   const idleTimeoutMs = options.streamIdleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -66,7 +66,9 @@ export async function runProviderPrompt(
       { role: 'system', content: options.systemPrompt },
       { role: 'user', content: prompt }
     ],
-    maxTokens: 8192
+    maxTokens: 8192,
+    streamUsage: gateway.streamUsage,
+    gatewayCaching: gateway.gatewayCaching
   });
 
   let accumulated = '';

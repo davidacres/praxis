@@ -7,7 +7,21 @@ import {
   getKnownContextLength,
   getModelPricing,
   probeApiKeyAuth,
-  PROVIDER_DESCRIPTORS,
+  probeOpenAiCompatible,
+  gatewayOptionsFor,
+  getProviderDescriptor,
+  isCustomProviderId,
+  listProviderIds,
+  providerNeedsApiKey,
+  sanitizeCustomProvider,
+  customBaseUrlProblem,
+  customHeaderNameProblem,
+  customProviderIdFor,
+  clearProviderApiKey,
+  storeProviderApiKey,
+  type CustomProviderConfig,
+  type SaveCustomProviderInput,
+  type ProviderProbeResult,
   resolveGatewayUrlFromEnv,
   VercelAgentService,
   getStoredProviderApiKey,
@@ -123,7 +137,7 @@ export function respondToActivePermission(issueKey: string, decision: Permission
 
 /** Resolves the executable + args to spawn for a `hostKind: 'acp'` provider (Claude Code, Codex CLI, or GitHub Copilot via `copilot --acp`). */
 export function resolveAcpStartOptions(provider: AiProvider): { command: string; args?: string[] } {
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const descriptor = getProviderDescriptor(provider);
   if (descriptor.kind !== 'cli-agent' || descriptor.hostKind !== 'acp') {
     throw new Error(`${descriptor.label} is not an ACP-hosted provider.`);
   }
@@ -134,7 +148,7 @@ export function resolveAcpStartOptions(provider: AiProvider): { command: string;
 
 /** The available models for a `hostKind: 'acp'` provider, or `undefined` for any other provider/no selector. */
 export async function listCliModelOptions(provider: AiProvider): Promise<ModelOptions | undefined> {
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const descriptor = getProviderDescriptor(provider);
   if (descriptor.kind !== 'cli-agent' || descriptor.hostKind !== 'acp') {
     return undefined;
   }
@@ -169,12 +183,12 @@ export async function listCliModelOptions(provider: AiProvider): Promise<ModelOp
  * configured or the fetch fails (network error, endpoint not supported).
  */
 export async function listApiModelOptions(provider: AiProvider, forceRefresh?: boolean): Promise<ModelOptions | undefined> {
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const descriptor = getProviderDescriptor(provider);
   if (descriptor.kind !== 'api') {
     return undefined;
   }
   const { apiKey, gatewayUrl, model } = await resolveConnectionOptions(provider);
-  if (!apiKey) {
+  if (!apiKey && providerNeedsApiKey(provider)) {
     return undefined;
   }
   // vercel-gateway carries a legacy env-var fallback for the URL too
@@ -183,7 +197,7 @@ export async function listApiModelOptions(provider: AiProvider, forceRefresh?: b
   // picker resolves against the same gateway a session would actually use.
   const url = provider === 'vercel-gateway' ? resolveGatewayUrlFromEnv(gatewayUrl) : gatewayUrl || descriptor.defaultBaseUrl;
   try {
-    const options = await listCatalogModels(provider, { apiKey, url, apiPath: descriptor.apiPath }, forceRefresh);
+    const options = await listCatalogModels(provider, gatewayOptionsFor(provider, url, apiKey), forceRefresh);
     return { currentValue: model, options };
   } catch {
     return undefined;
@@ -192,13 +206,25 @@ export async function listApiModelOptions(provider: AiProvider, forceRefresh?: b
 
 /** Tests whether the configured API key and endpoint for a provider can connect successfully. */
 export async function testProviderConnection(provider: AiProvider): Promise<{ ok: boolean; message: string }> {
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const descriptor = getProviderDescriptor(provider);
   if (descriptor.kind !== 'api') {
     return { ok: true, message: `${descriptor.label} is a local CLI agent.` };
   }
   const { apiKey, gatewayUrl, model } = await resolveConnectionOptions(provider);
-  if (!apiKey) {
+  if (!apiKey && providerNeedsApiKey(provider)) {
     throw new Error(`No ${descriptor.label} API key configured.`);
+  }
+  if (descriptor.custom) {
+    // A saved endpoint is tested the same way as a draft, and remembers what it found.
+    const result = await testCustomProvider(descriptor.custom, { model });
+    const failed = result.steps.filter(step => step.status === 'fail');
+    if (!result.capabilities.chat) throw new Error(failed[0]?.detail ?? 'The endpoint did not answer a chat request.');
+    return {
+      ok: true,
+      message: failed.length === 0
+        ? `Connected to ${descriptor.label} — every check passed.`
+        : `Connected to ${descriptor.label}. ${failed.map(step => step.detail).join(' ')}`
+    };
   }
   const url = provider === 'vercel-gateway' ? resolveGatewayUrlFromEnv(gatewayUrl) : gatewayUrl || descriptor.defaultBaseUrl;
   const testModel = model || descriptor.defaultModel;
@@ -209,7 +235,7 @@ export async function testProviderConnection(provider: AiProvider): Promise<{ ok
       return { ok: true, message: `Connected successfully to ${descriptor.label}.` };
     }
     // OpenAI, Vercel Gateway, Z.ai
-    await probeApiKeyAuth({ apiKey, url, apiPath: descriptor.apiPath }, 10_000, testModel);
+    await probeApiKeyAuth(gatewayOptionsFor(provider, url, apiKey), 10_000, testModel);
     return { ok: true, message: `Connected successfully to ${descriptor.label}.` };
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
@@ -229,9 +255,104 @@ export async function testProviderConnection(provider: AiProvider): Promise<{ ok
   }
 }
 
+/**
+ * Runs the capability probe against an endpoint — a saved one, or an unsaved
+ * draft from the settings form (`apiKey` is then the typed key, never stored
+ * by this call). A draft carrying a saved endpoint's id falls back to that
+ * endpoint's stored key when no key is typed. The result is written back to
+ * the saved endpoint only when the probe targeted exactly what is saved.
+ */
+export async function testCustomProvider(
+  draft: CustomProviderConfig,
+  options: { apiKey?: string; model?: string } = {}
+): Promise<ProviderProbeResult> {
+  const config = sanitizeCustomProvider(draft);
+  if (!config) throw new Error('Check the endpoint URL and authentication.');
+  const typedKey = options.apiKey?.trim();
+  const apiKey = typedKey || (config.auth.kind === 'none' ? undefined : await resolveProviderApiKey(getSecretsStore(), config.id));
+  const result = await probeOpenAiCompatible({
+    url: config.baseUrl,
+    apiKey,
+    apiPath: config.apiPath,
+    exactPath: true,
+    auth: config.auth,
+    ...(config.headers ? { headers: config.headers } : {})
+  }, options.model);
+  const settings = getSettingsBackend().read();
+  const saved = settings.ai.customProviders?.find(provider => provider.id === config.id);
+  const sameTarget = saved && saved.baseUrl === config.baseUrl && saved.apiPath === config.apiPath && saved.auth.kind === config.auth.kind && !typedKey;
+  if (saved && sameTarget) {
+    await getSettingsBackend().write({
+      ai: {
+        customProviders: (settings.ai.customProviders ?? []).map(provider => provider.id === config.id
+          ? { ...provider, capabilities: result.capabilities, streamUsage: result.capabilities.streamUsage || !result.capabilities.streaming ? provider.streamUsage : false }
+          : provider)
+      }
+    });
+  }
+  return result;
+}
+
+/**
+ * Agent sessions drive tools on every turn. An endpoint whose connection test
+ * showed no tool calling would fail on its first tool use, so it is refused up
+ * front with the reason; one that was never tested is allowed (built-ins never
+ * carry a probe result).
+ */
+export function assertCanRunAgentSession(provider: AiProvider): void {
+  const descriptor = getProviderDescriptor(provider);
+  if (descriptor.kind === 'api' && descriptor.custom?.capabilities && !descriptor.custom.capabilities.tools) {
+    throw new Error(`${descriptor.label} didn't pass tool calling, which agent sessions need. Run its connection test in Settings → AI Provider after changing the model or server.`);
+  }
+}
+
+/** Adds or updates a custom endpoint (and its key), validating it the same way settings load does. */
+export async function saveCustomProvider(input: SaveCustomProviderInput): Promise<CustomProviderConfig> {
+  const settings = getSettingsBackend().read();
+  const existing = settings.ai.customProviders ?? [];
+  const requestedId = input.config.id;
+  const isUpdate = requestedId !== undefined && existing.some(provider => provider.id === requestedId);
+  const id = isUpdate ? requestedId : customProviderIdFor(input.config.label, existing.map(provider => provider.id));
+  const urlProblem = customBaseUrlProblem(input.config.baseUrl ?? '');
+  if (urlProblem) throw new Error(urlProblem);
+  for (const name of Object.keys(input.config.headers ?? {})) {
+    const problem = customHeaderNameProblem(name);
+    if (problem) throw new Error(problem);
+  }
+  const config = sanitizeCustomProvider({ ...input.config, id });
+  if (!config) throw new Error('Check the endpoint name, URL and authentication.');
+  const customProviders = isUpdate
+    ? existing.map(provider => (provider.id === id ? config : provider))
+    : [...existing, config];
+  await getSettingsBackend().write({
+    ai: {
+      customProviders,
+      ...(input.defaultModel !== undefined
+        ? { providers: { [id]: { ...(settings.ai.providers[id] ?? {}), defaultModel: input.defaultModel.trim() || undefined } } }
+        : {})
+    }
+  });
+  if (config.auth.kind === 'none') {
+    await clearProviderApiKey(getSecretsStore(), id);
+  } else if (input.apiKey !== undefined) {
+    if (input.apiKey.trim()) await storeProviderApiKey(getSecretsStore(), id, input.apiKey);
+    else await clearProviderApiKey(getSecretsStore(), id);
+  }
+  return config;
+}
+
+/** Deletes a custom endpoint and its key. Settings that named it fall back (see `mergeAppSettings`). */
+export async function removeCustomProvider(id: AiProvider): Promise<void> {
+  if (!isCustomProviderId(id)) throw new Error(`“${id}” is a built-in provider and can't be removed.`);
+  const settings = getSettingsBackend().read();
+  const customProviders = (settings.ai.customProviders ?? []).filter(provider => provider.id !== id);
+  await getSettingsBackend().write({ ai: { customProviders } });
+  await clearProviderApiKey(getSecretsStore(), id);
+}
+
 /** Completes ACP initialize without creating a provider session or sending a prompt. */
 export async function probeProviderCapability(provider: AiProvider): Promise<ProviderCapabilityProbe | undefined> {
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const descriptor = getProviderDescriptor(provider);
   if (descriptor.kind !== 'cli-agent') return undefined;
   const { command, args } = resolveAcpStartOptions(provider);
   const preflight = await probeCliProvider(command);
@@ -272,7 +393,8 @@ export async function resolveConnectionOptions(provider: AiProvider): Promise<{
   const config = settings.ai.providers[provider];
   return {
     apiKey,
-    gatewayUrl: config?.baseUrl?.trim() || undefined,
+    // A custom endpoint's URL lives on the endpoint itself (its descriptor's default).
+    gatewayUrl: isCustomProviderId(provider) ? undefined : config?.baseUrl?.trim() || undefined,
     model: config?.defaultModel?.trim() || undefined
   };
 }
@@ -290,7 +412,7 @@ export async function resolveGatewayOptions(): Promise<{
 /** Status snapshot for one provider — the key value itself never crosses IPC. */
 async function buildProviderStatus(provider: AiProvider): Promise<AiProviderStatus> {
   const settings = getSettingsBackend().read();
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const descriptor = getProviderDescriptor(provider);
 
   if (descriptor.kind === 'cli-agent') {
     // No API key concept — auth is the CLI's own (e.g. `claude login`,
@@ -303,6 +425,8 @@ async function buildProviderStatus(provider: AiProvider): Promise<AiProviderStat
     const configured = command ? await isExecutableAvailable(command) : true;
     return {
       provider,
+      label: descriptor.label,
+      kind: 'cli-agent',
       configured,
       enabled: settings.ai.providers[provider]?.enabled !== false,
       keySource: 'none',
@@ -324,12 +448,19 @@ async function buildProviderStatus(provider: AiProvider): Promise<AiProviderStat
   const gatewayUrl =
     provider === 'vercel-gateway'
       ? settings.ai.gatewayUrl.trim() || descriptor.defaultBaseUrl
-      : config?.baseUrl?.trim() || descriptor.defaultBaseUrl;
+      : descriptor.custom
+        ? descriptor.defaultBaseUrl
+        : config?.baseUrl?.trim() || descriptor.defaultBaseUrl;
   const defaultModel =
     provider === 'vercel-gateway' ? settings.ai.defaultModel : config?.defaultModel ?? '';
+  const custom = descriptor.custom;
   return {
     provider,
-    configured: keySource !== 'none',
+    label: descriptor.label,
+    kind: 'api',
+    // A "No key" endpoint (a local runtime) is ready as soon as it exists.
+    configured: keySource !== 'none' || !providerNeedsApiKey(provider),
+    ...(custom ? { custom: true, needsKey: custom.auth.kind !== 'none', ...(custom.capabilities ? { capabilities: custom.capabilities } : {}) } : {}),
     enabled: settings.ai.providers[provider]?.enabled !== false,
     keySource,
     gatewayUrl,
@@ -347,7 +478,5 @@ export async function getAiProviderStatus(): Promise<AiProviderStatus> {
 
 /** Every configured provider's status, for the settings UI and the session picker. */
 export async function listAiProviderStatuses(): Promise<AiProviderStatus[]> {
-  return Promise.all(
-    (Object.keys(PROVIDER_DESCRIPTORS) as AiProvider[]).map(provider => buildProviderStatus(provider))
-  );
+  return Promise.all(listProviderIds().map(provider => buildProviderStatus(provider)));
 }

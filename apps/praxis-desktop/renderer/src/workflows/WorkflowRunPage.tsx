@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import type { AiProvider, WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { StageArtifacts } from './StageArtifacts';
-import { PROVIDER_LABELS, providerIconName } from '../ai/modelProviders';
-import { isProviderUsable } from '../ai/providerAvailability';
+import { providerIconName, providerLabel } from '../ai/modelProviders';
+import { isProviderUsableForSessions } from '../ai/providerAvailability';
 import { useDeleteRun } from './useDeleteRun';
 import { WorkflowPipelineVertical } from './WorkflowPipelineVertical';
 import { WorkflowRunsBrowser } from './WorkflowRunsBrowser';
@@ -135,7 +135,7 @@ export function WorkflowRunPage({
     void window.praxis.ai
       .listProviderStatuses()
       .then(statuses => {
-        if (!cancelled) setUsableAis(statuses.filter(isProviderUsable).map(status => status.provider));
+        if (!cancelled) setUsableAis(statuses.filter(isProviderUsableForSessions).map(status => status.provider));
       })
       .catch(() => undefined);
     return () => {
@@ -517,12 +517,12 @@ export function WorkflowRunPage({
                     data-testid="wf-run-provider"
                     title={
                       run.aiProvider
-                        ? `Configured with ${PROVIDER_LABELS[run.aiProvider] ?? run.aiProvider}${run.aiModel ? ` · ${run.aiModel}` : ''}`
+                        ? `Configured with ${providerLabel(run.aiProvider) ?? run.aiProvider}${run.aiModel ? ` · ${run.aiModel}` : ''}`
                         : `Configured with model ${run.aiModel}`
                     }
                   >
                     <Icon name={run.aiProvider ? providerIconName(run.aiProvider) : 'robot'} size={12} />
-                    {run.aiProvider ? (PROVIDER_LABELS[run.aiProvider] ?? run.aiProvider) : 'AI'}
+                    {run.aiProvider ? (providerLabel(run.aiProvider) ?? run.aiProvider) : 'AI'}
                     {run.aiModel ? ` · ${run.aiModel}` : ''}
                   </p>
                 )}
@@ -995,7 +995,7 @@ export function WorkflowRunPage({
 }
 
 function aiName(provider: string): string {
-  return (PROVIDER_LABELS[provider as AiProvider] ?? provider).replace(/\s*\(local\)$/, '').replace(/ CLI$/, '');
+  return (providerLabel(provider as AiProvider) ?? provider).replace(/\s*\(local\)$/, '').replace(/ CLI$/, '');
 }
 
 /**

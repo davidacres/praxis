@@ -1,6 +1,7 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'node:url';
+import type { ProviderAuth } from '../providers/customProviders';
 
 /**
  * Minimal HTTP/HTTPS client for the Vercel AI Gateway.
@@ -13,6 +14,24 @@ export interface GatewayOptions {
   allowInsecureTls?: boolean;
   /** Path prefix before the standard `/models` and `/chat/completions` routes. */
   apiPath?: string;
+  /**
+   * `apiPath` is exactly what the user configured (a custom endpoint): join it
+   * to `url` as-is, with none of `endpoint()`'s `/v1` guessing.
+   */
+  exactPath?: boolean;
+  /** How the key is sent. Absent means bearer — every built-in's behaviour. */
+  auth?: ProviderAuth;
+  /** Extra non-secret request headers (custom endpoints only). */
+  headers?: Record<string, string>;
+  /** `false` omits `stream_options.include_usage` for servers that reject it. */
+  streamUsage?: boolean;
+  /**
+   * Whether the Vercel gateway's `providerOptions.gateway.caching` hint may be
+   * sent. Absent means yes (Vercel callers predate the flag); every other
+   * provider's options set it `false`, so the hint never leaks to a host that
+   * isn't the gateway.
+   */
+  gatewayCaching?: boolean;
 }
 
 export function isZaiHost(url: string): boolean {
@@ -58,6 +77,10 @@ export function isNonRetryableRateLimit(body: string): boolean {
 
 export function endpoint(opts: GatewayOptions, suffix: string): string {
   const cleanUrl = opts.url.replace(/\/+$/, '');
+  if (opts.exactPath) {
+    const path = (opts.apiPath ?? '').replace(/\/+$/, '');
+    return `${cleanUrl}${path && !path.startsWith('/') ? `/${path}` : path}${suffix}`;
+  }
   let cleanPath = (opts.apiPath ?? '/v1').replace(/\/+$/, '');
   if (!cleanPath.startsWith('/')) {
     cleanPath = `/${cleanPath}`;
@@ -101,10 +124,13 @@ function requestModule(target: string): typeof http | typeof https {
   return target.startsWith('https:') ? https : http;
 }
 
-function buildHeaders(opts: GatewayOptions, extra: Record<string, string> = {}): Record<string, string> {
-  const headers: Record<string, string> = { Accept: 'application/json', ...extra };
-  if (opts.apiKey) {
+export function buildHeaders(opts: GatewayOptions, extra: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...(opts.headers ?? {}), Accept: 'application/json', ...extra };
+  const auth = opts.auth ?? { kind: 'bearer' };
+  if (opts.apiKey && auth.kind === 'bearer') {
     headers.Authorization = `Bearer ${opts.apiKey}`;
+  } else if (opts.apiKey && auth.kind === 'header') {
+    headers[auth.name] = opts.apiKey;
   }
   return headers;
 }

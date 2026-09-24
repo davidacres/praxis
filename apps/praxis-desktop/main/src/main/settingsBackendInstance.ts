@@ -2,7 +2,7 @@ import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { app } from 'electron';
-import { resolveSharedSettingsPath, type SettingsBackend } from '@praxis/core';
+import { resolveSharedSettingsPath, setCustomProviderSource, type SettingsBackend } from '@praxis/core';
 import { SharedSettingsBackend } from './adapters/sharedSettingsBackend';
 
 /**
@@ -46,7 +46,10 @@ export async function initSettingsBackend(): Promise<SettingsBackend> {
   const legacyPath = path.join(app.getPath('userData'), 'settings.json');
   await migrateLegacySettings(legacyPath, sharedPath);
 
-  instance = new SharedSettingsBackend(sharedPath);
+  const backend = new SharedSettingsBackend(sharedPath);
+  instance = backend;
+  // Core resolves `custom:` provider ids through this — always the live list.
+  setCustomProviderSource(() => backend.read().ai.customProviders ?? []);
   return instance;
 }
 

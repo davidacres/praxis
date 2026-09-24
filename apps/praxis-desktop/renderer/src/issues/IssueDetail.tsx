@@ -30,13 +30,8 @@ import {
   SEVERITY_OPTIONS
 } from './issueDraftFields';
 import { resolveBackendMode } from '../board/boardMeta';
-import {
-  fetchModelOptions,
-  MODEL_PROVIDERS,
-  PROVIDER_LABELS,
-  providerIconName
-} from '../ai/modelProviders';
-import { isProviderUsable } from '../ai/providerAvailability';
+import { fetchModelOptions, hasModelCatalog, providerIconName, providerLabel } from '../ai/modelProviders';
+import { isProviderUsableForSessions } from '../ai/providerAvailability';
 import { ChipSelect } from '../ui/ChipSelect';
 
 /** Centre-pane AI tooling views the detail panel can hand off to. */
@@ -122,7 +117,7 @@ function StartAiSessionDialog({
   const [workflowPackId, setWorkflowPackId] = useState(initialWorkflow?.id ?? '');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | undefined>();
-  const configuredProviders = providerStatuses.filter(isProviderUsable);
+  const configuredProviders = providerStatuses.filter(isProviderUsableForSessions);
   const selectedStatus = providerStatuses.find(status => status.provider === selectedProvider);
   const workflowPackOptions = initialWorkflow && !workflows.some(workflow => workflow.id === initialWorkflow.id)
     ? [initialWorkflow, ...workflows]
@@ -226,7 +221,7 @@ function StartAiSessionDialog({
                 placeholder="No configured provider"
                 disabled={starting || configuredProviders.length === 0}
                 onChange={value => onProviderChange(value as AiProvider)}
-                options={configuredProviders.map(status => ({ value: status.provider, label: PROVIDER_LABELS[status.provider], icon: providerIconName(status.provider) }))}
+                options={configuredProviders.map(status => ({ value: status.provider, label: providerLabel(status.provider), icon: providerIconName(status.provider) }))}
               />
             </label>
             <label className="session-setup-field">
@@ -296,8 +291,8 @@ function StartAiSessionDialog({
             <p className="detail-ai-provider-hint">
               <Icon name={providerIconName(selectedProvider)} size={12} />
               {selectedStatus?.configured
-                ? `The shared Praxis execution prompt will run with ${PROVIDER_LABELS[selectedProvider]}${selectedModel ? ` · ${selectedModel}` : ''}.`
-                : `${PROVIDER_LABELS[selectedProvider]} is not configured. Open Settings → AI Provider.`}
+                ? `The shared Praxis execution prompt will run with ${providerLabel(selectedProvider)}${selectedModel ? ` · ${selectedModel}` : ''}.`
+                : `${providerLabel(selectedProvider)} is not configured. Open Settings → AI Provider.`}
             </p>
           )}
         </div>
@@ -723,16 +718,16 @@ export function IssueDetail({
         setSelectedProvider(current => {
           if (
             current &&
-            statuses.some(status => status.provider === current && isProviderUsable(status))
+            statuses.some(status => status.provider === current && isProviderUsableForSessions(status))
           ) {
             return current;
           }
           const active = statuses.find(
             status =>
               status.provider === settings.ai.activeProvider &&
-              isProviderUsable(status)
+              isProviderUsableForSessions(status)
           );
-          return active?.provider ?? statuses.find(isProviderUsable)?.provider;
+          return active?.provider ?? statuses.find(isProviderUsableForSessions)?.provider;
         });
       })
       .catch(() => {
@@ -770,7 +765,7 @@ export function IssueDetail({
   useEffect(() => {
     setRuntimeModels(undefined);
     setSelectedRuntimeModel('');
-    if (!selectedProvider || !MODEL_PROVIDERS.has(selectedProvider)) {
+    if (!selectedProvider || !hasModelCatalog(selectedProvider)) {
       return;
     }
     let cancelled = false;
@@ -844,7 +839,7 @@ export function IssueDetail({
   const isFeatureRequest = issue?.description?.trim().toLowerCase().includes('feature request') ?? false;
   const analysisRequired = analysisGateEnabled && !analysisConfirmed;
   const selectedProviderStatus = providerStatuses.find(status => status.provider === selectedProvider);
-  const configuredProviders = providerStatuses.filter(isProviderUsable);
+  const configuredProviders = providerStatuses.filter(isProviderUsableForSessions);
   const workflowActionsReady =
     workingDirectoryConfigured && (!analysisGateEnabled || analysisConfirmed);
 
@@ -1626,7 +1621,7 @@ export function IssueDetail({
                       placeholder="No configured provider"
                       disabled={configuredProviders.length === 0}
                       onChange={value => setSelectedProvider(value as AiProvider)}
-                      options={configuredProviders.map(status => ({ value: status.provider, label: PROVIDER_LABELS[status.provider], icon: providerIconName(status.provider) }))}
+                      options={configuredProviders.map(status => ({ value: status.provider, label: providerLabel(status.provider), icon: providerIconName(status.provider) }))}
                     />
                   </label>
                   <label className="detail-ai-runtime-field">

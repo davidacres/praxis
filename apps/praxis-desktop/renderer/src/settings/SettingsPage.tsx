@@ -21,7 +21,9 @@ import type {
   ModelChoice,
   SurfaceMotifSettings,
   BoardsSidebarMode,
-  Connection
+  Connection,
+  CustomProviderConfig,
+  ProviderPreset
 } from '@praxis/core';
 import {
   BUILT_IN_LOOKS,
@@ -34,7 +36,8 @@ import { Icon, type IconName } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
 import { ModelManagerPanel } from '../ai/ModelManagerPanel';
 import { AiUsageStatsSection } from './AiUsageStatsSection';
-import { MODEL_PROVIDERS, fetchModelOptions, providerIconName } from '../ai/modelProviders';
+import { fetchModelOptions, hasModelCatalog, providerIconName } from '../ai/modelProviders';
+import { AddProviderDialog, CustomEndpointForm, endpointDisplayUrl, type BuiltInCatalogEntry } from './AiProviderCatalog';
 import {
   formatCost,
   formatTokenCount,
@@ -1903,6 +1906,14 @@ interface AiProviderMeta {
   notInstalledHint?: string;
 }
 
+/** Short names for a custom endpoint's tested capabilities, as its row shows them. */
+const CAPABILITY_LABELS = {
+  models: 'Models',
+  chat: 'Chat',
+  streamUsage: 'Streaming usage',
+  tools: 'Tool calling'
+} as const;
+
 /** Display metadata for the settings UI — mirrors core's `PROVIDER_DESCRIPTORS`
  *  (kept as a local literal, not imported: core drags in Node built-ins that
  *  can't bundle into the renderer, same reason `settingsDefaults.ts` exists). */
@@ -2021,7 +2032,7 @@ function UsageAdminKeyField({ provider }: { provider: AiProvider }) {
     }
   };
   return (
-    <div style={{ display: 'flex', gap: 8 }}>
+    <div className="ai-key-controls">
       <input
         type="password"
         className="input"
@@ -2030,7 +2041,6 @@ function UsageAdminKeyField({ provider }: { provider: AiProvider }) {
         placeholder={saved ? '••••••••  (saved)' : 'Optional admin key'}
         value={draft}
         onChange={event => setDraft(event.target.value)}
-        style={{ flex: 1 }}
       />
       <button type="button" className="btn btn-primary" data-testid="ai-usage-admin-key-save" disabled={busy || !draft.trim()} onClick={() => void save(draft)}>
         Save
@@ -2068,6 +2078,15 @@ function AiSection({
   const [managingModels, setManagingModels] = useState(false);
   const [spendSessions, setSpendSessions] = useState<AgentSessionRecord[]>([]);
   const [spendRangeDays, setSpendRangeDays] = useState<number | undefined>(undefined);
+  const [addingProvider, setAddingProvider] = useState(false);
+  const [presets, setPresets] = useState<ProviderPreset[]>([]);
+  /** A new endpoint being set up from a preset — shown as its own open row until saved or cancelled. */
+  const [newEndpointPreset, setNewEndpointPreset] = useState<ProviderPreset>();
+  const customProviders = settings.ai.customProviders ?? [];
+
+  useEffect(() => {
+    window.praxis.ai.listProviderPresets().then(setPresets).catch(() => setPresets([]));
+  }, []);
 
   const reloadStatuses = () => {
     window.praxis.ai
@@ -2130,7 +2149,15 @@ function AiSection({
     }
   }, [setupFocus, selectedProviderId, tab, statuses, expandedProviderId]);
 
-  const selectedMeta = AI_PROVIDERS.find(p => p.id === selectedProviderId)!;
+  const selectedCustom = customProviders.find(provider => provider.id === selectedProviderId);
+  const selectedMeta: AiProviderMeta = AI_PROVIDERS.find(p => p.id === selectedProviderId) ?? {
+    id: selectedProviderId,
+    kind: 'api',
+    label: selectedCustom?.label ?? selectedProviderId,
+    keyLabel: `${selectedCustom?.label ?? 'Endpoint'} API key`,
+    urlPlaceholder: '',
+    modelPlaceholder: ''
+  };
   const selectedStatus = statuses.find(s => s.provider === selectedProviderId);
   const selectedConfig = settings.ai.providers[selectedProviderId] ?? {};
   const isVercel = selectedProviderId === 'vercel-gateway';
@@ -2205,11 +2232,86 @@ function AiSection({
         ? `Runs "${status.gatewayUrl}" — sign in with the CLI's own auth if it asks.`
         : (meta.notInstalledHint ?? `Not found: "${status.gatewayUrl}".`);
     }
+    if (status.custom) {
+      const config = customProviders.find(provider => provider.id === status.provider);
+      const where = config ? endpointDisplayUrl(config) : status.gatewayUrl;
+      const key = status.needsKey === false ? 'no key' : status.configured ? 'key saved' : 'add an API key';
+      const tested = status.capabilities
+        ? status.capabilities.tools ? '' : ' · chat only — not offered for agent sessions or workflows'
+        : ' · not tested yet';
+      return `${where} · ${key}${tested}`;
+    }
     return status.configured
       ? status.keySource === 'secret'
         ? 'Configured — API key stored in the OS keychain.'
         : 'Configured — API key resolved from the environment.'
       : 'Not configured — add an API key to enable AI sessions.';
+  };
+
+  /**
+   * The Providers tab lists the providers in use: configured (key saved / CLI
+   * found), the default, explicitly added from the catalog, or a custom
+   * endpoint. Everything else waits in Add provider.
+   */
+  const isListed = (id: AiProvider): boolean => {
+    if (settings.ai.activeProvider === id || settings.ai.providers[id]?.added) return true;
+    if (id.startsWith('custom:')) return true;
+    return statuses.find(status => status.provider === id)?.configured === true;
+  };
+  const listedMetas: AiProviderMeta[] = [
+    ...AI_PROVIDERS.filter(meta => isListed(meta.id)),
+    ...customProviders.map(config => ({
+      id: config.id,
+      kind: 'api' as const,
+      label: config.label,
+      keyLabel: `${config.label} API key`,
+      urlPlaceholder: '',
+      modelPlaceholder: ''
+    }))
+  ];
+  const listedIds = new Set<string>(listedMetas.map(meta => meta.id));
+  const catalogBuiltIns: BuiltInCatalogEntry[] = AI_PROVIDERS.map(meta => ({ id: meta.id, kind: meta.kind, label: meta.label }));
+  const unlistedBuiltIns = AI_PROVIDERS.filter(meta => !listedIds.has(meta.id)).length;
+
+  const openRow = (id: AiProvider) => {
+    setSelectedProviderId(id);
+    setExpandedProviderId(id);
+  };
+
+  const addBuiltIn = async (id: AiProvider) => {
+    setAddingProvider(false);
+    await update({ ai: { providers: { [id]: { ...(settings.ai.providers[id] ?? {}), added: true } } } });
+    openRow(id);
+    if (statuses.find(status => status.provider === id)?.configured !== true) setSetupFocus(id);
+  };
+
+  const startEndpoint = (preset: ProviderPreset) => {
+    setAddingProvider(false);
+    setNewEndpointPreset(preset);
+    setExpandedProviderId(undefined);
+  };
+
+  const removeFromList = async (id: AiProvider) => {
+    await update({ ai: { providers: { [id]: { ...(settings.ai.providers[id] ?? {}), added: undefined } } } });
+    setExpandedProviderId(undefined);
+  };
+
+  const removeEndpoint = async (config: CustomProviderConfig) => {
+    const confirmed = await confirm({
+      title: `Remove ${config.label}?`,
+      message: 'Its stored API key is deleted too. Sessions that already ran on it stay in your history.',
+      confirmLabel: 'Remove endpoint',
+      danger: true
+    });
+    if (!confirmed) return;
+    try {
+      await window.praxis.ai.removeCustomProvider(config.id);
+      setExpandedProviderId(undefined);
+      setSelectedProviderId(settings.ai.activeProvider === config.id ? 'vercel-gateway' : settings.ai.activeProvider);
+      reloadStatuses();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const urlValue = isVercel ? settings.ai.gatewayUrl : selectedConfig.baseUrl ?? '';
@@ -2306,18 +2408,56 @@ function AiSection({
       <div role="tabpanel" id={`ai-tabpanel-${tab}`} aria-labelledby={`ai-tab-${tab}`} data-testid={`ai-tabpanel-${tab}`}>
         {tab === 'providers' && (
           <>
-            <p className="settings-hint">
-              Turn on the providers you use. The default one is used for new sessions; each provider&rsquo;s connection details open
-              under its row.
-            </p>
+            <div className="ai-providers-toolbar">
+              <p className="settings-hint">
+                The providers you use. The default one is used for new sessions; each provider&rsquo;s connection details open
+                under its row.
+              </p>
+              <button type="button" className="btn btn-primary" data-testid="ai-add-provider" onClick={() => setAddingProvider(true)}>
+                <Icon name="plus" size={13} />
+                Add provider
+              </button>
+            </div>
             <div className="ai-provider-list" data-testid="ai-provider-list">
-              {AI_PROVIDERS.map(meta => {
+              {newEndpointPreset && (
+                <div className="ai-provider-row is-open" data-testid="ai-provider-row-new">
+                  <div className="ai-provider-head is-static">
+                    <span className="ai-provider-chevron" aria-hidden>
+                      <Icon name="chevron-down" size={13} />
+                    </span>
+                    <div className="ai-provider-text">
+                      <div className="ai-provider-name">
+                        New endpoint
+                        <span className="ai-provider-kind">{newEndpointPreset.id === 'custom' ? 'OpenAI-compatible' : newEndpointPreset.label}</span>
+                      </div>
+                      <div className="ai-provider-meta">Not saved yet — test it, then save.</div>
+                    </div>
+                  </div>
+                  <div className="ai-provider-body" data-testid="ai-provider-body-new">
+                    <CustomEndpointForm
+                      key={newEndpointPreset.id}
+                      preset={newEndpointPreset}
+                      onCancel={() => setNewEndpointPreset(undefined)}
+                      onSaved={config => {
+                        setNewEndpointPreset(undefined);
+                        reloadStatuses();
+                        openRow(config.id);
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+              {listedMetas.map(meta => {
                 const rowStatus = statuses.find(s => s.provider === meta.id);
                 const isDefault = settings.ai.activeProvider === meta.id;
                 const isOpen = expandedProviderId === meta.id;
                 const configured = rowStatus?.configured === true;
                 const enabled = settings.ai.providers[meta.id]?.enabled !== false;
                 const on = configured && enabled;
+                const custom = customProviders.find(provider => provider.id === meta.id);
+                const kindTag = custom
+                  ? presets.find(preset => preset.id === custom.presetId)?.group === 'local' ? 'Local' : 'OpenAI-compatible'
+                  : meta.kind === 'cli-agent' ? 'CLI' : 'API';
                 const switchTitle = !rowStatus
                   ? 'Checking…'
                   : !configured
@@ -2358,12 +2498,28 @@ function AiSection({
                       <div className="ai-provider-text">
                         <div className="ai-provider-name">
                           {meta.label}
+                          <span className="ai-provider-kind">{kindTag}</span>
                           {isDefault && <span className="chip ai-provider-default" data-testid={`ai-provider-default-${meta.id}`}>Default</span>}
                         </div>
                         <div className="ai-provider-meta" data-testid={isOpen ? 'ai-provider-status' : undefined}>
                           {enabled ? '' : 'Turned off. '}
                           {statusText(rowStatus, meta)}
                         </div>
+                        {custom?.capabilities && (
+                          <div className="ai-provider-caps" data-testid={`ai-provider-caps-${meta.id}`}>
+                            {(['models', 'chat', 'streamUsage', 'tools'] as const).map(capability => (
+                              <span
+                                key={capability}
+                                className={`ai-provider-cap${custom.capabilities![capability] ? '' : ' is-missing'}`}
+                                data-capability={capability}
+                                data-ok={custom.capabilities![capability] ? 'true' : 'false'}
+                              >
+                                <Icon name={custom.capabilities![capability] ? 'check' : 'close'} size={10} />
+                                {CAPABILITY_LABELS[capability]}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <span className="spacer" />
                       {!isDefault && enabled && (
@@ -2404,8 +2560,51 @@ function AiSection({
                         }}
                       />
                     </div>
-                    {isOpen && (
+                    {isOpen && custom && (
                       <div className="ai-provider-body" data-testid={`ai-provider-body-${meta.id}`}>
+                        <CustomEndpointForm
+                          key={custom.id}
+                          initial={custom}
+                          defaultModel={settings.ai.providers[custom.id]?.defaultModel ?? ''}
+                          keySaved={rowStatus?.keySource === 'secret'}
+                          onSaved={() => reloadStatuses()}
+                          onRemove={() => void removeEndpoint(custom)}
+                        />
+                        <FieldRow
+                          label="Models"
+                          description={
+                            selectedConfig.enabledModelIds
+                              ? `${selectedConfig.enabledModelIds.length} of the fetched catalog selected for the composer's Model picker.`
+                              : "Every fetched model is offered in the composer's Model picker (no curation set)."
+                          }
+                        >
+                          <button type="button" className="btn" data-testid="ai-manage-models-btn" onClick={() => setManagingModels(true)}>
+                            Manage models…
+                          </button>
+                        </FieldRow>
+                        <FieldRow
+                          label="Model tiers"
+                          stacked
+                          description={`What fast, standard and strong mean on ${meta.label}. A workflow stage names a tier, so the same workflow runs on whichever provider is used; a tier left unset uses the run's model.`}
+                        >
+                          <ProviderModelTiers
+                            key={meta.id}
+                            provider={meta.id}
+                            tiers={settings.ai.modelTiers?.[meta.id] ?? {}}
+                            onChange={saveProviderTiers}
+                          />
+                        </FieldRow>
+                      </div>
+                    )}
+                    {isOpen && !custom && (
+                      <div className="ai-provider-body" data-testid={`ai-provider-body-${meta.id}`}>
+                        {!configured && rowStatus && settings.ai.providers[meta.id]?.added && !isDefault && (
+                          <div className="ai-provider-body-actions">
+                            <button type="button" className="btn btn-compact" data-testid={`ai-provider-remove-${meta.id}`} onClick={() => void removeFromList(meta.id)}>
+                              Remove from list
+                            </button>
+                          </div>
+                        )}
                         {!configured && rowStatus && (
                           <p className="settings-hint ai-provider-setup-hint" data-testid={`ai-provider-setup-hint-${meta.id}`}>
                             {meta.kind === 'cli-agent'
@@ -2417,9 +2616,12 @@ function AiSection({
                 <>
                   <FieldRow
                     label="API key"
+                    stacked
                     description={`${selectedMeta.keyLabel}. Stored encrypted in the OS keychain; it is never shown again after saving.`}
                   >
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    {/* Wraps instead of squeezing: in a narrow row the buttons used to wrap their own
+                        labels and push Test/Clear past the edge. */}
+                    <div className="ai-key-controls">
                       <input
                         type="password"
                         className="input"
@@ -2428,7 +2630,6 @@ function AiSection({
                         placeholder={selectedStatus?.configured ? '••••••••  (saved)' : 'Paste API key'}
                         value={keyDraft}
                         onChange={event => setKeyDraft(event.target.value)}
-                        style={{ flex: 1 }}
                       />
                       <button
                         type="button"
@@ -2512,6 +2713,7 @@ function AiSection({
                   {selectedProviderId === 'openai' && (
                     <FieldRow
                       label="Usage Admin API key"
+                      stacked
                       description="Optional OpenAI Admin API key for account usage, limits, and cost reporting. Stored encrypted in the OS keychain; it is never used for model requests."
                     >
                       <UsageAdminKeyField provider={selectedProviderId} />
@@ -2561,7 +2763,7 @@ function AiSection({
                   />
                 </FieldRow>
               )}
-              {MODEL_PROVIDERS.has(selectedProviderId) && (
+              {hasModelCatalog(selectedProviderId) && (
                 <FieldRow
                   label="Models"
                   description={
@@ -2598,6 +2800,26 @@ function AiSection({
                 );
               })}
             </div>
+            <p className="settings-hint ai-providers-footnote" data-testid="ai-providers-footnote">
+              {unlistedBuiltIns > 0 ? `${unlistedBuiltIns} more built-in provider${unlistedBuiltIns === 1 ? '' : 's'}, ` : ''}
+              {presets.filter(preset => preset.group !== 'custom').length} OpenAI-compatible presets and custom endpoints are in{' '}
+              <button type="button" className="link-button" onClick={() => setAddingProvider(true)}>
+                Add provider
+              </button>
+              .
+            </p>
+            {addingProvider && (
+              <AddProviderDialog
+                builtIns={catalogBuiltIns}
+                listed={listedIds}
+                statuses={statuses}
+                presets={presets}
+                customProviders={customProviders}
+                onClose={() => setAddingProvider(false)}
+                onPickBuiltIn={id => void addBuiltIn(id)}
+                onPickPreset={startEndpoint}
+              />
+            )}
           </>
         )}
 
@@ -2615,7 +2837,7 @@ function AiSection({
                 onChange={value => void update({ ai: { recommendationProvider: value ? (value as AiProvider) : undefined } })}
                 options={[
                   { value: '', label: 'Auto (first configured provider)' },
-                  ...AI_PROVIDERS.filter(
+                  ...[...AI_PROVIDERS, ...customProviders.map(config => ({ id: config.id, kind: 'api' as const, label: config.label }))].filter(
                     meta =>
                       (meta.kind === 'api' || meta.kind === 'cli-agent') &&
                       // A provider that is off is not offered; one that is already chosen stays listed (marked) so the

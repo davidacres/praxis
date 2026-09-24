@@ -22,7 +22,7 @@ import { useDialogs } from '../ui/dialogs';
 import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
-import { PROVIDER_LABELS, providerIconName } from './modelProviders';
+import { providerIconName, providerLabel } from './modelProviders';
 import { basename, contextPressure, formatCost, formatContextLength, formatErrorMessage, formatModelCost, getKnownContextLength, getModelPricing, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
@@ -234,7 +234,7 @@ function WorkflowManagedRuntimeChip({
   }, [position]);
 
   const runtime = stageSession?.provider
-    ? `${PROVIDER_LABELS[stageSession.provider]}${stageSession.model ? ` · ${stageSession.model}` : ''}`
+    ? `${providerLabel(stageSession.provider)}${stageSession.model ? ` · ${stageSession.model}` : ''}`
     : stage?.type === 'agent-task'
       ? 'Resolved when the stage starts'
       : stage
@@ -631,7 +631,7 @@ function SessionUsageSummary({
             ))}
           </div>
           <div className="session-usage-provider">
-            <span className="session-usage-label">{session.provider ? `${PROVIDER_LABELS[session.provider]} account` : 'Provider account'}</span>
+            <span className="session-usage-label">{session.provider ? `${providerLabel(session.provider)} account` : 'Provider account'}</span>
             {provider?.totalTokens ? <span>{Math.round(provider.totalTokens).toLocaleString()} cumulative tokens</span> : provider?.credits ? <span>{provider.credits.remaining.toFixed(2)} {provider.credits.currency} remaining</span> : <span>{provider?.unavailableReason ?? 'Credits and account limits are not exposed by this provider.'}</span>}
           </div>
           {provider && provider.windows.length > 0 && (
@@ -1640,7 +1640,7 @@ export function SessionsPage({
                     <div className="session-chat-header">
                       <div className="session-chat-author">{event.type === 'message'
                         ? event.speaker
-                          ? <><Icon name={providerIconName(event.speaker.provider)} size={13} />{`${PROVIDER_LABELS[event.speaker.provider]}${event.speaker.model ? ` · ${event.speaker.model}` : ''}`}</>
+                          ? <><Icon name={providerIconName(event.speaker.provider)} size={13} />{`${providerLabel(event.speaker.provider)}${event.speaker.model ? ` · ${event.speaker.model}` : ''}`}</>
                           : 'AI agent'
                         : 'You'}</div>
                       <div className="session-chat-header-actions">
@@ -1772,7 +1772,7 @@ export function SessionsPage({
                 <div className="session-chat-message is-assistant session-chat-participant-legacy" data-testid="session-response">
                   <div className="session-chat-header">
                     <div className="session-chat-author">{selected?.conversation?.state === 'running'
-                      ? (() => { const speaker = selected.conversation.participants.find(participant => participant.id === selected.conversation?.currentSpeakerId); return speaker ? <><Icon name={providerIconName(speaker.provider)} size={13} />{`${PROVIDER_LABELS[speaker.provider]}${speaker.model ? ` · ${speaker.model}` : ''}`}</> : 'AI agent'; })()
+                      ? (() => { const speaker = selected.conversation.participants.find(participant => participant.id === selected.conversation?.currentSpeakerId); return speaker ? <><Icon name={providerIconName(speaker.provider)} size={13} />{`${providerLabel(speaker.provider)}${speaker.model ? ` · ${speaker.model}` : ''}`}</> : 'AI agent'; })()
                       : 'AI agent'}</div>
                     <div className="session-chat-header-actions">
                       <button
@@ -2258,7 +2258,7 @@ export function SessionsPage({
                         title="The workflow controls the active stage runtime; this is the session's selected provider"
                       >
                         <Icon name={providerIconName(selected.provider)} size={14} />
-                        {PROVIDER_LABELS[selected.provider]}
+                        {providerLabel(selected.provider)}
                       </span>
                     )}
                     {workflowOwnsRuntime && selected.provider && (
@@ -2278,7 +2278,7 @@ export function SessionsPage({
                         title="This workflow stage's AI provider is fixed"
                       >
                         <Icon name={providerIconName(selected.provider)} size={14} />
-                        {PROVIDER_LABELS[selected.provider]}
+                        {providerLabel(selected.provider)}
                       </span>
                     ) : (
                       <button
@@ -2300,7 +2300,7 @@ export function SessionsPage({
                         }}
                       >
                         <Icon name={providerIconName(selected.provider)} size={14} />
-                        {PROVIDER_LABELS[selected.provider]}
+                        {providerLabel(selected.provider)}
                       </button>
                     ))}
                     {!workflowOwnsRuntime && selected.provider && (() => {

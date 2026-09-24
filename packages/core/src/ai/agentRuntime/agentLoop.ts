@@ -138,7 +138,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       const body = options.adapter.buildChatRequest({
         modelId: options.modelId,
         messages,
-        tools: options.tools
+        tools: options.tools,
+        streamUsage: options.gateway.streamUsage,
+        gatewayCaching: options.gateway.gatewayCaching
       });
 
       const handle = await options.adapter.postChatStream(

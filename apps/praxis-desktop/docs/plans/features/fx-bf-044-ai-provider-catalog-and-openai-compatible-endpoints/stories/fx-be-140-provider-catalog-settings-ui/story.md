@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-140
 title: "Provider catalog settings UI"
-status: Proposed
+status: Complete
 feature: FX-BF-044
 updated: 2026-09-24
 dependencies: [FX-BE-137, FX-BE-138, FX-BE-139]
@@ -64,3 +64,11 @@ Settings → AI Provider → Providers shows the providers in use and an
   (`ai:getProviderStatus` reports unconfigured).
 - Screenshots of list, dialog, form (light + one dark theme) inspected per
   "Verifying a UI change".
+
+## Delivered
+
+As scoped, plus: the New Session provider menu refreshes provider statuses when opened, so an
+endpoint added in Settings is offered without a reload; Escape closes the catalog without also
+closing Settings. `aiProviderTabs.spec.ts` was updated where it relied on unconfigured built-ins
+being rows. e2e: `aiProviderCatalog.spec.ts` (4 tests, including geometric no-overlap checks
+at a 1024px window).

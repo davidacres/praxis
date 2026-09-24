@@ -74,6 +74,7 @@ and Electron integration. Last audited: 2026-09-15.
 | Feature | Status | Notes |
 |---|---|---|
 | AI provider setup (Vercel gateway) | ✓ | Settings → AI Provider; stores encrypted API key in `safeStorage` |
+| Provider catalog + OpenAI-compatible endpoints | ✓ | Settings → AI Provider lists providers in use; **Add provider** picks a built-in, a preset (OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, Fireworks, Cerebras, Ollama, LM Studio, vLLM, llama.cpp) or a custom endpoint. Each endpoint is tested (models / chat / streaming usage / tool calling) before save; one without tool calling is kept out of sessions and workflows but still serves recommendations (FX-BF-044) |
 | Delegate issue to AI agent | ✓ | Issue detail action; picker selects agent + assigns workflow pack |
 | Agent selection | ✓ | Agent Hub browser; runs system runtime or CLI executable |
 | Assign workflow pack | ✓ | Dropdown in delegate picker; attaches pack to session |

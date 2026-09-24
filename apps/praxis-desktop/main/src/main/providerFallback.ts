@@ -4,7 +4,7 @@
  * a session the user moves to another AI.
  */
 import {
-  PROVIDER_DESCRIPTORS,
+  listProviderIds,
   exhaustedProviders,
   stageProvider,
   type AiProvider,
@@ -18,7 +18,7 @@ export async function usableProviders(preferred: readonly string[] = []): Promis
   const usable = new Set(
     (await listAiProviderStatuses()).filter(status => status.configured && status.enabled).map(status => status.provider)
   );
-  const order = [...preferred, getSettingsBackend().read().ai.activeProvider, ...Object.keys(PROVIDER_DESCRIPTORS)];
+  const order = [...preferred, getSettingsBackend().read().ai.activeProvider, ...listProviderIds()];
   return [...new Set(order)].filter((id): id is AiProvider => usable.has(id as AiProvider));
 }
 

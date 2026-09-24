@@ -254,8 +254,29 @@ control — the dashed style and the off-palette hue are both asserted.
 Settings → AI Provider is four tabs — **Providers · Defaults · Spend · Tools** — and each
 provider is **one row**: name, status, "Make default", and an on/off switch, with its
 connection details (key, URL, model, CLI path, models) opening under the selected row.
-Add a provider by adding to `AI_PROVIDERS`; add a setting to the tab it belongs to rather
-than the top of the page.
+Add a setting to the tab it belongs to rather than the top of the page.
+
+**The Providers tab lists the providers in use, not every provider (FX-BF-044).** A row shows
+when it is configured, the default, `ai.providers[id].added`, or a custom endpoint; everything
+else is picked from **Add provider** (`settings/AiProviderCatalog.tsx`). Adding an
+*OpenAI-compatible* provider is data, not code: a preset in core's `providerPresets.ts`, or the
+user's own endpoint (`ai.customProviders`, id `custom:<slug>`, driven through
+`openAiCompatibleAdapter`). Only a provider with a genuinely different wire protocol or a CLI
+host needs a built-in — then `AI_PROVIDERS` here plus core's `PROVIDER_DESCRIPTORS`.
+
+- A renderer lookup by provider id must go through `ai/modelProviders.ts`'s `providerLabel`,
+  `hasModelCatalog`, `isApiModelProvider` — not the `PROVIDER_LABELS` / `MODEL_PROVIDERS`
+  literals, which only know built-ins and silently return `undefined` for a custom id.
+- **Tool calling is a capability, not an assumption.** A custom endpoint's connection test
+  stores `capabilities`; one with `tools: false` can answer one-shot recommendations but never
+  runs an agent session, ticket review or workflow stage. Session pickers use
+  `isProviderUsableForSessions` / `canRunAgentSessions` (`ai/providerAvailability.ts`); main
+  enforces the same rule in `assertCanRunAgentSession`.
+- A cluster of an input and buttons in a settings row uses `.ai-key-controls` (wraps; buttons
+  never shrink). `.btn` sets neither `white-space: nowrap` nor `flex-shrink: 0`, so in a narrow
+  row a bare flex cluster wrapped "Save key" inside its fixed-height button and pushed "Test key"
+  and "Clear" off the edge. `aiProviderCatalog.spec.ts` measures this and was proven against the
+  broken layout.
 
 `ai.providers[id].enabled` is stored only when set; **undefined means enabled**. A provider
 is *usable* only when it is also `configured` (key present / CLI found), so leaving it unset

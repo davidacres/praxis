@@ -15,6 +15,7 @@ import {
 } from './settings/themes';
 import { registerCustomSurfacePacks, registerMarketplaceSurfacePacks } from './settings/surfacePacks';
 import { startPublishingMobileAppearance } from './settings/mobileAppearancePublisher';
+import { setCustomProviderCatalog } from './ai/modelProviders';
 import type { AppSettings } from '@praxis/core';
 import './theme.css';
 import './surfaces.css';
@@ -96,6 +97,7 @@ async function applyMarketplaceAppearance(): Promise<void> {
 }
 
 void window.praxis.settings.get().then(async settings => {
+  setCustomProviderCatalog(settings.ai.customProviders);
   applyDisplayMode(settings.appearance.displayMode);
   registerCustomThemes(settings.appearance.customThemes);
   registerCustomSurfacePacks(settings.appearance.customSurfacePacks);
@@ -113,7 +115,10 @@ void window.praxis.settings.get().then(async settings => {
   // Local storage remains a usable first-launch fallback when settings are unavailable.
 });
 
-window.praxis.settings.onChanged(settings => applyDisplayMode(settings.appearance.displayMode));
+window.praxis.settings.onChanged(settings => {
+  setCustomProviderCatalog(settings.ai.customProviders);
+  applyDisplayMode(settings.appearance.displayMode);
+});
 
 window.praxis.marketplace.onChanged(() => {
   void applyMarketplaceAppearance().then(() => {

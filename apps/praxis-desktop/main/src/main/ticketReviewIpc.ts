@@ -1,12 +1,13 @@
 import { ipcMain } from 'electron';
 import {
-  PROVIDER_DESCRIPTORS,
+  getProviderDescriptor,
+  providerNeedsApiKey,
   buildTicketReviewGoal,
   ticketReviewSessionKey,
   type AgentSessionRecord,
   type AiTicketReviewInput
 } from '@praxis/core';
-import { abortActiveTask, getAiSessionManager, hasActiveTask, resolveConnectionOptions } from './aiInstance';
+import { abortActiveTask, assertCanRunAgentSession, getAiSessionManager, hasActiveTask, resolveConnectionOptions } from './aiInstance';
 import { trackerToolExtension } from './aiIpc';
 import { launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 import { getGadgetService } from './gadgetInstance';
@@ -27,14 +28,15 @@ async function startTicketReview(input: AiTicketReviewInput): Promise<AgentSessi
   const sessionManager = getAiSessionManager();
   const settings = getSettingsBackend().read();
   const provider = input.provider ?? settings.ai.activeProvider;
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  const descriptor = getProviderDescriptor(provider);
 
   if (settings.ai.providers[provider]?.enabled === false) {
     throw new Error(`${descriptor.label} is turned off. Enable it under Settings → AI Provider.`);
   }
-  if (descriptor.kind === 'api' && !(await resolveConnectionOptions(provider)).apiKey) {
+  if (descriptor.kind === 'api' && !(await resolveConnectionOptions(provider)).apiKey && providerNeedsApiKey(provider)) {
     throw new Error(`No ${descriptor.label} API key configured. Add one under Settings → AI Provider.`);
   }
+  assertCanRunAgentSession(provider);
 
   const service = await getServiceForConnection(input.connectionId);
   const issue = await service.getIssue(input.issueKey);

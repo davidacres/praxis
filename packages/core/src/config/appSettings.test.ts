@@ -458,3 +458,52 @@ test('instruction source and working style are sanitized and merged', () => {
   const merged = mergeAppSettings(raw, { ai: { workingStyle: { enabled: true } } });
   assert.deepEqual(merged.ai.workingStyle, { enabled: true, text: 'Mine.' });
 });
+
+test('settings without custom endpoints round-trip with no customProviders key', () => {
+  const stored = {
+    ai: { activeProvider: 'anthropic', providers: { anthropic: { defaultModel: 'claude-sonnet-4-6' }, openai: { enabled: false } } }
+  };
+  const once = sanitizeAppSettings(stored);
+  assert.equal('customProviders' in once.ai, false);
+  assert.deepEqual(sanitizeAppSettings(JSON.parse(JSON.stringify(once))).ai, once.ai);
+});
+
+test('custom endpoints are validated, and a stale custom id falls back to the default provider', () => {
+  const settings = sanitizeAppSettings({
+    ai: {
+      activeProvider: 'custom:gone',
+      recommendationProvider: 'custom:ollama',
+      providers: { 'custom:ollama': { defaultModel: 'llama3.1', added: true }, 'custom:gone': { enabled: false } },
+      customProviders: [
+        { id: 'custom:ollama', label: 'Ollama', protocol: 'openai-chat', baseUrl: 'http://localhost:11434/', apiPath: 'v1/', auth: { kind: 'none' } },
+        { id: 'custom:ollama', label: 'Duplicate', protocol: 'openai-chat', baseUrl: 'http://x', apiPath: '', auth: { kind: 'none' } },
+        { id: 'custom:BAD ID', label: 'Bad', protocol: 'openai-chat', baseUrl: 'http://x', apiPath: '', auth: { kind: 'none' } },
+        { id: 'custom:ftp', label: 'Ftp', protocol: 'openai-chat', baseUrl: 'ftp://x', apiPath: '', auth: { kind: 'none' } },
+        { id: 'custom:hdr', label: 'Hdr', protocol: 'openai-chat', baseUrl: 'https://x', apiPath: '', auth: { kind: 'bearer' },
+          headers: { 'HTTP-Referer': 'https://praxis', 'X-Auth-Token': 'leak', Authorization: 'Bearer leak' } }
+      ]
+    }
+  });
+  assert.equal(settings.ai.activeProvider, 'vercel-gateway');
+  assert.equal(settings.ai.recommendationProvider, 'custom:ollama');
+  assert.deepEqual(settings.ai.customProviders?.map(p => p.id), ['custom:ollama', 'custom:hdr']);
+  assert.equal(settings.ai.customProviders?.[0].baseUrl, 'http://localhost:11434');
+  assert.equal(settings.ai.customProviders?.[0].apiPath, '/v1');
+  assert.deepEqual(settings.ai.customProviders?.[1].headers, { 'HTTP-Referer': 'https://praxis' });
+  assert.deepEqual(settings.ai.providers['custom:ollama'], { defaultModel: 'llama3.1', added: true });
+  assert.equal(settings.ai.providers['custom:gone'], undefined);
+});
+
+test('removing a custom endpoint drops the settings that pointed at it', () => {
+  const endpoint = { id: 'custom:lab' as const, label: 'Lab', protocol: 'openai-chat' as const, baseUrl: 'http://10.0.0.2:8000', apiPath: '/v1', auth: { kind: 'none' as const } };
+  const withEndpoint = mergeAppSettings(DEFAULT_APP_SETTINGS, {
+    ai: { customProviders: [endpoint], activeProvider: 'custom:lab', providers: { 'custom:lab': { defaultModel: 'm' } }, modelTiers: { 'custom:lab': { fast: 'm' } } }
+  });
+  assert.equal(withEndpoint.ai.activeProvider, 'custom:lab');
+  assert.equal(withEndpoint.ai.providers['custom:lab']?.defaultModel, 'm');
+  const removed = mergeAppSettings(withEndpoint, { ai: { customProviders: [] } });
+  assert.equal('customProviders' in removed.ai, false);
+  assert.equal(removed.ai.activeProvider, 'vercel-gateway');
+  assert.equal(removed.ai.providers['custom:lab'], undefined);
+  assert.equal(removed.ai.modelTiers?.['custom:lab'], undefined);
+});

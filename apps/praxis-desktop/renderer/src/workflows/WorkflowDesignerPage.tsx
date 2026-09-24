@@ -14,7 +14,7 @@ import type {
   WorkflowPolicyProfile
 } from '@praxis/core';
 import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
-import { API_MODEL_PROVIDERS, fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from '../ai/modelProviders';
+import { fetchModelOptions, hasModelCatalog, isApiModelProvider, providerIconName, providerLabel } from '../ai/modelProviders';
 import { ChipSelect, type ChipSelectOption } from '../ui/ChipSelect';
 import { Icon, type IconName } from '../ui/Icon';
 import { WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
@@ -32,7 +32,7 @@ import {
   updateNode,
   type BucketedFeedback
 } from './workflowEdits';
-import { isProviderUsable } from '../ai/providerAvailability';
+import { isProviderUsable, isProviderUsableForSessions } from '../ai/providerAvailability';
 
 /**
  * Visual workflow designer (FX-BE-021 / FX-BF-014).
@@ -182,7 +182,7 @@ export function WorkflowDesignerPage({
     void window.praxis.workflows.effectivePolicy(project.id).then(setPolicy);
     void window.praxis.ai
       .listProviderStatuses()
-      .then(statuses => setRecommendationAvailable(statuses.some(status => API_MODEL_PROVIDERS.has(status.provider) && isProviderUsable(status))))
+      .then(statuses => setRecommendationAvailable(statuses.some(status => isApiModelProvider(status.provider) && isProviderUsable(status))))
       .catch(() => setRecommendationAvailable(false));
   }, [project.id]);
 
@@ -1319,7 +1319,7 @@ function AgentStageFields({
     void window.praxis.ai
       .listProviderStatuses()
       .then(statuses => {
-        if (!cancelled) setUsableAis(statuses.filter(isProviderUsable).map(status => status.provider));
+        if (!cancelled) setUsableAis(statuses.filter(isProviderUsableForSessions).map(status => status.provider));
       })
       .catch(() => undefined);
     return () => {
@@ -1379,7 +1379,7 @@ function AgentStageFields({
     { value: '', label: 'Run’s AI', description: 'Use the AI the run was started with', icon: 'sparkles' },
     ...[...new Set([...usableAis, ...(stageAi ? [stageAi] : [])])].map(id => ({
       value: id,
-      label: PROVIDER_LABELS[id as AiProvider] ?? id,
+      label: providerLabel(id as AiProvider) ?? id,
       icon: providerIconName(id as AiProvider),
       meta: usableAis.includes(id) ? undefined : 'not set up'
     }))
@@ -1390,7 +1390,7 @@ function AgentStageFields({
   useEffect(() => {
     let cancelled = false;
     setStageModels(undefined);
-    if (!stageAi || !MODEL_PROVIDERS.has(stageAi as AiProvider)) return;
+    if (!stageAi || !hasModelCatalog(stageAi as AiProvider)) return;
     setModelsLoading(true);
     fetchModelOptions(stageAi as AiProvider, false)
       .then(result => {
@@ -1556,7 +1556,7 @@ function AgentStageFields({
         <Field
           label="AI"
           labelTitle="Which AI runs this stage. Different stages can use different AIs — plan with one, implement with another."
-          warning={stageAi && usableAis.length > 0 && !usableAis.includes(stageAi) ? `${PROVIDER_LABELS[stageAi as AiProvider] ?? stageAi} is not set up or is turned off — set it up in Settings › AI Provider, or the run will not start.` : undefined}
+          warning={stageAi && usableAis.length > 0 && !usableAis.includes(stageAi) ? `${providerLabel(stageAi as AiProvider) ?? stageAi} is not set up or is turned off — set it up in Settings › AI Provider, or the run will not start.` : undefined}
         >
           <ChipSelect
             ariaLabel="AI"

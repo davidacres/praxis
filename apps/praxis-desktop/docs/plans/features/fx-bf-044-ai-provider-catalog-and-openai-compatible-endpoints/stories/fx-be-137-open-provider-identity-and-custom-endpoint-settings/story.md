@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-137
 title: "Open provider identity and custom endpoint settings"
-status: Proposed
+status: Complete
 feature: FX-BF-044
 updated: 2026-09-24
 dependencies: []
@@ -82,3 +82,15 @@ exist without a code change, and proves existing settings load byte-identical.
 - A header named `Authorization-Token` is rejected; `HTTP-Referer` is kept.
 - `npm run check-types` passes in all workspaces with no `as AiProvider`
   casts added to silence widening.
+
+## Delivered
+
+As scoped, with these differences: `AiProvider` was widened in place (built-ins are now
+`BuiltInAiProvider`) rather than introducing a separate `AiProviderId`, so the compiler listed
+every site that indexed `PROVIDER_DESCRIPTORS` — each now calls `getProviderDescriptor` /
+`findProviderDescriptor`. `customProviders` is optional and omitted when empty, so an existing
+settings file round-trips unchanged. Core reads the live list through
+`setCustomProviderSource` (main points it at the settings backend), so an endpoint resolves the
+moment its settings write returns. Removing an endpoint in `mergeAppSettings` also clears
+`activeProvider`, `recommendationProvider`, `modelTiers` and `providers` entries that named it.
+Tests: `appSettings.test.ts`, `customProviders.test.ts`.

@@ -1,4 +1,5 @@
 import type { AiProvider } from '../../types';
+import type { CustomProviderConfig } from './customProviders';
 import type { ChatStreamHandle, GatewayOptions } from '../gateway/gatewayClient';
 import type { BuildChatRequestArgs, StreamChatEvent } from '../gateway/wire';
 
@@ -12,6 +13,8 @@ export interface ApiProviderDescriptor {
   defaultModel: string;
   /** Optional path prefix for OpenAI-compatible providers whose API is not rooted at `/v1`. */
   apiPath?: string;
+  /** Present only on a user-added endpoint — the stored config it was built from. */
+  custom?: CustomProviderConfig;
 }
 
 export interface CliAgentProviderDescriptor {

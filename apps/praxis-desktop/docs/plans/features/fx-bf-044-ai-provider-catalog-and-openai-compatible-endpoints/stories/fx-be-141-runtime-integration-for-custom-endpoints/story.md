@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-141
 title: "Runtime integration for custom endpoints"
-status: Proposed
+status: Complete
 feature: FX-BF-044
 updated: 2026-09-24
 dependencies: [FX-BE-137, FX-BE-139]
@@ -35,7 +35,7 @@ chosen or used — and fails with a named reason where it can't.
   instances listed under their label; an instance whose last probe failed
   **tools** is shown disabled in agent/workflow pickers with the reason
   ("This endpoint didn't pass tool calling — run Test connection"), but
-  remains selectable for recommendation and ticket review.
+  remains selectable for one-shot recommendations.
 - `resolveRecommendationProvider` / `ai:delegate` accept `custom:` ids and
   apply the existing enabled/usable rule.
 - Session records store `providerLabel` at start so history still reads
@@ -50,7 +50,18 @@ chosen or used — and fails with a named reason where it can't.
 - e2e: agent session against `mockGatewayServer` via a custom instance
   streams, runs a tool call and records token usage.
 - e2e: a no-tools instance is disabled in the session provider picker with the
-  reason, and ticket review on it succeeds.
+  reason, and it is still offered as the Recommendations provider.
 - Deleting an instance leaves its sessions listed and readable.
 - Existing provider e2e specs pass unchanged apart from the deliberate
   row-visibility updates in FX-BE-140.
+
+## Delivered
+
+Sessions, handover, conversations, diagnosis, workflows (through the shared launcher), ticket
+review, recommendations and provider fallback all accept `custom:` ids; key-less endpoints are
+not refused for a missing key. Corrections to the scope above:
+
+- **Ticket review is an agent session** (read-only tools and gadgets), so an endpoint without
+  tool calling is refused there too — only one-shot recommendations can use it.
+- Session records do **not** capture a `providerLabel`; a session on a removed endpoint shows
+  its id, and resuming it fails with "The AI endpoint … was removed. Choose another provider".

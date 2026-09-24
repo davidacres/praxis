@@ -170,6 +170,10 @@ export interface BuildChatRequestArgs {
   maxTokens?: number;
   temperature?: number;
   stream?: boolean;
+  /** `false` omits `stream_options.include_usage` (some OpenAI-compatible servers reject it). */
+  streamUsage?: boolean;
+  /** `false` withholds the Vercel-only caching hint — see `GatewayOptions.gatewayCaching`. */
+  gatewayCaching?: boolean;
 }
 
 /** Build the OpenAI-compatible chat request body for the Vercel AI Gateway. */
@@ -182,7 +186,7 @@ export function buildChatRequest(args: BuildChatRequestArgs): Record<string, unk
     max_tokens: typeof args.maxTokens === 'number' ? args.maxTokens : 8192
   };
 
-  if (stream) {
+  if (stream && args.streamUsage !== false) {
     body.stream_options = { include_usage: true };
   }
   if (typeof args.temperature === 'number') {
@@ -194,7 +198,7 @@ export function buildChatRequest(args: BuildChatRequestArgs): Record<string, unk
     body.tools = tools;
   }
 
-  if (shouldEnableVercelAutoCaching(args.modelId)) {
+  if (args.gatewayCaching !== false && shouldEnableVercelAutoCaching(args.modelId)) {
     body.providerOptions = { gateway: { caching: 'auto' } };
   }
 
