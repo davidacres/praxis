@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { StoredTemplateRecommendation, TemplateReadiness, WorkflowDefinition, WorkflowTemplate } from '@praxis/core';
-import { API_MODEL_PROVIDERS } from '../ai/modelProviders';
+import { isApiModelProvider } from '../ai/modelProviders';
 import { Icon } from '../ui/Icon';
 import { getWorkflowTemplateGuidance, getWorkflowStageSequence } from './workflowTemplateGuidance';
 import { isProviderUsable } from '../ai/providerAvailability';
@@ -68,7 +68,7 @@ export function NewWorkflowDialog({
     void window.praxis.workflows.getRecommendedTemplate(projectId).then(setRecommendation);
     void window.praxis.ai
       .listProviderStatuses()
-      .then(statuses => setRecommendationAvailable(statuses.some(status => API_MODEL_PROVIDERS.has(status.provider) && isProviderUsable(status))))
+      .then(statuses => setRecommendationAvailable(statuses.some(status => isApiModelProvider(status.provider) && isProviderUsable(status))))
       .catch(() => setRecommendationAvailable(false));
   }, [projectId]);
 

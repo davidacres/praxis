@@ -1,5 +1,9 @@
 import {
-  PROVIDER_DESCRIPTORS,
+  getProviderDescriptor,
+  gatewayOptionsFor,
+  buildHeaders,
+  endpoint,
+  providerNeedsApiKey,
   buildTicketContext,
   reviewTicketWithClaude,
   reviewTicketWithGemini,
@@ -26,13 +30,19 @@ export interface AiReviewRuntimeOptions {
   allowMutations?: boolean;
 }
 
+/** A custom endpoint's auth and extra headers, minus `Accept` — the review may stream. */
+function reviewHeaders(gateway: Parameters<typeof buildHeaders>[0]): Record<string, string> {
+  const { Accept: _accept, ...headers } = buildHeaders(gateway);
+  return headers;
+}
+
 /** Runs ticket review/analysis through the exact runtime selected in ticket details. */
 export async function reviewIssueWithRuntime(
   issue: IssueDetails,
   options: AiReviewRuntimeOptions
 ): Promise<string> {
   const settings = getSettingsBackend().read();
-  const descriptor = PROVIDER_DESCRIPTORS[options.provider];
+  const descriptor = getProviderDescriptor(options.provider);
   const agentName = settings.ai.agentName.trim() || descriptor.label;
   const systemPrompt = [options.systemPrompt?.trim() || DEFAULT_REVIEW_PROMPT, options.userPrompt?.trim() ? `User follow-up:\n${options.userPrompt.trim()}` : undefined]
     .filter((value): value is string => Boolean(value))
@@ -40,23 +50,32 @@ export async function reviewIssueWithRuntime(
 
   if (descriptor.kind === 'api') {
     const connection = await resolveConnectionOptions(options.provider);
-    if (!connection.apiKey) {
+    if (!connection.apiKey && providerNeedsApiKey(options.provider)) {
       throw new Error(`No ${descriptor.label} API key configured. Add one under Settings → AI Provider.`);
     }
-    const review = options.provider === 'openai' || options.provider === 'z-ai'
+    // A custom endpoint speaks OpenAI chat-completions on its own path, with its own auth.
+    const customGateway = descriptor.custom ? gatewayOptionsFor(options.provider, connection.gatewayUrl, connection.apiKey) : undefined;
+    if (customGateway && !(options.model?.trim() || connection.model)) {
+      // The OpenAI review falls back to an OpenAI model id, which a custom server won't have.
+      throw new Error(`Choose a default model for ${descriptor.label} under Settings → AI Provider.`);
+    }
+    const review = options.provider === 'openai' || options.provider === 'z-ai' || customGateway
       ? reviewTicketWithOpenAi
       : options.provider === 'anthropic'
         ? reviewTicketWithClaude
         : options.provider === 'gemini'
           ? reviewTicketWithGemini
           : reviewTicketWithVercelGateway;
-    return review(issue, connection.apiKey, agentName, {
+    return review(issue, connection.apiKey ?? '', agentName, {
       gatewayUrl: connection.gatewayUrl,
       model: options.model?.trim() || connection.model,
       systemPrompt,
       signal: options.signal,
       onUpdate: options.onUpdate,
-      ...(descriptor.apiPath ? { apiPath: descriptor.apiPath } : {})
+      ...(descriptor.apiPath ? { apiPath: descriptor.apiPath } : {}),
+      ...(customGateway
+        ? { endpointUrl: endpoint(customGateway, '/chat/completions'), requestHeaders: reviewHeaders(customGateway) }
+        : {})
     });
   }
 

@@ -151,6 +151,13 @@ export interface ReviewStreamOptions {
   gatewayUrl?: string;
   /** Path prefix for OpenAI-compatible APIs that do not use `/v1`. */
   apiPath?: string;
+  /**
+   * OpenAI-compatible only: the exact chat-completions URL and auth headers,
+   * for a custom endpoint whose path and auth style are its own. When set they
+   * replace the `gatewayUrl` + `apiPath` join and the Bearer header.
+   */
+  endpointUrl?: string;
+  requestHeaders?: Record<string, string>;
 }
 
 export const ANALYSIS_CANCELLED_MESSAGE = 'Analysis cancelled.';
@@ -703,13 +710,15 @@ export async function reviewTicketWithOpenAi(
   const userMessage = `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`;
   const model = options?.model?.trim() || 'gpt-4o-mini';
   const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
-  const endpoint = `${(options?.gatewayUrl?.trim() || 'https://api.openai.com').replace(/\/+$/, '')}${(options?.apiPath ?? '/v1').replace(/\/+$/, '')}/chat/completions`;
+  const endpoint = options?.endpointUrl
+    ?? `${(options?.gatewayUrl?.trim() || 'https://api.openai.com').replace(/\/+$/, '')}${(options?.apiPath ?? '/v1').replace(/\/+$/, '')}/chat/completions`;
+  const authHeaders = options?.requestHeaders ?? { 'Authorization': `Bearer ${apiKey}` };
 
   if (options?.onUpdate) {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        ...authHeaders,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -758,7 +767,7 @@ export async function reviewTicketWithOpenAi(
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      ...authHeaders,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({

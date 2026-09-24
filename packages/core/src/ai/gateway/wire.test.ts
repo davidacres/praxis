@@ -189,3 +189,13 @@ test('buildChatRequest sends an image-only user turn without a text part', () =>
     { type: 'image_url', image_url: { url: 'data:image/webp;base64,aGk=' } }
   ]);
 });
+
+test('the Vercel caching hint and stream usage option are only sent when allowed', () => {
+  const messages: WireMessage[] = [{ role: 'user', content: 'hi' }];
+  const vercel = buildChatRequest({ modelId: 'anthropic/claude-sonnet-4.6', messages });
+  assert.deepEqual(vercel.providerOptions, { gateway: { caching: 'auto' } });
+  assert.deepEqual(vercel.stream_options, { include_usage: true });
+  const elsewhere = buildChatRequest({ modelId: 'anthropic/claude-sonnet-4.6', messages, gatewayCaching: false, streamUsage: false });
+  assert.equal('providerOptions' in elsewhere, false);
+  assert.equal('stream_options' in elsewhere, false);
+});

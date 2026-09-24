@@ -1,16 +1,18 @@
-import type { AiProvider } from '../../types';
+import type { AiProvider, BuiltInAiProvider } from '../../types';
+import type { GatewayOptions } from '../gateway/gatewayClient';
+import { isCustomProviderId, type CustomProviderConfig } from './customProviders';
 import { DEFAULT_VERCEL_URL } from '../gateway/modelIds';
 import { anthropicAdapter } from './anthropicAdapter';
 import { geminiAdapter } from './geminiAdapter';
 import { DEFAULT_GEMINI_BASE_URL } from './geminiClient';
 import { openAiCompatibleAdapter } from './openAiCompatibleAdapter';
-import type { ProviderAdapter, ProviderDescriptor } from './providerAdapter';
+import type { ApiProviderDescriptor, ProviderAdapter, ProviderDescriptor } from './providerAdapter';
 
 /** Developer-maintained provider registry — not user-editable. Unlike a plain
  * "URL + key" source list, each provider here has real adapter code because
  * their wire protocols genuinely differ (OpenAI-compatible vs. Anthropic
  * Messages vs. Google Gemini vs., in Phase 2, a subprocess-hosted CLI agent). */
-export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
+export const PROVIDER_DESCRIPTORS: Record<BuiltInAiProvider, ProviderDescriptor> = {
   'vercel-gateway': {
     id: 'vercel-gateway',
     kind: 'api',
@@ -90,7 +92,7 @@ export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
   }
 };
 
-const ADAPTERS: Partial<Record<AiProvider, ProviderAdapter>> = {
+const ADAPTERS: Partial<Record<BuiltInAiProvider, ProviderAdapter>> = {
   'vercel-gateway': openAiCompatibleAdapter,
   openai: openAiCompatibleAdapter,
   'z-ai': openAiCompatibleAdapter,
@@ -98,17 +100,124 @@ const ADAPTERS: Partial<Record<AiProvider, ProviderAdapter>> = {
   gemini: geminiAdapter
 };
 
-/** Only valid for `kind: 'api'` providers — `kind: 'cli-agent'` providers use `AcpAgentHost` instead. */
+/**
+ * User-added endpoints, as descriptors. The main process owns settings, so it
+ * hands core a getter for the current list (`setCustomProviderSource`); core
+ * then resolves a `custom:` id exactly like a built-in without threading
+ * settings through every call. Read through a getter rather than pushed on
+ * change so an endpoint is resolvable the instant a settings write returns.
+ */
+let customSource: () => readonly CustomProviderConfig[] = () => [];
+let memoConfigs: readonly CustomProviderConfig[] | undefined;
+let memoDescriptors = new Map<string, ApiProviderDescriptor>();
+
+function toDescriptor(config: CustomProviderConfig): ApiProviderDescriptor {
+  return {
+    id: config.id,
+    kind: 'api',
+    label: config.label,
+    defaultBaseUrl: config.baseUrl,
+    // No shipped default: the model comes from the server's list or the user.
+    defaultModel: '',
+    apiPath: config.apiPath,
+    custom: config
+  };
+}
+
+function customDescriptors(): Map<string, ApiProviderDescriptor> {
+  const configs = customSource();
+  if (configs !== memoConfigs) {
+    memoConfigs = configs;
+    memoDescriptors = new Map(configs.map(config => [config.id, toDescriptor(config)]));
+  }
+  return memoDescriptors;
+}
+
+export function setCustomProviderSource(source: () => readonly CustomProviderConfig[]): void {
+  customSource = source;
+  memoConfigs = undefined;
+}
+
+/** Fixed list — for tests and hosts without live settings. */
+export function setCustomProviders(configs: readonly CustomProviderConfig[]): void {
+  const snapshot = [...configs];
+  setCustomProviderSource(() => snapshot);
+}
+
+/** The current user-added endpoints, in settings order. */
+export function listCustomProviderIds(): AiProvider[] {
+  return [...customDescriptors().keys()] as AiProvider[];
+}
+
+export function isBuiltInProvider(id: string): id is BuiltInAiProvider {
+  return Object.prototype.hasOwnProperty.call(PROVIDER_DESCRIPTORS, id);
+}
+
+/** The descriptor for any provider id, or `undefined` for an unknown or removed one. */
+export function findProviderDescriptor(id: string): ProviderDescriptor | undefined {
+  if (isBuiltInProvider(id)) return PROVIDER_DESCRIPTORS[id];
+  return isCustomProviderId(id) ? customDescriptors().get(id) : undefined;
+}
+
+/** The descriptor for a provider id; throws a named error for an endpoint that no longer exists. */
+export function getProviderDescriptor(id: AiProvider): ProviderDescriptor {
+  const descriptor = findProviderDescriptor(id);
+  if (!descriptor) {
+    throw new Error(isCustomProviderId(id)
+      ? `The AI endpoint “${id.slice('custom:'.length)}” was removed. Choose another provider in Settings → AI Provider.`
+      : `Unknown AI provider “${id}”.`);
+  }
+  return descriptor;
+}
+
+/** Every provider id currently known: built-ins, then user-added endpoints. */
+export function listProviderIds(): AiProvider[] {
+  return [...(Object.keys(PROVIDER_DESCRIPTORS) as AiProvider[]), ...listCustomProviderIds()];
+}
+
+/**
+ * Connection options for an API provider, carrying every per-provider wire
+ * detail (API path, auth style, headers, stream-usage and caching flags) so no
+ * caller rebuilds them by hand. `url` falls back to the provider's default.
+ */
+export function gatewayOptionsFor(provider: AiProvider, url: string | undefined, apiKey: string | undefined): GatewayOptions {
+  const descriptor = getProviderDescriptor(provider);
+  if (descriptor.kind !== 'api') {
+    throw new Error(`${descriptor.label} is CLI-hosted and has no HTTP endpoint.`);
+  }
+  const base: GatewayOptions = { url: url?.trim() || descriptor.defaultBaseUrl, apiKey };
+  const custom = descriptor.custom;
+  if (custom) {
+    return {
+      ...base,
+      apiPath: custom.apiPath,
+      exactPath: true,
+      auth: custom.auth,
+      ...(custom.headers ? { headers: custom.headers } : {}),
+      ...(custom.streamUsage === false ? { streamUsage: false } : {}),
+      gatewayCaching: false
+    };
+  }
+  return {
+    ...base,
+    ...(descriptor.apiPath ? { apiPath: descriptor.apiPath } : {}),
+    ...(provider === 'vercel-gateway' ? {} : { gatewayCaching: false })
+  };
+}
+
 /** The name people know an AI by: "Claude Code (local)" → "Claude Code", "Codex CLI (local)" → "Codex". */
 export function providerDisplayName(provider: string): string {
-  const descriptor = (PROVIDER_DESCRIPTORS as Record<string, ProviderDescriptor | undefined>)[provider];
+  const descriptor = findProviderDescriptor(provider);
   return descriptor ? descriptor.label.replace(/\s*\(local\)$/, '').replace(/ CLI$/, '') : provider;
 }
 
+/** Only valid for `kind: 'api'` providers — `kind: 'cli-agent'` providers use `AcpAgentHost` instead. */
 export function resolveProviderAdapter(id: AiProvider): ProviderAdapter {
-  const adapter = ADAPTERS[id];
+  const descriptor = getProviderDescriptor(id);
+  // Every user-added endpoint speaks OpenAI chat-completions (its `protocol`).
+  const adapter = descriptor.kind === 'api' && descriptor.custom ? openAiCompatibleAdapter : ADAPTERS[id as BuiltInAiProvider];
   if (!adapter) {
-    throw new Error(`Provider '${id}' has no chat-completions adapter (kind: '${PROVIDER_DESCRIPTORS[id].kind}').`);
+    throw new Error(`Provider '${id}' has no chat-completions adapter (kind: '${descriptor.kind}').`);
   }
   return adapter;
 }

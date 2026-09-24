@@ -26,6 +26,9 @@ import type {
   UpdateIssueInput
 } from '../types';
 import type { ModelOptions } from '../ai/providers/modelCatalog';
+import type { CustomProviderConfig, ProviderCapabilities } from '../ai/providers/customProviders';
+import type { ProviderPreset } from '../ai/providers/providerPresets';
+import type { ProviderProbeResult } from '../ai/providers/providerProbe';
 import type { WireImageAttachment } from '../ai/gateway/wire';
 import type {
   ActivatedSkill,
@@ -632,6 +635,15 @@ export interface WorkflowRunWorkInfo {
 
 export interface AiProviderStatus {
   provider: AiProvider;
+  /** Display name — a built-in's shipped label, or a custom endpoint's own name. */
+  label: string;
+  kind: 'api' | 'cli-agent';
+  /** A user-added OpenAI-compatible endpoint (`custom:<slug>`). */
+  custom?: boolean;
+  /** Custom endpoints only: false for a "No key" endpoint. */
+  needsKey?: boolean;
+  /** Custom endpoints only: what the last connection test found. */
+  capabilities?: ProviderCapabilities;
   /** True when a usable API key exists (secret store or, for vercel-gateway, env fallback). */
   configured: boolean;
   /**
@@ -648,6 +660,15 @@ export interface AiProviderStatus {
   activeTasks: string[];
   /** Lightweight local CLI preflight; API providers do not carry this field. */
   preflight?: ProviderPreflightState;
+}
+
+export interface SaveCustomProviderInput {
+  /** Omitted `id` creates a new endpoint; its id is derived from the label. */
+  config: Omit<CustomProviderConfig, 'id'> & { id?: CustomProviderConfig['id'] };
+  /** Typed key: stored in the keychain; `''` clears it; omitted leaves it as is. */
+  apiKey?: string;
+  /** Written to `ai.providers[id].defaultModel`. */
+  defaultModel?: string;
 }
 
 export interface AiDelegateInput {
@@ -750,6 +771,20 @@ export interface AiIpc {
   testProviderApiKey(provider: AiProvider): Promise<{ ok: boolean; message: string }>;
   /** Clears all AI provider API keys so credentials can be re-entered after a keychain migration. */
   resetProviderApiKeys(): Promise<void>;
+  /** The OpenAI-compatible presets offered by Settings → AI Provider → Add provider. */
+  listProviderPresets(): Promise<ProviderPreset[]>;
+  /**
+   * Probes an endpoint — saved, or an unsaved draft from the settings form.
+   * `apiKey` is the key typed into the form; it is used for this probe only.
+   */
+  testCustomProvider(draft: CustomProviderConfig, options?: { apiKey?: string; model?: string }): Promise<ProviderProbeResult>;
+  /**
+   * Adds or updates an endpoint, and its key when one is given (`''` clears it).
+   * Returns the saved endpoint — its id is assigned here for a new one.
+   */
+  saveCustomProvider(input: SaveCustomProviderInput): Promise<CustomProviderConfig>;
+  /** Deletes an endpoint and its stored key; settings that pointed at it fall back. */
+  removeCustomProvider(id: AiProvider): Promise<void>;
   /** Every persisted agent session, most recently started first. */
   listSessions(): Promise<AgentSessionRecord[]>;
   /**

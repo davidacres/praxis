@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-044
 slug: ai-provider-catalog-and-openai-compatible-endpoints
 title: AI provider catalog and OpenAI-compatible endpoints
-status: Proposed
+status: Complete
 owner: Electron desktop app
 updated: 2026-09-24
 stories: [FX-BE-137, FX-BE-138, FX-BE-139, FX-BE-140, FX-BE-141]
@@ -165,3 +165,20 @@ stored keys, default provider or running sessions.
 2. FX-BE-138 (catalog + wire) — unit-tested against `mockGatewayServer`.
 3. FX-BE-139 (probe) — IPC only.
 4. FX-BE-141 (runtime) and FX-BE-140 (UI) in parallel; UI last to merge.
+
+## Delivered
+
+All five stories are implemented on `claude/ai-provider-selection-s7mvpr`. Where the build
+differs from the plan above, the story says so under **Delivered**. Two changes outside the
+story list, both from the "no overlapping buttons" requirement:
+
+- The built-in API key row's buttons (`Save key` / `Test key` / `Clear`) wrapped their labels
+  and ran off the row in a narrow window; they now sit in a wrapping cluster
+  (`.ai-key-controls`), guarded by a geometric e2e check that was proven against the old layout.
+- On Windows/Linux the title bar's centred group overlapped the layout buttons below ~1650px
+  (61px at 1280px) because the window controls sit on the right there. Below that width it now
+  joins the flex row; measured overlap-free from 1000px to 1800px.
+
+Still open: the renderer's `AI_PROVIDERS` literal and core's `PROVIDER_DESCRIPTORS` still
+disagree on Antigravity's default command (`agy` vs `antigravity-acp`), and the mobile app has
+not been checked against `custom:` provider ids.

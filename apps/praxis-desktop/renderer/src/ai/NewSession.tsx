@@ -11,10 +11,10 @@ import type {
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
-import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from './modelProviders';
+import { fetchModelOptions, hasModelCatalog, NO_TOOLS_REASON, providerIconName, providerLabel } from './modelProviders';
 import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
-import { isProviderUsable } from './providerAvailability';
+import { canRunAgentSessions, isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
 
 /** Applies a provider's curated `enabledModelIds` (Settings → AI Provider → Models) to a fetched catalog. */
 function applyEnabledModelCuration(options: ModelOptions, enabledModelIds: string[] | undefined): ModelOptions {
@@ -297,7 +297,7 @@ export function NewSession({
     Promise.all([window.praxis.ai.listProviderStatuses(), window.praxis.settings.get()])
       .then(([statuses, settings]) => {
         setProviderStatuses(statuses);
-        const active = statuses.find(status => status.provider === settings.ai.activeProvider && isProviderUsable(status));
+        const active = statuses.find(status => status.provider === settings.ai.activeProvider && isProviderUsableForSessions(status));
         setSelectedProvider(current => current ?? active?.provider);
       })
       .catch(() => setProviderStatuses([]));
@@ -343,7 +343,7 @@ export function NewSession({
     setSelectedModel(undefined);
     setModelOptions(undefined);
     setModelFilter('');
-    if (!selectedProvider || !MODEL_PROVIDERS.has(selectedProvider)) {
+    if (!selectedProvider || !hasModelCatalog(selectedProvider)) {
       return;
     }
     let cancelled = false;
@@ -439,6 +439,8 @@ export function NewSession({
     if (rect) {
       setProviderMenuPos({ top: rect.bottom + 4, left: rect.left });
     }
+    // Settings may have changed since this view mounted (a provider added, set up or turned off).
+    window.praxis.ai.listProviderStatuses().then(setProviderStatuses).catch(() => undefined);
   };
 
   const toggleWorkflowMenu = () => {
@@ -808,7 +810,7 @@ export function NewSession({
               onClick={toggleProviderMenu}
             >
               <Icon name={selectedProvider ? providerIconName(selectedProvider) : 'robot'} size={14} />
-              {selectedProvider ? PROVIDER_LABELS[selectedProvider] : 'Provider'}
+              {selectedProvider ? providerLabel(selectedProvider) : 'Provider'}
               <Icon name="chevron-down" size={12} />
             </button>
             {providerMenuPos &&
@@ -823,27 +825,37 @@ export function NewSession({
                   {configuredProviderStatuses.length === 0 && (
                     <div className="popover-label">No providers configured</div>
                   )}
-                  {configuredProviderStatuses.map(status => (
-                    <button
-                      key={status.provider}
-                      type="button"
-                      className={`composer-provider-option${selectedProvider === status.provider ? ' active' : ''}`}
-                      data-testid={`new-session-provider-option-${status.provider}`}
-                      role="option"
-                      aria-selected={selectedProvider === status.provider}
-                      onClick={() => {
-                        setSelectedProvider(status.provider);
-                        setProviderMenuPos(undefined);
-                      }}
-                    >
-                      <Icon name={providerIconName(status.provider)} size={14} />
-                      {PROVIDER_LABELS[status.provider]}
-                    </button>
-                  ))}
+                  {configuredProviderStatuses.map(status => {
+                    // Listed but not selectable: an endpoint whose test showed no tool calling.
+                    const blocked = !canRunAgentSessions(status);
+                    return (
+                      <button
+                        key={status.provider}
+                        type="button"
+                        className={`composer-provider-option${selectedProvider === status.provider ? ' active' : ''}${blocked ? ' is-unavailable' : ''}`}
+                        data-testid={`new-session-provider-option-${status.provider}`}
+                        role="option"
+                        aria-selected={selectedProvider === status.provider}
+                        aria-disabled={blocked || undefined}
+                        disabled={blocked}
+                        title={blocked ? NO_TOOLS_REASON : undefined}
+                        onClick={() => {
+                          setSelectedProvider(status.provider);
+                          setProviderMenuPos(undefined);
+                        }}
+                      >
+                        <Icon name={providerIconName(status.provider)} size={14} />
+                        <span className="composer-provider-option-text">
+                          {status.label || providerLabel(status.provider)}
+                          {blocked && <span className="composer-provider-option-note">Chat only — no tool calling</span>}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>,
                 document.body
               )}
-            {selectedProvider && MODEL_PROVIDERS.has(selectedProvider) && (modelsLoading || modelOptions) && (() => {
+            {selectedProvider && hasModelCatalog(selectedProvider) && (modelsLoading || modelOptions) && (() => {
               const selectedOption = modelOptions?.options.find(option => option.value === selectedModel);
               const contextLimit = selectedOption?.contextLength ?? getKnownContextLength(selectedModel, selectedProvider);
               const contextSize = formatContextLength(contextLimit);

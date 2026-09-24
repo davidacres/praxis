@@ -17,7 +17,13 @@ export type BackendMode =
   | 'project';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
-export type AiProvider = 'vercel-gateway' | 'openai' | 'anthropic' | 'gemini' | 'z-ai' | 'claude-code-cli' | 'codex-cli' | 'copilot-cli' | 'antigravity-cli';
+/** Providers with dedicated code in `providers/registry.ts`. */
+export type BuiltInAiProvider = 'vercel-gateway' | 'openai' | 'anthropic' | 'gemini' | 'z-ai' | 'claude-code-cli' | 'codex-cli' | 'copilot-cli' | 'antigravity-cli';
+/**
+ * Any provider a session or setting can name: a built-in, or a user-added
+ * OpenAI-compatible endpoint (`custom:<slug>`, see `providers/customProviders.ts`).
+ */
+export type AiProvider = BuiltInAiProvider | `custom:${string}`;
 
 export interface AiAssignment {
   provider: AiProvider;

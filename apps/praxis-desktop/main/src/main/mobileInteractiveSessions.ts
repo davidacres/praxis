@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
-  PROVIDER_DESCRIPTORS,
+  findProviderDescriptor,
+  getProviderDescriptor,
   type AgentSessionRecord,
   type AgentTaskDefinition,
   type AgentToolMode,
@@ -40,12 +41,12 @@ export async function createMobileInteractiveSession(input: {
   const requestedProvider = input.provider?.trim();
   // An unknown provider is an error, never a silent switch to the default:
   // the phone must launch what it showed the user.
-  if (requestedProvider && !(requestedProvider in PROVIDER_DESCRIPTORS)) {
+  if (requestedProvider && !findProviderDescriptor(requestedProvider)) {
     throw new Error(`“${requestedProvider}” is not an AI provider this desktop knows.`);
   }
   const provider = (requestedProvider || settings.ai.activeProvider) as AiProvider;
   if (settings.ai.providers[provider]?.enabled === false) {
-    throw new Error(`${PROVIDER_DESCRIPTORS[provider].label} is turned off on the desktop (Settings → AI Provider).`);
+    throw new Error(`${getProviderDescriptor(provider).label} is turned off on the desktop (Settings → AI Provider).`);
   }
   const mode = input.mode ?? 'chat';
   const analysisPrompt = settings.ai.analysisPrompt.trim();

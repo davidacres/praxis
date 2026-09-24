@@ -11,7 +11,7 @@ import type {
   SessionRuntimeEpoch
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName, refreshModelOptions } from './modelProviders';
+import { allModelProviderIds, fetchModelOptions, providerIconName, providerLabel, providerSupportsTools, refreshModelOptions } from './modelProviders';
 import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing } from './sessionNav';
 import { isProviderUsable } from './providerAvailability';
 import { isTerminalAgentState } from './aiSessionState';
@@ -190,7 +190,7 @@ export function SessionRuntimeHistory({ session }: { session: AgentSessionRecord
         {displayedEpochs.map(epoch => (
           <li key={epoch.id} data-testid="session-runtime-epoch">
             <strong>
-              {epoch.provider ? PROVIDER_LABELS[epoch.provider] : 'Provider'}
+              {epoch.provider ? providerLabel(epoch.provider) : 'Provider'}
               {epoch.model ? ` · ${epoch.model}` : ''}
             </strong>
             <p className="session-summary-text">
@@ -366,7 +366,8 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
   };
 
   const providerIsSelectable = (provider: AiProvider) =>
-    provider === session.provider || providerStatuses?.some(status => status.provider === provider && isProviderUsable(status)) === true;
+    provider === session.provider
+    || (providerSupportsTools(provider) && providerStatuses?.some(status => status.provider === provider && isProviderUsable(status)) === true);
 
   const chooseProvider = (provider: AiProvider) => {
     if (!providerIsSelectable(provider)) return;
@@ -400,10 +401,10 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
         <div className="session-handover-confirm" data-testid="session-handover-confirmation">
           <div className="session-popover-heading">
             <Icon name="info" size={15} />
-            <strong>Hand over to {PROVIDER_LABELS[pendingProvider]}?</strong>
+            <strong>Hand over to {providerLabel(pendingProvider)}?</strong>
           </div>
           <p>
-            This continues the current session with {PROVIDER_LABELS[pendingProvider]}. The new AI receives the session brief and workspace context.
+            This continues the current session with {providerLabel(pendingProvider)}. The new AI receives the session brief and workspace context.
           </p>
           <p className="session-popover-note">Always skips this confirmation for future provider changes on this Praxis installation.</p>
           {error && <p className="session-popover-error">{error}</p>}
@@ -428,7 +429,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
             <button
               type="button"
               className="model-menu-refresh"
-              aria-label={`Refresh ${session.provider ? PROVIDER_LABELS[session.provider] : ''} models`}
+              aria-label={`Refresh ${session.provider ? providerLabel(session.provider) : ''} models`}
               title="Refresh model list"
               data-testid="session-model-refresh"
               disabled={loading || busy}
@@ -476,7 +477,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
               one, so it stays visible even if its config changed underneath
               it) are worth showing — an unconfigured entry has no working
               action here (its row and "add" button were both dead clicks). */}
-          {!loading && [...MODEL_PROVIDERS].filter(providerIsSelectable).map(provider => (
+          {!loading && allModelProviderIds().filter(providerIsSelectable).map(provider => (
             <div
               key={provider}
               className={`composer-provider-option${session.provider === provider ? ' active' : ''}`}
@@ -493,11 +494,11 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
               }}
             >
               <Icon name={providerIconName(provider)} size={14} />
-              <span>{PROVIDER_LABELS[provider]}</span>
+              <span>{providerLabel(provider)}</span>
               <button
                 type="button"
                 className="composer-provider-add"
-                aria-label={`Add ${PROVIDER_LABELS[provider]} to this chat`}
+                aria-label={`Add ${providerLabel(provider)} to this chat`}
                 data-testid={`session-provider-add-${provider}`}
                 onClick={event => {
                   event.stopPropagation();
@@ -508,7 +509,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
               </button>
             </div>
           ))}
-          {!loading && [...MODEL_PROVIDERS].every(provider => !providerIsSelectable(provider)) && (
+          {!loading && allModelProviderIds().every(provider => !providerIsSelectable(provider)) && (
             <div className="popover-label">No providers configured — add one in Settings → AI.</div>
           )}
           {error && <p className="session-popover-error">{error}</p>}
@@ -526,8 +527,8 @@ export function SessionConversationDialog({ session, open, position, onClose, in
   // Undefined until the fetch below resolves — an empty configured list at
   // that point reads as "still loading", not "nothing configured".
   const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>();
-  const configuredProviders = [...MODEL_PROVIDERS].filter(id =>
-    providerStatuses?.some(status => status.provider === id && isProviderUsable(status))
+  const configuredProviders = allModelProviderIds().filter(id =>
+    providerSupportsTools(id) && providerStatuses?.some(status => status.provider === id && isProviderUsable(status))
   );
   const defaultProvider =
     configuredProviders.find(id => id !== session.provider) ?? configuredProviders[0] ?? session.provider ?? 'openai';
@@ -633,7 +634,7 @@ export function SessionConversationDialog({ session, open, position, onClose, in
             disabled={!providerStatuses || configuredProviders.length === 0}
             placeholder={!providerStatuses ? 'Loading providers…' : 'No providers configured'}
             onChange={value => setProvider(value as AiProvider)}
-            options={configuredProviders.map(id => ({ value: id, label: PROVIDER_LABELS[id], icon: providerIconName(id) }))}
+            options={configuredProviders.map(id => ({ value: id, label: providerLabel(id), icon: providerIconName(id) }))}
           />
         </label>
         <label className="session-brief-field"><span className="rail-sub">Model</span>
@@ -799,5 +800,5 @@ export function SessionLimitSwitch({ session, onStop }: { session: AgentSessionR
 }
 
 function aiName(provider: AiProvider): string {
-  return (PROVIDER_LABELS[provider] ?? provider).replace(/\s*\(local\)$/, '').replace(/ CLI$/, '');
+  return (providerLabel(provider) ?? provider).replace(/\s*\(local\)$/, '').replace(/ CLI$/, '');
 }

@@ -13,8 +13,8 @@ import { isIssueDone } from '../board/boardMeta';
 import { Icon } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
 import { assertRunBaseOrThrow, UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from './UncommittedBaseNotice';
-import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from '../ai/modelProviders';
-import { isProviderUsable } from '../ai/providerAvailability';
+import { fetchModelOptions, hasModelCatalog, providerIconName, providerLabel } from '../ai/modelProviders';
+import { isProviderUsableForSessions } from '../ai/providerAvailability';
 
 /** "KEY — Summary", the same picker convention IssueDetail's parent-issue field uses. */
 const ISSUE_OPTION_SEPARATOR = '—';
@@ -88,11 +88,11 @@ export function StartRunDialog({
         if (cancelled) return;
         setProviderStatuses(statuses);
         setSelectedProvider(current => {
-          if (current && statuses.some(s => s.provider === current && isProviderUsable(s))) {
+          if (current && statuses.some(s => s.provider === current && isProviderUsableForSessions(s))) {
             return current;
           }
-          const active = statuses.find(s => s.provider === settings.ai.activeProvider && isProviderUsable(s));
-          return active?.provider ?? statuses.find(isProviderUsable)?.provider ?? settings.ai.activeProvider;
+          const active = statuses.find(s => s.provider === settings.ai.activeProvider && isProviderUsableForSessions(s));
+          return active?.provider ?? statuses.find(isProviderUsableForSessions)?.provider ?? settings.ai.activeProvider;
         });
       })
       .catch(() => {
@@ -107,7 +107,7 @@ export function StartRunDialog({
   useEffect(() => {
     setModelOptions(undefined);
     setSelectedModel('');
-    if (!selectedProvider || !MODEL_PROVIDERS.has(selectedProvider)) {
+    if (!selectedProvider || !hasModelCatalog(selectedProvider)) {
       return;
     }
     let cancelled = false;
@@ -254,7 +254,7 @@ export function StartRunDialog({
     }
   };
 
-  const usableStatuses = providerStatuses.filter(isProviderUsable);
+  const usableStatuses = providerStatuses.filter(isProviderUsableForSessions);
   const baseStatuses = usableStatuses.length > 0 ? usableStatuses : providerStatuses;
   const availableProviderOptions: Array<{ provider: AiProvider }> = baseStatuses.map(s => ({ provider: s.provider }));
   if (selectedProvider && !availableProviderOptions.some(s => s.provider === selectedProvider)) {
@@ -384,7 +384,7 @@ export function StartRunDialog({
                   onChange={value => setSelectedProvider(value as AiProvider)}
                   options={availableProviderOptions.map(status => ({
                     value: status.provider,
-                    label: PROVIDER_LABELS[status.provider] ?? status.provider,
+                    label: providerLabel(status.provider) ?? status.provider,
                     icon: providerIconName(status.provider)
                   }))}
                 />

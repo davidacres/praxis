@@ -32,7 +32,7 @@ import {
   summarizeWorkflowRun,
   validateWorkflow,
   preflightWorkflow,
-  PROVIDER_DESCRIPTORS,
+  getProviderDescriptor,
   workflowFileName,
   writeProjectWorkflow,
   WorkflowRunStore,
@@ -113,7 +113,7 @@ function stageReportText(runId: string, nodeId: string): string | undefined {
 
 /** Bridges the shared recommendation prompt/JSON validation to an ACP host. */
 function recommendationPromptRunner(provider: import('@praxis/core').AiProvider, model?: string) {
-  if (PROVIDER_DESCRIPTORS[provider].kind !== 'cli-agent') return undefined;
+  if (getProviderDescriptor(provider).kind !== 'cli-agent') return undefined;
   return async (prompt: string, systemPrompt: string, signal?: AbortSignal): Promise<{ text: string; model: string }> => {
     const settings = getSettingsBackend().read();
     const text = await getAcpAgentHost().promptOnce(`${systemPrompt}\n\n${prompt}`, {

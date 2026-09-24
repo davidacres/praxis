@@ -1,4 +1,4 @@
-import type { AiProvider, ModelOptions } from '@praxis/core';
+import type { AiProvider, CustomProviderConfig, ModelOptions, ProviderCapabilities } from '@praxis/core';
 import type { IconName } from '../ui/Icon';
 
 /**
@@ -64,6 +64,66 @@ export function providerIconName(provider: AiProvider): IconName {
   }
 }
 
+/**
+ * User-added OpenAI-compatible endpoints (`custom:<slug>`), mirrored from
+ * settings by `main.tsx` so every label/capability lookup below knows them.
+ * Built-ins keep their literals above; a custom endpoint is known only here.
+ */
+const customProviders = new Map<string, { label: string; capabilities?: ProviderCapabilities }>();
+let customProvidersKey = '';
+
+/** Local copy of core's `isCustomProviderId` — the renderer imports only types from core. */
+export function isCustomProvider(provider: string | undefined): boolean {
+  return typeof provider === 'string' && provider.startsWith('custom:');
+}
+
+export function setCustomProviderCatalog(configs: readonly CustomProviderConfig[] | undefined): void {
+  const key = JSON.stringify(configs ?? []);
+  if (key === customProvidersKey) return;
+  customProvidersKey = key;
+  customProviders.clear();
+  for (const config of configs ?? []) customProviders.set(config.id, { label: config.label, capabilities: config.capabilities });
+  // A changed URL or auth makes a cached catalog stale.
+  for (const provider of [...modelOptionsCache.keys()]) if (isCustomProvider(provider)) modelOptionsCache.delete(provider);
+}
+
+/** The ids of the user-added endpoints, in settings order. */
+export function customProviderIds(): AiProvider[] {
+  return [...customProviders.keys()] as AiProvider[];
+}
+
+/** Every provider with a model catalog: the built-ins, then the user-added endpoints. */
+export function allModelProviderIds(): AiProvider[] {
+  return [...MODEL_PROVIDERS, ...customProviderIds()];
+}
+
+/** Display name for any provider id — a custom endpoint's own name, a built-in's label, else the id. */
+export function providerLabel(provider: AiProvider | string): string {
+  return customProviders.get(provider)?.label ?? PROVIDER_LABELS[provider as AiProvider] ?? provider;
+}
+
+/** A `kind: 'api'` provider with a model-listing endpoint — every built-in API provider and every custom endpoint. */
+export function isApiModelProvider(provider: AiProvider | string): boolean {
+  return API_MODEL_PROVIDERS.has(provider as AiProvider) || isCustomProvider(provider);
+}
+
+/** Any provider with a model catalog at all. */
+export function hasModelCatalog(provider: AiProvider | string): boolean {
+  return MODEL_PROVIDERS.has(provider as AiProvider) || isCustomProvider(provider);
+}
+
+/**
+ * Whether the provider can run agent sessions and workflows (which call tools).
+ * False only for a custom endpoint whose last connection test showed no tool
+ * calling — an untested endpoint and every built-in are assumed able.
+ */
+export function providerSupportsTools(provider: AiProvider | string): boolean {
+  const capabilities = customProviders.get(provider)?.capabilities;
+  return !capabilities || capabilities.tools;
+}
+
+export const NO_TOOLS_REASON = "Didn't pass tool calling, which agent sessions need — run its connection test in Settings → AI Provider.";
+
 const modelOptionsCache = new Map<AiProvider, ModelOptions>();
 const modelOptionsRequests = new Map<AiProvider, Promise<ModelOptions | undefined>>();
 
@@ -79,7 +139,7 @@ export function fetchModelOptions(provider: AiProvider, forceRefresh: boolean): 
   }
   const request = (CLI_MODEL_LISTING_PROVIDERS.has(provider)
     ? window.praxis.ai.listCliModelOptions(provider)
-    : API_MODEL_PROVIDERS.has(provider)
+    : isApiModelProvider(provider)
       ? window.praxis.ai.listApiModelOptions(provider, forceRefresh)
       : Promise.resolve(undefined)
   ).then(options => {

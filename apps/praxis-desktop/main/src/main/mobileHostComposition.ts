@@ -10,7 +10,8 @@ import * as os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import {
   InMemoryMobileCommandLedger,
-  PROVIDER_DESCRIPTORS,
+  findProviderDescriptor,
+  getProviderDescriptor,
   fingerprintMobileHostKey,
   type AgentSessionRecord,
   type AiProvider,
@@ -102,7 +103,7 @@ async function providerCatalog(projectId?: string): Promise<MobileProviderCatalo
   const settings = getSettingsBackend().read();
   const statuses = await listAiProviderStatuses();
   const providers = statuses.map((status): MobileProviderOption => {
-    const descriptor = PROVIDER_DESCRIPTORS[status.provider];
+    const descriptor = getProviderDescriptor(status.provider);
     const configuredDefault = status.defaultModel?.trim();
     const defaultModel = configuredDefault || (descriptor.kind === 'api' ? descriptor.defaultModel : undefined);
     const base = {
@@ -143,9 +144,9 @@ const cliModelCache = new Map<string, { at: number; options: ModelOptions | unde
 const CLI_MODEL_TTL_MS = 5 * 60 * 1000;
 
 async function modelCatalog(provider: string, refresh: boolean): Promise<MobileModelCatalog> {
-  if (!(provider in PROVIDER_DESCRIPTORS)) throw new Error(`“${provider}” is not an AI provider this desktop knows.`);
+  if (!findProviderDescriptor(provider)) throw new Error(`“${provider}” is not an AI provider this desktop knows.`);
   const id = provider as AiProvider;
-  const descriptor = PROVIDER_DESCRIPTORS[id];
+  const descriptor = getProviderDescriptor(id);
   let options: ModelOptions | undefined;
   try {
     if (descriptor.kind === 'api') {

@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-139
 title: "Connection test and capability probe"
-status: Proposed
+status: Complete
 feature: FX-BF-044
 updated: 2026-09-24
 dependencies: [FX-BE-138]
@@ -51,3 +51,10 @@ API an endpoint supports before they start a session that needs them.
   failing step and never throws.
 - A 401 stops the probe after step 1 with "API key rejected".
 - The API key never appears in a probe result or log line.
+
+## Delivered
+
+As scoped (`providerProbe.ts`, `ai.testCustomProvider`). The probe result is written back to a
+saved endpoint only when it targeted exactly what is saved; a draft probe never stores its key.
+Tests: `providerProbe.test.ts` (all-pass, no tools, rejects `stream_options`, no `/models`,
+401 without echoing the key, unreachable server).

@@ -4,6 +4,7 @@ import { fetchModels, type GatewayOptions, type RawGatewayModel } from '../gatew
 import { fetchAnthropicModels } from './anthropicClient';
 import { fetchGeminiModels } from './geminiClient';
 import { getKnownContextLength, getModelPricing, type ModelPriceRates } from './modelPricing';
+import { findProviderDescriptor } from './registry';
 
 /**
  * One selectable model, shared by every "model picker" surface — both
@@ -104,6 +105,11 @@ export async function listCatalogModels(
     // Anthropic's Models API needs `x-api-key`/`anthropic-version` auth, not
     // OpenAI-style Bearer — everything else speaks the same `/v1/models` shape.
     let raw: RawGatewayModel[] = [];
+    // A custom endpoint may have no usable `/models`; its manually listed ids
+    // stand in, and are merged in when the server lists some but not all.
+    const descriptor = findProviderDescriptor(provider);
+    const manual = (descriptor?.kind === 'api' ? descriptor.custom?.manualModels : undefined) ?? [];
+    const manualChoices = (): ModelChoice[] => manual.map(id => ({ value: id, name: id }));
     try {
       raw = provider === 'anthropic'
         ? await fetchAnthropicModels(opts)
@@ -113,6 +119,11 @@ export async function listCatalogModels(
     } catch (err) {
       if (provider === 'z-ai') {
         const fallbackChoices = [...KNOWN_Z_AI_MODELS];
+        cache.set(key, { choices: fallbackChoices, fetchedAt: Date.now() });
+        return fallbackChoices;
+      }
+      if (manual.length > 0) {
+        const fallbackChoices = manualChoices();
         cache.set(key, { choices: fallbackChoices, fetchedAt: Date.now() });
         return fallbackChoices;
       }
@@ -133,6 +144,9 @@ export async function listCatalogModels(
       }
       return pricing ? { ...choice, pricing } : choice;
     });
+    for (const extra of manualChoices()) {
+      if (!choices.some(choice => choice.value === extra.value)) choices.push(extra);
+    }
     if (provider === 'z-ai' && choices.length === 0) {
       const fallbackChoices = [...KNOWN_Z_AI_MODELS];
       cache.set(key, { choices: fallbackChoices, fetchedAt: Date.now() });
