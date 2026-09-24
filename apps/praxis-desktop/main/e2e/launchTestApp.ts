@@ -80,22 +80,10 @@ export async function launchTestApp(
   const userDataDir = reuse?.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-e2e-'));
   const settingsPath = reuse?.settingsPath ?? path.join(userDataDir, 'test-settings.json');
   const freeMobilePort = reuse ? undefined : await findFreePort();
-  if (!reuse || seedSettings) {
-    const baseSettings: Record<string, unknown> = freeMobilePort
-      ? { mobileAccess: { listenPort: freeMobilePort } }
-      : {};
-    const mergedSettings = seedSettings
-      ? {
-          ...baseSettings,
-          ...seedSettings,
-          mobileAccess: {
-            ...(baseSettings.mobileAccess as Record<string, unknown> | undefined),
-            ...(typeof seedSettings.mobileAccess === 'object' && seedSettings.mobileAccess !== null
-              ? (seedSettings.mobileAccess as Record<string, unknown>)
-              : {})
-          }
-        }
-      : baseSettings;
+  if (seedSettings) {
+    const mergedSettings = freeMobilePort && !seedSettings.mobileAccess
+      ? { ...seedSettings, mobileAccess: { listenPort: freeMobilePort } }
+      : seedSettings;
     fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2));
   }
 
