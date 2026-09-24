@@ -1,7 +1,7 @@
 # CLAUDE.md
 
-All project guidance for AI coding agents lives in **[AGENTS.md](AGENTS.md)** — the
-cross-tool convention, so every agent reads the same rules from one file.
+Project guidance for AI coding agents lives in **[AGENTS.md](AGENTS.md)** — the
+cross-tool convention — with area notes in `AGENTS.md` files next to the code it indexes.
 
 The thing most likely to cost you time here: several invariants fail *silently*
 rather than loudly — the renderer CSP's `img-src data:`, the hand-maintained

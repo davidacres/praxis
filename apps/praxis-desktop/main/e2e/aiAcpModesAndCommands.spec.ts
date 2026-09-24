@@ -1,5 +1,5 @@
 // Two previously-unhandled, stable ACP session updates — `available_commands_update`
-// and `current_mode_update` — see the ACP section of AGENTS.md's table of what
+// and `current_mode_update` — see the ACP section of packages/core/src/ai/AGENTS.md's table of what
 // the protocol offers versus what this host reads. Neither is invented UI:
 // `session/new` already returns modes on a real Claude Code/Codex session, and
 // slash commands are how those CLIs already work — this just makes both
