@@ -92,6 +92,8 @@ function createRepository(): string {
   const feature = path.join(root, 'docs', 'plans', 'features', 'feature-01-existing');
   fs.mkdirSync(feature, { recursive: true });
   fs.writeFileSync(path.join(feature, 'feature.md'), '# Existing work\n\n**Status:** 📋 To Do\n**Type:** Feature\n');
+  // The board file names another key; a project board keeps its project's, and the plan is filed under whichever the board uses.
+  fs.writeFileSync(path.join(root, 'docs', 'plans', 'board.praxis.json'), JSON.stringify({ projectKey: 'SEC', projectName: 'Audit Target', allowIssueCreation: true }));
   git('add', '.');
   git('commit', '-m', 'initial');
   return root;
