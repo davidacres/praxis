@@ -1380,6 +1380,7 @@ textarea {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar-header {
@@ -1529,12 +1530,13 @@ textarea {
   /* Match the vertical rhythm a .sidebar-section-label would have brought —
      the footer has its own padding, so margin-top collapses to zero. */
   margin: 0 0 var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  /* A slightly-tinted header sets the "Praxis" section apart from the plain
-     board/project rows above it — the same alpha token every hover state
-     already uses, so it stays correct across every theme/mode/surface. */
-  background: var(--bg-hover);
+  padding: 6px var(--space-3);
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+  /* A sticky header must be fully opaque: feature rows travel beneath it
+     as the Praxis footer scrolls, but their content must never show through. */
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--bg-hover), var(--bg-hover));
 }
 
 .feature-section-toggle .sidebar-section-label {
@@ -1549,6 +1551,9 @@ textarea {
 }
 
 .feature-section-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   padding-right: var(--space-2);
 }
 
@@ -1594,8 +1599,9 @@ textarea {
 .sidebar-footer {
   flex-shrink: 0;
   border-top: 1px solid var(--border);
-  padding: var(--space-2) 0;
+  padding: 0 0 var(--space-2);
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .sidebar-footer-maximized {
