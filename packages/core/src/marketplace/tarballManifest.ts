@@ -1,5 +1,8 @@
 import { gunzipSync } from 'node:zlib';
 
+/** An add-on is a manifest and a few files; anything that inflates past this is not one. */
+export const MAX_UNPACKED_TARBALL_BYTES = 64 * 1024 * 1024;
+
 /**
  * Reads `package/package.json`'s `praxis` field straight out of a published
  * tarball, in memory — a pure USTAR reader, no `fs`, no external `tar` dep.
@@ -15,9 +18,6 @@ import { gunzipSync } from 'node:zlib';
  * add-on is silently invisible to the catalogue, regardless of how correctly
  * it was authored. This is the fallback that recovers it.
  */
-/** An add-on is a manifest and a few files; anything that inflates past this is not one. */
-export const MAX_UNPACKED_TARBALL_BYTES = 64 * 1024 * 1024;
-
 export function readPraxisManifestFromTarball(tarball: Uint8Array, maxUnpackedBytes = MAX_UNPACKED_TARBALL_BYTES): unknown {
   let tar: Buffer;
   try {
