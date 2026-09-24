@@ -34,7 +34,7 @@ import type { AiProvider } from '../types';
 import { approvalReadiness, type GateStatus } from './workflowGates';
 import { stageSessionKey } from './workflowStageTask';
 import { providerDisplayName } from '../ai/providers/registry';
-import type { WorkflowPolicyProfile } from './workflowTypes';
+import type { WorkflowBoardReference, WorkflowPolicyProfile } from './workflowTypes';
 import type { WorkflowPlanInput } from './workflowRun';
 
 export interface StageRow {
@@ -51,7 +51,7 @@ export interface StageRow {
   sessionKey?: string;
   snapshotRef?: string;
   gate?: WorkflowGateKind;
-  artifacts: Array<{ contractId: string; kind: string; path?: string }>;
+  artifacts: Array<{ contractId: string; kind: string; path?: string; reference?: WorkflowBoardReference }>;
   lastError?: string;
   /** The last attempt stopped without a verdict (AI provider limit, or the stage's tooling could not run); retrying does not spend an attempt. */
   pause?: WorkflowPauseReason;
@@ -62,6 +62,16 @@ export interface StageRow {
   provider?: string;
   /** The AI this stage is set to use: one it was switched to in this run, else its own choice. Absent means the run's. */
   chosenProvider?: string;
+  /** The CLI command executed by a check or merge stage. */
+  command?: string;
+  /** Process exit code for a check stage. */
+  exitCode?: number;
+  /** Execution duration of the latest attempt in milliseconds. */
+  durationMs?: number;
+  /** Decision prompt for an approval stage. */
+  prompt?: string;
+  /** Gates required by an approval stage. */
+  requiredGates?: WorkflowGateKind[];
 }
 
 export interface BranchGroup {
@@ -150,6 +160,14 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
   const stages: StageRow[] = run.definition.nodes.map(node => {
     const state = run.nodes[node.id];
     const lastAttempt = state?.attempts[state.attempts.length - 1];
+    const durationMs =
+      lastAttempt?.startedAt && lastAttempt?.endedAt
+        ? Math.max(0, new Date(lastAttempt.endedAt).getTime() - new Date(lastAttempt.startedAt).getTime())
+        : undefined;
+    const command =
+      node.type === 'check'
+        ? [node.command, ...(node.args ?? [])].filter(Boolean).join(' ')
+        : undefined;
     return {
       nodeId: node.id,
       name: node.name,
@@ -166,14 +184,19 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
       artifacts: (state?.artifacts ?? []).map(artifact => ({
         contractId: artifact.contractId,
         kind: artifact.kind,
-        ...(artifact.path ? { path: artifact.path } : {})
+        ...(artifact.path ? { path: artifact.path } : {}),
+        ...(artifact.reference ? { reference: artifact.reference } : {})
       })),
       ...(lastAttempt?.error ? { lastError: lastAttempt.error } : {}),
       ...(state && pauseReasonOf(state) ? { pause: pauseReasonOf(state) } : {}),
       ...(state?.phase ? { phase: state.phase } : {}),
       ...(state?.findings ? { findings: state.findings } : {}),
       ...(lastAttempt?.provider ? { provider: lastAttempt.provider } : {}),
-      ...(chosenProviderOf(run, node) ? { chosenProvider: chosenProviderOf(run, node) } : {})
+      ...(chosenProviderOf(run, node) ? { chosenProvider: chosenProviderOf(run, node) } : {}),
+      ...(command ? { command } : {}),
+      ...(lastAttempt?.exitCode !== undefined ? { exitCode: lastAttempt.exitCode } : {}),
+      ...(durationMs !== undefined ? { durationMs } : {}),
+      ...(isApprovalNode(node) ? { prompt: node.prompt, requiredGates: node.requiredGates } : {})
     };
   });
 

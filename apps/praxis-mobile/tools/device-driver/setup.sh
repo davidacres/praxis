@@ -14,7 +14,7 @@ if [ -z "${PRAXIS_DRIVER_TEAM:-}" ]; then
   # Sign with the same team as the Praxis app when this copy sits in the repo.
   for project in "${PRAXIS_IOS_PROJECT:-}" "$DRIVER_DIR/../../ios/Praxis.xcodeproj"; do
     if [ -n "$project" ] && [ -f "$project/project.pbxproj" ]; then
-      PRAXIS_DRIVER_TEAM=$(grep -m1 -oE 'DEVELOPMENT_TEAM = [A-Z0-9]+' "$project/project.pbxproj" | awk '{print $3}')
+      PRAXIS_DRIVER_TEAM=$(grep -m1 -oE 'DEVELOPMENT_TEAM = [A-Z0-9]+' "$project/project.pbxproj" | awk '{print $3}' || true)
       break
     fi
   done

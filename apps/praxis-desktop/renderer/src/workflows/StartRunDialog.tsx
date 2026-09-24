@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   AiProvider,
   AiProviderStatus,
@@ -143,6 +143,18 @@ export function StartRunDialog({
   // Preselect the only workflow, so a project with one goes straight to "Task".
   useEffect(() => {
     if (!startWorkflowId && runnableWorkflows.length === 1) setStartWorkflowId(runnableWorkflows[0].id);
+  }, [runnableWorkflows, startWorkflowId]);
+
+  // Name the run after its workflow until the person types their own title, so a run that needs
+  // no description (a security review, an audit) starts in one click. A picked ticket still wins.
+  const autoTitle = useRef('');
+  useEffect(() => {
+    const name = runnableWorkflows.find(workflow => workflow.id === startWorkflowId)?.name ?? '';
+    setTaskTitle(current => {
+      if (current.trim() && current !== autoTitle.current) return current;
+      autoTitle.current = name;
+      return name;
+    });
   }, [runnableWorkflows, startWorkflowId]);
 
   useEffect(() => {
@@ -341,7 +353,7 @@ export function StartRunDialog({
                 onChange={key => {
                   setIssueKeyDraft(key);
                   const matched = issueOptions.find(option => option.key === key);
-                  if (matched && !taskTitle.trim()) setTaskTitle(matched.summary);
+                  if (matched && (!taskTitle.trim() || taskTitle === autoTitle.current)) setTaskTitle(matched.summary);
                 }}
                 options={[
                   { value: '', label: 'No ticket', description: 'The outcome is not written back anywhere' },

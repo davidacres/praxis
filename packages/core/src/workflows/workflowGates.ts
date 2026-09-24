@@ -612,3 +612,31 @@ export function rejectStage(
     error: `Rejected by ${input.actor}: ${input.reason}`
   });
 }
+
+/**
+ * Skips an optional approval (`WorkflowApprovalNode.optional`): the person chose not to take the
+ * next steps. The approval is recorded as skipped with who skipped it, everything after it is then
+ * skipped by the scheduler, and the run finishes on the stages that did run.
+ */
+export function skipApproval(
+  run: WorkflowRun,
+  approvalNodeId: string,
+  input: { actor: string; at: string }
+): { run: WorkflowRun; ok: boolean; reason?: string } {
+  if (!input.actor.trim()) throw new Error('A skip must record who made it.');
+  const node = run.definition.nodes.find(candidate => candidate.id === approvalNodeId);
+  if (!node || !isApprovalNode(node)) return { run, ok: false, reason: `No approval stage "${approvalNodeId}".` };
+  if (!node.optional) return { run, ok: false, reason: `"${node.name}" is a sign-off and cannot be skipped.` };
+  if (run.nodes[approvalNodeId]?.outcome !== 'pending') {
+    return { run, ok: false, reason: `"${node.name}" is not waiting for a decision.` };
+  }
+  return {
+    run: applyWorkflowRunCommand(run, {
+      kind: 'node-skipped',
+      nodeId: approvalNodeId,
+      at: input.at,
+      reason: `skipped by ${input.actor}`
+    }),
+    ok: true
+  };
+}

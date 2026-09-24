@@ -386,6 +386,10 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('workflows:approveRun', runId, actor, note, nodeId),
     bypassGate: (runId: string, gate: string, actor: string, reason: string, nodeId?: string) =>
       ipcRenderer.invoke('workflows:bypassGate', runId, gate, actor, reason, nodeId),
+    skipApproval: (runId: string, nodeId: string, actor: string) =>
+      ipcRenderer.invoke('workflows:skipApproval', runId, nodeId, actor),
+    stageReport: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:stageReport', runId, nodeId),
+    saveStageReport: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:saveStageReport', runId, nodeId),
     retryStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:retryStage', runId, nodeId),
     switchStageProvider: (runId: string, nodeId: string, provider: string) =>
       ipcRenderer.invoke('workflows:switchStageProvider', runId, nodeId, provider),

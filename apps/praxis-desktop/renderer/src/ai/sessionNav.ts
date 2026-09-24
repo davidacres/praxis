@@ -820,7 +820,9 @@ export function sessionLimitNotice(session?: AgentSessionRecord): string | undef
   // that operational detail out of the session error banner.
   const concise = 'This provider has reached its usage limit. Switch providers to continue, or stop this session.';
   if (session.lastError && isProviderLimitMessage(session.lastError)) return concise;
-  if (session.responseText && isProviderLimitMessage(session.responseText)) return concise;
+  // A reply is only read as a limit message when the session did not complete: a completed
+  // session's reply is its work, and a security report recommending rate limits is not a limit.
+  if (session.state !== 'completed' && session.responseText && isProviderLimitMessage(session.responseText)) return concise;
   // Only a limit the session has not moved past: a reply (or a new session start,
   // as after a handover to another AI) since the error means the limit is behind it.
   const events = session.events ?? [];

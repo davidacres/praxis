@@ -12,6 +12,7 @@ import {
   InMemoryMobileCommandLedger,
   PROVIDER_DESCRIPTORS,
   fingerprintMobileHostKey,
+  type AgentSessionRecord,
   type AiProvider,
   type MobileCommandLedger,
   type MobileCommandOperation,
@@ -40,7 +41,7 @@ import {
 } from './mobileHostServices';
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore, getWorkflowPolicyStore } from './workflowStoreInstance';
-import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
+import { getWorkflowOrchestrator, onDidChangeWorkflowRun } from './workflowOrchestratorInstance';
 import {
   getAiSessionManager,
   hasActiveTask,
@@ -56,6 +57,7 @@ import { getSettingsBackend } from './settingsBackendInstance';
 import { cancelMobileInteractiveSession, continueMobileInteractiveSession, createMobileInteractiveSession } from './mobileInteractiveSessions';
 import { getDesktopAppearance, onDidChangeDesktopAppearance } from './mobileAppearance';
 import { appendMobileAppearanceEvent, appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
+import { appendMobileRunEvent, mobileRunSnapshot } from './mobileRunProjection';
 import { pendingMobilePermissions, respondToMobilePermission } from './mobilePermissions';
 import { listWorkflowChoices, startWorkflowRun } from './workflowIpc';
 
@@ -69,6 +71,17 @@ function policyFor(projectId: string): WorkflowPolicyProfile | undefined {
 
 function summarize(run: WorkflowRun): ReturnType<typeof summarizeWorkflowRun> {
   return summarizeWorkflowRun(run, policyFor(run.projectId));
+}
+
+/**
+ * A workflow stage's session is started by the run, not from a project, so its record has
+ * no `projectId` — and the phone only ever sees sessions in the project it was granted.
+ * It belongs to its run's project.
+ */
+function withRunProject(record: AgentSessionRecord): AgentSessionRecord {
+  if (record.projectId || !record.workflowRunId) return record;
+  const projectId = runStore().get(record.workflowRunId)?.projectId;
+  return projectId ? { ...record, projectId } : record;
 }
 
 function requireRun(runId: string): WorkflowRun {
@@ -218,6 +231,7 @@ export function createDesktopMobileHostServiceDeps(
       }));
     },
     listSessions: async projectId => [...getAiSessionManager().getAllAgentSessions().values()]
+      .map(withRunProject)
       .filter(record => !projectId || record.projectId === projectId)
       .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
       .map(mobileSessionSummary),
@@ -226,9 +240,14 @@ export function createDesktopMobileHostServiceDeps(
         candidate => candidate.sessionId === sessionId || candidate.issueKey === sessionId,
       );
       if (!record) return undefined;
-      return mobileSessionSnapshot(record, ledger.latestSequence());
+      return mobileSessionSnapshot(withRunProject(record), ledger.latestSequence());
     },
     listWorkflows: async projectId => listWorkflowChoices(projectId),
+    listRuns: async projectId => runStore()
+      .forProject(projectId)
+      .filter(run => !run.archived)
+      .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+      .map(run => mobileRunSnapshot(summarize(run), ledger.latestSequence())),
     getRun: async runId => {
       const run = runStore().get(runId);
       return run ? summarize(run) : undefined;
@@ -341,7 +360,21 @@ export function composeDesktopMobileHost(hostId?: string): MobileHostApplication
     ledger,
     payloadDigest: (command: unknown) => JSON.stringify((command as MobileCommand).payload ?? null),
   });
-  getAiSessionManager().onDidChangeAgentSession(record => appendMobileSessionEvent(ledger, deps.hostId, record));
+  getAiSessionManager().onDidChangeAgentSession(record => appendMobileSessionEvent(ledger, deps.hostId, withRunProject(record)));
+  // A deleted run is gone from the store by the time it is announced, so remember each
+  // run's project to scope its removal to the phones that could see it.
+  const runProjects = new Map<string, string>();
+  onDidChangeWorkflowRun(runId => {
+    const run = runStore().get(runId);
+    if (!run || run.archived) {
+      const projectId = run?.projectId ?? runProjects.get(runId);
+      runProjects.delete(runId);
+      if (projectId) appendMobileRunEvent(ledger, deps.hostId, { removed: { runId, projectId } });
+      return;
+    }
+    runProjects.set(runId, run.projectId);
+    appendMobileRunEvent(ledger, deps.hostId, { summary: summarize(run) });
+  });
   onDidChangeDesktopAppearance(appearance => appendMobileAppearanceEvent(ledger, deps.hostId, appearance));
   return app;
 }

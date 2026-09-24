@@ -21,6 +21,7 @@ import {
   isAgentTaskNode,
   isCheckNode,
   isDeploymentNode,
+  isMergeNode,
   isTerminalOutcome,
   nodeGate,
   nodeMutatesWorktree,
@@ -238,7 +239,7 @@ export type WorkflowRunCommand =
       kind: 'node-succeeded';
       nodeId: string;
       at: string;
-      artifacts?: Array<Pick<WorkflowArtifactRef, 'contractId' | 'kind'> & { path?: string; artifactId?: string }>;
+      artifacts?: Array<Pick<WorkflowArtifactRef, 'contractId' | 'kind'> & { path?: string; artifactId?: string; reference?: WorkflowArtifactRef['reference'] }>;
       exitCode?: number;
       /** Commit or worktree ref this stage froze, for downstream inspection. */
       snapshotRef?: string;
@@ -594,7 +595,9 @@ function settleNode(
       at,
       kind: 'artifact-produced',
       nodeId,
-      message: `${label(run, nodeId)} produced ${artifact.kind} "${artifact.contractId}".`
+      message: artifact.reference
+        ? `${label(run, nodeId)} created ${artifact.kind} ${artifact.reference.key} on the board: ${artifact.reference.title} (${artifact.reference.itemKeys.length} ${artifact.reference.itemKeys.length === 1 ? 'item' : 'items'}).`
+        : `${label(run, nodeId)} produced ${artifact.kind} "${artifact.contractId}".`
     });
   }
 
@@ -625,7 +628,7 @@ function retryNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRun {
   // `maxAttempts` bounds how far the run keeps going on its own (see `canRetry`);
   // it does not stop a person deciding to try again. A failed run is reopened.
   const maxAttempts =
-    (isAgentTaskNode(findNode(run, nodeId)!) || isCheckNode(findNode(run, nodeId)!) || isDeploymentNode(findNode(run, nodeId)!)
+    (isAgentTaskNode(findNode(run, nodeId)!) || isCheckNode(findNode(run, nodeId)!) || isDeploymentNode(findNode(run, nodeId)!) || isMergeNode(findNode(run, nodeId)!)
       ? (findNode(run, nodeId) as { maxAttempts?: number }).maxAttempts
       : undefined) ?? 1;
   const spent = attemptsSpent(state);
@@ -863,7 +866,7 @@ export function canRetry(run: WorkflowRun, nodeId: string): boolean {
   const node = findNode(run, nodeId);
   if (!state || !node || state.outcome !== 'failed') return false;
   const maxAttempts =
-    (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) ? node.maxAttempts : undefined) ?? 1;
+    (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) || isMergeNode(node) ? node.maxAttempts : undefined) ?? 1;
   return attemptsSpent(state) < maxAttempts;
 }
 
@@ -952,6 +955,9 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
       artifacts: Array.isArray(stored?.artifacts) ? stored.artifacts : [],
       ...(typeof stored?.snapshotRef === 'string' ? { snapshotRef: stored.snapshotRef } : {}),
       ...(typeof stored?.assessedSnapshotRef === 'string' ? { assessedSnapshotRef: stored.assessedSnapshotRef } : {}),
+      // A stage's findings are what its gate thresholds are judged on: dropping them on reload
+      // would make every severity threshold pass on a run read back from disk.
+      ...(isStoredFindings(stored?.findings) ? { findings: stored.findings } : {}),
       // Only meaningful while running; a normalized non-running node simply
       // omits it rather than trusting a stale value from disk.
       ...(typeof stored?.phase === 'string' && isOutcome(stored?.outcome) && stored.outcome === 'running'
@@ -1066,12 +1072,23 @@ function toArtifactRefs(
       runId: run.runId,
       kind: artifact.kind,
       ...(artifact.path ? { path: artifact.path } : {}),
+      ...(artifact.reference ? { reference: artifact.reference } : {}),
       createdAt: at
     }));
 }
 
 const OUTCOMES = new Set<WorkflowNodeOutcome>(['pending', 'ready', 'running', 'succeeded', 'failed', 'skipped', 'cancelled']);
 const STATUSES = new Set<WorkflowRunStatus>(['running', 'awaiting-approval', 'succeeded', 'failed', 'cancelled']);
+
+function isStoredFindings(value: unknown): value is CheckFindings {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as CheckFindings).findings) &&
+    typeof (value as CheckFindings).metrics === 'object' &&
+    (value as CheckFindings).metrics !== null
+  );
+}
 
 function isOutcome(value: unknown): value is WorkflowNodeOutcome {
   return OUTCOMES.has(value as WorkflowNodeOutcome);

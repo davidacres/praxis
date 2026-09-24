@@ -25,11 +25,14 @@
 import {
   isAgentTaskNode,
   isCheckNode,
+  isMergeNode,
   nodeMutatesWorktree,
   type CheckFindings,
   type WorkflowAgentTaskNode,
   type WorkflowArtifactKind,
-  type WorkflowCheckNode
+  type WorkflowBoardReference,
+  type WorkflowCheckNode,
+  type WorkflowMergeNode
 } from './workflowTypes';
 import {
   applyWorkflowRunCommand,
@@ -51,7 +54,7 @@ export interface StageOutcome {
   snapshotRef?: string;
   /** Immutable upstream implementation snapshot this stage assessed. */
   assessedSnapshotRef?: string;
-  artifacts?: Array<{ contractId: string; kind: WorkflowArtifactKind; path?: string }>;
+  artifacts?: Array<{ contractId: string; kind: WorkflowArtifactKind; path?: string; reference?: WorkflowBoardReference }>;
   findings?: CheckFindings;
   /**
    * A `failed` outcome that says nothing about the work — the AI provider's
@@ -87,7 +90,7 @@ export interface StageDispatcher {
    *
    * Consulted *before* the stage is marked running, so declining costs nothing.
    */
-  canDispatch?(node: WorkflowCheckNode | WorkflowAgentTaskNode, run: WorkflowRun): boolean;
+  canDispatch?(node: WorkflowCheckNode | WorkflowAgentTaskNode | WorkflowMergeNode, run: WorkflowRun): boolean;
   runCheck(node: WorkflowCheckNode, context: StageDispatchContext): Promise<StageOutcome>;
   /**
    * Starts an agent stage and resolves when its session ends. `sessionId` is
@@ -99,6 +102,8 @@ export interface StageDispatcher {
     context: StageDispatchContext,
     onSession: (sessionId: string) => void
   ): Promise<StageOutcome>;
+  /** Merges changes from the delivery worktree/branch into the base branch. */
+  runMerge?(node: WorkflowMergeNode, context: StageDispatchContext): Promise<StageOutcome>;
   /** Stops a stage that has outrun its timeout or whose run was cancelled. */
   cancelStage?(nodeId: string, context: StageDispatchContext): Promise<void>;
 }
@@ -265,7 +270,7 @@ export class WorkflowOrchestrator {
       .filter(nodeId => !this.inFlight.has(this.key(runId, nodeId)))
       .filter(nodeId => {
         const node = current.definition.nodes.find(candidate => candidate.id === nodeId);
-        if (!node || (!isCheckNode(node) && !isAgentTaskNode(node))) return false;
+        if (!node || (!isCheckNode(node) && !isAgentTaskNode(node) && !isMergeNode(node))) return false;
         return this.options.dispatcher.canDispatch?.(node, current) ?? true;
       });
     if (launchable.length === 0) return;
@@ -276,7 +281,7 @@ export class WorkflowOrchestrator {
 
     for (const nodeId of launchable) {
       const node = run.definition.nodes.find(candidate => candidate.id === nodeId);
-      if (!node || (!isCheckNode(node) && !isAgentTaskNode(node))) continue;
+      if (!node || (!isCheckNode(node) && !isAgentTaskNode(node) && !isMergeNode(node))) continue;
 
       // Claim before persisting: two interleaved steps must not both launch,
       // and the claim is released only when the stage settles.
@@ -296,7 +301,7 @@ export class WorkflowOrchestrator {
 
   private async dispatch(
     runId: string,
-    node: WorkflowCheckNode | WorkflowAgentTaskNode,
+    node: WorkflowCheckNode | WorkflowAgentTaskNode | WorkflowMergeNode,
     run: WorkflowRun
   ): Promise<void> {
     const controller = new AbortController();
@@ -309,11 +314,20 @@ export class WorkflowOrchestrator {
       }
     };
 
-    const completion = Promise.resolve().then(() => isCheckNode(node)
-      ? this.options.dispatcher.runCheck(node, context)
-      : this.options.dispatcher.runAgentStage(node, context, sessionId => {
-          void this.recordSession(runId, node.id, sessionId);
-        }));
+    const completion = Promise.resolve().then(() => {
+      if (isCheckNode(node)) {
+        return this.options.dispatcher.runCheck(node, context);
+      }
+      if (isMergeNode(node)) {
+        if (!this.options.dispatcher.runMerge) {
+          throw new Error('Merge stage dispatcher is not configured.');
+        }
+        return this.options.dispatcher.runMerge(node, context);
+      }
+      return this.options.dispatcher.runAgentStage(node, context, sessionId => {
+        void this.recordSession(runId, node.id, sessionId);
+      });
+    });
     const key = this.key(runId, node.id);
     this.executions.set(key, { controller, completion });
     try {

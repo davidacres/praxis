@@ -1,10 +1,11 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   applyWorkflowRunCommand,
   approveStage,
+  skipApproval,
   assembleTemplateLibrary,
   assessTemplateReadiness,
   builtInWorkflowTemplates,
@@ -96,6 +97,18 @@ import {
 
 function runStore(): WorkflowRunStore {
   return new WorkflowRunStore(getWorkflowBackingStore());
+}
+
+function stageReportText(runId: string, nodeId: string): string | undefined {
+  const run = runStore().get(runId);
+  if (!run?.nodes[nodeId]) return undefined;
+  const text = getAiSessionManager()
+    .getAgentSession(stageSessionKey(runId, nodeId))
+    ?.responseText
+    // The `praxis-plan` block is for the board, which already holds it; people read the rest.
+    ?.replace(/```praxis-plan[^\n]*\n[\s\S]*?```/g, '')
+    .trim();
+  return text || undefined;
 }
 
 /** Bridges the shared recommendation prompt/JSON validation to an ACP host. */
@@ -925,6 +938,46 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       });
       await getWorkflowOrchestrator().step(runId);
       return summarize(runStore().get(runId)!);
+    }
+  );
+
+  ipcMain.handle(
+    'workflows:skipApproval',
+    async (_event, runId: string, nodeId: string, actor: string): Promise<WorkflowRunSummary> => {
+      await withRun(runId, run => {
+        const result = skipApproval(run, nodeId, { actor, at: new Date().toISOString() });
+        if (!result.ok) throw new Error(result.reason ?? 'The approval could not be skipped.');
+        return result.run;
+      });
+      await getWorkflowOrchestrator().step(runId);
+      return summarize(runStore().get(runId)!);
+    }
+  );
+
+  // A report or plan stage's written output: its session's final response, which is the artifact.
+  ipcMain.handle('workflows:stageReport', async (_event, runId: string, nodeId: string): Promise<string | undefined> =>
+    stageReportText(runId, nodeId)
+  );
+
+  ipcMain.handle(
+    'workflows:saveStageReport',
+    async (event, runId: string, nodeId: string): Promise<{ saved: boolean; path?: string }> => {
+      const text = stageReportText(runId, nodeId);
+      if (!text) throw new Error('This stage has no written output to save.');
+      const run = runStore().get(runId);
+      const stage = run?.definition.nodes.find(node => node.id === nodeId);
+      const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const fileName = `${slug(run?.definition.name ?? 'workflow')}-${slug(stage?.name ?? nodeId)}-${(run?.startedAt ?? new Date().toISOString()).slice(0, 10)}.md`;
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const options = {
+        title: `Save ${stage?.name ?? 'report'}`,
+        defaultPath: path.join(getProjectStore().get(run?.projectId ?? '')?.workspaceFolder ?? '', fileName),
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      };
+      const choice = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
+      if (choice.canceled || !choice.filePath) return { saved: false };
+      await fs.promises.writeFile(choice.filePath, text.endsWith('\n') ? text : `${text}\n`, 'utf8');
+      return { saved: true, path: choice.filePath };
     }
   );
 

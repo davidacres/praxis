@@ -424,6 +424,32 @@ they do on a parent session — every stage session under it, children before th
 first and names the count. The *run itself* is untouched (it stays under Workflows → Runs; deleting the
 run is `workflows:deleteRun`), and archived sessions are restored one by one from the Sessions tab.
 
+**What a stage hands on, and how a run ends.**
+
+- **Agent stages deliver `findings` from their reply.** `stageOutcomeFromSession` reads the last fenced
+  ```json block holding a `findings` array (`parseReviewFindings`), and the brief tells the stage that
+  format (`FINDINGS_BLOCK_INSTRUCTIONS`). Before this, no agent stage could satisfy a required `findings`
+  output, so every agent review stage in the Full SDLC templates failed.
+- **Check logs travel inline.** A check's log lives in the evidence store, outside the worktree that
+  gateway agents' file tools are sandboxed to (`resolveSandboxedPath`), so `workflowAgentStage` inlines
+  `log` inputs (`formatUpstreamLogs`) the same way reports are inlined (`formatUpstreamReports`, 24k cap).
+- **`publishTo: 'board'` on a `plan` output** creates the plan on the run's project board: the stage ends
+  with a `praxis-plan` block (`workflowPlanPublishing.ts`), and the app creates a feature plus items via the
+  project connection's `createIssue` (real plan markdown for a folder-backed project) and records the
+  feature key on `WorkflowArtifactRef.reference`.
+- **`optional: true` on an approval** offers **Skip** (`skipApproval`), which skips everything after it.
+  It is opt-in so that a delivery sign-off can never be skipped.
+- **`advanceJoins` also settles branches that can no longer run** (the scheduler's `skip` list), except
+  those closed by a *failure*, which a person can still retry. Without this, an untaken branch kept a
+  finished run at `running` forever.
+- **`normalizeWorkflowRun` keeps node `findings`.** It used to drop them on reload, so a run read back
+  from disk showed no findings and passed every severity threshold.
+- **`normalizeWorkflow` copies fields one by one.** Every save/load runs through it, so a node field it
+  does not copy is silently deleted on the first save. Approval `gateThresholds`/`waivers` and a check's
+  `adapter`/`reportPath`/`observe` were missing, which stripped every Full SDLC security threshold and
+  SARIF parse. Add any new node field there; `workflowPlanPublishing.test.ts` round-trips the shipped
+  templates to catch this.
+
 ## Onboarding and the walkthrough
 
 First run is: Getting Started's "Create your first project" (a default workspace is created

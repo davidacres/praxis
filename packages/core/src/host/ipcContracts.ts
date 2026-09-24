@@ -1246,6 +1246,12 @@ export interface WorkflowsIpc {
    * `approveRun` when omitted.
    */
   bypassGate(runId: string, gate: string, actor: string, reason: string, nodeId?: string): Promise<WorkflowRunSummary>;
+  /** Skips an optional approval (`WorkflowApprovalNode.optional`); what follows it is skipped too. */
+  skipApproval(runId: string, nodeId: string, actor: string): Promise<WorkflowRunSummary>;
+  /** The full written output (report or plan) of a stage, or undefined when it wrote none. */
+  stageReport(runId: string, nodeId: string): Promise<string | undefined>;
+  /** Asks where to save a stage's written output as Markdown, and saves it there. */
+  saveStageReport(runId: string, nodeId: string): Promise<{ saved: boolean; path?: string }>;
   /** Queues a failed stage for another attempt within its budget. */
   retryStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
   /** Moves a stage whose AI ran out of budget to another AI; a paused stage goes again on it. */
