@@ -758,6 +758,7 @@ function progressNode(run: WorkflowRun, nodeId: string, at: string, phase: strin
     at,
     kind: 'node-progress',
     nodeId,
+    attempt: state.attempts.length,
     message: eventMessage
   });
 }
