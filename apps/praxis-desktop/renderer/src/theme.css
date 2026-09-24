@@ -1896,6 +1896,98 @@ textarea {
 .project-tree-children > .tree-row { position: relative; }
 .project-tree-children > .sidebar-subsection-toggle::before,
 .project-tree-children > .tree-row::before { content: ''; position: absolute; top: 50%; left: 17px; width: 13px; height: 1px; background: var(--border); }
+/* ── Sticky tree headers (top sidebar panel) ─────────────────────────────
+ * As `.sidebar-scroll` scrolls, each header on the path to the rows in view
+ * sticks, nested: the "Projects" / "Boards" heading at the top, a project row
+ * below it, its subsection (Boards, Repository, Workflows, docs) below that,
+ * `plans` below docs, a document-type group below plans. Each is sticky
+ * inside its own container, so it is pushed away when its section ends and a
+ * later sibling at the same level simply replaces it.
+ *
+ * `--sidebar-sticky-*` is where each level sticks: the sum of the heights of
+ * the levels above it. Those heights are the rows' natural heights — change a
+ * header's padding, border or font size and these must move with it, or a
+ * gap opens (rows show through) or headers overlap. `sidebarStickyHeaders.spec.ts`
+ * measures that each stuck header's top meets its parent's bottom exactly.
+ *
+ * A stuck header must be opaque — rows travel beneath it — but an opaque
+ * header at rest reads as a band (it hides the pane's grain and watermark) and
+ * cuts the tree's connector line. So the fill is an `::after` layer painted
+ * only while the header is actually stuck (`scroll-state(stuck: top)`), and at
+ * rest the tree renders exactly as it did before headers were sticky. The fill
+ * is the pane's own --bg + tint wash, the tint attached to the viewport so it
+ * lines up with the pane's. The selectors carry two classes on purpose: the
+ * rows' own rules further down would otherwise win on source order.
+ */
+:root {
+  --sidebar-sticky-0-h: 26px;  /* .sidebar-section-heading */
+  --sidebar-sticky-1-h: 40px;  /* .project-tree-parent */
+  --sidebar-sticky-2-h: 23px;  /* a project subsection header */
+  --sidebar-sticky-3-h: 22px;  /* docs > plans */
+  --sidebar-sticky-1: calc(var(--sidebar-sticky-0-h) - var(--space-1));
+  --sidebar-sticky-2: calc(var(--sidebar-sticky-1) + var(--sidebar-sticky-1-h));
+  --sidebar-sticky-3: calc(var(--sidebar-sticky-2) + var(--sidebar-sticky-2-h));
+  --sidebar-sticky-4: calc(var(--sidebar-sticky-3) + var(--sidebar-sticky-3-h));
+}
+.sidebar-scroll > .sidebar-section-heading,
+.sidebar-scroll .project-tree-parent,
+.project-tree-children > .sidebar-subsection-toggle,
+.project-tree-children > .tree-subsection-heading,
+.project-docs-tree > .project-plans-folder,
+.project-document-group > .project-document-group-toggle {
+  position: sticky;
+  container-type: scroll-state;
+}
+.sidebar-scroll > .sidebar-section-heading::after,
+.sidebar-scroll .project-tree-parent::after,
+.project-tree-children > .sidebar-subsection-toggle::after,
+.project-tree-children > .tree-subsection-heading::after,
+.project-docs-tree > .project-plans-folder::after,
+.project-document-group > .project-document-group-toggle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Behind the header's content, above its own (hover / active) background:
+     the header is a stacking context (sticky + z-index), so -1 stays inside it. */
+  z-index: -1;
+  pointer-events: none;
+}
+@container scroll-state(stuck: top) {
+  .sidebar-scroll > .sidebar-section-heading::after,
+  .sidebar-scroll .project-tree-parent::after,
+  .project-tree-children > .sidebar-subsection-toggle::after,
+  .project-tree-children > .tree-subsection-heading::after,
+  .project-docs-tree > .project-plans-folder::after,
+  .project-document-group > .project-document-group-toggle::after {
+    background-color: var(--bg);
+    background-image: var(--surface-panel-tint-layer);
+    background-attachment: fixed;
+  }
+  /* The header's own hover / active wash is translucent and sits under this
+     fill, so while stuck the fill carries it instead. */
+  .sidebar-scroll .project-tree-parent:hover::after,
+  .project-tree-children > .sidebar-subsection-toggle:hover::after,
+  .project-tree-children > .tree-subsection-heading:hover::after,
+  .project-docs-tree > .project-plans-folder:hover::after,
+  .project-document-group > .project-document-group-toggle:hover::after {
+    background-image: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--surface-panel-tint-layer);
+  }
+  .sidebar-scroll .project-tree-parent.active::after {
+    background-image: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface-panel-tint-layer);
+  }
+}
+/* `.sidebar-scroll`'s own padding-top would otherwise open a strip above the
+   top header that rows show through. */
+.sidebar-scroll > .sidebar-section-heading { top: calc(-1 * var(--space-1)); z-index: 5; }
+.sidebar-scroll .project-tree-parent { top: var(--sidebar-sticky-1); z-index: 4; }
+.project-tree-children > .sidebar-subsection-toggle,
+.project-tree-children > .tree-subsection-heading { top: var(--sidebar-sticky-2); z-index: 3; }
+.project-docs-tree > .project-plans-folder { top: var(--sidebar-sticky-3); z-index: 2; }
+.project-document-group > .project-document-group-toggle { top: var(--sidebar-sticky-4); z-index: 1; }
+/* The Workflows heading's "+" (26px) would make it 3px taller than its sibling
+   subsection headers, and that strip shows beneath the next one to stick. */
+.project-tree-children > .tree-subsection-heading .sidebar-section-add { height: var(--sidebar-sticky-2-h); }
+
 .project-board-row { height: 28px; padding-left: var(--tree-indent-2); }
 .project-board-icon { color: var(--text-secondary); }
 /* Run and Deployments are leaf rows with no children of their own, so they
