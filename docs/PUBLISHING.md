@@ -75,7 +75,7 @@ git push origin v0.4.0
 
 This triggers:
 1. `publish-packages.yml` - Publishes packages to GitHub Packages
-2. `build-release.yml` - Builds installers on macOS and Windows, uploads to release
+2. `build-release.yml` - Builds installers on macOS, Windows, and Linux, uploads to release
 
 ## Package Versions
 
@@ -141,3 +141,25 @@ The installer creates:
 - Desktop shortcut
 - Start Menu entry
 - Uninstaller in Control Panel
+
+### Linux Installation
+
+**Method 1: AppImage (Universal)**
+1. Download `Praxis-VERSION-ARCH.AppImage` from releases
+2. Make it executable:
+   ```bash
+   chmod +x Praxis-*.AppImage
+   ```
+3. Launch:
+   ```bash
+   ./Praxis-*.AppImage
+   ```
+
+**Method 2: Debian / Ubuntu (.deb)**
+1. Download `Praxis-VERSION-ARCH.deb` from releases
+2. Install with apt or dpkg:
+   ```bash
+   sudo apt install ./Praxis-*.deb
+   # or: sudo dpkg -i Praxis-*.deb
+   ```
+3. Launch `praxis` from your terminal or application launcher.

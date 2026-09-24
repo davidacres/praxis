@@ -80,13 +80,14 @@ async function createRelease() {
 
     // List available installers
     try {
-      const { stdout } = await execAsync('ls -lh apps/praxis-desktop/main/dist/*.dmg apps/praxis-desktop/main/dist/*-setup.exe 2>/dev/null || true');
+      const { stdout } = await execAsync('ls -lh apps/praxis-desktop/main/dist/*.dmg apps/praxis-desktop/main/dist/*-setup.exe apps/praxis-desktop/main/dist/*.AppImage apps/praxis-desktop/main/dist/*.deb 2>/dev/null || true');
       if (stdout) {
         console.log('\n📁 Available installers to upload:');
         console.log(stdout);
         console.log('\n💡 Upload installers with:');
         console.log(`   gh release upload ${tag} apps/praxis-desktop/main/dist/Praxis-*.dmg`);
         console.log(`   gh release upload ${tag} apps/praxis-desktop/main/dist/*-setup.exe`);
+        console.log(`   gh release upload ${tag} apps/praxis-desktop/main/dist/*.AppImage apps/praxis-desktop/main/dist/*.deb`);
       }
     } catch {
       // Ignore ls errors
