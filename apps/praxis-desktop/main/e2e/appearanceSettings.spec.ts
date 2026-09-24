@@ -26,7 +26,7 @@ test.afterEach(async () => {
 async function openAppearance(): Promise<void> {
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance"]').click();
-  await expect(window.locator('.settings-section-title')).toHaveText('Board Settings');
+  await expect(window.locator('.settings-section-title')).toHaveText('Appearance');
   await window.locator('.priority-color-list').waitFor({ state: 'visible' });
 }
 
