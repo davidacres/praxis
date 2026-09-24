@@ -1,6 +1,6 @@
 {
   "name": "@davidacres/praxis-addon-full-sdlc-python",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Comprehensive SDLC workflow tailored for Python applications and services.",
   "author": "davidacres",
   "license": "MIT",
@@ -16,7 +16,7 @@
     "name": "Full SDLC (Python)",
     "summary": "12-stage pipeline with Ruff linter, Pytest, Bandit SAST, Gitleaks, and pip-audit vulnerability checks.",
     "author": "davidacres",
-    "contentVersion": "1.0.0",
-    "minAppVersion": "0.3.0"
+    "contentVersion": "1.1.0",
+    "minAppVersion": "0.3.2"
   }
 }

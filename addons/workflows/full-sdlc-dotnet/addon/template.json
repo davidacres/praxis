@@ -44,7 +44,10 @@
       "agent": {
         "agentId": "praxis-implementer",
         "scope": "global",
-        "toolMode": "full"
+        "toolMode": "full",
+        "skillNames": [
+          "verification-report"
+        ]
       },
       "instructions": "Implement changes matching plan specifications and commit changes to the branch.",
       "outputs": [

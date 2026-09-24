@@ -1003,6 +1003,9 @@ error, it just never appears on the board. The contract:
 - Dependencies are scraped from a `## Dependencies` section or a
   `**Dependencies:**` line.
 
+The `plan-authoring` skill (`.agents/skills/plan-authoring/`) carries these rules for
+agent sessions that write plan files.
+
 Re-check after editing plans by running `parsePlanFolder` over the repo — if
 the feature/story/task counts move unexpectedly, something stopped parsing.
 
@@ -1161,15 +1164,10 @@ No test *guarantees* correctness (a regression can still paint), but tests + scr
 
 ## Real iPhone deployment guardrail
 
-For the mobile app, a physical iPhone deployment must use the Xcode workspace
-at `apps/praxis-mobile/ios/Praxis.xcworkspace`, the `Praxis` scheme, and the
-connected device's actual destination. Set Product → Scheme → Edit Scheme →
-Run → Info → Build Configuration to **Release** before running. Debug sets
-`SKIP_BUNDLING=1` and expects Metro; installing that build on a phone can look
-like a blank app. Verify the Release product contains a non-empty
-`main.jsbundle` and that the Xcode console reports `Running "main"` before
-claiming the physical deployment works. See
-`apps/praxis-mobile/docs/ios-phone-deployment.md` for the complete procedure.
+A phone build must be **Release** (Debug expects Metro and looks like a blank app
+on a phone). The full procedure and checks live in the `mobile-device-testing`
+skill (`addons/skills/mobile-device-testing/`) and
+`apps/praxis-mobile/docs/ios-phone-deployment.md`; follow those.
 
 ## Mobile theme follows the desktop
 
