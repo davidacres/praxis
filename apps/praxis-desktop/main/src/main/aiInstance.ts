@@ -12,6 +12,8 @@ import {
   VercelAgentService,
   getStoredProviderApiKey,
   isExecutableAvailable,
+  probeCliProvider,
+  type ProviderCapabilityProbe,
   resolveProviderApiKey,
   type AcpAgentLogger,
   type AiKeySource,
@@ -224,6 +226,30 @@ export async function testProviderConnection(provider: AiProvider): Promise<{ ok
       // not JSON
     }
     throw new Error(friendly);
+  }
+}
+
+/** Completes ACP initialize without creating a provider session or sending a prompt. */
+export async function probeProviderCapability(provider: AiProvider): Promise<ProviderCapabilityProbe | undefined> {
+  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  if (descriptor.kind !== 'cli-agent') return undefined;
+  const { command, args } = resolveAcpStartOptions(provider);
+  const preflight = await probeCliProvider(command);
+  if (preflight.status !== 'ready') return preflight;
+  try {
+    const settings = getSettingsBackend().read();
+    const capabilities = await getAcpAgentHost().probeCapabilities({
+      command,
+      args,
+      workingDirectory: settings.ai.workingDirectory.trim() || undefined
+    });
+    return { ...preflight, capabilities };
+  } catch (error) {
+    return {
+      status: 'failed',
+      message: error instanceof Error ? error.message : String(error),
+      ...(preflight.providerVersion ? { providerVersion: preflight.providerVersion } : {})
+    };
   }
 }
 

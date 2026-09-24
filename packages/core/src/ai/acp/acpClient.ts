@@ -12,6 +12,7 @@ import { resolveSandboxedPath } from '../tools/pathSandbox';
 import type { PermissionDecision } from '../tools';
 import type { AgentToolMode } from '../agentTypes';
 import type { WireImageAttachment } from '../gateway/wire';
+import type { ProviderCapabilityManifest } from '../providers/providerPreflight';
 
 /**
  * Thin host-side wrapper around `@agentclientprotocol/sdk`'s `ClientApp` —
@@ -258,6 +259,19 @@ export class AcpClientWrapper {
   /** Provider-owned session id, available after session creation or successful native resume. */
   public get sessionId(): string | undefined {
     return this.resumedSessionId ?? this.session?.sessionId;
+  }
+
+  /** Stable, persisted representation of the ACP features negotiated at initialize time. */
+  public getCapabilityManifest(): ProviderCapabilityManifest | undefined {
+    const capabilities = this.initializeResponse?.agentCapabilities;
+    if (!capabilities) return undefined;
+    return {
+      protocol: 'acp',
+      sessionResume: Boolean(capabilities.sessionCapabilities?.resume),
+      sessionLoad: capabilities.loadSession === true,
+      sessionClose: Boolean(capabilities.sessionCapabilities?.close),
+      mcpHttp: capabilities.mcpCapabilities?.http === true
+    };
   }
 
   private async tryResumeSession(): Promise<boolean> {

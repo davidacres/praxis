@@ -46,6 +46,7 @@ import {
   listAiProviderStatuses,
   listApiModelOptions,
   listCliModelOptions,
+  probeProviderCapability,
   resolveConnectionOptions,
   respondToActivePermission,
   testProviderConnection
@@ -519,6 +520,10 @@ export function registerAiIpc(): void {
   ipcMain.handle('ai:getStatus', async () => getAiProviderStatus());
 
   ipcMain.handle('ai:listProviderStatuses', async () => listAiProviderStatuses());
+
+  ipcMain.handle('ai:probeProviderCapability', async (_event: Electron.IpcMainInvokeEvent, provider: AiProvider) =>
+    probeProviderCapability(provider)
+  );
 
   ipcMain.handle('ai:listCliModelOptions', async (_event: Electron.IpcMainInvokeEvent, provider: AiProvider) =>
     listCliModelOptions(provider)

@@ -21,6 +21,7 @@ import type { ModelOptions } from '../providers/modelCatalog';
 import type { PermissionDecision } from '../tools';
 import { AcpClientWrapper, type AcpPermissionRequest } from './acpClient';
 import { isProviderLimitError, isLimitNoticeReply, extractProviderLimitMessage } from '../providerLimitError';
+import { probeCliProvider, type ProviderCapabilityManifest } from '../providers/providerPreflight';
 
 /**
  * Phase-2 peer of `VercelAgentService` for `kind: 'cli-agent'` providers —
@@ -586,8 +587,17 @@ export class AcpAgentHost {
       });
     }, timeoutMs);
 
+    const providerPreflight = probeCliProvider(options.command);
     task.promptPromise = (async () => {
       await client.connect();
+      this.sessionManager.updateAgentRuntime(issue.key, {
+        ...(client.getCapabilityManifest() ? { providerCapabilities: client.getCapabilityManifest() } : {})
+      });
+      void providerPreflight.then(preflight => {
+        if (preflight.providerVersion) {
+          this.sessionManager.updateAgentRuntime(issue.key, { providerVersion: preflight.providerVersion });
+        }
+      });
       await applyAcpModel(client, options.model);
       // `session/new` triggers no prompt/completion of its own, so reading
       // modes here (rather than only reacting to `current_mode_update` later)
@@ -662,6 +672,28 @@ export class AcpAgentHost {
       });
 
     return sessionId;
+  }
+
+  /** Connects through ACP without creating a session or sending a prompt. */
+  public async probeCapabilities(options: Pick<AcpAgentStartOptions, 'command' | 'args' | 'env' | 'workingDirectory'>): Promise<ProviderCapabilityManifest> {
+    const client = new AcpClientWrapper({
+      command: options.command,
+      args: options.args,
+      env: options.env,
+      workingDirectory: options.workingDirectory?.trim() || process.cwd(),
+      toolMode: 'read-only',
+      requestPermission: async () => 'deny',
+      onSessionUpdate: () => {},
+      logSink: this.logger
+    });
+    try {
+      await client.connect();
+      const capabilities = client.getCapabilityManifest();
+      if (!capabilities) throw new Error('The ACP provider did not advertise capabilities.');
+      return capabilities;
+    } finally {
+      await client.shutdown();
+    }
   }
 
   private buildConversationTranscript(events: AgentSessionRecord['events']): string | undefined {

@@ -218,6 +218,7 @@ const praxis: PraxisIpc = {
     getStatus: () => ipcRenderer.invoke('ai:getStatus'),
     setApiKey: (value: string) => ipcRenderer.invoke('ai:setApiKey', value),
     listProviderStatuses: () => ipcRenderer.invoke('ai:listProviderStatuses'),
+    probeProviderCapability: (provider: AiProvider) => ipcRenderer.invoke('ai:probeProviderCapability', provider),
     listCliModelOptions: (provider: AiProvider) => ipcRenderer.invoke('ai:listCliModelOptions', provider),
     listApiModelOptions: (provider: AiProvider, forceRefresh?: boolean) =>
       ipcRenderer.invoke('ai:listApiModelOptions', provider, forceRefresh),
