@@ -138,6 +138,8 @@ export function WorkflowRunPage({
     };
   }, []);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [timelineScope, setTimelineScope] = useState<'latest' | 'all'>('latest');
+  const [timelineStageFilter, setTimelineStageFilter] = useState(false);
   /** `${runId}:${nodeId}:${attempt}` of the evidence panel currently open, if any. */
   const [evidenceKey, setEvidenceKey] = useState<string>();
   const [evidenceView, setEvidenceView] = useState<WorkflowEvidenceView>();
@@ -275,6 +277,51 @@ export function WorkflowRunPage({
       action.kind === 'retry-stage' &&
       !!run?.stages.some(candidate => candidate.nodeId === action.nodeId && candidate.pause)
   );
+
+  const maxAttemptByNode = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of run?.stages ?? []) {
+      map.set(s.nodeId, s.attempts);
+    }
+    return map;
+  }, [run?.stages]);
+
+  const { latestEvents, earlierEvents, displayedEvents } = useMemo(() => {
+    const all = run?.events ?? [];
+    const filtered = timelineStageFilter && stage ? all.filter(e => !e.nodeId || e.nodeId === stage.nodeId) : all;
+    const latest: typeof all = [];
+    const earlier: typeof all = [];
+
+    const sequentialAttemptByNode = new Map<string, number>();
+    const eventAttempt = new Map<string, number>();
+    for (const ev of all) {
+      if (ev.nodeId) {
+        if (ev.attempt !== undefined) {
+          sequentialAttemptByNode.set(ev.nodeId, ev.attempt);
+          eventAttempt.set(ev.id, ev.attempt);
+        } else if (ev.kind === 'node-started') {
+          const cur = (sequentialAttemptByNode.get(ev.nodeId) ?? 0) + 1;
+          sequentialAttemptByNode.set(ev.nodeId, cur);
+          eventAttempt.set(ev.id, cur);
+        } else {
+          const cur = sequentialAttemptByNode.get(ev.nodeId) ?? 1;
+          eventAttempt.set(ev.id, cur);
+        }
+      }
+    }
+
+    for (const ev of filtered) {
+      const maxAtt = ev.nodeId ? maxAttemptByNode.get(ev.nodeId) : undefined;
+      const att = ev.nodeId ? eventAttempt.get(ev.id) : undefined;
+      if (ev.nodeId && maxAtt && maxAtt > 1 && att !== undefined && att < maxAtt) {
+        earlier.push(ev);
+      } else {
+        latest.push(ev);
+      }
+    }
+
+    return { latestEvents: latest, earlierEvents: earlier, displayedEvents: filtered };
+  }, [run?.events, maxAttemptByNode, timelineStageFilter, stage]);
 
   const centre = (() => {
     if (!runId || (loaded && !run)) {
@@ -848,14 +895,72 @@ export function WorkflowRunPage({
                 )}
 
                 <details className="wf-timeline" open={timelineOpen} onToggle={e => setTimelineOpen((e.target as HTMLDetailsElement).open)}>
-                  <summary>Timeline ({run.events.length})</summary>
+                  <summary>
+                    Timeline ({timelineScope === 'latest' && earlierEvents.length > 0 ? `${latestEvents.length} current · ${displayedEvents.length} total` : displayedEvents.length})
+                  </summary>
+
+                  <div className="wf-timeline-controls">
+                    <div className="wf-timeline-filter-group">
+                      <button
+                        type="button"
+                        className={`chip chip-sm ${timelineScope === 'latest' ? 'active' : ''}`}
+                        aria-pressed={timelineScope === 'latest'}
+                        onClick={() => setTimelineScope('latest')}
+                      >
+                        Latest run {earlierEvents.length > 0 ? `(${latestEvents.length})` : ''}
+                      </button>
+                      <button
+                        type="button"
+                        className={`chip chip-sm ${timelineScope === 'all' ? 'active' : ''}`}
+                        aria-pressed={timelineScope === 'all'}
+                        onClick={() => setTimelineScope('all')}
+                      >
+                        All history ({displayedEvents.length})
+                      </button>
+                    </div>
+                    {stage && (
+                      <button
+                        type="button"
+                        className={`chip chip-sm ${timelineStageFilter ? 'active' : ''}`}
+                        aria-pressed={timelineStageFilter}
+                        onClick={() => setTimelineStageFilter(f => !f)}
+                        title={`Filter timeline to events for ${stage.name}`}
+                      >
+                        {timelineStageFilter ? `Showing ${stage.name}` : `Filter by ${stage.name}`}
+                      </button>
+                    )}
+                  </div>
+
                   <ol>
-                    {run.events.map(event => (
+                    {(timelineScope === 'latest' ? latestEvents : displayedEvents).map(event => (
                       <li key={event.id}>
-                        <span className="rail-sub">{new Date(event.at).toLocaleTimeString()}</span> {event.message}
+                        <span className="rail-sub">{new Date(event.at).toLocaleTimeString()}</span>{' '}
+                        {event.attempt && event.attempt > 1 && (
+                          <span className="wf-timeline-attempt-badge">att {event.attempt}</span>
+                        )}{' '}
+                        {event.message}
                       </li>
                     ))}
                   </ol>
+
+                  {timelineScope === 'latest' && earlierEvents.length > 0 && (
+                    <details className="wf-timeline-earlier">
+                      <summary>
+                        Earlier attempts ({earlierEvents.length} events from prior retries)
+                      </summary>
+                      <ol>
+                        {earlierEvents.map(event => (
+                          <li key={event.id}>
+                            <span className="rail-sub">{new Date(event.at).toLocaleTimeString()}</span>{' '}
+                            {event.attempt && (
+                              <span className="wf-timeline-attempt-badge">att {event.attempt}</span>
+                            )}{' '}
+                            {event.message}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  )}
                 </details>
 
                 {stage?.sessionKey && renderSessionInspector && (
