@@ -1,6 +1,6 @@
 {
   "name": "@praxis/desktop-main",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Praxis desktop workspace for planning, tickets, and delivery.",
   "author": "Praxis",
   "repository": "https://github.com/davidacres/praxis.git",

@@ -17,10 +17,39 @@ type Release = {
 
 const RELEASES: Release[] = [
   {
+    version: '0.3.2',
+    label: 'Phone pairing, per-stage AI, and security review',
+    summary: 'Pair a phone to continue desktop sessions, choose the AI for each workflow stage, and run a whole-codebase security review.',
+    current: true,
+    sections: [
+      {
+        title: 'Features',
+        icon: 'sparkles',
+        items: [
+          'Pair a phone from Settings › Mobile access and continue desktop sessions from it over the local network.',
+          'Choose the AI and model for each workflow stage, and what happens when one runs out of budget.',
+          'Agents, skills and instructions kept by other AI tools in a repository are used in place once the project is allowed.',
+          'Security Review workflow: a severity-ranked report, then a prioritised remediation plan published to the board.',
+          'Workflows retry failed stages, rework automatically after a failed gate, and keep a history of runs.',
+          'Built-in skills for verification reports, visual checks, and Electron and CI hardening, installed with the workflows that use them.',
+          'Structured ticket review: the agent gives a verdict, then asks what to do about each finding.'
+        ]
+      },
+      {
+        title: 'Fixes',
+        icon: 'check-square',
+        items: [
+          'The marketplace sends its token only to the configured registry and checks each package\'s integrity before reading it.',
+          'The main window no longer navigates away from the app or opens new windows; links open in your browser.',
+          'Retrying a delivery reuses its existing worktree instead of failing.'
+        ]
+      }
+    ]
+  },
+  {
     version: '0.3.1',
     label: 'Marketplace and add-on packages now working',
     summary: 'Install themes, surfaces, agents and workflows from GitHub Packages marketplace.',
-    current: true,
     sections: [
       {
         title: 'Features',
