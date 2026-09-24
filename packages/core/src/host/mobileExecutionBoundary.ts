@@ -15,6 +15,8 @@ export interface MobileExecutionHandlers {
   'workflowRuns.retryStage': (command: MobileCommand) => Promise<unknown>;
   'permissions.respond': (command: MobileCommand) => Promise<unknown>;
   'workflowGates.approve': (command: MobileCommand) => Promise<unknown>;
+  'workflowGates.reject': (command: MobileCommand) => Promise<unknown>;
+  'gadgets.submit': (command: MobileCommand) => Promise<unknown>;
 }
 
 export type MobileExecutionResult =

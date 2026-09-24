@@ -24,10 +24,14 @@ import {
   WorkflowRunStore,
   applyWorkflowRunCommand,
   approveStage,
+  rejectStage,
   resolveApprovalTarget,
   summarizeWorkflowRun,
+  type ChatBlock,
   type MobileCommand,
+  type MobileGadgetView,
   type MobileHostApplication,
+  parseChatBlocks,
   type WorkflowPolicyProfile,
   type WorkflowRun,
 } from '@praxis/core';
@@ -56,7 +60,11 @@ import { getMobileHostIdentity } from './mobileHostIdentity';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { cancelMobileInteractiveSession, continueMobileInteractiveSession, createMobileInteractiveSession } from './mobileInteractiveSessions';
 import { getDesktopAppearance, onDidChangeDesktopAppearance } from './mobileAppearance';
-import { appendMobileAppearanceEvent, appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
+import { appendMobileAppearanceEvent, appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary, type MobileGadgetResolver } from './mobileSessionProjection';
+import { getGadgetService, resolveSessionScope } from './gadgetInstance';
+import { readMobileSessionChanges, readMobileSessionFileDiff, type MobileSessionChangesGit } from './mobileSessionChanges';
+import { getGitComparison, getGitStatus } from './gitService';
+import { onDidChangeGadgets, submitGadgetAction } from './gadgetIpc';
 import { appendMobileRunEvent, mobileRunSnapshot } from './mobileRunProjection';
 import { pendingMobilePermissions, respondToMobilePermission } from './mobilePermissions';
 import { listWorkflowChoices, startWorkflowRun } from './workflowIpc';
@@ -69,8 +77,54 @@ function policyFor(projectId: string): WorkflowPolicyProfile | undefined {
   return getWorkflowPolicyStore().effectiveForProject(projectId)?.profile;
 }
 
+const gitForMobile: MobileSessionChangesGit = { status: getGitStatus, comparison: getGitComparison };
+
+function requireSessionRecord(sessionId: string): AgentSessionRecord {
+  const record = [...getAiSessionManager().getAllAgentSessions().values()].find(candidate => candidate.sessionId === sessionId);
+  if (!record) throw new Error(`No agent session found for ${sessionId}.`);
+  return record;
+}
+
 function summarize(run: WorkflowRun): ReturnType<typeof summarizeWorkflowRun> {
   return summarizeWorkflowRun(run, policyFor(run.projectId));
+}
+
+/**
+ * The gadgets one assistant message asked for, as the desktop has them. A
+ * message the desktop has not published yet (its Sessions page was never open)
+ * is published here under the same key, so both surfaces share one gadget and
+ * one answer. Deliberately does not announce the change: this runs while a
+ * session is being projected, and announcing would re-project it in a loop.
+ */
+function resolveMobileGadgets(sessionId: string, messageKey: string, text: string): ReturnType<MobileGadgetResolver> {
+  const service = getGadgetService();
+  const ofMessage = (blocks: readonly ChatBlock[]) => blocks.filter(block => block.type !== 'markdown' && block.blockId.startsWith(`${messageKey}-`));
+  let blocks = ofMessage(service.getBlocks(sessionId));
+  let unrendered = 0;
+  if (blocks.length === 0) {
+    const scope = resolveSessionScope(sessionId);
+    if (!scope) return { gadgets: [], unrendered: 0 };
+    const parsed = parseChatBlocks(text, { scope, issuedAt: new Date().toISOString(), idPrefix: messageKey });
+    unrendered = parsed.malformed;
+    if (parsed.blocks.some(block => block.type === 'gadget')) blocks = ofMessage(service.publish(sessionId, parsed.blocks));
+  }
+  const gadgets: MobileGadgetView[] = [];
+  for (const block of blocks) {
+    if (block.type !== 'gadget') {
+      unrendered += 1;
+      continue;
+    }
+    const settled = service.actionLedger
+      .forGadget(block.gadget.gadgetId)
+      .filter(record => record.status === 'accepted' || record.status === 'completed')
+      .at(-1);
+    gadgets.push({
+      gadget: block.gadget,
+      state: block.gadget.state ?? 'active',
+      ...(settled ? { result: { status: settled.status, ...(settled.message ? { message: settled.message } : {}) } } : {}),
+    });
+  }
+  return { gadgets, unrendered };
 }
 
 /**
@@ -240,7 +294,7 @@ export function createDesktopMobileHostServiceDeps(
         candidate => candidate.sessionId === sessionId || candidate.issueKey === sessionId,
       );
       if (!record) return undefined;
-      return mobileSessionSnapshot(withRunProject(record), ledger.latestSequence());
+      return mobileSessionSnapshot(withRunProject(record), ledger.latestSequence(), resolveMobileGadgets);
     },
     listWorkflows: async projectId => listWorkflowChoices(projectId),
     listRuns: async projectId => runStore()
@@ -256,6 +310,16 @@ export function createDesktopMobileHostServiceDeps(
       const summary = summarize(requireRun(runId));
       return { runId, stages: summary.stages ?? [] };
     },
+    sessionChanges: async sessionId => readMobileSessionChanges(requireSessionRecord(sessionId), gitForMobile),
+    sessionFileDiff: async (sessionId, path) => readMobileSessionFileDiff(requireSessionRecord(sessionId), path, gitForMobile),
+    findGadget: (sessionId, gadgetId) => getGadgetService().findGadget(sessionId, gadgetId),
+    submitGadget: async (sessionId, payload, actor) => submitGadgetAction({
+      sessionId,
+      gadgetId: payload.gadgetId,
+      actionId: payload.actionId,
+      value: payload.value,
+      idempotencyKey: payload.idempotencyKey,
+    }, actor),
     listAttention: async projectId => {
       const items: Array<Record<string, unknown>> = [];
       for (const request of pendingMobilePermissions(getAiSessionManager().getAllAgentSessions().values())) {
@@ -290,7 +354,7 @@ export function createDesktopMobileHostServiceDeps(
 
     createSession: async input => {
       const record = await createMobileInteractiveSession(input);
-      return mobileSessionSnapshot(record, ledger.latestSequence());
+      return mobileSessionSnapshot(record, ledger.latestSequence(), resolveMobileGadgets);
     },
     startRun: async input => startWorkflowRun({
       projectId: input.projectId,
@@ -323,7 +387,15 @@ export function createDesktopMobileHostServiceDeps(
       await getWorkflowOrchestrator().step(runId);
       return summarize(requireRun(runId));
     },
-    continueSession: async (sessionId, message) => mobileSessionSnapshot(await continueMobileInteractiveSession(sessionId, message), ledger.latestSequence()),
+    rejectRun: async (runId, actor, reason) => {
+      await getWorkflowOrchestrator().updateRun(runId, run => {
+        const approval = resolveApprovalTarget(run);
+        return rejectStage(run, approval.id, { actor, reason, at: new Date().toISOString() });
+      });
+      await getWorkflowOrchestrator().step(runId);
+      return summarize(requireRun(runId));
+    },
+    continueSession: async (sessionId, message) => mobileSessionSnapshot(await continueMobileInteractiveSession(sessionId, message), ledger.latestSequence(), resolveMobileGadgets),
     configureSession: async (sessionId, change) => {
       const record = [...getAiSessionManager().getAllAgentSessions().values()].find(candidate => candidate.sessionId === sessionId);
       if (!record) throw new Error(`No agent session found for ${sessionId}.`);
@@ -336,9 +408,9 @@ export function createDesktopMobileHostServiceDeps(
           expectedBriefRevision: getAiSessionManager().getAgentSession(record.issueKey)?.handoverBrief?.revision ?? 0,
         });
       }
-      return mobileSessionSnapshot(getAiSessionManager().getAgentSession(record.issueKey)!, ledger.latestSequence());
+      return mobileSessionSnapshot(getAiSessionManager().getAgentSession(record.issueKey)!, ledger.latestSequence(), resolveMobileGadgets);
     },
-    cancelSession: async sessionId => mobileSessionSnapshot(await cancelMobileInteractiveSession(sessionId), ledger.latestSequence()),
+    cancelSession: async sessionId => mobileSessionSnapshot(await cancelMobileInteractiveSession(sessionId), ledger.latestSequence(), resolveMobileGadgets),
     respondToPermission: async (requestId, decision, _actor, projectId) => respondToMobilePermission({
       records: getAiSessionManager().getAllAgentSessions().values(),
       requestId,
@@ -360,7 +432,12 @@ export function composeDesktopMobileHost(hostId?: string): MobileHostApplication
     ledger,
     payloadDigest: (command: unknown) => JSON.stringify((command as MobileCommand).payload ?? null),
   });
-  getAiSessionManager().onDidChangeAgentSession(record => appendMobileSessionEvent(ledger, deps.hostId, withRunProject(record)));
+  getAiSessionManager().onDidChangeAgentSession(record => appendMobileSessionEvent(ledger, deps.hostId, withRunProject(record), resolveMobileGadgets));
+  // An answer from either surface changes a gadget's state; the phone sees it in the session's next snapshot.
+  onDidChangeGadgets(sessionId => {
+    const record = [...getAiSessionManager().getAllAgentSessions().values()].find(candidate => candidate.sessionId === sessionId);
+    if (record) appendMobileSessionEvent(ledger, deps.hostId, withRunProject(record), resolveMobileGadgets);
+  });
   // A deleted run is gone from the store by the time it is announced, so remember each
   // run's project to scope its removal to the phones that could see it.
   const runProjects = new Map<string, string>();
