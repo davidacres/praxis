@@ -240,3 +240,73 @@ test('list view shows the same grouping and ordering', async () => {
   await expect(parentRow).toHaveClass(/board-list-row-parent/);
   await expect(parentRow).not.toHaveClass(/board-list-row-child/);
 });
+
+test('grouping by parentKey prevents regression (collapsed stacks hide children)', async () => {
+  // Regression test: ensure that child issues are hidden when stacks are collapsed.
+  // This verifies the parentKey-based grouping mechanism is working.
+  await launchWithFixture();
+
+  const cards = window.locator('[data-testid="issue-card"]');
+  const stack = window.locator('[data-testid="issue-card-stack"]');
+
+  // Initial state: only parent issues visible (stack collapsed)
+  await expect(cards).toHaveCount(2);
+  await expect(stack).toHaveCount(1);
+  await expect(stack).toHaveAttribute('aria-expanded', 'false');
+
+  // Expand the stack
+  await stack.click();
+  await expect(stack).toHaveAttribute('aria-expanded', 'true');
+  await expect(cards).toHaveCount(6);
+
+  // Collapse again - children should hide
+  await stack.click();
+  await expect(stack).toHaveAttribute('aria-expanded', 'false');
+  await expect(cards).toHaveCount(2);
+
+  // Verify the visible cards are only the parents
+  const visibleKeys = await cards.evaluateAll(nodes =>
+    nodes.map(node => (node as HTMLElement).dataset.issueKey)
+  );
+  expect(visibleKeys).toEqual(['HIER-F01', 'HIER-F02']);
+});
+
+test('children must have parentKey set to be grouped', async () => {
+  // Regression test: verify that without a parentKey, items are not grouped.
+  // If this breaks, it likely means parentKey is not being set during parsing.
+  await launchWithFixture();
+
+  const cards = window.locator('[data-testid="issue-card"]');
+
+  // Expand to see all children
+  await window.locator('[data-testid="issue-card-stack"]').click();
+  await expect(cards).toHaveCount(6);
+
+  // Every child must have a data-child-of attribute pointing to its parent
+  const childCards = window.locator('[data-testid="issue-card"][class*="issue-card-child"]');
+  const childCount = await childCards.count();
+  expect(childCount).toBe(4); // 3 stories + 1 task
+
+  // Each child must have the correct parent key
+  for (let i = 0; i < childCount; i++) {
+    const childOf = await childCards.nth(i).getAttribute('data-child-of');
+    expect(childOf).toBe('HIER-F01');
+  }
+});
+
+test('parent shows child count badge only when there are children', async () => {
+  // Regression test: parent issues without children should not show a badge.
+  await launchWithFixture();
+
+  const featureWithChildren = window.locator('[data-testid="issue-card"][data-issue-key="HIER-F01"]');
+  const featureWithoutChildren = window.locator('[data-testid="issue-card"][data-issue-key="HIER-F02"]');
+
+  // Feature with children shows badge
+  const badge1 = featureWithChildren.locator('[data-testid="issue-card-child-count"]');
+  await expect(badge1).toHaveCount(1);
+  await expect(badge1).toHaveText('4');
+
+  // Feature without children does not show badge
+  const badge2 = featureWithoutChildren.locator('[data-testid="issue-card-child-count"]');
+  await expect(badge2).toHaveCount(0);
+});
