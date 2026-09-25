@@ -111,7 +111,7 @@ class _TranscriptViewState extends State<TranscriptView> {
                   Text(
                     message.timestamp,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          opacity: 0.7,
+                          color: Theme.of(context).textTheme.bodySmall?.color?.withAlpha(179),
                         ),
                   ),
                 ],

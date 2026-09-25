@@ -112,6 +112,11 @@ linter:
     - void_checks
 
 analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
   language:
     strict-casts: true
     strict-raw-types: true

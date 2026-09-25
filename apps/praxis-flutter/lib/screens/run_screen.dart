@@ -101,17 +101,24 @@ class _RunScreenState extends State<RunScreen> {
             ),
             // Stages
             Expanded(
-              child: run.stages.isEmpty
+              child: run == null
                   ? Center(
                       child: Text(
-                        'No stages yet',
+                        'No workflow run data',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     )
-                  : ListView.builder(
-                      itemCount: run.stages.length,
-                      itemBuilder: (context, index) {
-                        final stage = run.stages[index];
+                  : run!.stages.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No stages yet',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: run!.stages.length,
+                          itemBuilder: (context, index) {
+                            final stage = run!.stages[index];
                         return _StageCard(stage: stage);
                       },
                     ),
