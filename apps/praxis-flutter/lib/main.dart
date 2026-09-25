@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'app/store/store_provider.dart';
 import 'app/theme.dart';
+import 'app/services/connection_service.dart';
+import 'app/services/mobile_client.dart';
 import 'screens/connect_screen.dart';
 import 'screens/work_screen.dart';
 import 'screens/attention_screen.dart';
 import 'screens/activity_screen.dart';
+import 'screens/run_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,10 +20,19 @@ class PraxisApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AppStore(),
+    final store = AppStore();
+    final client = MobileClient(
+      connection: ConnectionService(),
+      store: store,
+    );
+
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: store),
+        Provider.value(value: client),
+      ],
       child: Consumer<AppStore>(
-        builder: (context, store, _) {
+        builder: (context, _, __) {
           return MaterialApp(
             title: 'Praxis',
             theme: buildTheme(store.appearance),
@@ -44,11 +56,28 @@ class _PraxisShellState extends State<PraxisShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppStore>(
-      builder: (context, store, _) {
+    return Consumer2<AppStore, MobileClient>(
+      builder: (context, store, client, _) {
         // Show connect screen if not connected
         if (!store.isConnected) {
-          return const ConnectScreen();
+          return ConnectScreen(
+            onConnect: (config) {
+              client.connect(config).then((_) {
+                store.notifyListeners();
+              }).catchError((error) {
+                store.setConnectionError('Connection failed: $error');
+              });
+            },
+          );
+        }
+
+        // Show run screen if a run is open
+        final openRunId = store.openRunId;
+        if (openRunId != null) {
+          return RunScreen(
+            runId: openRunId,
+            onOpenSidebar: () => setState(() => _sidebarOpen = true),
+          );
         }
 
         // Build the main shell
