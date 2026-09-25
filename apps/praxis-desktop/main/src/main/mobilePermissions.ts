@@ -42,8 +42,14 @@ export function respondToMobilePermission(input: {
   hasActiveTask(sessionKey: string): boolean;
   respond(sessionKey: string, decision: PermissionDecision): void;
 }): { requestId: string; decision: 'allow' | 'deny'; sessionId: string } {
-  const request = pendingMobilePermissions(input.records).find(candidate => candidate.requestId === input.requestId);
+  const pending = pendingMobilePermissions(input.records);
+  const request = pending.find(candidate => candidate.requestId === input.requestId);
   if (!request) throw new Error('That permission request is no longer pending.');
+  // The hosts answer a session's requests oldest first, whatever id is named, so
+  // answering a later one would really decide the earlier one.
+  if (pending.find(candidate => candidate.sessionId === request.sessionId)?.requestId !== request.requestId) {
+    throw new Error('This session has an earlier permission request waiting. Answer that one first.');
+  }
   if (request.projectId !== input.projectId) throw new Error(`That permission request is not in project ${input.projectId}.`);
   if (!input.hasActiveTask(request.sessionKey)) throw new Error('The session for that permission request is no longer active.');
   input.respond(request.sessionKey, input.decision === 'allow' ? 'allow_once' : 'deny');

@@ -8,6 +8,7 @@ import '../core/session_options.dart';
 import '../core/time.dart';
 import '../ui/kit.dart';
 import '../ui/motif_backdrop.dart';
+import '../ui/permission_card.dart';
 import '../ui/transcript.dart';
 import 'changes_view.dart';
 import 'provider_model_sheet.dart';
@@ -288,7 +289,9 @@ class _WorkDetailState extends State<WorkDetail> {
         ? 'Reconnecting to ${store.host.hostName.isNotEmpty ? store.host.hostName : 'the desktop'}… you can send again once it is back.'
         : verdict;
     final entries = <_Entry>[...messages.map(_MessageEntry.new), ...itemFollowUps.map(_FollowUpEntry.new)];
-    final sending = item.status == 'active' || itemFollowUps.any((message) => message.state == FollowUpState.pending);
+    final permissions = store.openAttention.where((entry) => entry.kind == 'permission' && entry.sessionId == item.sessionId).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final sending = item.status == 'active' ||itemFollowUps.any((message) => message.state == FollowUpState.pending);
 
     Widget body;
     if (store.detail == 'chat') {
@@ -336,6 +339,17 @@ class _WorkDetailState extends State<WorkDetail> {
               },
             ),
           ),
+          // The agent is blocked until this is answered, so it sits over the composer, not in the scrollback.
+          // The desktop answers a session's requests oldest first, so only the oldest is offered.
+          if (permissions.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.fromLTRB(t.s(12), t.s(8), t.s(12), 0),
+              child: PermissionCard(
+                key: ValueKey(permissions.first.id),
+                item: permissions.first,
+                subject: permissions.length > 1 ? 'The agent is waiting for you · ${permissions.length - 1} more after this' : null,
+              ),
+            ),
           SessionComposer(
             controller: _draft,
             onSend: () => _send(store, item),

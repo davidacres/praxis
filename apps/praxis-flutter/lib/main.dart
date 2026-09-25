@@ -13,6 +13,7 @@ import 'screens/connect_screen.dart';
 import 'screens/work_screen.dart';
 import 'ui/error_card.dart';
 import 'ui/kit.dart';
+import 'ui/permission_card.dart';
 import 'ui/sidebar.dart';
 
 void main() {
@@ -121,6 +122,7 @@ class _RootState extends State<_Root> {
       body = Column(
         children: [
           const StaleBanner(),
+          const PermissionBanner(),
           Expanded(
             child: switch (store.primaryRoute) {
               'attention' => AttentionScreen(onOpenSidebar: _open),

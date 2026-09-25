@@ -38,3 +38,15 @@ test('responds only to a current request and rejects a stale id', () => {
     records: [record([])], requestId: 's1:permission:0', projectId: 'p1', decision: 'allow', hasActiveTask: () => true, respond: () => undefined,
   }), /no longer pending/);
 });
+
+test('refuses a later request while an earlier one in the same session waits', () => {
+  const records = [record([
+    { timestamp: '2026-09-22T09:00:01.000Z', type: 'permission_requested', summary: 'Run tests' },
+    { timestamp: '2026-09-22T09:00:02.000Z', type: 'permission_requested', summary: 'Write file' },
+  ])];
+  let responded = false;
+  assert.throws(() => respondToMobilePermission({
+    records, requestId: 's1:permission:1', projectId: 'p1', decision: 'allow', hasActiveTask: () => true, respond: () => { responded = true; },
+  }), /earlier permission request/);
+  assert.equal(responded, false);
+});

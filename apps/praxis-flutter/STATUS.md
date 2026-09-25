@@ -42,7 +42,7 @@ display size, connect/pairing screens.
 | Answer a choice / confirmation / form / conflict / approval question | ✓ (Face ID where the answer changes something) | ✗ **app crashes** (fatal JS error, 3 crash reports) |
 | Approve a run (Face ID) | ✓ | — |
 | Reject a run with a reason (Face ID) | ✓ | ✗ reason field sits under the keyboard; cannot be submitted |
-| Allow / deny an agent permission | ✓ / ✓ | — / ✓ |
+| Allow / deny an agent permission | ✓ / ✓ — in the chat that is waiting, with a banner on every other screen | — / ✓ (Attention screen only) |
 | Retry a failed stage | ✓ | — |
 | Start a workflow | ✓ | ✓ |
 | Hand over to another provider | ✓ | ✓ |
