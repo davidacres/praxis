@@ -8,7 +8,7 @@ slug: packaging-github-backend-and-agent-proof
 title: Packaging, GitHub backend, and multi-file/terminal proof
 status: In Progress
 owner: Electron desktop app
-updated: 2026-09-05
+updated: 2026-09-25
 issues: docs/issues/features/fx-bf-016-packaging-github-backend-and-agent-proof/feature-issues.md
 stories: [FX-BE-034, FX-BE-035, FX-BE-036]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -76,3 +76,18 @@ end to end the same way single-file edits already are.
 
 ## Description
 
+
+## Review 2026-09-25
+
+Status corrected to Done during the board-state review: all child stories
+now show Done, and the underlying delivery is present in the tree (see the
+per-story review comments for file-level evidence). Validation commands from
+the stories (`npm run check-types`, `npm run test:core`) were not rerun as
+part of this review.
+
+## Review correction 2026-09-25
+
+Feature remains In Progress: child FX-BE-034 (signed auto-update) is still
+Blocked, and FX-BE-062/FX-BE-063 (GitLab CI executor, pipeline setup UX)
+remain unimplemented in the tree (no gitlab executor in
+`packages/core/src/deployments/`). Other children verified Done.

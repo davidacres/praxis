@@ -858,7 +858,7 @@ function SessionsNav({
   const [draft, setDraft] = useState('');
   const [mutatingKey, setMutatingKey] = useState<string>();
   const [error, setError] = useState<string>();
-  const { confirm } = useDialogs();
+  const { confirmChoice } = useDialogs();
 
   /** Every session nested beneath `session`, deepest last. */
   const descendantsOf = (session: AgentSessionRecord): AgentSessionRecord[] => {
@@ -910,15 +910,19 @@ function SessionsNav({
 
   const remove = async (session: AgentSessionRecord) => {
     const descendants = descendantsOf(session);
-    if (
-      descendants.length > 0 &&
-      !(await confirm({
-        title: 'Delete this session?',
-        message: `It also deletes the ${descendants.length} session${descendants.length === 1 ? '' : 's'} nested beneath it.`,
-        confirmLabel: 'Delete sessions',
-        danger: true
-      }))
-    ) {
+    const choice = await confirmChoice({
+      title: 'Delete this session?',
+      message:
+        descendants.length > 0
+          ? `It also deletes the ${descendants.length} session${descendants.length === 1 ? '' : 's'} nested beneath it. This can’t be undone.`
+          : 'This can’t be undone.',
+      confirmLabel: descendants.length > 0 ? 'Delete sessions' : 'Delete session',
+      tertiaryLabel: 'Archive instead',
+      danger: true
+    });
+    if (choice === 'cancel') return;
+    if (choice === 'tertiary') {
+      await archive(session, true);
       return;
     }
     setMutatingKey(session.issueKey);
@@ -955,14 +959,16 @@ function SessionsNav({
   const removeRun = async (runId: string, label: string, members: AgentSessionRecord[]) => {
     const all = runSessions(members);
     const live = all.filter(session => !isTerminalAgentState(session.state)).length;
-    if (
-      !(await confirm({
-        title: 'Delete this run\u2019s sessions?',
-        message: `It deletes all ${all.length} session${all.length === 1 ? '' : 's'} of \u201c${label}\u201d${live > 0 ? `, ${live} of them still working` : ''}. The run itself stays under Workflows \u2192 Runs.`,
-        confirmLabel: 'Delete sessions',
-        danger: true
-      }))
-    ) {
+    const choice = await confirmChoice({
+      title: 'Delete this run\u2019s sessions?',
+      message: `It deletes all ${all.length} session${all.length === 1 ? '' : 's'} of \u201c${label}\u201d${live > 0 ? `, ${live} of them still working` : ''}. The run itself stays under Workflows \u2192 Runs.`,
+      confirmLabel: 'Delete sessions',
+      tertiaryLabel: 'Archive instead',
+      danger: true
+    });
+    if (choice === 'cancel') return;
+    if (choice === 'tertiary') {
+      await archiveRun(runId, members);
       return;
     }
     setMutatingKey(`run:${runId}`);

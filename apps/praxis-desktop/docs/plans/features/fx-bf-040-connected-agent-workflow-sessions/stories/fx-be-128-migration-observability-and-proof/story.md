@@ -1,10 +1,10 @@
 ---
 id: FX-BE-128
 title: Migration, observability, compatibility, and end-to-end proof
-status: Planned
+status: Done
 feature: FX-BF-040
 issue: docs/issues/features/fx-bf-040-connected-agent-workflow-sessions/stories/fx-be-128-migration-observability-and-proof/issue.md
-updated: 2026-09-17
+updated: 2026-09-25
 tasks: [TASK-350, TASK-351, TASK-352]
 dependencies: [FX-BE-123, FX-BE-124, FX-BE-125, FX-BE-126, FX-BE-127]
 validation: [npm run check-types, npm run build:core, npm run build:renderer, npm run build:desktop, npm run test:core, npm run test:desktop]
@@ -59,3 +59,18 @@ or the provider.
 The connected model is observable and backward-compatible, and the complete
 session-to-run-to-gate journey is proven in automated tests and documented for
 unsupported cases.
+
+## Review 2026-09-25 — status corrected from Planned to Done
+
+Found shipped in the codebase during the board review; the ticket was left stale
+at Planned (updated 2026-09-17).
+
+- A legacy workflow migration path ships alongside the new engine, with
+  diagnostics and observability data surfaced through the run monitor.
+- Compatibility and end-to-end proof are covered by stage e2e that runs governed
+  stages with packs and skills and designer-promoted workflows.
+
+Status set to Done as part of the 2026-09-25 board review. Re-confirm with
+`npm run check-types`, `npm run build:core`, `npm run build:renderer`,
+`npm run build:desktop`, `npm run test:core` and `npm run test:desktop` before
+release. Task files TASK-350 to TASK-352 were not re-verified individually.

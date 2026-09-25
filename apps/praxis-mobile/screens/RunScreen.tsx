@@ -82,7 +82,12 @@ export function RunDetail({ runId, onOpenSidebar }: { runId: string; onOpenSideb
           resetKey={`${runId}:${stage.nodeId}`}
           renderItem={message => (
             <ChatMessage
-              message={message}
+              message={{
+                ...message,
+                model: message.model ?? (message.author === 'assistant' ? model : undefined),
+                tokens: message.tokens ?? (message.author === 'assistant' ? session?.tokenUsage : undefined),
+                cost: message.cost ?? (message.author === 'assistant' ? session?.cost : undefined),
+              }}
               connected={shell.connection === 'ready'}
               onAnswer={(gadget, action, value) => answerGadget(stage.sessionId!, gadget, action, value)}
             />

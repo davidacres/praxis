@@ -182,3 +182,16 @@ story list, both from the "no overlapping buttons" requirement:
 Still open: the renderer's `AI_PROVIDERS` literal and core's `PROVIDER_DESCRIPTORS` still
 disagree on Antigravity's default command (`agy` vs `antigravity-acp`), and the mobile app has
 not been checked against `custom:` provider ids.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

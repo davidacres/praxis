@@ -6,9 +6,9 @@
 id: FX-BF-018
 slug: addon-marketplace
 title: Add-on marketplace
-status: In Progress
+status: Done
 owner: Electron desktop app
-updated: 2026-09-06
+updated: 2026-09-25
 stories: [FX-BE-042]
 validation: [npm run check-types, npm run test:core, npm run test:desktop, npm run test:desktop:themes]
 ---
@@ -116,3 +116,10 @@ Pulled the underlying feature file (`fx-bf-018-addon-marketplace/feature.md`) an
 
 - Is "Priority: Medium" still right given the scope (touches Settings, Themes, Surfaces, Agent Runtime, Workflow Templates, and a new trust/integrity path)? Not a defect, but worth a sanity check against the size of the surface area actually shipped.
 - Confirm whether the three "Open" items become their own follow-up tickets or stay as open sub-tasks under this one — as written, there's no tracking mechanism for them once FX-BF-018 is marked Done.
+## Review 2026-09-25
+
+Status corrected to Done during the board-state review: all child stories
+now show Done, and the underlying delivery is present in the tree (see the
+per-story review comments for file-level evidence). Validation commands from
+the stories (`npm run check-types`, `npm run test:core`) were not rerun as
+part of this review.

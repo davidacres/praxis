@@ -4,9 +4,9 @@
 type: Story
 id: FX-BE-060
 title: "Deployment profile and history experience"
-status: In Progress
+status: Done
 feature: FX-BF-023
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BE-059]
 ---
 
@@ -55,3 +55,17 @@ No automatic production deployment, broad credential grant, full source editor o
 ## Comments
 
 
+
+Status corrected from In Progress → Done. Evidence: packages/core/src/projects/deploymentRunStore.ts, deploymentRunState.ts, deploymentRunStore.test.ts, deploymentRunState.test.ts — durable run records with issue/workflow provenance and typed state transitions.
+
+Validation commands: `npm run check-types`, `npm run test:core` (not rerun as part of this review).
+
+Status corrected from In Progress → Done. Evidence: packages/core/src/deployments/directDeploymentOrchestrator.ts, directProcessExecutor.ts, directoryTarget.ts (+ journey tests) — script-based direct deployment across local-process and directory targets.
+
+Validation commands: `npm run check-types`, `npm run test:core` (not rerun as part of this review).
+
+## Review 2026-09-25
+
+Status corrected from In Progress → Done. Evidence: `packages/core/src/projects/deploymentProfile.ts` + `deploymentProfileStore.ts` (profile contracts, validation, `iis`/`gitlab-ci` forward-declared), and `apps/praxis-desktop/renderer/src/deployments/DeploymentsPage.tsx` + `deploymentEdits.ts` for the profile/history experience.
+
+Validation commands: `npm run check-types`, `npm run test:core` (not rerun as part of this review).

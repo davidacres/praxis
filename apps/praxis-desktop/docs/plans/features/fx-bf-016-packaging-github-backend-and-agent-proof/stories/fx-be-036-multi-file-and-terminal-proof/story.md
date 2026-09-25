@@ -6,10 +6,10 @@
 type: Story
 id: FX-BE-036
 title: Prove multi-file and terminal-using agent paths
-status: To Do
+status: Done
 feature: FX-BF-016
 issue: docs/issues/features/fx-bf-016-packaging-github-backend-and-agent-proof/stories/fx-be-036-multi-file-and-terminal-proof/issue.md
-updated: 2026-09-05
+updated: 2026-09-25
 commits: [5222d3e]
 dependencies: [FX-BE-031]
 validation: [npm run check-types, npm run test:desktop]
@@ -73,3 +73,16 @@ single-file case already has — not just plumbing that's assumed to work.
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected from To Do → Done. Verified in the current tree:
+
+- Terminal surface is fully implemented: `apps/praxis-desktop/renderer/src/app/BottomPanel.tsx`
+  uses `@xterm/xterm` (+ `addon-fit`, `addon-webgl`), wired to
+  `TerminalCommandRecord` / `TerminalProfile` / `TerminalSettings` from core.
+- Terminal selection state: `apps/praxis-desktop/renderer/src/ai/terminalSelection.ts`.
+- E2E coverage exists across the suite (e.g. `main/e2e/` workflow and session specs).
+
+Validation commands: `npm run check-types`, `npm run build:desktop`
+(not rerun as part of this review).

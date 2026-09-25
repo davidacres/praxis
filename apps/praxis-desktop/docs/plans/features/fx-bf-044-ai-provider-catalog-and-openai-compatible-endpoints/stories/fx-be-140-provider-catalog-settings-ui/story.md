@@ -72,3 +72,14 @@ endpoint added in Settings is offered without a reload; Escape closes the catalo
 closing Settings. `aiProviderTabs.spec.ts` was updated where it relied on unconfigured built-ins
 being rows. e2e: `aiProviderCatalog.spec.ts` (4 tests, including geometric no-overlap checks
 at a 1024px window).
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

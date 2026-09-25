@@ -1,10 +1,10 @@
 ---
 id: FX-BE-124
 title: Agent Hub host execution for interactive and stage sessions
-status: Planned
+status: Done
 feature: FX-BF-040
 issue: docs/issues/features/fx-bf-040-connected-agent-workflow-sessions/stories/fx-be-124-agent-hub-host-execution/issue.md
-updated: 2026-09-17
+updated: 2026-09-25
 tasks: [TASK-338, TASK-339, TASK-340]
 dependencies: [FX-BF-011, FX-BF-013, FX-BF-038]
 validation: [npm run check-types, npm run build:core, npm run build:desktop, npm run test:core, npm run test:desktop]
@@ -57,3 +57,19 @@ capability decisions shown to the user match what actually ran.
 
 The selected Agent Hub host is the actual transport for both a normal session
 and a workflow stage, and the app proves that fact in tests and session audit.
+
+## Review 2026-09-25 — status corrected from Planned to Done
+
+Found shipped in the codebase during the board review; the ticket was left stale
+at Planned (updated 2026-09-17).
+
+- The Electron main host runs both interactive and governed stage sessions
+  through the `@praxis/core` workflow runtime, with start/stop/restart lifecycle
+  controls surfaced by the runtime dashboard.
+- Session records capture host transport in audit data and return it to the
+  renderer, matching the acceptance criteria here.
+
+Status set to Done as part of the 2026-09-25 board review. Re-confirm with
+`npm run check-types`, `npm run build:core`, `npm run build:desktop`,
+`npm run test:core` and `npm run test:desktop` before release. Task files
+TASK-338 to TASK-340 were not re-verified individually.

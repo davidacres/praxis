@@ -1,6 +1,6 @@
 import type { MobileCaller, MobileReadOperation, MobileReadRequest, MobileSessionSnapshot, MobileSessionSummary } from '@praxis/core';
 import type { MobileAttentionItem } from '../../renderer/mobileAttention';
-import { formatClock } from '../../renderer/mobileTime';
+import { formatClock, formatDayAndClock } from '../../renderer/mobileTime';
 import type { MobileActivityEntry, MobileTranscriptMessage, MobileWorkItem } from './types';
 
 /**
@@ -45,9 +45,12 @@ export function transcript(snapshot: MobileSessionSnapshot | undefined): MobileT
     id: message.id,
     author: message.role,
     text: message.text,
-    at: formatClock(message.at),
+    at: formatDayAndClock(message.at) ?? (formatClock(message.at) || message.at),
     streaming: message.status === 'streaming',
     ...(message.gadgets?.length ? { gadgets: message.gadgets } : {}),
+    ...(message.model ? { model: message.model } : message.role === 'assistant' && snapshot.model ? { model: snapshot.model } : {}),
+    ...(message.tokenUsage ? { tokens: message.tokenUsage } : message.role === 'assistant' && snapshot.tokenUsage ? { tokens: snapshot.tokenUsage } : {}),
+    ...(message.cost ? { cost: message.cost } : message.role === 'assistant' && snapshot.cost ? { cost: snapshot.cost } : {}),
   }));
 }
 

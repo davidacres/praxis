@@ -194,7 +194,7 @@ function PendingFollowUp({ followUp, canRetry, onRetry }: { followUp: MobileFoll
 function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: () => void }): React.JSX.Element {
   const {
     work, shell, host, transcriptFor, followUps, workflows, runs, workflowRuns, sendFollowUp, retryFollowUp, cancelSession, startWorkflow, loadRun, answerGadget,
-    providers, models, loadModels, refreshProviders, updateDraftSelection, usageFor, refreshUsage, hostInfo, configureSession,
+    providers, models, loadModels, refreshProviders, updateDraftSelection, usageFor, refreshUsage, hostInfo, configureSession, sessionFor,
   } = useStore();
   const [pendingHandover, setPendingHandover] = useState<string | undefined>(undefined);
   const [configuring, setConfiguring] = useState(false);
@@ -207,6 +207,7 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
   const [picker, setPicker] = useState<'provider' | 'model' | undefined>(undefined);
   const itemFollowUps = followUps.filter(message => message.workId === workId);
   const run = item.runId ? runs[item.runId] : undefined;
+  const session = sessionFor(item.sessionId);
   const messages = transcriptFor(item.sessionId);
 
   const catalog = providers.value;
@@ -220,6 +221,7 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
   const shownModel = item.draft
     ? modelLabel(providerModels?.value, selection?.model, option?.defaultModel)
     : item.model ? modelLabel(providerModels?.value, item.model) : 'Provider default';
+  const model = session?.model ?? (item.draft ? selection?.model : item.model);
   const mode: MobileSessionMode = item.draft ? selection?.mode ?? 'chat' : item.mode;
   const modeOptions: readonly ComposerModeOption[] = catalog?.sessionModes ?? UNSUPPORTED_MODES;
   const canConfigure = Boolean(hostInfo?.commandOperations.includes('sessions.configure'));
@@ -307,7 +309,12 @@ function WorkDetail({ workId, onOpenSidebar }: { workId: string; onOpenSidebar: 
             ) : null}
             renderItem={entry => entry.kind === 'message' ? (
               <ChatMessage
-                message={entry.message}
+                message={{
+                  ...entry.message,
+                  model: entry.message.model ?? (entry.message.author === 'assistant' ? model : undefined),
+                  tokens: entry.message.tokens ?? (entry.message.author === 'assistant' ? session?.tokenUsage : undefined),
+                  cost: entry.message.cost ?? (entry.message.author === 'assistant' ? session?.cost : undefined),
+                }}
                 connected={shell.connection === 'ready'}
                 onAnswer={(gadget, action, value) => answerGadget(item.sessionId, gadget, action, value)}
               />
@@ -450,7 +457,6 @@ const styles = themedStyles(() => StyleSheet.create({
   headerTitle: { flex: 1, minWidth: 0, color: theme.text, fontSize: mobileScale(14), fontWeight: '700' },
   transcript: { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: mobileScale(12), paddingTop: mobileScale(14), paddingBottom: mobileScale(8) },
   message: {
-    maxWidth: '88%',
     marginBottom: mobileScale(12),
     paddingHorizontal: mobileScale(12),
     paddingTop: mobileScale(9),
@@ -458,8 +464,8 @@ const styles = themedStyles(() => StyleSheet.create({
     borderWidth: 1,
     borderRadius: mobileScale(7),
   },
-  messageUser: { alignSelf: 'flex-end', borderColor: theme.accentMuted, backgroundColor: theme.userMessage },
-  messageAssistant: { alignSelf: 'flex-start', borderColor: theme.border, backgroundColor: theme.assistantMessage },
+  messageUser: { alignSelf: 'flex-end', maxWidth: '85%', borderColor: theme.accentMuted, backgroundColor: theme.userMessage },
+  messageAssistant: { alignSelf: 'stretch', width: '100%', maxWidth: '100%', borderColor: theme.border, backgroundColor: theme.assistantMessage },
   messageHeader: { marginBottom: mobileScale(7), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: mobileScale(18) },
   messageAuthor: { color: theme.textDim, fontSize: mobileScale(10), fontWeight: '700', letterSpacing: 0.8 },
   messageTime: { color: theme.textDim, fontSize: mobileScale(10), fontVariant: ['tabular-nums'] },

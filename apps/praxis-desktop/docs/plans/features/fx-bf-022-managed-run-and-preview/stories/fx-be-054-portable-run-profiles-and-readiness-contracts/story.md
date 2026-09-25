@@ -4,9 +4,9 @@
 type: Story
 id: FX-BE-054
 title: "Portable run profiles and readiness contracts"
-status: In Progress
+status: Done
 feature: FX-BF-022
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BF-021]
 ---
 
@@ -55,3 +55,19 @@ No automatic production deployment, broad credential grant, full source editor o
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected from In Progress → Done. Verified in the current tree:
+
+- Run profile contracts with readiness probes:
+  `packages/core/src/projects/runProfile.ts` (`readinessProbe`, validation of
+  probe kinds), plus `runProfileDiscovery.ts`, `runProfileStore.ts` (both with
+  tests).
+- Scoped preview access: `packages/core/src/projects/previewAccess.ts`
+  (with `previewAccess.test.ts`).
+- Service lifecycle management: `packages/core/src/projects/runServiceManager.ts`
+  (+ test), `runReconciliation.ts`.
+
+Validation commands: `npm run check-types`, `npm run test:core`
+(not rerun as part of this review).

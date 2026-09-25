@@ -230,8 +230,13 @@ test('composer selects a board and open ticket, names the session, and streams t
   );
   expect(persistedTranscriptOrder).toEqual(['user', 'assistant', 'user', 'assistant']);
 
-  // Delete removes the persisted conversation and leaves the Sessions empty state.
+  // Delete asks first, in an app-styled dialog with a third "Archive instead" escape hatch,
+  // then removes the persisted conversation and leaves the Sessions empty state.
   await persistedRow.locator('[data-testid="session-delete-btn"]').click();
+  const deleteDialog = win.getByRole('dialog');
+  await expect(deleteDialog).toContainText('Delete this session?');
+  await expect(deleteDialog.getByTestId('app-dialog-tertiary')).toHaveText('Archive instead');
+  await deleteDialog.getByRole('button', { name: 'Delete session' }).click();
   await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(0);
   await expect(win.locator('[data-testid="sessions-empty"]')).toBeVisible();
 });

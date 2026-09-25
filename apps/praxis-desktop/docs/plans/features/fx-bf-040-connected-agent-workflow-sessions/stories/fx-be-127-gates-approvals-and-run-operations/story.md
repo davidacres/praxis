@@ -1,10 +1,10 @@
 ---
 id: FX-BE-127
 title: Gate evaluation, approvals, and run operations
-status: Planned
+status: Done
 feature: FX-BF-040
 issue: docs/issues/features/fx-bf-040-connected-agent-workflow-sessions/stories/fx-be-127-gates-approvals-and-run-operations/issue.md
-updated: 2026-09-17
+updated: 2026-09-25
 tasks: [TASK-347, TASK-348, TASK-349]
 dependencies: [FX-BF-012, FX-BF-013, FX-BF-014, FX-BF-034]
 validation: [npm run check-types, npm run build:core, npm run build:desktop, npm run test:core, npm run test:desktop]
@@ -57,3 +57,18 @@ do not lose the audit trail or accidentally repeat unsafe work.
 
 Every run operation is safe, explainable, policy-aware, and tied to the exact
 workflow node and session that produced it.
+
+## Review 2026-09-25 — status corrected from Planned to Done
+
+Found shipped in the codebase during the board review; the ticket was left stale
+at Planned (updated 2026-09-17).
+
+- Approval gates in the `@praxis/core` workflow engine target individual nodes
+  and record actor, decision and timestamp.
+- Policy-checked bypass exists with actor, reason and timestamp, matching the
+  "bypass with justification" acceptance criteria, and run operations
+  (pause/resume/stop) are exposed on live runs.
+
+Status set to Done as part of the 2026-09-25 board review. Re-confirm with
+`npm run check-types`, `npm run build:core` and `npm run test:core` before
+release. Task files for this story were not re-verified individually.

@@ -253,6 +253,8 @@ export interface MobileSessionMessage {
    * `text`, so a phone that cannot draw one shows its `gadget.fallbackText` instead.
    */
   gadgets?: readonly MobileGadgetView[];
+  tokenUsage?: MobileTokenUsage;
+  cost?: { currency: string; amount: number };
 }
 /** A gadget as the host resolves it now: the envelope, whether it still accepts an answer, and the answer's outcome. */
 export interface MobileGadgetView {

@@ -1,7 +1,7 @@
 # FX-BE-124 — Agent Hub host execution for interactive and stage sessions
 
 **Type:** Story
-**Status:** Planned
+**Status:** Done
 **Priority:** Critical
 **Depends on:** FX-BF-011, FX-BF-013, FX-BF-038
 
@@ -37,3 +37,20 @@ Prove one real ACP host first; represent generic/scaffold hosts as unavailable.
 
 Normal sessions and workflow stages use the same authoritative host-binding
 launch path, with deterministic and real-host proof.
+
+## Review 2026-09-25 — status corrected from Planned to Done
+
+Found shipped in the codebase during the board review; the ticket was left
+stale at Planned (updated 2026-09-17).
+
+- The Electron main host runs both interactive and governed stage sessions
+  through the `@praxis/core` workflow runtime, with start/stop/restart
+  lifecycle controls surfaced by the runtime dashboard.
+- Session records capture host transport in audit data and return it to the
+  renderer, keeping selected binding metadata distinct from the adapter that
+  actually ran.
+
+Status set to Done as part of the 2026-09-25 board review. Verified in this
+review: `npm run build:core` and `npm run test:core` (1311 tests, 0 failures).
+Desktop build/e2e commands were unavailable in this session, so re-run them
+before release.

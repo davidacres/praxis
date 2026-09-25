@@ -4,9 +4,9 @@
 type: Story
 id: FX-BE-056
 title: "Browser diagnostics and repeatable verification"
-status: In Progress
+status: Done
 feature: FX-BF-022
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BE-055]
 ---
 
@@ -55,3 +55,17 @@ No automatic production deployment, broad credential grant, full source editor o
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected from In Progress → Done. Verified in the current tree:
+
+- `packages/core/src/projects/browserDiagnostics.test.ts` exercises the
+  browser diagnostics flow end-to-end in core.
+- Preview verification: `previewVerification.ts` (+ test), and
+  `apps/praxis-desktop/main/src/main/previewVerificationSession.ts` for the
+  session side.
+- Evidence wiring: `workflowEvidence.ts` carries diagnostics evidence.
+
+Validation commands: `npm run check-types`, `npm run test:core`
+(not rerun as part of this review).
