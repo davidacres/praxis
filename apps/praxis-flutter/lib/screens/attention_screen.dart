@@ -7,6 +7,7 @@ import '../app/theme.dart';
 import '../core/attention.dart';
 import '../ui/approval_panel.dart';
 import '../ui/kit.dart';
+import '../ui/permission_card.dart';
 
 /// What needs the person: approvals, failed steps and agent permissions.
 /// Port of `screens/AttentionScreen.tsx`.
@@ -51,6 +52,9 @@ class _AttentionScreenState extends State<AttentionScreen> {
               for (final item in items)
                 Builder(
                   builder: (context) {
+                    if (item.kind == 'permission') {
+                      return PermissionCard(key: ValueKey(item.id), item: item, subject: attentionSubject(item, work, runNames));
+                    }
                     final run = item.runId != null ? store.workflowRuns.where((candidate) => candidate.runId == item.runId).firstOrNull : null;
                     final stage = run != null && item.kind == 'failure'
                         ? run.stages.where((candidate) => item.id.endsWith(':${candidate.nodeId}')).firstOrNull
@@ -67,11 +71,8 @@ class _AttentionScreenState extends State<AttentionScreen> {
                         Body(
                           item.kind == 'approval'
                               ? run?.explanation ?? 'A run is waiting for your approval.'
-                              : item.kind == 'permission'
-                              ? item.summary ?? 'The agent is asking permission to act.'
                               : stage?.lastError ?? 'A stage failed and can be retried.',
                         ),
-                        if (item.kind == 'permission' && item.detail != null) Body(item.detail!, dim: true),
                         if (item.kind == 'approval' && item.runId != null) ...[
                           ApprovalPanel(runId: item.runId!, run: run),
                           if (store.runsSupported && run != null) PraxisButton(label: 'Open run', ghost: true, onPressed: () => store.openRun(item.runId)),
@@ -85,20 +86,6 @@ class _AttentionScreenState extends State<AttentionScreen> {
                                 PraxisButton(label: 'Open run', ghost: true, expand: false, onPressed: () => store.openRun(item.runId)),
                               if (stage != null && store.canCommand('workflowRuns.retryStage'))
                                 PraxisButton(label: 'Retry step', expand: false, onPressed: () => _act(store.retryStage(item.runId!, stage.nodeId))),
-                            ],
-                          ),
-                        if (item.kind == 'permission' && item.requestId != null)
-                          Wrap(
-                            spacing: t.s(8),
-                            runSpacing: t.s(8),
-                            children: [
-                              PraxisButton(
-                                label: 'Deny',
-                                ghost: true,
-                                expand: false,
-                                onPressed: () => _act(store.respondToPermission(item.requestId!, 'deny')),
-                              ),
-                              PraxisButton(label: 'Allow once', expand: false, onPressed: () => _act(store.respondToPermission(item.requestId!, 'allow'))),
                             ],
                           ),
                       ],
