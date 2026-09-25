@@ -1223,6 +1223,55 @@ async function parsePlanFolderRecursively(
   }
   features.sort((left, right) => left.featureId - right.featureId || left.dirName.localeCompare(right.dirName));
 
+  // Identify parent items (non-feature items that are top-level in their directory
+  // like standalone tasks, bugs, ideas). These can have their own children.
+  const parentItemsByDirectory = new Map<string, { file: MarkdownPlanFile; featureId: number }>();
+  const usedParentIds = new Set(usedFeatureIds);
+  let autoParentId = 8000; // Reserve 8000+ for non-feature parents
+
+  const nonFeatureFiles = files.filter(file => !featureFiles.includes(file));
+
+  // Group files by directory to identify parent items
+  const filesByDirectory = new Map<string, MarkdownPlanFile[]>();
+  for (const file of nonFeatureFiles) {
+    const directory = path.dirname(file.filePath);
+    if (!filesByDirectory.has(directory)) {
+      filesByDirectory.set(directory, []);
+    }
+    filesByDirectory.get(directory)!.push(file);
+  }
+
+  // First pass: identify parent items (top-level task, bug files that can have children)
+  for (const [directory, filesInDir] of filesByDirectory.entries()) {
+    // Skip if directory is under a feature
+    const isUnderFeature = Array.from(featureDirectories.keys()).some(
+      fd => directory === fd || directory.startsWith(fd + path.sep)
+    );
+    if (isUnderFeature) continue;
+
+    // Look for a primary parent file in this directory
+    for (const file of filesInDir) {
+      const issueType = normalizeChildIssueType(extractTypeRaw(file.content));
+      if (!issueType || issueType === 'Story') continue; // Skip non-items and stories
+
+      // Check if this is a parent-like file (named as a top-level item)
+      const isParentLike =
+        file.name.toLowerCase() === `${issueType.toLowerCase()}.md` ||
+        /^(task|bug|idea)-\d+-\d+(?:-|$)/.test(file.name.toLowerCase());
+
+      if (isParentLike && !parentItemsByDirectory.has(directory)) {
+        // This is a parent item
+        let parentId = planningNumber(extractFrontMatterValue(file.content, 'id'))
+          || planningNumber(directory)
+          || autoParentId++;
+        while (usedParentIds.has(parentId)) parentId = autoParentId++;
+        usedParentIds.add(parentId);
+        parentItemsByDirectory.set(directory, { file, featureId: parentId });
+        break; // Only one parent per directory
+      }
+    }
+  }
+
   const featureIdByDirectory = new Map(featureDirectories);
   const childFiles = files.filter(file => !featureFiles.includes(file));
   let autoSequence = 9000;
@@ -1231,7 +1280,37 @@ async function parsePlanFolderRecursively(
     const parsedName = parseChildFileName(file.name);
     const issueType = normalizeChildIssueType(extractTypeRaw(file.content)) || parsedName?.issueType;
     if (!issueType) continue;
-    const featureId = planningFeatureId(file, featureIdByDirectory);
+
+    // Skip files that are parent items themselves
+    if (parentItemsByDirectory.has(path.dirname(file.filePath)) &&
+        parentItemsByDirectory.get(path.dirname(file.filePath))?.file === file) {
+      continue;
+    }
+
+    // Determine if this is a child of a feature or a parent item
+    let featureId: number | undefined;
+    let parentFile: MarkdownPlanFile | undefined;
+    let parentIssueType: 'Feature' | 'Task' | 'Bug' | 'Idea' | undefined;
+    let parentFilePath: string | undefined;
+
+    // First check if it's in a parent item's directory
+    const directory = path.dirname(file.filePath);
+    for (const [parentDir, parentInfo] of parentItemsByDirectory.entries()) {
+      if (directory === parentDir || directory.startsWith(parentDir + path.sep)) {
+        featureId = parentInfo.featureId;
+        parentFile = parentInfo.file;
+        parentIssueType = normalizeChildIssueType(extractTypeRaw(parentInfo.file.content));
+        parentFilePath = parentInfo.file.filePath;
+        break;
+      }
+    }
+
+    // If not in a parent directory, check for feature parent or explicit feature reference
+    if (featureId === undefined) {
+      featureId = planningFeatureId(file, featureIdByDirectory);
+      // parentIssueType and parentFilePath stay undefined for feature parents
+    }
+
     const sequence = planningNumber(extractFrontMatterValue(file.content, 'id')) ?? parsedName?.sequence ?? autoSequence++;
     progress(`Reading ${issueType.toLowerCase()}: ${file.relativePath}`);
     childItems.push({
@@ -1253,7 +1332,9 @@ async function parsePlanFolderRecursively(
       severity: extractSeverityRaw(file.content),
       reportedBy: extractReportedByRaw(file.content),
       model: extractModelRaw(file.content),
-      complexity: extractComplexityRaw(file.content)
+      complexity: extractComplexityRaw(file.content),
+      parentIssueType,
+      parentFilePath
     });
   }
   childItems.sort((left, right) => (left.featureId ?? 0) - (right.featureId ?? 0) || left.issueType.localeCompare(right.issueType) || left.sequence - right.sequence || left.relativePath.localeCompare(right.relativePath));
