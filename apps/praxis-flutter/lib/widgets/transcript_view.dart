@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app/store/types.dart';
+import './markdown_message.dart';
 
 class TranscriptView extends StatefulWidget {
   final List<TranscriptMessage> messages;
@@ -88,17 +89,24 @@ class _TranscriptViewState extends State<TranscriptView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SelectableText(
-                    message.text,
-                    style: TextStyle(
-                      color: isUser
-                          ? (Theme.of(context).brightness == Brightness.dark
-                              ? Colors.black
-                              : Colors.white)
-                          : null,
-                      fontSize: 14,
+                  if (isUser)
+                    SelectableText(
+                      message.text,
+                      style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.black
+                            : Colors.white,
+                        fontSize: 14,
+                      ),
+                    )
+                  else
+                    MarkdownMessage(
+                      text: message.text,
+                      baseStyle: TextStyle(
+                        fontSize: 14,
+                        color: Theme.of(context).textTheme.bodyMedium?.color,
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 4),
                   Text(
                     message.timestamp,

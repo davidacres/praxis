@@ -30,6 +30,10 @@ dependencies:
   # SVG rendering for motifs
   flutter_svg: ^2.0.0
 
+  # Markdown rendering
+  flutter_markdown: ^0.6.0
+  url_launcher: ^6.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
