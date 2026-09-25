@@ -116,7 +116,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
   }
 
   Future<void> _openScanner() async {
-    final data = await Navigator.of(context).push<String>(MaterialPageRoute(fullscreenDialog: true, builder: (_) => const _Scanner()));
+    final data = await Navigator.of(context).push<String>(MaterialPageRoute(fullscreenDialog: true, builder: (_) => const PairingScanner()));
     if (data != null && mounted) {
       _invitationText.text = data;
       _importConnectionDetails(data);
@@ -483,13 +483,13 @@ class _Field extends StatelessWidget {
   }
 }
 
-class _Scanner extends StatefulWidget {
-  const _Scanner();
+class PairingScanner extends StatefulWidget {
+  const PairingScanner({super.key});
   @override
-  State<_Scanner> createState() => _ScannerState();
+  State<PairingScanner> createState() => _ScannerState();
 }
 
-class _ScannerState extends State<_Scanner> {
+class _ScannerState extends State<PairingScanner> {
   // One controller for the page's life: building a new one on every rebuild restarts
   // the camera session, so the preview never settles and detections are dropped.
   final MobileScannerController _controller = MobileScannerController(formats: const [BarcodeFormat.qrCode], detectionSpeed: DetectionSpeed.noDuplicates);
@@ -506,7 +506,10 @@ class _ScannerState extends State<_Scanner> {
     final p = context.p;
     return Scaffold(
       backgroundColor: p.camera,
+      // The Scaffold gives its body loose constraints, so an unsized Stack shrinks to the
+      // 250pt guide box and sits top-left with the preview inside it. Fill the page.
       body: Stack(
+        fit: StackFit.expand,
         alignment: Alignment.center,
         children: [
           Positioned.fill(
@@ -532,12 +535,15 @@ class _ScannerState extends State<_Scanner> {
               },
             ),
           ),
-          Container(
-            width: 250,
-            height: 250,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: p.accent, width: 2),
+          Center(
+            child: Container(
+              key: const ValueKey('scan-guide'),
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: p.accent, width: 2),
+              ),
             ),
           ),
           Positioned(
