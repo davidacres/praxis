@@ -6,7 +6,22 @@ The root file still holds the rules that apply to every change; read it too.
 ## Real iPhone deployment guardrail
 
 A phone build must be **Release** (Debug expects Metro and looks like a blank app
-on a phone). The full procedure and checks live in the `mobile-device-testing`
+on a phone). Deploy in one step using:
+```bash
+./scripts/deploy-iphone.sh
+# or:
+npm run mobile:deploy
+```
+The script runs with zero parameters: it auto-detects the connected device, builds
+core packages, compiles in Release, verifies `main.jsbundle`, installs, and launches.
+
+**Native module safety:** any optional or conditionally-linked native module
+(such as `expo-local-authentication`) must never be eagerly required at module
+evaluation time. Load native modules safely via dynamic getters with fallbacks
+(e.g., `app/confirmIdentity.ts`), or unlinked native pods will cause an unhandled
+runtime exception on boot and render a blank screen on the physical device.
+
+The full procedure and checks live in the `mobile-device-testing`
 skill (`addons/skills/mobile-device-testing/`) and
 `apps/praxis-mobile/docs/ios-phone-deployment.md`; follow those.
 

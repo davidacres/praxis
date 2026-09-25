@@ -1,9 +1,22 @@
 # Physical iPhone: build, install, verify
 
-Run from the Praxis repository root unless stated. Get `<udid>` and
-`<CoreDevice id>` from `bash preflight.sh`.
+Run from the Praxis repository root unless stated.
 
-## Build Release
+## One-Command Automated Deployment (Recommended)
+
+Deploy to the connected physical iPhone with a single command (no parameters required):
+
+```sh
+./scripts/deploy-iphone.sh
+# or via npm:
+npm run mobile:deploy
+```
+
+This auto-detects the connected device, builds the core packages, compiles the Release build, verifies the Hermes bundle, installs and launches the app.
+
+## Manual Build Release
+
+Get `<udid>` and `<CoreDevice id>` from `bash preflight.sh`.
 
 ```sh
 npm run build:core && npm run build:mobile-protocol   # shared packages the app bundles
