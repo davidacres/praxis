@@ -1,5 +1,19 @@
-import * as LocalAuthentication from 'expo-local-authentication';
 import { Alert } from 'react-native';
+
+type LocalAuthModule = typeof import('expo-local-authentication');
+
+function getLocalAuth(): LocalAuthModule | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('expo-local-authentication') as LocalAuthModule;
+    if (mod && typeof mod.getEnrolledLevelAsync === 'function') {
+      return mod;
+    }
+  } catch {
+    // Native module not linked in this binary
+  }
+  return null;
+}
 
 /**
  * How long one successful check covers further approvals. Long enough to work
@@ -31,15 +45,17 @@ function askPlainConfirmation(reason: string): Promise<boolean> {
  */
 export async function confirmIdentity(reason: string): Promise<boolean> {
   if (Date.now() < confirmedUntil) return true;
+  const auth = getLocalAuth();
+  if (!auth) return askPlainConfirmation(reason);
   let secured = false;
   try {
-    secured = (await LocalAuthentication.getEnrolledLevelAsync()) !== LocalAuthentication.SecurityLevel.NONE;
+    secured = (await auth.getEnrolledLevelAsync()) !== auth.SecurityLevel.NONE;
   } catch {
     secured = false;
   }
   if (!secured) return askPlainConfirmation(reason);
   try {
-    const result = await LocalAuthentication.authenticateAsync({
+    const result = await auth.authenticateAsync({
       promptMessage: reason,
       cancelLabel: 'Cancel',
       disableDeviceFallback: false,
