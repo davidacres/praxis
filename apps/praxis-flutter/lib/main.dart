@@ -9,6 +9,7 @@ import 'screens/work_screen.dart';
 import 'screens/attention_screen.dart';
 import 'screens/activity_screen.dart';
 import 'screens/run_screen.dart';
+import 'widgets/app_sidebar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -108,81 +109,10 @@ class _PraxisShellState extends State<PraxisShell> {
           body: Stack(
             children: [
               body,
-              if (_sidebarOpen)
-                GestureDetector(
-                  onTap: () => setState(() => _sidebarOpen = false),
-                  child: Container(
-                    color: Colors.black26,
-                  ),
-                ),
-              if (_sidebarOpen)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 300,
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Menu',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: () =>
-                                    setState(() => _sidebarOpen = false),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: ListView(
-                            children: [
-                              ListTile(
-                                title: const Text('Work'),
-                                onTap: () {
-                                  store.setRoute('work');
-                                  setState(() => _sidebarOpen = false);
-                                },
-                              ),
-                              ListTile(
-                                title: const Text('Attention'),
-                                onTap: () {
-                                  store.setRoute('attention');
-                                  setState(() => _sidebarOpen = false);
-                                },
-                              ),
-                              ListTile(
-                                title: const Text('Activity'),
-                                onTap: () {
-                                  store.setRoute('activity');
-                                  setState(() => _sidebarOpen = false);
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: ElevatedButton(
-                            onPressed: () => store.disconnect(),
-                            child: const Text('Disconnect'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              AppSidebar(
+                visible: _sidebarOpen,
+                onClose: () => setState(() => _sidebarOpen = false),
+              ),
             ],
           ),
         );
