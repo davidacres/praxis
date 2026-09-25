@@ -33,7 +33,7 @@ by screenshot with a fresh Release build of the Expo app on the same data:
 | Sidebar (runs, sessions, badges, settings) | matches Expo — label widths measured pixel-equal |
 | Chat with full markdown reply | matches |
 | Streaming session, meta chips, usage panel | matches |
-| Gadgets (choice, confirmation, form, table, chart, progress, diff, artifact, handoff, conflict, approval) | all render; answering one is not yet confirmed |
+| Gadgets (choice, confirmation, form, table, chart, progress, diff, artifact, handoff, conflict, approval) | all render; the choice answer reached the desktop (gadget completed, session continued) |
 | Run awaiting approval, details strip, stage bar | matches |
 | Workflow steps sheet | matches |
 | Attention (permission, approval, failure) | matches |
@@ -42,6 +42,12 @@ by screenshot with a fresh Release build of the Expo app on the same data:
 | Provider picker, model picker, session options sheet | match |
 | New chat → first message creates a desktop session and streams the reply | works |
 | Desktop theme + hexagon motif (masked corner lattice) | matches |
+| Approve a run from Attention (Face ID prompt, enrolled simulator match) | run moved to succeeded on the desktop |
+| Allow an agent permission; retry a failed stage | both applied on the desktop; Attention emptied live |
+| Changes view: file list and inline diff | works |
+| Live theme switch (desktop → Praxis Dark) | phone follows immediately |
+| Desktop stops → RECONNECTING, composer blocked with reason; desktop back → LIVE | works |
+| Display size Large | scales text and controls |
 
 Text metrics were calibrated against CoreText: Flutter omits SF's size-specific
 tracking and inherits Material's type scale; `ts()` in `lib/ui/kit.dart` applies
@@ -50,16 +56,10 @@ the Expo app to the pixel.
 
 ## Not yet verified
 
-- Answering gadgets (a first attempt on the simulator could not be confirmed).
-- Approve / reject a run, allow a permission, and answering a mutating gadget —
-  these ask for Face ID / passcode (`local_auth`); not yet exercised on the
-  simulator.
-- Retry a failed stage, start a workflow, handover to another provider,
-  cancel a streaming turn.
-- Changes view (file list + diff) and Progress view.
-- Reconnect after the desktop drops, `host.appearance` live theme switch,
-  display size "Large", QR scanning (needs a camera — simulator has none),
-  LAN discovery.
+- Reject a run with a reason, answering a mutating gadget.
+- Start a workflow, handover to another provider, cancel a streaming turn.
+- Progress view.
+- QR scanning (needs a camera — the simulator has none), LAN discovery.
 - Pairing with the real desktop app (only the stage host, which runs the
   desktop's own `MobileLanServer` and host services, has been used).
 - Android — not built.
