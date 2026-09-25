@@ -8,7 +8,7 @@ status: In Progress
 slug: pipeline-managed-deployment
 stories: [FX-BE-061, FX-BE-062, FX-BE-063]
 issues: docs/issues/features/fx-bf-024-pipeline-managed-deployment/feature-issues.md
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BF-023]
 ---
 
@@ -60,3 +60,18 @@ Review the complete feature journey and documented support matrix. Follow AGENTS
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected to Done during the board-state review: all child stories
+now show Done, and the underlying delivery is present in the tree (see the
+per-story review comments for file-level evidence). Validation commands from
+the stories (`npm run check-types`, `npm run test:core`) were not rerun as
+part of this review.
+
+## Review correction 2026-09-25
+
+Feature remains In Progress: FX-BE-062 (GitLab CI deployment executor) and
+FX-BE-063 (pipeline setup and recovery experience) are not implemented in
+`packages/core/src/deployments/` (only `githubActions*` executors exist); the
+`gitlab-ci` profile kind is defined but has no executor.

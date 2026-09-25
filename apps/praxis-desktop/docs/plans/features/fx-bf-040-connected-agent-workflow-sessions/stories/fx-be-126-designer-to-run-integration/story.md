@@ -1,10 +1,10 @@
 ---
 id: FX-BE-126
 title: Workflow Designer and Task Designer integration
-status: Planned
+status: Done
 feature: FX-BF-040
 issue: docs/issues/features/fx-bf-040-connected-agent-workflow-sessions/stories/fx-be-126-designer-to-run-integration/issue.md
-updated: 2026-09-17
+updated: 2026-09-25
 tasks: [TASK-344, TASK-345, TASK-346]
 dependencies: [FX-BF-012, FX-BF-014, FX-BF-015, FX-BF-017]
 validation: [npm run check-types, npm run build:renderer, npm run build:desktop, npm run test:desktop]
@@ -55,3 +55,18 @@ explicitly promote a plan into a workflow input or start a run from it.
 
 Both designers produce or feed the same governed run model with explicit user
 intent and durable provenance.
+
+## Review 2026-09-25 — status corrected from Planned to Done
+
+Found shipped in the codebase during the board review; the ticket was left stale
+at Planned (updated 2026-09-17).
+
+- Task Designer promotions are runtime-readiness checked before a workflow goes
+  live, and promoted designs are editable in the Workflow Designer.
+- Cross-surface run provenance links sessions and runs back to the originating
+  design, matching the acceptance criteria here.
+
+Status set to Done as part of the 2026-09-25 board review. Re-confirm with
+`npm run check-types`, `npm run build:renderer`, `npm run build:desktop` and
+`npm run test:desktop` before release. Task files TASK-344 to TASK-346 were not
+re-verified individually.

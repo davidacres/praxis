@@ -1,14 +1,15 @@
 ---
-**Status:** 📋 To Do
+**Status:** ✅ Complete
 **Created:** 2026-09-17T21:31:56.564Z
 **Type:** Feature
 **Priority:** Medium
+type: Feature
 id: FX-BF-040
 slug: connected-agent-workflow-sessions
 title: Connected agent workflow sessions and governed delivery
-status: Proposed
+status: Done
 owner: Electron desktop app
-updated: 2026-09-17
+updated: 2026-09-25
 issues: docs/issues/features/fx-bf-040-connected-agent-workflow-sessions/feature-issues.md
 stories: [FX-BE-123, FX-BE-124, FX-BE-125, FX-BE-126, FX-BE-127, FX-BE-128]
 validation: [npm run check-types, npm run build:core, npm run build:renderer, npm run build:desktop, npm run test:core, npm run test:desktop]
@@ -128,6 +129,19 @@ legacy sessions and prompt-only packs still open and behave as before.
 5. Harden gate, approval, retry, and recovery operations.
 6. Migrate, instrument, and prove the complete path with deterministic and
    real-host fixtures.
+
+## Review 2026-09-25 — status corrected from Proposed to Done
+
+All six stories were found shipped in the codebase during the board review;
+the feature and its story tickets were left stale at Planned (updated
+2026-09-17). Governed workflow selection, run snapshots, host-adapter
+launches, pack and skill activation, designer promotion, node-specific
+approvals with policy-checked bypass, migration, and diagnostics are present
+and exercised by the core test suite.
+
+Verified in this review: `npm run build:core` and `npm run test:core`
+(1311 tests, 0 failures). Desktop build/e2e commands were unavailable in this
+session, so re-run them before release.
 
 ## Description
 

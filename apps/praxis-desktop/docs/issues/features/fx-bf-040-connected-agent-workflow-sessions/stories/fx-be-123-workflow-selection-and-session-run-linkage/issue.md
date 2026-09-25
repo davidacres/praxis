@@ -1,7 +1,7 @@
 # FX-BE-123 — Workflow selection and session/run linkage
 
 **Type:** Story
-**Status:** Planned
+**Status:** Done
 **Priority:** Critical
 **Depends on:** FX-BF-012, FX-BF-013, FX-BF-014, FX-BF-038
 
@@ -36,3 +36,21 @@ The session is the entry/control surface; the orchestrator owns graph execution.
 
 A user can start a governed run from a session and navigate the durable
 relationship in both session and run surfaces.
+
+## Review 2026-09-25 — status corrected from Planned to Done
+
+Found shipped in the codebase during the board review; the ticket was left
+stale at Planned (updated 2026-09-17).
+
+- The New Session composer offers governed workflow selection with readiness
+  feedback before a run starts, and invalid definitions, bindings, skills,
+  trust, folders, or policies surface as blocking reasons instead of silent
+  failures.
+- Starting a workflow creates a durable `WorkflowRun` snapshot linked to the
+  originating session, with stage sessions attributed to run and node; the
+  Run Monitor and session surfaces reopen the same relationship.
+
+Status set to Done as part of the 2026-09-25 board review. Verified in this
+review: `npm run build:core` and `npm run test:core` (1311 tests, 0 failures).
+Desktop build/e2e commands were unavailable in this session, so re-run them
+before release.

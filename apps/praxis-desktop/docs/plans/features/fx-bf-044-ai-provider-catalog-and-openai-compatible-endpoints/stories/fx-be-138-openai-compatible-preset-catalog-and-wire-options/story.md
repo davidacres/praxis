@@ -83,3 +83,14 @@ any API provider so no caller hand-assembles them. Differences: the IPC is
 Preset URLs are taken from each vendor's OpenAI-compatibility documentation and were not
 exercised against the live services from this environment. Tests: `wire.test.ts`,
 `customProviders.test.ts`.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

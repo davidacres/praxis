@@ -4,9 +4,9 @@
 type: Story
 id: FX-BE-052
 title: "Bounded diagnose and verify workflow"
-status: In Progress
+status: Done
 feature: FX-BF-021
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BE-051]
 ---
 
@@ -55,3 +55,19 @@ No automatic production deployment, broad credential grant, full source editor o
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected from In Progress → Done. Verified in the current tree:
+
+- `buildDiagnosisBrief` implements the closed diagnosis handoff from retained
+  evidence: `packages/core/src/ai/diagnosisBrief.ts` (header documents
+  FX-BE-052 / TASK-135 explicitly).
+- Reproduction commands come exclusively from `WorkflowCheckNode` (trusted
+  workflow definitions), never from untrusted evidence content — enforced by
+  the `DiagnosisBrief` type shape.
+- Desktop diagnosis wiring: `apps/praxis-desktop/main/src/main/previewVerificationSession.ts`
+  and `runControlIpc.ts`.
+
+Validation commands: `npm run check-types`, `npm run test:core`
+(not rerun as part of this review).

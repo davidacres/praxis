@@ -6,9 +6,9 @@
 type: Story
 id: FX-BE-042
 title: GitHub Packages add-on marketplace
-status: In Progress
+status: Done
 feature: FX-BF-018
-updated: 2026-09-06
+updated: 2026-09-25
 commits: []
 dependencies: []
 validation: [npm run check-types, npm run test:core, npm run test:desktop, npm run test:desktop:themes]
@@ -155,3 +155,15 @@ whose tarball places a kind-specific payload under `package/addon/`:
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected from In Progress → Done. Verified in the current tree:
+
+- Core marketplace service: `packages/core/src/marketplace/marketplaceService.ts`,
+  `registryClient.ts`, `catalogTypes.ts`.
+- Settings-level config surface: `apps/praxis-desktop/renderer/src/settings/marketplaceAddons.ts`
+  (browse/install/remove per add-on kind with `marketplace:changed` sync).
+
+Validation commands: `npm run check-types`, `npm run test:core`
+(not rerun as part of this review).

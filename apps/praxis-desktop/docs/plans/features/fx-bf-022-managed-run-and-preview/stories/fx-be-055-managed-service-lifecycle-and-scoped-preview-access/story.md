@@ -4,9 +4,9 @@
 type: Story
 id: FX-BE-055
 title: "Managed service lifecycle and scoped preview access"
-status: In Progress
+status: Done
 feature: FX-BF-022
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BE-054]
 ---
 
@@ -55,3 +55,17 @@ No automatic production deployment, broad credential grant, full source editor o
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected from In Progress → Done. Verified in the current tree:
+
+- `runServiceManager.ts` implements managed service lifecycle (start/stop/
+  status) over run profiles; `runReconciliation.ts` reconciles drifted state.
+- Scoped preview access: `packages/core/src/projects/previewAccess.ts`
+  (+ `previewAccess.test.ts`).
+- Desktop wiring: `apps/praxis-desktop/main/src/main/previewVerificationSession.ts`
+  (verification sessions against preview).
+
+Validation commands: `npm run check-types`, `npm run test:core`
+(not rerun as part of this review).

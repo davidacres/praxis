@@ -65,3 +65,14 @@ not refused for a missing key. Corrections to the scope above:
   tool calling is refused there too — only one-shot recommendations can use it.
 - Session records do **not** capture a `providerLabel`; a session on a removed endpoint shows
   its id, and resuming it fails with "The AI endpoint … was removed. Choose another provider".
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -4,9 +4,9 @@
 type: Story
 id: FX-BE-059
 title: "Script-based direct deployment executor"
-status: In Progress
+status: Done
 feature: FX-BF-023
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BE-058]
 ---
 
@@ -55,3 +55,9 @@ No automatic production deployment, broad credential grant, full source editor o
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected from In Progress → Done. Evidence: `packages/core/src/deployments/directDeploymentOrchestrator.ts`, `directProcessExecutor.ts`, `directoryTarget.ts` (+ journey tests) — script-based direct deployment across local-process and directory targets.
+
+Validation commands: `npm run check-types`, `npm run test:core` (not rerun as part of this review).

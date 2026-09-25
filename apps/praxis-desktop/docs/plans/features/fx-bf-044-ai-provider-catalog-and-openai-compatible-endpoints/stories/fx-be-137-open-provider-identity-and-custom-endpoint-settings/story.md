@@ -94,3 +94,14 @@ settings file round-trips unchanged. Core reads the live list through
 moment its settings write returns. Removing an endpoint in `mergeAppSettings` also clears
 `activeProvider`, `recommendationProvider`, `modelTiers` and `providers` entries that named it.
 Tests: `appSettings.test.ts`, `customProviders.test.ts`.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -4,9 +4,9 @@
 type: Story
 id: FX-BE-058
 title: "Durable deployment state and workflow operations"
-status: In Progress
+status: Done
 feature: FX-BF-023
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BE-057]
 ---
 
@@ -55,3 +55,9 @@ No automatic production deployment, broad credential grant, full source editor o
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected from In Progress → Done. Evidence: `packages/core/src/projects/deploymentRunStore.ts`, `deploymentRunState.ts` (+ tests) — durable run records with issue/workflow provenance and typed state transitions.
+
+Validation commands: `npm run check-types`, `npm run test:core` (not rerun as part of this review).

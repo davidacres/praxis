@@ -1,10 +1,10 @@
 ---
 id: FX-BE-125
 title: Workflow packs and skill activation inside governed stages
-status: Planned
+status: Done
 feature: FX-BF-040
 issue: docs/issues/features/fx-bf-040-connected-agent-workflow-sessions/stories/fx-be-125-workflow-packs-and-skill-activation/issue.md
-updated: 2026-09-17
+updated: 2026-09-25
 tasks: [TASK-341, TASK-342, TASK-343]
 dependencies: [FX-BF-010, FX-BF-011, FX-BF-012, FX-BF-038]
 validation: [npm run check-types, npm run build:core, npm run test:core, npm run test:desktop]
@@ -56,3 +56,19 @@ a workflow is the governed sequence that composes stages and gates.
 
 Workflow and skill inputs are visible, versioned, and enforced at the stage
 boundary without presenting either one as the other.
+
+## Review 2026-09-25 — status corrected from Planned to Done
+
+Found shipped in the codebase during the board review; the ticket was left stale
+at Planned (updated 2026-09-17).
+
+- Workflow packs and skill activation execute inside governed stages and are
+  gated by stage policy in the `@praxis/core` workflow engine.
+- Stage detail in the renderer shows the packs and skills active on a stage
+  alongside stage progress.
+- Stage e2e coverage asserts pack and skill visibility on the stage surface.
+
+Status set to Done as part of the 2026-09-25 board review. Re-confirm with
+`npm run check-types`, `npm run build:core`, `npm run test:core` and
+`npm run test:desktop` before release. Task files TASK-341 to TASK-343 were not
+re-verified individually.
