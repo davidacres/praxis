@@ -32,6 +32,9 @@ class AppStore extends ChangeNotifier {
   // Connection status
   String? _connectionIssue;
 
+  // Additional data
+  String? _connectionError;
+
   // Getters
   String get primaryRoute => _primaryRoute;
   String? get detailTab => _detailTab;
@@ -52,6 +55,7 @@ class AppStore extends ChangeNotifier {
   MobileAppearance? get appearance => _appearance;
   int get themeVersion => _themeVersion;
   String? get connectionIssue => _connectionIssue;
+  String? get connectionError => _connectionError;
 
   // Actions
   void setRoute(String route) {
@@ -141,6 +145,32 @@ class AppStore extends ChangeNotifier {
   void startNewChat() {
     _openWorkId = null;
     _currentTranscript = [];
+    notifyListeners();
+  }
+
+  void updateHostInfo(MobileHostSummary host) {
+    _host = host;
+    _isConnected = true;
+    _connectionError = null;
+    notifyListeners();
+  }
+
+  void updateProject(MobileProjectSummary project) {
+    _project = project;
+    notifyListeners();
+  }
+
+  void addRunSnapshot(MobileRunSummary run) {
+    _workflowRuns = [..._workflowRuns, run];
+    _runsSupported = true;
+    notifyListeners();
+  }
+
+  void setConnectionError(String? error) {
+    _connectionError = error;
+    if (error != null) {
+      _isConnected = false;
+    }
     notifyListeners();
   }
 }

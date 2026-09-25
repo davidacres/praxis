@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../app/store/store_provider.dart';
 import '../app/store/types.dart';
 
 class ConnectScreen extends StatefulWidget {
-  const ConnectScreen({Key? key}) : super(key: key);
+  final Future<void> Function(MobileHostConfiguration) onConnect;
+
+  const ConnectScreen({
+    Key? key,
+    required this.onConnect,
+  }) : super(key: key);
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -25,7 +28,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
     super.dispose();
   }
 
-  Future<void> _handleConnect(BuildContext context) async {
+  Future<void> _handleConnect() async {
     final host = _hostController.text.trim();
     final port = int.tryParse(_portController.text.trim()) ?? 9876;
     final key = _keyController.text.trim();
@@ -43,14 +46,13 @@ class _ConnectScreenState extends State<ConnectScreen> {
     });
 
     try {
-      final store = context.read<AppStore>();
       final config = MobileHostConfiguration(
         hostId: host,
         address: host,
         port: port,
         hostPublicKeyHex: key,
       );
-      await store.connect(config);
+      await widget.onConnect(config);
     } catch (e) {
       setState(() {
         _connectionError = 'Connection failed: $e';
@@ -146,7 +148,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
             ],
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: _isConnecting ? null : () => _handleConnect(context),
+              onPressed: _isConnecting ? null : _handleConnect,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: _isConnecting

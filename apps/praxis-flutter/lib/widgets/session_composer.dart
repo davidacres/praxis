@@ -5,10 +5,12 @@ import '../app/store/types.dart';
 
 class SessionComposer extends StatefulWidget {
   final String workId;
+  final Future<void> Function(String)? onSendMessage;
 
   const SessionComposer({
     Key? key,
     required this.workId,
+    this.onSendMessage,
   }) : super(key: key);
 
   @override
@@ -51,7 +53,14 @@ class _SessionComposerState extends State<SessionComposer> {
       );
       store.addTranscriptMessage(message);
 
-      // TODO: Send to desktop via connection
+      // Send to desktop via connection if handler provided
+      if (widget.onSendMessage != null) {
+        await widget.onSendMessage!(text);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending message: $e')),
+      );
     } finally {
       setState(() {
         _isSending = false;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app/store/store_provider.dart';
 import '../app/store/types.dart';
+import '../app/services/mobile_client.dart';
 import '../widgets/transcript_view.dart';
 import '../widgets/session_composer.dart';
 
@@ -20,8 +21,8 @@ class WorkScreen extends StatefulWidget {
 class _WorkScreenState extends State<WorkScreen> {
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppStore>(
-      builder: (context, store, _) {
+    return Consumer2<AppStore, MobileClient>(
+      builder: (context, store, client, _) {
         final openWorkId = store.openWorkId;
         final work = openWorkId != null
             ? store.work.firstWhere(
@@ -82,6 +83,7 @@ class _WorkScreenState extends State<WorkScreen> {
             // Composer
             SessionComposer(
               workId: work.workId,
+              onSendMessage: client.sendMessage,
             ),
           ],
         );
