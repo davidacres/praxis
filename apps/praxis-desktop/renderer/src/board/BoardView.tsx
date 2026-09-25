@@ -556,6 +556,59 @@ export function BoardView({
       });
   }, [scopedFilters, connectionId, pageStatuses, hasMoreByStatus, nextStartAtByStatus]);
 
+  const loadAll = useCallback(() => {
+    const generation = generationRef.current;
+    setLoadingMore(true);
+
+    const loadAllPages = async () => {
+      let currentHasMore = { ...hasMoreByStatus };
+      let currentStartAt = { ...nextStartAtByStatus };
+      const allNewIssues: typeof issues = [];
+
+      while (Object.values(currentHasMore).some(Boolean)) {
+        const statusesWithMore = pageStatuses.filter(status => currentHasMore[status ?? ALL_STATUSES_PAGE_KEY]);
+        if (statusesWithMore.length === 0) break;
+
+        const pages = await Promise.all(
+          statusesWithMore.map(status => {
+            const key = status ?? ALL_STATUSES_PAGE_KEY;
+            return window.praxis.issue.list(
+              { ...scopedFilters, statuses: status ? [status] : scopedFilters.statuses },
+              currentStartAt[key] ?? 0,
+              COLUMN_PAGE_SIZE,
+              connectionId
+            );
+          })
+        );
+
+        statusesWithMore.forEach((status, index) => {
+          const key = status ?? ALL_STATUSES_PAGE_KEY;
+          currentHasMore[key] = pages[index].hasMore;
+          currentStartAt[key] = (currentStartAt[key] ?? 0) + pages[index].issues.length;
+          allNewIssues.push(...pages[index].issues);
+        });
+      }
+
+      if (generation !== generationRef.current) {
+        return;
+      }
+
+      setIssues(current => [...current, ...allNewIssues]);
+      setHasMoreByStatus(currentHasMore);
+      setNextStartAtByStatus(currentStartAt);
+      setHasMore(false);
+      setLoadingMore(false);
+    };
+
+    loadAllPages().catch((error: unknown) => {
+      if (generation !== generationRef.current) {
+        return;
+      }
+      setListError(error instanceof Error ? error.message : String(error));
+      setLoadingMore(false);
+    });
+  }, [scopedFilters, connectionId, pageStatuses, hasMoreByStatus, nextStartAtByStatus, issues.length]);
+
   // Preference pipeline: fetched issues → max-age → columns in the user's
   // order → hidden columns dropped → manual card order applied.
   const visibleIssues = useMemo(
@@ -1151,6 +1204,15 @@ export function BoardView({
             onClick={loadMore}
           >
             {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-testid="board-load-all"
+            disabled={loadingMore}
+            onClick={loadAll}
+          >
+            {loadingMore ? 'Loading…' : 'Load all'}
           </button>
         </div>
       )}
