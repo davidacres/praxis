@@ -62,12 +62,13 @@ class _PraxisShellState extends State<PraxisShell> {
         // Show connect screen if not connected
         if (!store.isConnected) {
           return ConnectScreen(
-            onConnect: (config) {
-              client.connect(config).then((_) {
+            onConnect: (config) async {
+              try {
+                await client.connect(config);
                 store.notifyListeners();
-              }).catchError((error) {
+              } catch (error) {
                 store.setConnectionError('Connection failed: $error');
-              });
+              }
             },
           );
         }

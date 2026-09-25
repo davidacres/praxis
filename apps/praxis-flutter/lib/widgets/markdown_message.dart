@@ -145,7 +145,7 @@ class MarkdownMessage extends StatelessWidget {
           ),
         ),
         codeblockPadding: const EdgeInsets.all(12),
-        codeblockText: TextStyle(
+        code: TextStyle(
           fontFamily: 'monospace',
           fontSize: 12,
           color: theme.textTheme.bodyMedium?.color,
@@ -192,7 +192,6 @@ class MarkdownMessage extends StatelessWidget {
         h5Padding: const EdgeInsets.only(top: 2, bottom: 0),
         h6Padding: const EdgeInsets.only(top: 2, bottom: 0),
         blockSpacing: 8,
-        listItemCrossAxisAlignment: WrapCrossAlignment.start,
       ),
     );
   }
