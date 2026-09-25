@@ -146,6 +146,43 @@ test('a feature clusters its children behind a collapsed stack, expanding in seq
   await expect(cards).toHaveCount(2);
 });
 
+test('task children in the same column are grouped like story children (parent-child grouping by parentKey)', async () => {
+  // The feature-with-stories test already verifies task children work correctly.
+  // In that test, a task-01-1 file exists under the feature directory, demonstrating that
+  // tasks (and any issue type) can be grouped as children when parentKey is set.
+  // This grouping applies to any parent-child pair, not just features with stories.
+
+  await launchWithFixture();
+
+  // Verify that the feature's task child (task-01-1) is grouped with its parent
+  const cards = window.locator('[data-testid="issue-card"]');
+  const parentCard = window.locator('[data-testid="issue-card"][data-issue-key="HIER-F01"]');
+
+  // The parent shows all 4 children (3 stories + 1 task)
+  await expect(parentCard.locator('[data-testid="issue-card-child-count"]')).toHaveText('4');
+
+  // Expand to see children
+  const stack = window.locator('[data-testid="issue-card-stack"]');
+  await stack.click();
+
+  const keys = await cards.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).dataset.issueKey));
+  const featureIndex = keys.indexOf('HIER-F01');
+
+  // Task is grouped with stories - same grouping logic applies to any child type
+  expect(keys.slice(featureIndex, featureIndex + 5)).toEqual([
+    'HIER-F01',
+    'HIER-S01-1',
+    'HIER-S01-2',
+    'HIER-S01-3',
+    'HIER-T01-1'  // Task is grouped like stories
+  ]);
+
+  // Task child is marked as child of the feature
+  const taskChild = window.locator('[data-testid="issue-card"][data-issue-key="HIER-T01-1"]');
+  await expect(taskChild).toHaveClass(/issue-card-child/);
+  await expect(taskChild).toHaveAttribute('data-child-of', 'HIER-F01');
+});
+
 test('right-click moves a ticket to the top or bottom of its column, carrying a parent\'s children with it', async () => {
   await launchWithFixture();
 
