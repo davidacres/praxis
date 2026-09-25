@@ -25,7 +25,7 @@ reinvented. Current verified state is in [STATUS.md](STATUS.md).
 - **`issuedAt` must be `YYYY-MM-DDTHH:MM:SS.mmmZ`** (`isoNow()`); Dart's
   `toIso8601String` emits microseconds and the desktop rejects the command.
 - **Tappable things use `Pressable`** with the same accessibility label as the
-  Expo control, so `apps/praxis-mobile/tools/device-driver` drives both apps.
+  Expo control, so `tools/device-driver` drives both apps.
 - **Motif SVGs go through `flattenMotifSvg`** — flutter_svg rasterises
   `<pattern>` and ignores `<mask>`.
 

@@ -16,6 +16,7 @@
  *   GET /theme/light | /theme/dark | /theme/none   switch the desktop theme live
  *   GET /reply            stream a new agent reply into the first chat
  *   GET /permission       raise a new permission request
+ *   GET /fail-next        make the next message to a session fail (to test Retry)
  *   GET /invitation       the invitation text again
  */
 'use strict';
@@ -647,6 +648,7 @@ function fileDiff(sessionId, file) {
 
 // ---------------------------------------------------------------- streaming
 
+let failNext = false;
 const timers = new Map();
 function streamReply(record, text, onDone) {
   clearInterval(timers.get(record.sessionId));
@@ -763,6 +765,10 @@ const deps = {
     return snapshotOf(record);
   },
   continueSession: async (sessionId, text) => {
+    if (failNext) {
+      failNext = false;
+      throw new Error('The desktop could not start this turn (stage host /fail-next).');
+    }
     const record = sessions.get(sessionId);
     record.messages.push(message('user', text, new Date().toISOString()));
     record.lifecycle = 'active';
@@ -895,7 +901,16 @@ const deps = {
   },
 };
 
-const commands = createMobileHostExecutionHandlers(deps);
+const commands = Object.fromEntries(Object.entries(createMobileHostExecutionHandlers(deps)).map(([operation, handler]) => [operation, async command => {
+  try {
+    const result = await handler(command);
+    console.log(`[stage] ${operation} ok`);
+    return result;
+  } catch (error) {
+    console.log(`[stage] ${operation} refused: ${error instanceof Error ? error.message : error}`);
+    throw error;
+  }
+}]));
 const app = {
   reads: createMobileHostReads(deps, Object.keys(commands)),
   commands,
@@ -962,6 +977,8 @@ http.createServer((request, response) => {
     const record = sessions.get('sess-ci');
     record.pendingPermissions.push({ requestId: `perm-${Date.now().toString(36)}`, summary: 'Write to .github/workflows/ci.yml', detail: 'The agent wants to change the cache key.', createdAt: new Date().toISOString() });
     publishSession(record);
+  } else if (url === '/fail-next') {
+    failNext = true;
   } else if (url === '/invitation') {
     body = invitation();
   } else {

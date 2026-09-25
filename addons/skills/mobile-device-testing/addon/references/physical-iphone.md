@@ -1,10 +1,10 @@
 # Physical iPhone: build, install, verify
 
-Run from the Praxis repository root unless stated.
+Run from the Praxis repository root unless stated. The app is the Flutter app
+in `apps/praxis-flutter` (bundle id `com.acresweb.praxis.mobile.praxis`,
+shown on the phone as "Praxis Flutter").
 
-## One-Command Automated Deployment (Recommended)
-
-Deploy to the connected physical iPhone with a single command (no parameters required):
+## One-command deployment (recommended)
 
 ```sh
 ./scripts/deploy-iphone.sh
@@ -12,73 +12,65 @@ Deploy to the connected physical iPhone with a single command (no parameters req
 npm run mobile:deploy
 ```
 
-This auto-detects the connected device, builds the core packages, compiles the Release build, verifies the Hermes bundle, installs and launches the app.
+It auto-detects the connected device, builds the Flutter Release app, checks
+the compiled Dart code is embedded, installs and launches it.
 
-## Manual Build Release
+## Manual build
 
 Get `<udid>` and `<CoreDevice id>` from `bash preflight.sh`.
 
 ```sh
-npm run build:core && npm run build:mobile-protocol   # shared packages the app bundles
-cd apps/praxis-mobile
-xcodebuild -workspace ios/Praxis.xcworkspace -scheme Praxis -configuration Release \
-  -destination 'id=<udid>' -allowProvisioningUpdates build > /tmp/praxis-ios-build.log 2>&1
+cd apps/praxis-flutter
+flutter pub get
+flutter build ios --release --no-codesign            # compiles Dart and generates the Xcode settings
+cd ios
+xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
+  -destination 'id=<udid>' -derivedDataPath build/device-release \
+  -allowProvisioningUpdates DEVELOPMENT_TEAM=WY4B2H77A5 build > /tmp/praxis-ios-build.log 2>&1
 grep -E 'error:|\*\* BUILD' /tmp/praxis-ios-build.log
+APP=apps/praxis-flutter/ios/build/device-release/Build/Products/Release-iphoneos/Runner.app
 ```
 
-Takes 3–6 minutes cold. Run it in the background if your tools allow and report
-when it finishes. `** BUILD SUCCEEDED **` is required.
+`** BUILD SUCCEEDED **` is required.
 
-The product is under DerivedData:
+## Verify the product before installing
 
 ```sh
-APP=$(ls -d ~/Library/Developer/Xcode/DerivedData/Praxis-*/Build/Products/Release-iphoneos/Praxis.app | head -1)
+ls -l "$APP/Frameworks/App.framework/App"                                  # the compiled Dart code
+/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP/Info.plist"   # com.acresweb.praxis.mobile.praxis
 ```
 
-## Verify the bundle before installing
-
-```sh
-wc -c < "$APP/main.jsbundle"            # must be non-zero (about 1.8 MB)
-file "$APP/main.jsbundle"               # Hermes JavaScript bytecode
-strings "$APP/main.jsbundle" | grep -c "<a string you just added>"   # proves it is the new code
-/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP/Info.plist"   # com.acresweb.praxis.mobile
-```
-
-`grep` directly on the bundle prints nothing useful because it is bytecode —
-use `strings` first. A missing `main.jsbundle` or a product under
-`Debug-iphoneos` means the build was Debug: rebuild with `-configuration Release`.
+A Flutter Release build needs no dev server, so there is no blank-screen
+failure mode like a Debug React Native build.
 
 ## Install and launch
 
 ```sh
 xcrun devicectl device install app --device <CoreDevice id> "$APP"
-xcrun devicectl device process launch --device <CoreDevice id> --terminate-existing com.acresweb.praxis.mobile
+xcrun devicectl device process launch --device <CoreDevice id> --terminate-existing com.acresweb.praxis.mobile.praxis
 ```
 
-## Prove it started (`Running "main"`)
+A personal (free) team allows only **three** sideloaded apps on a phone. An
+install refused with "maximum number of installed apps using a free developer
+profile" needs one removed first — ask the user which
+(`xcrun devicectl device uninstall app --device <CoreDevice id> <bundle id>`).
 
-React Native logs `Running "main"` to the unified log, not stdout. Capture it
-without root by mirroring the log to the attached console:
+## Capture launch logs
+
+Mirror the unified log to the console without root:
 
 ```sh
 perl -e 'alarm 30; exec @ARGV' xcrun devicectl device process launch \
   --device <CoreDevice id> --terminate-existing --console \
   --environment-variables '{"OS_ACTIVITY_DT_MODE":"1"}' \
-  com.acresweb.praxis.mobile > /tmp/praxis-launch.log 2>&1
-grep -E 'Running "main"|evaluateJavaScript|No script URL|RCTFatal|TypeError|ReferenceError' /tmp/praxis-launch.log
+  com.acresweb.praxis.mobile.praxis > /tmp/praxis-launch.log 2>&1
+grep -iE 'flutter|exception|error' /tmp/praxis-launch.log
 ```
 
-Expect `evaluateJavaScript() with JS bundle` and `[javascript] Running "main"`,
-and no `No script URL provided` or JS errors. The alarm ends the attached
-session — and the app with it ("terminated due to signal 14" is expected) — so
-relaunch without `--console` afterwards:
-
-```sh
-xcrun devicectl device process launch --device <CoreDevice id> --terminate-existing com.acresweb.praxis.mobile
-```
+The alarm ends the attached session — and the app with it — so relaunch
+without `--console` afterwards.
 
 Notes:
 - macOS has no `timeout` command; use the `perl -e 'alarm N; exec @ARGV'` wrapper.
-- In zsh, `log` is a shell builtin; call `/usr/bin/log`. `log collect --device`
-  needs root, which is why the console mirror above is used instead.
-- Check the app is running: `xcrun devicectl device info processes --device <CoreDevice id> | grep Praxis`.
+- In zsh, `log` is a shell builtin; call `/usr/bin/log`.
+- Check the app is running: `xcrun devicectl device info processes --device <CoreDevice id> | grep Runner`.

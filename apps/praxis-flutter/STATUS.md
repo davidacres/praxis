@@ -1,85 +1,119 @@
 # Praxis Flutter — status
 
 _Last updated 2026-09-25._ A Flutter port of the Expo app in `apps/praxis-mobile`,
-built to reach feature and visual parity with it. This file says what has been
-verified and what has not; nothing below is claimed without a test or a
-simulator screenshot behind it.
+built to replace it. Everything below was checked on the iPhone 15 Pro
+simulator against `tool/stage_host.cjs` (the desktop's own LAN listener and
+host services over sample data), with the same steps run in a fresh Release
+build of the Expo app where the Expo app could be driven.
 
-## Verified
+## Tests
 
-**Protocol** — a Dart port of `@praxis/mobile-protocol` (Noise
-`IK_25519_ChaChaPoly_SHA256`, length-prefixed records, status frames, pairing,
-request correlation, failure classification).
+`flutter test` — 53 pass:
 
-- `test/protocol/noise_test.dart`: byte-exact against the same `snow` vectors
-  the TypeScript suite uses (IK, NK, XX), plus live channel, wrong-key and
-  record-reassembly cases.
-- `test/protocol/stage_host_test.dart`: the Dart client pairs with the
-  desktop's **real** `MobileLanServer` (`pairing-required` → `pairing-pending`
-  → `ready`), reads, replays; a wrong pinned key reports `handshake-rejected`,
-  a dead port `unreachable`.
+- Noise IK/NK/XX byte-exact against the `snow` vectors `@praxis/mobile-protocol` uses.
+- The Dart client pairing with the desktop's real `MobileLanServer`
+  (`pairing-required` → `pairing-pending` → `ready`), reads, replay, and the
+  handshake-rejected / unreachable failures.
+- Ports of the Expo renderer tests (markdown, usage, theme and motif, workflow
+  runs, gadgets, pairing invitation, session options).
+- The error card replacing a widget that fails to build.
 
-**Logic** — `test/core/logic_test.dart` ports the Expo renderer tests
-(markdown, usage, theme/motif, workflow runs, gadgets, pairing invitation,
-session options): 43 cases pass.
-
-**On the iPhone 15 Pro simulator, paired with `tool/stage_host.cjs`**, the
-Flutter app was driven with the repo's device driver and compared screenshot
-by screenshot with a fresh Release build of the Expo app on the same data:
+## Screens — compared with the Expo app, same data
 
 | Screen | Result |
 | --- | --- |
-| Connect landing (Praxis Dark) | renders; pairing by pasted invitation works end to end |
-| Sidebar (runs, sessions, badges, settings) | matches Expo — label widths measured pixel-equal |
-| Chat with full markdown reply | matches |
-| Streaming session, meta chips, usage panel | matches |
-| Gadgets (choice, confirmation, form, table, chart, progress, diff, artifact, handoff, conflict, approval) | all render; the choice answer reached the desktop (gadget completed, session continued) |
-| Run awaiting approval, details strip, stage bar | matches |
-| Workflow steps sheet | matches |
-| Attention (permission, approval, failure) | matches |
-| Activity | matches (≈1pt/card vertical drift) |
+| Sidebar, markdown chat, streaming chat, meta chips, usage panel | match (label widths measured pixel-equal) |
+| Run awaiting approval, details strip, stage bar, steps sheet | match |
+| Attention, Activity | match |
 | Settings: Desktop connection, Permissions, App settings | pixel-equal |
-| Provider picker, model picker, session options sheet | match |
-| New chat → first message creates a desktop session and streams the reply | works |
-| Desktop theme + hexagon motif (masked corner lattice) | matches |
-| Approve a run from Attention (Face ID prompt, enrolled simulator match) | run moved to succeeded on the desktop |
-| Allow an agent permission; retry a failed stage | both applied on the desktop; Attention emptied live |
-| Changes view: file list and inline diff | works |
-| Live theme switch (desktop → Praxis Dark) | phone follows immediately |
-| Desktop stops → RECONNECTING, composer blocked with reason; desktop back → LIVE | works |
-| Display size Large | scales text and controls |
+| Provider picker, model picker, session options, new-chat draft | match |
+| Handover result, Progress view | match |
 
-Text metrics were calibrated against CoreText: Flutter omits SF's size-specific
-tracking and inherits Material's type scale; `ts()` in `lib/ui/kit.dart` applies
-the measured tracking table and CoreText's line height, so text lines up with
-the Expo app to the pixel.
+Flutter only (checked against the Expo source, not an Expo screenshot): all 11
+gadget kinds, Changes view with diff, dark theme, Reconnecting state, Large
+display size, connect/pairing screens.
+
+## Actions — each confirmed by the desktop's state afterwards
+
+| Action | Flutter | Expo |
+| --- | --- | --- |
+| Pair with an invitation | ✓ | ✓ |
+| Send first message (creates a session, reply streams) | ✓ | — |
+| Answer a choice / confirmation / form / conflict / approval question | ✓ (Face ID where the answer changes something) | ✗ **app crashes** (fatal JS error, 3 crash reports) |
+| Approve a run (Face ID) | ✓ | — |
+| Reject a run with a reason (Face ID) | ✓ | ✗ reason field sits under the keyboard; cannot be submitted |
+| Allow / deny an agent permission | ✓ / ✓ | — / ✓ |
+| Retry a failed stage | ✓ | — |
+| Start a workflow | ✓ | ✓ |
+| Hand over to another provider | ✓ | ✓ |
+| Change model; change mode | ✓; ✓ | ✓; ✓ |
+| Stop a streaming turn | ✓ | ✓ |
+| Retry a message the desktop refused | ✓ | ✗ desktop replays the refusal's empty result |
+| Live theme switch; reconnect after the desktop drops | ✓; ✓ | — |
+| Network discovery | ✓ (found the real desktop) | — |
+
+— = not run in that app.
 
 ## Not yet verified
 
-- Reject a run with a reason, answering a mutating gadget.
-- Start a workflow, handover to another provider, cancel a streaming turn.
-- Progress view.
-- QR scanning (needs a camera — the simulator has none), LAN discovery.
-- Pairing with the real desktop app (only the stage host, which runs the
-  desktop's own `MobileLanServer` and host services, has been used).
+- QR scanning (simulator has no camera; the phone build has it).
+- Pairing with the real desktop app — only the stage desktop has been used.
 - Android — not built.
 
 ## Known differences from the Expo app
 
-- Tabular figures (`fontVariant: ['tabular-nums']`) are not applied by Flutter
-  to the iOS system font, so numeric meta chips are a few points narrower.
-- Italic is synthesised by Flutter; spacing around italic runs differs slightly.
-- Accessibility labels on sidebar rows are the row's own text; Expo's are the
-  auto-joined children including the icon glyph (`✓, Title, caption, ›`).
+- Tabular figures are not applied to the iOS system font, so numeric meta
+  chips are a few points narrower; italic spacing differs slightly.
+- Sidebar rows' accessibility labels are their own text; Expo's start with the
+  icon glyph (`✓, Title, caption, ›`).
+- Retrying a refused message sends a new command id (Expo resends the same one,
+  which the desktop answers with the refusal's empty result).
+
+## Archiving the Expo app
+
+Done in the repository already:
+
+- `scripts/deploy-iphone.sh` (and `npm run mobile:deploy`) deploys the Flutter
+  app by default; `--app expo` still deploys the old one.
+- The device driver moved to `tools/device-driver` and drives the Flutter app
+  by default; the `mobile-device-testing` skill's docs and its bundled copy are
+  updated for Flutter.
+- Root `AGENTS.md` lists the Flutter app; `npm run test:flutter` and
+  `npm run mobile:stage-host` exist.
+
+Still to do, in this order:
+
+1. **Commit the per-message usage change** already in the working tree
+   (`packages/core/src/host/mobileProtocol.ts`,
+   `apps/praxis-desktop/main/src/main/mobileSessionProjection.ts`): the
+   desktop sends each reply's tokens and cost, which the Flutter app shows.
+   The uncommitted Expo edits in the same change can go with the archive.
+2. **Decide where the PRAXISMOBILE plans live.** `apps/praxis-mobile/docs/plans`,
+   `project.praxis.md` and `docs/PLAN_MAP.md` are a folder-backed project
+   linked from `apps/praxis-desktop/docs/PLAN_MAP.md` and `master-plan.md`.
+   Move them (e.g. to `apps/praxis-flutter/docs`) and fix those two links, or
+   keep them in the archived folder.
+3. **Remove the Expo workspace**: take `apps/praxis-mobile` out of the root
+   `workspaces`, drop the `build:mobile`, `test:mobile` and `mobile:fixture`
+   scripts and `test:mobile` from `test`, then `npm install` to regenerate the
+   lockfile (keep the `//optionalDependencies` bindings note in mind).
+4. **Move the folder**: `git mv apps/praxis-mobile archive/praxis-mobile`, or
+   delete it — history keeps it either way.
+5. **Publish the skill**: `tools/device-driver/publish-skill.sh` (bumps the
+   version; the published copy still describes the Expo app).
+6. Remove the Expo app from the phone when you no longer want it.
+
+`packages/mobile-protocol` stays: the desktop uses it.
 
 ## How to run
 
 ```bash
-# once: compiled desktop modules the stage host reuses
-npm run build:core && npm --prefix apps/praxis-desktop/main run compile
-
-node apps/praxis-flutter/tool/stage_host.cjs     # prints a pairing invitation
-cd apps/praxis-flutter
-flutter test                                     # protocol + logic (+ live stage-host test)
-flutter run -d <simulator>                       # paste the invitation under "Add connection"
+npm run build:core && npm --prefix apps/praxis-desktop/main run compile   # once, for the stage desktop
+npm run mobile:stage-host        # prints a pairing invitation (127.0.0.1 — reachable from the simulator)
+npm run test:flutter
+cd apps/praxis-flutter && flutter run -d <simulator>
+npm run mobile:deploy            # physical iPhone, Release
 ```
+
+The stage desktop's control port (`http://127.0.0.1:43191`) takes `/theme/light`,
+`/theme/dark`, `/reply`, `/permission` and `/fail-next`.

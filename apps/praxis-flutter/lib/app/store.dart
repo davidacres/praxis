@@ -13,6 +13,7 @@ import '../core/time.dart';
 import '../core/usage.dart';
 import '../core/workflow_runs.dart';
 import '../protocol/session_mirror.dart';
+import '../protocol/wire.dart';
 import 'confirm_identity.dart';
 import 'connection.dart';
 import 'diagnostics.dart';
@@ -837,7 +838,10 @@ class AppStore extends ChangeNotifier {
     if (entry == null) return;
     try {
       final value = await _requireConnection().command(entry.command);
-      final snapshot = SessionSnapshot(value as Map<String, dynamic>);
+      if (value is! Map<String, dynamic>) {
+        throw StateError('The desktop did not return the session for this message. Refresh and send it again.');
+      }
+      final snapshot = SessionSnapshot(value);
       _commands.remove(messageId);
       _applySnapshot(snapshot);
       openWorkId = snapshot.sessionKey;
@@ -845,6 +849,9 @@ class AppStore extends ChangeNotifier {
       followUps = followUps.where((message) => message.messageId != messageId).toList();
       _changed();
     } catch (error) {
+      // The desktop refused it, so it did not run: a retry must be a new command, or the
+      // desktop replays the refused one's empty outcome instead of trying again.
+      if (error is MobileRequestError) _commands[messageId] = (command: {...entry.command, 'commandId': commandId('message'), 'issuedAt': isoNow()}, workId: entry.workId, draft: entry.draft);
       followUps = followUps
           .map((message) => message.messageId == messageId ? message.copyWith(FollowUpState.failed, Diagnostics.messageOf(error)) : message)
           .toList();
@@ -947,7 +954,7 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> retryFollowUp(String messageId) async {
-    // Same command id: if the desktop already ran it, it answers with the recorded outcome.
+    // A lost reply keeps its command id, so a desktop that already ran it answers with the recorded outcome.
     followUps = followUps.map((message) => message.messageId == messageId ? message.copyWith(FollowUpState.pending) : message).toList();
     _changed();
     await _sendCommand(messageId);
