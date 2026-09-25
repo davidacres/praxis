@@ -11,7 +11,7 @@ exact message.
 | Device not in `xcodebuild -showdestinations` or preflight | Not paired with this Mac | Connect by USB, trust, open Xcode → Devices and Simulators once |
 | `No profiles for 'com.acresweb.praxis.driver…'`, signing errors | No team or account in Xcode | Set `PRAXIS_DRIVER_TEAM`; sign in under Xcode → Settings → Accounts; keep `-allowProvisioningUpdates` |
 | App or test runner won't open: "Untrusted Developer" | First install from this team | Settings → General → VPN & Device Management → Trust |
-| App opens blank | Debug build (no embedded bundle) | Rebuild `-configuration Release`; verify `main.jsbundle` |
+| App opens blank | 1. Debug build (no embedded bundle)<br>2. Unhandled JS runtime error at boot (e.g. unlinked native pod) | 1. Use `./scripts/deploy-iphone.sh` (or `-configuration Release`); verify `main.jsbundle`<br>2. Capture launch console logs (`OS_ACTIVITY_DT_MODE=1`) for `Cannot find native module` and guard module imports safely |
 | Launch log shows `No script URL provided` | Same — Debug/Metro build | As above |
 | `DRIVER NOT FOUND <label>` | Label differs or the screen changed | `bash labels.sh`; use `tapprefix:`; add `wait:` before the tap |
 | `Failed to synthesize event: Neither element nor any descendant has keyboard focus` | `type:` without a focused field | Tap the field (`tapprefix:<field label>`) first |
