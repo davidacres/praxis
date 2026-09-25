@@ -15,8 +15,9 @@ let package = Package(
         .library(name: "FlutterGeneratedPluginSwiftPackage", type: .static, targets: ["FlutterGeneratedPluginSwiftPackage"])
     ],
     dependencies: [
-        .package(name: "camera_avfoundation", path: "../.packages/camera_avfoundation-0.9.23+2"),
         .package(name: "local_auth_darwin", path: "../.packages/local_auth_darwin-1.6.1"),
+        .package(name: "mobile_scanner", path: "../.packages/mobile_scanner-7.4.2"),
+        .package(name: "share_plus", path: "../.packages/share_plus-10.1.4"),
         .package(name: "url_launcher_ios", path: "../.packages/url_launcher_ios-6.4.2"),
         .package(name: "FlutterFramework", path: "../.packages/FlutterFramework")
     ],
@@ -24,8 +25,9 @@ let package = Package(
         .target(
             name: "FlutterGeneratedPluginSwiftPackage",
             dependencies: [
-                .product(name: "camera-avfoundation", package: "camera_avfoundation"),
                 .product(name: "local-auth-darwin", package: "local_auth_darwin"),
+                .product(name: "mobile-scanner", package: "mobile_scanner"),
+                .product(name: "share-plus", package: "share_plus"),
                 .product(name: "url-launcher-ios", package: "url_launcher_ios"),
                 .product(name: "FlutterFramework", package: "FlutterFramework")
             ]
