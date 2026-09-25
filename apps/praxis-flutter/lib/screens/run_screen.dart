@@ -22,10 +22,14 @@ class _RunScreenState extends State<RunScreen> {
   Widget build(BuildContext context) {
     return Consumer<AppStore>(
       builder: (context, store, _) {
-        final run = store.workflowRuns.firstWhere(
-          (r) => r.runId == widget.runId,
-          orElse: () => null,
-        );
+        MobileRunSummary? run;
+        try {
+          run = store.workflowRuns.firstWhere(
+            (r) => r.runId == widget.runId,
+          );
+        } catch (e) {
+          run = null;
+        }
 
         if (run == null) {
           return Scaffold(
