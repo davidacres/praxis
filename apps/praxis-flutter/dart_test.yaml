@@ -1,0 +1,3 @@
+tags:
+  stage-host:
+    # Needs `node tool/stage_host.cjs` running; skipped when its invitation file is absent.

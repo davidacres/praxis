@@ -1,99 +1,80 @@
-import 'package:flutter/material.dart';
-import 'models/mobile_appearance.dart';
+import 'dart:convert';
 
-Color _parseColor(String hexColor) {
-  final buffer = StringBuffer();
-  if (!hexColor.startsWith('#')) buffer.write('#');
-  buffer.write(hexColor);
-  return Color(int.parse(buffer.toString().replaceFirst('#', '0xff')));
-}
+import 'package:flutter/widgets.dart';
 
-ThemeData buildTheme(MobileAppearance? appearance) {
-  if (appearance == null) {
-    appearance = MobileAppearance.defaultLight();
-  } else if (appearance.mode == 'dark') {
-    appearance = MobileAppearance.defaultDark();
+import '../core/palette.dart';
+
+/// The live theme: Praxis Dark until the paired desktop's appearance arrives,
+/// then the desktop's, following it as it changes. Port of `app/theme.ts`.
+class ThemeController extends ChangeNotifier {
+  Appearance? _appearance;
+  Palette _palette = Palette.praxisDark;
+  String _displayMode = 'compact';
+
+  Appearance? get appearance => _appearance;
+  Palette get palette => _palette;
+  String get displayMode => _displayMode;
+
+  /// Wears [next] (or Praxis Dark for null); returns whether anything changed.
+  bool applyAppearance(Appearance? next) {
+    if (jsonEncode(next?.raw) == jsonEncode(_appearance?.raw)) return false;
+    _appearance = next;
+    _palette = next == null ? Palette.praxisDark : Palette.fromAppearance(next);
+    notifyListeners();
+    return true;
   }
 
-  final isDark = appearance.mode == 'dark';
-  final primaryColor = _parseColor(appearance.primaryColor);
-  final backgroundColor = _parseColor(appearance.backgroundColor);
-  final surfaceColor = _parseColor(appearance.surfaceColor);
-  final textColor = _parseColor(appearance.textColor);
-  final secondaryTextColor = _parseColor(appearance.secondaryTextColor);
+  /// The person's preferred reading/control size; compact is the default.
+  bool applyDisplayMode(String next) {
+    if (_displayMode == next) return false;
+    _displayMode = next;
+    notifyListeners();
+    return true;
+  }
 
-  return ThemeData(
-    useMaterial3: true,
-    brightness: isDark ? Brightness.dark : Brightness.light,
-    primaryColor: primaryColor,
-    scaffoldBackgroundColor: backgroundColor,
-    canvasColor: backgroundColor,
-    cardColor: surfaceColor,
-    colorScheme: ColorScheme(
-      brightness: isDark ? Brightness.dark : Brightness.light,
-      primary: primaryColor,
-      onPrimary: isDark ? Colors.black : Colors.white,
-      secondary: primaryColor.withAlpha(180),
-      onSecondary: isDark ? Colors.black : Colors.white,
-      error: isDark ? Colors.red[300]! : Colors.red[700]!,
-      onError: Colors.white,
-      background: backgroundColor,
-      onBackground: textColor,
-      surface: surfaceColor,
-      onSurface: textColor,
-      surfaceVariant: surfaceColor.withAlpha(200),
-      onSurfaceVariant: secondaryTextColor,
-    ),
-    textTheme: TextTheme(
-      displayLarge: TextStyle(color: textColor, fontSize: 32, fontWeight: FontWeight.bold),
-      displayMedium: TextStyle(color: textColor, fontSize: 28, fontWeight: FontWeight.bold),
-      displaySmall: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.bold),
-      headlineMedium: TextStyle(color: textColor, fontSize: 22, fontWeight: FontWeight.bold),
-      headlineSmall: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.w600),
-      titleLarge: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
-      titleMedium: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.w500),
-      bodyLarge: TextStyle(color: textColor, fontSize: 16),
-      bodyMedium: TextStyle(color: textColor, fontSize: 14),
-      bodySmall: TextStyle(color: secondaryTextColor, fontSize: 12),
-      labelSmall: TextStyle(color: secondaryTextColor, fontSize: 11),
-    ),
-    appBarTheme: AppBarTheme(
-      backgroundColor: backgroundColor,
-      foregroundColor: textColor,
-      elevation: 0,
-      centerTitle: false,
-      titleTextStyle: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w600),
-    ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: surfaceColor,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: secondaryTextColor.withAlpha(100)),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: secondaryTextColor.withAlpha(100)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: primaryColor),
-      ),
-      hintStyle: TextStyle(color: secondaryTextColor),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: primaryColor,
-        foregroundColor: isDark ? Colors.black : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      ),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        foregroundColor: primaryColor,
-      ),
-    ),
+  PraxisThemeData get data => PraxisThemeData(
+    palette: _palette,
+    appearance: _appearance,
+    displayMode: _displayMode,
+    scale: _displayMode == 'large' ? 1.16 : 1,
+    space: _displayMode == 'large' ? 20 : 16,
+    radius: _displayMode == 'large' ? 12 : 10,
   );
+}
+
+@immutable
+class PraxisThemeData {
+  const PraxisThemeData({
+    required this.palette,
+    required this.appearance,
+    required this.displayMode,
+    required this.scale,
+    required this.space,
+    required this.radius,
+  });
+  final Palette palette;
+  final Appearance? appearance;
+  final String displayMode;
+  final double scale;
+  final double space;
+  final double radius;
+
+  /// Scales a dimension or type size for the large display mode.
+  double s(double value) => (value * scale).roundToDouble();
+}
+
+class PraxisTheme extends InheritedWidget {
+  const PraxisTheme({super.key, required this.data, required super.child});
+  final PraxisThemeData data;
+
+  static PraxisThemeData of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<PraxisTheme>()!.data;
+
+  @override
+  bool updateShouldNotify(PraxisTheme oldWidget) =>
+      oldWidget.data.palette != data.palette || oldWidget.data.scale != data.scale || oldWidget.data.appearance != data.appearance;
+}
+
+extension PraxisThemeContext on BuildContext {
+  PraxisThemeData get t => PraxisTheme.of(this);
+  Palette get p => PraxisTheme.of(this).palette;
 }

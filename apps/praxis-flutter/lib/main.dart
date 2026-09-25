@@ -1,43 +1,91 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'app/store/store_provider.dart';
+
+import 'app/confirm_identity.dart';
+import 'app/connection.dart';
+import 'app/diagnostics.dart';
+import 'app/store.dart';
 import 'app/theme.dart';
-import 'app/services/connection_service.dart';
-import 'app/services/mobile_client.dart';
+import 'screens/activity_screen.dart';
+import 'screens/attention_screen.dart';
 import 'screens/connect_screen.dart';
 import 'screens/work_screen.dart';
-import 'screens/attention_screen.dart';
-import 'screens/activity_screen.dart';
-import 'screens/run_screen.dart';
-import 'widgets/app_sidebar.dart';
+import 'ui/kit.dart';
+import 'ui/sidebar.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const PraxisApp());
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    Diagnostics.instance.record('Showing ${details.context?.toDescription() ?? 'a screen'}', details.exception);
+  };
+  final theme = ThemeController();
+  loadDisplayMode().then((mode) {
+    if (mode != null) theme.applyDisplayMode(mode);
+  });
+  runApp(PraxisApp(theme: theme));
 }
 
-class PraxisApp extends StatelessWidget {
-  const PraxisApp({Key? key}) : super(key: key);
+class PraxisApp extends StatefulWidget {
+  const PraxisApp({super.key, required this.theme});
+  final ThemeController theme;
+
+  @override
+  State<PraxisApp> createState() => _PraxisAppState();
+}
+
+class _PraxisAppState extends State<PraxisApp> {
+  late final AppStore _store = AppStore(theme: widget.theme);
+
+  @override
+  void dispose() {
+    _store.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final store = AppStore();
-    final client = MobileClient(
-      connection: ConnectionService(),
-      store: store,
-    );
-
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider.value(value: store),
-        Provider.value(value: client),
+        ChangeNotifierProvider.value(value: widget.theme),
+        ChangeNotifierProvider.value(value: _store),
+        ChangeNotifierProvider.value(value: Diagnostics.instance),
       ],
-      child: Consumer<AppStore>(
-        builder: (context, _, __) {
-          return MaterialApp(
-            title: 'Praxis',
-            theme: buildTheme(store.appearance),
-            home: const PraxisShell(),
+      // Re-render from the root when the desktop's theme arrives or changes, so every screen repaints.
+      child: Consumer<ThemeController>(
+        builder: (context, theme, _) {
+          final data = theme.data;
+          final p = data.palette;
+          return PraxisTheme(
+            data: data,
+            child: AnnotatedRegion<SystemUiOverlayStyle>(
+              value: p.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+              child: MaterialApp(
+                title: 'Praxis',
+                debugShowCheckedModeBanner: false,
+                navigatorKey: rootNavigatorKey,
+                theme: ThemeData(
+                  useMaterial3: true,
+                  brightness: p.dark ? Brightness.dark : Brightness.light,
+                  scaffoldBackgroundColor: p.bg,
+                  canvasColor: p.bg,
+                  splashFactory: NoSplash.splashFactory,
+                  highlightColor: Colors.transparent,
+                  textSelectionTheme: TextSelectionThemeData(cursorColor: p.accent, selectionColor: p.accentMuted, selectionHandleColor: p.accent),
+                  colorScheme: ColorScheme.fromSeed(seedColor: p.accent, brightness: p.dark ? Brightness.dark : Brightness.light, surface: p.surface),
+                ),
+                // A neutral base, as React Native has: Material's type scale adds letter spacing and line height to every Text.
+                builder: (context, child) => PraxisTheme(
+                  data: data,
+                  child: DefaultTextStyle(
+                    style: TextStyle(fontSize: 14, color: p.text),
+                    child: child!,
+                  ),
+                ),
+                home: const _Root(),
+              ),
+            ),
           );
         },
       ),
@@ -45,79 +93,53 @@ class PraxisApp extends StatelessWidget {
   }
 }
 
-class PraxisShell extends StatefulWidget {
-  const PraxisShell({Key? key}) : super(key: key);
-
+class _Root extends StatefulWidget {
+  const _Root();
   @override
-  State<PraxisShell> createState() => _PraxisShellState();
+  State<_Root> createState() => _RootState();
 }
 
-class _PraxisShellState extends State<PraxisShell> {
+class _RootState extends State<_Root> {
   bool _sidebarOpen = false;
+
+  void _open() => setState(() => _sidebarOpen = true);
+  void _close() => setState(() => _sidebarOpen = false);
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<AppStore, MobileClient>(
-      builder: (context, store, client, _) {
-        // Show connect screen if not connected
-        if (!store.isConnected) {
-          return ConnectScreen(
-            onConnect: (config) async {
-              try {
-                await client.connect(config);
-                store.notifyListeners();
-              } catch (error) {
-                store.setConnectionError('Connection failed: $error');
-              }
+    final store = context.watch<AppStore>();
+    final p = context.p;
+    if (!store.showsWork && _sidebarOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _close());
+    }
+    final Widget body;
+    if (!store.showsWork) {
+      body = const ConnectScreen();
+    } else {
+      body = Column(
+        children: [
+          const StaleBanner(),
+          Expanded(
+            child: switch (store.primaryRoute) {
+              'attention' => AttentionScreen(onOpenSidebar: _open),
+              'activity' => ActivityScreen(onOpenSidebar: _open),
+              _ => WorkScreen(onOpenSidebar: _open),
             },
-          );
-        }
-
-        // Show run screen if a run is open
-        final openRunId = store.openRunId;
-        if (openRunId != null) {
-          return RunScreen(
-            runId: openRunId,
-            onOpenSidebar: () => setState(() => _sidebarOpen = true),
-          );
-        }
-
-        // Build the main shell
-        final route = store.primaryRoute;
-        Widget body;
-
-        switch (route) {
-          case 'work':
-            body = WorkScreen(
-              onOpenSidebar: () => setState(() => _sidebarOpen = true),
-            );
-            break;
-          case 'attention':
-            body = AttentionScreen(
-              onOpenSidebar: () => setState(() => _sidebarOpen = true),
-            );
-            break;
-          case 'activity':
-            body = ActivityScreen(
-              onOpenSidebar: () => setState(() => _sidebarOpen = true),
-            );
-            break;
-          default:
-            body = const Center(child: Text('Unknown route'));
-        }
-
-        return Scaffold(
-          body: Stack(
-            children: [
-              body,
-              AppSidebar(
-                visible: _sidebarOpen,
-                onClose: () => setState(() => _sidebarOpen = false),
-              ),
-            ],
           ),
-        );
-      },
+        ],
+      );
+    }
+    return Scaffold(
+      backgroundColor: p.bg,
+      body: Stack(
+        children: [
+          Positioned.fill(child: SafeArea(child: body)),
+          if (store.showsWork)
+            Positioned.fill(
+              child: AppSidebar(visible: _sidebarOpen, onClose: _close),
+            ),
+        ],
+      ),
     );
   }
 }
