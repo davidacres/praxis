@@ -490,7 +490,16 @@ class _Scanner extends StatefulWidget {
 }
 
 class _ScannerState extends State<_Scanner> {
+  // One controller for the page's life: building a new one on every rebuild restarts
+  // the camera session, so the preview never settles and detections are dropped.
+  final MobileScannerController _controller = MobileScannerController(formats: const [BarcodeFormat.qrCode], detectionSpeed: DetectionSpeed.noDuplicates);
   bool _done = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -502,7 +511,8 @@ class _ScannerState extends State<_Scanner> {
         children: [
           Positioned.fill(
             child: MobileScanner(
-              controller: MobileScannerController(formats: const [BarcodeFormat.qrCode]),
+              controller: _controller,
+              fit: BoxFit.cover,
               errorBuilder: (context, error) => Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
@@ -517,6 +527,7 @@ class _ScannerState extends State<_Scanner> {
                 final value = capture.barcodes.map((barcode) => barcode.rawValue).whereType<String>().firstOrNull;
                 if (value == null || _done) return;
                 _done = true;
+                _controller.stop();
                 Navigator.of(context).pop(value);
               },
             ),
