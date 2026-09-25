@@ -2,7 +2,7 @@
 DRIVER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="${PRAXIS_DRIVER_RUN_DIR:-$DRIVER_DIR/.run}"
 mkdir -p "$RUN_DIR"
-PRAXIS_APP_BUNDLE_ID="${PRAXIS_APP_BUNDLE_ID:-com.acresweb.praxis.mobile}"
+PRAXIS_APP_BUNDLE_ID="${PRAXIS_APP_BUNDLE_ID:-com.acresweb.praxis.mobile.praxis}"
 
 # The xcodebuild destination id: PRAXIS_DEVICE_ID, else the one recorded by
 # setup.sh, else the first connected physical iPhone.

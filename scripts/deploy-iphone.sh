@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
-# Deploy the Praxis mobile companion app (Release build) to a physical iPhone.
+# Deploy the Praxis phone app (Release build) to a physical iPhone.
+# Default: the Flutter app (apps/praxis-flutter). --app expo: the Expo app (apps/praxis-mobile).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MOBILE_DIR="$REPO_ROOT/apps/praxis-mobile"
-IOS_DIR="$MOBILE_DIR/ios"
-DERIVED_DATA="$IOS_DIR/build/device-release"
-APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Praxis.app"
-BUNDLE_ID="com.acresweb.praxis.mobile"
-
+APP="flutter"
 SKIP_BUILD=0
 NO_LAUNCH=0
 CLEAN_BUILD=0
@@ -19,11 +15,10 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/deploy-iphone.sh [options]
 
-Deploys the Praxis mobile app in Release mode to a connected physical iPhone.
-Release mode is mandatory on physical devices to embed the Hermes JS bundle
-and prevent blank screens.
+Deploys the Praxis phone app in Release mode to a connected physical iPhone.
 
 Options:
+  --app flutter|expo  Which app to deploy (default: flutter)
   --skip-build        Skip rebuilding and install the current Release build
   --clean             Clean the build cache before compiling
   --no-launch         Install the app without launching it
@@ -44,10 +39,32 @@ while [[ $# -gt 0 ]]; do
     --clean) CLEAN_BUILD=1; shift ;;
     --no-launch) NO_LAUNCH=1; shift ;;
     --device) TARGET_DEVICE="$2"; shift 2 ;;
+    --app) APP="$2"; shift 2 ;;
     --help|-h) usage ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
+
+case "$APP" in
+  flutter)
+    MOBILE_DIR="$REPO_ROOT/apps/praxis-flutter"
+    IOS_DIR="$MOBILE_DIR/ios"
+    WORKSPACE="ios/Runner.xcworkspace"; SCHEME="Runner"
+    DERIVED_DATA="$IOS_DIR/build/device-release"
+    APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Runner.app"
+    # Uses the team's existing Xcode-managed profile, so no Apple account needs to be signed in.
+    BUNDLE_ID="com.acresweb.praxis.mobile.praxis"
+    APP_NAME="Praxis Flutter" ;;
+  expo)
+    MOBILE_DIR="$REPO_ROOT/apps/praxis-mobile"
+    IOS_DIR="$MOBILE_DIR/ios"
+    WORKSPACE="ios/Praxis.xcworkspace"; SCHEME="Praxis"
+    DERIVED_DATA="$IOS_DIR/build/device-release"
+    APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Praxis.app"
+    BUNDLE_ID="com.acresweb.praxis.mobile"
+    APP_NAME="Praxis" ;;
+  *) echo "Unknown --app '$APP' (use flutter or expo)" >&2; exit 1 ;;
+esac
 
 step() { printf '\033[36m==> %s\033[0m\n' "$1"; }
 ok()   { printf '\033[32m  ✓ %s\033[0m\n' "$1"; }
@@ -134,8 +151,15 @@ fi
 
 # Build
 if [ "$SKIP_BUILD" -eq 0 ]; then
-  step "Building core packages"
-  (cd "$REPO_ROOT" && npm run build:core && npm run build:mobile-protocol)
+  if [ "$APP" = expo ]; then
+    step "Building core packages"
+    (cd "$REPO_ROOT" && npm run build:core && npm run build:mobile-protocol)
+  else
+    command -v flutter >/dev/null || export PATH="$HOME/flutter/bin:$PATH"
+    command -v flutter >/dev/null || { bad "flutter is not on PATH"; exit 1; }
+    step "Preparing the Flutter Release build"
+    (cd "$MOBILE_DIR" && flutter pub get >/dev/null && flutter build ios --release --no-codesign >/dev/null)
+  fi
 
   if [ "$CLEAN_BUILD" -eq 1 ]; then
     step "Cleaning build cache"
@@ -156,8 +180,8 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
 
   set +e
   (cd "$MOBILE_DIR" && xcodebuild \
-    -workspace ios/Praxis.xcworkspace \
-    -scheme Praxis \
+    -workspace "$WORKSPACE" \
+    -scheme "$SCHEME" \
     -configuration Release \
     -destination "id=$DEVICE_UDID" \
     -derivedDataPath "$DERIVED_DATA" \
@@ -180,7 +204,7 @@ fi
 # Verify the app and embedded JavaScript bundle
 step "Verifying Release bundle"
 if [ ! -d "$APP_PATH" ]; then
-  bad "Praxis.app not found at $APP_PATH"
+  bad "$(basename "$APP_PATH") not found at $APP_PATH"
   exit 1
 fi
 
@@ -190,6 +214,7 @@ if [ "$INSTALLED_BUNDLE_ID" != "$BUNDLE_ID" ]; then
   exit 1
 fi
 
+if [ "$APP" = expo ]; then
 JS_BUNDLE="$APP_PATH/main.jsbundle"
 if [ ! -f "$JS_BUNDLE" ]; then
   bad "main.jsbundle missing in $APP_PATH!"
@@ -203,22 +228,26 @@ if [ "$BUNDLE_SIZE" -lt 100000 ]; then
   exit 1
 fi
 ok "Embedded JS bundle verified ($(( BUNDLE_SIZE / 1024 )) KB)"
+else
+  [ -f "$APP_PATH/Frameworks/App.framework/App" ] || { bad "Compiled Dart code (App.framework) missing in $APP_PATH"; exit 1; }
+  ok "Compiled Dart code present"
+fi
 
 # Install onto device
-step "Installing Praxis on $DEVICE_NAME"
+step "Installing $APP_NAME on $DEVICE_NAME"
 xcrun devicectl device install app --device "$DEVICE_CORE_ID" "$APP_PATH"
 ok "Installed $BUNDLE_ID successfully"
 
 # Launch app
 if [ "$NO_LAUNCH" -eq 0 ]; then
-  step "Launching Praxis on $DEVICE_NAME"
+  step "Launching $APP_NAME on $DEVICE_NAME"
   set +e
   LAUNCH_OUT=$(xcrun devicectl device process launch --device "$DEVICE_CORE_ID" --terminate-existing "$BUNDLE_ID" 2>&1)
   LAUNCH_STATUS=$?
   set -e
 
   if [ $LAUNCH_STATUS -eq 0 ]; then
-    ok "Praxis launched on $DEVICE_NAME!"
+    ok "$APP_NAME launched on $DEVICE_NAME!"
   else
     if echo "$LAUNCH_OUT" | grep -qi "Locked"; then
       warn "Praxis installed successfully, but could not launch because $DEVICE_NAME is locked."

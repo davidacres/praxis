@@ -7,7 +7,7 @@ import XCTest
 final class DriverTests: XCTestCase {
   func testStep() throws {
     let env = ProcessInfo.processInfo.environment
-    let app = XCUIApplication(bundleIdentifier: env["DRIVER_BUNDLE_ID"] ?? "com.acresweb.praxis.mobile")
+    let app = XCUIApplication(bundleIdentifier: env["DRIVER_BUNDLE_ID"] ?? "com.acresweb.praxis.mobile.praxis")
     let actions = (env["DRIVER_ACTIONS"] ?? "").components(separatedBy: ";;").filter { !$0.isEmpty }
     if actions.first == "launch" { app.launch() } else { app.activate() }
     for action in actions where action != "launch" {

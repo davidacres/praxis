@@ -100,8 +100,8 @@ else
 fi
 
 step "Done"
-if [ -n "$(git status --porcelain -- addons/skills apps/praxis-mobile/tools/device-driver)" ]; then
+if [ -n "$(git status --porcelain -- addons/skills tools/device-driver)" ]; then
   echo "Commit the changes so the repo matches what was published:"
-  echo "  git add addons/skills apps/praxis-mobile/tools/device-driver"
+  echo "  git add addons/skills tools/device-driver"
   echo "  git commit -m \"chore(marketplace): publish mobile-device-testing $NEXT\" && git push"
 fi

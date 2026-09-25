@@ -8,7 +8,7 @@ triggers: test on phone, test on iphone, test on device, test on simulator, ios 
 
 # Mobile device testing
 
-You can build, install and drive the Praxis mobile app (`com.acresweb.praxis.mobile`)
+You can build, install and drive the Praxis mobile app (the Flutter app, `com.acresweb.praxis.mobile.praxis`)
 on an iOS simulator or a physical iPhone, and record what it shows. You do this
 with Xcode's command-line tools and a small XCUITest driver bundled with this
 skill. Everything runs on the user's Mac; nothing is installed on the phone
@@ -48,7 +48,7 @@ Follow this order. Do not skip the confirmation step.
 
 Use the first that exists:
 
-1. In the Praxis repository: `apps/praxis-mobile/tools/device-driver/`.
+1. In the Praxis repository: `tools/device-driver/`.
 2. This skill's own copy: `scripts/device-driver/` inside this skill's folder.
    An installed skill lives at
    `~/Library/Application Support/Praxis/skills/mobile-device-testing/`.
@@ -80,16 +80,13 @@ prints: **udid** is what `xcodebuild` uses; **CoreDevice id** is what
 
 Details: `references/physical-iphone.md`, `references/simulator.md`.
 
-- Always build **Release** for a physical iPhone. Debug sets `SKIP_BUNDLING=1`
-  and opens as a blank screen without Metro.
-- Physical iPhone:
-  `xcodebuild -workspace apps/praxis-mobile/ios/Praxis.xcworkspace -scheme Praxis -configuration Release -destination 'id=<udid>' -allowProvisioningUpdates build`,
-  then `xcrun devicectl device install app --device <CoreDevice id> <…/Release-iphoneos/Praxis.app>`.
-- Simulator: same build with `-destination 'id=<simulator udid>'`, then
-  `xcrun simctl install booted <…/Release-iphonesimulator/Praxis.app>`.
-- Verify the product before testing: `main.jsbundle` exists and is non-empty,
-  and for a physical launch the log shows `Running "main"`
-  (`references/physical-iphone.md` shows how to capture it without root).
+- Physical iPhone: `./scripts/deploy-iphone.sh` builds the Flutter app in
+  Release, installs and launches it.
+- Simulator: `flutter build ios --simulator --debug` in `apps/praxis-flutter`,
+  then `xcrun simctl install booted build/ios/iphonesimulator/Runner.app`.
+- Verify the product before testing: `Runner.app/Frameworks/App.framework/App`
+  (the compiled Dart code) exists and the bundle id is
+  `com.acresweb.praxis.mobile.praxis`.
 
 ### 3. Set up the driver
 

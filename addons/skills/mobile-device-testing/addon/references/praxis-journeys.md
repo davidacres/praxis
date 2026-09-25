@@ -46,7 +46,7 @@ usage line shows desktop-reported figures.
 
 ## Change an existing session between turns
 
-Open the session from the sidebar (`tap:Open navigation;;tapprefix:✓, <title>`).
+Open the session from the sidebar (`tap:Open navigation;;wait:1;;tapprefix:<title>`).
 When no turn is running the chips show a ▾ and are editable.
 
 - Model: `tap:<model chip label>` → `tapprefix:<Model>, ` — applies immediately.
@@ -70,7 +70,7 @@ While a turn runs, tapping a chip shows why it is locked instead of opening a pi
 
 ## Settings pages
 
-`tap:Open navigation;;tapprefix:◇, Permissions` and
-`tapprefix:⌁, Desktop connection` show the real grant (device name, paired and
+`tap:Open navigation;;wait:1;;tapprefix:Permissions` and
+`tapprefix:Desktop connection` show the real grant (device name, paired and
 last-connected times, capabilities, projects) and connection details. Leave
 with `tap:Back to navigation;;tap:Close navigation`.

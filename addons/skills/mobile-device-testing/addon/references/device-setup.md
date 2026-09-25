@@ -11,8 +11,8 @@ the phone-side steps to the user; you cannot change settings on the phone.
   Xcode → Settings → Accounts. The command line uses it for automatic signing.
 - CocoaPods (`brew install cocoapods`). The driver's project generator uses the
   `xcodeproj` gem bundled with it; `gem install xcodeproj` also works.
-- The Praxis repository with `npm install` done, and the iOS project generated
-  under `apps/praxis-mobile/ios` (Pods installed).
+- Flutter (`flutter --version`) and the Praxis repository; `flutter pub get`
+  in `apps/praxis-flutter` installs the app's packages and Pods.
 
 ## Physical iPhone — first time
 

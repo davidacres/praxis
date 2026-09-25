@@ -4,7 +4,7 @@
 
 `step.sh` runs one XCUITest (`xcodebuild test-without-building`) that attaches
 to the installed app by bundle id (`PRAXIS_APP_BUNDLE_ID`, default
-`com.acresweb.praxis.mobile`), performs the actions, then writes:
+`com.acresweb.praxis.mobile.praxis`, the Flutter app), performs the actions, then writes:
 
 | File (in `.run/`) | Contents |
 | --- | --- |

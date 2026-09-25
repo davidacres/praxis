@@ -14,7 +14,7 @@ rm -rf "$RUN_DIR/out.xcresult" "$RUN_DIR/shots" "$RUN_DIR/screen.png"
 mkdir -p "$RUN_DIR/shots"
 TEST_RUNNER_DRIVER_ACTIONS="${1:-}" \
 TEST_RUNNER_DRIVER_SETTLE="${2:-1.5}" \
-TEST_RUNNER_DRIVER_BUNDLE_ID="${PRAXIS_APP_BUNDLE_ID:-com.acresweb.praxis.mobile}" \
+TEST_RUNNER_DRIVER_BUNDLE_ID="${PRAXIS_APP_BUNDLE_ID:-com.acresweb.praxis.mobile.praxis}" \
   xcodebuild test-without-building -project PraxisDriver.xcodeproj -scheme DriverUITests \
   -destination "id=$DEVICE" -derivedDataPath "$RUN_DIR/dd" -resultBundlePath "$RUN_DIR/out.xcresult" > "$RUN_DIR/run.log" 2>&1
 status=$?
