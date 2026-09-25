@@ -20,17 +20,20 @@ class AppSidebar extends StatelessWidget {
       builder: (context, store, _) {
         return GestureDetector(
           onTap: onClose,
-          child: Container(
-            color: Colors.black26,
-            child: GestureDetector(
-              onTap: () {}, // Prevent dismissal on sidebar tap
-              child: Positioned(
+          child: Stack(
+            children: [
+              // Overlay background
+              Container(color: Colors.black26),
+              // Sidebar
+              Positioned(
                 right: 0,
                 top: 0,
                 bottom: 0,
-                child: Container(
-                  width: 300,
-                  color: Theme.of(context).scaffoldBackgroundColor,
+                width: 300,
+                child: GestureDetector(
+                  onTap: () {}, // Prevent dismissal on sidebar tap
+                  child: Container(
+                    color: Theme.of(context).scaffoldBackgroundColor,
                   child: Column(
                     children: [
                       // Header
@@ -168,7 +171,8 @@ class AppSidebar extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
+            ],
+          ),
           ),
         );
       },

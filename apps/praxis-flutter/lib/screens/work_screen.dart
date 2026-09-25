@@ -24,12 +24,14 @@ class _WorkScreenState extends State<WorkScreen> {
     return Consumer2<AppStore, MobileClient>(
       builder: (context, store, client, _) {
         final openWorkId = store.openWorkId;
-        final work = openWorkId != null
-            ? store.work.firstWhere(
-                (item) => item.workId == openWorkId,
-                orElse: () => null,
-              )
-            : null;
+        MobileWorkItem? work;
+        if (openWorkId != null) {
+          try {
+            work = store.work.firstWhere((item) => item.workId == openWorkId);
+          } catch (e) {
+            work = null;
+          }
+        }
 
         if (work == null) {
           return _EmptyWorkView(onOpenSidebar: widget.onOpenSidebar);
