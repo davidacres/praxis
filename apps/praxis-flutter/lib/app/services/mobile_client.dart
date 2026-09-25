@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import '../models/mobile_appearance.dart';
 import '../store/store_provider.dart';
 import '../store/types.dart';
 import 'connection_service.dart';
@@ -203,24 +204,4 @@ class MobileClient {
     await _eventSubscription?.cancel();
     await _connection.disconnect();
   }
-}
-
-class MobileAppearance {
-  final String name;
-  final String mode;
-  final String primaryColor;
-  final String backgroundColor;
-  final String surfaceColor;
-  final String textColor;
-  final String secondaryTextColor;
-
-  MobileAppearance({
-    required this.name,
-    required this.mode,
-    required this.primaryColor,
-    required this.backgroundColor,
-    required this.surfaceColor,
-    required this.textColor,
-    required this.secondaryTextColor,
-  });
 }

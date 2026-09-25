@@ -9,9 +9,11 @@ Color _parseColor(String hexColor) {
 }
 
 ThemeData buildTheme(MobileAppearance? appearance) {
-  appearance ??= appearance?.mode == 'dark'
-      ? MobileAppearance.defaultDark()
-      : MobileAppearance.defaultLight();
+  if (appearance == null) {
+    appearance = MobileAppearance.defaultLight();
+  } else if (appearance.mode == 'dark') {
+    appearance = MobileAppearance.defaultDark();
+  }
 
   final isDark = appearance.mode == 'dark';
   final primaryColor = _parseColor(appearance.primaryColor);
