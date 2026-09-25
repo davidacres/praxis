@@ -69,6 +69,8 @@ class PraxisTheme extends InheritedWidget {
 
   static PraxisThemeData of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<PraxisTheme>()!.data;
 
+  static PraxisThemeData? maybeOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<PraxisTheme>()?.data;
+
   @override
   bool updateShouldNotify(PraxisTheme oldWidget) =>
       oldWidget.data.palette != data.palette || oldWidget.data.scale != data.scale || oldWidget.data.appearance != data.appearance;

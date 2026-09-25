@@ -11,6 +11,7 @@ import 'screens/activity_screen.dart';
 import 'screens/attention_screen.dart';
 import 'screens/connect_screen.dart';
 import 'screens/work_screen.dart';
+import 'ui/error_card.dart';
 import 'ui/kit.dart';
 import 'ui/sidebar.dart';
 
@@ -20,6 +21,7 @@ void main() {
     FlutterError.presentError(details);
     Diagnostics.instance.record('Showing ${details.context?.toDescription() ?? 'a screen'}', details.exception);
   };
+  ErrorWidget.builder = (details) => ErrorCard(details: details);
   final theme = ThemeController();
   loadDisplayMode().then((mode) {
     if (mode != null) theme.applyDisplayMode(mode);

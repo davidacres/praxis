@@ -12,31 +12,28 @@ open -a Simulator                          # optional: watch it
 
 ## Build and install
 
-A Release build embeds the JavaScript, so Metro is not needed:
-
 ```sh
-npm run build:core && npm run build:mobile-protocol
-cd apps/praxis-mobile
-xcodebuild -workspace ios/Praxis.xcworkspace -scheme Praxis -configuration Release \
-  -destination 'id=<simulator udid>' build > /tmp/praxis-sim-build.log 2>&1
-grep -E 'error:|\*\* BUILD' /tmp/praxis-sim-build.log
-APP=$(ls -d ~/Library/Developer/Xcode/DerivedData/Praxis-*/Build/Products/Release-iphonesimulator/Praxis.app | head -1)
-xcrun simctl install booted "$APP"
-xcrun simctl launch booted com.acresweb.praxis.mobile
+cd apps/praxis-flutter
+flutter build ios --simulator --debug
+xcrun simctl install booted build/ios/iphonesimulator/Runner.app
+xcrun simctl launch booted com.acresweb.praxis.mobile.praxis
 ```
 
-For quick UI iteration you can instead run Metro (`npx expo start` in
-`apps/praxis-mobile`) with a Debug build (`npx expo run:ios`); evidence for a
-release should come from a Release build.
+`flutter run -d <simulator udid>` also builds, installs and gives hot reload.
+
+For realistic data without a real desktop, run the stage desktop
+(`node apps/praxis-flutter/tool/stage_host.cjs`): the desktop's own LAN
+listener and host services over sample sessions, runs and questions. It prints
+a pairing invitation for `127.0.0.1`, which the simulator can reach.
 
 Useful simulator commands:
 
 ```sh
 xcrun simctl io booted screenshot /tmp/sim.png            # screenshot without the driver
-xcrun simctl spawn booted log stream --predicate 'process == "Praxis"' --style compact   # live logs (no root needed)
+xcrun simctl spawn booted log stream --predicate 'process == "Runner"' --style compact   # live logs (no root needed)
 printf '%s' "<text>" | xcrun simctl pbcopy booted          # put text on the simulator clipboard
-xcrun simctl uninstall booted com.acresweb.praxis.mobile  # reset the app (drops pairing and keys)
-xcrun simctl terminate booted com.acresweb.praxis.mobile
+xcrun simctl uninstall booted com.acresweb.praxis.mobile.praxis  # reset the app (drops pairing and keys)
+xcrun simctl terminate booted com.acresweb.praxis.mobile.praxis
 ```
 
 ## Drive it

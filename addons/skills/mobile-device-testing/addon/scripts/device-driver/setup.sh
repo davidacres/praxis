@@ -12,15 +12,15 @@ if [ "${1:-}" = "--simulator" ]; then TARGET=simulator; SIM_NAME="${2:-}"; fi
 
 if [ -z "${PRAXIS_DRIVER_TEAM:-}" ]; then
   # Sign with the same team as the Praxis app when this copy sits in the repo.
-  for project in "${PRAXIS_IOS_PROJECT:-}" "$DRIVER_DIR/../../ios/Praxis.xcodeproj"; do
+  for project in "${PRAXIS_IOS_PROJECT:-}" "$DRIVER_DIR/../../apps/praxis-flutter/ios/Runner.xcodeproj"; do
     if [ -n "$project" ] && [ -f "$project/project.pbxproj" ]; then
-      PRAXIS_DRIVER_TEAM=$(grep -m1 -oE 'DEVELOPMENT_TEAM = [A-Z0-9]+' "$project/project.pbxproj" | awk '{print $3}')
+      PRAXIS_DRIVER_TEAM=$(grep -m1 -oE 'DEVELOPMENT_TEAM = [A-Z0-9]+' "$project/project.pbxproj" | awk '{print $3}' || true)
       break
     fi
   done
 fi
 if [ "$TARGET" = device ] && [ -z "${PRAXIS_DRIVER_TEAM:-}" ]; then
-  echo "Set PRAXIS_DRIVER_TEAM (Apple development team id) or PRAXIS_IOS_PROJECT (path to Praxis.xcodeproj)." >&2
+  echo "Set PRAXIS_DRIVER_TEAM (Apple development team id) or PRAXIS_IOS_PROJECT (path to the app's .xcodeproj)." >&2
   exit 1
 fi
 export PRAXIS_DRIVER_TEAM="${PRAXIS_DRIVER_TEAM:-}"

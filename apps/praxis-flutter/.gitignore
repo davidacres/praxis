@@ -88,3 +88,6 @@ coverage/
 
 # Stage host state (host key, paired phones)
 tool/.stage-host/
+
+# Xcode build output (deploy script, xcodebuild)
+/ios/build/

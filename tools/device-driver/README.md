@@ -15,10 +15,10 @@ check what the phone actually shows.
 Requirements: Xcode, CocoaPods (its bundled `xcodeproj` gem generates the
 project), an iPhone connected by USB, unlocked and trusted, with
 **Settings → Developer → Enable UI Automation** on, and the Praxis Release build
-installed (see [iOS phone deployment](../../docs/ios-phone-deployment.md)).
+installed (`./scripts/deploy-iphone.sh` from the repo root).
 
 ```sh
-cd apps/praxis-mobile/tools/device-driver
+cd tools/device-driver
 ./preflight.sh                  # read-only: paired, connected, Developer Mode, DDI services
 ./setup.sh                      # first connected iPhone
 ./setup.sh --simulator [name]   # booted simulator, else the first matching one (booted for you)
@@ -37,11 +37,11 @@ Outside this repository (for example the copy shipped in the
 | Variable | Default |
 | --- | --- |
 | `PRAXIS_DEVICE_ID` | The first connected iPhone (recorded by `setup.sh`) |
-| `PRAXIS_DRIVER_TEAM` | `DEVELOPMENT_TEAM` from `ios/Praxis.xcodeproj` (physical iPhone only) |
-| `PRAXIS_IOS_PROJECT` | Path to a `Praxis.xcodeproj` to read the team from |
+| `PRAXIS_DRIVER_TEAM` | `DEVELOPMENT_TEAM` from `apps/praxis-flutter/ios/Runner.xcodeproj` (physical iPhone only) |
+| `PRAXIS_IOS_PROJECT` | Path to an `.xcodeproj` to read the team from |
 | `PRAXIS_DRIVER_RUN_DIR` | `.run/` next to the scripts |
 | `PRAXIS_DRIVER_BUNDLE_PREFIX` | `com.acresweb.praxis` (driver apps are `<prefix>.driver…`) |
-| `PRAXIS_APP_BUNDLE_ID` | `com.acresweb.praxis.mobile` — the app being driven |
+| `PRAXIS_APP_BUNDLE_ID` | `com.acresweb.praxis.mobile.praxis` (the Flutter app) — the app being driven; `com.acresweb.praxis.mobile` for the Expo app |
 
 ## Running steps
 

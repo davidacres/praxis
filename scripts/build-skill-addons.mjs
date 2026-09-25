@@ -4,7 +4,7 @@
  * Prepares the skill add-ons under addons/skills/ for publishing:
  *   - copies bundled tool sources into each skill's payload (one source of truth
  *     in the repo — e.g. the mobile device driver lives in
- *     apps/praxis-mobile/tools/device-driver and ships inside the
+ *     tools/device-driver and ships inside the
  *     mobile-device-testing skill as scripts/device-driver),
  *   - validates the package's `praxis` manifest,
  *   - checks Praxis's own skill discovery accepts the payload's SKILL.md.
@@ -30,7 +30,7 @@ const { discoverSkills } = await import('../packages/core/out/ai/agentRuntime/sk
 const BUNDLES = {
   'mobile-device-testing': [
     {
-      source: 'apps/praxis-mobile/tools/device-driver',
+      source: 'tools/device-driver',
       target: 'scripts/device-driver',
       // Generated, machine-local, or repo-only (publishing); never shipped.
       exclude: ['.run', 'PraxisDriver.xcodeproj', '.gitignore', 'publish-skill.sh']
