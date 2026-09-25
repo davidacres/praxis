@@ -4,11 +4,11 @@
 type: Feature
 id: FX-BF-022
 title: "Managed project runs and diagnostic browser previews"
-status: In Progress
+status: Done
 slug: managed-run-and-preview
 stories: [FX-BE-054, FX-BE-055, FX-BE-056]
 issues: docs/issues/features/fx-bf-022-managed-run-and-preview/feature-issues.md
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BF-021]
 ---
 
@@ -74,3 +74,10 @@ Status: Failed · Duration: 2m 19s
 - ⏳ Security scan: pending
 
 Required stage "plan" failed.
+## Review 2026-09-25
+
+Status corrected to Done during the board-state review: all child stories
+now show Done, and the underlying delivery is present in the tree (see the
+per-story review comments for file-level evidence). Validation commands from
+the stories (`npm run check-types`, `npm run test:core`) were not rerun as
+part of this review.

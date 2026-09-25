@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import type { MobileGadgetView } from '@praxis/core';
 import { followOnMessages, followOnScroll, initialFollowState, jumpLabel } from '../renderer/mobileTranscriptFollow';
+import { formatCost, formatTokenCount } from '../renderer/mobileUsage';
 import { GadgetView, type GadgetAnswer } from './GadgetView';
 import { Markdown, markdownPlainText } from './Markdown';
 import { mobileScale, theme, themedStyles } from './theme';
@@ -14,6 +15,19 @@ export interface TranscriptMessage {
   at: string;
   streaming: boolean;
   gadgets?: readonly MobileGadgetView[];
+  model?: string;
+  tokens?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  cost?: { currency: string; amount: number };
+}
+
+function formatTokensDetail(tokens: { inputTokens?: number; outputTokens?: number; totalTokens?: number }): string | undefined {
+  const total = tokens.totalTokens ?? ((tokens.inputTokens ?? 0) + (tokens.outputTokens ?? 0) || undefined);
+  if (total === undefined && tokens.inputTokens === undefined && tokens.outputTokens === undefined) return undefined;
+  const count = total ?? 0;
+  if (tokens.inputTokens !== undefined && tokens.outputTokens !== undefined) {
+    return `${formatTokenCount(count)} tok (${formatTokenCount(tokens.inputTokens)} in · ${formatTokenCount(tokens.outputTokens)} out)`;
+  }
+  return `${formatTokenCount(count)} tokens`;
 }
 
 /**
@@ -37,6 +51,10 @@ export const ChatMessage = React.memo(function ChatMessage({
     );
   }
   const user = message.author === 'user';
+  const tokensText = !user && message.tokens ? formatTokensDetail(message.tokens) : undefined;
+  const costText = !user && message.cost ? formatCost(message.cost) : undefined;
+  const hasMeta = !user && Boolean(message.model || tokensText || costText);
+
   return (
     <View style={styles.messageGroup}>
       {message.text ? (
@@ -49,6 +67,28 @@ export const ChatMessage = React.memo(function ChatMessage({
             <Text style={styles.messageTime}>{message.streaming ? 'STREAMING' : message.at}</Text>
           </View>
           {user ? <Text selectable style={styles.messageText}>{message.text}</Text> : <Markdown text={message.text} />}
+          {hasMeta ? (
+            <View style={styles.messageMeta}>
+              {message.model ? (
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaLabel}>MODEL</Text>
+                  <Text numberOfLines={1} style={styles.metaValue}>{message.model}</Text>
+                </View>
+              ) : null}
+              {tokensText ? (
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaLabel}>TOKENS</Text>
+                  <Text style={styles.metaValue}>{tokensText}</Text>
+                </View>
+              ) : null}
+              {costText ? (
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaLabel}>COST</Text>
+                  <Text style={styles.metaValue}>{costText}</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       ) : null}
       {message.gadgets?.map(view => (
@@ -137,24 +177,109 @@ export function Transcript<T>({
 
 const styles = themedStyles(() => StyleSheet.create({
   shell: { flex: 1 },
-  transcript: { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: mobileScale(12), paddingTop: mobileScale(8), paddingBottom: mobileScale(14) },
-  messageGroup: { gap: mobileScale(8), marginBottom: mobileScale(12) },
+  transcript: {
+    flexGrow: 1,
+    paddingHorizontal: mobileScale(12),
+    paddingTop: mobileScale(8),
+    paddingBottom: mobileScale(14),
+  },
+  messageGroup: {
+    width: '100%',
+    gap: mobileScale(8),
+    marginBottom: mobileScale(12),
+  },
   message: {
-    maxWidth: '88%',
     paddingHorizontal: mobileScale(12),
     paddingTop: mobileScale(9),
     paddingBottom: mobileScale(11),
     borderWidth: 1,
     borderRadius: mobileScale(7),
   },
-  messageUser: { alignSelf: 'flex-end', borderColor: theme.accentMuted, backgroundColor: theme.userMessage },
-  messageAssistant: { alignSelf: 'flex-start', borderColor: theme.border, backgroundColor: theme.assistantMessage },
-  messageHeader: { marginBottom: mobileScale(7), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: mobileScale(18) },
-  messageAuthor: { color: theme.textDim, fontSize: mobileScale(10), fontWeight: '700', letterSpacing: 0.8 },
-  messageTime: { color: theme.textDim, fontSize: mobileScale(10), fontVariant: ['tabular-nums'] },
-  messageText: { color: theme.text, fontSize: mobileScale(13), lineHeight: mobileScale(19) },
-  notice: { alignSelf: 'center', maxWidth: '90%', marginBottom: mobileScale(12), paddingHorizontal: mobileScale(10), paddingVertical: mobileScale(4), borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border, backgroundColor: theme.surface },
-  noticeText: { color: theme.textDim, fontSize: mobileScale(11), textAlign: 'center' },
+  messageUser: {
+    alignSelf: 'flex-end',
+    maxWidth: '85%',
+    borderColor: theme.accentMuted,
+    backgroundColor: theme.userMessage,
+  },
+  messageAssistant: {
+    alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: '100%',
+    borderColor: theme.border,
+    backgroundColor: theme.assistantMessage,
+  },
+  messageHeader: {
+    marginBottom: mobileScale(7),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: mobileScale(18),
+  },
+  messageAuthor: {
+    color: theme.textDim,
+    fontSize: mobileScale(10),
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  messageTime: {
+    color: theme.textDim,
+    fontSize: mobileScale(10),
+    fontVariant: ['tabular-nums'],
+  },
+  messageText: {
+    color: theme.text,
+    fontSize: mobileScale(13),
+    lineHeight: mobileScale(19),
+  },
+  messageMeta: {
+    marginTop: mobileScale(9),
+    paddingTop: mobileScale(7),
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.border,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: mobileScale(6),
+  },
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: mobileScale(6),
+    paddingVertical: mobileScale(2.5),
+    borderRadius: mobileScale(4),
+    backgroundColor: theme.surfaceRaised,
+    borderWidth: 1,
+    borderColor: theme.border,
+    gap: mobileScale(5),
+  },
+  metaLabel: {
+    color: theme.textDim,
+    fontSize: mobileScale(9),
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  metaValue: {
+    color: theme.textSecondary,
+    fontSize: mobileScale(10.5),
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+  },
+  notice: {
+    alignSelf: 'center',
+    maxWidth: '90%',
+    marginBottom: mobileScale(12),
+    paddingHorizontal: mobileScale(10),
+    paddingVertical: mobileScale(4),
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.border,
+    backgroundColor: theme.surface,
+  },
+  noticeText: {
+    color: theme.textDim,
+    fontSize: mobileScale(11),
+    textAlign: 'center',
+  },
   jump: {
     position: 'absolute',
     alignSelf: 'center',
@@ -166,5 +291,9 @@ const styles = themedStyles(() => StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.borderStrong,
   },
-  jumpText: { color: theme.text, fontSize: mobileScale(12.5), fontWeight: '700' },
+  jumpText: {
+    color: theme.text,
+    fontSize: mobileScale(12.5),
+    fontWeight: '700',
+  },
 }));

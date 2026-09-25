@@ -31,6 +31,22 @@ test('TASK-247: getBundledAgentManifests returns trusted global agents', () => {
   }
 });
 
+test('praxis planner defines the canonical Praxis plan-file specification', () => {
+  const brief = BUNDLED_AGENT_DEFINITIONS['praxis-planner'].brief;
+
+  assert.match(brief, /You define and enforce the Praxis plan-file standard\./);
+  assert.match(brief, /Existing plans provide delivery context only/);
+  assert.match(brief, /features\/<feature-id>\/feature\.md/);
+  assert.match(brief, /stories\/<story-id>\/story\.md/);
+  assert.match(brief, /tasks\/<task-id>\.md/);
+  assert.match(brief, /Declare its `id`, `type`/);
+  assert.match(brief, /IDs must be unique\s+across the entire plans tree/);
+  assert.match(brief, /Use the board's declared workflow stage names for statuses/);
+  assert.match(brief, /`## Dependencies` section/);
+  assert.match(brief, /parseable by a Praxis board/);
+  assert.doesNotMatch(brief, /Follow repository planning conventions/);
+});
+
 test('TASK-247: discoverAgents on clean directory discovers bundled agents with trust', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-bundled-test-'));
   try {

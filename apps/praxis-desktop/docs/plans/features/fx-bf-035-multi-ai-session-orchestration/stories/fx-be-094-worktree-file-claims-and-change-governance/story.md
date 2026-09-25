@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Created:** 2026-09-10T10:48:08.260Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-094
 title: "Worktree, file claims and change governance"
-status: To Do
+status: In Progress
 feature: FX-BF-035
-updated: 2026-09-10
+updated: 2026-09-25
 dependencies: [FX-BE-092, FX-BF-003]
 ---
 
@@ -43,3 +43,36 @@ Contract tests, fixture repositories, captured provider output, failure and reco
 ## Comments
 
 
+
+## Review 2026-09-25 — status corrected from To Do to In Progress
+
+Substantially delivered through the session and workflow worktree work. Found
+during the board review; the ticket was stale at To Do (updated 2026-09-10).
+
+Delivered:
+
+- `packages/core/src/git/gitWorktreeManager.ts` implements per-session branch
+  and worktree creation and cleanup, with `gitWorktreeManager.test.ts` covering
+  it and the e2e spec `aiWorktree.spec.ts` proving a worktree session creates
+  the branch and checkout and can remove it (TASK-262).
+- Dirty-worktree protection is enforced rather than assumed:
+  `workflowWorkspace.ts` commits leftover changes as a WIP commit before
+  removing a checkout because `--force` would throw them away, and
+  `workflowMergeRunner.ts` refuses to merge into a checkout with uncommitted
+  changes. `NewSession.tsx` surfaces uncommitted base files as a blocking
+  choice instead of proceeding silently (TASK-262).
+- Change attribution is captured: `runWork.ts` records commit count, commit
+  list and uncommitted file count per worktree, and sessions carry
+  `worktreePath`, `worktreeBranch`, `worktreeBaseBranch` and `worktreeName`
+  so a change set resolves back to its session (TASK-264).
+
+Not yet delivered, which is why this is In Progress rather than Done:
+
+- TASK-263 is absent — there is no path-claim registry, no overlap detection
+  between concurrent sessions, and no claim expiry or release. Isolation is
+  currently by worktree only, so the acceptance criterion "two sessions cannot
+  acquire overlapping write claims" is met incidentally rather than enforced.
+- TASK-265's out-of-scope change policy (block or escalate an undeclared path
+  change) has no implementation.
+
+Remaining scope is TASK-263 and TASK-265.

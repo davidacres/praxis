@@ -26,8 +26,11 @@ no error, it just never appears on the board. Check every file you write against
    todo / pending / planned → To Do; anything else → Backlog. If the plans folder has a board.praxis.json
    with a workflow, use that workflow's stage names.
 5. **Dependencies** go in a "## Dependencies" section or on a "**Dependencies:**" line, naming item ids.
-6. **Keep to the folder's existing layout and naming.** Read two or three existing items first and match
-   their frontmatter, headings and file names.
+6. **Praxis defines the layout and naming.** Do not treat existing items as a specification or copy their
+   structure. Use the Praxis contracts above: canonical names are `feature.md` for features and
+   `stories/<id>/story.md` for stories (with an explicit `type: Story`); use `tasks/<id>.md` or a
+   `task-N-N-slug.md` filename with an explicit type for tasks. Inspect existing items only to avoid
+   duplicate IDs, identify dependencies, and use a declared board workflow's stage names.
 
 When you have finished, list every file you wrote with its id, type, status and H1, and say which rule
 each satisfies. If the repository provides a plan validator or parser test, run it and report the

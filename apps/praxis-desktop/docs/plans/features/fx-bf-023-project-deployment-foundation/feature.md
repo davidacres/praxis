@@ -4,11 +4,11 @@
 type: Feature
 id: FX-BF-023
 title: "Project deployment profiles and direct execution"
-status: In Progress
+status: Done
 slug: project-deployment-foundation
 stories: [FX-BE-057, FX-BE-058, FX-BE-059, FX-BE-060]
 issues: docs/issues/features/fx-bf-023-project-deployment-foundation/feature-issues.md
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BF-021]
 ---
 
@@ -61,3 +61,11 @@ Review the complete feature journey and documented support matrix. Follow AGENTS
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected to Done during the board-state review: all child stories
+now show Done, and the underlying delivery is present in the tree (see the
+per-story review comments for file-level evidence). Validation commands from
+the stories (`npm run check-types`, `npm run test:core`) were not rerun as
+part of this review.

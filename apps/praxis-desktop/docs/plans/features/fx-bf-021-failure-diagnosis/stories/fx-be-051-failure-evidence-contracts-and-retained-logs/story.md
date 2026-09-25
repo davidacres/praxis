@@ -4,9 +4,9 @@
 type: Story
 id: FX-BE-051
 title: "Failure evidence contracts and retained logs"
-status: In Progress
+status: Done
 feature: FX-BF-021
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BE-024, FX-BE-025, FX-BE-041]
 ---
 
@@ -57,3 +57,18 @@ No automatic production deployment, broad credential grant, full source editor o
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected from In Progress → Done. Verified in the current tree:
+
+- Evidence contracts live in `packages/core/src/workflows/workflowEvidence.ts`
+  (bundle/entry/source-ref types; imported across `workflowRunSummary`,
+  `diagnosisBrief`, and `browserDiagnostics`).
+- Retained evidence flows through the run pipeline: `workflowRunSummary.ts`
+  carries check evidence into stage summaries.
+- Core test coverage: `workflowEvidence` exercised via
+  `directDeliveryJourney.test.ts` and `workflowRunSummary` tests.
+
+Validation commands: `npm run check-types`, `npm run test:core`
+(not rerun as part of this review).

@@ -58,3 +58,14 @@ As scoped (`providerProbe.ts`, `ai.testCustomProvider`). The probe result is wri
 saved endpoint only when it targeted exactly what is saved; a draft probe never stores its key.
 Tests: `providerProbe.test.ts` (all-pass, no tools, rejects `stream_options`, no `/models`,
 401 without echoing the key, unreachable server).
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

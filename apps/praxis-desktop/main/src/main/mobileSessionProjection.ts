@@ -128,6 +128,8 @@ function persistedMessages(record: AgentSessionRecord, resolveGadgets?: MobileGa
       ...(event.reasoning ? { reasoning: boundedText(event.reasoning, MAX_MOBILE_REASONING_CHARS) } : {}),
       ...(event.modelId ? { model: event.modelId } : {}),
       ...(event.toolNames?.length ? { toolNames: event.toolNames } : {}),
+      ...(event.tokenUsage ? { tokenUsage: event.tokenUsage } : {}),
+      ...(event.cost ? { cost: event.cost } : {}),
     });
   });
   return messages.length > MAX_MOBILE_MESSAGES ? messages.slice(-MAX_MOBILE_MESSAGES) : messages;
@@ -177,6 +179,8 @@ export function mobileSessionSnapshot(
       status: 'streaming',
       ...(record.reasoningText?.trim() ? { reasoning: boundedText(record.reasoningText.trim(), MAX_MOBILE_REASONING_CHARS) } : {}),
       ...(record.model ? { model: record.model } : {}),
+      ...(record.tokenUsage ? { tokenUsage: record.tokenUsage } : {}),
+      ...(record.cost ? { cost: record.cost } : {}),
     });
   }
   if (messages.length > MAX_MOBILE_MESSAGES) messages.splice(0, messages.length - MAX_MOBILE_MESSAGES);

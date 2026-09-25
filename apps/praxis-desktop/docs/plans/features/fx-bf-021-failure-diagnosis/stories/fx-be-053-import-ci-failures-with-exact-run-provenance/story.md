@@ -4,9 +4,9 @@
 type: Story
 id: FX-BE-053
 title: "Import CI failures with exact run provenance"
-status: In Progress
+status: Done
 feature: FX-BF-021
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BE-052]
 ---
 
@@ -55,3 +55,16 @@ No automatic production deployment, broad credential grant, full source editor o
 ## Comments
 
 
+
+## Review 2026-09-25
+
+Status corrected from In Progress → CI failure import with provenance is implemented in core.
+
+- `packages/core/src/ci/gitLabCiEvidenceProvider.ts` imports GitLab CI evidence,
+  wiring run provenance into the shared evidence contracts
+  (`workflowEvidence.ts`).
+- `packages/core/src/gitlab/gitLabApiService.ts` + `gitLabBoardService.ts`
+  provide the GitLab backend integration used by the import path.
+
+Validation commands: `npm run check-types`, `npm run test:core`
+(not rerun as part of this review).

@@ -4,11 +4,11 @@
 type: Feature
 id: FX-BF-021
 title: "Reproducible failure diagnosis and verification evidence"
-status: In Progress
+status: Done
 slug: failure-diagnosis
 stories: [FX-BE-051, FX-BE-052, FX-BE-053]
 issues: docs/issues/features/fx-bf-021-failure-diagnosis/feature-issues.md
-updated: 2026-09-07
+updated: 2026-09-25
 dependencies: [FX-BE-024, FX-BE-025, FX-BE-041]
 ---
 
@@ -94,3 +94,10 @@ Status: Cancelled · Duration: 5m 24s
 - ⏭️ Security scan: cancelled
 
 cancelled from the monitor
+## Review 2026-09-25
+
+Status corrected to Done during the board-state review: all child stories
+now show Done, and the underlying delivery is present in the tree (see the
+per-story review comments for file-level evidence). Validation commands from
+the stories (`npm run check-types`, `npm run test:core`) were not rerun as
+part of this review.

@@ -1,7 +1,7 @@
 # FX-BE-126 — Workflow Designer and Task Designer integration
 
 **Type:** Story
-**Status:** Planned
+**Status:** Done
 **Priority:** High
 **Depends on:** FX-BF-012, FX-BF-014, FX-BF-015, FX-BF-017
 
@@ -37,3 +37,18 @@ the original plan artifact intact.
 
 Both designers feed governed execution by explicit user intent and durable
 provenance.
+
+## Review 2026-09-25 — status corrected from Planned to Done
+
+Found shipped in the codebase during the board review; the ticket was left
+stale at Planned (updated 2026-09-17).
+
+- Task Designer promotions are runtime-readiness checked before a workflow
+  goes live, and promoted designs stay editable in the Workflow Designer.
+- Cross-surface run provenance links sessions and runs back to the originating
+  design, matching the acceptance criteria here.
+
+Status set to Done as part of the 2026-09-25 board review. Verified in this
+review: `npm run build:core` and `npm run test:core` (1311 tests, 0 failures).
+Renderer/desktop build and e2e commands were unavailable in this session, so
+re-run them before release.

@@ -24,6 +24,8 @@ interface ConfirmOptions {
   option?: { label: string; hint?: string };
   confirmLabel?: string;
   cancelLabel?: string;
+  /** A third button beside Cancel/Confirm for a softer alternative, e.g. "Archive instead". */
+  tertiaryLabel?: string;
   danger?: boolean;
 }
 
@@ -39,17 +41,22 @@ interface PromptOptions {
   validate?: (value: string) => string | undefined;
 }
 
+/** Which button closed a `confirmChoice` dialog. */
+export type ConfirmResult = 'confirm' | 'cancel' | 'tertiary';
+
 interface DialogsApi {
   confirm: (options: ConfirmOptions) => Promise<boolean>;
   /** Like `confirm`, but also reports whether the `option` checkbox was ticked. Cancelling reports `checked: false`. */
   confirmWithOption: (options: ConfirmOptions) => Promise<{ confirmed: boolean; checked: boolean }>;
+  /** Like `confirm`, but distinguishes the optional `tertiaryLabel` button from Cancel. */
+  confirmChoice: (options: ConfirmOptions) => Promise<ConfirmResult>;
   prompt: (options: PromptOptions) => Promise<string | null>;
 }
 
 const DialogsContext = createContext<DialogsApi | null>(null);
 
 type ActiveDialog =
-  | { kind: 'confirm'; options: ConfirmOptions; resolve: (confirmed: boolean, checked: boolean) => void }
+  | { kind: 'confirm'; options: ConfirmOptions; resolve: (result: ConfirmResult, checked: boolean) => void }
   | { kind: 'prompt'; options: PromptOptions; resolve: (value: string | null) => void };
 
 export function DialogHost({ children }: { children: React.ReactNode }) {
@@ -59,11 +66,24 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
   const [optionChecked, setOptionChecked] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const confirmChoice = useCallback(
+    (options: ConfirmOptions) =>
+      new Promise<ConfirmResult>(resolve => {
+        setOptionChecked(false);
+        setActive({ kind: 'confirm', options, resolve: result => resolve(result) });
+      }),
+    []
+  );
+
   const confirmWithOption = useCallback(
     (options: ConfirmOptions) =>
       new Promise<{ confirmed: boolean; checked: boolean }>(resolve => {
         setOptionChecked(false);
-        setActive({ kind: 'confirm', options, resolve: (confirmed, checked) => resolve({ confirmed, checked }) });
+        setActive({
+          kind: 'confirm',
+          options,
+          resolve: (result, checked) => resolve({ confirmed: result === 'confirm', checked })
+        });
       }),
     []
   );
@@ -88,7 +108,10 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const api = useMemo<DialogsApi>(() => ({ confirm, confirmWithOption, prompt }), [confirm, confirmWithOption, prompt]);
+  const api = useMemo<DialogsApi>(
+    () => ({ confirm, confirmWithOption, confirmChoice, prompt }),
+    [confirm, confirmWithOption, confirmChoice, prompt]
+  );
 
   const close = (settle: () => void) => {
     settle();
@@ -97,13 +120,18 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
 
   const cancel = () => {
     if (!active) return;
-    close(() => (active.kind === 'confirm' ? active.resolve(false, false) : active.resolve(null)));
+    close(() => (active.kind === 'confirm' ? active.resolve('cancel', false) : active.resolve(null)));
+  };
+
+  const tertiary = () => {
+    if (!active || active.kind !== 'confirm') return;
+    close(() => active.resolve('tertiary', optionChecked));
   };
 
   const accept = () => {
     if (!active) return;
     if (active.kind === 'confirm') {
-      close(() => active.resolve(true, optionChecked));
+      close(() => active.resolve('confirm', optionChecked));
       return;
     }
     const value = draft.trim();
@@ -188,6 +216,11 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
               <button type="button" className="btn" onClick={cancel}>
                 {active.options.cancelLabel ?? 'Cancel'}
               </button>
+              {active.kind === 'confirm' && active.options.tertiaryLabel && (
+                <button type="button" className="btn" data-testid="app-dialog-tertiary" onClick={tertiary}>
+                  {active.options.tertiaryLabel}
+                </button>
+              )}
               <button
                 type="button"
                 className={`btn ${active.kind === 'confirm' && active.options.danger ? 'btn-danger' : 'btn-primary'}`}

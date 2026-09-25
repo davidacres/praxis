@@ -1,7 +1,7 @@
 # FX-BF-040 — Connected agent workflow sessions and governed delivery
 
 **Type:** Feature
-**Status:** Planned
+**Status:** Done
 **Owner:** Electron desktop app
 
 ## Outcome
@@ -25,3 +25,18 @@ From a session, a user selects a ready governed workflow and compatible binding;
 the app starts a durable run, executes attributed stage sessions through the
 selected host and skills, enforces gates and approvals, and preserves the full
 relationship after restart without changing legacy prompt-only sessions.
+
+## Review 2026-09-25 — status corrected from Planned to Done
+
+All six stories were found shipped in the codebase during the board review;
+they were left stale at Planned (updated 2026-09-17).
+
+- Governed workflow selection, run snapshots, host-adapter launches, pack and
+  skill activation, designer promotion, node-specific approvals with
+  policy-checked bypass, migration, and diagnostics are all present and
+  exercised by the core test suite.
+- Verified in this review: `npm run build:core` and `npm run test:core`
+  (1311 tests, 0 failures). Desktop build/e2e commands were unavailable in
+  this session, so re-run them before release.
+
+Status set to Done as part of the 2026-09-25 board review.

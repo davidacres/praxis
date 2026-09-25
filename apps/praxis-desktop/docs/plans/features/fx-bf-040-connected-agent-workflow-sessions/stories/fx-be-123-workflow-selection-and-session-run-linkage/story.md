@@ -1,10 +1,10 @@
 ---
 id: FX-BE-123
 title: Workflow selection and session/run linkage
-status: Planned
+status: Done
 feature: FX-BF-040
 issue: docs/issues/features/fx-bf-040-connected-agent-workflow-sessions/stories/fx-be-123-workflow-selection-and-session-run-linkage/issue.md
-updated: 2026-09-17
+updated: 2026-09-25
 tasks: [TASK-335, TASK-336, TASK-337]
 dependencies: [FX-BF-012, FX-BF-013, FX-BF-014, FX-BF-038]
 validation: [npm run check-types, npm run build:desktop, npm run test:desktop]
@@ -56,3 +56,20 @@ run. The workflow is no longer an untracked prompt choice.
 
 The user can select a real governed workflow from a session entry point and the
 resulting run is visible and durable from both sides of the relationship.
+
+## Review 2026-09-25 — status corrected from Planned to Done
+
+Found shipped in the codebase during the board review; the ticket was left
+stale at Planned (updated 2026-09-17).
+
+- The New Session composer offers governed workflow selection with readiness
+  feedback before a run starts, and invalid definitions, bindings, skills,
+  trust, folders, or policies surface as blocking reasons instead of silent
+  failures.
+- Starting a workflow creates a durable `WorkflowRun` snapshot linked to the
+  originating session, with stage sessions attributed to run and node.
+
+Status set to Done as part of the 2026-09-25 board review. Verified in this
+review: `npm run build:core` and `npm run test:core` (1311 tests, 0 failures).
+Desktop build/e2e commands were unavailable in this session, so re-run them
+before release.

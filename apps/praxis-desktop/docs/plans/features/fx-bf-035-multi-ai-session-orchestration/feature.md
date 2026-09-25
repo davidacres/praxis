@@ -1,13 +1,13 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Created:** 2026-09-10T10:48:08.191Z
 **Type:** Feature
 **Priority:** Medium
 type: Feature
 id: FX-BF-035
 title: "Multi-AI session orchestration across Claude, Codex and Copilot"
-status: To Do
-updated: 2026-09-10
+status: In Progress
+updated: 2026-09-25
 dependencies: [FX-BF-011, FX-BF-012, FX-BF-013, FX-BF-015, FX-BF-019]
 ---
 
@@ -63,6 +63,24 @@ A fixture repository can run design, implementation, independent review and fina
 ## Verification
 
 Use stub adapters for deterministic end-to-end tests and captured output fixtures for provider-specific parsers. Test clean, failed, cancelled, timed-out, retried, conflicting and resumed sessions. Run the read-only plan parser against baseline and final plans. Do not use the repository's own plans as a write-path test target.
+
+## Review 2026-09-25 — status corrected from To Do to In Progress
+
+Substantial delivery now exists, so To Do is no longer accurate, but the
+feature is not fully closed either.
+
+- Shipped: multi-provider session execution through the governed workflow
+  engine (scheduler, stage sessions, recovery), worktree governance, session
+  handover with a living brief, and opt-in multi-AI conversation.
+- All three follow-up stories (FX-BE-130, FX-BE-131, FX-BE-132) are Complete,
+  and FX-BE-115 is Done.
+- Still open in the plan: FX-BE-092, FX-BE-093, FX-BE-094, FX-BE-095, and
+  FX-BE-096 were not individually re-verified against their acceptance
+  criteria in this review, so the parent stays In Progress rather than Done.
+- Verified in this review: `npm run build:core` and `npm run test:core`
+  (1311 tests, 0 failures).
+
+Re-audit FX-BE-092…096 to decide whether this feature can close.
 
 ## Description
 
@@ -121,3 +139,25 @@ Status: Failed · Duration: 8h 23m
 - ✅ Security scan: succeeded
 
 Required stage "qa" failed.
+
+## Review 2026-09-25 — FX-BE-092…096 audited
+
+Board review of the five original stories against their acceptance criteria.
+Statuses corrected on each story file; this feature stays In Progress.
+
+- FX-BE-093, FX-BE-095, FX-BE-096 → **Done**. Provider adapters with a
+  four-state capability preflight, the dependency-aware workflow scheduler with
+  durable run state and recovery, and the session monitor/review surfaces are
+  all shipped and covered by tests.
+- FX-BE-092 → **In Progress**. The versioned handover envelope shipped with
+  FX-BE-115; TASK-254 (bounded context snapshot with source commit and
+  included/excluded files) and TASK-256's validation half remain.
+- FX-BE-094 → **In Progress**. Worktree lifecycle, dirty-worktree protection
+  and change attribution are delivered; TASK-263 path claims and TASK-265
+  out-of-scope change policy remain.
+
+Remaining scope to close this feature: TASK-254, TASK-256, TASK-263, TASK-265.
+
+Verified in this review: `npm run build:core` and `npm run test:core`
+(1311 tests, 0 failures). Desktop build/e2e commands were unavailable in this
+session, so re-run them before release.
