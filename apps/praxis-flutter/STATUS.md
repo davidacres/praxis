@@ -56,7 +56,14 @@ display size, connect/pairing screens.
 
 ## Not yet verified
 
-- QR scanning (simulator has no camera; the phone build has it).
+- QR scanning with the phone camera. Two bugs are fixed but untested on a camera:
+  the scanner made a new camera controller on every rebuild, so the preview sat
+  in the top-left corner and never settled; and the desktop's QR code could not
+  be read at all. It was a fixed version-4 code with no alignment pattern and
+  wrong format bits, and it cut the ~160-byte invitation off at 77 bytes. The
+  desktop code (`renderer/src/ui/qrCodeSvg.tsx`) is now a standard byte-mode,
+  ECC-M encoder. A capture from the running desktop decodes to the full
+  invitation with Core Image's QR detector.
 - Pairing with the real desktop app — only the stage desktop has been used.
 - Android — not built.
 
