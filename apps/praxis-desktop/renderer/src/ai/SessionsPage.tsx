@@ -102,6 +102,16 @@ export interface SessionsPageProps {
   onBrowserOpenChange?: (open: boolean) => void;
   onBrowserUrlChange?: (url: string) => void;
   browserSuspended?: boolean;
+  /**
+   * Floating chat window (FX-BE-143). Set on the conversation console only —
+   * an ordinary ticket/board session has no pop-out affordance. Renders a
+   * header button that floats the selected session out into its own window.
+   * The caller is responsible for not also rendering this console for a
+   * session that is already floating (see `App.tsx`'s `renderConversationsPage`).
+   */
+  onPopOut?: (session: AgentSessionRecord) => void;
+  /** Set inside the floating window itself: replaces the pop-out button with pop-in. */
+  onPopIn?: () => void;
 }
 
 /** Per-session override of the profile-wide "Plain chat background" setting.
@@ -675,7 +685,9 @@ export function SessionsPage({
   initialBrowserUrl,
   onBrowserOpenChange,
   onBrowserUrlChange,
-  browserSuspended
+  browserSuspended,
+  onPopOut,
+  onPopIn
 }: SessionsPageProps) {
   const { confirm } = useDialogs();
   const [status, setStatus] = useState<AiProviderStatus | undefined>();
@@ -1526,6 +1538,28 @@ export function SessionsPage({
               >
                 <Icon name="globe" size={13} />
               </button>
+              {onPopOut && (
+                <button
+                  type="button"
+                  className="icon-btn icon-btn-sm"
+                  data-testid="session-pop-out"
+                  aria-label={`Open ${sessionTitle(selected)} in a floating window`}
+                  onClick={() => onPopOut(selected)}
+                >
+                  <Icon name="external-link" size={13} />
+                </button>
+              )}
+              {onPopIn && (
+                <button
+                  type="button"
+                  className="icon-btn icon-btn-sm"
+                  data-testid="session-pop-in"
+                  aria-label={`Return ${sessionTitle(selected)} to the main window`}
+                  onClick={onPopIn}
+                >
+                  <Icon name="window-restore" size={13} />
+                </button>
+              )}
             </div>
 
             {selected.taskDefinition.kind === 'analysis' && (

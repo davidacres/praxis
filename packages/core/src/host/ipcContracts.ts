@@ -241,6 +241,23 @@ export interface WindowIpc {
 }
 
 /**
+ * Floating chat window (FX-BE-143): pops a standalone conversation out of the
+ * main window into its own always-on-top, native-framed `BrowserWindow`. The
+ * main process is the sole authority for which sessions are currently
+ * detached, so a conversation is never rendered live in two windows at once.
+ */
+export interface DetachedChatIpc {
+  /** Opens (or focuses, if already open) the floating window for `issueKey`. */
+  open(issueKey: string): Promise<void>;
+  /** Pop-in: closes the floating window and returns the conversation to the main window. */
+  close(issueKey: string): Promise<void>;
+  /** The issue keys currently floating in their own windows. */
+  list(): Promise<string[]>;
+  /** Fires whenever a conversation pops out, pops in, or its window is closed natively. */
+  onChanged(listener: (issueKeys: string[]) => void): () => void;
+}
+
+/**
  * Settings store slice. The Electron main process and the VS Code extension
  * share a single JSON file (see `resolveSharedSettingsPath`) so a change made
  * in one is reflected in the other via the file watcher + this push channel.
@@ -1018,6 +1035,7 @@ export interface PraxisIpc {
   connection: ConnectionIpc;
   folder: FolderIpc;
   window: WindowIpc;
+  detachedChat: DetachedChatIpc;
   settings: SettingsIpc;
   log: LogIpc;
   dialog: DialogIpc;

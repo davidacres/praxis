@@ -1,14 +1,14 @@
 ---
-**Status:** Backlog
+**Status:** In Progress
 **Created:** 2026-09-25T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-142
 title: "Conversations list and lifecycle"
-status: Backlog
+status: In Progress
 feature: FX-BF-045
-updated: 2026-09-25
+updated: 2026-09-26
 dependencies: []
 ---
 
@@ -96,3 +96,49 @@ foundation the floating window (FX-BE-143) sits on top of.
 
 
 ## Comments
+
+**2026-09-26 — implementation (Claude):** All Scope items implemented:
+
+- `isConversationSession` added to `renderer/src/ai/sessionNav.ts`, exactly the
+  predicate the feature file specifies (synthesized key, minus workflow-stage
+  and ticket-review sessions).
+- Sidebar: new **Conversations** row between Overview and Sessions
+  (`Sidebar.tsx`'s `FEATURES`), `chats` icon, reusing the existing
+  `SessionsNav` component (rename/archive/delete come for free) filtered to
+  conversation sessions; `SessionsNav`'s Sessions instance is now filtered to
+  *exclude* them so nothing double-lists.
+- Lightweight "New conversation" composer: `NewSession.tsx` gained a
+  `conversational` prop that hides the board/ticket picker entirely (heading
+  becomes plain "New conversation") and swaps the goal placeholder to "Ask
+  anything, brainstorm, or get something done…". Wired from the sidebar row's
+  `+`, the Overview hero button, and the command palette.
+- Command palette: conversations get their own `agentSessions.filter(...)`
+  block grouped under "Conversations", plus a "New conversation" action entry.
+- Overview (`OverviewPage.tsx`): hero row's third button is "New conversation"
+  (now the primary-styled one, per the feature's decision 5); a new "Recent
+  conversations" panel sits beside "Active AI sessions" (own empty state); the
+  starter strip's gate now excludes conversation sessions so starting one
+  first still leaves "Create a project" visible.
+- `App.tsx` routing: a `conversations` feature reuses the exact same session
+  console (`SessionsPage`) the Sessions route uses, scoped to conversation
+  sessions only — no new chat UI needed, matching decision 4.
+
+**Verification:** `npm run check-types`, `npm run build:renderer`, and
+`npm run build:desktop` all pass clean; `npm run test:core` passes all 1312
+tests. **`npm run test:desktop` could not be run in this sandbox** — Electron
+fails to launch here because a bundled native dependency (`node-pty`, used by
+the unrelated terminal feature) has no linux-x64 prebuild and this
+container's network policy blocks fetching Node headers to build one
+(`nodejs.org` is not on the proxy's allowed host list). This is an
+environment limitation, not something this change introduced — `node-pty`
+loads on startup regardless of any AI-session/Conversations code path.
+Marking this **In Progress** rather than **Done** because the story's own
+Validation section requires `npm run test:desktop` and the "focused coverage"
+it calls for (conversation classification, sidebar partitioning,
+command-palette lookup, onboarding-strip guard) was not added as new
+Playwright specs — I did not want to author untested e2e specs and claim they
+pass. Recommend running `npm run desktop:copy-renderer && npm run test:desktop`
+in a normal dev machine before marking this Done, particularly
+`overview.spec.ts`, `commandPalette.spec.ts`, `aiSessions.spec.ts` and
+`sidebarTreeAlignment.spec.ts` for regressions, plus new coverage for the
+Conversations node itself.

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
+import { DetachedChatWindow } from './ai/DetachedChatWindow';
 import { DialogHost } from './ui/dialogs';
 import { installIconButtonTooltips } from './ui/iconButtonTooltips';
 import {
@@ -128,10 +129,15 @@ window.praxis.marketplace.onChanged(() => {
   });
 });
 
+// The floating chat window (FX-BE-143) loads this exact same renderer bundle —
+// same theme/CSP setup above — at `?detachedSession=<issueKey>`, so it renders
+// a single-conversation view instead of the full shell.
+const detachedSessionKey = new URLSearchParams(window.location.search).get('detachedSession');
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <DialogHost>
-      <App />
+      {detachedSessionKey ? <DetachedChatWindow issueKey={detachedSessionKey} /> : <App />}
     </DialogHost>
   </StrictMode>
 );
