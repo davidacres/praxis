@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AgentSessionRecord, Board, Connection, ConnectionCheck, ProjectRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { isTerminalAgentState } from '../ai/aiSessionState';
+import { isConversationSession } from '../ai/sessionNav';
 
 interface OverviewPageProps {
   projects: ProjectRecord[];
@@ -11,8 +12,12 @@ interface OverviewPageProps {
   connectionChecks: Record<string, ConnectionCheck | undefined>;
   onNewProject: () => void;
   onNewSession: () => void;
+  /** Opens the lightweight "New conversation" composer (FX-BE-142). */
+  onNewConversation: () => void;
   onOpenProjects: () => void;
   onOpenSessions: () => void;
+  /** Opens Conversations, optionally to one conversation directly. */
+  onOpenConversations: (sessionKey?: string) => void;
   onOpenConnections: () => void;
   onOpenBoard: (board: Board) => void;
   onOpenProject: (project: ProjectRecord) => void;
@@ -23,11 +28,12 @@ const stateLabel: Record<AgentSessionRecord['state'], string> = {
   awaiting_input: 'Awaiting input', paused: 'Paused', completed: 'Completed', failed: 'Failed', aborted: 'Aborted'
 };
 
-export function OverviewPage({ projects, boards, connections, sessions, connectionChecks, onNewProject, onNewSession, onOpenProjects, onOpenSessions, onOpenConnections, onOpenBoard, onOpenProject }: OverviewPageProps) {
-  const activeSessions = sessions.filter(session => !isTerminalAgentState(session.state));
+export function OverviewPage({ projects, boards, connections, sessions, connectionChecks, onNewProject, onNewSession, onNewConversation, onOpenProjects, onOpenSessions, onOpenConversations, onOpenConnections, onOpenBoard, onOpenProject }: OverviewPageProps) {
+  const activeSessions = sessions.filter(session => !isTerminalAgentState(session.state) && !isConversationSession(session));
   const healthyConnections = connections.filter(connection => connectionChecks[connection.id]?.status !== 'error').length;
   const recentProjects = [...projects].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4);
-  const recentSessions = sessions.slice(0, 4);
+  const recentSessions = sessions.filter(session => !isConversationSession(session)).slice(0, 4);
+  const recentConversations = sessions.filter(isConversationSession).slice(0, 4);
   const [runtime, setRuntime] = useState<{ profiles: number; hosts: number; skills: number }>();
   useEffect(() => { void window.praxis.agentRuntime.list().then(snapshot => setRuntime({ profiles: snapshot.profiles?.length ?? 0, hosts: (snapshot.runtimeHosts ?? snapshot.agents).length, skills: snapshot.skills.length })).catch(() => setRuntime({ profiles: 0, hosts: 0, skills: 0 })); }, []);
 
@@ -35,7 +41,7 @@ export function OverviewPage({ projects, boards, connections, sessions, connecti
     <div className="overview-page" data-testid="overview-page">
       <header className="overview-hero">
         <div><div className="eyebrow">Workspace overview</div><h1>Good to see you.</h1><p>Keep projects, tickets, and AI work moving from one place.</p></div>
-        <div className="overview-actions"><button className="btn" type="button" onClick={onNewProject}><Icon name="plus" size={14} /> New project</button><button className="btn btn-primary" type="button" onClick={onNewSession}><Icon name="robot" size={14} /> New session</button></div>
+        <div className="overview-actions"><button className="btn" type="button" onClick={onNewProject}><Icon name="plus" size={14} /> New project</button><button className="btn" type="button" onClick={onNewSession}><Icon name="robot" size={14} /> New session</button><button className="btn btn-primary" type="button" onClick={onNewConversation}><Icon name="chats" size={14} /> New conversation</button></div>
       </header>
 
       <section className="overview-stat-grid" aria-label="Workspace summary">
@@ -45,16 +51,19 @@ export function OverviewPage({ projects, boards, connections, sessions, connecti
         <OverviewStat icon="plug" label="Connections" value={connections.length} detail={`${healthyConnections} available`} onClick={onOpenConnections} tone={connections.some(connection => connectionChecks[connection.id]?.status === 'error') ? 'warning' : undefined} />
       </section>
 
-      {projects.length === 0 && sessions.length === 0 && <section className="overview-starter-strip" aria-label="Getting started">
+      {projects.length === 0 && sessions.filter(session => !isConversationSession(session)).length === 0 && <section className="overview-starter-strip" aria-label="Getting started">
         <div className="overview-starter-heading"><span className="eyebrow">Start here</span><strong>Build your workspace in three steps</strong><small>Everything you need to move from an idea to visible delivery progress.</small></div>
         <button className="overview-starter-card starter-project" type="button" onClick={onNewProject}><span className="overview-starter-number">01</span><span className="overview-starter-art"><Icon name="folder-open" size={24} /></span><strong>Create a project</strong><small>Set a brief, board, and starter work.</small><Icon name="chevron-right" size={15} /></button>
         <button className="overview-starter-card starter-connection" type="button" onClick={onOpenConnections}><span className="overview-starter-number">02</span><span className="overview-starter-art"><Icon name="plug" size={24} /></span><strong>Connect your tracker</strong><small>Bring tickets into one workspace.</small><Icon name="chevron-right" size={15} /></button>
         <button className="overview-starter-card starter-session" type="button" onClick={onNewSession}><span className="overview-starter-number">03</span><span className="overview-starter-art"><Icon name="robot" size={24} /></span><strong>Start an AI session</strong><small>Turn a ticket into visible progress.</small><Icon name="chevron-right" size={15} /></button>
       </section>}
 
-      <div className="overview-columns">
+      <div className="overview-columns overview-columns-3">
         <section className="overview-panel overview-sessions"><PanelHeading title="Active AI sessions" action={activeSessions.length ? 'View all' : undefined} onAction={onOpenSessions} />
           {activeSessions.length === 0 ? <div className="overview-empty overview-empty-sessions" data-testid="overview-sessions-empty"><Icon name="robot" size={22} /><span>No active sessions yet.<small>A session turns a ticket into visible progress: the agent plans the work, asks before it uses a tool, and reports what it changed.</small></span><button className="btn btn-primary" type="button" onClick={onNewSession}>New session</button></div> : activeSessions.map(session => <SessionCard key={session.issueKey} session={session} onOpen={() => onOpenSessions()} />)}
+        </section>
+        <section className="overview-panel overview-conversations"><PanelHeading title="Recent conversations" action={recentConversations.length ? 'View all' : undefined} onAction={() => onOpenConversations()} />
+          {recentConversations.length === 0 ? <div className="overview-empty overview-empty-sessions" data-testid="overview-conversations-empty"><Icon name="chats" size={22} /><span>No conversations yet.<small>Talk to the AI with no project or ticket required — brainstorm, ask questions, or think something through.</small></span><button className="btn btn-primary" type="button" onClick={onNewConversation}>New conversation</button></div> : <div className="overview-activity-list">{recentConversations.map(session => <div className="overview-activity-row" key={session.issueKey}><span className={`overview-activity-marker overview-status-${session.state}`}><Icon name="chats" size={12} /></span><span><strong>{session.title || 'Conversation'}</strong><small>{stateLabel[session.state]} · {new Date(session.startedAt).toLocaleString()}</small></span><button className="btn btn-quiet" type="button" onClick={() => onOpenConversations(session.issueKey)}>Open</button></div>)}</div>}
         </section>
         <section className="overview-panel"><PanelHeading title="Recent projects" action={projects.length ? 'View projects' : undefined} onAction={onOpenProjects} />
           {recentProjects.length === 0 ? <EmptyOverview icon="folder-open" text="Create a project to get a brief, board, and starter work items." action="Create project" onAction={onNewProject} /> : <div className="overview-project-grid">{recentProjects.map((project, index) => <button className={`overview-project-card project-tone-${index % 4}`} key={project.id} type="button" onClick={() => onOpenProject(project)}><span className="overview-project-art"><Icon name="folder-open" size={18} /></span><span className="overview-project-copy"><strong>{project.name}</strong><small>{project.key} · {project.type}</small></span><span className="overview-project-arrow"><Icon name="chevron-right" size={14} /></span></button>)}</div>}

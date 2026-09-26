@@ -36,6 +36,7 @@ import { backendModeMeta } from '../board/boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from '../board/boardTransitionMatch';
 import { isTerminalAgentState } from '../ai/aiSessionState';
+import { isConversationSession } from '../ai/sessionNav';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { StartupSplash } from './StartupSplash';
 import { CommandPalette, type CommandEntry } from './CommandPalette';
@@ -110,6 +111,8 @@ function WindowCloseGuard() {
 interface Route {
   /** Durable selection of the empty New Session surface (never its draft text). */
   newSession?: boolean;
+  /** Durable selection of the empty New Conversation composer (FX-BE-142). */
+  newConversation?: boolean;
   /** Title-bar quick-session handoff: pre-selects the project's quick-change
    *  workflow and focuses the goal. Transient, not persisted. */
   quickSession?: boolean;
@@ -152,6 +155,7 @@ interface Route {
 
 const FEATURE_TITLES: Record<FeatureId, string> = {
   overview: 'Overview',
+  conversations: 'Conversations',
   sessions: 'Sessions',
   connections: 'Connections',
   agents: 'Agent Hub',
@@ -163,6 +167,7 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
 
 const FEATURE_ICONS: Record<FeatureId, IconName> = {
   overview: 'home',
+  conversations: 'chats',
   sessions: 'robot',
   connections: 'plug',
   agents: 'zap',
@@ -274,8 +279,8 @@ function writeLastWorkspaceRoute(workspaceId: string, route: Route): void {
     ...(route.boardId ? { boardId: route.boardId } : {}),
     ...(route.issueKey ? { issueKey: route.issueKey } : {}),
     ...(route.sessionKey ? { sessionKey: route.sessionKey } : {}),
-    ...(route.feature === 'sessions' && route.browserOpen !== undefined ? { browserOpen: route.browserOpen } : {}),
-    ...(route.feature === 'sessions' && route.browserUrl && restorableBrowserUrl(route.browserUrl) ? { browserUrl: route.browserUrl } : {}),
+    ...((route.feature === 'sessions' || route.feature === 'conversations') && route.browserOpen !== undefined ? { browserOpen: route.browserOpen } : {}),
+    ...((route.feature === 'sessions' || route.feature === 'conversations') && route.browserUrl && restorableBrowserUrl(route.browserUrl) ? { browserUrl: route.browserUrl } : {}),
     ...(route.gitView ? { gitView: route.gitView } : {}),
     ...(route.feature === 'workflows' && route.workflowView ? { workflowView: route.workflowView } : {}),
     ...(route.feature === 'workflows' && route.workflowId ? { workflowId: route.workflowId } : {}),
@@ -363,7 +368,7 @@ export function App() {
     index: 0
   });
   const route = nav.entries[nav.index];
-  const inSession = route.feature === 'sessions';
+  const inSession = route.feature === 'sessions' || route.feature === 'conversations';
 
   const [boards, setBoards] = useState<Board[]>([]);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
@@ -384,6 +389,18 @@ export function App() {
   /** Agent sessions, most recent first — feeds the Sessions view and the sidebar badge. */
   const [agentSessions, setAgentSessions] = useState<AgentSessionRecord[]>([]);
   const [agentSessionsLoaded, setAgentSessionsLoaded] = useState(false);
+  /** Conversations currently floating in their own window (FX-BE-143) — never
+   *  rendered live in the main window's console at the same time. */
+  const [detachedConversationKeys, setDetachedConversationKeys] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    void window.praxis.detachedChat.list().then(keys => { if (!cancelled) setDetachedConversationKeys(new Set(keys)); });
+    const off = window.praxis.detachedChat.onChanged(keys => setDetachedConversationKeys(new Set(keys)));
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
   const [boardDetails, setBoardDetails] = useState<BoardDetails | undefined>();
   const [detailsByBoardId, setDetailsByBoardId] = useState<Record<string, BoardDetails | undefined>>({});
   /** Latest health-check per connection id — feeds the sidebar status dots. */
@@ -1215,7 +1232,8 @@ export function App() {
 
   const featureCounts = useMemo<Partial<Record<FeatureId, number>>>(
     () => ({
-      sessions: agentSessions.filter(session => !isTerminalAgentState(session.state)).length,
+      sessions: agentSessions.filter(session => !isTerminalAgentState(session.state) && !isConversationSession(session)).length,
+      conversations: agentSessions.filter(session => !isTerminalAgentState(session.state) && isConversationSession(session)).length,
       connections: connections.length
     }),
     [connections, agentSessions]
@@ -1296,11 +1314,12 @@ export function App() {
         id: `feature:${feature}`,
         label: FEATURE_TITLES[feature],
         group: 'Go to',
-        icon: feature === 'git' ? 'git-branch' : feature === 'run' ? 'server' : feature === 'deployments' ? 'rocket' : feature === 'agents' ? 'zap' : feature === 'sessions' ? 'robot' : 'home',
+        icon: feature === 'git' ? 'git-branch' : feature === 'run' ? 'server' : feature === 'deployments' ? 'rocket' : feature === 'agents' ? 'zap' : feature === 'sessions' ? 'robot' : feature === 'conversations' ? 'chats' : 'home',
         run: () => navigate((feature === 'git' || feature === 'run' || feature === 'deployments') && selectedProject ? { projectId: selectedProject.id, feature } : { feature })
       });
     });
     entries.push({ id: 'action:new-session', label: 'New session', group: 'Go to', icon: 'plus', keywords: 'start agent', run: () => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) }) });
+    entries.push({ id: 'action:new-conversation', label: 'New conversation', group: 'Go to', icon: 'chats', keywords: 'chat talk brainstorm ask', run: () => navigate({ newConversation: true }) });
     entries.push({ id: 'action:quick-session', label: 'Quick session', group: 'Go to', icon: 'zap', keywords: 'quick change workflow fast immediate', run: openQuickSession });
     entries.push({ id: 'action:new-project', label: 'New project', group: 'Go to', icon: 'plus', run: () => requestProjectWizard('create') });
     entries.push({ id: 'action:add-existing-project', label: 'Add project from folder', group: 'Go to', icon: 'folder-open', keywords: 'existing repository import scan', run: () => requestProjectWizard('existing') });
@@ -1323,8 +1342,11 @@ export function App() {
     workspaceBoards.forEach(board => {
       entries.push({ id: `board:${board.connectionId ?? 'demo'}:${board.id}`, label: board.name, hint: 'Board', group: 'Boards', icon: 'columns', run: () => openBoard(board.id) });
     });
-    agentSessions.forEach(session => {
+    agentSessions.filter(session => !isConversationSession(session)).forEach(session => {
       entries.push({ id: `session:${session.issueKey}`, label: session.title || session.issueKey, hint: session.issueKey, group: 'Sessions', icon: 'robot', run: () => navigate({ feature: 'sessions', sessionKey: session.issueKey }) });
+    });
+    agentSessions.filter(isConversationSession).forEach(session => {
+      entries.push({ id: `conversation:${session.issueKey}`, label: session.title || 'Conversation', hint: 'Conversation', group: 'Conversations', icon: 'chats', run: () => navigate({ feature: 'conversations', sessionKey: session.issueKey }) });
     });
     (agentSnapshot?.profiles ?? []).filter(profile => !isHostShimProfile(profile)).forEach(profile => {
       entries.push({ id: `profile:${profile.profile.id}`, label: profile.profile.name, hint: 'Agent profile', group: 'Agent Hub', icon: 'robot', run: () => navigate({ feature: 'agents', agentProfileId: profile.profile.id }) });
@@ -1562,12 +1584,43 @@ export function App() {
     />
   );
 
+  /** The lightweight "New conversation" composer (FX-BE-142) — no board or ticket
+   *  chrome, since a conversation belongs to neither. */
+  const renderNewConversation = () => (
+    <NewSession
+      boards={[]}
+      conversational
+      autoFocusGoal
+      onSubmit={async ({ title, goal, provider, model, toolMode, mode, workingDirectory, agentId, profileId, hostId, skillNames }) => {
+        const record = await window.praxis.ai.delegate({
+          mode,
+          task: { goal },
+          provider,
+          model,
+          toolMode,
+          workingDirectory,
+          ...(agentId ? { agentId } : {}),
+          ...(profileId ? { profileId } : {}),
+          ...(hostId ? { hostId } : {}),
+          ...(skillNames?.length ? { skillNames } : {})
+        });
+        await window.praxis.ai.renameSession(record.issueKey, title);
+        navigate({ feature: 'conversations', sessionKey: record.issueKey });
+      }}
+      connectionCount={connections.length}
+      onOpenConnections={() => {
+        refreshConnections();
+        navigate({ feature: 'connections' });
+      }}
+    />
+  );
+
   /** The session console for one session key — shared by the Sessions route and a workflow run's centre pane. */
   const renderSessionsPage = (sessionKey: string | undefined) => {
     const targetSession = agentSessions.find(session => session.issueKey === sessionKey) ?? agentSessions[0];
     return (
       <SessionsPage
-        sessions={activeSessions}
+        sessions={activeSessions.filter(session => !isConversationSession(session))}
         selectedKey={sessionKey}
         workflowOptions={targetSession
           ? sessionWorkflowsByProject[
@@ -1614,19 +1667,63 @@ export function App() {
     );
   };
 
+  /** The conversation console (FX-BE-142) — the same session console/composer as
+   *  Sessions, scoped to sessions that belong to no project and no ticket. */
+  const renderConversationsPage = (sessionKey: string | undefined) => {
+    const conversations = activeSessions.filter(isConversationSession);
+    const target = conversations.find(session => session.issueKey === sessionKey) ?? conversations[0];
+    if (target && detachedConversationKeys.has(target.issueKey)) {
+      return (
+        <div className="empty-state" data-testid="conversation-detached-placeholder">
+          <Icon name="external-link" size={28} />
+          <span>This conversation is open in its floating window.</span>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => void window.praxis.detachedChat.close(target.issueKey)}
+          >
+            <Icon name="window-restore" size={13} />
+            Bring back to this window
+          </button>
+        </div>
+      );
+    }
+    return (
+      <SessionsPage
+        sessions={conversations}
+        selectedKey={sessionKey}
+        onNewSession={() => navigate({ newConversation: true })}
+        onSelectSession={sessionKey => navigate({ feature: 'conversations', sessionKey })}
+        onOpenAiSettings={() => setSettingsDialogCategory('ai')}
+        focusMode={!sidebarVisible && !auxVisible}
+        initialBrowserOpen={route.browserOpen}
+        initialBrowserUrl={route.browserUrl}
+        onBrowserOpenChange={handleBrowserOpenChange}
+        onBrowserUrlChange={handleBrowserUrlChange}
+        browserSuspended={nativeOverlayOpen}
+        onPopOut={session => void window.praxis.detachedChat.open(session.issueKey)}
+      />
+    );
+  };
+
   /** The right-pane inspector for one session — shared by the Sessions route and a workflow run's session details. */
   const renderSessionInspector = (inspectedSession: AgentSessionRecord | undefined) => (
     <SessionInspector
       session={inspectedSession}
       sessions={agentSessions}
-      onSelectSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
+      onSelectSession={issueKey => {
+        const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
+        navigate(session && isConversationSession(session)
+          ? { feature: 'conversations', sessionKey: issueKey }
+          : { feature: 'sessions', sessionKey: issueKey });
+      }}
       onArchiveSession={async (issueKey, archived) => {
         await window.praxis.ai.archiveSession(issueKey, archived);
         // Archiving the open conversation would leave the
         // console showing a session the tree no longer lists;
         // fall back to the newest remaining active session.
-        if (archived && route.sessionKey === issueKey) {
-          navigate({ feature: 'sessions' });
+        if (archived && route.sessionKey === issueKey && (route.feature === 'sessions' || route.feature === 'conversations')) {
+          navigate({ feature: route.feature });
         }
       }}
       onOpenWorkflowRun={runId => {
@@ -1666,6 +1763,9 @@ export function App() {
         );
       }
       return renderNewSession();
+    }
+    if (route.newConversation) {
+      return renderNewConversation();
     }
     if (selectedProject && route.feature === 'workflows') {
       if (route.workflowView === 'policies') {
@@ -1775,8 +1875,10 @@ export function App() {
           connectionChecks={connectionChecks}
           onNewProject={() => requestProjectWizard('create')}
           onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
+          onNewConversation={() => navigate({ newConversation: true })}
           onOpenProjects={() => navigate({})}
           onOpenSessions={() => navigate({ feature: 'sessions' })}
+          onOpenConversations={sessionKey => navigate({ feature: 'conversations', ...(sessionKey ? { sessionKey } : {}) })}
           onOpenConnections={() => { refreshConnections(); navigate({ feature: 'connections' }); }}
           onOpenBoard={board => openBoard(board.id)}
           onOpenProject={project => navigate({ projectId: project.id })}
@@ -1786,6 +1888,9 @@ export function App() {
     if (route.feature === 'sessions') {
       // No view-scroll wrapper: the sessions list and console own their scrolling.
       return renderSessionsPage(route.sessionKey);
+    }
+    if (route.feature === 'conversations') {
+      return renderConversationsPage(route.sessionKey);
     }
     if (route.feature === 'git') {
       if (route.gitView === 'changes') {
@@ -1980,7 +2085,11 @@ export function App() {
     && !(route.feature === 'git' && route.gitView === 'changes');
   const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
   const selectedAgentSession = route.feature === 'sessions'
-    ? agentSessions.find(session => session.issueKey === route.sessionKey) ?? agentSessions[0]
+    ? agentSessions.find(session => session.issueKey === route.sessionKey && !isConversationSession(session))
+      ?? agentSessions.find(session => !isConversationSession(session))
+    : route.feature === 'conversations'
+    ? agentSessions.find(session => session.issueKey === route.sessionKey && isConversationSession(session))
+      ?? agentSessions.find(isConversationSession)
     : undefined;
   const terminalBoard = selectedBoard ?? (!route.feature && !route.projectId
     ? boards.find(board => board.id === composerBoardId)
@@ -2145,23 +2254,28 @@ export function App() {
                   onModeChange={setMode}
                   activeFeature={route.feature}
                   sessions={activeSessions}
-                  {...(route.feature === 'sessions' && route.sessionKey
+                  {...((route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey
                     ? { activeSessionKey: route.sessionKey }
                     : {})}
-                  onSelectSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
+                  onSelectSession={issueKey => {
+                    const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
+                    navigate(session && isConversationSession(session)
+                      ? { feature: 'conversations', sessionKey: issueKey }
+                      : { feature: 'sessions', sessionKey: issueKey });
+                  }}
                   onRenameSession={async (issueKey, title) => {
                     await window.praxis.ai.renameSession(issueKey, title);
                   }}
                   onArchiveSession={async (issueKey, archived) => {
                     await window.praxis.ai.archiveSession(issueKey, archived);
-                    if (archived && route.feature === 'sessions' && route.sessionKey === issueKey) {
-                      navigate({ feature: 'sessions' });
+                    if (archived && (route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey === issueKey) {
+                      navigate({ feature: route.feature });
                     }
                   }}
                   onDeleteSession={async issueKey => {
                     await window.praxis.ai.deleteSession(issueKey);
-                    if (route.feature === 'sessions' && route.sessionKey === issueKey) {
-                      navigate({ feature: 'sessions' });
+                    if ((route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey === issueKey) {
+                      navigate({ feature: route.feature });
                     }
                   }}
                   onSelectFeature={feature => {
@@ -2172,6 +2286,7 @@ export function App() {
                   }}
                   featureCounts={featureCounts}
                   onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
+                  onNewConversation={() => navigate({ newConversation: true })}
                   onNewProject={() => requestProjectWizard('create')}
                   onAddExistingProject={() => requestProjectWizard('existing')}
                   onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
@@ -2322,7 +2437,7 @@ export function App() {
                   data-testid="issue-details-pane"
                   style={detailIsExpanded ? undefined : { width: aux.size }}
                 >
-                  {route.feature === 'sessions' ? (
+                  {route.feature === 'sessions' || route.feature === 'conversations' ? (
                     renderSessionInspector(selectedAgentSession)
                   ) : route.feature === 'git' ? (
                     <div ref={setAuxSlotEl} className="aux-slot" data-testid="git-aux-slot" />

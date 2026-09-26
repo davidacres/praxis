@@ -44,6 +44,21 @@ export function isWorkflowStageSession(session: AgentSessionRecord): boolean {
   return !!session.workflowRunId && !!session.workflowNodeId;
 }
 
+/**
+ * A standalone conversation (FX-BF-045) is a free-form session that belongs to
+ * no project and no ticket — plain "talk to the AI." It rides the existing
+ * `AgentSessionRecord`/synthesized-key session engine rather than a new record
+ * type: the identity check is what makes it a conversation, not storage. A
+ * governed workflow stage and a ticket review both also carry a synthesized
+ * key, so both are explicitly excluded rather than inferred from a missing
+ * `projectId` — a ticket-backed session can legitimately have none.
+ */
+export function isConversationSession(session: AgentSessionRecord): boolean {
+  return isSynthesizedKey(session.issueKey)
+    && !isWorkflowStageSession(session)
+    && !isTicketReviewKey(session.issueKey);
+}
+
 /** What to show as the session's name: the title alone for free-form sessions,
  *  `KEY — title` for tracker-issue sessions. */
 export function sessionLabel(session: AgentSessionRecord): string {

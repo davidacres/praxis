@@ -155,6 +155,16 @@ const praxis: PraxisIpc = {
       return () => ipcRenderer.off('window:zoomChanged', handler);
     }
   },
+  detachedChat: {
+    open: (issueKey: string) => ipcRenderer.invoke('detachedChat:open', issueKey),
+    close: (issueKey: string) => ipcRenderer.invoke('detachedChat:close', issueKey),
+    list: () => ipcRenderer.invoke('detachedChat:list') as Promise<string[]>,
+    onChanged: (listener: (issueKeys: string[]) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, issueKeys: string[]) => listener(issueKeys);
+      ipcRenderer.on('detachedChat:changed', handler);
+      return () => ipcRenderer.off('detachedChat:changed', handler);
+    }
+  },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch: AppSettingsPatch) => ipcRenderer.invoke('settings:set', patch),

@@ -13,7 +13,7 @@ import type {
 } from '@praxis/core';
 import { agentStateLabel, agentStateLaneClass, isTerminalAgentState } from '../ai/aiSessionState';
 import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
-import { isSynthesizedKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
+import { isConversationSession, isSynthesizedKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
 import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
 import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
@@ -37,6 +37,7 @@ const RUN_STATUS_TONE: Record<WorkflowRunSummary['status'], string> = {
 
 export type FeatureId =
   | 'overview'
+  | 'conversations'
   | 'sessions'
   | 'connections'
   | 'agents'
@@ -58,6 +59,7 @@ interface FeatureDef {
  */
 const FEATURES: FeatureDef[] = [
   { id: 'overview', label: 'Overview', icon: 'home' },
+  { id: 'conversations', label: 'Conversations', icon: 'chats' },
   { id: 'sessions', label: 'Sessions', icon: 'robot' },
   { id: 'connections', label: 'Connections', icon: 'plug' },
   { id: 'agents', label: 'Agent Hub', icon: 'zap' },
@@ -80,6 +82,8 @@ export interface SidebarProps {
   onSelectFeature: (feature: FeatureId) => void;
   featureCounts: Partial<Record<FeatureId, number>>;
   onNewSession: () => void;
+  /** Opens the lightweight "New conversation" composer (FX-BE-142). */
+  onNewConversation: () => void;
   onNewProject: () => void;
   onAddExistingProject: () => void;
   /** Opens the bulk "import plans folders as projects" wizard. */
@@ -179,6 +183,7 @@ export function Sidebar({
   onArchiveSession,
   featureCounts,
   onNewSession,
+  onNewConversation,
   onNewProject,
   onAddExistingProject,
   onImportProjects,
@@ -747,7 +752,28 @@ export function Sidebar({
             // Agents is the one destination that carries a catalog, so it
             // expands into it rather than opening a second navigator in the
             // centre pane (the Workflows idiom).
-            feature.id === 'sessions' ? (
+            feature.id === 'conversations' ? (
+              <SessionsNav
+                key={feature.id}
+                icon={feature.icon}
+                label={feature.label}
+                active={activeFeature === 'conversations'}
+                collapsed={collapsed['feature:conversations'] ?? false}
+                onToggleCollapsed={() =>
+                  setCollapsed(current => ({ ...current, 'feature:conversations': !(current['feature:conversations'] ?? false) }))
+                }
+                sessions={sessions.filter(isConversationSession)}
+                runNames={{}}
+                activeSessionKey={activeSessionKey}
+                runningCount={featureCounts.conversations ?? 0}
+                onSelectFeature={() => onSelectFeature('conversations')}
+                onSelectSession={onSelectSession}
+                onNewSession={onNewConversation}
+                onRenameSession={onRenameSession}
+                onDeleteSession={onDeleteSession}
+                onArchiveSession={onArchiveSession}
+              />
+            ) : feature.id === 'sessions' ? (
               <SessionsNav
                 key={feature.id}
                 icon={feature.icon}
@@ -757,7 +783,7 @@ export function Sidebar({
                 onToggleCollapsed={() =>
                   setCollapsed(current => ({ ...current, 'feature:sessions': !(current['feature:sessions'] ?? false) }))
                 }
-                sessions={sessions}
+                sessions={sessions.filter(session => !isConversationSession(session))}
                 runNames={Object.fromEntries(
                   Object.values(runsByProjectId)
                     .flat()
