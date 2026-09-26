@@ -282,3 +282,17 @@ Status: Failed · Duration: 3h 23m
 - ✅ Security scan: succeeded
 
 Required stage "review" failed.
+
+**PRX-F45** — 2026-09-26T17:43:54.928Z
+**Workflow run succeeded: Governed delivery — FX-BF-045: Standalone conversations (chat outside any project)**
+
+Status: Succeeded · Duration: 1h 31m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ✅ QA: succeeded
+- ✅ Security scan: succeeded
