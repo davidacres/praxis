@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import type { WorkflowCheckNode } from '@praxis/core';
+import { ensureEnvironmentPath } from './shellEnvironment';
 
 export interface CheckProcessResult {
   code: number | null;
@@ -16,6 +17,7 @@ export function spawnCheck(
   onLine?: (line: string) => void
 ): Promise<CheckProcessResult> {
   if (signal?.aborted) return Promise.resolve({ code: null, output: '', timedOut: false, error: 'Check cancelled.' });
+  ensureEnvironmentPath();
   return new Promise(resolve => {
     let output = '';
     let timedOut = false;
