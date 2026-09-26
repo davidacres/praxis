@@ -80,6 +80,9 @@ inside the main Praxis window.
 ## Description
 
 
+## Dependencies
+
+
 ## Comments
 
 **2026-09-26 — implementation (Claude):** Implemented as designed:
