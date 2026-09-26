@@ -49,6 +49,13 @@ export interface ProjectWorkItem {
   status: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * The same two-tier hierarchy every other backend uses (see
+   * `issues/issueHierarchy.ts`'s `getParentRule`): a Story/Task/Bug's parent
+   * is a Feature, a Subtask's parent is a Story/Task/Bug, and a Feature
+   * itself has none. Absent on every item created before this field existed.
+   */
+  parentKey?: string;
 }
 
 export interface ProjectBoardReference {
