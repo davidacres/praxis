@@ -475,10 +475,17 @@ test('a stage whose AI ran out can be switched to another AI and carries on', as
   const notice = page.getByTestId('wf-run-limit');
   await expect(notice).toContainText('Vercel AI Gateway ran out of budget');
   await expect(notice.getByTestId('wf-limit-switch-to')).toHaveAttribute('data-value', 'codex-cli');
+  await expect(notice.getByTestId('wf-limit-switch-model')).toBeVisible();
+  await expect(notice.getByTestId('wf-limit-switch-model')).toHaveAttribute('data-value', 'fake-default');
   await expect(notice.getByTestId('wf-run-resume')).toHaveText('Retry on Vercel AI Gateway');
   await expect(notice.getByTestId('wf-limit-stop')).toBeVisible();
   await page.mouse.move(0, 0);
   await page.screenshot({ path: path.resolve(process.cwd(), 'output', 'playwright', 'workflow-limit-ask.png') });
+
+  // Select another model from the model dropdown
+  await notice.getByTestId('wf-limit-switch-model').click();
+  await page.getByRole('option', { name: 'Fake Fast' }).click();
+  await expect(notice.getByTestId('wf-limit-switch-model')).toHaveAttribute('data-value', 'fake-fast');
 
   await notice.getByTestId('wf-limit-switch').click();
   await expect(notice).toHaveCount(0);
@@ -486,7 +493,8 @@ test('a stage whose AI ran out can be switched to another AI and carries on', as
     .poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(summary => summary?.stages.find(stage => stage.nodeId === 'review')?.provider), run.runId), { timeout: 30000 })
     .toBe('codex-cli');
   const summary = await page.evaluate(id => window.praxis.workflows.getRun(id), run.runId);
-  expect(summary?.events.some(event => event.kind === 'node-provider-switched' && /switched from Vercel AI Gateway to Codex after Vercel AI Gateway ran out/.test(event.message))).toBe(true);
+  expect(summary?.events.some(event => event.kind === 'node-provider-switched' && /switched from Vercel AI Gateway to Codex after Vercel AI Gateway ran out \(fake-fast\)/.test(event.message))).toBe(true);
+  expect(summary?.stages.find(stage => stage.nodeId === 'review')?.chosenModel).toBe('fake-fast');
   expect(summary?.exhaustedProviders).toEqual(['vercel-gateway']);
 });
 

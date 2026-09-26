@@ -991,11 +991,11 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
   });
 
   // A stage whose AI ran out: carry on with another AI, or stop the run.
-  ipcMain.handle('workflows:switchStageProvider', async (_event, runId: string, nodeId: string, provider: string): Promise<WorkflowRunSummary> => {
+  ipcMain.handle('workflows:switchStageProvider', async (_event, runId: string, nodeId: string, provider: string, model?: string): Promise<WorkflowRunSummary> => {
     if (!(await usableProviders()).includes(provider as AiProvider)) {
       throw new Error(`${providerDisplayName(provider)} is not set up or is turned off.`);
     }
-    await withRun(runId, run => applyWorkflowRunCommand(run, { kind: 'stage-provider-switched', nodeId, at: new Date().toISOString(), provider }));
+    await withRun(runId, run => applyWorkflowRunCommand(run, { kind: 'stage-provider-switched', nodeId, at: new Date().toISOString(), provider, model }));
     await getWorkflowOrchestrator().step(runId);
     return summarize(runStore().get(runId)!);
   });

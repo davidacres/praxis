@@ -54,6 +54,13 @@ output and a negative case in `checkEnvironmentFailure.test.ts`. (Real example: 
 against a default registry with no audit endpoint, e.g. GitHub Packages, exits 1 having checked
 nothing; the Governed delivery template now audits against `registry.npmjs.org` for that reason.)
 
+**Switching AI on a paused or running stage.** When an AI provider limit pauses a stage (or the
+user changes provider from the stage menu), the user can switch to another configured provider
+and select which model to use with it. The switch persists on `run.stageProviders[nodeId]` and
+`run.stageModels[nodeId]`. `runWorkflowAgentStage` / `chooseStageModel` prioritize the
+switched model before falling back to tier mapping or defaults, and the switch event records both
+provider and model in the run timeline.
+
 **A person can always retry a failed stage; `maxAttempts` only bounds the run continuing alone.**
 `retryNode` no longer checks the attempt budget, and a `node-retry` on a **failed** run reopens it
 (the one command besides `gate-decided`/`node-stopped` a settled run accepts; a `cancelled` run stays

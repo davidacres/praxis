@@ -761,7 +761,7 @@ export function SessionsPage({
   const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>(() => getActiveTerminalId());
   const [attachTerminalContext, setAttachTerminalContext] = useState(false);
   const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
-  const [transitionPopover, setTransitionPopover] = useState<{ open: 'model' | 'handover'; position: ComposerPopoverPosition }>();
+  const [transitionPopover, setTransitionPopover] = useState<{ open: 'model' | 'handover' | 'toolMode' | 'folder'; position: ComposerPopoverPosition }>();
   const [conversationPopoverPosition, setConversationPopoverPosition] = useState<ComposerPopoverPosition>();
   const [conversationInitialProvider, setConversationInitialProvider] = useState<AiProvider>();
   const [conversationTargetId, setConversationTargetId] = useState<string>();
@@ -2015,17 +2015,78 @@ export function SessionsPage({
                           <span className="session-runtime-chip-label">Usage</span>
                         </button>
                       )}
-                      <span className="composer-chip session-runtime-chip is-readonly" data-testid="session-tool-mode" title="Tool access for this session — fixed when it started">
+                      <button
+                        type="button"
+                        className={`composer-chip session-runtime-chip${transitionPopover?.open === 'toolMode' ? ' active' : ''}`}
+                        data-testid="session-tool-mode"
+                        title="Tool access for this session — click to change"
+                        aria-haspopup="listbox"
+                        aria-expanded={transitionPopover?.open === 'toolMode'}
+                        onClick={event => {
+                          if (transitionPopover?.open === 'toolMode') {
+                            setTransitionPopover(undefined);
+                            return;
+                          }
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          setConversationPopoverPosition(undefined);
+                          setTransitionPopover({
+                            open: 'toolMode',
+                            position: { bottom: window.innerHeight - rect.top + 6, left: rect.left }
+                          });
+                        }}
+                      >
                         <Icon name={selected.toolMode === 'full' ? 'tools' : 'search'} size={14} />
                         <span className="session-runtime-chip-label">
                           {selected.toolMode === 'project-only' ? 'Project only' : selected.toolMode === 'read-only' ? 'Read only' : 'Full tools'}
                         </span>
-                      </span>
-                      {selected.workingDirectory && (
-                        <span className="composer-chip session-runtime-chip is-readonly" data-testid="session-working-directory" title={selected.workingDirectory}>
+                      </button>
+                      {selected.workingDirectory ? (
+                        <button
+                          type="button"
+                          className={`composer-chip session-runtime-chip${transitionPopover?.open === 'folder' ? ' active' : ''}`}
+                          data-testid="session-working-directory"
+                          title={`${selected.workingDirectory} — click to change or detach folder`}
+                          aria-haspopup="listbox"
+                          aria-expanded={transitionPopover?.open === 'folder'}
+                          onClick={event => {
+                            if (transitionPopover?.open === 'folder') {
+                              setTransitionPopover(undefined);
+                              return;
+                            }
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            setConversationPopoverPosition(undefined);
+                            setTransitionPopover({
+                              open: 'folder',
+                              position: { bottom: window.innerHeight - rect.top + 6, left: rect.left }
+                            });
+                          }}
+                        >
                           <Icon name="folder" size={14} />
                           <span className="session-runtime-chip-label">{basename(selected.workingDirectory)}</span>
-                        </span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="composer-chip session-runtime-chip"
+                          data-testid="session-attach-folder"
+                          title="Attach a working folder to this session"
+                          onClick={async () => {
+                            try {
+                              const picked = await window.praxis.dialog.pickFolder('Choose working folder for this session');
+                              if (picked) {
+                                await window.praxis.ai.updateSessionToolAccess(selected.issueKey, {
+                                  workingDirectory: picked,
+                                  toolMode: selected.toolMode === 'project-only' ? 'read-only' : selected.toolMode
+                                });
+                              }
+                            } catch (cause) {
+                              console.error('Failed to attach folder', cause);
+                            }
+                          }}
+                        >
+                          <Icon name="folder" size={14} />
+                          <span className="session-runtime-chip-label">Attach folder…</span>
+                        </button>
                       )}
                     </div>
                   </div>

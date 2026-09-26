@@ -212,13 +212,16 @@ export async function runWorkflowAgentStage(
   // on the stage's own AI, the run's model only on the run's AI.
   const switched = Boolean(workflowRun.stageProviders?.[node.id]);
   const ownProvider = node.agent.providerId?.trim();
-  const modelChoice = chooseStageModel({
-    node: !switched && (!ownProvider || ownProvider === provider) ? node : { ...node, model: undefined },
-    provider,
-    tiers: settings.ai.modelTiers,
-    runModel: provider === runProvider ? workflowRun.aiModel : undefined,
-    attemptsSpent: failedAttempts
-  });
+  const switchedModel = workflowRun.stageModels?.[node.id];
+  const modelChoice = switchedModel
+    ? { model: switchedModel, reason: 'explicitly chosen for this stage' }
+    : chooseStageModel({
+        node: !switched && (!ownProvider || ownProvider === provider) ? node : { ...node, model: undefined },
+        provider,
+        tiers: settings.ai.modelTiers,
+        runModel: provider === runProvider ? workflowRun.aiModel : undefined,
+        attemptsSpent: failedAttempts
+      });
 
   // A synthetic issue: the session store is issue-keyed, and a stage is not a
   // ticket, so it carries the run/node key instead.

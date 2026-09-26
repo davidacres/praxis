@@ -61,7 +61,8 @@ import {
   testProviderConnection
 } from './aiInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
-import { getSecretsStore } from './connectionStoreInstance';
+import { getConnectionStore, getSecretsStore } from './connectionStoreInstance';
+import { ElectronFolderConfigProvider } from './adapters/electronFolderConfigProvider';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { AiBrowserBridge } from './aiBrowser';
 import { browserMcpServerForSession } from './browserMcp';
@@ -782,12 +783,60 @@ export function registerAiIpc(): void {
           taskDefinition.attachments = attachments;
         }
       }
+      const project = input.projectId
+        ? getProjectStore().get(input.projectId)
+        : input.connectionId
+          ? (() => {
+              const conn = getConnectionStore().getConnection(input.connectionId);
+              return typeof conn?.settings?.projectId === 'string'
+                ? getProjectStore().get(conn.settings.projectId)
+                : undefined;
+            })()
+          : undefined;
+
+      const connectionFolder = input.connectionId
+        ? (() => {
+            const conn = getConnectionStore().getConnection(input.connectionId);
+            if (conn?.mode === 'folder') {
+              const folderProvider = new ElectronFolderConfigProvider(conn);
+              const roots = folderProvider.getFolderRoots();
+              return roots[0]?.trim() || undefined;
+            }
+            return undefined;
+          })()
+        : undefined;
+
+      const existingSessionFolder = input.issueKey
+        ? sessionManager.getAgentSession(input.issueKey)?.workingDirectory?.trim() || undefined
+        : undefined;
+
       const workingDirectory =
         input.workingDirectory?.trim() ||
+        project?.workspaceFolder?.trim() ||
+        connectionFolder ||
+        existingSessionFolder ||
         settings.ai.workingDirectory.trim() ||
         process.env.PRAXIS_AI_WORKING_DIR?.trim() ||
         undefined;
-      const toolMode = isAnalysisSession ? 'read-only' : (input.toolMode ?? 'full');
+
+      let toolMode = isAnalysisSession ? 'read-only' : (input.toolMode ?? project?.defaultAiToolMode);
+
+      // When no working directory is available (folderless project, standalone
+      // conversation, or free-form chat):
+      // - If toolMode was not explicitly passed, or if project is folderless,
+      //   coerce to 'project-only' (no filesystem/terminal tools) so pure chat
+      //   and conversation sessions can converse without throwing.
+      // - If the caller explicitly requested 'full' tools for a task that requires
+      //   filesystem mutation but provided no folder, require an explicit one.
+      if (!workingDirectory) {
+        if (!input.toolMode || (project && !project.workspaceFolder) || mode === 'chat') {
+          toolMode = project?.defaultAiToolMode === 'read-only' ? 'read-only' : 'project-only';
+        }
+      }
+
+      if (!toolMode) {
+        toolMode = workingDirectory ? 'full' : 'project-only';
+      }
 
       // A full-tools session edits and runs commands in its working directory —
       // require an explicit one rather than silently defaulting to the app's cwd.
@@ -968,6 +1017,22 @@ export function registerAiIpc(): void {
   ipcMain.handle(
     'ai:updateSessionModel',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, model: string) => updateSessionModel(issueKey, model)
+  );
+
+  ipcMain.handle(
+    'ai:updateSessionToolAccess',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      issueKey: string,
+      options: { workingDirectory?: string | null; toolMode?: AgentToolMode }
+    ) => {
+      const record = sessionManager.getAgentSession(issueKey);
+      if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+      if (hasActiveTask(issueKey)) {
+        throw new Error('Wait for the current session turn to finish before changing tool access.');
+      }
+      return sessionManager.updateAgentSessionToolAccess(issueKey, options);
+    }
   );
 
   ipcMain.handle(

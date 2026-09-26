@@ -160,7 +160,7 @@ export function NewSession({
   const [modelOptions, setModelOptions] = useState<ModelOptions | undefined>();
   const [modelsLoading, setModelsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | undefined>();
-  const [toolMode, setToolMode] = useState<AgentToolMode>(defaultToolMode ?? 'full');
+  const [toolMode, setToolMode] = useState<AgentToolMode>(defaultToolMode ?? (conversational ? 'project-only' : 'full'));
   const [mode, setMode] = useState<SessionMode>('chat');
   const [workingDirectory, setWorkingDirectory] = useState<string | undefined>(defaultWorkingDirectory);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
@@ -200,8 +200,10 @@ export function NewSession({
     if (selectedBoard) {
       const projectDefault = toolModeForBoard?.(selectedBoard);
       if (projectDefault) setToolMode(projectDefault);
+    } else if (selectedBoardId === FREEFORM_BOARD_ID) {
+      if (!workingDirectory) setToolMode('project-only');
     }
-  }, [selectedBoard, toolModeForBoard]);
+  }, [selectedBoard, selectedBoardId, toolModeForBoard, workingDirectory]);
 
   useEffect(() => {
     if (selectedBoardId !== FREEFORM_BOARD_ID && selectedBoardId && !selectableBoards.some(board => board.id === selectedBoardId)) {

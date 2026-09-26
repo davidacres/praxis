@@ -266,3 +266,19 @@ Status: Failed · Duration: 3s
 - ⏳ Security scan: pending
 
 Required stage "plan" failed.
+
+**PRX-F45** — 2026-09-26T13:15:43.969Z
+**Workflow run failed: Governed delivery — FX-BF-045: Standalone conversations (chat outside any project)**
+
+Status: Failed · Duration: 3h 23m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ❌ Review: failed
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "review" failed.
