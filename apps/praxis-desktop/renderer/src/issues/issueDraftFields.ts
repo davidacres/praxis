@@ -90,19 +90,6 @@ export function getDraftParentRule(
     };
   }
 
-  // Mirrors `getParentRule` in core: an app-storage project's work items have
-  // no parent field, so never offer the picker.
-  if (mode === 'app' || mode === 'project') {
-    return {
-      canHaveParent: false,
-      requiresParent: false,
-      label: 'Parent',
-      helperText: `${typeLabel} items in a project do not use a parent.`,
-      placeholder: '',
-      allowsNewParent: false
-    };
-  }
-
   if (mode === 'folder') {
     return {
       canHaveParent: true,

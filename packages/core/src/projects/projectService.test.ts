@@ -56,6 +56,92 @@ test('createProjectService: an app-storage project serves its own work items', a
   service.dispose();
 });
 
+test('createProjectService: a Story can be created under a Feature and the board reads both directions', async () => {
+  const store = new ProjectStore(memoryStore());
+  await store.create(projectRecord({ workItems: [] }));
+  const service = createProjectService(store, 'p1');
+
+  const feature = await service.createIssue({ projectKey: 'DEMO', issueType: 'Feature', summary: 'Onboarding' });
+  const story = await service.createIssue({
+    projectKey: 'DEMO', issueType: 'Story', summary: 'Sign-up form', parentKey: feature.key
+  });
+
+  assert.equal(story.parentKey, feature.key);
+  assert.equal(story.parentIssue?.summary, 'Onboarding');
+
+  const details = await service.getBoardDetails({ id: 'project-board-p1' } as never);
+  const reloadedStory = details.issues.find(issue => issue.key === story.key);
+  assert.equal(reloadedStory?.parentKey, feature.key);
+  service.dispose();
+});
+
+test('createProjectService: a Feature cannot itself have a parent', async () => {
+  const store = new ProjectStore(memoryStore());
+  await store.create(projectRecord({ workItems: [] }));
+  const service = createProjectService(store, 'p1');
+  const feature = await service.createIssue({ projectKey: 'DEMO', issueType: 'Feature', summary: 'A' });
+
+  await assert.rejects(
+    service.createIssue({ projectKey: 'DEMO', issueType: 'Feature', summary: 'B', parentKey: feature.key }),
+    /cannot have a parent/i
+  );
+  service.dispose();
+});
+
+test('createProjectService: a Story can only take a Feature as its parent, not another Story', async () => {
+  const store = new ProjectStore(memoryStore());
+  await store.create(projectRecord({ workItems: [] }));
+  const service = createProjectService(store, 'p1');
+  const story = await service.createIssue({ projectKey: 'DEMO', issueType: 'Story', summary: 'A' });
+
+  await assert.rejects(
+    service.createIssue({ projectKey: 'DEMO', issueType: 'Task', summary: 'B', parentKey: story.key }),
+    /can only belong to/i
+  );
+  service.dispose();
+});
+
+test('createProjectService: an unknown parent key is rejected', async () => {
+  const store = new ProjectStore(memoryStore());
+  await store.create(projectRecord({ workItems: [] }));
+  const service = createProjectService(store, 'p1');
+
+  await assert.rejects(
+    service.createIssue({ projectKey: 'DEMO', issueType: 'Story', summary: 'A', parentKey: 'DEMO-999' }),
+    /was not found/i
+  );
+  service.dispose();
+});
+
+test('createProjectService: updateIssue can attach and later clear a parent', async () => {
+  const store = new ProjectStore(memoryStore());
+  await store.create(projectRecord({ workItems: [] }));
+  const service = createProjectService(store, 'p1');
+  const feature = await service.createIssue({ projectKey: 'DEMO', issueType: 'Feature', summary: 'A' });
+  const story = await service.createIssue({ projectKey: 'DEMO', issueType: 'Story', summary: 'B' });
+  assert.equal(story.parentKey, undefined);
+
+  const attached = await service.updateIssue(story.key, { parentKey: feature.key });
+  assert.equal(attached.parentKey, feature.key);
+
+  const cleared = await service.updateIssue(story.key, { parentKey: null });
+  assert.equal(cleared.parentKey, undefined);
+  service.dispose();
+});
+
+test('createProjectService: getParentItems for a Story only returns Features, not Bugs', async () => {
+  const store = new ProjectStore(memoryStore());
+  await store.create(projectRecord({ workItems: [] }));
+  const service = createProjectService(store, 'p1');
+  await service.createIssue({ projectKey: 'DEMO', issueType: 'Feature', summary: 'A feature' });
+  await service.createIssue({ projectKey: 'DEMO', issueType: 'Bug', summary: 'A bug' });
+
+  const candidates = await service.getParentItems(EMPTY_FILTERS, undefined, { childIssueType: 'Story' });
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].issueType, 'Feature');
+  service.dispose();
+});
+
 test('folder-backed projects use a normal folder connection', () => {
   const connection = buildProjectConnection(projectRecord({
     storage: 'folder',
