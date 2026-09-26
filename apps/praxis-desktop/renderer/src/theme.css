@@ -13181,6 +13181,7 @@ button.session-chat-attachment {
 .wf-recommend-result-text strong { font-size: var(--text-sm); }
 .wf-recommend-result-text span { color: var(--text-secondary); font-size: var(--text-xs); }
 .wf-recommend-result-text .wf-recommend-stale { color: var(--warning); }
+.wf-recommend-actions { display: flex; gap: var(--space-1); flex-shrink: 0; align-items: center; }
 .form-fieldset { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2); }
 .form-fieldset legend { font-size: var(--text-sm); color: var(--text-tertiary); }
 .form-check { display: flex; gap: var(--space-2); align-items: center; font-size: var(--text-md); }

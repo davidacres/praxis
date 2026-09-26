@@ -1372,6 +1372,11 @@ export interface WorkflowsIpc {
     input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
   ): Promise<AgentRecommendationResult>;
   /**
+   * Drops the cached agent recommendation for one stage — e.g. when the user
+   * applies or dismisses it so they aren't repeatedly prompted.
+   */
+  clearRecommendation(workflowId: string, nodeId: string): Promise<void>;
+  /**
    * Reads back the retained evidence for one stage attempt (FX-BE-051).
    * `entry` is undefined when nothing was ever captured for that attempt — a
    * stage that hasn't run, or one from before this capability shipped; that
