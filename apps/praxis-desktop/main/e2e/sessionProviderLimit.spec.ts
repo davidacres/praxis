@@ -38,7 +38,7 @@ async function outOfBudgetSession(): Promise<TestApp['window']> {
   );
   const win = app.window;
   await win.evaluate(() => window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Summarise the release plan.' } }));
-  await win.getByTestId('nav-sessions').click();
+  await win.getByTestId('nav-conversations').click();
   await expect(win.getByTestId('session-state-badge')).toHaveText('Failed', { timeout: 15000 });
   return win;
 }

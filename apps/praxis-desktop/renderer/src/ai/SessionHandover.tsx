@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type {
   AgentConversationMode,
   AgentSessionRecord,
+  AgentToolMode,
   AiHandoverBriefEdits,
   AiProvider,
   AiProviderStatus,
@@ -10,7 +11,7 @@ import type {
   ModelOptions,
   SessionRuntimeEpoch
 } from '@praxis/core';
-import { Icon } from '../ui/Icon';
+import { Icon, type IconName } from '../ui/Icon';
 import { allModelProviderIds, fetchModelOptions, providerIconName, providerLabel, providerSupportsTools, refreshModelOptions } from './modelProviders';
 import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing } from './sessionNav';
 import { isProviderUsable } from './providerAvailability';
@@ -214,7 +215,7 @@ export interface ComposerPopoverPosition {
 
 interface TransitionDialogsProps {
   session: AgentSessionRecord;
-  open: 'model' | 'handover' | undefined;
+  open: 'model' | 'handover' | 'toolMode' | 'folder' | undefined;
   position: ComposerPopoverPosition | undefined;
   onClose: () => void;
   onAddProvider?: (provider: AiProvider) => void;
@@ -300,7 +301,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element;
       if (menuRef.current?.contains(target)) return;
-      if (target.closest('[data-testid="session-provider"], [data-testid="session-model"]')) return;
+      if (target.closest('[data-testid="session-provider"], [data-testid="session-model"], [data-testid="session-tool-mode"], [data-testid="session-working-directory"]')) return;
       onClose();
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -343,6 +344,41 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const TOOL_MODES: Array<{ mode: AgentToolMode; label: string; desc: string; icon: IconName }> = [
+    { mode: 'project-only', label: 'Project only', desc: 'Chat and manage tickets only; no file or shell access', icon: 'search' },
+    { mode: 'read-only', label: 'Read only', desc: 'Inspect codebase and read files; no file editing or shell commands', icon: 'search' },
+    { mode: 'full', label: 'Full tools', desc: 'Read and edit files, and execute terminal commands', icon: 'tools' }
+  ];
+
+  const changeToolMode = async (targetMode: AgentToolMode) => {
+    if (targetMode === session.toolMode) {
+      onClose();
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      let dir = session.workingDirectory;
+      if ((targetMode === 'full' || targetMode === 'read-only') && !dir) {
+        const picked = await window.praxis.dialog.pickFolder('Choose working folder for this session');
+        if (!picked) {
+          setBusy(false);
+          return;
+        }
+        dir = picked;
+      }
+      await window.praxis.ai.updateSessionToolAccess(session.issueKey, {
+        toolMode: targetMode,
+        ...(dir ? { workingDirectory: dir } : {})
+      });
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -393,11 +429,122 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
       ref={menuRef}
       className="composer-provider-menu session-runtime-popover"
       role={pendingProvider ? 'dialog' : 'listbox'}
-      aria-label={pendingProvider ? 'Confirm AI provider handover' : open === 'model' ? 'Model' : 'AI provider'}
-      data-testid={open === 'model' ? 'session-model-menu' : 'session-provider-menu'}
-      style={anchoredPopoverStyle(position, 300)}
+      aria-label={
+        pendingProvider
+          ? 'Confirm AI provider handover'
+          : open === 'model'
+            ? 'Model'
+            : open === 'toolMode'
+              ? 'Tool access'
+              : open === 'folder'
+                ? 'Working folder'
+                : 'AI provider'
+      }
+      data-testid={
+        open === 'model'
+          ? 'session-model-menu'
+          : open === 'toolMode'
+            ? 'session-tool-mode-menu'
+            : open === 'folder'
+              ? 'session-folder-menu'
+              : 'session-provider-menu'
+      }
+      style={anchoredPopoverStyle(position, open === 'toolMode' ? 320 : 300)}
     >
-      {pendingProvider ? (
+      {open === 'toolMode' ? (
+        <>
+          <div className="session-popover-heading" style={{ padding: '8px 12px 4px' }}>
+            <Icon name="tools" size={14} />
+            <strong>Tool access</strong>
+          </div>
+          {TOOL_MODES.map(opt => (
+            <button
+              key={opt.mode}
+              type="button"
+              className={`composer-provider-option${session.toolMode === opt.mode ? ' active' : ''}`}
+              data-testid={`session-tool-mode-option-${opt.mode}`}
+              role="option"
+              aria-selected={session.toolMode === opt.mode}
+              title={opt.desc}
+              disabled={busy}
+              onClick={() => void changeToolMode(opt.mode)}
+            >
+              <Icon name={opt.icon} size={14} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
+                <span className="composer-model-option-name">{opt.label}</span>
+                <span className="composer-chip-meta" style={{ fontSize: '11px', opacity: 0.8 }}>{opt.desc}</span>
+              </div>
+            </button>
+          ))}
+          {error && <p className="session-popover-error">{error}</p>}
+        </>
+      ) : open === 'folder' ? (
+        <>
+          <div className="session-popover-heading" style={{ padding: '8px 12px 4px' }}>
+            <Icon name="folder" size={14} />
+            <strong>Working folder</strong>
+          </div>
+          {session.workingDirectory && (
+            <div className="composer-provider-option" style={{ cursor: 'default', opacity: 0.85 }} title={session.workingDirectory}>
+              <Icon name="folder" size={14} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '240px', fontSize: '12px' }}>
+                {session.workingDirectory}
+              </span>
+            </div>
+          )}
+          <button
+            type="button"
+            className="composer-provider-option"
+            data-testid="session-folder-change"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError(undefined);
+              try {
+                const picked = await window.praxis.dialog.pickFolder('Choose working folder for this session');
+                if (picked) {
+                  await window.praxis.ai.updateSessionToolAccess(session.issueKey, { workingDirectory: picked });
+                  onClose();
+                }
+              } catch (cause) {
+                setError(cause instanceof Error ? cause.message : String(cause));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Icon name="folder" size={14} />
+            <span>{session.workingDirectory ? 'Change working folder…' : 'Choose working folder…'}</span>
+          </button>
+          {session.workingDirectory && (
+            <button
+              type="button"
+              className="composer-provider-option"
+              data-testid="session-folder-detach"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setError(undefined);
+                try {
+                  await window.praxis.ai.updateSessionToolAccess(session.issueKey, {
+                    workingDirectory: null,
+                    toolMode: 'project-only'
+                  });
+                  onClose();
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : String(cause));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <Icon name="close" size={14} />
+              <span>Detach folder (revert to Project only)</span>
+            </button>
+          )}
+          {error && <p className="session-popover-error">{error}</p>}
+        </>
+      ) : pendingProvider ? (
         <div className="session-handover-confirm" data-testid="session-handover-confirmation">
           <div className="session-popover-heading">
             <Icon name="info" size={15} />

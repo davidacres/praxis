@@ -5,6 +5,7 @@ import {
   canRetry,
   exhaustedProviders,
   stageProvider,
+  stageModel,
   createWorkflowRun,
   normalizeWorkflowRun,
   reworkWorkflowRun,
@@ -940,9 +941,45 @@ function definitionForAi(): WorkflowDefinition {
 test('a stored run keeps its budget policy and the AIs its stages were switched to', () => {
   const run = {
     ...createWorkflowRun({ runId: 'r', projectId: 'p', definition: definitionForAi(), at: '2026-09-23T00:00:00.000Z', providerLimitPolicy: 'stop' }),
-    stageProviders: { plan: 'gemini', build: 7 as unknown as string }
+    stageProviders: { plan: 'gemini', build: 7 as unknown as string },
+    stageModels: { plan: 'gemini-2.0-flash', build: 42 as unknown as string }
   };
   const restored = normalizeWorkflowRun(JSON.parse(JSON.stringify(run)));
   assert.equal(restored?.providerLimitPolicy, 'stop');
   assert.deepEqual(restored?.stageProviders, { plan: 'gemini' });
+  assert.deepEqual(restored?.stageModels, { plan: 'gemini-2.0-flash' });
+});
+
+test('switching a stage to another AI and model records stageModels and chosenModel in summary', () => {
+  let run = createWorkflowRun({ runId: 'r', projectId: 'p', definition: definitionForAi(), at: T(0) });
+  run = applyWorkflowRunCommand(run, {
+    kind: 'stage-provider-switched',
+    nodeId: 'plan',
+    at: T(1),
+    provider: 'gemini',
+    model: 'gemini-2.5-pro'
+  });
+
+  assert.equal(stageProvider(run, 'plan', 'vercel-gateway'), 'gemini');
+  assert.equal(stageModel(run, 'plan'), 'gemini-2.5-pro');
+  assert.deepEqual(run.stageModels, { plan: 'gemini-2.5-pro' });
+  assert.match(run.events[run.events.length - 1].message, /plan switched .*to Google Gemini \(gemini-2.5-pro\)\./i);
+
+  const summary = summarizeWorkflowRun(run);
+  const planStage = summary.stages.find(s => s.nodeId === 'plan');
+  assert.equal(planStage?.chosenProvider, 'gemini');
+  assert.equal(planStage?.chosenModel, 'gemini-2.5-pro');
+
+  // Switching without a model clears stageModels for that node
+  run = applyWorkflowRunCommand(run, {
+    kind: 'stage-provider-switched',
+    nodeId: 'plan',
+    at: T(2),
+    provider: 'openai'
+  });
+  assert.equal(stageProvider(run, 'plan', 'vercel-gateway'), 'openai');
+  assert.equal(stageModel(run, 'plan'), undefined);
+  assert.equal(run.stageModels, undefined);
+  const summary2 = summarizeWorkflowRun(run);
+  assert.equal(summary2.stages.find(s => s.nodeId === 'plan')?.chosenModel, undefined);
 });

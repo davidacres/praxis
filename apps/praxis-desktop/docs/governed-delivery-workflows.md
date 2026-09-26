@@ -11,27 +11,36 @@ watch one).
 
 ## The built-in template
 
-**Governed delivery**: `Plan → Implement → (Review ∥ QA ∥ Security) → Gates → Approve`.
+**Governed delivery**: `Plan → Implement → Praxis Test contracts → (Review ∥ (Install → Build → QA) ∥ Security) → Gates → Approve`.
 
-| Stage | Kind | Notes |
-| --- | --- | --- |
-| Plan | agent | read-only; produces a `plan` artifact |
-| Implement | agent | writes the worktree; produces a `diff`; up to 2 attempts |
-| Review | agent | read-only; satisfies the **review** gate |
-| QA | check | `npm test`; satisfies the **qa** gate |
-| Security scan | check | `npm audit`; satisfies the **security** gate |
-| Gates | join | waits for all three branches |
-| Approve | approval | requires review + qa + security; no bypass |
+| Stage | Kind | Tool Mode | Notes |
+| --- | --- | --- | --- |
+| Plan | agent | `read-only` | produces a `plan` artifact; inspects code without mutating |
+| Implement | agent | `full` | writes the worktree; produces a `diff`; up to 2 attempts |
+| Praxis Test contracts | agent | `full` | authors/updates test catalog & runs validator; mutates worktree; up to 2 attempts |
+| Review | agent | `read-only` | inspects snapshot and change diff; satisfies the **review** gate |
+| Install dependencies | check | — | `npm ci`; ensures clean dependency tree in the run worktree |
+| Build | check | — | `npm run build --if-present`; verifies compilation |
+| QA | check | — | `npm test`; satisfies the **qa** gate |
+| Security scan | check | — | `npm audit`; audits against public registry; satisfies the **security** gate |
+| Gates | join | — | waits for all three branches (Review, QA, Security) |
+| Approve | approval | — | requires review + qa + security; no bypass |
+
+### Stage tool modes
+
+- **`read-only`**: The agent has local read tools (`read_file`, `list_dir`) sandboxed to the run's worktree. Shell execution (`run_shell`) and write tools (`write_file`) are disabled. Appropriate for planning, analysis, and code review.
+- **`full`**: The agent has full read, write, and command execution tools (`read_file`, `list_dir`, `write_file`, `run_shell`) sandboxed to the worktree. Required whenever `mutatesWorktree: true` (such as `Implement` or authoring `Praxis Test contracts`).
+- **`project-only`**: All filesystem tools are disabled. Reserved for folderless projects or non-code conversations; should not be used on code workflow stages that need to read or mutate repository files.
 
 QA and security are **deterministic checks**, not agents, so an agent cannot
 mark those gates passed by prose — their outcome is an exit code. Review, QA, and
 security all inspect the *same immutable implementation snapshot* that Implement
-froze, not whatever the worktree holds by the time each runs.
+and Test contracts froze, not whatever the worktree holds by the time each runs.
 
 Agents are referenced by Agent Hub id only. The template stores no manifests; a
-project points `praxis-planner` / `praxis-implementer` / `praxis-reviewer` at
-real agents, and the designer's template list flags any id that does not
-resolve *before* a run starts.
+project points `praxis-planner` / `praxis-implementer` / `praxis-test-author` /
+`praxis-reviewer` at real agents, and the designer's template list flags any id
+that does not resolve *before* a run starts.
 
 ## Reading a run
 

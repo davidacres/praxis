@@ -444,3 +444,30 @@ test('setAgentSessionArchived fires the session-changed event', () =>  {
   assert.equal(seen.length, 1);
   assert.equal(seen[0]?.archived, true);
 });
+
+test('updateAgentSessionToolAccess updates workingDirectory and toolMode', () => {
+  const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('completed') }));
+  const initial = mgr.getAgentSession('SESSION-abc')!;
+  initial.toolMode = 'project-only';
+
+  // Cannot elevate to full without a workingDirectory
+  assert.throws(
+    () => mgr.updateAgentSessionToolAccess('SESSION-abc', { toolMode: 'full' }),
+    /A working folder is required for file tools/
+  );
+
+  // Attach a working directory and elevate to full
+  const updated = mgr.updateAgentSessionToolAccess('SESSION-abc', {
+    workingDirectory: '/path/to/project',
+    toolMode: 'full'
+  });
+  assert.equal(updated.workingDirectory, '/path/to/project');
+  assert.equal(updated.toolMode, 'full');
+
+  // Detaching folder coerces toolMode to project-only
+  const detached = mgr.updateAgentSessionToolAccess('SESSION-abc', {
+    workingDirectory: null
+  });
+  assert.equal(detached.workingDirectory, undefined);
+  assert.equal(detached.toolMode, 'project-only');
+});

@@ -1515,6 +1515,8 @@ export function App() {
           : composerProject;
         // Before any session exists, so a dirty checkout costs nothing to back out of.
         if (workflowId && project) await assertRunBaseOrThrow(project.id, uncommittedChanges);
+        const effectiveWorkingDir = project?.workspaceFolder ?? workingDirectory;
+        const effectiveToolMode = project?.defaultAiToolMode ?? (effectiveWorkingDir ? toolMode : 'project-only');
         const record = await window.praxis.ai.delegate({
           ...(issueKey ? { issueKey } : {}),
           mode,
@@ -1523,8 +1525,8 @@ export function App() {
           task: { goal },
           provider,
           model,
-          toolMode: project?.defaultAiToolMode ?? toolMode,
-          workingDirectory: project?.workspaceFolder ?? workingDirectory,
+          toolMode: effectiveToolMode,
+          workingDirectory: effectiveWorkingDir,
           ...(runInWorktree ? { runInWorktree: true } : {}),
           ...(agentId ? { agentId } : {}),
           ...(profileId ? { profileId } : {}),
@@ -1590,6 +1592,7 @@ export function App() {
     <NewSession
       boards={[]}
       conversational
+      defaultToolMode="project-only"
       autoFocusGoal
       onSubmit={async ({ title, goal, provider, model, toolMode, mode, workingDirectory, agentId, profileId, hostId, skillNames }) => {
         const record = await window.praxis.ai.delegate({
@@ -1597,7 +1600,7 @@ export function App() {
           task: { goal },
           provider,
           model,
-          toolMode,
+          toolMode: workingDirectory ? toolMode : 'project-only',
           workingDirectory,
           ...(agentId ? { agentId } : {}),
           ...(profileId ? { profileId } : {}),

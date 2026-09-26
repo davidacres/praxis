@@ -755,6 +755,7 @@ export function Sidebar({
             feature.id === 'conversations' ? (
               <SessionsNav
                 key={feature.id}
+                testId="nav-conversations"
                 icon={feature.icon}
                 label={feature.label}
                 active={activeFeature === 'conversations'}
@@ -776,6 +777,7 @@ export function Sidebar({
             ) : feature.id === 'sessions' ? (
               <SessionsNav
                 key={feature.id}
+                testId="nav-sessions"
                 icon={feature.icon}
                 label={feature.label}
                 active={activeFeature === 'sessions'}
@@ -849,6 +851,7 @@ export function Sidebar({
 function SessionsNav({
   icon,
   label,
+  testId = 'nav-sessions',
   active,
   collapsed,
   onToggleCollapsed,
@@ -863,6 +866,7 @@ function SessionsNav({
   onDeleteSession,
   onArchiveSession
 }: {
+  testId?: string;
   /** Workflow run id → its workflow's name, for the header over a run's stage sessions. */
   runNames: Record<string, string>;
   icon: IconName;
@@ -1191,7 +1195,7 @@ function SessionsNav({
     <>
       <div className="feature-row-heading">
         <button
-          data-testid="nav-sessions"
+          data-testid={testId}
           className={`feature-row${active ? ' active' : ''}`}
           onClick={() => {
             onSelectFeature();
@@ -1208,15 +1212,15 @@ function SessionsNav({
           className="feature-row-expand"
           aria-label={collapsed ? 'Expand session list' : 'Collapse session list'}
           aria-expanded={!collapsed}
-          data-testid="nav-sessions-toggle"
+          data-testid={`${testId}-toggle`}
           onClick={onToggleCollapsed}
         >
           <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
         </button>
         <button
           className="sidebar-section-add"
-          aria-label="New session"
-          data-testid="sessions-new-btn"
+          aria-label={`New ${label.toLowerCase().slice(0, -1)}`}
+          data-testid={testId === 'nav-conversations' ? 'conversations-new-btn' : 'sessions-new-btn'}
           onClick={onNewSession}
         >
           <Icon name="plus" size={13} />

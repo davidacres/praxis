@@ -14,6 +14,7 @@ import type {
   AgentTaskDefinition,
   AgentTaskListItem,
   AgentTaskState,
+  AgentToolMode,
   AgentWorkflowReference,
   HandoverBrief,
   IssueWorkflowAssignment,
@@ -311,7 +312,33 @@ export class AiSessionManager {
       sessionMode: mode,
       kind: mode === 'analysis' ? 'analysis' : mode === 'review' ? 'review' : 'general'
     };
-    record.toolMode = mode === 'chat' ? 'full' : 'read-only';
+    record.toolMode = mode === 'chat' ? (record.workingDirectory ? 'full' : 'project-only') : 'read-only';
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
+  /** Update the working directory and/or tool mode for a session. */
+  public updateAgentSessionToolAccess(
+    issueKey: string,
+    options: { workingDirectory?: string | null; toolMode?: AgentToolMode }
+  ): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      throw new Error(`No agent session found for ${issueKey}.`);
+    }
+    if (options.workingDirectory !== undefined) {
+      record.workingDirectory = options.workingDirectory?.trim() || undefined;
+      if (!record.workingDirectory && !options.toolMode) {
+        record.toolMode = 'project-only';
+      }
+    }
+    if (options.toolMode !== undefined) {
+      if ((options.toolMode === 'full' || options.toolMode === 'read-only') && !record.workingDirectory) {
+        throw new Error('A working folder is required for file tools.');
+      }
+      record.toolMode = options.toolMode;
+    }
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
     return record;
