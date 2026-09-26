@@ -29,7 +29,7 @@
     "rebuild-terminal": "npm rebuild node-pty --build-from-source",
     "start": "npm run compile && electron .",
     "test:e2e": "npm run copy-renderer && npm run compile && npx playwright test",
-    "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/workflowMergeRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js",
+    "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/shellEnvironment.test.js out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/workflowMergeRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js",
     "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/projectSnapshot.test.js out/main/adapters/jsonKeyValueStore.test.js out/main/ticketReviewApply.test.js",
     "test:mobile": "npm run compile && node --test out/main/mobileHostServices.test.js out/main/mobileRunProjection.test.js out/main/mobileSessionProjection.test.js out/main/mobileSessionChanges.test.js out/main/mobilePermissions.test.js out/main/mobileAccessLifecycle.test.js out/main/mobileLanServer.test.js out/main/mobilePairingRegistry.test.js out/main/mobileDiscoveryAdvertiser.test.js out/main/mobileEndToEnd.test.js out/main/mobileAppearance.test.js"
   },

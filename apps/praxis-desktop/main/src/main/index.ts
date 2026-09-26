@@ -44,8 +44,12 @@ import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { registerMarketplaceIpc } from './marketplaceIpc';
 import { reconcileInstalledOnLaunch } from './marketplaceInstance';
 import { initMobileHost } from './mobileListenerInstance';
+import { ensureEnvironmentPath } from './shellEnvironment';
 
 const isMac = process.platform === 'darwin';
+
+// Ensure child processes inherit the user's interactive login shell PATH on macOS and Linux
+ensureEnvironmentPath();
 
 /**
  * Renamed from Electron's unpackaged default (the npm package name,
