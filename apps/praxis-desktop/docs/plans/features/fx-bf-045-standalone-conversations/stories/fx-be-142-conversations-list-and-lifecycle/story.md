@@ -95,6 +95,9 @@ foundation the floating window (FX-BE-143) sits on top of.
 ## Description
 
 
+## Dependencies
+
+
 ## Comments
 
 **2026-09-26 — implementation (Claude):** All Scope items implemented:
