@@ -434,6 +434,8 @@ const praxis: PraxisIpc = {
       nodeId: string,
       input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
     ) => ipcRenderer.invoke('workflows:getRecommendation', workflowId, nodeId, input),
+    clearRecommendation: (workflowId: string, nodeId: string) =>
+      ipcRenderer.invoke('workflows:clearRecommendation', workflowId, nodeId),
     recommendAgent: (
       workflowId: string,
       nodeId: string,
