@@ -47,6 +47,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from typing import Any
 
@@ -66,6 +67,7 @@ SERVER_VERSION = "0.1.0"
 AGENT_METHODS = {
     "initialize": "initialize",
     "session_new": "session/new",
+    "session_set_config_option": "session/set_config_option",
     "session_prompt": "session/prompt",
     "session_cancel": "session/cancel",
     "session_close": "session/close",
@@ -104,6 +106,84 @@ def send_error(req_id: Any, code: int, message: str, data: Any = None) -> None:
     send({"jsonrpc": "2.0", "id": req_id, "error": err})
 
 
+# ── Model configuration ───────────────────────────────────────────────────────
+
+DEFAULT_MODELS: list[dict[str, str]] = [
+    {"value": "gemini-3.8-flash-high", "name": "Gemini 3.8 Flash (High)"},
+    {"value": "gemini-3.8-flash-medium", "name": "Gemini 3.8 Flash (Medium)"},
+    {"value": "gemini-3.8-flash-low", "name": "Gemini 3.8 Flash (Low)"},
+    {"value": "gemini-3.7-flash-high", "name": "Gemini 3.7 Flash (High)"},
+    {"value": "gemini-3.7-flash-medium", "name": "Gemini 3.7 Flash (Medium)"},
+    {"value": "gemini-3.7-flash-low", "name": "Gemini 3.7 Flash (Low)"},
+    {"value": "gemini-3.6-flash-high", "name": "Gemini 3.6 Flash (High)"},
+    {"value": "gemini-3.6-flash-medium", "name": "Gemini 3.6 Flash (Medium)"},
+    {"value": "gemini-3.6-flash-low", "name": "Gemini 3.6 Flash (Low)"},
+    {"value": "gemini-3.1-pro-high", "name": "Gemini 3.1 Pro (High)"},
+    {"value": "gemini-3.1-pro-low", "name": "Gemini 3.1 Pro (Low)"},
+    {"value": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6 (Thinking)"},
+    {"value": "claude-opus-4-6-thinking", "name": "Claude Opus 4.6 (Thinking)"},
+    {"value": "gpt-oss-120b-medium", "name": "GPT-OSS 120B (Medium)"},
+]
+
+_cached_models: list[dict[str, str]] | None = None
+_cached_models_time: float = 0.0
+_MODELS_CACHE_TTL = 60.0  # seconds
+
+
+def get_available_models() -> list[dict[str, str]]:
+    global _cached_models, _cached_models_time
+    now = time.time()
+    if _cached_models is not None and (now - _cached_models_time) < _MODELS_CACHE_TTL:
+        return _cached_models
+
+    agy_bin = shutil.which("agy")
+    if not agy_bin:
+        return DEFAULT_MODELS
+
+    try:
+        res = subprocess.run(
+            [agy_bin, "models"],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+        if res.returncode == 0 and res.stdout:
+            models = []
+            for line in res.stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(None, 1)
+                val = parts[0]
+                name = parts[1] if len(parts) > 1 else parts[0]
+                models.append({"value": val, "name": name})
+            if models:
+                _cached_models = models
+                _cached_models_time = now
+                return models
+    except Exception as exc:
+        log.warning("Failed to fetch models from agy: %s", exc)
+
+    if _cached_models is not None:
+        return _cached_models
+    return DEFAULT_MODELS
+
+
+def get_model_config_option(current_model: str | None = None) -> dict[str, Any]:
+    models = get_available_models()
+    default_val = models[0]["value"] if models else "gemini-3.7-flash-high"
+    val = current_model if current_model else default_val
+    return {
+        "id": "model",
+        "name": "Model",
+        "description": "Antigravity model selector",
+        "category": "model",
+        "type": "select",
+        "currentValue": val,
+        "options": models,
+    }
+
+
 # ── Session state ─────────────────────────────────────────────────────────────
 
 
@@ -111,6 +191,7 @@ class Session:
     def __init__(self, session_id: str, cwd: str) -> None:
         self.session_id = session_id
         self.cwd = cwd
+        self.model: str | None = None
         # conversation_id issued by agy for the first turn; passed as
         # --conversation on subsequent turns for session continuity.
         self.conversation_id: str | None = None
@@ -134,6 +215,8 @@ class Session:
             return
 
         cmd = [agy_bin, "--output-format", "stream-json", "--dangerously-skip-permissions"]
+        if self.model:
+            cmd += ["--model", self.model]
         if self.conversation_id:
             cmd += ["--conversation", self.conversation_id]
         cmd += ["--print", prompt_text]
@@ -275,7 +358,34 @@ def handle_session_new(req_id: Any, params: dict) -> None:
     session = Session(session_id, cwd)
     _sessions[session_id] = session
     _active_session = session
-    send_response(req_id, {"sessionId": session_id, "configOptions": []})
+    send_response(
+        req_id,
+        {
+            "sessionId": session_id,
+            "configOptions": [get_model_config_option(session.model)],
+        },
+    )
+
+
+def handle_session_set_config_option(req_id: Any, params: dict) -> None:
+    session_id = params.get("sessionId", "")
+    session = _sessions.get(session_id)
+    if session is None:
+        send_error(req_id, -32602, f"Unknown session: {session_id}")
+        return
+
+    config_id = params.get("configId")
+    value = params.get("value")
+
+    if config_id == "model" and isinstance(value, str):
+        session.model = value
+
+    send_response(
+        req_id,
+        {
+            "configOptions": [get_model_config_option(session.model)],
+        },
+    )
 
 
 def handle_session_prompt(req_id: Any, params: dict) -> None:
@@ -321,6 +431,7 @@ def handle_session_close(req_id: Any, params: dict) -> None:
 _HANDLERS = {
     AGENT_METHODS["initialize"]: handle_initialize,
     AGENT_METHODS["session_new"]: handle_session_new,
+    AGENT_METHODS["session_set_config_option"]: handle_session_set_config_option,
     AGENT_METHODS["session_prompt"]: handle_session_prompt,
     AGENT_METHODS["session_cancel"]: handle_session_cancel,
     AGENT_METHODS["session_close"]: handle_session_close,

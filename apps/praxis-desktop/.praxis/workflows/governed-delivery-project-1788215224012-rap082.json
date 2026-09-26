@@ -30,7 +30,7 @@
       ],
       "mutatesWorktree": false,
       "model": "default",
-      "modelTier": "fast"
+      "modelTier": "strong"
     },
     {
       "id": "implement",
@@ -342,7 +342,7 @@
   ],
   "entryNodeId": "plan",
   "createdAt": "2026-09-23T23:26:52.387Z",
-  "updatedAt": "2026-09-23T23:28:33.283Z",
+  "updatedAt": "2026-09-26T16:10:38.751Z",
   "description": "Plan, implement, then converge review, QA, and security before a human approves.",
   "projectId": "project-1788215224012-rap082"
 }

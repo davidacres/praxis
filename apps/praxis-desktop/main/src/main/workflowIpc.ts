@@ -1099,6 +1099,12 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
   );
 
   ipcMain.handle(
+    'workflows:clearRecommendation',
+    async (_event, workflowId: string, nodeId: string): Promise<void> =>
+      getWorkflowRecommendationCache().clear(workflowId, nodeId)
+  );
+
+  ipcMain.handle(
     'workflows:recommendAgent',
     async (
       _event,

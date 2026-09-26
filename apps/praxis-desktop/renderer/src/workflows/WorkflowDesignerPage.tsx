@@ -1256,8 +1256,16 @@ function AgentStageFields({
       .then(({ recommendation, stale }) => {
         if (cancelled) return;
         if (recommendation) {
-          setRecommendState({ status: 'done', agentId: recommendation.agentId, rationale: recommendation.rationale, stale });
-          setHasRecommendation(true);
+          const alreadyUsing = selectedProfileId === recommendation.agentId;
+          if (!alreadyUsing) {
+            setRecommendState({ status: 'done', agentId: recommendation.agentId, rationale: recommendation.rationale, stale });
+          } else {
+            setRecommendState({ status: 'idle' });
+            if (stale) {
+              void window.praxis.workflows.clearRecommendation(workflowId, node.id);
+            }
+          }
+          setHasRecommendation(!alreadyUsing || !stale);
         } else {
           setRecommendState({ status: 'idle' });
           setHasRecommendation(false);
@@ -1487,25 +1495,34 @@ function AgentStageFields({
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              className="btn btn-compact"
-              data-testid="wf-recommend-use"
-              onClick={() => {
-                setAgent({ profileId: recommendState.agentId });
-                setRecommendState({ status: 'idle' });
-              }}
-            >
-              Use
-            </button>
-            <button
-              type="button"
-              className="icon-btn icon-btn-sm"
-              aria-label="Dismiss recommendation"
-              onClick={() => setRecommendState({ status: 'idle' })}
-            >
-              <Icon name="close" size={12} />
-            </button>
+            <div className="wf-recommend-actions">
+              <button
+                type="button"
+                className="btn btn-compact"
+                data-testid="wf-recommend-use"
+                onClick={() => {
+                  setAgent({ profileId: recommendState.agentId });
+                  setRecommendState({ status: 'idle' });
+                  setHasRecommendation(false);
+                  void window.praxis.workflows.clearRecommendation(workflowId, node.id);
+                }}
+              >
+                Use
+              </button>
+              <button
+                type="button"
+                className="icon-btn icon-btn-sm"
+                aria-label="Dismiss recommendation"
+                title="Dismiss recommendation"
+                onClick={() => {
+                  setRecommendState({ status: 'idle' });
+                  setHasRecommendation(false);
+                  void window.praxis.workflows.clearRecommendation(workflowId, node.id);
+                }}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
           </div>
         )}
 
