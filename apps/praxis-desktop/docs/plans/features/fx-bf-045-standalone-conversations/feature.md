@@ -249,3 +249,20 @@ this file end to end (new conversation from sidebar and from Overview with
 zero projects, archive/delete, pop out, drag/resize, pop back in, confirm the
 "Create a project" strip still shows), and add the missing coverage each
 story's Validation section calls for.
+
+
+**PRX-F45** — 2026-09-26T09:44:08.637Z
+**Workflow run failed: Governed delivery — FX-BF-045: Standalone conversations (chat outside any project)**
+
+Status: Failed · Duration: 3s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Praxis Test contracts: pending
+- ⏳ Review: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "plan" failed.
