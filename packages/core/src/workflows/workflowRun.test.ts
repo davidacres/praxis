@@ -414,10 +414,12 @@ test('a person can retry a failed stage after its attempt budget is spent, which
     'a failed run still offers a retry'
   );
 
+  run = { ...run, issueWriteBackAt: T(8) };
   run = applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId: 'implement', at: T(9) });
   assert.equal(run.status, 'running');
   assert.equal(run.endedAt, undefined);
   assert.equal(run.endedReason, undefined);
+  assert.equal(run.issueWriteBackAt, undefined, 'a retried run must publish its next terminal outcome');
   assert.equal(run.nodes.implement.attempts.length, 2, 'earlier attempts stay on the record');
   assert.deepEqual(scheduleWorkflowRun(run).ready, ['implement']);
   assert.match(run.events.at(-1)?.message ?? '', /attempt 3/);

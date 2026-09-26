@@ -456,7 +456,7 @@ export function reworkWorkflowRun(
       .filter((gate): gate is NonNullable<typeof gate> => !!gate)
   );
   const next: WorkflowRun = {
-    ...run,
+    ...withoutIssueWriteBack(run),
     status: 'running',
     endedAt: undefined,
     endedReason: undefined,
@@ -639,6 +639,7 @@ function retryNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRun {
   const spent = attemptsSpent(state);
   let base = run;
   if (isRunSettled(run)) {
+    base = withoutIssueWriteBack(run);
     // Siblings stopped because this failure ended the run were interrupted, not
     // judged, so they go back in the queue with it.
     for (const other of Object.values(run.nodes)) {
@@ -656,6 +657,11 @@ function retryNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRun {
     attempt: state.attempts.length,
     message: `${label(run, nodeId)} queued for retry (attempt ${spent + 1}${spent < maxAttempts ? ` of ${maxAttempts}` : ''}).`
   });
+}
+
+function withoutIssueWriteBack(run: WorkflowRun): WorkflowRun {
+  const { issueWriteBackAt: _issueWriteBackAt, ...withoutMarker } = run;
+  return withoutMarker;
 }
 
 function switchStageProvider(run: WorkflowRun, nodeId: string, at: string, provider: string, model?: string, automatic?: boolean): WorkflowRun {
