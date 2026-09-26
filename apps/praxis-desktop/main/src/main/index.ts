@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeImage } from 'electron';
+import { attachRendererNavigationGuard } from './rendererNavigationGuard';
+import { closeAllDetachedChats, registerDetachedChatIpc } from './detachedChatWindow';
 import { registerBoardIpc } from './boardIpc';
 import { registerIssueIpc } from './issueIpc';
 import { registerConnectionIpc } from './connectionIpc';
@@ -166,52 +167,6 @@ function wantsWindowVibrancyAtLaunch(): boolean {
   }
 }
 
-/**
- * Is `url` the renderer this main window was loaded with — the dev server
- * origin, or a file:// path under the packaged renderer directory? Anything
- * else (an in-app link, a compromised-renderer redirect, a spoofed
- * window.open) is not something this window should ever navigate to.
- */
-function isOwnRendererUrl(url: string, devServerUrl: string | undefined, rendererDir: string): boolean {
-  try {
-    const target = new URL(url);
-    if (devServerUrl) return target.origin === new URL(devServerUrl).origin;
-    if (target.protocol !== 'file:') return false;
-    const relative = path.relative(rendererDir, fileURLToPath(target));
-    return !relative.startsWith('..') && !path.isAbsolute(relative);
-  } catch {
-    return false;
-  }
-}
-
-/** Only these schemes are worth handing to the OS — anything else is silently dropped. */
-function openInOsBrowser(url: string): void {
-  if (/^(https?|mailto):/i.test(url)) void shell.openExternal(url);
-}
-
-/**
- * The main window only ever needs to show its own renderer. Unlike
- * aiBrowser.ts / previewBrowser.ts's WebContentsViews (which load remote
- * URLs on purpose), any navigation or new-window request away from that
- * renderer here means an in-app link or a compromised renderer trying to
- * take the window somewhere else — block it and, for http(s)/mailto
- * targets, send it to the OS browser instead.
- */
-function attachMainWindowNavigationGuard(win: BrowserWindow, devServerUrl: string | undefined): void {
-  const rendererDir = path.join(__dirname, '../../renderer');
-  const guard = (event: Electron.Event, url: string) => {
-    if (isOwnRendererUrl(url, devServerUrl, rendererDir)) return;
-    event.preventDefault();
-    openInOsBrowser(url);
-  };
-  win.webContents.on('will-navigate', guard);
-  win.webContents.on('will-redirect', guard);
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    openInOsBrowser(url);
-    return { action: 'deny' };
-  });
-}
-
 function createMainWindow(): void {
   const vibrancy = wantsWindowVibrancyAtLaunch();
   const win = new BrowserWindow({
@@ -250,9 +205,15 @@ function createMainWindow(): void {
     setWindowVibrancy(win, 'glass');
   }
   win.once('ready-to-show', () => win.show());
+  // A floating chat window with no main window behind it has no way back into
+  // the app (the dock's "activate" only recreates one when no window is open
+  // at all) — closing the main window takes any floating conversations with
+  // it. Nothing is lost: a conversation is just a session, still reachable
+  // from the next main window's Conversations list.
+  win.on('closed', () => closeAllDetachedChats());
 
   const devServerUrl = process.env.PRAXIS_DEV_SERVER_URL;
-  attachMainWindowNavigationGuard(win, devServerUrl);
+  attachRendererNavigationGuard(win, devServerUrl);
   if (devServerUrl) {
     void win.loadURL(devServerUrl);
   } else {
@@ -331,6 +292,7 @@ void app.whenReady().then(async () => {
   registerGadgetIpc();
   registerMarketplaceIpc();
   registerGitIpc();
+  registerDetachedChatIpc(process.env.PRAXIS_DEV_SERVER_URL);
   // Mobile companion: compose the host, serve the IPC bridge, and drive the
   // Noise LAN listener from the persisted access policy (default `off` — nothing
   // binds).
@@ -380,6 +342,7 @@ app.on('window-all-closed', () => {
 // exits — an open chokidar watcher otherwise keeps the event loop alive and
 // hangs a graceful quit (see disposeAllServices' doc comment).
 app.on('before-quit', () => {
+  closeAllDetachedChats();
   disposeAllServices();
   // An ACP-hosted session's subprocess (Claude Code, Codex, or GitHub
   // Copilot via `copilot --acp`) is a child of this process — leaving one

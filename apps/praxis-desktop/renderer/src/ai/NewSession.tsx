@@ -73,6 +73,13 @@ export interface NewSessionProps {
    * label instead of a picker.
    */
   scopeLabel?: string;
+  /**
+   * Standalone conversation (FX-BE-142): the composer belongs to no project
+   * and no ticket at all, not even a named scope. The board/ticket picker
+   * heading is replaced by a plain "New conversation" heading and the goal
+   * placeholder reads as a prompt to chat rather than a task to plan.
+   */
+  conversational?: boolean;
   /** Seeds the tool-mode toggle — e.g. the scoped project's configured default. */
   defaultToolMode?: AgentToolMode;
   /**
@@ -123,6 +130,7 @@ export function NewSession({
   agentContext,
   defaultWorkingDirectory,
   scopeLabel,
+  conversational,
   defaultToolMode
 }: NewSessionProps) {
   const { settings: liveSettings } = useSettings();
@@ -533,7 +541,11 @@ export function NewSession({
             <button className="btn btn-primary" onClick={onNewProject}>New Project</button>
           </div>
         )}
-        {scopeLabel ? (
+        {conversational ? (
+          <h1 className="session-heading" data-testid="new-conversation-heading">
+            New conversation
+          </h1>
+        ) : scopeLabel ? (
           <h1 className="session-heading" data-testid="new-session-scope-heading">
             New session in{' '}
             <span className="heading-chip is-static">
@@ -768,7 +780,7 @@ export function NewSession({
           <textarea
             ref={composerInputRef}
             className="composer-input"
-            placeholder="What's the goal?"
+            placeholder={conversational ? 'Ask anything, brainstorm, or get something done…' : "What's the goal?"}
             value={goal}
             rows={2}
             onChange={event => {

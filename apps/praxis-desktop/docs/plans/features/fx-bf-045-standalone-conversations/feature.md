@@ -1,14 +1,14 @@
 ---
-**Status:** Backlog
+**Status:** In Progress
 **Created:** 2026-09-25T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-045
 slug: standalone-conversations
 title: Standalone conversations (chat outside any project)
-status: Backlog
+status: In Progress
 owner: Electron desktop app
-updated: 2026-09-25
+updated: 2026-09-26
 stories: [FX-BE-142, FX-BE-143]
 ---
 
@@ -165,8 +165,8 @@ chat.
 
 | Ref | Story | Status | Depends on |
 | --- | --- | --- | --- |
-| FX-BE-142 | Conversations list and lifecycle | Proposed | — |
-| FX-BE-143 | Floating chat window | Proposed | FX-BE-142 |
+| FX-BE-142 | Conversations list and lifecycle | In Progress | — |
+| FX-BE-143 | Floating chat window | In Progress | FX-BE-142 |
 
 ## Dependencies
 
@@ -214,3 +214,38 @@ strip after starting their first conversation.
 
 
 ## Comments
+
+**2026-09-26 — implementation (Claude):** Both stories (FX-BE-142, FX-BE-143)
+implemented in full per their Scope sections — see each story's own comment
+for the file-by-file detail. Summary: a conversation rides the existing
+`AgentSessionRecord`/session-engine exactly as Decision 1 specifies (no new
+record type, store, or IPC for the data itself); `isConversationSession`
+(Decision 2) is the one new predicate everything else filters on; the
+sidebar, Overview, and command palette all got the Conversations entry
+points described in Decisions 3/5/6; and the floating window (Decisions
+8/9) is a second native-framed `BrowserWindow` with an explicit
+open/close/list/onChanged IPC surface and a single in-memory registry as the
+authority for which conversation is live where.
+
+Type-checked and built clean across `@praxis/core`, `@praxis/desktop-main`
+and `@praxis/desktop-renderer`; `npm run test:core` passes all 1312 tests.
+**`npm run test:desktop` (the Playwright e2e suite) could not be run in this
+sandboxed session** — Electron fails to launch here because a bundled native
+dependency (`node-pty`) has no linux-x64 prebuild, and this container's
+outbound network policy denies `nodejs.org`, so node-gyp can't fetch the
+headers to build one. That's an environment limitation of this particular
+session, unrelated to this change (node-pty loads on startup for the
+terminal feature regardless of what else is touched).
+
+Marking the feature and both stories **In Progress** rather than **Done**:
+every acceptance criterion in both stories was implemented against, but
+none was verified by actually running the app or the e2e suite, and the
+"Add focused/new e2e coverage" validation item in each story was not
+authored (I did not want to hand over Playwright specs I had no way to run
+and confirm pass). Before calling this Done: run
+`npm run build && npm run desktop:copy-renderer && npm run test:desktop` on a
+normal dev machine, manually walk the "Close when" scenario at the top of
+this file end to end (new conversation from sidebar and from Overview with
+zero projects, archive/delete, pop out, drag/resize, pop back in, confirm the
+"Create a project" strip still shows), and add the missing coverage each
+story's Validation section calls for.
