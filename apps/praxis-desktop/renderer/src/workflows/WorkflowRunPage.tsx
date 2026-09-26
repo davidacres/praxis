@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { AiProvider, WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { StageArtifacts } from './StageArtifacts';
-import { providerIconName, providerLabel } from '../ai/modelProviders';
+import { fetchModelOptions, hasModelCatalog, providerIconName, providerLabel } from '../ai/modelProviders';
 import { isProviderUsableForSessions } from '../ai/providerAvailability';
 import { useDeleteRun } from './useDeleteRun';
 import { WorkflowPipelineVertical } from './WorkflowPipelineVertical';
@@ -491,7 +491,9 @@ export function WorkflowRunPage({
                         run={run}
                         stage={stage}
                         usableAis={usableAis}
-                        onSwitch={provider => void act(() => window.praxis.workflows.switchStageProvider(run.runId, stage.nodeId, provider as AiProvider))}
+                        onSwitch={(provider, model) =>
+                          void act(() => window.praxis.workflows.switchStageProvider(run.runId, stage.nodeId, provider as AiProvider, model))
+                        }
                         onRetry={() => void act(() => window.praxis.workflows.retryStage(run.runId, stage.nodeId))}
                         onStop={() => void act(() => window.praxis.workflows.stopForProviderLimit(run.runId, stage.nodeId))}
                       />
@@ -634,7 +636,7 @@ export function WorkflowRunPage({
                       {stage.gate ? ` · ${stage.gate} gate` : ''} · {deploymentPhaseLabel(stage) ?? (stage.pause ? 'paused' : stage.outcome)}
                       {stage.maxAttempts && stage.attempts > 0 ? ` (${stage.attempts}/${stage.maxAttempts})` : ''}
                       {stage.provider || stage.chosenProvider ? (
-                        <span data-testid="wf-stage-ai"> · on {aiName(stage.provider ?? stage.chosenProvider!)}</span>
+                        <span data-testid="wf-stage-ai"> · on {aiName(stage.provider ?? stage.chosenProvider!)}{stage.chosenModel ? ` (${stage.chosenModel})` : ''}</span>
                       ) : null}
                     </p>
 
@@ -1014,7 +1016,7 @@ function ProviderLimitNotice({
   run: WorkflowRunSummary;
   stage: WorkflowRunSummary['stages'][number];
   usableAis: string[];
-  onSwitch: (provider: string) => void;
+  onSwitch: (provider: string, model?: string) => void;
   onRetry: () => void;
   onStop: () => void;
 }) {
@@ -1024,6 +1026,52 @@ function ProviderLimitNotice({
   const [choice, setChoice] = useState<string>('');
   const selected = choices.includes(choice) ? choice : choices[0] ?? '';
   const stopped = run.status === 'failed';
+
+  const [modelOptions, setModelOptions] = useState<Array<{ value: string; label: string; description?: string }>>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [modelsLoading, setModelsLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setModelOptions([]);
+    setSelectedModel('');
+    if (!selected || !hasModelCatalog(selected as AiProvider)) {
+      return;
+    }
+    setModelsLoading(true);
+    Promise.all([
+      fetchModelOptions(selected as AiProvider, false),
+      window.praxis.settings.get()
+    ])
+      .then(([options, settings]) => {
+        if (cancelled || !options) return;
+        const enabled = settings.ai.providers[selected as AiProvider]?.enabledModelIds;
+        const filtered = enabled
+          ? options.options.filter(option => enabled.includes(option.value))
+          : options.options;
+        const mapped = filtered.map(opt => ({
+          value: opt.value,
+          label: opt.name || opt.value,
+          description: opt.description
+        }));
+        setModelOptions(mapped);
+        const defaultChoice =
+          options.currentValue && mapped.some(option => option.value === options.currentValue)
+            ? options.currentValue
+            : (mapped[0]?.value ?? '');
+        setSelectedModel(defaultChoice);
+      })
+      .catch(() => {
+        if (!cancelled) setModelOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
   return (
     <div className="wf-run-limit" role="alert" data-testid="wf-run-limit" data-node-id={stage.nodeId}>
       <strong>{stopped ? 'The run could not be completed' : `${who} ran out of budget`}</strong>
@@ -1044,7 +1092,27 @@ function ProviderLimitNotice({
                 options={choices.map(id => ({ value: id, label: aiName(id), icon: providerIconName(id as AiProvider) }))}
               />
             </label>
-            <button type="button" className="btn btn-primary btn-compact" data-testid="wf-limit-switch" onClick={() => onSwitch(selected)}>
+            {hasModelCatalog(selected as AiProvider) && (modelOptions.length > 0 || modelsLoading) && (
+              <label className="wf-run-limit-switch wf-run-limit-model-switch">
+                <span>Model</span>
+                <ChipSelect
+                  ariaLabel={`Model for ${stage.name}`}
+                  data-testid="wf-limit-switch-model"
+                  icon="sparkles"
+                  value={selectedModel}
+                  placeholder={modelsLoading ? 'Loading models…' : 'Choose a model'}
+                  disabled={modelsLoading}
+                  onChange={setSelectedModel}
+                  options={modelOptions}
+                />
+              </label>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary btn-compact"
+              data-testid="wf-limit-switch"
+              onClick={() => onSwitch(selected, selectedModel || undefined)}
+            >
               Switch and continue
             </button>
           </>

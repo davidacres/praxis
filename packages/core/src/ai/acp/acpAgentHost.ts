@@ -523,14 +523,16 @@ export class AcpAgentHost {
       await this.abortTask(issue.key);
     }
 
-    const workingDirectory = options.workingDirectory?.trim() || process.cwd();
+    const workingDirectory = options.workingDirectory?.trim() || undefined;
     const toolMode = options.toolMode ?? (taskDefinition.kind === 'analysis' ? 'read-only' : 'full');
     const sessionId = randomUUID();
     const hasBrowser = options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false;
     const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\nTool mode: ${
       toolMode === 'read-only'
         ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
-        : 'FULL. Use tools as needed; honor every permission request.'
+        : toolMode === 'project-only'
+          ? 'PROJECT ONLY. Do not edit files, execute commands, or read local repository files.'
+          : 'FULL. Use tools as needed; honor every permission request.'
     }${hasBrowser ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}`;
     // ACP's `session/prompt` has no separate system-role slot in the
     // high-level `ActiveSession.prompt(text)` API — the CLI agent supplies
@@ -543,7 +545,7 @@ export class AcpAgentHost {
       command: options.command,
       args: options.args,
       env: options.env,
-      workingDirectory,
+      workingDirectory: workingDirectory || process.cwd(),
       toolMode,
       mcpServers: options.mcpServers,
       requestPermission: request => this.requestPermission(issue.key, request),
@@ -727,7 +729,7 @@ export class AcpAgentHost {
     if (!followUp) {
       throw new Error('Enter a follow-up message.');
     }
-    const workingDirectory = record.workingDirectory?.trim() || options.workingDirectory?.trim() || process.cwd();
+    const workingDirectory = record.workingDirectory?.trim() || options.workingDirectory?.trim() || undefined;
     const toolMode = record.toolMode ?? options.toolMode ?? 'full';
     const systemPrompt = `${buildSystemPrompt(record.taskDefinition, {
       key: issueKey,
@@ -738,7 +740,9 @@ export class AcpAgentHost {
     } as IssueDetails)}\n\nTool mode: ${
       toolMode === 'read-only'
         ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
-        : 'FULL. Use tools as needed; honor every permission request.'
+        : toolMode === 'project-only'
+          ? 'PROJECT ONLY. Do not edit files, execute commands, or read local repository files.'
+          : 'FULL. Use tools as needed; honor every permission request.'
     }${
       (options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false)
         ? `\n\n${BROWSER_TOOLS_PROMPT}`
@@ -754,7 +758,7 @@ export class AcpAgentHost {
       command: options.command,
       args: options.args,
       env: options.env,
-      workingDirectory,
+      workingDirectory: workingDirectory || process.cwd(),
       toolMode,
       mcpServers: options.mcpServers,
       resumeSessionId: record.runtimeSessionId,

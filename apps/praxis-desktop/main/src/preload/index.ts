@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   AgentSessionRecord,
+  AgentToolMode,
   AgentWorkflowReference,
   AiAnalysisState,
   AiDelegateInput,
@@ -257,6 +258,10 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:continueSession', issueKey, message, images),
     updateSessionModel: (issueKey: string, model: string) =>
       ipcRenderer.invoke('ai:updateSessionModel', issueKey, model),
+    updateSessionToolAccess: (
+      issueKey: string,
+      options: { workingDirectory?: string | null; toolMode?: AgentToolMode }
+    ) => ipcRenderer.invoke('ai:updateSessionToolAccess', issueKey, options),
     handoverSession: (issueKey: string, input: AiHandoverInput) =>
       ipcRenderer.invoke('ai:handoverSession', issueKey, input),
     startConversation: (issueKey: string, input: AiStartConversationInput) =>
@@ -407,8 +412,8 @@ const praxis: PraxisIpc = {
     stageReport: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:stageReport', runId, nodeId),
     saveStageReport: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:saveStageReport', runId, nodeId),
     retryStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:retryStage', runId, nodeId),
-    switchStageProvider: (runId: string, nodeId: string, provider: string) =>
-      ipcRenderer.invoke('workflows:switchStageProvider', runId, nodeId, provider),
+    switchStageProvider: (runId: string, nodeId: string, provider: string, model?: string) =>
+      ipcRenderer.invoke('workflows:switchStageProvider', runId, nodeId, provider, model),
     stopForProviderLimit: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:stopForProviderLimit', runId, nodeId),
     reworkStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:reworkStage', runId, nodeId),
     cancelRun: (runId: string, reason?: string) => ipcRenderer.invoke('workflows:cancelRun', runId, reason),

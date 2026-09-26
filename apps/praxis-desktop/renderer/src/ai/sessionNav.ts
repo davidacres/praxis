@@ -55,6 +55,8 @@ export function isWorkflowStageSession(session: AgentSessionRecord): boolean {
  */
 export function isConversationSession(session: AgentSessionRecord): boolean {
   return isSynthesizedKey(session.issueKey)
+    && !session.projectId
+    && !session.workflowRunId
     && !isWorkflowStageSession(session)
     && !isTicketReviewKey(session.issueKey);
 }

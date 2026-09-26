@@ -179,7 +179,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         x: 360,
         y: 160,
         inputs: ['change-diff'],
-        agent: { agentId: 'praxis-test-author', profileId: 'praxis-test-author', hostId: 'praxis-test-author', scope: 'global', toolMode: 'project-only', skillNames: ['praxis-test-contracts'] },
+        agent: { agentId: 'praxis-test-author', profileId: 'praxis-test-author', hostId: 'praxis-test-author', scope: 'global', toolMode: 'full', skillNames: ['praxis-test-contracts'] },
         instructions: 'Inventory the automated QA tests, author or update the structured English Praxis Test catalog, and run its deterministic validator. Ensure automated tests pass and report the exact test count, coverage links, and any stale or ambiguous contracts.',
         outputs: [{ id: 'test-contracts', kind: 'report', required: true, description: 'The validated Praxis Test catalog and coverage report.' }],
         mutatesWorktree: true,
@@ -193,7 +193,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         y: 0,
         inputs: ['change-diff', 'test-contracts'],
         agent: { agentId: 'praxis-reviewer', profileId: 'praxis-reviewer', hostId: 'praxis-reviewer', scope: 'global', toolMode: 'read-only' },
-        instructions: 'Review the implementation snapshot for correctness and quality.',
+        instructions: 'Review the implementation snapshot for correctness and quality using the change-diff input artifact and read-only file access. Do not run shell commands.',
         outputs: [{ id: 'review-report', kind: 'report', required: true }],
         mutatesWorktree: false,
         satisfiesGate: 'review'

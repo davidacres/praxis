@@ -194,6 +194,11 @@ export interface WorkflowRun {
    */
   stageProviders?: Record<string, string>;
   /**
+   * Models stages were switched to during this run (node id → model id).
+   * Wins over the stage's own choice, mapped tier, and the run's.
+   */
+  stageModels?: Record<string, string>;
+  /**
    * The git worktree this run's stages execute in, once acquired. Recorded on
    * the run so a restart re-attaches to the same tree instead of branching a
    * second one beside it.
@@ -265,7 +270,7 @@ export type WorkflowRunCommand =
    * Moves a stage to another AI after the one it used ran out; a paused stage is
    * queued again on it. `automatic` when the run's policy switched without asking.
    */
-  | { kind: 'stage-provider-switched'; nodeId: string; at: string; provider: string; automatic?: boolean }
+  | { kind: 'stage-provider-switched'; nodeId: string; at: string; provider: string; model?: string; automatic?: boolean }
   /** Ends the run because a stage's AI ran out of budget (policy `stop`, or the user chose to stop). */
   | { kind: 'provider-limit-stop'; nodeId: string; at: string; detail?: string }
   /**
@@ -377,7 +382,7 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
         provider: command.provider
       });
     case 'stage-provider-switched':
-      return switchStageProvider(run, command.nodeId, command.at, command.provider, command.automatic === true);
+      return switchStageProvider(run, command.nodeId, command.at, command.provider, command.model, command.automatic === true);
     case 'provider-limit-stop':
       return stopForProviderLimit(run, command.nodeId, command.at, command.detail);
     case 'node-stopped':
@@ -653,20 +658,33 @@ function retryNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRun {
   });
 }
 
-function switchStageProvider(run: WorkflowRun, nodeId: string, at: string, provider: string, automatic: boolean): WorkflowRun {
+function switchStageProvider(run: WorkflowRun, nodeId: string, at: string, provider: string, model?: string, automatic?: boolean): WorkflowRun {
   const state = run.nodes[nodeId];
   const node = findNode(run, nodeId);
   if (!state || !node || !isAgentTaskNode(node) || !provider.trim()) return run;
   const from = state.attempts[state.attempts.length - 1]?.provider;
+  const stageProviders = { ...(run.stageProviders ?? {}), [nodeId]: provider };
+  const stageModels = { ...(run.stageModels ?? {}) };
+  if (model?.trim()) {
+    stageModels[nodeId] = model.trim();
+  } else {
+    delete stageModels[nodeId];
+  }
   let next = append(
-    { ...run, stageProviders: { ...(run.stageProviders ?? {}), [nodeId]: provider } },
+    {
+      ...run,
+      stageProviders,
+      ...(Object.keys(stageModels).length > 0 ? { stageModels } : { stageModels: undefined })
+    },
     {
       at,
       kind: 'node-provider-switched',
       nodeId,
       message: `${label(run, nodeId)} switched ${from ? `from ${providerDisplayName(from)} ` : ''}to ${providerDisplayName(provider)}${
         automatic ? ' automatically' : ''
-      }${from && pauseReasonOf(state) === 'provider-limit' ? ` after ${providerDisplayName(from)} ran out` : ''}.`
+      }${from && pauseReasonOf(state) === 'provider-limit' ? ` after ${providerDisplayName(from)} ran out` : ''}${
+        model?.trim() ? ` (${model.trim()})` : ''
+      }.`
     }
   );
   // A stage waiting on the AI that ran out goes again, now on the new one.
@@ -704,6 +722,13 @@ export function stageProvider(run: WorkflowRun, nodeId: string, fallback: string
   const node = findNode(run, nodeId);
   const own = node && isAgentTaskNode(node) ? node.agent.providerId?.trim() : undefined;
   return run.stageProviders?.[nodeId] ?? (own || undefined) ?? run.aiProvider ?? fallback;
+}
+
+/**
+ * The model a stage was switched to during this run, if any.
+ */
+export function stageModel(run: WorkflowRun, nodeId: string): string | undefined {
+  return run.stageModels?.[nodeId];
 }
 
 /**
@@ -994,6 +1019,13 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
       ? {
           stageProviders: Object.fromEntries(
             Object.entries(raw.stageProviders as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim() !== '')
+          )
+        }
+      : {}),
+    ...(raw.stageModels && typeof raw.stageModels === 'object' && !Array.isArray(raw.stageModels)
+      ? {
+          stageModels: Object.fromEntries(
+            Object.entries(raw.stageModels as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim() !== '')
           )
         }
       : {}),

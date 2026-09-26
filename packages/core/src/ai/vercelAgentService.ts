@@ -553,7 +553,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
 
     const provider = options.provider ?? 'vercel-gateway';
     const gateway = this.resolveConnection(provider, options);
-    const workingDirectory = options.workingDirectory?.trim() || process.cwd();
+    const workingDirectory = options.workingDirectory?.trim() || undefined;
     const toolMode = options.toolMode ?? (taskDefinition.kind === 'analysis' ? 'read-only' : 'full');
     const maxSteps = taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
@@ -563,7 +563,9 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\n${
       toolMode === 'read-only'
         ? 'Tool mode: READ ONLY. You may inspect files and tracker data, but must not change files, run commands, or mutate tickets.'
-        : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
+        : toolMode === 'project-only'
+          ? 'Tool mode: PROJECT ONLY. You do not have local file or shell tools. Converse directly with the user.'
+          : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
     }${hasBrowserTools ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}`;
     const userPrompt = this.buildInitialPrompt(issue, taskDefinition, workingDirectory);
 
@@ -609,7 +611,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       gateway,
       provider,
       model,
-      workingDirectory,
+      workingDirectory: workingDirectory || process.cwd(),
       toolMode,
       maxSteps,
       timeoutMs,
@@ -652,7 +654,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
 
     const provider = options.provider ?? record.provider ?? 'vercel-gateway';
     const gateway = this.resolveConnection(provider, options);
-    const workingDirectory = record.workingDirectory?.trim() || options.workingDirectory?.trim() || process.cwd();
+    const workingDirectory = record.workingDirectory?.trim() || options.workingDirectory?.trim() || undefined;
     const toolMode = record.toolMode ?? options.toolMode ?? 'full';
     const maxSteps = record.taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = record.taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
@@ -670,7 +672,9 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     } as IssueDetails)}\n\n${
       toolMode === 'read-only'
         ? 'Tool mode: READ ONLY. Do not change files, run commands, or mutate tickets.'
-        : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
+        : toolMode === 'project-only'
+          ? 'Tool mode: PROJECT ONLY. You do not have local file or shell tools. Converse directly with the user.'
+          : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
     }${
       (options.toolExtension?.definitions.some(tool => tool.name === 'browser_navigate') ?? false)
         ? `\n\n${BROWSER_TOOLS_PROMPT}`
@@ -733,7 +737,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       gateway,
       provider,
       model,
-      workingDirectory,
+      workingDirectory: workingDirectory || process.cwd(),
       toolMode,
       maxSteps,
       timeoutMs,

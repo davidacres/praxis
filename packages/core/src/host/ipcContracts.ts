@@ -834,6 +834,11 @@ export interface AiIpc {
   continueSession(issueKey: string, message: string, images?: WireImageAttachment[]): Promise<void>;
   /** Changes the model used for the next turn of an idle session. */
   updateSessionModel(issueKey: string, model: string): Promise<AgentSessionRecord>;
+  /** Updates the working directory or tool mode for an idle session. */
+  updateSessionToolAccess(
+    issueKey: string,
+    options: { workingDirectory?: string | null; toolMode?: AgentToolMode }
+  ): Promise<AgentSessionRecord>;
   /** Hands the same Praxis session to another provider and seeds it with the living brief. */
   handoverSession(issueKey: string, input: AiHandoverInput): Promise<AgentSessionRecord>;
   startConversation(issueKey: string, input: AiStartConversationInput): Promise<AgentSessionRecord>;
@@ -1307,8 +1312,8 @@ export interface WorkflowsIpc {
   saveStageReport(runId: string, nodeId: string): Promise<{ saved: boolean; path?: string }>;
   /** Queues a failed stage for another attempt within its budget. */
   retryStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
-  /** Moves a stage whose AI ran out of budget to another AI; a paused stage goes again on it. */
-  switchStageProvider(runId: string, nodeId: string, provider: AiProvider): Promise<WorkflowRunSummary>;
+  /** Moves a stage whose AI ran out of budget to another AI and optional model; a paused stage goes again on it. */
+  switchStageProvider(runId: string, nodeId: string, provider: AiProvider, model?: string): Promise<WorkflowRunSummary>;
   /** Ends the run because a stage's AI ran out of budget. */
   stopForProviderLimit(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
   /** Starts a new delivery revision and replays the selected stage's downstream path. */

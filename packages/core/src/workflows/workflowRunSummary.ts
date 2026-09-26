@@ -62,6 +62,8 @@ export interface StageRow {
   provider?: string;
   /** The AI this stage is set to use: one it was switched to in this run, else its own choice. Absent means the run's. */
   chosenProvider?: string;
+  /** The model this stage is set to use: one it was switched to in this run, else its own choice. */
+  chosenModel?: string;
   /** The CLI command executed by a check or merge stage. */
   command?: string;
   /** Process exit code for a check stage. */
@@ -193,6 +195,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
       ...(state?.findings ? { findings: state.findings } : {}),
       ...(lastAttempt?.provider ? { provider: lastAttempt.provider } : {}),
       ...(chosenProviderOf(run, node) ? { chosenProvider: chosenProviderOf(run, node) } : {}),
+      ...(chosenModelOf(run, node) ? { chosenModel: chosenModelOf(run, node) } : {}),
       ...(command ? { command } : {}),
       ...(lastAttempt?.exitCode !== undefined ? { exitCode: lastAttempt.exitCode } : {}),
       ...(durationMs !== undefined ? { durationMs } : {}),
@@ -273,6 +276,11 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
 function chosenProviderOf(run: WorkflowRun, node: WorkflowNode): string | undefined {
   if (node.type !== 'agent-task') return undefined;
   return run.stageProviders?.[node.id] ?? (node.agent.providerId?.trim() || undefined);
+}
+
+function chosenModelOf(run: WorkflowRun, node: WorkflowNode): string | undefined {
+  if (node.type !== 'agent-task') return undefined;
+  return run.stageModels?.[node.id] ?? (node.model?.trim() || undefined);
 }
 
 /** The parallel branches feeding each join, and whether they have converged. */

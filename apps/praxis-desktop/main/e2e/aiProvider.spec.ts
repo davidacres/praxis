@@ -527,3 +527,96 @@ test('the model manager panel curates which models the composer offers', async (
   await expect(menu.locator('[data-testid="new-session-model-option-anthropic/claude-sonnet-5"]')).toBeVisible();
   await expect(menu.locator('[data-testid="new-session-model-option-openai/gpt-5.6"]')).toHaveCount(0);
 });
+
+test('delegate succeeds without a working folder in chat/conversation mode and coerces toolMode to project-only', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp({
+    ai: {
+      activeProvider: 'vercel-gateway',
+      workingDirectory: ''
+    }
+  }, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'mock-key',
+    AI_GATEWAY_URL: mock.baseUrl,
+    PRAXIS_AI_WORKING_DIR: ''
+  });
+  const win = app.window;
+
+  const session = await win.evaluate(async () => {
+    const w = window as unknown as {
+      praxis: {
+        ai: {
+          delegate: (input: {
+            goal: string;
+            mode?: 'chat';
+            provider?: string;
+            task: { goal: string; maxSteps: number; timeoutMs: number };
+          }) => Promise<{ sessionId: string; issueKey: string; toolMode: string; workingDirectory?: string }>;
+        };
+      };
+    };
+    return w.praxis.ai.delegate({
+      goal: 'Just chatting without a folder',
+      mode: 'chat',
+      task: { goal: 'Just chatting without a folder', maxSteps: 3, timeoutMs: 30000 }
+    });
+  });
+
+  expect(session.sessionId).toBeTruthy();
+  expect(session.toolMode).toBe('project-only');
+  expect(session.workingDirectory).toBeFalsy();
+});
+
+test('updateSessionToolAccess attaches a working folder and elevates toolMode mid-session', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp({
+    ai: {
+      activeProvider: 'vercel-gateway',
+      workingDirectory: ''
+    }
+  }, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'mock-key',
+    AI_GATEWAY_URL: mock.baseUrl,
+    PRAXIS_AI_WORKING_DIR: ''
+  });
+  const win = app.window;
+
+  const session = await win.evaluate(async () => {
+    const w = window as unknown as {
+      praxis: {
+        ai: {
+          delegate: (input: unknown) => Promise<{ sessionId: string; issueKey: string; toolMode: string; workingDirectory?: string }>;
+        };
+      };
+    };
+    return w.praxis.ai.delegate({
+      goal: 'Chat starting in project-only mode',
+      mode: 'chat',
+      task: { goal: 'Chat starting in project-only mode', maxSteps: 3, timeoutMs: 30000 }
+    });
+  });
+
+  expect(session.toolMode).toBe('project-only');
+  expect(session.workingDirectory).toBeFalsy();
+
+  const updated = await win.evaluate(async (key: string) => {
+    const w = window as unknown as {
+      praxis: {
+        ai: {
+          updateSessionToolAccess: (key: string, opts: { workingDirectory?: string | null; toolMode?: string }) =>
+            Promise<{ issueKey: string; toolMode: string; workingDirectory?: string }>;
+        };
+      };
+    };
+    return w.praxis.ai.updateSessionToolAccess(key, {
+      workingDirectory: '/tmp/test-project',
+      toolMode: 'full'
+    });
+  }, session.issueKey);
+
+  expect(updated.toolMode).toBe('full');
+  expect(updated.workingDirectory).toBe('/tmp/test-project');
+});
+
