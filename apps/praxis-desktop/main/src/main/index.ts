@@ -23,6 +23,7 @@ import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { registerWorkflowIpc, recoverWorkflowRunsOnStartup } from './workflowIpc';
 import { registerGitIpc } from './gitIpc';
 import { attachWindowCloseGuard, attachWindowStateEvents, attachWindowZoomShortcuts, getInitialZoomFactor, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
+import { attachWindowStatePersistence, loadWindowState } from './windowState';
 import { getSettingsBackend, initSettingsBackend } from './settingsBackendInstance';
 import { setMcpOAuthProviderSource } from '@praxis/core';
 import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
@@ -173,11 +174,15 @@ function wantsWindowVibrancyAtLaunch(): boolean {
 
 function createMainWindow(): void {
   const vibrancy = wantsWindowVibrancyAtLaunch();
+  const savedState = loadWindowState();
+
   const win = new BrowserWindow({
-    // Landscape-first default: 16:9 gives the board and project panes room to
-    // sit side by side on the first launch.
-    width: 1664,
-    height: 936,
+    // Remember previous bounds, or fall back to 16:9 landscape-first default
+    width: savedState.width,
+    height: savedState.height,
+    ...(savedState.x !== undefined && savedState.y !== undefined
+      ? { x: savedState.x, y: savedState.y }
+      : {}),
     minWidth: 720,
     minHeight: 480,
     icon: getDevAppIcon(),
@@ -202,7 +207,12 @@ function createMainWindow(): void {
     }
   });
 
+  if (savedState.isMaximized) {
+    win.maximize();
+  }
+
   attachWindowStateEvents(win);
+  attachWindowStatePersistence(win);
   attachWindowZoomShortcuts(win);
   attachWindowCloseGuard(win, () => getAllActiveTaskIssueKeys().length);
   if (vibrancy) {
