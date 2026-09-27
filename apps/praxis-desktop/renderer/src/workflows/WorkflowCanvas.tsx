@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { WorkflowDefinition, WorkflowNode, WorkflowNodeType } from '@praxis/core';
+import type { DiscoveredAgentProfile, DiscoveredSkill, WorkflowDefinition, WorkflowNode, WorkflowNodeType } from '@praxis/core';
 import {
   anchorPoint,
   buildConnectorCurvePath,
   resolveConnectorDirections,
   type CanvasBox
 } from '../taskDesigner/taskDesignerState';
-import { autoArrange, connectNodes, disconnect, moveNode, removeNode } from './workflowEdits';
-import { Icon } from '../ui/Icon';
+import { addNode, autoArrange, connectNodes, disconnect, moveNode, newNode, removeNode } from './workflowEdits';
+import { Icon, type IconName } from '../ui/Icon';
+import { skillTitle } from '../agents/agentCatalog';
+
+export const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: IconName; description: string }> = [
+  { type: 'agent-task', label: 'Agent stage', icon: 'robot', description: 'Autonomous agent task stage' },
+  { type: 'check', label: 'Check', icon: 'shield', description: 'Verification, test, or security gate' },
+  { type: 'approval', label: 'Approval', icon: 'check-square', description: 'Manual human sign-off gate' },
+  { type: 'deployment', label: 'Deployment', icon: 'rocket', description: 'Deployment or release step' },
+  { type: 'join', label: 'Join', icon: 'split-horizontal', description: 'Parallel branches synchronizer' }
+];
 
 /**
  * Pan/zoom canvas for the workflow designer (FX-BE-023 / TASK-110).
@@ -42,9 +51,14 @@ export interface WorkflowCanvasProps {
   selectedEdgeId?: string | undefined;
   issuesByNode: Record<string, number>;
   presentations?: Record<string, WorkflowNodePresentation>;
+  agents?: DiscoveredAgentProfile[];
+  skills?: DiscoveredSkill[];
+  selectedAgentStageName?: string;
   onChange: (next: WorkflowDefinition) => void;
   onSelectNode: (nodeId: string | undefined) => void;
   onSelectEdge?: (edgeId: string | undefined) => void;
+  onAddAgentStage?: (profileId: string) => void;
+  onUseSkill?: (skillName: string) => void;
   /** Receives agents dropped onto the canvas and skills dropped onto a stage. */
   onPaletteDrop?: (item: WorkflowPaletteItem, targetNodeId: string | undefined, at: { x: number; y: number }) => void;
 }
@@ -55,9 +69,14 @@ export function WorkflowCanvas({
   selectedEdgeId: controlledSelectedEdgeId,
   issuesByNode,
   presentations = {},
+  agents = [],
+  skills = [],
+  selectedAgentStageName,
   onChange,
   onSelectNode,
   onSelectEdge,
+  onAddAgentStage,
+  onUseSkill,
   onPaletteDrop
 }: WorkflowCanvasProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -98,6 +117,139 @@ export function WorkflowCanvas({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedEdgeId, selectedNodeId, definition, onChange, setSelectedEdgeId, onSelectNode]);
 
+  const [activeTool, setActiveTool] = useState<'select'>('select');
+  const [activeSubmenu, setActiveSubmenu] = useState<'agents' | 'skills' | undefined>();
+  const [agentQuery, setAgentQuery] = useState('');
+  const [skillQuery, setSkillQuery] = useState('');
+  const [toolbarPosition, setToolbarPosition] = useState<{ x: number; y: number }>(() => {
+    try {
+      const saved = localStorage.getItem('praxis-workflow-toolbar-pos');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          return parsed;
+        }
+      }
+    } catch {}
+    return { x: 16, y: 16 };
+  });
+
+  useEffect(() => {
+    if (!activeSubmenu) {
+      setAgentQuery('');
+      setSkillQuery('');
+    }
+  }, [activeSubmenu]);
+
+  const filteredAgents = useMemo(() => {
+    if (agents.length <= 10 || !agentQuery.trim()) return agents;
+    const q = agentQuery.trim().toLowerCase();
+    return agents.filter(
+      profile =>
+        profile.profile.name.toLowerCase().includes(q) ||
+        (profile.profile.description && profile.profile.description.toLowerCase().includes(q))
+    );
+  }, [agents, agentQuery]);
+
+  const filteredSkills = useMemo(() => {
+    if (skills.length <= 10 || !skillQuery.trim()) return skills;
+    const q = skillQuery.trim().toLowerCase();
+    return skills.filter(
+      skill =>
+        skillTitle(skill.metadata).toLowerCase().includes(q) ||
+        skill.metadata.name.toLowerCase().includes(q) ||
+        (skill.metadata.description && skill.metadata.description.toLowerCase().includes(q))
+    );
+  }, [skills, skillQuery]);
+
+  useEffect(() => {
+    if (!activeSubmenu) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.designer-tool-submenu-wrap')) return;
+      setActiveSubmenu(undefined);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveSubmenu(undefined);
+      }
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [activeSubmenu]);
+
+  const toolbarDragRef = useRef<{
+    pointerId: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
+
+  const onToolbarHandlePointerDown = useCallback((event: React.PointerEvent) => {
+    if (event.button !== 0) return;
+    setActiveSubmenu(undefined);
+    const toolbar = (event.currentTarget as HTMLElement).closest('.designer-toolbar');
+    if (!toolbar) return;
+    const rect = toolbar.getBoundingClientRect();
+    toolbarDragRef.current = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top
+    };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    event.stopPropagation();
+    event.preventDefault();
+  }, []);
+
+  const onToolbarHandlePointerMove = useCallback((event: React.PointerEvent) => {
+    const dragInfo = toolbarDragRef.current;
+    if (!dragInfo || dragInfo.pointerId !== event.pointerId) return;
+    const surface = surfaceRef.current;
+    if (!surface) return;
+    const surfaceRect = surface.getBoundingClientRect();
+    const nextX = Math.max(8, Math.min(surfaceRect.width - 50, event.clientX - surfaceRect.left - dragInfo.offsetX));
+    const nextY = Math.max(8, Math.min(surfaceRect.height - 120, event.clientY - surfaceRect.top - dragInfo.offsetY));
+    const nextPos = { x: nextX, y: nextY };
+    setToolbarPosition(nextPos);
+    try {
+      localStorage.setItem('praxis-workflow-toolbar-pos', JSON.stringify(nextPos));
+    } catch {}
+  }, []);
+
+  const onToolbarHandlePointerUp = useCallback((event: React.PointerEvent) => {
+    if (toolbarDragRef.current?.pointerId === event.pointerId) {
+      toolbarDragRef.current = null;
+      try {
+        (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+      } catch {}
+    }
+  }, []);
+
+  const onAddStage = useCallback(
+    (type: WorkflowNodeType) => {
+      const node = newNode(type, {
+        x: Math.max(40, Math.round(-view.x / view.zoom + 120)),
+        y: Math.max(40, Math.round(-view.y / view.zoom + 120 + definition.nodes.length * 30))
+      });
+      onChange(addNode(definition, node));
+      onSelectNode(node.id);
+    },
+    [view.x, view.y, view.zoom, definition, onChange, onSelectNode]
+  );
+
+  const onDeleteSelected = useCallback(() => {
+    if (selectedEdgeId) {
+      onChange(disconnect(definition, selectedEdgeId));
+      setSelectedEdgeId(undefined);
+    } else if (selectedNodeId) {
+      onChange(removeNode(definition, selectedNodeId));
+      onSelectNode(undefined);
+    }
+  }, [selectedEdgeId, selectedNodeId, definition, onChange, setSelectedEdgeId, onSelectNode]);
+
   const [drag, setDrag] = useState<
     | { kind: 'pan'; startX: number; startY: number; originX: number; originY: number }
     | { kind: 'node'; nodeId: string; offsetX: number; offsetY: number }
@@ -126,12 +278,23 @@ export function WorkflowCanvas({
 
   const onSurfacePointerDown = useCallback(
     (event: React.PointerEvent) => {
+      if (event.button !== 0 && event.button !== 1) return;
+      const target = event.target as HTMLElement | SVGElement | null;
+      if (
+        target?.closest('[data-node-id]') ||
+        target?.closest('.wf-canvas-edge-group') ||
+        target?.closest('.designer-toolbar') ||
+        target?.closest('button') ||
+        target?.closest('input')
+      ) {
+        return;
+      }
       setSelectedEdgeId(undefined);
-      if (event.target !== surfaceRef.current) return;
+      onSelectNode(undefined);
       setDrag({ kind: 'pan', startX: event.clientX, startY: event.clientY, originX: view.x, originY: view.y });
       surfaceRef.current?.setPointerCapture(event.pointerId);
     },
-    [view.x, view.y, setSelectedEdgeId]
+    [view.x, view.y, setSelectedEdgeId, onSelectNode]
   );
 
   const onPointerMove = useCallback(
@@ -157,6 +320,11 @@ export function WorkflowCanvas({
 
   const endDrag = useCallback(
     (event: React.PointerEvent) => {
+      if (drag?.kind === 'pan') {
+        try {
+          surfaceRef.current?.releasePointerCapture(event.pointerId);
+        } catch {}
+      }
       if (drag?.kind === 'link') {
         const target = (event.target as HTMLElement).closest('[data-node-id]')?.getAttribute('data-node-id');
         if (target && target !== drag.from) onChange(connectNodes(definition, { from: drag.from, to: target }));
@@ -168,10 +336,32 @@ export function WorkflowCanvas({
 
   const onWheel = useCallback((event: React.WheelEvent) => {
     event.preventDefault();
-    setView(current => {
-      const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current.zoom * (event.deltaY < 0 ? 1.1 : 0.9)));
-      return { ...current, zoom: Math.round(zoom * 100) / 100 };
-    });
+    if (event.ctrlKey || event.metaKey) {
+      // Pinch to zoom or Ctrl+wheel: zoom centered at pointer
+      const rect = surfaceRef.current?.getBoundingClientRect();
+      const clientX = event.clientX;
+      const clientY = event.clientY;
+      const factor = event.deltaY < 0 ? 1.08 : 1 / 1.08;
+      setView(current => {
+        const zoom = Math.round(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current.zoom * factor)) * 100) / 100;
+        if (!rect) return { ...current, zoom };
+        const pointerX = clientX - rect.left;
+        const pointerY = clientY - rect.top;
+        const scale = zoom / current.zoom;
+        return {
+          x: pointerX - (pointerX - current.x) * scale,
+          y: pointerY - (pointerY - current.y) * scale,
+          zoom
+        };
+      });
+    } else {
+      // Normal trackpad drag or scroll wheel: pan the canvas
+      setView(current => ({
+        ...current,
+        x: Math.round(current.x - event.deltaX),
+        y: Math.round(current.y - event.deltaY)
+      }));
+    }
   }, []);
 
   /** Toolbar zoom — keeps the centre of the visible surface where it is. */
@@ -243,42 +433,13 @@ export function WorkflowCanvas({
         )
       : undefined;
 
+  const containerWidth = surfaceRef.current?.clientWidth ?? 0;
+  const spaceLeft = toolbarPosition.x;
+  const spaceRight = Math.max(0, containerWidth - (toolbarPosition.x + 47));
+  const isSubmenuLeft = containerWidth > 0 && spaceLeft > spaceRight;
+
   return (
     <div className="wf-canvas">
-      <div className="wf-canvas-toolbar" role="toolbar" aria-label="Canvas">
-        <button
-          type="button"
-          className="icon-btn icon-btn-sm"
-          data-testid="wf-auto-arrange"
-          aria-label="Auto arrange"
-          onClick={() => onChange(autoArrange(definition))}
-          disabled={definition.nodes.length < 2}
-          title="Auto arrange — lay stages out in dependency order without overlap"
-        >
-          <Icon name="columns" size={13} />
-        </button>
-        <span className="wf-canvas-toolbar-sep" aria-hidden />
-        <button type="button" className="icon-btn icon-btn-sm" aria-label="Zoom out" title="Zoom out" disabled={view.zoom <= MIN_ZOOM} onClick={() => zoomBy(1 / 1.2)}>
-          <Icon name="zoom-out" size={13} />
-        </button>
-        <button type="button" className="wf-canvas-zoom" aria-label="Reset view" title="Reset view (100%, back to the origin)" onClick={() => setView({ x: 40, y: 40, zoom: 1 })}>
-          {Math.round(view.zoom * 100)}%
-        </button>
-        <button type="button" className="icon-btn icon-btn-sm" aria-label="Zoom in" title="Zoom in" disabled={view.zoom >= MAX_ZOOM} onClick={() => zoomBy(1.2)}>
-          <Icon name="zoom-in" size={13} />
-        </button>
-        <span className="wf-canvas-toolbar-sep" aria-hidden />
-        <span
-          className="wf-canvas-help-icon"
-          tabIndex={0}
-          role="img"
-          aria-label="Canvas help"
-          title="Drag a card to move it; drag from its ▸ handle onto another card to connect. Click a connection to select or delete it. Drag empty space to pan, scroll to zoom."
-        >
-          <Icon name="info" size={13} />
-        </span>
-      </div>
-
       <p id="wf-canvas-help" className="sr-only">
         Each stage is a button. Press Tab to move between stages, Enter or Space to select one
         and open its inspector, and the arrow keys to nudge the selected stage (hold Shift for a
@@ -536,6 +697,407 @@ export function WorkflowCanvas({
               </div>
             );
           })}
+        </div>
+
+        <div
+          className="designer-toolbar"
+          style={{ left: toolbarPosition.x, top: toolbarPosition.y }}
+          aria-label="Workflow designer tools"
+          data-testid="wf-designer-toolbar"
+          onPointerDown={e => e.stopPropagation()}
+          onWheel={e => e.stopPropagation()}
+        >
+          <div
+            className="designer-toolbar-handle"
+            title="Drag toolbar"
+            aria-label="Drag toolbar"
+            onPointerDown={onToolbarHandlePointerDown}
+            onPointerMove={onToolbarHandlePointerMove}
+            onPointerUp={onToolbarHandlePointerUp}
+          >
+            <span className="designer-toolbar-grip" aria-hidden="true" />
+          </div>
+
+          <div className="designer-toolbar-group" role="group" aria-label="Stages and tools">
+            <button
+              type="button"
+              className={`designer-tool-btn${activeTool === 'select' ? ' is-active' : ''}`}
+              title="Select (click or drag stages on canvas)"
+              aria-label="Select"
+              data-testid="wf-tool-select"
+              onClick={() => {
+                setActiveTool('select');
+                onSelectNode(undefined);
+                setSelectedEdgeId(undefined);
+              }}
+            >
+              <Icon name="cursor" size={17} />
+            </button>
+            {NODE_KINDS.map(kind => (
+              <button
+                key={kind.type}
+                type="button"
+                className="designer-tool-btn"
+                title={`Add ${kind.label}: ${kind.description} (click or drag to canvas)`}
+                aria-label={`Add ${kind.label}`}
+                data-testid={`wf-tool-${kind.type}`}
+                draggable
+                onDragStart={event => {
+                  event.dataTransfer.effectAllowed = 'copy';
+                  event.dataTransfer.setData(
+                    'application/x-praxis-workflow-palette',
+                    JSON.stringify({ kind: 'stage', nodeType: kind.type } satisfies WorkflowPaletteItem)
+                  );
+                }}
+                onClick={() => onAddStage(kind.type)}
+              >
+                <Icon name={kind.icon} size={17} />
+              </button>
+            ))}
+          </div>
+
+          <div className="designer-toolbar-separator" />
+
+          <div className="designer-toolbar-group" role="group" aria-label="Library">
+            <div className="designer-tool-submenu-wrap">
+              <button
+                type="button"
+                className={`designer-tool-btn designer-tool-btn--has-submenu${
+                  activeSubmenu === 'agents' ? ' is-active' : ''
+                }`}
+                title="Agents (browse and add agent stages)"
+                aria-label="Agents"
+                aria-haspopup="true"
+                aria-expanded={activeSubmenu === 'agents'}
+                data-testid="wf-tool-agents"
+                onClick={() => setActiveSubmenu(prev => (prev === 'agents' ? undefined : 'agents'))}
+              >
+                <span
+                  className="designer-tool-btn-indicator-line"
+                  aria-hidden="true"
+                  data-testid="wf-tool-indicator-line-agents"
+                />
+                <Icon name="robot" size={17} />
+              </button>
+              {activeSubmenu === 'agents' && (
+                <div
+                  className={`designer-submenu${isSubmenuLeft ? ' designer-submenu--left' : ''}`}
+                  role="menu"
+                  aria-label="Agents"
+                  data-testid="wf-submenu-agents"
+                  onWheel={e => e.stopPropagation()}
+                  onPointerDown={e => e.stopPropagation()}
+                >
+                  <div className="designer-submenu-header">
+                    <span>Agents</span>
+                    <span className="designer-submenu-count">
+                      {agentQuery.trim() ? `${filteredAgents.length}/${agents.length}` : agents.length}
+                    </span>
+                  </div>
+                  {agents.length > 10 && (
+                    <div className="designer-submenu-search">
+                      <Icon name="search" size={12} />
+                      <input
+                        type="search"
+                        value={agentQuery}
+                        onChange={e => setAgentQuery(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Escape') {
+                            if (agentQuery) {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              setAgentQuery('');
+                            } else {
+                              setActiveSubmenu(undefined);
+                            }
+                            return;
+                          }
+                          e.stopPropagation();
+                        }}
+                        placeholder="Search agents…"
+                        aria-label="Search agents"
+                        data-testid="wf-submenu-agents-search"
+                        autoFocus
+                      />
+                      {agentQuery && (
+                        <button
+                          type="button"
+                          className="designer-submenu-search-clear"
+                          aria-label="Clear search"
+                          onClick={() => setAgentQuery('')}
+                        >
+                          <Icon name="close" size={10} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div className="designer-submenu-list">
+                    {filteredAgents.length > 0 ? (
+                      filteredAgents.map(profile => {
+                        const blocked = profile.error || !profile.trusted;
+                        const title = profile.error
+                          ? `Cannot use ${profile.profile.name}: ${profile.error}`
+                          : !profile.trusted
+                            ? `${profile.profile.name} needs trust before it can run.`
+                            : `Add ${profile.profile.name} as an agent stage${
+                                profile.profile.description ? ` — ${profile.profile.description}` : ''
+                              } (click or drag to canvas)`;
+                        return (
+                          <button
+                            key={profile.profile.id}
+                            type="button"
+                            className="designer-submenu-item"
+                            draggable={!blocked}
+                            disabled={Boolean(blocked)}
+                            title={title}
+                            data-testid={`wf-tool-agent-${profile.profile.id}`}
+                            onDragStart={event => {
+                              event.dataTransfer.effectAllowed = 'copy';
+                              event.dataTransfer.setData(
+                                'application/x-praxis-workflow-palette',
+                                JSON.stringify({ kind: 'agent', profileId: profile.profile.id } satisfies WorkflowPaletteItem)
+                              );
+                            }}
+                            onClick={() => {
+                              onAddAgentStage?.(profile.profile.id);
+                              setActiveSubmenu(undefined);
+                            }}
+                          >
+                            <span className="designer-submenu-item-icon">
+                              <Icon name="robot" size={14} />
+                            </span>
+                            <span className="designer-submenu-item-text">{profile.profile.name}</span>
+                            {blocked && (
+                              <span className="designer-submenu-item-badge">
+                                {profile.error ? 'error' : 'untrusted'}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
+                    ) : agents.length === 0 ? (
+                      <div className="designer-submenu-empty">No agent profiles found</div>
+                    ) : (
+                      <div className="designer-submenu-empty">No matching agents</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="designer-tool-submenu-wrap">
+              <button
+                type="button"
+                className={`designer-tool-btn designer-tool-btn--has-submenu${
+                  activeSubmenu === 'skills' ? ' is-active' : ''
+                }`}
+                title="Skills (browse and attach skills)"
+                aria-label="Skills"
+                aria-haspopup="true"
+                aria-expanded={activeSubmenu === 'skills'}
+                data-testid="wf-tool-skills"
+                onClick={() => setActiveSubmenu(prev => (prev === 'skills' ? undefined : 'skills'))}
+              >
+                <span
+                  className="designer-tool-btn-indicator-line"
+                  aria-hidden="true"
+                  data-testid="wf-tool-indicator-line-skills"
+                />
+                <Icon name="sparkles" size={17} />
+              </button>
+              {activeSubmenu === 'skills' && (
+                <div
+                  className={`designer-submenu${isSubmenuLeft ? ' designer-submenu--left' : ''}`}
+                  role="menu"
+                  aria-label="Skills"
+                  data-testid="wf-submenu-skills"
+                  onWheel={e => e.stopPropagation()}
+                  onPointerDown={e => e.stopPropagation()}
+                >
+                  <div className="designer-submenu-header">
+                    <span>Skills</span>
+                    <span className="designer-submenu-count">
+                      {skillQuery.trim() ? `${filteredSkills.length}/${skills.length}` : skills.length}
+                    </span>
+                  </div>
+                  {skills.length > 10 && (
+                    <div className="designer-submenu-search">
+                      <Icon name="search" size={12} />
+                      <input
+                        type="search"
+                        value={skillQuery}
+                        onChange={e => setSkillQuery(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Escape') {
+                            if (skillQuery) {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              setSkillQuery('');
+                            } else {
+                              setActiveSubmenu(undefined);
+                            }
+                            return;
+                          }
+                          e.stopPropagation();
+                        }}
+                        placeholder="Search skills…"
+                        aria-label="Search skills"
+                        data-testid="wf-submenu-skills-search"
+                        autoFocus
+                      />
+                      {skillQuery && (
+                        <button
+                          type="button"
+                          className="designer-submenu-search-clear"
+                          aria-label="Clear search"
+                          onClick={() => setSkillQuery('')}
+                        >
+                          <Icon name="close" size={10} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div className="designer-submenu-list">
+                    {filteredSkills.length > 0 ? (
+                      filteredSkills.map(skill => {
+                        const blocked = skill.error || !skill.trusted;
+                        const title = blocked
+                          ? `Cannot use ${skillTitle(skill.metadata)}: ${skill.error ?? 'needs trust before it can run.'}`
+                          : selectedAgentStageName
+                            ? `Add ${skillTitle(skill.metadata)} to ${selectedAgentStageName}${
+                                skill.metadata.description ? ` — ${skill.metadata.description}` : ''
+                              }`
+                            : `Attach ${skillTitle(skill.metadata)} to an agent stage${
+                                skill.metadata.description ? ` — ${skill.metadata.description}` : ''
+                              } (click or drag to stage)`;
+                        return (
+                          <button
+                            key={skill.metadata.name}
+                            type="button"
+                            className="designer-submenu-item"
+                            draggable={!blocked}
+                            disabled={Boolean(blocked)}
+                            title={title}
+                            data-testid={`wf-tool-skill-${skill.metadata.name}`}
+                            onDragStart={event => {
+                              event.dataTransfer.effectAllowed = 'copy';
+                              event.dataTransfer.setData(
+                                'application/x-praxis-workflow-palette',
+                                JSON.stringify({ kind: 'skill', skillName: skill.metadata.name } satisfies WorkflowPaletteItem)
+                              );
+                            }}
+                            onClick={() => {
+                              onUseSkill?.(skill.metadata.name);
+                              setActiveSubmenu(undefined);
+                            }}
+                          >
+                            <span className="designer-submenu-item-icon">
+                              <Icon name="sparkles" size={14} />
+                            </span>
+                            <span className="designer-submenu-item-text">{skillTitle(skill.metadata)}</span>
+                            {blocked && (
+                              <span className="designer-submenu-item-badge">
+                                {skill.error ? 'error' : 'untrusted'}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
+                    ) : skills.length === 0 ? (
+                      <div className="designer-submenu-empty">No skills found</div>
+                    ) : (
+                      <div className="designer-submenu-empty">No matching skills</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="designer-toolbar-separator" />
+
+          <div className="designer-toolbar-group" role="group" aria-label="Canvas controls">
+            <button
+              type="button"
+              className="designer-tool-btn"
+              data-testid="wf-auto-arrange"
+              title="Auto arrange — lay stages out in dependency order without overlap"
+              aria-label="Auto arrange"
+              disabled={definition.nodes.length < 2}
+              onClick={() => onChange(autoArrange(definition))}
+            >
+              <Icon name="columns" size={17} />
+            </button>
+            <button
+              type="button"
+              className="designer-tool-btn"
+              data-testid="wf-tool-zoom-in"
+              title="Zoom in"
+              aria-label="Zoom in"
+              disabled={view.zoom >= MAX_ZOOM}
+              onClick={() => zoomBy(1.2)}
+            >
+              <Icon name="zoom-in" size={17} />
+            </button>
+            <button
+              type="button"
+              className="designer-tool-btn"
+              data-testid="wf-tool-zoom-out"
+              title="Zoom out"
+              aria-label="Zoom out"
+              disabled={view.zoom <= MIN_ZOOM}
+              onClick={() => zoomBy(1 / 1.2)}
+            >
+              <Icon name="zoom-out" size={17} />
+            </button>
+            <button
+              type="button"
+              className="designer-tool-btn"
+              data-testid="wf-tool-reset-view"
+              title="Reset view (100%, back to origin)"
+              aria-label="Reset view"
+              onClick={() => setView({ x: 40, y: 40, zoom: 1 })}
+            >
+              <Icon name="refresh" size={17} />
+            </button>
+          </div>
+
+          <div className="designer-toolbar-separator" />
+
+          <div className="designer-toolbar-group" role="group" aria-label="Stage actions">
+            <button
+              type="button"
+              className="designer-tool-btn"
+              title={
+                selectedEdgeId
+                  ? 'Delete selected connection'
+                  : selectedNodeId
+                    ? 'Delete selected stage'
+                    : 'Delete selected stage or connection'
+              }
+              aria-label={
+                selectedEdgeId
+                  ? 'Delete selected connection'
+                  : selectedNodeId
+                    ? 'Delete selected stage'
+                    : 'Delete selected stage or connection'
+              }
+              data-testid="wf-delete-selected"
+              disabled={!selectedNodeId && !selectedEdgeId}
+              onClick={onDeleteSelected}
+            >
+              <Icon name="trash" size={17} />
+            </button>
+            <button
+              type="button"
+              className="designer-tool-btn"
+              data-testid="wf-tool-help"
+              title="Canvas help: Drag a card to move it; drag from its handle onto another card to connect. Click a connection to select or delete it. Drag empty space to pan. Zoom with the toolbar or pinch."
+              aria-label="Canvas help"
+            >
+              <Icon name="info" size={17} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

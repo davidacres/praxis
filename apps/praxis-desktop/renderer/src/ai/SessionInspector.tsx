@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AgentSessionRecord, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
@@ -7,7 +7,8 @@ import { SessionChanges } from './SessionChanges';
 import { SessionHandoverBrief, SessionPurposeBlock, SessionRuntimeHistory } from './SessionHandover';
 import { SessionTasks } from './SessionTasks';
 import { SessionActivity } from './SessionActivity';
-import { failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, reasoningSnippet, sessionMode, sessionTitle } from './sessionNav';
+import { SessionSubagentsSummaryBlock, SessionSubagentsTab } from './SessionSubagents';
+import { extractSubagents, failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, reasoningSnippet, sessionMode, sessionTitle } from './sessionNav';
 import { agentStateLaneClass, agentStateLabel } from './aiSessionState';
 
 /**
@@ -51,14 +52,7 @@ export interface SessionInspectorProps {
   onOpenWorkflowRun?: (runId: string) => void;
 }
 
-type InspectorTab = 'summary' | 'activity' | 'changes' | 'sessions';
-
-const TABS: Array<{ id: InspectorTab; label: string }> = [
-  { id: 'summary', label: 'Summary' },
-  { id: 'activity', label: 'Activity' },
-  { id: 'changes', label: 'Changes' },
-  { id: 'sessions', label: 'Sessions' }
-];
+type InspectorTab = 'summary' | 'activity' | 'changes' | 'subagents' | 'sessions';
 
 export function SessionInspector({
   session,
@@ -143,6 +137,10 @@ export function SessionInspector({
   const activity = liveActivity(session);
   const reasoning = reasoningSnippet(session);
   const failedTools = failedToolCount(session.events);
+  const subagents = extractSubagents(session, sessions);
+  const parentSession = session.parentSessionKey
+    ? sessions.find(s => s.issueKey === session.parentSessionKey)
+    : undefined;
 
   const copyReasoning = () => {
     if (!reasoning) return;
@@ -175,6 +173,19 @@ export function SessionInspector({
     void run(() => window.praxis.ai.removeWorktree(session.issueKey));
   };
 
+  const visibleTabs: Array<{ id: InspectorTab; label: string }> = useMemo(() => {
+    const list: Array<{ id: InspectorTab; label: string }> = [
+      { id: 'summary', label: 'Summary' },
+      { id: 'activity', label: 'Activity' },
+      { id: 'changes', label: 'Changes' }
+    ];
+    if (subagents.length > 0 || tab === 'subagents') {
+      list.push({ id: 'subagents', label: 'Subagents' });
+    }
+    list.push({ id: 'sessions', label: 'Sessions' });
+    return list;
+  }, [subagents.length, tab]);
+
   return (
     <section className="inspector inspector--tabbed session-inspector" aria-label="Session context" data-testid="session-inspector">
       <div className="agent-runtime-status">
@@ -192,8 +203,24 @@ export function SessionInspector({
         </div>
       </div>
 
+      {session.parentSessionKey && (
+        <div className="session-parent-banner" data-testid="session-parent-banner">
+          <Icon name="robot" size={12} />
+          <span>Subagent of</span>
+          <button
+            type="button"
+            className="session-parent-link"
+            data-testid="session-parent-link"
+            onClick={() => onSelectSession?.(session.parentSessionKey!)}
+            title={`Open parent agent (${session.parentSessionKey})`}
+          >
+            {parentSession ? sessionTitle(parentSession) : session.parentSessionKey}
+          </button>
+        </div>
+      )}
+
       <div className="inspector-tabs" role="tablist" aria-label="Session detail">
-        {TABS.map(entry => (
+        {visibleTabs.map(entry => (
           <button
             key={entry.id}
             type="button"
@@ -204,6 +231,9 @@ export function SessionInspector({
             onClick={() => setTab(entry.id)}
           >
             {entry.label}
+            {entry.id === 'subagents' && subagents.length > 0 && (
+              <span className="inspector-tab-badge" data-testid="session-tab-subagents-count">{subagents.length}</span>
+            )}
             {/* The failure count is the one urgent thing the log carries, so it
                 has to be readable without opening the tab. */}
             {entry.id === 'activity' && failedTools > 0 && (
@@ -248,6 +278,14 @@ export function SessionInspector({
             {/* What the agent says it's doing, live */}
             <SessionTasks session={session} />
 
+            {subagents.length > 0 && (
+              <SessionSubagentsSummaryBlock
+                subagents={subagents}
+                onViewAll={() => setTab('subagents')}
+                onSelectSession={onSelectSession}
+              />
+            )}
+
             {(session.workflowRunId || session.taskDefinition.workflow) && (
               <div className="agent-runtime-block session-workflow-context" data-testid="session-workflow-context">
                 <span className="rail-sub">Governed workflow</span>
@@ -284,7 +322,7 @@ export function SessionInspector({
             {/* Everything on this tab is live state, so a finished session with
                 no recorded plan has genuinely nothing to show. Saying so beats
                 a blank pane, which reads as a failure to load. */}
-            {!activity && !reasoning && !session.taskList?.length && !session.purpose && !session.handoverBrief && (
+            {!activity && !reasoning && !session.taskList?.length && !session.purpose && !session.handoverBrief && subagents.length === 0 && (
               <div className="empty-state" data-testid="session-summary-idle">
                 <Icon name="check" size={24} />
                 <span>
@@ -298,6 +336,13 @@ export function SessionInspector({
         )}
 
         {tab === 'activity' && <SessionActivity session={session} />}
+
+        {tab === 'subagents' && (
+          <SessionSubagentsTab
+            subagents={subagents}
+            onSelectSession={onSelectSession}
+          />
+        )}
 
         {/* What the session did to the working tree, and what to do about it.
             Renders its own empty state when the folder is not a repository or

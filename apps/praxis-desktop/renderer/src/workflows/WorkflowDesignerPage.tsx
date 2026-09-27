@@ -17,7 +17,7 @@ import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
 import { fetchModelOptions, hasModelCatalog, isApiModelProvider, providerIconName, providerLabel } from '../ai/modelProviders';
 import { ChipSelect, type ChipSelectOption } from '../ui/ChipSelect';
 import { Icon, type IconName } from '../ui/Icon';
-import { WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
+import { NODE_KINDS, WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
 import { WorkflowValidationDialog } from './WorkflowValidationDialog';
 import { WorkflowAssistantPopover } from './WorkflowAssistantPopover';
 import {
@@ -43,14 +43,6 @@ import { isProviderUsable, isProviderUsableForSessions } from '../ai/providerAva
  * centre column.
  */
 
-const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: IconName; description: string }> = [
-  { type: 'agent-task', label: 'Agent stage', icon: 'robot', description: 'Autonomous agent task stage' },
-  { type: 'check', label: 'Check', icon: 'shield', description: 'Verification, test, or security gate' },
-  { type: 'approval', label: 'Approval', icon: 'check-square', description: 'Manual human sign-off gate' },
-  { type: 'deployment', label: 'Deployment', icon: 'rocket', description: 'Deployment or release step' },
-  { type: 'join', label: 'Join', icon: 'split-horizontal', description: 'Parallel branches synchronizer' }
-];
-
 const GATES: WorkflowGateKind[] = ['review', 'qa', 'security'];
 const OUTCOMES: Array<{ value: WorkflowEdgeOutcome; label: string; description: string }> = [
   { value: 'success', label: 'On success', description: 'Follow this connection when the stage passes' },
@@ -60,13 +52,6 @@ const OUTCOMES: Array<{ value: WorkflowEdgeOutcome; label: string; description: 
 
 function nodeKind(type: WorkflowNodeType) {
   return NODE_KINDS.find(kind => kind.type === type) ?? NODE_KINDS[0];
-}
-
-/** The gate a stage satisfies, without importing a core runtime helper. */
-function railGate(node: WorkflowNode): WorkflowGateKind | undefined {
-  return node.type === 'agent-task' || node.type === 'check' || node.type === 'deployment'
-    ? node.satisfiesGate
-    : undefined;
 }
 
 function profileHostId(catalog: AgentRuntimeSnapshot | undefined, profileId: string): string | undefined {
@@ -339,17 +324,9 @@ export function WorkflowDesignerPage({
     [definition, profiles]
   );
 
-  const [toolboxView, setToolboxView] = useState<'all' | 'tools' | 'stages'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   const q = searchQuery.trim().toLowerCase();
-  const showTools = toolboxView === 'all' || toolboxView === 'tools';
-  const showStages = toolboxView === 'all' || toolboxView === 'stages';
-
-  const filteredBlocks = useMemo(() => {
-    if (!q) return NODE_KINDS;
-    return NODE_KINDS.filter(k => k.label.toLowerCase().includes(q) || k.type.toLowerCase().includes(q));
-  }, [q]);
 
   const filteredProfiles = useMemo(() => {
     if (!q) return profiles;
@@ -364,12 +341,6 @@ export function WorkflowDesignerPage({
       s => s.metadata.name.toLowerCase().includes(q) || (s.metadata.description && s.metadata.description.toLowerCase().includes(q))
     );
   }, [skills, q]);
-
-  const filteredNodes = useMemo(() => {
-    if (!definition) return [];
-    if (!q) return definition.nodes;
-    return definition.nodes.filter(n => n.name.toLowerCase().includes(q) || n.type.toLowerCase().includes(q));
-  }, [definition, q]);
 
   const addProfileStage = useCallback(
     (profileId: string, at?: { x: number; y: number }) => {
@@ -573,47 +544,17 @@ export function WorkflowDesignerPage({
                 <Icon name="tools" size={13} />
                 <span>Toolbox</span>
               </span>
-              <span className="wf-rail-badge">{definition.nodes.length} stages</span>
-            </div>
-
-            <div className="wf-rail-view-switch" role="tablist" aria-label="Toolbox view">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={toolboxView === 'all'}
-                className={`wf-view-btn${toolboxView === 'all' ? ' is-active' : ''}`}
-                onClick={() => setToolboxView('all')}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={toolboxView === 'tools'}
-                className={`wf-view-btn${toolboxView === 'tools' ? ' is-active' : ''}`}
-                onClick={() => setToolboxView('tools')}
-              >
-                Tools
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={toolboxView === 'stages'}
-                className={`wf-view-btn${toolboxView === 'stages' ? ' is-active' : ''}`}
-                onClick={() => setToolboxView('stages')}
-              >
-                Stages
-              </button>
+              <span className="wf-rail-badge">{filteredProfiles.length + filteredSkills.length} tools</span>
             </div>
 
             <div className="wf-rail-search">
               <Icon name="search" size={12} />
               <input
                 type="search"
-                placeholder="Filter tools & stages…"
+                placeholder="Filter tools…"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                aria-label="Filter tools and stages"
+                aria-label="Filter tools"
               />
               {searchQuery && (
                 <button
@@ -629,45 +570,7 @@ export function WorkflowDesignerPage({
           </div>
 
           <div className="wf-rail-body">
-            {showTools && (
-              <section className="wf-toolbox-section" aria-labelledby="wf-section-blocks">
-                <div className="wf-section-header">
-                  <span id="wf-section-blocks">Blocks</span>
-                  <span className="wf-section-count">{filteredBlocks.length}</span>
-                </div>
-                <div className="wf-toolbox-grid" role="group" aria-label="Stage blocks">
-                  {filteredBlocks.map(kind => (
-                    <button
-                      key={kind.type}
-                      type="button"
-                      className="wf-tool-card wf-tool-card--block"
-                      draggable
-                      title={`Drag or click to add ${kind.label}: ${kind.description}`}
-                      onDragStart={event => {
-                        event.dataTransfer.effectAllowed = 'copy';
-                        event.dataTransfer.setData(
-                          'application/x-praxis-workflow-palette',
-                          JSON.stringify({ kind: 'stage', nodeType: kind.type } satisfies WorkflowPaletteItem)
-                        );
-                      }}
-                      onClick={() => {
-                        const node = newNode(kind.type, { x: 120, y: 120 + definition.nodes.length * 40 });
-                        mutate(addNode(definition, node));
-                        selectStage(node.id);
-                      }}
-                    >
-                      <span className="wf-tool-icon">
-                        <Icon name={kind.icon} size={13} />
-                      </span>
-                      <span className="wf-tool-label">{kind.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {showTools && (
-              <section className="wf-composer-palette" aria-labelledby="wf-building-blocks">
+            <section className="wf-composer-palette" aria-labelledby="wf-building-blocks">
                 <span id="wf-building-blocks" className="sr-only">Build with agents and skills</span>
                 <div className="wf-toolbox-section">
                   <div className="wf-section-header">
@@ -813,67 +716,6 @@ export function WorkflowDesignerPage({
                   </div>
                 )}
               </section>
-            )}
-
-            {showStages && (
-              <section className="wf-toolbox-section wf-stages-section" aria-labelledby="wf-section-stages">
-                <div className="wf-section-header">
-                  <span id="wf-section-stages">Flow Stages</span>
-                  <span className="wf-section-count">{filteredNodes.length}</span>
-                </div>
-                <ul className="rail-list">
-                  {filteredNodes.map(node => {
-                    const issues = feedback?.byNode[node.id]?.length ?? 0;
-                    const isEntry = node.id === definition.entryNodeId;
-                    const icon = nodeKind(node.type).icon;
-                    return (
-                      <li key={node.id} className="wf-stage-rail-item">
-                        <button
-                          type="button"
-                          className="rail-row"
-                          aria-pressed={node.id === selectedNodeId}
-                          aria-label={`${node.name} (${node.type})${isEntry ? ', entry stage' : ''}${
-                            issues > 0 ? `, ${issues} issue${issues === 1 ? '' : 's'}` : ''
-                          }`}
-                          onClick={() => selectStage(node.id)}
-                        >
-                          <span className="rail-row-icon">
-                            <Icon name={icon} size={13} />
-                          </span>
-                          <span className="rail-main">
-                            <span className="rail-name">{node.name}</span>
-                            <span className="rail-sub">{node.type}</span>
-                          </span>
-                          {issues > 0 ? (
-                            <span className="rail-mark is-issue" title={`${issues} validation issue${issues === 1 ? '' : 's'}`}>
-                              ⚠ {issues}
-                            </span>
-                          ) : isEntry ? (
-                            <span className="rail-mark is-entry">entry</span>
-                          ) : railGate(node) ? (
-                            <span className="rail-mark is-gate">{railGate(node)}</span>
-                          ) : null}
-                        </button>
-                        <button
-                          type="button"
-                          className="wf-stage-rail-delete"
-                          title={`Delete stage ${node.name}`}
-                          aria-label={`Delete stage ${node.name}`}
-                          data-testid={`wf-stage-rail-delete-${node.id}`}
-                          onClick={e => {
-                            e.stopPropagation();
-                            mutate(removeNode(definition, node.id));
-                            if (selectedNodeId === node.id) selectStage(undefined);
-                          }}
-                        >
-                          <Icon name="trash" size={11} />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            )}
           </div>
 
         </nav>
@@ -887,9 +729,14 @@ export function WorkflowDesignerPage({
               Object.entries(feedback?.byNode ?? {}).map(([id, list]) => [id, list.length])
             )}
             presentations={presentations}
+            agents={profiles}
+            skills={skills}
+            selectedAgentStageName={selectedAgentStage?.name}
             onChange={mutate}
             onSelectNode={selectStage}
             onSelectEdge={selectEdge}
+            onAddAgentStage={profileId => addProfileStage(profileId)}
+            onUseSkill={skillName => useSkill(skillName, selectedAgentStage?.id)}
             onPaletteDrop={(item, targetNodeId, at) => {
               if (item.kind === 'stage') {
                 const node = newNode(item.nodeType, at);

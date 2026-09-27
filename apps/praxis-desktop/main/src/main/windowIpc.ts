@@ -1,14 +1,24 @@
 import * as os from 'node:os';
 import { BrowserWindow, ipcMain } from 'electron';
+import { getSettingsBackend } from './settingsBackendInstance';
 
 const confirmedWindows = new WeakSet<BrowserWindow>();
 const APP_ZOOM_MIN = 0.7;
 const APP_ZOOM_MAX = 1.5;
 const APP_ZOOM_STEP = 0.1;
 
-function clampZoomFactor(value: number): number {
+export function clampZoomFactor(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.min(APP_ZOOM_MAX, Math.max(APP_ZOOM_MIN, Math.round(value * 10) / 10));
+}
+
+export function getInitialZoomFactor(): number {
+  try {
+    const factor = getSettingsBackend().read().appearance.zoomFactor;
+    return clampZoomFactor(factor);
+  } catch {
+    return 1;
+  }
 }
 
 function publishZoomFactor(win: BrowserWindow, factor: number): number {
@@ -16,6 +26,17 @@ function publishZoomFactor(win: BrowserWindow, factor: number): number {
   if (win.isDestroyed()) return next;
   win.webContents.setZoomFactor(next);
   win.webContents.send('window:zoomChanged', next);
+  try {
+    const backend = getSettingsBackend();
+    const current = backend.read().appearance.zoomFactor;
+    if (current !== next) {
+      void backend.write({ appearance: { zoomFactor: next } }).catch(err => {
+        console.error('Failed to persist zoom factor:', err);
+      });
+    }
+  } catch {
+    // Backend may not be initialised in some test contexts
+  }
   return next;
 }
 
@@ -110,13 +131,21 @@ export function registerWindowIpc(): void {
     return { applied };
   });
 
-  ipcMain.handle('window:getZoomFactor', async (event: Electron.IpcMainInvokeEvent) =>
-    senderWindow(event)?.webContents.getZoomFactor() ?? 1
-  );
+  ipcMain.handle('window:getZoomFactor', async (event: Electron.IpcMainInvokeEvent) => {
+    const win = senderWindow(event);
+    if (!win || win.isDestroyed()) return getInitialZoomFactor();
+    const current = win.webContents.getZoomFactor();
+    const initial = getInitialZoomFactor();
+    if (Math.abs(current - 1) < 0.01 && Math.abs(initial - 1) >= 0.01) {
+      win.webContents.setZoomFactor(initial);
+      return initial;
+    }
+    return current;
+  });
 
   ipcMain.handle('window:setZoomFactor', async (event: Electron.IpcMainInvokeEvent, factor: number) => {
     const win = senderWindow(event);
-    return win ? publishZoomFactor(win, factor) : 1;
+    return win ? publishZoomFactor(win, factor) : getInitialZoomFactor();
   });
 }
 

@@ -1,0 +1,518 @@
+{
+  "schemaVersion": 1,
+  "id": "full-sdlc-project-1788215224012-rap082",
+  "name": "Full SDLC",
+  "scope": "project",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "plan",
+      "name": "Plan",
+      "x": 40,
+      "y": 40,
+      "inputs": [],
+      "type": "agent-task",
+      "agent": {
+        "agentId": "praxis-planner",
+        "profileId": "praxis-planner",
+        "hostId": "praxis-planner",
+        "scope": "global",
+        "toolMode": "read-only"
+      },
+      "instructions": "Analyze requirements, verify existing architecture, and produce structured plan.",
+      "outputs": [
+        {
+          "id": "plan-doc",
+          "kind": "plan",
+          "required": true
+        }
+      ],
+      "mutatesWorktree": false,
+      "modelTier": "fast"
+    },
+    {
+      "id": "implement",
+      "name": "Implement",
+      "x": 300,
+      "y": 40,
+      "inputs": [
+        "plan-doc"
+      ],
+      "type": "agent-task",
+      "agent": {
+        "agentId": "praxis-implementer",
+        "profileId": "praxis-implementer",
+        "hostId": "praxis-implementer",
+        "scope": "global",
+        "toolMode": "full",
+        "skillNames": [
+          "verification-report",
+          "visual-verification"
+        ]
+      },
+      "instructions": "Implement changes matching plan specifications, verify changes by running automated tests and fixing any broken or outdated tests, and commit clean changes to the branch.",
+      "outputs": [
+        {
+          "id": "change-diff",
+          "kind": "diff",
+          "required": true
+        }
+      ],
+      "mutatesWorktree": true,
+      "maxAttempts": 3,
+      "modelTier": "strong"
+    },
+    {
+      "id": "install",
+      "name": "Install dependencies",
+      "x": 560,
+      "y": 40,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "check",
+      "command": "npm",
+      "outputs": [
+        {
+          "id": "install-log",
+          "kind": "log",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "args": [
+        "ci",
+        "--registry=https://registry.npmjs.org/"
+      ],
+      "timeoutMs": 600000,
+      "maxAttempts": 2
+    },
+    {
+      "id": "build",
+      "name": "Build",
+      "x": 820,
+      "y": 320,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "check",
+      "command": "npm",
+      "outputs": [
+        {
+          "id": "build-log",
+          "kind": "log",
+          "required": false
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "args": [
+        "run",
+        "build",
+        "--if-present"
+      ],
+      "timeoutMs": 900000
+    },
+    {
+      "id": "lint",
+      "name": "Lint",
+      "x": 820,
+      "y": 40,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "check",
+      "command": "npm",
+      "outputs": [
+        {
+          "id": "lint-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "args": [
+        "run",
+        "lint"
+      ],
+      "satisfiesGate": "qa"
+    },
+    {
+      "id": "typecheck",
+      "name": "Type check",
+      "x": 820,
+      "y": 180,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "check",
+      "command": "npx",
+      "outputs": [
+        {
+          "id": "typecheck-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "args": [
+        "tsc",
+        "--noEmit"
+      ],
+      "satisfiesGate": "qa"
+    },
+    {
+      "id": "test",
+      "name": "Unit tests & coverage",
+      "x": 1080,
+      "y": 40,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "check",
+      "command": "npm",
+      "outputs": [
+        {
+          "id": "test-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "args": [
+        "test"
+      ],
+      "satisfiesGate": "qa"
+    },
+    {
+      "id": "sast",
+      "name": "SAST scan",
+      "x": 560,
+      "y": 180,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "check",
+      "command": "semgrep",
+      "outputs": [
+        {
+          "id": "sast-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "args": [
+        "scan",
+        "--config=auto",
+        "--sarif",
+        "--output=semgrep.sarif"
+      ],
+      "satisfiesGate": "security"
+    },
+    {
+      "id": "secrets",
+      "name": "Secret scan",
+      "x": 560,
+      "y": 320,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "check",
+      "command": "gitleaks",
+      "outputs": [
+        {
+          "id": "secret-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "args": [
+        "detect",
+        "--no-git",
+        "--report-format=sarif",
+        "--report-path=gitleaks.sarif"
+      ],
+      "satisfiesGate": "security"
+    },
+    {
+      "id": "sca",
+      "name": "SCA scan",
+      "x": 560,
+      "y": 460,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "check",
+      "command": "osv-scanner",
+      "outputs": [
+        {
+          "id": "sca-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "args": [
+        "--format=sarif",
+        "--output=osv.sarif",
+        "."
+      ],
+      "satisfiesGate": "security"
+    },
+    {
+      "id": "review",
+      "name": "Structured code review",
+      "x": 560,
+      "y": 600,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "agent-task",
+      "agent": {
+        "agentId": "praxis-reviewer",
+        "scope": "global",
+        "toolMode": "read-only"
+      },
+      "instructions": "Review changes against quality and security criteria and return structured findings.",
+      "outputs": [
+        {
+          "id": "review-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "mutatesWorktree": false,
+      "satisfiesGate": "review",
+      "maxAttempts": 3,
+      "modelTier": "standard"
+    },
+    {
+      "id": "gates",
+      "name": "SDLC Gates",
+      "x": 1340,
+      "y": 40,
+      "inputs": [],
+      "type": "join",
+      "mode": "all"
+    },
+    {
+      "id": "approve",
+      "name": "Approve",
+      "x": 1600,
+      "y": 40,
+      "inputs": [
+        "change-diff",
+        "review-findings"
+      ],
+      "type": "approval",
+      "prompt": "All QA, Security, and Code Review quality gates have passed. Sign off on changes?",
+      "requiredGates": [
+        "qa",
+        "security",
+        "review"
+      ],
+      "allowBypass": false,
+      "gateThresholds": {
+        "qa": [
+          {
+            "type": "metric",
+            "metric": "coverage",
+            "operator": ">=",
+            "value": 80
+          }
+        ],
+        "security": [
+          {
+            "type": "severity",
+            "maxCount": 0,
+            "severityLevel": "high"
+          }
+        ],
+        "review": [
+          {
+            "type": "severity",
+            "maxCount": 0,
+            "severityLevel": "high"
+          }
+        ]
+      }
+    },
+    {
+      "id": "deploy",
+      "name": "Deploy",
+      "x": 1860,
+      "y": 40,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "check",
+      "command": "npm",
+      "outputs": [],
+      "successExitCodes": [
+        0
+      ],
+      "args": [
+        "run",
+        "deploy"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-plan-impl",
+      "from": "plan",
+      "to": "implement",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-install",
+      "from": "implement",
+      "to": "install",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-lint",
+      "from": "install",
+      "to": "lint",
+      "on": "success",
+      "required": false
+    },
+    {
+      "id": "e-impl-typecheck",
+      "from": "install",
+      "to": "typecheck",
+      "on": "success",
+      "required": false
+    },
+    {
+      "id": "e-install-build",
+      "from": "install",
+      "to": "build",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-test",
+      "from": "build",
+      "to": "test",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-sast",
+      "from": "implement",
+      "to": "sast",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-sec",
+      "from": "implement",
+      "to": "secrets",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-sca",
+      "from": "implement",
+      "to": "sca",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-rev",
+      "from": "implement",
+      "to": "review",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-lint-gates",
+      "from": "lint",
+      "to": "gates",
+      "on": "success",
+      "required": false
+    },
+    {
+      "id": "e-typecheck-gates",
+      "from": "typecheck",
+      "to": "gates",
+      "on": "success",
+      "required": false
+    },
+    {
+      "id": "e-test-gates",
+      "from": "test",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-sast-gates",
+      "from": "sast",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-sec-gates",
+      "from": "secrets",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-sca-gates",
+      "from": "sca",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-rev-gates",
+      "from": "review",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-gates-approve",
+      "from": "gates",
+      "to": "approve",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-approve-deploy",
+      "from": "approve",
+      "to": "deploy",
+      "on": "success",
+      "required": false
+    }
+  ],
+  "entryNodeId": "plan",
+  "createdAt": "2026-09-27T11:27:46.018Z",
+  "updatedAt": "2026-09-27T11:46:51.871Z",
+  "description": "Complete SDLC automation with parallel lint, typecheck, test coverage, SAST, secrets, SCA, and code review gates.",
+  "trigger": "ticket",
+  "projectId": "project-1788215224012-rap082"
+}

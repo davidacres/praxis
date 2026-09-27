@@ -507,3 +507,32 @@ test('removing a custom endpoint drops the settings that pointed at it', () => {
   assert.equal(removed.ai.providers['custom:lab'], undefined);
   assert.equal(removed.ai.modelTiers?.['custom:lab'], undefined);
 });
+
+test('preview enableEasyMode defaults to false and can be merged', () => {
+  assert.equal(DEFAULT_APP_SETTINGS.preview.enableEasyMode, false);
+  assert.equal(sanitizeAppSettings({}).preview.enableEasyMode, false);
+  assert.equal(sanitizeAppSettings({ preview: { enableEasyMode: true } }).preview.enableEasyMode, true);
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, { preview: { enableEasyMode: true } });
+  assert.equal(merged.preview.enableEasyMode, true);
+  assert.ok(DEFAULT_APP_SETTINGS.appearance.installedThemeIds.includes('simple'));
+});
+
+test('preview enableDeployments defaults to false and can be merged', () => {
+  assert.equal(DEFAULT_APP_SETTINGS.preview.enableDeployments, false);
+  assert.equal(sanitizeAppSettings({}).preview.enableDeployments, false);
+  assert.equal(sanitizeAppSettings({ preview: { enableDeployments: true } }).preview.enableDeployments, true);
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, { preview: { enableDeployments: true } });
+  assert.equal(merged.preview.enableDeployments, true);
+});
+
+test('appearance zoomFactor defaults to 1 and is sanitized and merged within 0.7 - 1.5 limits', () => {
+  assert.equal(DEFAULT_APP_SETTINGS.appearance.zoomFactor, 1);
+  assert.equal(sanitizeAppSettings({}).appearance.zoomFactor, 1);
+  assert.equal(sanitizeAppSettings({ appearance: { zoomFactor: 1.2 } }).appearance.zoomFactor, 1.2);
+  // Clamped bounds
+  assert.equal(sanitizeAppSettings({ appearance: { zoomFactor: 0.2 } }).appearance.zoomFactor, 0.7);
+  assert.equal(sanitizeAppSettings({ appearance: { zoomFactor: 3.0 } }).appearance.zoomFactor, 1.5);
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, { appearance: { zoomFactor: 1.3 } });
+  assert.equal(merged.appearance.zoomFactor, 1.3);
+});
+

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AgentRuntimeSnapshot } from '@praxis/core';
+import type { AgentRuntimeSnapshot, AgentSessionRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import {
   agentStartBlockedReason,
@@ -10,6 +10,8 @@ import {
 } from './agentCatalog';
 import type { ActivationMap, CatalogSelection, LifecycleAction } from './agentSelection';
 import { ChipSelect } from '../ui/ChipSelect';
+import { agentStateBadgeClass, agentStateLabel } from '../ai/aiSessionState';
+import { formatSubagentTokens, type SubagentItem } from '../ai/sessionNav';
 
 /**
  * Agent Hub runtime panel — the shell's right pane for the `agents` route.
@@ -19,12 +21,25 @@ import { ChipSelect } from '../ui/ChipSelect';
  * changes runtime state. The centre pane stays the read-only record.
  */
 
+export interface AgentRuntimeSessionItem {
+  issueKey: string;
+  title: string;
+  agentId?: string;
+  profileId?: string;
+  hostId?: string;
+  state?: AgentSessionRecord['state'];
+  model?: string;
+  tokenUsage?: AgentSessionRecord['tokenUsage'];
+  cost?: AgentSessionRecord['cost'];
+  subagents?: SubagentItem[];
+}
+
 export interface AgentRuntimePanelProps {
   snapshot?: AgentRuntimeSnapshot;
   selection?: CatalogSelection;
   busy: boolean;
   activations: ActivationMap;
-  sessions: Array<{ issueKey: string; title: string; agentId?: string; profileId?: string; hostId?: string }>;
+  sessions: AgentRuntimeSessionItem[];
   onLifecycle: (agentId: string, action: LifecycleAction) => void;
   onActivate: (agentId: string, skillName: string) => void;
   onStartSession?: (agentId: string, skillNames: string[], profileId?: string) => void;
@@ -102,7 +117,7 @@ function ProfileBinding({
   snapshot: AgentRuntimeSnapshot;
   busy: boolean;
   activations: Array<{ skill: string; mode: string }>;
-  sessions: Array<{ issueKey: string; title: string }>;
+  sessions: AgentRuntimeSessionItem[];
   onLifecycle: (agentId: string, action: LifecycleAction) => void;
   onStartSession?: (hostId: string, skillNames: string[], profileId?: string) => void;
   onOpenSession?: (issueKey: string) => void;
@@ -163,16 +178,7 @@ function ProfileBinding({
         </div>
       )}
 
-      {sessions.length > 0 && (
-        <div className="agent-runtime-block">
-          <span className="rail-sub">Sessions</span>
-          <ul className="agent-runtime-sessions">
-            {sessions.map(session => (
-              <li key={session.issueKey}><button type="button" className="btn-compact" onClick={() => onOpenSession?.(session.issueKey)}>{session.title}</button></li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <AgentRuntimeSessionsList sessions={sessions} onOpenSession={onOpenSession} />
     </>
   );
 }
@@ -268,7 +274,7 @@ function AgentRuntime({
   snapshot: AgentRuntimeSnapshot;
   busy: boolean;
   activations: Array<{ skill: string; mode: string }>;
-  sessions: Array<{ issueKey: string; title: string }>;
+  sessions: AgentRuntimeSessionItem[];
   onLifecycle: (agentId: string, action: LifecycleAction) => void;
   onStartSession?: (agentId: string, skillNames: string[]) => void;
   onOpenSession?: (issueKey: string) => void;
@@ -294,21 +300,75 @@ function AgentRuntime({
         </div>
       )}
 
-      {sessions.length > 0 && (
-        <div className="agent-runtime-block">
-          <span className="rail-sub">Sessions</span>
-          <ul className="agent-runtime-sessions">
-            {sessions.map(session => (
-              <li key={session.issueKey}>
-                <button type="button" className="btn-compact" onClick={() => onOpenSession?.(session.issueKey)}>
-                  {session.title}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <AgentRuntimeSessionsList sessions={sessions} onOpenSession={onOpenSession} />
     </>
+  );
+}
+
+function AgentRuntimeSessionsList({
+  sessions,
+  onOpenSession
+}: {
+  sessions: AgentRuntimeSessionItem[];
+  onOpenSession?: (issueKey: string) => void;
+}) {
+  if (sessions.length === 0) return null;
+
+  return (
+    <div className="agent-runtime-block" data-testid="agent-runtime-sessions-block">
+      <span className="rail-sub">Sessions ({sessions.length})</span>
+      <div className="agent-runtime-sessions-list" data-testid="agent-runtime-sessions-list">
+        {sessions.map(session => (
+          <div key={session.issueKey} className="agent-runtime-session-card" data-testid="agent-runtime-session-card">
+            <div className="agent-runtime-session-card-header">
+              <button
+                type="button"
+                className="btn-compact agent-runtime-session-title"
+                onClick={() => onOpenSession?.(session.issueKey)}
+                title={session.title}
+              >
+                {session.title}
+              </button>
+              {session.state && (
+                <span className={agentStateBadgeClass(session.state)} data-testid="agent-session-state-badge">
+                  {agentStateLabel(session.state)}
+                </span>
+              )}
+            </div>
+            <div className="agent-runtime-session-meta">
+              {session.model && (
+                <span className="chip chip-muted" data-testid="agent-session-model">{session.model}</span>
+              )}
+              {(session.tokenUsage || session.cost) && (
+                <span className="rail-sub" data-testid="agent-session-tokens">{formatSubagentTokens(session.tokenUsage, session.cost)}</span>
+              )}
+            </div>
+            {session.subagents && session.subagents.length > 0 && (
+              <div className="agent-runtime-session-subagents" data-testid="agent-runtime-subagents">
+                <span className="rail-sub">Subagents ({session.subagents.length}):</span>
+                <ul className="agent-runtime-subagents-list">
+                  {session.subagents.map(sub => (
+                    <li key={sub.id} className="agent-runtime-subagent-item" data-testid="agent-runtime-subagent-item">
+                      <span className={agentStateBadgeClass(sub.status)}>{agentStateLabel(sub.status)}</span>
+                      <button
+                        type="button"
+                        className="btn-link agent-runtime-subagent-name"
+                        title={sub.title}
+                        onClick={() => sub.sessionKey && onOpenSession?.(sub.sessionKey)}
+                      >
+                        {sub.title}
+                      </button>
+                      <span className="chip chip-muted" data-testid="subagent-model">{sub.model}</span>
+                      <span className="rail-sub" data-testid="subagent-tokens">{formatSubagentTokens(sub.tokenUsage, sub.cost)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

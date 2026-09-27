@@ -33,7 +33,7 @@ test('rows at the same depth of the project tree share an icon column and a labe
   git('add', '.');
   git('commit', '-m', 'initial');
 
-  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  app = await launchTestApp({ preview: { enableDeployments: true } }, undefined, undefined, { openNewSession: false });
   const page = app.window;
   await page.evaluate(async repoPath => {
     const workspace = (await window.praxis.workspaces.list())[0];
@@ -72,18 +72,15 @@ test('rows at the same depth of the project tree share an icon column and a labe
       return { icon: Math.round(i.left), label: Math.round(l.left), gap: Math.round(l.left - i.right) };
     }, iconSelector);
 
-  // Depth 2 (--tree-indent-2): a board, Graph, Changes, a workflow, the Runs header, Policies.
+  // Depth 2 (--tree-indent-2): a board, a workflow, the Runs header, Policies.
   const depth2 = {
     board: await measure('.project-board-row', '.tree-icon'),
-    graph: await measure('.project-git-row', '.tree-icon'),
-    changes: await measure('.project-git-child', '.tree-icon'),
     workflow: await measure('.project-workflow-row', '.tree-icon'),
     runsHeader: await measure('.project-runs-header', '.tree-icon'),
     policies: await measure('.project-workflow-child:not(.project-runs-header)', '.tree-icon')
   };
-  // Depth 1 (--tree-indent-1): flat leaves with no children.
+  // Depth 1 (--tree-indent-1): flat leaves with no children (deployments).
   const depth1 = {
-    run: await measure('[data-testid=project-run-nav-item]', '.tree-icon'),
     deployments: await measure('[data-testid=project-deployments-nav-item]', '.tree-icon')
   };
   // Depth 3 (--tree-indent-3): a workflow run node, its status dot then its name.
@@ -98,6 +95,11 @@ test('rows at the same depth of the project tree share an icon column and a labe
     })
   ];
 
+  // Verify header action buttons (Graph, Changes, Run) are visible on the project node header
+  await expect(page.getByTestId('project-git-nav-item')).toBeVisible();
+  await expect(page.getByTestId('project-git-changes-nav-item')).toBeVisible();
+  await expect(page.getByTestId('project-run-nav-item')).toBeVisible();
+
   const iconCols = (rows: Record<string, { icon: number }>) => [...new Set(Object.values(rows).map(row => row.icon))];
   const labelCols = (rows: Record<string, { label: number }>) => [...new Set(Object.values(rows).map(row => row.label))];
   expect(iconCols(depth2), `depth-2 icons should share one column: ${JSON.stringify(depth2)}`).toHaveLength(1);
@@ -107,8 +109,8 @@ test('rows at the same depth of the project tree share an icon column and a labe
   // Every icon is the same distance from its label (.tree-row's 6px gap) — none touching, none floating.
   for (const [name, row] of Object.entries({ ...depth2, ...depth1 })) expect(row.gap, `${name} icon→label gap`).toBe(6);
   // Deeper levels step in, and never the other way round.
-  expect(depth1.run.icon).toBeLessThan(depth2.graph.icon);
-  expect(runNodes[0]).toBeGreaterThan(depth2.graph.icon);
+  expect(depth1.deployments.icon).toBeLessThan(depth2.board.icon);
+  expect(runNodes[0]).toBeGreaterThan(depth2.board.icon);
   expect(runNodes[0]).toBe(runNodes[1]);
 
   await page.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'sidebar-tree-alignment.png'), clip: { x: 0, y: 40, width: 270, height: 700 } });

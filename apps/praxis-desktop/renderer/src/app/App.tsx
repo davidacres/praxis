@@ -27,6 +27,8 @@ import { LocalPeerReviewPage } from '../ai/LocalPeerReviewPage';
 import { TaskDesignerPage } from '../taskDesigner/TaskDesignerPage';
 import { TaskDesignerItemDetail } from '../taskDesigner/TaskDesignerItemDetail';
 import { TaskDesignerSidebar } from '../taskDesigner/TaskDesignerSidebar';
+import { EasyModeSidebar } from '../components/sidebar/EasyModeSidebar';
+import { AgentDetailsPage } from '../components/agent-details/AgentDetailsPage';
 import { BottomPanel } from './BottomPanel';
 import { SessionInspector } from '../ai/SessionInspector';
 import { SessionsPage } from '../ai/SessionsPage';
@@ -36,7 +38,7 @@ import { backendModeMeta } from '../board/boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from '../board/boardTransitionMatch';
 import { isTerminalAgentState } from '../ai/aiSessionState';
-import { isConversationSession } from '../ai/sessionNav';
+import { extractSubagents, isConversationSession } from '../ai/sessionNav';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { StartupSplash } from './StartupSplash';
 import { CommandPalette, type CommandEntry } from './CommandPalette';
@@ -139,8 +141,10 @@ interface Route {
   browserOpen?: boolean;
   /** Last navigated URL in the in-app browser. */
   browserUrl?: string;
-  /** Centre-pane AI tooling view for `issueKey` (review / peer review / designer). */
-  view?: 'review' | 'lpr' | 'designer';
+  /** Centre-pane AI tooling view for `issueKey` (review / peer review / designer / agent-details). */
+  view?: 'review' | 'lpr' | 'designer' | 'agent-details';
+  /** Subagent call ID or agent ID when inspecting agent details. */
+  subagentId?: string;
   /** Per-ticket runtime selected before opening an AI tool. */
   aiProvider?: AiProvider;
   aiModel?: string;
@@ -1310,6 +1314,7 @@ export function App() {
   const paletteEntries = useMemo<CommandEntry[]>(() => {
     const entries: CommandEntry[] = [];
     (Object.keys(FEATURE_TITLES) as FeatureId[]).forEach(feature => {
+      if (feature === 'deployments' && !settings?.preview?.enableDeployments) return;
       entries.push({
         id: `feature:${feature}`,
         label: FEATURE_TITLES[feature],
@@ -1330,7 +1335,9 @@ export function App() {
       entries.push({ id: `project:${project.id}`, label: project.name, hint: `${project.key} · ${project.type}`, group: 'Projects', icon: 'folder-open', run: () => navigate({ projectId: project.id }) });
       entries.push({ id: `project-git:${project.id}`, label: `${project.name}: Git graph`, hint: project.key, group: 'Projects', icon: 'git-branch', keywords: 'repository history commits', run: () => navigate({ projectId: project.id, feature: 'git' }) });
       entries.push({ id: `project-run:${project.id}`, label: `${project.name}: Run`, hint: project.key, group: 'Projects', icon: 'server', keywords: 'run profile services launch', run: () => navigate({ projectId: project.id, feature: 'run' }) });
-      entries.push({ id: `project-deployments:${project.id}`, label: `${project.name}: Deployments`, hint: project.key, group: 'Projects', icon: 'rocket', keywords: 'deploy deployment profile target executor', run: () => navigate({ projectId: project.id, feature: 'deployments' }) });
+      if (settings?.preview?.enableDeployments) {
+        entries.push({ id: `project-deployments:${project.id}`, label: `${project.name}: Deployments`, hint: project.key, group: 'Projects', icon: 'rocket', keywords: 'deploy deployment profile target executor', run: () => navigate({ projectId: project.id, feature: 'deployments' }) });
+      }
       entries.push({ id: `runs:${project.id}`, label: `${project.name} · Workflow runs`, hint: 'Browse runs and history', group: 'Workflows', icon: 'play', keywords: 'runs history list workflow archive', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined }) });
       (runsByProjectId[project.id] ?? []).filter(run => !run.archived).forEach(run => {
         entries.push({ id: `run:${run.runId}`, label: run.workflowName, hint: `${project.name} · run · ${run.status}`, group: 'Workflows', icon: 'play', keywords: 'workflow run pipeline', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: run.runId }) });
@@ -1888,6 +1895,18 @@ export function App() {
         />
       );
     }
+    if (route.view === 'agent-details') {
+      return (
+        <AgentDetailsPage
+          sessionKey={route.sessionKey}
+          agentId={route.subagentId}
+          sessions={agentSessions}
+          onClose={() => navigate({ ...route, view: undefined, subagentId: undefined })}
+          onSelectSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
+          onSelectAgent={(sessionKey, subId) => navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: subId })}
+        />
+      );
+    }
     if (route.feature === 'sessions') {
       // No view-scroll wrapper: the sessions list and console own their scrolling.
       return renderSessionsPage(route.sessionKey);
@@ -1921,6 +1940,15 @@ export function App() {
       return <RunProfileEditor project={selectedProject} />;
     }
     if (route.feature === 'deployments') {
+      if (!settings?.preview?.enableDeployments) {
+        return (
+          <div className="empty-state" data-testid="deployments-disabled">
+            <Icon name="rocket" size={28} />
+            <span>Deployments preview is disabled.</span>
+            <p>Enable Deployments under Settings &gt; Preview to manage deployment profiles and delivery runs.</p>
+          </div>
+        );
+      }
       if (!selectedProject) {
         return (
           <div className="empty-state" data-testid="deployments-no-project">
@@ -2234,6 +2262,33 @@ export function App() {
                   }
                   onSelectIssue={handleDesignerBoardTicketSelect}
                 />
+              ) : settings?.preview.enableEasyMode ? (
+                <EasyModeSidebar
+                  sessions={activeSessions}
+                  allSessions={agentSessions}
+                  activeSessionKey={(route.feature === 'sessions' || route.feature === 'conversations') ? route.sessionKey : undefined}
+                  activeAgentId={route.view === 'agent-details' ? (route.subagentId || route.sessionKey) : undefined}
+                  onSelectSession={issueKey => {
+                    const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
+                    navigate(session && isConversationSession(session)
+                      ? { feature: 'conversations', sessionKey: issueKey }
+                      : { feature: 'sessions', sessionKey: issueKey });
+                  }}
+                  onSelectAgent={(sessionKey, agentId) => {
+                    navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: agentId });
+                  }}
+                  onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
+                  projects={workspaceProjects}
+                  runsByProjectId={runsByProjectId}
+                  activeWorkflowRunId={route.feature === 'workflows' && route.workflowView === 'runs' ? route.workflowRunId : undefined}
+                  onSelectWorkflowRun={(project, runId) => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: runId })}
+                  onNewWorkflowRun={() => {
+                    const project = selectedProject ?? workspaceProjects[0];
+                    if (project) {
+                      setStartRunDialog({ projectId: project.id });
+                    }
+                  }}
+                />
               ) : (
                 <Sidebar
                   boards={workspaceBoards}
@@ -2344,6 +2399,7 @@ export function App() {
                   }}
                   onSelectWorkflowPolicies={project => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'policies' })}
                   onSelectRun={project => navigate({ projectId: project.id, feature: 'run' })}
+                  enableDeployments={settings?.preview?.enableDeployments ?? false}
                   onSelectDeployments={project => navigate({ projectId: project.id, feature: 'deployments' })}
                   onNewWorkflow={project => setNewWorkflowForProject(project.id)}
                   onDeleteWorkflow={async (project, workflowId) => {
@@ -2453,6 +2509,11 @@ export function App() {
                       sessions={agentSessions.map(session => ({
                         issueKey: session.issueKey,
                         title: session.title ?? session.taskDefinition.goal.slice(0, 60),
+                        state: session.state,
+                        model: session.model ?? session.provider,
+                        tokenUsage: session.tokenUsage,
+                        cost: session.cost,
+                        subagents: extractSubagents(session, agentSessions),
                         ...(session.agentId ? { agentId: session.agentId } : {}),
                         ...(session.profileId ? { profileId: session.profileId } : {}),
                         ...(session.hostId ? { hostId: session.hostId } : {})
