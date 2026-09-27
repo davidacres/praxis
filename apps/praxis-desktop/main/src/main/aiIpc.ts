@@ -913,6 +913,9 @@ export function registerAiIpc(): void {
       if (input.projectId) {
         sessionManager.updateAgentRuntime(issue.key, { projectId: input.projectId });
       }
+      if (input.parentSessionKey) {
+        sessionManager.updateAgentRuntime(issue.key, { parentSessionKey: input.parentSessionKey.trim() || undefined });
+      }
       if (profileId && hostId) {
         sessionManager.updateAgentRuntime(issue.key, {
           agentId: hostId,

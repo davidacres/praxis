@@ -854,3 +854,116 @@ export function sessionLimitNotice(session?: AgentSessionRecord): string | undef
   }
   return undefined;
 }
+
+export interface SubagentItem {
+  id: string;
+  title: string;
+  role?: string;
+  status: AgentSessionRecord['state'];
+  model: string;
+  tokenUsage?: AgentSessionRecord['tokenUsage'];
+  cost?: AgentSessionRecord['cost'];
+  sessionKey?: string;
+  startedAt?: string;
+  completedAt?: string;
+  elapsed?: string;
+  stepCount?: number;
+}
+
+export function formatSubagentTokens(tokenUsage?: AgentSessionRecord['tokenUsage'], cost?: AgentSessionRecord['cost']): string {
+  if (tokenUsage) {
+    if (typeof tokenUsage.totalTokens === 'number' && tokenUsage.totalTokens > 0) {
+      return formatTokenCount(tokenUsage.totalTokens);
+    }
+    const sum = (tokenUsage.inputTokens || 0) + (tokenUsage.outputTokens || 0);
+    if (sum > 0) {
+      return formatTokenCount(sum);
+    }
+  }
+  if (cost) {
+    return formatCost(cost) || '0 cost';
+  }
+  return '0 tokens';
+}
+
+export function extractSubagents(session: AgentSessionRecord, allSessions?: AgentSessionRecord[]): SubagentItem[] {
+  const items: SubagentItem[] = [];
+  const seenIds = new Set<string>();
+
+  // 1. Direct child sessions linked by parentSessionKey or controller workflow run
+  const childSessions = (allSessions ?? []).filter(s => {
+    if (!s || s.issueKey === session.issueKey) return false;
+    if (s.parentSessionKey === session.issueKey) return true;
+    if (
+      session.workflowRole === 'controller' &&
+      session.workflowRunId &&
+      s.workflowRunId === session.workflowRunId &&
+      isWorkflowStageSession(s)
+    ) {
+      return true;
+    }
+    return false;
+  });
+
+  for (const child of childSessions) {
+    seenIds.add(child.issueKey);
+    const role = child.workflowNodeId
+      ? `Stage: ${child.workflowNodeId}`
+      : child.workflowRole
+        ? `Role: ${child.workflowRole}`
+        : child.taskDefinition.kind && child.taskDefinition.kind !== 'general'
+          ? `Kind: ${child.taskDefinition.kind}`
+          : 'Subagent';
+
+    items.push({
+      id: child.issueKey,
+      title: sessionTitle(child),
+      role,
+      status: child.state,
+      model: child.model?.trim() || (child.provider ? providerLabel(child.provider) : 'Default model'),
+      tokenUsage: child.tokenUsage,
+      cost: child.cost,
+      sessionKey: child.issueKey,
+      startedAt: child.startedAt,
+      completedAt: child.completedAt,
+      elapsed: formatElapsed(child.startedAt, child.completedAt),
+      stepCount: child.stepCount
+    });
+  }
+
+  // 2. Subagent tool invocations in events (e.g. from ACP Claude Code or multi-agent tools)
+  const subagentToolNames = new Set(['agent', 'task', 'invoke_subagent', 'subagent', 'delegate']);
+  for (const event of session.events ?? []) {
+    const rawToolName = event.data?.toolName?.toLowerCase() ?? '';
+    const isSubagentTool = subagentToolNames.has(rawToolName) || rawToolName.includes('subagent');
+    if (!isSubagentTool) continue;
+    const callId = event.data?.callId || event.timestamp;
+    if (seenIds.has(callId)) continue;
+    seenIds.add(callId);
+
+    const status: AgentSessionRecord['state'] = event.data?.ok === false
+      ? 'failed'
+      : event.type === 'tool_complete'
+        ? 'completed'
+        : 'executing';
+
+    const eventTitle = event.data?.argsSummary
+      || event.summary.replace(/^Running tool:\s*/i, '').replace(/^Tool\s*(completed|failed):\s*/i, '')
+      || 'Subagent execution';
+
+    items.push({
+      id: callId,
+      title: eventTitle,
+      role: event.data?.toolName || 'Tool subagent',
+      status,
+      model: event.modelId?.trim() || session.model?.trim() || (session.provider ? providerLabel(session.provider) : 'Default model'),
+      tokenUsage: event.tokenUsage,
+      cost: event.cost,
+      startedAt: event.timestamp,
+      elapsed: event.durationMs ? `${Math.round(event.durationMs / 1000)}s` : undefined
+    });
+  }
+
+  return items;
+}
+

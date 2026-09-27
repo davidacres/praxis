@@ -124,8 +124,8 @@ test('blocks save while the graph is invalid and announces the errors', async ()
   const page = app.window;
   await newWorkflow(page, 'Quick change');
 
-  const rail = page.getByRole('navigation', { name: 'Workflow stages' });
-  await rail.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
+  const canvas = canvasOf(page);
+  await canvas.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
   // A configured profile is now always visible in the Agent Hub palette;
   // clear the launch binding explicitly to make the stage unrunnable.
   await pickChip(page, inspectorOf(page), 'Launch binding', /^None/);
@@ -133,16 +133,14 @@ test('blocks save while the graph is invalid and announces the errors', async ()
   const status = page.getByRole('status').filter({ hasText: /error/ });
   await expect(status).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save workflow' })).toBeDisabled();
-  await expect(rail.getByRole('button', { name: /^Implement \(agent-task\).*issue/ })).toBeVisible();
+  await expect(canvas.getByRole('button', { name: /^Implement \(agent-task\).*issue/ })).toBeVisible();
 });
 
-test('the canvas moves a stage with the keyboard and stays in sync with the rail', async () => {
+test('the canvas moves a stage with the keyboard and selects it', async () => {
   const page = app.window;
   await newWorkflow(page, 'Governed delivery');
 
-  const rail = page.getByRole('navigation', { name: 'Workflow stages' });
   const canvas = canvasOf(page);
-  await expect(rail).toBeVisible();
   await expect(canvas).toBeVisible();
 
   const qaCard = canvas.getByRole('button', { name: /^QA \(check\)/ });
@@ -152,7 +150,7 @@ test('the canvas moves a stage with the keyboard and stays in sync with the rail
   await qaCard.press('Shift+ArrowRight');
   await expect.poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.left)).not.toBe(before);
 
-  await rail.getByRole('button', { name: /^Review \(agent-task\)/ }).click();
+  await canvas.getByRole('button', { name: /^Review \(agent-task\)/ }).click();
   await expect(canvas.getByRole('button', { name: /^Review \(agent-task\)/ })).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -341,8 +339,8 @@ test('validates workflow connections, flow, and configuration via validate workf
   await expect(dialog).toBeHidden();
 
   // 2. Introduce an invalid configuration (clear launch binding / agent id)
-  const rail = page.getByRole('navigation', { name: 'Workflow stages' });
-  await rail.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
+  const canvas = canvasOf(page);
+  await canvas.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
   await pickChip(page, inspectorOf(page), 'Launch binding', /^None/);
 
   // 3. The header's validation chip reports the error, and re-runs validation when clicked
@@ -524,3 +522,299 @@ test('a connection selected on the canvas is edited in the inspector, with no se
   await expect(page.getByRole('listbox')).toHaveCount(0);
   expect(await canvasOf(page).locator('[data-testid^="wf-canvas-edge-line-"]').count()).toBe(edgesBefore);
 });
+
+test('floating toolbar provides stage tools, canvas tools, and deletion', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Quick change');
+
+  const canvas = canvasOf(page);
+  const toolbar = page.getByTestId('wf-designer-toolbar');
+  await expect(toolbar).toBeVisible();
+
+  // Arrow (Select) tool is the first tool and active by default
+  const selectTool = page.getByTestId('wf-tool-select');
+  await expect(selectTool).toBeVisible();
+  await expect(selectTool).toHaveClass(/is-active/);
+  await expect(selectTool).toHaveAttribute('title', /Select/);
+  await expect(selectTool).toHaveAttribute('aria-label', 'Select');
+
+  // Stage and library tool buttons exist and all have tooltips
+  for (const toolId of [
+    'wf-tool-select',
+    'wf-tool-agent-task',
+    'wf-tool-check',
+    'wf-tool-approval',
+    'wf-tool-deployment',
+    'wf-tool-join',
+    'wf-tool-agents',
+    'wf-tool-skills',
+    'wf-auto-arrange',
+    'wf-tool-zoom-in',
+    'wf-tool-zoom-out',
+    'wf-tool-reset-view',
+    'wf-delete-selected',
+    'wf-tool-help'
+  ]) {
+    const btn = page.getByTestId(toolId);
+    await expect(btn).toBeVisible();
+    const title = await btn.getAttribute('title');
+    expect(title).toBeTruthy();
+    const ariaLabel = await btn.getAttribute('aria-label');
+    expect(ariaLabel).toBeTruthy();
+  }
+
+  // Clicking check tool adds a check stage
+  const initialNodes = await canvas.locator('[data-node-id]').count();
+  await page.getByTestId('wf-tool-check').click();
+  await expect(canvas.locator('[data-node-id]')).toHaveCount(initialNodes + 1);
+
+  // The newly added check stage is selected, and delete button is enabled
+  const deleteBtn = page.getByTestId('wf-delete-selected');
+  await expect(deleteBtn).toBeEnabled();
+  await deleteBtn.click();
+  await expect(canvas.locator('[data-node-id]')).toHaveCount(initialNodes);
+
+  // Dragging toolbar handle moves the toolbar
+  const handle = toolbar.locator('.designer-toolbar-handle');
+  const boxBefore = await toolbar.boundingBox();
+  expect(boxBefore).not.toBeNull();
+  if (boxBefore) {
+    await handle.hover();
+    await page.mouse.down();
+    await page.mouse.move(boxBefore.x + 80, boxBefore.y + 80);
+    await page.mouse.up();
+    const boxAfter = await toolbar.boundingBox();
+    expect(boxAfter).not.toBeNull();
+    if (boxAfter) {
+      expect(boxAfter.x).not.toBe(boxBefore.x);
+    }
+  }
+});
+
+test('clicking and dragging on the designer surface pans the canvas without changing zoom', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Quick change');
+
+  const canvas = canvasOf(page);
+  const world = canvas.locator('.wf-canvas-world');
+
+  // Initial transform has scale(1)
+  const initialTransform = await world.evaluate(el => (el as HTMLElement).style.transform);
+  expect(initialTransform).toContain('scale(1)');
+
+  // Click on empty canvas space and drag to pan
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  if (canvasBox) {
+    const startX = canvasBox.x + 200;
+    const startY = canvasBox.y + 350;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 80, startY + 50);
+    await page.mouse.up();
+
+    const afterDragTransform = await world.evaluate(el => (el as HTMLElement).style.transform);
+    // Transform translate should change, but scale(1) MUST remain unchanged (no zooming on drag!)
+    expect(afterDragTransform).not.toBe(initialTransform);
+    expect(afterDragTransform).toContain('scale(1)');
+  }
+
+  // Wheel scrolling also pans without zooming
+  await canvas.hover();
+  await page.mouse.wheel(0, 100);
+  const afterWheelTransform = await world.evaluate(el => (el as HTMLElement).style.transform);
+  expect(afterWheelTransform).toContain('scale(1)');
+});
+
+test('floating toolbar provides agent and skill submenus with scrolling list, icon, and text', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Quick change');
+
+  const canvas = canvasOf(page);
+  const toolbar = page.getByTestId('wf-designer-toolbar');
+  await expect(toolbar).toBeVisible();
+
+  // Agents button exists and has a vertical line indicator on the left side
+  const agentsBtn = page.getByTestId('wf-tool-agents');
+  await expect(agentsBtn).toBeVisible();
+  await expect(agentsBtn).toHaveAttribute('title', /Agents/);
+  await expect(agentsBtn).toHaveAttribute('aria-haspopup', 'true');
+  const agentsLineIndicator = page.getByTestId('wf-tool-indicator-line-agents');
+  await expect(agentsLineIndicator).toBeVisible();
+
+  // Skills button exists and has a vertical line indicator on the left side
+  const skillsBtn = page.getByTestId('wf-tool-skills');
+  await expect(skillsBtn).toBeVisible();
+  await expect(skillsBtn).toHaveAttribute('title', /Skills/);
+  await expect(skillsBtn).toHaveAttribute('aria-haspopup', 'true');
+  const skillsLineIndicator = page.getByTestId('wf-tool-indicator-line-skills');
+  await expect(skillsLineIndicator).toBeVisible();
+
+  // Submenus are closed initially
+  await expect(page.getByTestId('wf-submenu-agents')).not.toBeVisible();
+  await expect(page.getByTestId('wf-submenu-skills')).not.toBeVisible();
+
+  // Click agents button to open agents submenu — opens to the right since toolbar is on the left
+  await agentsBtn.click();
+  const agentsSubmenu = page.getByTestId('wf-submenu-agents');
+  await expect(agentsSubmenu).toBeVisible();
+  await expect(agentsBtn).toHaveClass(/is-active/);
+  await expect(agentsSubmenu).not.toHaveClass(/designer-submenu--left/);
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: 'output/playwright/wf-agents-submenu.png' });
+
+  // Scrolling mouse wheel over the submenu list does NOT pan the canvas
+  const world = canvas.locator('.wf-canvas-world');
+  const worldBeforeWheel = await world.evaluate(el => (el as HTMLElement).style.transform);
+  await agentsSubmenu.locator('.designer-submenu-list').hover();
+  await page.mouse.wheel(0, 40);
+  const worldAfterWheel = await world.evaluate(el => (el as HTMLElement).style.transform);
+  expect(worldAfterWheel).toBe(worldBeforeWheel);
+
+  // Check header, count, and scrollable list
+  await expect(agentsSubmenu.locator('.designer-submenu-header')).toContainText('Agents');
+  const agentList = agentsSubmenu.locator('.designer-submenu-list');
+  await expect(agentList).toBeVisible();
+  const agentItems = agentsSubmenu.locator('.designer-submenu-item');
+  const agentCount = await agentItems.count();
+  expect(agentCount).toBeGreaterThan(0);
+
+  // Each agent item has an icon and text
+  const firstAgent = agentItems.first();
+  await expect(firstAgent.locator('.designer-submenu-item-icon')).toBeVisible();
+  await expect(firstAgent.locator('.designer-submenu-item-text')).toBeVisible();
+  const agentName = await firstAgent.locator('.designer-submenu-item-text').innerText();
+  expect(agentName.length).toBeGreaterThan(0);
+
+  // Clicking an agent adds it to canvas and closes submenu
+  const initialNodes = await canvas.locator('[data-node-id]').count();
+  await firstAgent.click();
+  await expect(canvas.locator('[data-node-id]')).toHaveCount(initialNodes + 1);
+  await expect(agentsSubmenu).not.toBeVisible();
+
+  // Open skills submenu
+  await skillsBtn.click();
+  const skillsSubmenu = page.getByTestId('wf-submenu-skills');
+  await expect(skillsSubmenu).toBeVisible();
+  await expect(skillsBtn).toHaveClass(/is-active/);
+  await page.screenshot({ path: 'output/playwright/wf-skills-submenu.png' });
+
+  // Check header, count, and scrollable list
+  await expect(skillsSubmenu.locator('.designer-submenu-header')).toContainText('Skills');
+  const skillItems = skillsSubmenu.locator('.designer-submenu-item');
+  const skillCount = await skillItems.count();
+  expect(skillCount).toBeGreaterThan(0);
+
+  // Each skill item has an icon and text
+  const firstSkill = skillItems.first();
+  await expect(firstSkill.locator('.designer-submenu-item-icon')).toBeVisible();
+  await expect(firstSkill.locator('.designer-submenu-item-text')).toBeVisible();
+  const skillTitle = await firstSkill.locator('.designer-submenu-item-text').innerText();
+  expect(skillTitle.length).toBeGreaterThan(0);
+
+  // Clicking a skill attaches it to the selected agent stage and closes submenu
+  await firstSkill.click();
+  await expect(skillsSubmenu).not.toBeVisible();
+
+  // Escape key closes open submenu
+  await agentsBtn.click();
+  await expect(page.getByTestId('wf-submenu-agents')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('wf-submenu-agents')).not.toBeVisible();
+
+  // Dragging toolbar to the right side of the canvas where there is more space on the left:
+  // Submenu should open to the left (designer-submenu--left)
+  const handle = toolbar.locator('.designer-toolbar-handle');
+  const canvasBox = await canvas.boundingBox();
+  const toolbarBox = await toolbar.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  expect(toolbarBox).not.toBeNull();
+  if (canvasBox && toolbarBox) {
+    const targetX = canvasBox.x + canvasBox.width - 80;
+    await handle.hover();
+    await page.mouse.down();
+    await page.mouse.move(targetX, toolbarBox.y);
+    await page.mouse.up();
+
+    // Now open agents submenu on the right side
+    await agentsBtn.click();
+    const rightSideSubmenu = page.getByTestId('wf-submenu-agents');
+    await expect(rightSideSubmenu).toBeVisible();
+    await expect(rightSideSubmenu).toHaveClass(/designer-submenu--left/);
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: 'output/playwright/wf-submenu-open-left.png' });
+  }
+
+  // With <= 10 items in fixture, search input is not rendered
+  await expect(page.getByTestId('wf-submenu-agents-search')).not.toBeVisible();
+});
+
+test('submenu displays search box when items exceed 10, filters real-time, and clears on escape or button click', async () => {
+  const page = app.window;
+  // Seed extra agents so total agents > 10
+  for (let i = 1; i <= 12; i++) {
+    seedAgent(app.userDataDir, `extra-agent-${i}`, `Specialist Agent ${String.fromCharCode(64 + i)}`);
+  }
+  await page.evaluate(async () => window.praxis.agentRuntime.refresh());
+
+  await newWorkflow(page, 'Quick change');
+  const canvas = canvasOf(page);
+  const toolbar = page.getByTestId('wf-designer-toolbar');
+  const agentsBtn = toolbar.getByTestId('wf-tool-agents');
+
+  // Open agents submenu
+  await agentsBtn.click();
+  const agentsSubmenu = page.getByTestId('wf-submenu-agents');
+  await expect(agentsSubmenu).toBeVisible();
+
+  // Search box is displayed because total agents > 10
+  const searchInput = page.getByTestId('wf-submenu-agents-search');
+  await expect(searchInput).toBeVisible();
+  await expect(searchInput).toHaveAttribute('placeholder', 'Search agents…');
+
+  const totalAgents = await agentsSubmenu.locator('.designer-submenu-item').count();
+  expect(totalAgents).toBeGreaterThan(10);
+
+  // Type filter query
+  await searchInput.fill('Specialist Agent B');
+  await expect(agentsSubmenu.locator('.designer-submenu-header')).toContainText(`1/${totalAgents}`);
+  await expect(agentsSubmenu.locator('.designer-submenu-item')).toHaveCount(1);
+  await expect(agentsSubmenu.locator('.designer-submenu-item-text')).toHaveText('Specialist Agent B');
+
+  // Clear button is visible when query is present
+  const clearBtn = agentsSubmenu.locator('.designer-submenu-search-clear');
+  await expect(clearBtn).toBeVisible();
+
+  // Visual screenshot of search in action
+  await page.screenshot({ path: 'output/playwright/wf-submenu-search.png' });
+
+  // Pressing Escape while query is present clears search text
+  await searchInput.press('Escape');
+  await expect(searchInput).toHaveValue('');
+  await expect(agentsSubmenu.locator('.designer-submenu-item')).toHaveCount(totalAgents);
+
+  // Test typing a query that matches nothing
+  await searchInput.fill('nonexistent-query-xyz');
+  await expect(agentsSubmenu.locator('.designer-submenu-empty')).toHaveText('No matching agents');
+  await expect(agentsSubmenu.locator('.designer-submenu-item')).toHaveCount(0);
+
+  // Clicking clear button clears query
+  await clearBtn.click();
+  await expect(searchInput).toHaveValue('');
+  await expect(agentsSubmenu.locator('.designer-submenu-item')).toHaveCount(totalAgents);
+
+  // Backspace/Delete inside search input does not delete any canvas elements
+  const stagesCountBefore = await canvas.locator('[data-node-id]').count();
+  await searchInput.focus();
+  await searchInput.fill('Agent');
+  await searchInput.press('Backspace');
+  await searchInput.press('Delete');
+  const stagesCountAfter = await canvas.locator('[data-node-id]').count();
+  expect(stagesCountAfter).toBe(stagesCountBefore);
+
+  // Clear search and press Escape to close submenu
+  await clearBtn.click();
+  await searchInput.press('Escape');
+  await expect(agentsSubmenu).not.toBeVisible();
+});
+

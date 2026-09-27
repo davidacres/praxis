@@ -728,6 +728,8 @@ export interface AiDelegateInput {
   profileId?: string;
   hostId?: string;
   skillNames?: string[];
+  /** Parent session that spawned this subagent session. */
+  parentSessionKey?: string;
 }
 
 export interface AiHandoverBriefEdits {

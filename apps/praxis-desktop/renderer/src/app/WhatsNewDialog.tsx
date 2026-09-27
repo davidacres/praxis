@@ -17,10 +17,47 @@ type Release = {
 
 const RELEASES: Release[] = [
   {
+    version: '0.3.3',
+    label: 'Standalone conversations, custom AI endpoints, and floating chat',
+    summary: 'Start freeform AI conversations with pop-out floating chat, connect OpenAI-compatible model providers, and organise boards with issue hierarchies.',
+    current: true,
+    sections: [
+      {
+        title: 'Features',
+        icon: 'sparkles',
+        items: [
+          'Standalone conversations: chat freely with AI agents without attaching to a ticket or board, accessible from the sidebar and Overview.',
+          'Floating chat window: pop out any conversation into an always-on-top window to keep chats visible alongside your workspace.',
+          'AI provider catalog: connect OpenAI-compatible endpoints (Ollama, LM Studio, OpenRouter, Groq, DeepSeek, and custom hosts) with live capability checks.',
+          'Parent issue hierarchy: organise planning items across Feature, Story, Task, Bug, and Subtask levels in app-storage projects.',
+          'Linux packages: native Linux installer targets and packaging scripts for AppImage and deb distributions.',
+          'Load all board cards: pagination controls now include a Load all option to view an entire board at once.'
+        ]
+      },
+      {
+        title: 'Improvements',
+        icon: 'star',
+        items: [
+          'Nested sticky headers keep project and section titles pinned as the sidebar scrolls.',
+          'Interactive login shell PATH is inherited by child processes on macOS and Linux, ensuring CLI tools resolve correctly.',
+          'Mobile companion pairing improvements: refined QR code scanner alignment, tool permission requests, and session archiving.',
+          'Settings navigation is now resizable, with adaptive header layout wrapping for narrower screens.'
+        ]
+      },
+      {
+        title: 'Fixes',
+        icon: 'check-square',
+        items: [
+          'Fixed workflow stage tool modes and model selection when switching AI models.',
+          'Fixed workflow QA report writeback after retries.'
+        ]
+      }
+    ]
+  },
+  {
     version: '0.3.2',
     label: 'Phone pairing, per-stage AI, and security review',
     summary: 'Pair a phone to continue desktop sessions, choose the AI for each workflow stage, and run a whole-codebase security review.',
-    current: true,
     sections: [
       {
         title: 'Features',

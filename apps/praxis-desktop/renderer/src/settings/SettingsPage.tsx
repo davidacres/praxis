@@ -3393,6 +3393,20 @@ function PreviewSection({
         mode={settings.preview.boardsSidebarMode}
         onChange={next => void update({ preview: { boardsSidebarMode: next } })}
       />
+      <Toggle
+        label="EasyMode sidebar (experimental)"
+        description="Replaces standard sidebar trees with a simplified Sessions and Automations workspace."
+        checked={settings.preview.enableEasyMode ?? false}
+        onChange={next => void update({ preview: { enableEasyMode: next } })}
+        testId="toggle-enable-easymode"
+      />
+      <Toggle
+        label="Deployments (experimental)"
+        description="Enable deployment profiles, targets, and delivery runs for projects."
+        checked={settings.preview.enableDeployments ?? false}
+        onChange={next => void update({ preview: { enableDeployments: next } })}
+        testId="toggle-enable-deployments"
+      />
     </>
   );
 }

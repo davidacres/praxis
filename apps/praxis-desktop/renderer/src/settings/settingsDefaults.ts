@@ -141,14 +141,17 @@ export const DEFAULT_APP_SETTINGS = {
   preview: {
     enableCreateIdea: false,
     enableNewProject: true,
-    boardsSidebarMode: 'classic' as 'classic' | 'work'
+    boardsSidebarMode: 'classic' as 'classic' | 'work',
+    enableEasyMode: false,
+    enableDeployments: false
   },
   appearance: {
     displayMode: 'compact' as 'compact' | 'large',
+    zoomFactor: 1,
     showBrandArtwork: true,
     themeId: 'praxis-light',
     themeMode: 'light' as 'light' | 'dark' | 'system',
-    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2'] as string[],
+    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'simple'] as string[],
     customThemes: [] as Array<{ id: string; name: string; mode: 'light' | 'dark'; description: string; preview: Record<string, string> }>,
     surfacePackId: 'parchment',
     surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false },
