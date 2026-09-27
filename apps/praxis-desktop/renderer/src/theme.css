@@ -13651,11 +13651,86 @@ button.session-chat-attachment {
 .agent-runtime-sessions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .agent-runtime-sessions .btn-compact { width: 100%; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ── Workflow Validation Dialog ─────────────────────────────────────────── */
+/* ── Workflow Validation Pane (Bottom Panel) ────────────────────────────── */
 
-.modal-card.wf-validation-dialog {
-  width: min(640px, 92vw);
-  max-height: 82vh;
+.wf-val-dock {
+  display: flex;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+.wf-val-dock > .wf-validation-pane {
+  flex: 1;
+  min-width: 0;
+}
+
+.wf-validation-pane {
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
+.wf-val-pane-tabs {
+  border-bottom: 1px solid var(--border);
+}
+
+.wf-val-pane-tabs .panel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.wf-val-revalidate-btn,
+.wf-val-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  height: 22px;
+  padding: 0 var(--space-2);
+}
+
+.wf-val-pane-body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: normal;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.wf-val-pane-body.is-cleared {
+  justify-content: center;
+  align-items: center;
+}
+
+.wf-val-cleared-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.wf-val-cleared-state svg {
+  color: var(--text-tertiary);
+}
+
+.wf-val-cleared-state strong {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.wf-val-cleared-state p {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
 }
 
 .wf-val-subtitle {
@@ -13718,8 +13793,8 @@ button.session-chat-attachment {
 }
 
 .wf-val-categories {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--space-2);
 }
 
@@ -13728,6 +13803,17 @@ button.session-chat-attachment {
   border-radius: var(--radius-md);
   background: var(--bg-sunken);
   padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.wf-val-card:hover {
+  background: var(--bg-hover);
+}
+
+.wf-val-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .wf-val-card-header {
@@ -13747,6 +13833,90 @@ button.session-chat-attachment {
   margin: 4px 0 0 0;
   font-size: var(--text-xs);
   color: var(--text-secondary);
+}
+
+.wf-val-stages-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.wf-val-section-header {
+  font-size: var(--text-xs);
+  color: var(--text);
+}
+
+.wf-val-stages-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-2);
+}
+
+.wf-val-stage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.wf-val-stage-card:hover {
+  background: var(--bg-hover);
+}
+
+.wf-val-stage-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.wf-val-stage-card.is-valid {
+  border-left: 3px solid var(--tone-green);
+}
+
+.wf-val-stage-card.is-invalid {
+  border-left: 3px solid var(--tone-red);
+}
+
+.wf-val-stage-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.wf-val-stage-name {
+  font-weight: 500;
+  font-size: var(--text-xs);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.wf-val-stage-type {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.wf-val-stage-issues-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 2px;
+}
+
+.wf-val-stage-issue-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wf-val-issues-section {
