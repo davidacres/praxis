@@ -392,7 +392,10 @@ export function WorkflowCanvas({
         const item = JSON.parse(raw) as WorkflowPaletteItem;
         if (item.kind !== 'agent' && item.kind !== 'skill' && item.kind !== 'stage') return;
         event.preventDefault();
-        const targetNodeId = (event.target as HTMLElement).closest('[data-node-id]')?.getAttribute('data-node-id') ?? undefined;
+        // Use elementsFromPoint to find the node even when the submenu overlays the canvas.
+        const elements = document.elementsFromPoint(event.clientX, event.clientY);
+        const nodeEl = elements.find(el => el instanceof HTMLElement && el.dataset.nodeId) as HTMLElement | undefined;
+        const targetNodeId = nodeEl?.dataset.nodeId;
         onPaletteDrop(item, targetNodeId, toCanvas(event.clientX, event.clientY));
       } catch {
         // Ignore a malformed external drag; only the local palette writes this MIME type.
@@ -439,7 +442,7 @@ export function WorkflowCanvas({
   const isSubmenuLeft = containerWidth > 0 && spaceLeft > spaceRight;
 
   return (
-    <div className="wf-canvas">
+    <div className="wf-canvas" onDragOver={onPaletteDragOver} onDrop={handlePaletteDrop}>
       <p id="wf-canvas-help" className="sr-only">
         Each stage is a button. Press Tab to move between stages, Enter or Space to select one
         and open its inspector, and the arrow keys to nudge the selected stage (hold Shift for a

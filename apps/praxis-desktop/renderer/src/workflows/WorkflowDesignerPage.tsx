@@ -159,11 +159,9 @@ export function WorkflowDesignerPage({
   // sessions. `undefined` is "still checking", not "unconfigured" — see
   // `AgentStageFields`'s use of this for why that third state matters.
   const [recommendationAvailable, setRecommendationAvailable] = useState<boolean | undefined>(undefined);
-  const [packs, setPacks] = useState<AgentWorkflowReference[]>([]);
 
   useEffect(() => {
     void window.praxis.agentRuntime.list().then(setCatalog);
-    void window.praxis.ai.listWorkflowPacks().then(setPacks).catch(() => setPacks([]));
     void window.praxis.workflows.effectivePolicy(project.id).then(setPolicy);
     void window.praxis.ai
       .listProviderStatuses()
@@ -324,24 +322,6 @@ export function WorkflowDesignerPage({
     [definition, profiles]
   );
 
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const q = searchQuery.trim().toLowerCase();
-
-  const filteredProfiles = useMemo(() => {
-    if (!q) return profiles;
-    return profiles.filter(
-      p => p.profile.name.toLowerCase().includes(q) || (p.profile.description && p.profile.description.toLowerCase().includes(q))
-    );
-  }, [profiles, q]);
-
-  const filteredSkills = useMemo(() => {
-    if (!q) return skills;
-    return skills.filter(
-      s => s.metadata.name.toLowerCase().includes(q) || (s.metadata.description && s.metadata.description.toLowerCase().includes(q))
-    );
-  }, [skills, q]);
-
   const addProfileStage = useCallback(
     (profileId: string, at?: { x: number; y: number }) => {
       if (!definition) return;
@@ -374,34 +354,6 @@ export function WorkflowDesignerPage({
     },
     [definition, catalog, mutate, selectStage, selectedAgentStage]
   );
-
-  const promotePack = useCallback(async (pack: AgentWorkflowReference) => {
-    const fallbackProfile = profiles.find(profile => profile.trusted);
-    const selected = selectedAgentStage?.type === 'agent-task' ? selectedAgentStage.agent : undefined;
-    const agentId = selected?.agentId || (fallbackProfile && (profileHostId(catalog, fallbackProfile.profile.id) ?? fallbackProfile.profile.id));
-    if (!agentId) {
-      setError('Add or trust an agent first, then promote this workflow pack.');
-      return;
-    }
-    setBusy(true);
-    setError(undefined);
-    try {
-      await window.praxis.workflows.promotePack(project.id, pack.id, {
-        agentId,
-        ...(selected?.profileId || fallbackProfile?.profile.id
-          ? { profileId: selected?.profileId ?? fallbackProfile?.profile.id }
-          : {}),
-        ...(selected?.hostId || (fallbackProfile && profileHostId(catalog, fallbackProfile.profile.id))
-          ? { hostId: selected?.hostId ?? profileHostId(catalog, fallbackProfile!.profile.id) }
-          : {})
-      });
-      onSaved?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }, [catalog, onSaved, project.id, selectedAgentStage]);
 
   if (notFound) {
     return (
@@ -537,189 +489,6 @@ export function WorkflowDesignerPage({
       )}
 
       <div className="wf-designer wf-designer--two">
-        <nav className="rail wf-composer-rail" aria-label="Workflow stages">
-          <div className="wf-rail-header">
-            <div className="wf-rail-header-top">
-              <span className="wf-rail-title">
-                <Icon name="tools" size={13} />
-                <span>Toolbox</span>
-              </span>
-              <span className="wf-rail-badge">{filteredProfiles.length + filteredSkills.length} tools</span>
-            </div>
-
-            <div className="wf-rail-search">
-              <Icon name="search" size={12} />
-              <input
-                type="search"
-                placeholder="Filter tools…"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                aria-label="Filter tools"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="wf-rail-search-clear"
-                  aria-label="Clear filter"
-                  onClick={() => setSearchQuery('')}
-                >
-                  <Icon name="close" size={10} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="wf-rail-body">
-            <section className="wf-composer-palette" aria-labelledby="wf-building-blocks">
-                <span id="wf-building-blocks" className="sr-only">Build with agents and skills</span>
-                <div className="wf-toolbox-section">
-                  <div className="wf-section-header">
-                    <span>Agents</span>
-                    <span className="wf-section-count">{filteredProfiles.length}</span>
-                  </div>
-                  <div className="wf-palette-group" role="group" aria-label="Available agents">
-                    {filteredProfiles.length > 0 ? (
-                      filteredProfiles.map(profile => {
-                        const blocked = profile.error || !profile.trusted;
-                        const title = profile.error
-                          ? `Cannot use ${profile.profile.name}: ${profile.error}`
-                          : !profile.trusted
-                            ? `${profile.profile.name} needs trust before it can run.`
-                            : `Add ${profile.profile.name} as an agent stage${profile.profile.description ? ` — ${profile.profile.description}` : ''}`;
-                        return (
-                          <button
-                            key={profile.profile.id}
-                            type="button"
-                            className="wf-palette-item wf-palette-item--agent"
-                            draggable={!blocked}
-                            disabled={Boolean(blocked)}
-                            title={title}
-                            data-testid={`wf-palette-agent-${profile.profile.id}`}
-                            onDragStart={event => {
-                              event.dataTransfer.effectAllowed = 'copy';
-                              event.dataTransfer.setData(
-                                'application/x-praxis-workflow-palette',
-                                JSON.stringify({ kind: 'agent', profileId: profile.profile.id } satisfies WorkflowPaletteItem)
-                              );
-                            }}
-                            onClick={() => addProfileStage(profile.profile.id)}
-                          >
-                            <span className="wf-palette-item-icon">
-                              <Icon name="robot" size={13} />
-                            </span>
-                            <div className="wf-palette-item-content">
-                              <span className="wf-palette-item-title">{profile.profile.name}</span>
-                              {profile.profile.description && (
-                                <span className="wf-palette-item-desc">{profile.profile.description}</span>
-                              )}
-                            </div>
-                            <div className="wf-palette-item-badges" style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
-                              {profile.scope === 'project' && (
-                                <span className="wf-palette-badge chip-muted" title="Project-scoped agent">
-                                  project
-                                </span>
-                              )}
-                              {blocked && (
-                                <span className="wf-palette-badge is-warn">
-                                  {profile.error ? 'needs repair' : 'needs trust'}
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <p className="wf-palette-empty">No matching agents</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="wf-toolbox-section">
-                  <div className="wf-section-header">
-                    <span>Skills</span>
-                    <span className="wf-section-count">{filteredSkills.length}</span>
-                  </div>
-                  <div className="wf-palette-group" role="group" aria-label="Available skills">
-                    {filteredSkills.length > 0 ? (
-                      filteredSkills.map(skill => {
-                        const blocked = skill.error || !skill.trusted;
-                        const title = blocked
-                          ? `Cannot use ${skillTitle(skill.metadata)}: ${skill.error ?? 'it needs trust before it can run.'}`
-                          : selectedAgentStage
-                            ? `Add ${skillTitle(skill.metadata)} to ${selectedAgentStage.name}${skill.metadata.description ? ` — ${skill.metadata.description}` : ''}`
-                            : `Select an agent stage, then add ${skillTitle(skill.metadata)}${skill.metadata.description ? ` — ${skill.metadata.description}` : ''}`;
-                        return (
-                          <button
-                            key={skill.metadata.name}
-                            type="button"
-                            className="wf-palette-item wf-palette-item--skill"
-                            draggable={!blocked}
-                            disabled={Boolean(blocked)}
-                            title={title}
-                            data-testid={`wf-palette-skill-${skill.metadata.name}`}
-                            onDragStart={event => {
-                              event.dataTransfer.effectAllowed = 'copy';
-                              event.dataTransfer.setData(
-                                'application/x-praxis-workflow-palette',
-                                JSON.stringify({ kind: 'skill', skillName: skill.metadata.name } satisfies WorkflowPaletteItem)
-                              );
-                            }}
-                            onClick={() => useSkill(skill.metadata.name)}
-                          >
-                            <span className="wf-palette-item-icon">
-                              <Icon name="sparkles" size={13} />
-                            </span>
-                            <div className="wf-palette-item-content">
-                              <span className="wf-palette-item-title">{skillTitle(skill.metadata)}</span>
-                              {skill.metadata.description && (
-                                <span className="wf-palette-item-desc">{skill.metadata.description}</span>
-                              )}
-                            </div>
-                            {blocked && (
-                              <span className="wf-palette-badge is-warn">
-                                {skill.error ? 'needs repair' : 'needs trust'}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <p className="wf-palette-empty">No matching skills</p>
-                    )}
-                  </div>
-                </div>
-
-                {packs.length > 0 && (
-                  <div className="wf-toolbox-section" data-testid="wf-pack-palette">
-                    <div className="wf-section-header">
-                      <span>Workflow packs</span>
-                      <span className="wf-section-count">{packs.length}</span>
-                    </div>
-                    <div className="wf-palette-group" role="group" aria-label="Available workflow packs">
-                      {packs.map(pack => (
-                        <button
-                          key={pack.id}
-                          type="button"
-                          className="wf-palette-item wf-palette-item--skill"
-                          disabled={busy}
-                          title="Create a governed workflow from this pack"
-                          onClick={() => void promotePack(pack)}
-                        >
-                          <span className="wf-palette-item-icon"><Icon name="package" size={13} /></span>
-                          <span className="wf-palette-item-content">
-                            <span className="wf-palette-item-title">{pack.name}</span>
-                            <span className="wf-palette-item-desc">Promote to governed workflow</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </section>
-          </div>
-
-        </nav>
-
         <div className="wf-canvas-slot">
           <WorkflowCanvas
             definition={definition}
@@ -772,11 +541,12 @@ export function WorkflowDesignerPage({
                 addProfileStage(item.profileId, at);
                 return;
               }
-              if (!targetNodeId) {
+              const effectiveTargetId = targetNodeId ?? selectedAgentStage?.id;
+              if (!effectiveTargetId) {
                 setError('Drop a skill onto an agent stage. Skills guide an agent; they do not create a runnable stage alone.');
                 return;
               }
-              useSkill(item.skillName, targetNodeId);
+              useSkill(item.skillName, effectiveTargetId);
             }}
           />
         </div>
