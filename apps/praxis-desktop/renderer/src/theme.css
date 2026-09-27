@@ -11247,10 +11247,9 @@ button.session-chat-attachment {
   align-items: stretch;
 }
 @media (max-width: 1200px) { .wf-designer { grid-template-columns: 220px minmax(0, 1fr) 300px; } }
-/* FX-BF-014 rev: inspector lives in the shell's right pane, so the designer is
-   two columns — rail + canvas — and the canvas gets the rest. */
-.wf-designer--two { grid-template-columns: 232px minmax(0, 1fr); gap: 6px; }
-@media (max-width: 1200px) { .wf-designer--two { grid-template-columns: 208px minmax(0, 1fr); } }
+/* Designer with floating toolbar: canvas gets the full workspace. */
+.wf-designer--two { grid-template-columns: minmax(0, 1fr); gap: 0; }
+@media (max-width: 1200px) { .wf-designer--two { grid-template-columns: minmax(0, 1fr); gap: 0; } }
 .wf-designer .rail { width: auto; }
 .wf-header-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
 .wf-header-del { margin-left: auto; }

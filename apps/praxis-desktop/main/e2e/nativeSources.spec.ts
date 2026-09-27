@@ -187,17 +187,20 @@ test('an agent from another AI tool can be placed on a workflow stage and bound 
   await dialog.getByRole('button', { name: /^Use/ }).click();
   await expect(dialog).toBeHidden();
 
-  // The user-folder Claude agent (trusted) and the Codex skill are in the palette.
-  const palette = page.getByLabel('Workflow stages').getByLabel('Build with agents and skills');
-  const reviewer = palette.getByTestId('wf-palette-agent-csharp-reviewer');
-  const skill = palette.getByTestId('wf-palette-skill-playwright');
+  // The user-folder Claude agent (trusted) and the Codex skill are in the toolbar submenus.
+  const toolbar = page.getByTestId('wf-designer-toolbar');
+  await toolbar.getByTestId('wf-tool-agents').click();
+  const reviewer = page.getByTestId('wf-tool-agent-csharp-reviewer');
   await expect(reviewer).toBeVisible();
-  await expect(skill).toBeVisible();
 
   const canvas = page.getByRole('application', { name: 'Workflow canvas' });
   await reviewer.dragTo(canvas, { targetPosition: { x: 330, y: 180 } });
   const stage = canvas.getByRole('button', { name: /^Csharp Reviewer \(agent-task\).*agent Csharp Reviewer/ });
   await expect(stage).toBeVisible();
-  await skill.dragTo(stage);
+
+  await toolbar.getByTestId('wf-tool-skills').click();
+  const skill = page.getByTestId('wf-tool-skill-playwright');
+  await expect(skill).toBeVisible();
+  await skill.click();
   await expect(stage).toContainText('playwright');
 });
