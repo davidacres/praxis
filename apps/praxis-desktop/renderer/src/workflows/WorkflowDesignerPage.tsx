@@ -18,8 +18,9 @@ import { fetchModelOptions, hasModelCatalog, isApiModelProvider, providerIconNam
 import { ChipSelect, type ChipSelectOption } from '../ui/ChipSelect';
 import { Icon, type IconName } from '../ui/Icon';
 import { NODE_KINDS, WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
-import { WorkflowValidationDialog } from './WorkflowValidationDialog';
+import { WorkflowValidationPane } from './WorkflowValidationPane';
 import { WorkflowAssistantPopover } from './WorkflowAssistantPopover';
+import { useResizable } from '../app/useResizable';
 import {
   addNode,
   bucketFeedback,
@@ -215,8 +216,16 @@ export function WorkflowDesignerPage({
     };
   }, [definition, project.id]);
 
-  const [validationDialogOpen, setValidationDialogOpen] = useState(false);
+  const [validationPaneOpen, setValidationPaneOpen] = useState(false);
   const [validating, setValidating] = useState(false);
+
+  const validationResizable = useResizable({
+    storageKey: 'tm-pane-wf-validation',
+    initial: 260,
+    min: 140,
+    max: 560,
+    side: 'bottom'
+  });
 
   const runValidation = useCallback(async () => {
     if (!definition) return;
@@ -224,7 +233,7 @@ export function WorkflowDesignerPage({
     try {
       const result = await window.praxis.workflows.validate(project.id, definition);
       setFeedback(bucketFeedback(definition, result));
-      setValidationDialogOpen(true);
+      setValidationPaneOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -552,16 +561,26 @@ export function WorkflowDesignerPage({
         </div>
       </div>
 
-      {validationDialogOpen && (
-        <WorkflowValidationDialog
-          project={project}
-          definition={definition}
-          feedback={feedback}
-          onClose={() => setValidationDialogOpen(false)}
-          onSelectNode={selectStage}
-          onRevalidate={() => void runValidation()}
-          busy={validating}
-        />
+      {validationPaneOpen && (
+        <>
+          <div
+            className={`splitter-h${validationResizable.dragging ? ' dragging' : ''}`}
+            aria-label="Resize validation pane"
+            {...validationResizable.handleProps}
+          />
+          <div className="panel-dock wf-val-dock" style={{ height: validationResizable.size }}>
+            <WorkflowValidationPane
+              project={project}
+              definition={definition}
+              feedback={feedback}
+              selectedNodeId={selectedNodeId}
+              onClose={() => setValidationPaneOpen(false)}
+              onSelectNode={selectStage}
+              onRevalidate={() => void runValidation()}
+              busy={validating}
+            />
+          </div>
+        </>
       )}
 
       {createPortal(
