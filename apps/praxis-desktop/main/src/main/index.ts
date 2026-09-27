@@ -22,7 +22,7 @@ import { registerAiWorkflowIpc } from './aiWorkflowIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { registerWorkflowIpc, recoverWorkflowRunsOnStartup } from './workflowIpc';
 import { registerGitIpc } from './gitIpc';
-import { attachWindowCloseGuard, attachWindowStateEvents, attachWindowZoomShortcuts, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
+import { attachWindowCloseGuard, attachWindowStateEvents, attachWindowZoomShortcuts, getInitialZoomFactor, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
 import { getSettingsBackend, initSettingsBackend } from './settingsBackendInstance';
 import { setMcpOAuthProviderSource } from '@praxis/core';
 import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
@@ -208,6 +208,13 @@ function createMainWindow(): void {
   if (vibrancy) {
     setWindowVibrancy(win, 'glass');
   }
+
+  const initialZoom = getInitialZoomFactor();
+  win.webContents.setZoomFactor(initialZoom);
+  win.webContents.on('did-finish-load', () => {
+    win.webContents.setZoomFactor(getInitialZoomFactor());
+  });
+
   win.once('ready-to-show', () => win.show());
   // A floating chat window with no main window behind it has no way back into
   // the app (the dock's "activate" only recreates one when no window is open

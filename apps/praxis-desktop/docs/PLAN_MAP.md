@@ -516,3 +516,47 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | TASK-367 | Task | Add tool execution summary chip to assistant messages with activity tab navigation | Complete | FX-BE-135 |
 | TASK-368 | Task | Add one-click copy message button with clipboard feedback | Complete | FX-BE-135 |
 | TASK-369 | Task | Verification, theming compatibility across surface packs, and accessibility/keyboard focus testing | Complete | FX-BE-135 |
+
+## TypeSafe Jev structured decisions
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| FX-BF-043 | Feature | TypeSafe Jev structured-decision model (deferred evaluation) | Proposed | None |
+| FX-BE-136 | Story | TypeSafe Jev structured-decision model evaluation | Proposed | FX-BF-043 |
+
+## AI provider catalog and OpenAI-compatible endpoints
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| FX-BF-044 | Feature | AI provider catalog and OpenAI-compatible endpoints | Complete | FX-BF-038 |
+| FX-BE-137 | Story | Open provider identity and custom endpoint settings | Complete | FX-BF-044 |
+| FX-BE-138 | Story | OpenAI-compatible preset catalog and wire options | Complete | FX-BE-137 |
+| FX-BE-139 | Story | Connection test and capability probe | Complete | FX-BE-137 |
+| FX-BE-140 | Story | Provider catalog settings UI | Complete | FX-BE-137, FX-BE-138, FX-BE-139 |
+| FX-BE-141 | Story | Runtime integration for custom endpoints | Complete | FX-BE-140 |
+
+## Standalone conversations
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| FX-BF-045 | Feature | Standalone conversations (chat outside any project) | In Progress | FX-BF-035, FX-BF-041 |
+| FX-BE-142 | Story | Conversations list and lifecycle | In Progress | FX-BF-045 |
+| FX-BE-143 | Story | Floating chat window | In Progress | FX-BE-142 |
+
+## EasyMode sidebar, Agent Details page, and Simple theme
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| [FX-BF-046](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/feature.md) | Feature | EasyMode sidebar, Agent Details page, and Simple theme | Complete | FX-BF-013, FX-BF-042, FX-BF-045 |
+| [FX-BE-144](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-144-easymode-sidebar-workspace/story.md) | Story | EasyMode sidebar workspace (Sessions, Automations, and Orca card hierarchy) | Complete | FX-BF-046 |
+| [TASK-377](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-144-easymode-sidebar-workspace/tasks/task-377-section-header-and-sidebar-host.md) | Task | Create EasyModeSidebar host container and reusable SectionHeader component | Complete | TASK-375 |
+| [TASK-378](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-144-easymode-sidebar-workspace/tasks/task-378-sessions-cards-subagents-glow-and-highlight.md) | Task | Implement EasyMode Sessions card list, subagents hierarchy, status glow, and selection highlight | Complete | TASK-377 |
+| [TASK-379](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-144-easymode-sidebar-workspace/tasks/task-379-automations-section-and-workflow-run-launch.md) | Task | Implement EasyMode Automations section with workflow run triggers and dialog | Complete | TASK-377 |
+| [FX-BE-145](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-145-dedicated-agent-details-center-page/story.md) | Story | Dedicated Agent Details center page (Activity feed, tool executions, and file edits) | Complete | FX-BE-144 |
+| [TASK-380](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-145-dedicated-agent-details-center-page/tasks/task-380-agent-details-route-and-shell.md) | Task | Create Agent Details route integration, top bar, and center pane shell | Complete | TASK-378 |
+| [TASK-381](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-145-dedicated-agent-details-center-page/tasks/task-381-agent-activity-timeline-diffs-undo.md) | Task | Implement Agent Activity timeline, live events, tool args, file diffs, and undo action | Complete | TASK-380 |
+| [TASK-382](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-145-dedicated-agent-details-center-page/tasks/task-382-easymode-e2e-verification-and-a11y.md) | Task | End-to-end verification, accessibility audit, and visual snapshot testing | Complete | TASK-376, TASK-378, TASK-379, TASK-381 |
+| [FX-BE-146](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-146-simple-dark-theme-and-preview-setting/story.md) | Story | Simple dark theme and preview setting | Complete | FX-BF-046 |
+| [TASK-375](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-146-simple-dark-theme-and-preview-setting/tasks/task-375-settings-contract-and-defaults.md) | Task | Define enableEasyMode setting contract, sanitizer, and renderer defaults | Complete | None |
+| [TASK-376](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-146-simple-dark-theme-and-preview-setting/tasks/task-376-simple-theme-and-preview-toggle.md) | Task | Register Simple dark theme, CSS theme definition, and Settings Preview toggle | Complete | TASK-375 |
+

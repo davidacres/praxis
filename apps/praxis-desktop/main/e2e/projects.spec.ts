@@ -95,8 +95,9 @@ test('creates a folderless Product project through the full wizard and opens its
   await expect(page.getByTestId('nav-board')).toHaveCount(0);
   await expect(page.getByTestId('board-nav-item').filter({ hasText: 'Customer Portal Board' })).toHaveCount(0);
   await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Customer Portal Board');
-  await expect(projectTree.getByText('Default', { exact: true })).toBeVisible();
-  await expect(projectTree.getByText('Repository', { exact: true })).toBeVisible();
+  await expect(projectTree.getByTestId('project-git-nav-item')).toBeVisible();
+  await expect(projectTree.getByTestId('project-git-changes-nav-item')).toBeVisible();
+  await expect(projectTree.getByTestId('project-run-nav-item')).toBeVisible();
   const themedColors = await projectTree.evaluate(tree => ({
     accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
     projectIcon: getComputedStyle(tree.querySelector('.project-icon')!).color,

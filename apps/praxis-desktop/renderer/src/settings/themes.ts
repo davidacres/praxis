@@ -58,6 +58,11 @@ const BUILT_IN_THEMES: ThemeDefinition[] = [
     id: 'tm-default-2', name: 'TMDefault2', family: 'Praxis', section: 'Recent', mode: 'dark',
     description: 'The original Praxis dark palette.',
     preview: { canvas: '#1c1c1c', panel: '#202020', raised: '#181818', border: '#3d3d3d', text: '#e4e4e4', muted: '#858585', accent: '#7c5cff', success: '#3fb950', warning: '#d29922', danger: '#f47067' }
+  },
+  {
+    id: 'simple', name: 'Simple', family: 'Praxis', section: 'Recent', mode: 'dark',
+    description: 'Clean, minimalist dark palette inspired by Orca with neutral charcoals and crisp contrast.',
+    preview: { canvas: '#0a0a0a', panel: '#171717', raised: '#141414', border: '#2a2a2a', text: '#fafafa', muted: '#888888', accent: '#ffffff', success: '#10b981', warning: '#f59e0b', danger: '#ef4444' }
   }
 ];
 

@@ -29,3 +29,32 @@ test('whole-window zoom scales the Praxis shell and supports VS Code shortcuts',
   await page.keyboard.press(`${modifier}+0`);
   await expect(zoomValue).toHaveText('100%');
 });
+
+test('zoom setting is preserved across app restart', async () => {
+  const page = app.window;
+  const zoomValue = page.getByTestId('titlebar-zoom-reset');
+
+  await expect(zoomValue).toHaveText('100%');
+  await page.getByTestId('titlebar-zoom-in').click();
+  await expect(zoomValue).toHaveText('110%');
+  await page.getByTestId('titlebar-zoom-in').click();
+  await expect(zoomValue).toHaveText('120%');
+
+  // Verify settings backend recorded the change
+  await expect.poll(async () => {
+    const settings = await page.evaluate(() => window.praxis.settings.get());
+    return settings.appearance.zoomFactor;
+  }).toBe(1.2);
+
+  // Close app and relaunch with the same profile and settings
+  const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
+  await app.electronApp.close();
+
+  app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
+  const restartedPage = app.window;
+  const restartedZoomValue = restartedPage.getByTestId('titlebar-zoom-reset');
+
+  await expect(restartedZoomValue).toHaveText('120%');
+  await expect(restartedPage.evaluate(() => window.praxis.window.getZoomFactor())).resolves.toBe(1.2);
+});
+

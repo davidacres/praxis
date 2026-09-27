@@ -242,6 +242,10 @@ export interface PreviewSettings {
   enableNewProject: boolean;
   /** Boards sidebar layout — 'classic' (separate views) or 'work' (board-centric). */
   boardsSidebarMode: BoardsSidebarMode;
+  /** Enable the experimental EasyMode sidebar view. */
+  enableEasyMode: boolean;
+  /** Enable deployment profiles, targets, and delivery runs for projects. */
+  enableDeployments: boolean;
 }
 
 export interface StartupSettings {
@@ -370,6 +374,8 @@ export interface AppearanceSettings {
    * is selected and edits are not mirrored anywhere.
    */
   activeLookId: string;
+  /** Whole-window UI zoom factor (0.7 to 1.5, default 1). Remembered between restarts. */
+  zoomFactor: number;
 }
 
 /**
@@ -597,14 +603,16 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   preview: {
     enableCreateIdea: false,
     enableNewProject: true,
-    boardsSidebarMode: 'classic'
+    boardsSidebarMode: 'classic',
+    enableEasyMode: false,
+    enableDeployments: false
   },
   appearance: {
     displayMode: 'compact',
     showBrandArtwork: true,
     themeId: 'praxis-light',
     themeMode: 'light',
-    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2'],
+    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'simple'],
     customThemes: [],
     surfacePackId: 'parchment',
     surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false },
@@ -612,7 +620,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     customSurfacePacks: [],
     looks: BUILT_IN_LOOKS.map(look => ({ ...look, surface: { ...look.surface }, priorityColors: { ...look.priorityColors } })),
     activeLookId: 'look-parchment',
-    priorityColors: { ...DEFAULT_PRIORITY_COLORS }
+    priorityColors: { ...DEFAULT_PRIORITY_COLORS },
+    zoomFactor: 1
   },
   terminal: {
     defaultProfileId: '',
@@ -669,6 +678,7 @@ export interface AppSettingsPatch {
   preview?: Partial<PreviewSettings>;
   appearance?: {
     displayMode?: 'compact' | 'large';
+    zoomFactor?: number;
     showBrandArtwork?: boolean;
     priorityColors?: Record<string, string>;
     themeId?: string;
@@ -1218,7 +1228,9 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         boardsSidebarMode: readBoardsSidebarMode(
           raw.preview.boardsSidebarMode,
           DEFAULT_APP_SETTINGS.preview.boardsSidebarMode
-        )
+        ),
+        enableEasyMode: readBoolean(raw.preview.enableEasyMode, DEFAULT_APP_SETTINGS.preview.enableEasyMode),
+        enableDeployments: readBoolean(raw.preview.enableDeployments, DEFAULT_APP_SETTINGS.preview.enableDeployments)
       }
     : { ...DEFAULT_APP_SETTINGS.preview };
 
@@ -1263,6 +1275,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ,customSurfacePacks: readCustomSurfacePacks(raw.appearance.customSurfacePacks)
         ,looks: appearanceLooks
         ,activeLookId: appearanceActiveLookId
+        ,zoomFactor: clampNumber(raw.appearance.zoomFactor, 0.7, 1.5, DEFAULT_APP_SETTINGS.appearance.zoomFactor)
       }
     : {
         displayMode: DEFAULT_APP_SETTINGS.appearance.displayMode,
@@ -1278,6 +1291,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ,customSurfacePacks: []
         ,looks: appearanceLooks
         ,activeLookId: appearanceActiveLookId
+        ,zoomFactor: DEFAULT_APP_SETTINGS.appearance.zoomFactor
       };
 
   const git: GitSettings = isRecord(raw) && isRecord(raw.git)
@@ -1492,7 +1506,10 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     activeLookId: patch.appearance?.activeLookId ?? base.appearance.activeLookId,
     priorityColors: isRecord(patch.appearance) && isRecord(patch.appearance.priorityColors)
       ? { ...base.appearance.priorityColors, ...patch.appearance.priorityColors }
-      : { ...base.appearance.priorityColors }
+      : { ...base.appearance.priorityColors },
+    zoomFactor: typeof patch.appearance?.zoomFactor === 'number'
+      ? Math.min(1.5, Math.max(0.7, Math.round(patch.appearance.zoomFactor * 10) / 10))
+      : base.appearance.zoomFactor
   };
   mirrorActiveLook(appearance, patch);
 

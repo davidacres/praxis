@@ -129,6 +129,8 @@ export interface SidebarProps {
   onSelectRun: (project: ProjectRecord) => void;
   /** Opens the project's deployment profiles (FX-BE-059 / FX-BE-060). */
   onSelectDeployments: (project: ProjectRecord) => void;
+  /** Whether the experimental Deployments feature is enabled in preview settings. */
+  enableDeployments?: boolean;
   onNewWorkflow: (project: ProjectRecord) => void;
   onDeleteWorkflow?: (project: ProjectRecord, workflowId: string) => void;
   onDeleteBoard: (board: Board) => void;
@@ -213,6 +215,7 @@ export function Sidebar({
   onSelectWorkflowPolicies,
   onSelectRun,
   onSelectDeployments,
+  enableDeployments,
   onNewWorkflow,
   onDeleteWorkflow,
   onDeleteBoard,
@@ -379,7 +382,6 @@ export function Sidebar({
                     const projectCollapsed = collapsed[`project:${project.id}`] ?? false;
                     const childCount = (defaultBoard ? 1 : 0) + linkedBoards.length;
                     const projectBoardsCollapsed = collapsed[`project:${project.id}:boards`] ?? false;
-                    const projectGitCollapsed = collapsed[`project:${project.id}:git`] ?? false;
                     const projectWorkflowsCollapsed = collapsed[`project:${project.id}:workflows`] ?? false;
                     const projectWorkflowList = projectWorkflows[project.id] ?? [];
                     const projectRuns = runsByProjectId[project.id] ?? [];
@@ -402,6 +404,47 @@ export function Sidebar({
                           <span className="tree-stack"><span className="tree-label">{project.name}</span><span className="tree-sub">{project.type}</span></span>
                           <span className="tree-meta">{childCount}</span>
                         </button>
+                        <div className="project-tree-actions">
+                          <button
+                            type="button"
+                            className={`project-header-action${activeFeature === 'git' && activeGitView !== 'changes' && selectedProjectId === project.id ? ' active' : ''}`}
+                            data-testid="project-git-nav-item"
+                            title={!project.workspaceFolder ? 'Set up a Git workspace for this project' : `Git graph · ${project.name}`}
+                            aria-label={`Git graph for ${project.name}`}
+                            onClick={e => {
+                              e.stopPropagation();
+                              onSelectGit(project, 'graph');
+                            }}
+                          >
+                            <Icon name="git-branch" size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className={`project-header-action${activeFeature === 'git' && activeGitView === 'changes' && selectedProjectId === project.id ? ' active' : ''}`}
+                            data-testid="project-git-changes-nav-item"
+                            title={!project.workspaceFolder ? 'Set up a Git workspace for this project' : `Git changes · ${project.name}`}
+                            aria-label={`Git changes for ${project.name}`}
+                            onClick={e => {
+                              e.stopPropagation();
+                              onSelectGit(project, 'changes');
+                            }}
+                          >
+                            <Icon name="file" size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className={`project-header-action${activeFeature === 'run' && selectedProjectId === project.id ? ' active' : ''}`}
+                            data-testid="project-run-nav-item"
+                            title={`Run services · ${project.name}`}
+                            aria-label={`Run services for ${project.name}`}
+                            onClick={e => {
+                              e.stopPropagation();
+                              onSelectRun(project);
+                            }}
+                          >
+                            <Icon name="server" size={13} />
+                          </button>
+                        </div>
                       </div>
                       {!projectCollapsed && <div className="project-tree-children">
                         <button className="sidebar-subsection-toggle" aria-expanded={!projectBoardsCollapsed} onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:boards`]: !projectBoardsCollapsed }))}>
@@ -445,30 +488,13 @@ export function Sidebar({
                           </div>;
                         })}
                         </>}
-                        <button className="sidebar-subsection-toggle" aria-expanded={!projectGitCollapsed} onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:git`]: !projectGitCollapsed }))}>
-                          <span className={`tree-section-icon${projectGitCollapsed ? '' : ' open'}`}><Icon name="git-branch" size={13} /></span><span>Repository</span><span className="tree-meta">{project.workspaceFolder ? '1' : 'Setup'}</span>
-                        </button>
-                        {!projectGitCollapsed && <button
-                          className={`tree-row project-git-row${activeFeature === 'git' && activeGitView !== 'changes' && selectedProjectId === project.id ? ' active' : ''}`}
-                          data-testid="project-git-nav-item"
-                          // Reachable without a workspace on purpose: Git Graph
-                          // then shows the setup screen, which explains what is
-                          // missing and offers Choose folder / Clone. A disabled
-                          // control would leave the user with no way forward.
-                          title={!project.workspaceFolder ? 'Set up a Git workspace for this project' : undefined}
-                          onClick={() => onSelectGit(project, 'graph')}
-                        ><span className="tree-icon"><Icon name="git-branch" size={14} /></span><span className="tree-label">Graph</span><span className="tree-badge">{project.workspaceFolder ? 'Git' : 'Setup'}</span></button>}
-                        {!projectGitCollapsed && project.workspaceFolder && <button className={`tree-row project-git-child${activeFeature === 'git' && activeGitView === 'changes' && selectedProjectId === project.id ? ' active' : ''}`} data-testid="project-git-changes-nav-item" onClick={() => onSelectGit(project, 'changes')}><span className="tree-icon"><Icon name="file" size={14} /></span><span className="tree-label">Changes</span></button>}
-                        <button
-                          className={`tree-row project-service-run-row${activeFeature === 'run' && selectedProjectId === project.id ? ' active' : ''}`}
-                          data-testid="project-run-nav-item"
-                          onClick={() => onSelectRun(project)}
-                        ><span className="tree-icon"><Icon name="server" size={14} /></span><span className="tree-label">Run</span></button>
-                        <button
-                          className={`tree-row project-deployments-row${activeFeature === 'deployments' && selectedProjectId === project.id ? ' active' : ''}`}
-                          data-testid="project-deployments-nav-item"
-                          onClick={() => onSelectDeployments(project)}
-                        ><span className="tree-icon"><Icon name="rocket" size={14} /></span><span className="tree-label">Deployments</span></button>
+                        {enableDeployments && (
+                          <button
+                            className={`tree-row project-deployments-row${activeFeature === 'deployments' && selectedProjectId === project.id ? ' active' : ''}`}
+                            data-testid="project-deployments-nav-item"
+                            onClick={() => onSelectDeployments(project)}
+                          ><span className="tree-icon"><Icon name="rocket" size={14} /></span><span className="tree-label">Deployments</span></button>
+                        )}
                         <div className="tree-subsection-heading">
                           <button
                             className="sidebar-subsection-toggle"

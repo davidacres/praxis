@@ -23,7 +23,7 @@ import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { providerIconName, providerLabel } from './modelProviders';
-import { basename, contextPressure, formatCost, formatContextLength, formatErrorMessage, formatModelCost, getKnownContextLength, getModelPricing, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
+import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, formatModelCost, getKnownContextLength, getModelPricing, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
 import { LiveTurnActivityIndicator, formatElapsedDuration } from './LiveTurnActivityIndicator';
@@ -835,6 +835,7 @@ export function SessionsPage({
   }, []);
 
   const selected = sessions.find(session => session.issueKey === selectedKey) ?? sessions[0];
+  const selectedSubagents = useMemo(() => (selected ? extractSubagents(selected, sessions) : []), [selected, sessions]);
   const selectedWorkflowRuns = useSessionWorkflowRuns(selected);
   const activeWorkflowRun = selectedWorkflowRuns.find(run => run.runId === selected?.workflowRunId);
   const workflowOwnsRuntime = selected?.workflowRole === 'controller'
@@ -1513,6 +1514,20 @@ export function SessionsPage({
                     <span className="badge badge-blocked" data-testid="session-header-failed-badge" style={{ marginLeft: 6 }}>
                       Failed
                     </span>
+                  )}
+                  {selectedSubagents.length > 0 && (
+                    <button
+                      type="button"
+                      className="session-header-subagents-chip"
+                      data-testid="session-header-subagents-chip"
+                      title={`${selectedSubagents.length} ${selectedSubagents.length === 1 ? 'subagent' : 'subagents'} used by this agent. Click to inspect.`}
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('praxis:session-tab', { detail: { tab: 'subagents' } }));
+                      }}
+                    >
+                      <Icon name="robot" size={11} />
+                      <span>{selectedSubagents.length} {selectedSubagents.length === 1 ? 'subagent' : 'subagents'}</span>
+                    </button>
                   )}
                 </>
               )}
