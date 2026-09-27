@@ -329,16 +329,27 @@ test('validates workflow connections, flow, and configuration via validate workf
   await expect(validateBtn).toBeVisible();
   await validateBtn.click();
 
-  const dialog = page.getByTestId('workflow-validation-dialog');
-  await expect(dialog).toBeVisible();
+  const pane = page.getByTestId('workflow-validation-pane');
+  await expect(pane).toBeVisible();
   await expect(page.getByTestId('wf-validation-banner')).toContainText('Workflow is configured and valid');
   await expect(page.getByTestId('wf-val-category-connections')).toContainText('Valid');
   await expect(page.getByTestId('wf-val-category-flow')).toContainText('Valid');
   await expect(page.getByTestId('wf-val-category-configuration')).toContainText('Valid');
+  await page.screenshot({ path: 'output/playwright/workflow-validation-pane.png' });
 
-  // Close dialog via Done button
-  await page.getByTestId('wf-val-done-btn').click();
-  await expect(dialog).toBeHidden();
+  // Test clear and revalidate buttons in pane
+  const clearBtn = page.getByTestId('wf-val-clear-btn');
+  await clearBtn.click();
+  await expect(page.getByTestId('wf-val-cleared-state')).toBeVisible();
+
+  const recheckBtn = page.getByTestId('wf-val-recheck-btn');
+  await recheckBtn.click();
+  await expect(page.getByTestId('wf-val-cleared-state')).toHaveCount(0);
+  await expect(page.getByTestId('wf-validation-banner')).toContainText('Workflow is configured and valid');
+
+  // Close pane via close button
+  await page.getByTestId('wf-val-close-btn').click();
+  await expect(pane).toBeHidden();
 
   // 2. Introduce an invalid configuration (clear launch binding / agent id)
   const canvas = canvasOf(page);
@@ -349,15 +360,15 @@ test('validates workflow connections, flow, and configuration via validate workf
   await expect(validateBtn).toContainText(/1 error|\d+ errors/);
   await validateBtn.click();
 
-  await expect(dialog).toBeVisible();
+  await expect(pane).toBeVisible();
   await expect(page.getByTestId('wf-validation-banner')).toContainText('Workflow configuration requires attention');
   await expect(page.getByTestId('wf-val-category-configuration')).toContainText(/issue/);
+  await page.screenshot({ path: 'output/playwright/workflow-validation-pane-errors.png' });
 
   // Check Go to stage functionality
-  const gotoBtn = dialog.getByRole('button', { name: 'Go to stage' }).first();
+  const gotoBtn = pane.getByRole('button', { name: 'Go to stage' }).first();
   await expect(gotoBtn).toBeVisible();
   await gotoBtn.click();
-  await expect(dialog).toBeHidden();
   await expect(canvasOf(page).getByRole('button', { name: /^Implement \(agent-task\)/ })).toHaveAttribute('aria-pressed', 'true');
 });
 
