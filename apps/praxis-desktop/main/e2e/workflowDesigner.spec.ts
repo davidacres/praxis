@@ -217,22 +217,24 @@ test('builds an agent handoff stage from the palette and attaches a specialist s
   const page = app.window;
   await newWorkflow(page, 'Quick change');
 
-  const palette = page.getByLabel('Workflow stages').getByLabel('Build with agents and skills');
   const canvas = canvasOf(page);
-  const reviewer = palette.getByTestId('wf-palette-agent-code-reviewer');
-  const audit = palette.getByTestId('wf-palette-skill-code-audit');
+  const toolbar = page.getByTestId('wf-designer-toolbar');
 
+  // Open agents submenu and drag an agent to empty canvas
+  await toolbar.getByTestId('wf-tool-agents').click();
+  const reviewer = page.getByTestId('wf-tool-agent-code-reviewer');
   await expect(reviewer).toBeVisible();
-  await expect(audit).toBeVisible();
 
-  // Dragging an agent to empty canvas creates a runnable specialist stage.
   await reviewer.dragTo(canvas, { targetPosition: { x: 330, y: 180 } });
   const reviewerStage = canvas.getByRole('button', { name: /^Code Reviewer \(agent-task\).*agent Code Reviewer/ });
   await expect(reviewerStage).toBeVisible();
   await expect(reviewerStage).toHaveAttribute('aria-pressed', 'true');
 
-  // Dropping a skill on that stage binds the specialist guidance and pins its version.
-  await audit.dragTo(reviewerStage);
+  // Open skills submenu and click a skill to attach it to the selected stage
+  await toolbar.getByTestId('wf-tool-skills').click();
+  const audit = page.getByTestId('wf-tool-skill-code-audit');
+  await expect(audit).toBeVisible();
+  await audit.click();
   await expect(reviewerStage).toContainText('code-audit');
   await expect(inspectorOf(page).getByTestId('wf-node-skill-code-audit')).toBeVisible();
   await expect(page.getByRole('main')).toHaveScreenshot('workflow-designer-composition.png');
