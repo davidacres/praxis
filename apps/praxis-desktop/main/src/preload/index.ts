@@ -474,7 +474,8 @@ const praxis: PraxisIpc = {
     update: (workspaceId: string, patch: UpdateWorkspaceInput) => ipcRenderer.invoke('workspaces:update', workspaceId, patch),
     remove: (workspaceId: string) => ipcRenderer.invoke('workspaces:remove', workspaceId),
     saveToFile: (workspaceId: string) => ipcRenderer.invoke('workspaces:saveToFile', workspaceId),
-    openFromFile: () => ipcRenderer.invoke('workspaces:openFromFile')
+    openFromFile: () => ipcRenderer.invoke('workspaces:openFromFile'),
+    openFolder: (folderPath: string) => ipcRenderer.invoke('workspaces:openFolder', folderPath)
   },
   terminal: {
     listProfiles: () => ipcRenderer.invoke('terminal:listProfiles'),

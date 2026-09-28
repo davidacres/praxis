@@ -82,7 +82,9 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
   const inspection = project.folderInspection;
   const stack = inspection ? [...inspection.languages, ...inspection.frameworks, ...inspection.manifests] : [];
   const workspaceName = project.workspaceFolder?.split(/[\\/]/).filter(Boolean).pop();
-  const boardCount = project.linkedBoards.length;
+  const hasOwnedBoard = project.planningMode !== 'files'
+    && connections.some(connection => connection.settings.projectId === project.id);
+  const boardCount = project.linkedBoards.length + (hasOwnedBoard ? 1 : 0);
   const gitState: { label: string; on: boolean } = !project.workspaceFolder
     ? { label: 'No folder', on: false }
     : inspection?.hasGit
@@ -192,7 +194,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
     <div className="project-home-chips">
       <span className={`ph-chip${gitState.on ? ' is-on' : ''}`}><Icon name="git-branch" size={12} />{gitState.label}</span>
       <span className="ph-chip"><Icon name="tools" size={12} />{TOOL_MODE_LABEL[project.defaultAiToolMode]}</span>
-      <span className="ph-chip"><Icon name="columns" size={12} />{boardCount ? `${boardCount} board${boardCount === 1 ? '' : 's'}` : 'No boards'}</span>
+      <span className="ph-chip"><Icon name={project.planningMode === 'files' ? 'folder' : 'columns'} size={12} />{project.planningMode === 'files' ? 'File structure' : boardCount ? `${boardCount} board${boardCount === 1 ? '' : 's'}` : 'No boards'}</span>
     </div>
 
     <div className="project-home-sections">
@@ -213,7 +215,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
           : <div className={`ph-brief-row${project.brief[field.key]?.trim() ? ' is-filled' : ''}`} key={field.key}><Icon name={project.brief[field.key]?.trim() ? 'check' : 'dot'} size={12} /><div><strong>{field.label}</strong>{project.brief[field.key]?.trim() && <p>{project.brief[field.key]}</p>}</div></div>)}
       </section>
 
-      <section className="project-panel" data-testid="project-workflow">
+      {project.planningMode !== 'files' && <section className="project-panel" data-testid="project-workflow">
         <div className="ph-section-head">
           <h2>Workflow</h2>
           <span className="ph-count">{(editing ? stages : project.workflowStages).length}</span>
@@ -256,7 +258,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
               A removed stage&rsquo;s tickets move to the closest remaining stage of the same kind.
             </p>}
         </>}
-      </section>
+      </section>}
 
       <section className="project-panel">
         <div className="ph-section-head"><h2>Workspace</h2></div>
@@ -274,8 +276,15 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
       </section>
 
       <section className="project-panel">
-        <div className="ph-section-head"><h2>Planning sources</h2>{boardCount > 0 && <span className="ph-count">{boardCount}</span>}</div>
-        {boardCount === 0 && <p className="muted">No board is linked yet. Boards connected to this project will appear here.</p>}
+        <div className="ph-section-head">
+          <h2>Planning sources</h2>
+          <div className="ph-section-actions">
+            {project.planningMode === 'files' && <button className="btn btn-primary" data-testid="project-add-board" onClick={async () => { try { onChanged(await window.praxis.projects.update(project.id, { planningMode: 'board' })); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } }}>Add board</button>}
+            {boardCount > 0 && <span className="ph-count">{boardCount}</span>}
+          </div>
+        </div>
+        {project.planningMode === 'files' && <p className="muted">This project is using its file structure. Add a board when you want tracked work items.</p>}
+        {project.planningMode !== 'files' && project.linkedBoards.length === 0 && <p className="muted">Your project board is available in the sidebar. Boards connected to this project will appear here.</p>}
         {project.linkedBoards.map(link => <div className="linked-board" key={`${link.connectionId}:${link.boardId}`}>
           <div><strong>{link.displayName}</strong><small>{link.connectionId.startsWith('project-plans-') ? 'Local plans · read-only' : 'Linked board'}</small></div>
           <button className="icon-btn" title="Remove from planning sources" aria-label={`Remove ${link.displayName} from planning sources`} onClick={async () => onChanged(await window.praxis.projects.unlinkBoard(project.id, link.connectionId, link.boardId))}><Icon name="trash" size={14} /></button>

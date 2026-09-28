@@ -100,6 +100,8 @@ export interface ProjectDocumentsResult {
  * truth — `workItems` is then unused and the board is served by `FolderService`.
  */
 export type ProjectStorage = 'app' | 'folder';
+/** Whether the project owns a Praxis board or is just a file-backed workspace. */
+export type ProjectPlanningMode = 'board' | 'files';
 
 /**
  * The AI's answer to "which workflow template fits this project", cached on
@@ -186,6 +188,8 @@ export interface ProjectRecord {
   brief: Record<string, string>;
   /** Defaults to `app` when absent, which is what every project written before this field was. */
   storage?: ProjectStorage;
+  /** Defaults to `board` for records written before file-only quick start existed. */
+  planningMode?: ProjectPlanningMode;
   workspaceFolder?: string;
   workflowStages: ProjectWorkflowStage[];
   defaultBoardId: string;
@@ -212,6 +216,8 @@ export interface CreateProjectInput {
   startingPoint: ProjectStartingPoint;
   /** Defaults to `app`. `folder` requires a resolved `workspaceFolder`. */
   storage?: ProjectStorage;
+  /** Defaults to `board`; `files` creates no project-owned board or connection. */
+  planningMode?: ProjectPlanningMode;
   /** Existing folder, or the parent folder when startingPoint is new-folder. */
   folderPath?: string;
   folderName?: string;
@@ -221,6 +227,8 @@ export interface CreateProjectInput {
 }
 
 export interface UpdateProjectInput {
+  /** Switch a file-only project into board mode, or back to file-only mode. */
+  planningMode?: ProjectPlanningMode;
   name?: string;
   /**
    * Renaming after tickets exist is allowed — tracker association resolves

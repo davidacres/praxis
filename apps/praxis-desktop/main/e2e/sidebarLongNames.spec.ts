@@ -113,7 +113,7 @@ test('long workflow, run and session names leave their action buttons reachable 
   const runPanel = page.getByTestId('wf-run-panel');
   await expect(runPanel).toBeVisible();
   await expectButtonsInside(runPanel, 'run panel');
-  await page.getByTestId('project-workflow-runs-nav-item').click();
+  await page.getByTestId('project-sessions-nav-item').click();
   const card = page.locator('.wf-run-card').first();
   await expect(card).toBeVisible();
   await expectButtonsInside(card, 'runs browser row');

@@ -164,7 +164,6 @@ notarization when the credentials are absent:
 
 | Variable | For |
 | --- | --- |
-| `PRAXIS_PUBLISH_OWNER` / `PRAXIS_PUBLISH_REPO` | the GitHub release feed updates are read from |
 | `GH_TOKEN` | uploading the release |
 | `CSC_LINK` / `CSC_KEY_PASSWORD` | the Developer ID certificate (macOS) or code-signing cert (Windows) |
 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | notarization |
@@ -173,6 +172,11 @@ notarization when the credentials are absent:
 npm run dist:mac:publish --workspace=@praxis/desktop-main
 npm run dist:win:publish --workspace=@praxis/desktop-main
 ```
+
+The update feed is explicitly pinned to `davidacres/praxis` in the desktop
+package's electron-builder configuration. Release builds include the updater
+manifests and blockmaps; macOS builds also include the ZIP consumed by
+Squirrel.Mac alongside the user-facing DMG.
 
 **macOS updates require a signed build.** Squirrel.Mac refuses unsigned
 bundles, so an unsigned build can find an update but not install one — it

@@ -1,0 +1,17 @@
+{
+  "projectKey": "PXMOB",
+  "projectName": "Praxis Mobile",
+  "allowIssueCreation": true,
+  "workflow": [
+    {
+      "id": "project-1789239305854-dg8yni-backlog",
+      "name": "Backlog",
+      "category": "todo"
+    },
+    {
+      "id": "project-1789239305854-dg8yni-done",
+      "name": "Done",
+      "category": "done"
+    }
+  ]
+}

@@ -821,6 +821,77 @@ export function App() {
     setNav({ entries: [{ feature: 'overview' }], index: 0 });
   }, [touchWorkspace]);
 
+  const createFileOnlyProjectInWorkspace = useCallback(async (workspaceId: string, folder: string) => {
+    const inspection = await window.praxis.projects.inspectFolder(folder);
+    if (!inspection.exists || !inspection.isDirectory) throw new Error('Choose an existing project folder.');
+    const folderName = folder.split(/[\\/]/).filter(Boolean).at(-1) ?? 'Project';
+    const compactKey = folderName.replace(/[^A-Za-z0-9]+/g, '').slice(0, 8).toUpperCase();
+    const key = (/^[A-Z]/.test(compactKey) ? compactKey : `P${compactKey}`).slice(0, 15) || 'PROJECT';
+    const project = await window.praxis.projects.create({
+      name: folderName,
+      key,
+      type: 'software',
+      purpose: '',
+      brief: {},
+      startingPoint: 'existing-folder',
+      folderPath: folder,
+      workflowStages: [
+        { id: 'stage-1', name: 'Backlog', category: 'todo' },
+        { id: 'stage-2', name: 'Done', category: 'done' }
+      ],
+      starterTickets: [],
+      defaultAiToolMode: 'full',
+      storage: 'app',
+      planningMode: 'files'
+    }, workspaceId);
+    return project;
+  }, []);
+
+  const quickStartFromFolder = useCallback(async () => {
+    if (!activeWorkspaceId) throw new Error('Create a workspace before starting a project.');
+    const folder = await window.praxis.dialog.pickFolder('Choose project folder');
+    if (!folder) return false;
+    const project = await createFileOnlyProjectInWorkspace(activeWorkspaceId, folder);
+    setCreatedWorkspaceId(undefined);
+    setProjects(current => [...current.filter(item => item.id !== project.id), project]);
+    setWorkspaces(current => current.map(workspace => workspace.id === activeWorkspaceId
+      ? { ...workspace, projectIds: [...new Set([...workspace.projectIds, project.id])], defaultProjectId: workspace.defaultProjectId ?? project.id }
+      : workspace));
+    setGettingStarted(false);
+    refreshBoards();
+    refreshConnections();
+    navigate({ projectId: project.id });
+    return true;
+  }, [activeWorkspaceId, createFileOnlyProjectInWorkspace, navigate, refreshBoards, refreshConnections]);
+
+  const openExistingFolder = useCallback(async () => {
+    const folder = await window.praxis.dialog.pickFolder('Open existing project folder');
+    if (!folder) return false;
+    const workspace = await window.praxis.workspaces.openFolder(folder);
+    if (!workspace) throw new Error('Praxis could not open that folder.');
+    await window.praxis.workspaces.setActive(workspace.id);
+    setWorkspaces(current => [...current.filter(item => item.id !== workspace.id), workspace]);
+    setActiveWorkspaceId(workspace.id);
+    localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
+    touchWorkspace(workspace.id);
+    const normalizedFolder = folder.replace(/[\\/]+$/, '').toLowerCase();
+    const existing = (await window.praxis.projects.list()).find(project =>
+      workspace.projectIds.includes(project.id) &&
+      project.workspaceFolder?.replace(/[\\/]+$/, '').toLowerCase() === normalizedFolder
+    );
+    const project = existing ?? await createFileOnlyProjectInWorkspace(workspace.id, folder);
+    setProjects(current => [...current.filter(item => item.id !== project.id), project]);
+    setWorkspaces(current => current.map(item => item.id === workspace.id
+      ? { ...item, projectIds: [...new Set([...item.projectIds, project.id])], defaultProjectId: item.defaultProjectId ?? project.id }
+      : item));
+    setCreatedWorkspaceId(undefined);
+    setGettingStarted(false);
+    refreshBoards();
+    refreshConnections();
+    navigate({ projectId: project.id });
+    return true;
+  }, [createFileOnlyProjectInWorkspace, navigate, refreshBoards, refreshConnections, touchWorkspace]);
+
   const startFirstProject = useCallback(async (wizardMode: 'create' | 'existing') => {
     let workspaceId = activeWorkspaceId;
     if (!workspaceId || !workspaces.some(workspace => workspace.id === workspaceId)) {
@@ -1585,7 +1656,9 @@ export function App() {
         navigate({ feature: 'connections' });
       }}
       projectCount={workspaceProjects.length}
-      onNewProject={newProjectEnabled ? () => requestProjectWizard('create') : undefined}
+      {...(composerProject
+        ? { onNewWorkflow: () => setNewWorkflowForProject(composerProject.id) }
+        : { onNewProject: newProjectEnabled ? () => requestProjectWizard('create') : undefined })}
       toolModeForBoard={board => projectIdForConnection(board.connectionId, connections)
         ? projects.find(item => item.id === projectIdForConnection(board.connectionId, connections))?.defaultAiToolMode
         : undefined}
@@ -2235,11 +2308,13 @@ export function App() {
           createdWorkspace={workspaces.find(workspace => workspace.id === createdWorkspaceId)}
           onOpenWorkspace={openWorkspace}
           onOpenWorkspaceFile={openWorkspaceFromFile}
+          onOpenExistingFolder={openExistingFolder}
           onCreateWorkspace={createWorkspaceFromGettingStarted}
           onStartFirstProject={startFirstProject}
           onSkipSetup={() => void skipWorkspaceSetup()}
           onCreateProject={() => requestProjectWizard('create', 'onboarding')}
           onAddExistingProject={() => requestProjectWizard('existing', 'onboarding')}
+          onQuickStartFromFolder={quickStartFromFolder}
           onContinueEmpty={() => {
             setCreatedWorkspaceId(undefined);
             setGettingStarted(false);
@@ -2343,7 +2418,10 @@ export function App() {
                     navigate(feature === 'git' && selectedProject ? { projectId: selectedProject.id, feature } : { feature });
                   }}
                   featureCounts={featureCounts}
-                  onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
+                  onNewSession={project => navigate({
+                    newSession: true,
+                    ...((project ?? composerProject) ? { projectId: (project ?? composerProject)!.id } : {})
+                  })}
                   onNewConversation={() => navigate({ newConversation: true })}
                   onNewProject={() => requestProjectWizard('create')}
                   onAddExistingProject={() => requestProjectWizard('existing')}
@@ -2551,6 +2629,7 @@ export function App() {
                     <ProjectHome project={selectedProject} boards={boards} connections={connections} onChanged={project => {
                       setProjects(current => current.map(item => item.id === project.id ? project : item));
                       refreshBoards();
+                      refreshConnections();
                     }} onOpenBoard={openBoard} onOpenGit={() => navigate({ projectId: selectedProject.id, feature: 'git' })} />
                   ) : selectedBoard && boardDetails && route.issueKey === undefined ? (
                     <BoardDetailsPanel

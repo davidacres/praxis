@@ -71,11 +71,12 @@ async function startRun(page: Page, task: string, options: { ticket?: string } =
   await expect(runPanel(page)).toBeVisible();
 }
 
-/** Opens an existing run from its node under the sidebar's Runs group. */
+/** Opens an existing workflow run from the project's Sessions group. */
 async function openRun(page: Page, name: RegExp = /./): Promise<void> {
-  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  await page.getByTestId('project-workflow-run-row').filter({ hasText: name }).first().getByRole('button').first().click();
+  const row = page.getByTestId('project-workflow-run-row').filter({ hasText: name }).first();
+  const toggle = row.getByRole('button').first();
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+  await row.getByTestId('automation-inline-open-run').click();
   await expect(runPanel(page)).toBeVisible();
 }
 

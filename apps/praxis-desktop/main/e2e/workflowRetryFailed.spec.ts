@@ -112,9 +112,10 @@ test('a failed step on a failed run has a retry icon button that reopens the run
   await expect.poll(status, { timeout: 60000 }).toBe('failed');
 
   await page.reload();
-  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  await page.getByTestId('project-workflow-run-row').first().getByRole('button').first().click();
+  const sidebarRun = page.getByTestId('project-workflow-run-row').first();
+  const sidebarToggle = sidebarRun.getByRole('button').first();
+  if ((await sidebarToggle.getAttribute('aria-expanded')) === 'false') await sidebarToggle.click();
+  await sidebarRun.getByTestId('automation-inline-open-run').click();
 
   const step = page.getByTestId('wf-vpipe-step-verify');
   await expect(step).toHaveAttribute('data-lane', 'failed');
