@@ -1,6 +1,7 @@
 # Publishing Praxis Packages and Releases
 
-This document explains how to publish Praxis packages to GitHub Packages and create releases.
+This document explains how to publish Praxis libraries to GitHub Packages and
+ship the Praxis Desktop installers through GitHub Releases.
 
 ## Publishing Packages to GitHub Packages
 
@@ -49,19 +50,77 @@ Or use it in your `package.json`:
 
 ## Creating Releases
 
+### Local signed builds
+
+The local scripts pass signing credentials directly to electron-builder and do
+not write passwords or certificates into the repository.
+
+For macOS, export a password-protected **Developer ID Application** certificate
+and its private key from Keychain Access as a `.p12`, then run:
+
+```bash
+npm run release:local:mac -- --certificate /secure/path/DeveloperIDApplication.p12
+```
+
+The script prompts for the `.p12` password, Apple ID, Team ID, and Apple
+app-specific password. Password input is hidden. It builds a signed and
+notarized DMG, the ZIP required by Squirrel.Mac, their blockmaps, and
+`latest-mac.yml`.
+
+For Windows, export or obtain a password-protected Authenticode `.pfx`, then
+run from PowerShell on Windows:
+
+```powershell
+npm run release:local:win -- -Certificate C:\secure\PraxisSigning.pfx
+```
+
+The password is prompted for as a secure value. On macOS or Linux,
+electron-builder can also sign a cross-built Windows installer with:
+
+```bash
+./scripts/build-signed-installer.sh --target win --certificate /secure/path/PraxisSigning.pfx
+```
+
+All prompts can be bypassed for an existing secure shell session by exporting
+electron-builder's standard variables:
+
+```text
+macOS:  CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID,
+        APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
+Windows: WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD
+```
+
+Do not put these values in a tracked file. `.env` files are ignored, but an OS
+keychain or password manager is preferable for long-lived credentials.
+
+After reviewing the artifacts, publish the current platform through your
+authenticated GitHub CLI session:
+
+```bash
+gh auth login
+npm run release:local:upload -- --target mac
+```
+
+The uploader requires the release tag to match the desktop package version,
+creates the GitHub Release when necessary, and safely replaces matching assets
+when rerun. Use `--target win` or `--target linux` for those platforms.
+
 ### Manual Release
 
 To create a release and upload the installer:
 
 ```bash
-# Build the installer first
-npm run app:installer:mac
+# Build the installers and update metadata first
+npm run dist:mac --workspace=@praxis/desktop-main
 
 # Create the release (requires GITHUB_TOKEN)
 npm run release:create
 
 # Upload the built installer
-gh release upload v0.3.0 apps/praxis-desktop/main/dist/Praxis-0.3.0-arm64.dmg
+gh release upload v0.3.0 \
+  apps/praxis-desktop/main/dist/Praxis-0.3.0-arm64.dmg \
+  apps/praxis-desktop/main/dist/Praxis-0.3.0-arm64.zip \
+  apps/praxis-desktop/main/dist/latest-mac.yml
 ```
 
 ### Automated Releases (GitHub Actions)
@@ -74,8 +133,16 @@ git push origin v0.4.0
 ```
 
 This triggers:
-1. `publish-packages.yml` - Publishes packages to GitHub Packages
-2. `build-release.yml` - Builds installers on macOS, Windows, and Linux, uploads to release
+
+1. `publish-packages.yml` publishes the shared libraries to GitHub Packages.
+2. `build-release.yml` builds the signed/notarized installers and updater
+   metadata on macOS, Windows, and Linux, then creates the GitHub Release and
+   uploads every artifact from one release job.
+
+The release contains the native installers plus `latest.yml`,
+`latest-mac.yml`, and `latest-linux.yml`. The macOS release also contains a ZIP
+because Squirrel.Mac uses it for automatic updates; users still install Praxis
+from the DMG.
 
 ## Package Versions
 

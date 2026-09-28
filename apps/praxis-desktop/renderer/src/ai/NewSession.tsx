@@ -91,6 +91,8 @@ export interface NewSessionProps {
   onOpenConnections: () => void;
   projectCount?: number;
   onNewProject?: () => void;
+  /** When scoped to a project, offer a shortcut to create a workflow instead of the new-project callout. */
+  onNewWorkflow?: () => void;
   toolModeForBoard?: (board: Board) => AgentToolMode | undefined;
   onSelectedBoardChange?: (board: Board | undefined) => void;
   /** Pre-selects a workflow (e.g. the title-bar quick session's quick-change). */
@@ -122,6 +124,7 @@ export function NewSession({
   onOpenConnections,
   projectCount = 0,
   onNewProject,
+  onNewWorkflow,
   workflowOptions,
   toolModeForBoard,
   onSelectedBoardChange,
@@ -537,12 +540,17 @@ export function NewSession({
             </span>
           </div>
         )}
-        {onNewProject && (
+        {onNewWorkflow ? (
+          <div className="project-empty-callout" data-testid="project-workflow-callout">
+            <div><strong>Create a new workflow</strong><span>Govern how work happens in this project with a reusable, versioned workflow.</span></div>
+            <button className="btn btn-primary" onClick={onNewWorkflow}>New</button>
+          </div>
+        ) : onNewProject ? (
           <div className="project-empty-callout" data-testid="project-empty-state">
             <div><strong>{projectCount === 0 ? 'Create your first project' : 'Create a new project'}</strong><span>Start with a durable brief, local board, and editable starter tickets.</span></div>
             <button className="btn btn-primary" onClick={onNewProject}>New Project</button>
           </div>
-        )}
+        ) : null}
         {conversational ? (
           <h1 className="session-heading" data-testid="new-conversation-heading">
             New conversation

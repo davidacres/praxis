@@ -596,6 +596,7 @@ export interface WorkspacesIpc {
   remove(workspaceId: string): Promise<void>;
   saveToFile(workspaceId: string): Promise<string | undefined>;
   openFromFile(): Promise<WorkspaceRecord | undefined>;
+  openFolder(folderPath: string): Promise<WorkspaceRecord | undefined>;
 }
 
 /** Starts (or restarts) the interactive review of one ticket. */

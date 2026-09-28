@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   AgentRuntimeSnapshot,
   AgentSessionRecord,
@@ -13,7 +14,8 @@ import type {
 } from '@praxis/core';
 import { agentStateLabel, agentStateLaneClass, isTerminalAgentState } from '../ai/aiSessionState';
 import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
-import { isConversationSession, isSynthesizedKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
+import { formatElapsed, formatTokens, isConversationSession, isSynthesizedKey, isTicketReviewKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
+import { providerLabel } from '../ai/modelProviders';
 import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
 import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
@@ -60,7 +62,6 @@ interface FeatureDef {
 const FEATURES: FeatureDef[] = [
   { id: 'overview', label: 'Overview', icon: 'home' },
   { id: 'conversations', label: 'Conversations', icon: 'chats' },
-  { id: 'sessions', label: 'Sessions', icon: 'robot' },
   { id: 'connections', label: 'Connections', icon: 'plug' },
   { id: 'agents', label: 'Agent Hub', icon: 'zap' },
 ];
@@ -81,7 +82,7 @@ export interface SidebarProps {
   activeGitView?: 'graph' | 'changes' | 'conflicts';
   onSelectFeature: (feature: FeatureId) => void;
   featureCounts: Partial<Record<FeatureId, number>>;
-  onNewSession: () => void;
+  onNewSession: (project?: ProjectRecord) => void;
   /** Opens the lightweight "New conversation" composer (FX-BE-142). */
   onNewConversation: () => void;
   onNewProject: () => void;
@@ -120,7 +121,7 @@ export interface SidebarProps {
   onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
   onSelectWorkflowRuns?: (project: ProjectRecord) => void;
   /** Opens the start-run dialog for the selected workflow. */
-  onStartWorkflowRun: (project: ProjectRecord, workflowId: string) => void;
+  onStartWorkflowRun: (project: ProjectRecord, workflowId?: string) => void;
   onCancelWorkflowRun: (runId: string) => void | Promise<void>;
   onDeleteWorkflowRun: (project: ProjectRecord, run: WorkflowRunSummary) => void;
   onArchiveWorkflowRun?: (runId: string, archived: boolean) => Promise<void>;
@@ -161,6 +162,491 @@ export interface SidebarProps {
   query?: string;
   onQueryChange?: (query: string) => void;
   onToggleSearch?: () => void;
+}
+
+function ProjectSessionRow({
+  session,
+  active,
+  kind,
+  onSelectSession,
+  onRenameSession,
+  onDeleteSession,
+  onArchiveSession
+}: {
+  session: AgentSessionRecord;
+  active: boolean;
+  kind: 'general' | 'ticket';
+  onSelectSession: (issueKey: string) => void;
+  onRenameSession: (issueKey: string, title: string) => Promise<void>;
+  onDeleteSession: (issueKey: string) => Promise<void>;
+  onArchiveSession: (issueKey: string, archived: boolean) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(() => sessionTitle(session));
+  const [mutating, setMutating] = useState(false);
+  const [error, setError] = useState<string>();
+  const { confirmChoice } = useDialogs();
+  const title = sessionTitle(session);
+  const agentName = session.agentId || (session.provider ? providerLabel(session.provider) : undefined) || 'AI agent';
+  const agentNames = Array.from(new Set([
+    agentName,
+    ...(session.conversation?.participants.map(participant => participant.displayLabel) ?? []),
+    ...(session.runtimeEpochs?.map(epoch => epoch.provider ? providerLabel(epoch.provider) : undefined).filter(Boolean) ?? [])
+  ]));
+  const agentDisplay = agentNames.join(' + ');
+  const modelName = session.model || session.runtimeEpochs?.[session.runtimeEpochs.length - 1]?.model;
+  const elapsed = formatElapsed(session.startedAt, session.completedAt);
+  const tokens = formatTokens(session.tokenUsage);
+
+  const commitRename = async () => {
+    const next = draft.trim();
+    setEditing(false);
+    if (!next || next === title) return;
+    setMutating(true);
+    setError(undefined);
+    try {
+      await onRenameSession(session.issueKey, next);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const archive = async () => {
+    setMutating(true);
+    setError(undefined);
+    try {
+      await onArchiveSession(session.issueKey, true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const remove = async () => {
+    const choice = await confirmChoice({
+      title: 'Delete this session?',
+      message: 'This can’t be undone.',
+      confirmLabel: 'Delete session',
+      tertiaryLabel: 'Archive instead',
+      danger: true
+    });
+    if (choice === 'cancel') return;
+    if (choice === 'tertiary') {
+      await archive();
+      return;
+    }
+    setMutating(true);
+    setError(undefined);
+    try {
+      await onDeleteSession(session.issueKey);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  return (
+    <div className="project-session-entry">
+      <div
+        className={`tree-row session-nav-row${active ? ' active' : ''}`}
+        data-testid="project-session-nav-item"
+        title={title}
+        role="button"
+        tabIndex={0}
+        onClick={() => !editing && onSelectSession(session.issueKey)}
+        onKeyDown={event => {
+          if (!editing && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            onSelectSession(session.issueKey);
+          }
+        }}
+      >
+        <span className="tree-icon" title={kind === 'ticket' ? 'Ticket session' : 'General chat session'}><Icon name={kind === 'ticket' ? 'ticket' : 'chats'} size={13} /></span>
+        {!editing && <span className={`session-state-mark ${agentStateLaneClass(session.state)}`} aria-label={agentStateLabel(session.state)} title={agentStateLabel(session.state)} />}
+        {editing ? (
+          <input
+            className="session-title-input"
+            data-testid="session-title-input"
+            aria-label={`Session title for ${title}`}
+            value={draft}
+            disabled={mutating}
+            autoFocus
+            onClick={event => event.stopPropagation()}
+            onChange={event => setDraft(event.target.value)}
+            onBlur={() => void commitRename()}
+            onKeyDown={event => {
+              event.stopPropagation();
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                event.currentTarget.blur();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                setEditing(false);
+              }
+            }}
+          />
+        ) : (
+          <span className="tree-label" data-testid="session-title">{title}</span>
+        )}
+        {!editing && (
+          <>
+            <span
+              className="session-inline-telemetry"
+              data-testid="project-session-agent-summary"
+              title={`${agentDisplay}${modelName ? ` · ${modelName}` : ''} · ${agentStateLabel(session.state)} · ${elapsed ?? 'Time not available'} · ${tokens ?? 'Tokens not reported'}`}
+            >{agentDisplay}{modelName ? ` · ${modelName}` : ''} · {agentStateLabel(session.state)} · {elapsed ?? '—'} · {tokens ?? '—'}</span>
+            <span className="session-nav-actions">
+              <button
+                className="icon-btn icon-btn-sm"
+                aria-label={`Rename session ${title}`}
+                title="Rename session"
+                data-testid="session-rename-btn"
+                disabled={mutating}
+                onClick={event => {
+                  event.stopPropagation();
+                  setEditing(true);
+                  setDraft(title);
+                }}
+              ><Icon name="pencil" size={12} /></button>
+              <button
+                className="icon-btn icon-btn-sm"
+                aria-label={`Archive session ${title}`}
+                title="Archive session"
+                data-testid="session-archive-btn"
+                disabled={mutating}
+                onClick={event => {
+                  event.stopPropagation();
+                  void archive();
+                }}
+              ><Icon name="archive" size={12} /></button>
+              <button
+                className="icon-btn icon-btn-sm"
+                aria-label={`Delete session ${title}`}
+                title="Delete session"
+                data-testid="session-delete-btn"
+                disabled={mutating}
+                onClick={event => {
+                  event.stopPropagation();
+                  void remove();
+                }}
+              ><Icon name="trash" size={12} /></button>
+            </span>
+          </>
+        )}
+      </div>
+      {error && <div className="error-banner session-list-error" data-testid="project-session-row-error">{error}</div>}
+    </div>
+  );
+}
+
+const RUN_STATUS_LABEL: Record<WorkflowRunSummary['status'], string> = {
+  running: 'Running',
+  'awaiting-approval': 'Awaiting approval',
+  succeeded: 'Succeeded',
+  failed: 'Failed',
+  cancelled: 'Cancelled'
+};
+
+function stageLaneLabel(lane: WorkflowRunSummary['stages'][number]['lane']): string {
+  return lane === 'done'
+    ? 'Complete'
+    : lane === 'running'
+      ? 'Running'
+      : lane === 'awaiting'
+        ? 'Awaiting approval'
+        : lane === 'failed'
+          ? 'Failed'
+          : lane === 'paused'
+            ? 'Paused'
+            : lane === 'skipped'
+              ? 'Skipped'
+              : lane === 'ready'
+                ? 'Ready'
+                : 'Pending';
+}
+
+function stageLaneIcon(lane: WorkflowRunSummary['stages'][number]['lane']): IconName {
+  return lane === 'done'
+    ? 'check-square'
+    : lane === 'failed'
+      ? 'warning'
+      : lane === 'running'
+        ? 'play'
+        : lane === 'awaiting' || lane === 'paused'
+          ? 'clock'
+          : lane === 'skipped'
+            ? 'close'
+          : 'dot';
+}
+
+type AutomationRailItem =
+  | { kind: 'stage'; stage: WorkflowRunSummary['stages'][number] }
+  | { kind: 'overflow'; count: number; key: string };
+
+function activeAutomationStageIndex(run: WorkflowRunSummary): number {
+  const active = run.stages.findIndex(stage => ['running', 'awaiting', 'paused', 'failed', 'ready'].includes(stage.lane));
+  if (active >= 0) return active;
+  const completed = run.stages.reduce((latest, stage, index) => stage.lane === 'done' ? index : latest, -1);
+  return Math.max(0, completed);
+}
+
+/** At sidebar width, preserve the beginning, end and current neighbourhood instead of shrinking or scrolling. */
+function automationRailItems(run: WorkflowRunSummary): AutomationRailItem[] {
+  if (run.stages.length <= 12) return run.stages.map(stage => ({ kind: 'stage', stage }));
+  const current = activeAutomationStageIndex(run);
+  const indices = new Set<number>([0, run.stages.length - 1]);
+  for (let index = current - 3; index <= current + 4; index += 1) {
+    if (index >= 0 && index < run.stages.length) indices.add(index);
+  }
+  const sorted = [...indices].sort((a, b) => a - b);
+  const items: AutomationRailItem[] = [];
+  sorted.forEach((index, position) => {
+    const previous = sorted[position - 1];
+    if (previous !== undefined && index - previous > 1) {
+      items.push({ kind: 'overflow', count: index - previous - 1, key: `${previous}-${index}` });
+    }
+    items.push({ kind: 'stage', stage: run.stages[index] });
+  });
+  return items;
+}
+
+function automationStageSession(stage: WorkflowRunSummary['stages'][number], sessions: AgentSessionRecord[]): AgentSessionRecord | undefined {
+  return stage.sessionKey ? sessions.find(session => session.issueKey === stage.sessionKey) : undefined;
+}
+
+function automationStageMeta(stage: WorkflowRunSummary['stages'][number], sessions: AgentSessionRecord[]): string {
+  const session = automationStageSession(stage, sessions);
+  const agent = session?.agentId || (session?.provider ? providerLabel(session.provider) : undefined) || (stage.provider ? providerLabel(stage.provider) : undefined) || 'AI agent';
+  const model = session?.model || stage.chosenModel;
+  const duration = session ? formatElapsed(session.startedAt, session.completedAt) : (stage.durationMs !== undefined ? `${Math.round(stage.durationMs / 1000)}s` : undefined);
+  const tokens = session ? formatTokens(session.tokenUsage) : undefined;
+  return [agent, model, duration, tokens].filter(Boolean).join(' · ') || 'No telemetry reported';
+}
+
+function AutomationRunSheet({
+  project,
+  run,
+  sessions,
+  initialStageId,
+  onClose,
+  onOpenRun,
+  onCancel,
+  onArchive,
+  onDelete
+}: {
+  project: ProjectRecord;
+  run: WorkflowRunSummary;
+  sessions: AgentSessionRecord[];
+  initialStageId?: string;
+  onClose: () => void;
+  onOpenRun: () => void;
+  onCancel: () => void | Promise<void>;
+  onArchive?: () => void | Promise<void>;
+  onDelete: () => void;
+}) {
+  const fallbackStage = run.stages[activeAutomationStageIndex(run)];
+  const [selectedStageId, setSelectedStageId] = useState<string | undefined>(initialStageId ?? fallbackStage?.nodeId);
+  const sheetRef = useRef<HTMLElement>(null);
+  const completed = run.stages.filter(stage => stage.lane === 'done' || stage.lane === 'skipped').length;
+  const progress = run.stages.length > 0 ? Math.round((completed / run.stages.length) * 100) : 0;
+  const live = run.status === 'running' || run.status === 'awaiting-approval';
+  const statusLabel = run.paused ? 'Paused' : RUN_STATUS_LABEL[run.status];
+  const statusTone = run.paused ? 'lane--awaiting' : RUN_STATUS_TONE[run.status];
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      } else if (event.key === 'Tab' && sheetRef.current) {
+        const focusable = [...sheetRef.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+          .filter(element => element.offsetParent !== null);
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (first && last && event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (first && last && !event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return createPortal(
+    <div className="automation-sheet-backdrop" data-testid="automation-sheet-backdrop" onMouseDown={event => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <aside ref={sheetRef} className="automation-sheet" role="dialog" aria-modal="true" aria-labelledby={`automation-sheet-title-${run.runId}`} data-testid="automation-sheet">
+        <header className="automation-sheet-header">
+          <div className="automation-sheet-heading">
+            <span className={`automation-state-mark ${statusTone}`} aria-label={statusLabel} title={statusLabel} />
+            <div>
+              <h2 id={`automation-sheet-title-${run.runId}`}>{run.workflowName}</h2>
+              <p>{project.name} · {formatElapsed(run.startedAt, run.endedAt) ?? 'Just started'}</p>
+            </div>
+          </div>
+          <button type="button" className="icon-btn" aria-label="Close automation details" autoFocus onClick={onClose}><Icon name="close" size={13} /></button>
+        </header>
+        <div className="automation-sheet-summary">
+          <div><strong>{completed} of {run.stages.length}</strong><span> steps complete</span></div>
+          <span>{statusLabel}</span>
+          <div className="automation-sheet-progress" role="progressbar" aria-valuemin={0} aria-valuemax={run.stages.length} aria-valuenow={completed} aria-label={`${completed} of ${run.stages.length} steps complete`}>
+            <i style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+        <div className="automation-sheet-stages" data-testid="automation-sheet-stages">
+          {run.stages.map(stage => {
+            const selected = selectedStageId === stage.nodeId;
+            return <div className={`automation-sheet-stage${selected ? ' is-selected' : ''}`} key={stage.nodeId} data-lane={stage.lane}>
+              <button type="button" className="automation-sheet-stage-main" aria-expanded={selected} onClick={() => setSelectedStageId(selected ? undefined : stage.nodeId)}>
+                <span className={`automation-step-mark automation-step-mark--${stage.lane}`} aria-hidden><Icon name={stageLaneIcon(stage.lane)} size={11} /></span>
+                <span className="automation-sheet-stage-copy">
+                  <strong>{stage.name}</strong>
+                  <small>{stageLaneLabel(stage.lane)}{stage.durationMs !== undefined ? ` · ${Math.round(stage.durationMs / 1000)}s` : ''}</small>
+                </span>
+                <Icon name={selected ? 'chevron-up' : 'chevron-down'} size={11} />
+              </button>
+              {selected && <div className="automation-sheet-stage-details" data-testid={`automation-sheet-stage-${stage.nodeId}`}>
+                <span>{automationStageMeta(stage, sessions)}</span>
+                {stage.attempts > 0 && <span>{stage.attempts} attempt{stage.attempts === 1 ? '' : 's'}</span>}
+                {stage.lastError && <p>{stage.lastError}</p>}
+              </div>}
+            </div>;
+          })}
+        </div>
+        <footer className="automation-sheet-footer">
+          <button type="button" className="btn" data-testid="automation-sheet-open-run" onClick={onOpenRun}>Open full run</button>
+          <span className="automation-sheet-footer-spacer" />
+          {live && <button type="button" className="btn" onClick={() => void onCancel()}>Cancel run</button>}
+          {!live && onArchive && <button type="button" className="btn" onClick={() => void onArchive()}>Archive</button>}
+          <button type="button" className="btn automation-sheet-delete" onClick={onDelete}>Delete</button>
+        </footer>
+      </aside>
+    </div>,
+    document.body
+  );
+}
+
+function AutomationRunRow({
+  project,
+  run,
+  sessions,
+  active,
+  onSelectWorkflowRun,
+  onCancelWorkflowRun,
+  onDeleteWorkflowRun,
+  onArchiveWorkflowRun
+}: {
+  project: ProjectRecord;
+  run: WorkflowRunSummary;
+  sessions: AgentSessionRecord[];
+  active: boolean;
+  onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
+  onCancelWorkflowRun: (runId: string) => void | Promise<void>;
+  onDeleteWorkflowRun: (project: ProjectRecord, run: WorkflowRunSummary) => void;
+  onArchiveWorkflowRun?: (runId: string, archived: boolean) => Promise<void>;
+}) {
+  const [sheetStageId, setSheetStageId] = useState<string | undefined>();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [expanded, setExpanded] = useState(active);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const live = run.status === 'running' || run.status === 'awaiting-approval';
+  const runState = run.paused ? 'paused' : run.status;
+  const statusLabel = run.paused ? 'Paused' : RUN_STATUS_LABEL[run.status];
+  const statusTone = run.paused ? 'lane--awaiting' : RUN_STATUS_TONE[run.status];
+  const railItems = automationRailItems(run);
+  const completed = run.stages.filter(stage => stage.lane === 'done' || stage.lane === 'skipped').length;
+  const fallbackStage = run.stages[activeAutomationStageIndex(run)];
+  const [selectedStageId, setSelectedStageId] = useState<string | undefined>(fallbackStage?.nodeId);
+  const selectedStage = run.stages.find(stage => stage.nodeId === selectedStageId) ?? fallbackStage;
+  const selectedStageMeta = selectedStage ? automationStageMeta(selectedStage, sessions) : 'No stage telemetry reported';
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [menuOpen]);
+
+  const openSheet = (stageId?: string) => {
+    setSheetStageId(stageId ?? run.stages[activeAutomationStageIndex(run)]?.nodeId);
+    setSheetOpen(true);
+  };
+
+  return (
+    <>
+      <div className={`automation-run-item${active ? ' active' : ''}${expanded ? ' is-expanded' : ''}`} data-testid="project-workflow-run-row" data-run-status={runState}>
+        <div className="automation-run-title-row">
+          <button type="button" className="automation-run-main" aria-label={`${run.workflowName}, ${statusLabel}, ${completed} of ${run.stages.length} steps complete`} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+            <span className={`automation-state-mark ${statusTone}`} data-testid="automation-run-status" aria-label={statusLabel} title={statusLabel} />
+            <span className="automation-run-title" title={run.explanation}>{run.workflowName}</span>
+            <span className="automation-run-inline-meta" title={selectedStageMeta}>{selectedStageMeta}</span>
+          </button>
+          <span className="automation-run-progress-count" aria-label={`${completed} of ${run.stages.length} steps complete`}>{completed}/{run.stages.length}</span>
+          <div className="automation-run-menu-wrap" ref={menuRef}>
+            <button type="button" className="icon-btn icon-btn-sm automation-run-menu-trigger" aria-label={`Actions for ${run.workflowName}`} aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><Icon name="ellipsis" size={13} /></button>
+            {menuOpen && <div className="automation-run-menu" role="menu">
+              {live && <button type="button" role="menuitem" data-testid={`project-run-cancel-${run.runId}`} onClick={() => { setMenuOpen(false); void onCancelWorkflowRun(run.runId); }}><Icon name="close" size={12} />Cancel run</button>}
+              {!live && onArchiveWorkflowRun && <button type="button" role="menuitem" data-testid={`project-run-archive-${run.runId}`} onClick={() => { setMenuOpen(false); void onArchiveWorkflowRun(run.runId, true); }}><Icon name="archive" size={12} />Archive</button>}
+              <button type="button" role="menuitem" className="is-danger" data-testid={`project-run-delete-${run.runId}`} onClick={() => { setMenuOpen(false); onDeleteWorkflowRun(project, run); }}><Icon name="trash" size={12} />Delete</button>
+            </div>}
+          </div>
+        </div>
+        <div className={`automation-run-expansion${expanded ? ' is-open' : ''}`}>
+          <div className="automation-run-expansion-inner">
+            <div className="automation-progress-rail" data-testid="automation-timeline" aria-label={`${run.workflowName} workflow steps`}>
+              {railItems.map(item => item.kind === 'overflow' ? (
+                <button type="button" className="automation-rail-overflow" key={item.key} aria-label={`${item.count} hidden workflow steps. Open workflow details`} title={`${item.count} hidden steps`} onClick={() => openSheet()}>…</button>
+              ) : (
+                <button
+                  type="button"
+                  className={`automation-rail-step automation-rail-step--${item.stage.lane}${selectedStageId === item.stage.nodeId ? ' is-selected' : ''}`}
+                  key={item.stage.nodeId}
+                  title={`${item.stage.name}: ${stageLaneLabel(item.stage.lane)}`}
+                  aria-label={`${item.stage.name}: ${stageLaneLabel(item.stage.lane)}`}
+                  data-testid={`automation-stage-${item.stage.nodeId}`}
+                  onClick={() => setSelectedStageId(item.stage.nodeId)}
+                ><span aria-hidden /></button>
+              ))}
+            </div>
+            <div className="automation-run-stage-summary" data-testid="automation-run-stage-summary">
+              <div>
+                <strong>{selectedStage?.name ?? 'Workflow details'}</strong>
+                <span>{selectedStage ? stageLaneLabel(selectedStage.lane) : statusLabel}</span>
+              </div>
+              <p>{selectedStageMeta}</p>
+              <div className="automation-run-detail-actions">
+                <button type="button" data-testid="automation-inline-view-workflow" onClick={() => openSheet(selectedStage?.nodeId)}>View workflow</button>
+                <button type="button" data-testid="automation-inline-open-run" onClick={() => onSelectWorkflowRun(project, run.runId)}>Open full run</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {sheetOpen && <AutomationRunSheet
+        project={project}
+        run={run}
+        sessions={sessions}
+        initialStageId={sheetStageId}
+        onClose={() => setSheetOpen(false)}
+        onOpenRun={() => { setSheetOpen(false); onSelectWorkflowRun(project, run.runId); }}
+        onCancel={() => onCancelWorkflowRun(run.runId)}
+        onArchive={onArchiveWorkflowRun ? () => onArchiveWorkflowRun(run.runId, true) : undefined}
+        onDelete={() => { setSheetOpen(false); onDeleteWorkflowRun(project, run); }}
+      />}
+    </>
+  );
 }
 
 export function Sidebar({
@@ -275,6 +761,7 @@ export function Sidebar({
   const visibleProjects = activeWorkspace
     ? projects.filter(project => activeWorkspace.projectIds.includes(project.id))
     : projects;
+  const hideBoardsForActiveProject = projects.find(project => project.id === selectedProjectId)?.planningMode === 'files';
 
   useEffect(() => {
     let cancelled = false;
@@ -288,7 +775,9 @@ export function Sidebar({
     const needle = effectiveQuery.trim().toLowerCase();
     return visibleProjects.map(project => {
       const projectConnection = connections.find(connection => connection.settings.projectId === project.id);
-      const defaultBoard = boards.find(board => board.connectionId === projectConnection?.id);
+      const defaultBoard = projectConnection
+        ? boards.find(board => board.connectionId === projectConnection.id)
+        : undefined;
       const linkedBoards = project.linkedBoards.flatMap(link => {
         const board = boards.find(candidate => candidate.id === link.boardId && candidate.connectionId === link.connectionId);
         return board ? [{ link, board }] : [];
@@ -363,18 +852,38 @@ export function Sidebar({
         ) : (
           <>
             {newProjectEnabled && <>
-              <div className="sidebar-section-heading">
+              <div className="feature-section-header feature-section-toggle projects-section-header">
                 <button
-                  className="sidebar-section-label sidebar-section-button sidebar-section-toggle"
+                  type="button"
+                  className="feature-section-title"
                   aria-expanded={!projectsCollapsed}
                   data-testid="toggle-projects"
                   onClick={() => setProjectsCollapsed(value => !value)}
                 >
-                  <span className={`tree-section-icon${projectsCollapsed ? '' : ' open'}`}><Icon name={projectsCollapsed ? 'folder' : 'folder-open'} size={14} /></span>
-                  <span>Projects</span>
-                  <span className="tree-meta">{projects.length}</span>
+                  <span className="sidebar-section-label" style={{ margin: 0 }}>Projects{projects.length > 0 && <span className="tree-meta" style={{ marginLeft: 6 }}>{projects.length}</span>}</span>
                 </button>
-                <button className="sidebar-section-add" aria-label="Add project" onClick={onNewProject}><Icon name="plus" size={13} /></button>
+                <div className="feature-section-actions">
+                  <button
+                    type="button"
+                    className="feature-section-action"
+                    aria-label="Add project"
+                    title="New project"
+                    onClick={onNewProject}
+                  >
+                    <Icon name="plus" size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className="feature-section-action"
+                    aria-label={projectsCollapsed ? 'Expand Projects' : 'Collapse Projects'}
+                    title={projectsCollapsed ? 'Expand Projects' : 'Collapse Projects'}
+                    onClick={() => setProjectsCollapsed(value => !value)}
+                  >
+                    <span className={`tree-section-icon${projectsCollapsed ? '' : ' open'}`}>
+                      <Icon name={projectsCollapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+                    </span>
+                  </button>
+                </div>
               </div>
               {!projectsCollapsed && (projects.length === 0
                 ? <button className="sidebar-empty-project" onClick={onNewProject}>+ New Project</button>
@@ -386,11 +895,36 @@ export function Sidebar({
                     const projectWorkflowList = projectWorkflows[project.id] ?? [];
                     const projectRuns = runsByProjectId[project.id] ?? [];
                     const activeProjectRuns = projectRuns.filter(run => !run.archived);
-                    const projectRunCount = activeProjectRuns.filter(run => run.status === 'running' || run.status === 'awaiting-approval').length;
-                    const projectRunsCollapsed = collapsed[`project:${project.id}:runs`] ?? false;
                     const projectDocsCollapsed = collapsed[`project:${project.id}:docs`] ?? false;
                     const projectPlansCollapsed = collapsed[`project:${project.id}:plans`] ?? false;
                     const projectDocuments = documentsByProjectId[project.id];
+                    const projectSessionsCollapsed = collapsed[`project:${project.id}:sessions`] ?? false;
+                    const projectRunsCollapsed = collapsed[`project:${project.id}:runs`] ?? false;
+                    const projectItemKeys = new Set(project.workItems?.map(item => item.key) ?? []);
+                    const projectSessions = sessions.filter(
+                      session =>
+                        !isConversationSession(session) &&
+                        !isWorkflowStageSession(session) &&
+                        (session.projectId === project.id ||
+                          projectItemKeys.has(session.issueKey) ||
+                          Boolean(project.workspaceFolder && session.workingDirectory === project.workspaceFolder))
+                    );
+                    const generalSessions = projectSessions.filter(session => isSynthesizedKey(session.issueKey) && !isTicketReviewKey(session.issueKey));
+                    const ticketSessions = projectSessions.filter(session => !isSynthesizedKey(session.issueKey) || isTicketReviewKey(session.issueKey));
+                    const generalSessionsCollapsed = collapsed[`project:${project.id}:general-sessions`] ?? false;
+                    const ticketSessionsCollapsed = collapsed[`project:${project.id}:ticket-sessions`] ?? false;
+                    const renderProjectSessions = (items: AgentSessionRecord[], kind: 'general' | 'ticket') => items.map(session => (
+                      <ProjectSessionRow
+                        key={session.issueKey}
+                        session={session}
+                        active={activeSessionKey === session.issueKey}
+                        kind={kind}
+                        onSelectSession={onSelectSession}
+                        onRenameSession={onRenameSession}
+                        onDeleteSession={onDeleteSession}
+                        onArchiveSession={onArchiveSession}
+                      />
+                    ));
                     return <div className="project-tree" key={project.id} data-testid="project-tree">
                       <div className={`project-tree-parent${selectedProjectId === project.id ? ' active' : ''}`}>
                         <button
@@ -444,9 +978,23 @@ export function Sidebar({
                           >
                             <Icon name="server" size={13} />
                           </button>
+                          <button
+                            type="button"
+                            className="project-header-action"
+                            data-testid="project-workflow-new"
+                            title={`New workflow · ${project.name}`}
+                            aria-label={`New workflow in ${project.name}`}
+                            onClick={e => {
+                              e.stopPropagation();
+                              onNewWorkflow(project);
+                            }}
+                          >
+                            <Icon name="plus" size={13} />
+                          </button>
                         </div>
                       </div>
                       {!projectCollapsed && <div className="project-tree-children">
+                        {childCount > 0 && <>
                         <button className="sidebar-subsection-toggle" aria-expanded={!projectBoardsCollapsed} onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:boards`]: !projectBoardsCollapsed }))}>
                           <span className={`tree-section-icon${projectBoardsCollapsed ? '' : ' open'}`}><Icon name="columns" size={13} /></span><span>Boards</span><span className="tree-meta">{childCount}</span>
                         </button>
@@ -488,6 +1036,7 @@ export function Sidebar({
                           </div>;
                         })}
                         </>}
+                        </>}
                         {enableDeployments && (
                           <button
                             className={`tree-row project-deployments-row${activeFeature === 'deployments' && selectedProjectId === project.id ? ' active' : ''}`}
@@ -495,17 +1044,14 @@ export function Sidebar({
                             onClick={() => onSelectDeployments(project)}
                           ><span className="tree-icon"><Icon name="rocket" size={14} /></span><span className="tree-label">Deployments</span></button>
                         )}
-                        <div className="tree-subsection-heading">
-                          <button
-                            className="sidebar-subsection-toggle"
-                            aria-expanded={!projectWorkflowsCollapsed}
-                            data-testid="project-workflows-nav-item"
-                            onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:workflows`]: !projectWorkflowsCollapsed }))}
-                          >
-                            <span className={`tree-section-icon${projectWorkflowsCollapsed ? '' : ' open'}`}><Icon name="split-horizontal" size={13} /></span><span>Workflows</span><span className="tree-meta">{projectWorkflowList.length}</span>
-                          </button>
-                          <button className="sidebar-section-add" aria-label={`New workflow in ${project.name}`} data-testid="project-workflow-new" onClick={() => onNewWorkflow(project)}><Icon name="plus" size={13} /></button>
-                        </div>
+                        <button
+                          className="sidebar-subsection-toggle"
+                          aria-expanded={!projectWorkflowsCollapsed}
+                          data-testid="project-workflows-nav-item"
+                          onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:workflows`]: !projectWorkflowsCollapsed }))}
+                        >
+                          <span className={`tree-section-icon${projectWorkflowsCollapsed ? '' : ' open'}`}><Icon name="split-horizontal" size={13} /></span><span>Workflows</span><span className="tree-meta">{projectWorkflowList.length}</span>
+                        </button>
                         {!projectWorkflowsCollapsed && <>
                           {projectWorkflowList.map(workflow => (
                             <div
@@ -556,97 +1102,6 @@ export function Sidebar({
                               <span className="tree-icon"><Icon name="plus" size={13} /></span><span className="tree-label">New workflow…</span>
                             </button>
                           )}
-                          <div className={`tree-row project-workflow-child project-runs-header${activeFeature === 'workflows' && !activeWorkflowRunId && !activeWorkflowPolicies && !activeWorkflowId && selectedProjectId === project.id ? ' active' : ''}`}>
-                            <button
-                              type="button"
-                              className="board-tree-main"
-                              aria-expanded={!projectRunsCollapsed}
-                              data-testid="project-workflow-runs-nav-item"
-                              onClick={() => {
-                                if (onSelectWorkflowRuns) onSelectWorkflowRuns(project);
-                                else setCollapsed(current => ({ ...current, [`project:${project.id}:runs`]: !projectRunsCollapsed }));
-                              }}
-                            >
-                              <span
-                                className="tree-icon"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setCollapsed(current => ({ ...current, [`project:${project.id}:runs`]: !projectRunsCollapsed }));
-                                }}
-                              >
-                                <Icon name={projectRunsCollapsed ? 'chevron-right' : 'chevron-down'} size={14} />
-                              </span>
-                              <span className="tree-label">Runs</span>
-                              {projectRunCount > 0 && <span className="tree-badge" title={`${projectRunCount} run${projectRunCount === 1 ? '' : 's'} in flight`}>{projectRunCount}</span>}
-                            </button>
-                          </div>
-                          {!projectRunsCollapsed && activeProjectRuns.map(run => {
-                            const live = run.status === 'running' || run.status === 'awaiting-approval';
-                            return (
-                              <div
-                                key={run.runId}
-                                className={`tree-row project-run-row${activeFeature === 'workflows' && activeWorkflowRunId === run.runId ? ' active' : ''}`}
-                                data-testid="project-workflow-run-row"
-                                data-run-status={run.paused ? 'paused' : run.status}
-                              >
-                                <button
-                                  type="button"
-                                  className="board-tree-main"
-                                  aria-label={`${run.workflowName}, ${run.paused ? 'paused' : run.status}`}
-                                  onClick={() => onSelectWorkflowRun(project, run.runId)}
-                                >
-                                  <span className={`lane ${run.paused ? 'lane--awaiting' : RUN_STATUS_TONE[run.status]}`} aria-hidden>●</span>
-                                  <span className="tree-label" title={`${run.workflowName} · ${run.paused ? (run.pauseReason === 'environment' ? 'paused — a step could not run' : 'paused — AI provider limit reached') : run.status}`}>{run.workflowName}</span>
-                                </button>
-                                {live && (
-                                  <button
-                                    type="button"
-                                    className="board-tree-configure project-run-action"
-                                    data-testid={`project-run-cancel-${run.runId}`}
-                                    aria-label={`Cancel run ${run.workflowName}`}
-                                    title="Cancel this run"
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      void onCancelWorkflowRun(run.runId);
-                                    }}
-                                  >
-                                    <Icon name="close" size={12} />
-                                  </button>
-                                )}
-                                {!live && onArchiveWorkflowRun && (
-                                  <button
-                                    type="button"
-                                    className="board-tree-configure project-run-action"
-                                    data-testid={`project-run-archive-${run.runId}`}
-                                    aria-label={`Archive run ${run.workflowName}`}
-                                    title="Archive this run"
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      void onArchiveWorkflowRun(run.runId, true);
-                                    }}
-                                  >
-                                    <Icon name="archive" size={12} />
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  className="board-tree-delete project-run-action"
-                                  data-testid={`project-run-delete-${run.runId}`}
-                                  aria-label={`Delete run ${run.workflowName}`}
-                                  title="Delete this run"
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    onDeleteWorkflowRun(project, run);
-                                  }}
-                                >
-                                  <Icon name="trash" size={12} />
-                                </button>
-                              </div>
-                            );
-                          })}
-                          {!projectRunsCollapsed && activeProjectRuns.length === 0 && (
-                            <span className="sidebar-empty-hint project-runs-empty" data-testid="project-workflow-runs-empty">No runs yet</span>
-                          )}
                           <button
                             className={`tree-row project-workflow-child${activeFeature === 'workflows' && activeWorkflowPolicies && selectedProjectId === project.id ? ' active' : ''}`}
                             data-testid="project-workflow-policies-nav-item"
@@ -673,11 +1128,152 @@ export function Sidebar({
                             })}
                           </div>}
                         </>}
+                        <div className="feature-section-header feature-section-toggle project-sessions-header">
+                          <button
+                            type="button"
+                            className="feature-section-title"
+                            aria-expanded={!projectSessionsCollapsed}
+                            data-testid="project-sessions-nav-item"
+                            onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:sessions`]: !projectSessionsCollapsed }))}
+                          >
+                              <span className="sidebar-section-label" style={{ margin: 0 }}>Sessions</span>
+                          </button>
+                          <div className="feature-section-actions">
+                            <button
+                              type="button"
+                              className="feature-section-action"
+                              data-testid="project-session-new"
+                              aria-label={`New session in ${project.name}`}
+                              title={`New session · ${project.name}`}
+                              onClick={e => {
+                                e.stopPropagation();
+                                onNewSession(project);
+                              }}
+                            >
+                              <Icon name="plus" size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              className="feature-section-action"
+                              aria-label={projectSessionsCollapsed ? 'Expand sessions' : 'Collapse sessions'}
+                              title={projectSessionsCollapsed ? 'Expand sessions' : 'Collapse sessions'}
+                              onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:sessions`]: !projectSessionsCollapsed }))}
+                            >
+                              <span className={`tree-section-icon${projectSessionsCollapsed ? '' : ' open'}`}>
+                                <Icon name={projectSessionsCollapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                        {!projectSessionsCollapsed && <>
+                          <div className="feature-section-header feature-section-toggle project-session-category-header">
+                            <button
+                              type="button"
+                              className="feature-section-title"
+                              aria-expanded={!generalSessionsCollapsed}
+                              data-testid="project-general-sessions-nav-item"
+                              onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:general-sessions`]: !generalSessionsCollapsed }))}
+                            >
+                              <span className="tree-icon"><Icon name="chats" size={14} /></span>
+                              <span className="sidebar-section-label tree-label" style={{ margin: 0 }}>General{generalSessions.length > 0 && <span className="session-category-count">{generalSessions.length}</span>}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="feature-section-action"
+                              aria-label={generalSessionsCollapsed ? 'Expand general sessions' : 'Collapse general sessions'}
+                              title={generalSessionsCollapsed ? 'Expand general sessions' : 'Collapse general sessions'}
+                              onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:general-sessions`]: !generalSessionsCollapsed }))}
+                            ><span className={`tree-section-icon${generalSessionsCollapsed ? '' : ' open'}`}><Icon name={generalSessionsCollapsed ? 'chevron-right' : 'chevron-down'} size={13} /></span></button>
+                          </div>
+                          {!generalSessionsCollapsed && (generalSessions.length > 0 ? renderProjectSessions(generalSessions, 'general') : (
+                            <div className="project-session-empty">
+                              <span>No general sessions yet</span>
+                              <button type="button" className="project-session-empty-action" aria-label={`New general session in ${project.name}`} title="New general session" onClick={() => onNewSession(project)}><Icon name="plus" size={12} /></button>
+                            </div>
+                          ))}
+                          <div className="feature-section-header feature-section-toggle project-session-category-header">
+                            <button
+                              type="button"
+                              className="feature-section-title"
+                              aria-expanded={!ticketSessionsCollapsed}
+                              data-testid="project-ticket-sessions-nav-item"
+                              onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:ticket-sessions`]: !ticketSessionsCollapsed }))}
+                            >
+                              <span className="tree-icon"><Icon name="ticket" size={14} /></span>
+                              <span className="sidebar-section-label tree-label" style={{ margin: 0 }}>Ticket{ticketSessions.length > 0 && <span className="session-category-count">{ticketSessions.length}</span>}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="feature-section-action"
+                              aria-label={ticketSessionsCollapsed ? 'Expand ticket sessions' : 'Collapse ticket sessions'}
+                              title={ticketSessionsCollapsed ? 'Expand ticket sessions' : 'Collapse ticket sessions'}
+                              onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:ticket-sessions`]: !ticketSessionsCollapsed }))}
+                            ><span className={`tree-section-icon${ticketSessionsCollapsed ? '' : ' open'}`}><Icon name={ticketSessionsCollapsed ? 'chevron-right' : 'chevron-down'} size={13} /></span></button>
+                          </div>
+                          {!ticketSessionsCollapsed && (ticketSessions.length > 0 ? renderProjectSessions(ticketSessions, 'ticket') : (
+                            <div className="project-session-empty">
+                              <span>No ticket sessions yet</span>
+                              <button type="button" className="project-session-empty-action" aria-label={`New ticket session in ${project.name}`} title="New ticket session" onClick={() => onNewSession(project)}><Icon name="plus" size={12} /></button>
+                            </div>
+                          ))}
+                        </>}
+                        <div className="feature-section-header feature-section-toggle project-automations-header">
+                          <button
+                            type="button"
+                            className="feature-section-title"
+                            aria-expanded={!projectRunsCollapsed}
+                            data-testid="project-workflow-runs-nav-item"
+                            onClick={() => {
+                              if (onSelectWorkflowRuns) onSelectWorkflowRuns(project);
+                              else setCollapsed(current => ({ ...current, [`project:${project.id}:runs`]: !projectRunsCollapsed }));
+                            }}
+                          >
+                            <span className="sidebar-section-label" style={{ margin: 0 }}>Automations{activeProjectRuns.length > 0 && <span className="session-category-count">{activeProjectRuns.length}</span>}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="feature-section-action"
+                            aria-label="New automation"
+                            title="Start a new automation"
+                            data-testid="project-workflow-run-new"
+                            onClick={event => {
+                              event.stopPropagation();
+                              onStartWorkflowRun(project);
+                            }}
+                          ><Icon name="plus" size={13} /></button>
+                          <button
+                            type="button"
+                            className="feature-section-action"
+                            aria-label={projectRunsCollapsed ? 'Expand automations' : 'Collapse automations'}
+                            title={projectRunsCollapsed ? 'Expand automations' : 'Collapse automations'}
+                            onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:runs`]: !projectRunsCollapsed }))}
+                          >
+                            <span className={`tree-section-icon${projectRunsCollapsed ? '' : ' open'}`}>
+                              <Icon name={projectRunsCollapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+                            </span>
+                          </button>
+                        </div>
+                        {(!projectRunsCollapsed && activeProjectRuns.length > 0) && activeProjectRuns.map(run => (
+                          <AutomationRunRow
+                            key={`workflow-run:${run.runId}`}
+                            project={project}
+                            run={run}
+                            sessions={sessions}
+                            active={activeFeature === 'workflows' && activeWorkflowRunId === run.runId}
+                            onSelectWorkflowRun={onSelectWorkflowRun}
+                            onCancelWorkflowRun={onCancelWorkflowRun}
+                            onDeleteWorkflowRun={onDeleteWorkflowRun}
+                            onArchiveWorkflowRun={onArchiveWorkflowRun}
+                          />
+                        ))}
+                        {!projectRunsCollapsed && activeProjectRuns.length === 0 && (
+                          <span className="sidebar-empty-hint project-runs-empty">No automations yet</span>
+                        )}
                       </div>}
                     </div>;
                   }))}
             </>}
-            <div className="sidebar-section-heading">
+            {!hideBoardsForActiveProject && <><div className="sidebar-section-heading">
               <button className="sidebar-section-label sidebar-section-button sidebar-section-toggle" aria-expanded={!boardsCollapsed} data-testid="toggle-boards" onClick={() => setBoardsCollapsed(value => !value)}>
                 <span className={`tree-section-icon${boardsCollapsed ? '' : ' open'}`}><Icon name="columns" size={14} /></span><span>Boards</span><span className="tree-meta">{externalBoards.length}</span>
               </button>
@@ -696,7 +1292,7 @@ export function Sidebar({
                 <button className="board-tree-configure" data-testid="board-configure-btn" aria-label={`Configure board ${board.name}`} title="Configure board" onClick={() => onConfigureBoard(board)}><Icon name="gear" size={12} /></button>
                 {canDelete && <button className="board-tree-delete" data-testid="board-delete-btn" aria-label={`${removeLabel} board ${board.name}`} title={board.type === 'plan' ? 'Delete this board' : 'Remove this board from Praxis'} onClick={() => onDeleteBoard(board)}><Icon name="trash" size={12} /></button>}
               </div>;
-            })}</div>}
+            })}</div>}</>}
           </>
         )}
       </div>
@@ -800,32 +1396,6 @@ export function Sidebar({
                 onDeleteSession={onDeleteSession}
                 onArchiveSession={onArchiveSession}
               />
-            ) : feature.id === 'sessions' ? (
-              <SessionsNav
-                key={feature.id}
-                testId="nav-sessions"
-                icon={feature.icon}
-                label={feature.label}
-                active={activeFeature === 'sessions'}
-                collapsed={collapsed['feature:sessions'] ?? false}
-                onToggleCollapsed={() =>
-                  setCollapsed(current => ({ ...current, 'feature:sessions': !(current['feature:sessions'] ?? false) }))
-                }
-                sessions={sessions.filter(session => !isConversationSession(session))}
-                runNames={Object.fromEntries(
-                  Object.values(runsByProjectId)
-                    .flat()
-                    .map(run => [run.runId, run.workflowName])
-                )}
-                activeSessionKey={activeSessionKey}
-                runningCount={featureCounts.sessions ?? 0}
-                onSelectFeature={() => onSelectFeature('sessions')}
-                onSelectSession={onSelectSession}
-                onNewSession={onNewSession}
-                onRenameSession={onRenameSession}
-                onDeleteSession={onDeleteSession}
-                onArchiveSession={onArchiveSession}
-              />
             ) : feature.id === 'agents' ? (
               <AgentsNav
                 key={feature.id}
@@ -905,7 +1475,7 @@ function SessionsNav({
   runningCount: number;
   onSelectFeature: () => void;
   onSelectSession: (issueKey: string) => void;
-  onNewSession: () => void;
+  onNewSession: (project?: ProjectRecord) => void;
   onRenameSession: (issueKey: string, title: string) => Promise<void>;
   onDeleteSession: (issueKey: string) => Promise<void>;
   onArchiveSession: (issueKey: string, archived: boolean) => Promise<void>;
@@ -1247,7 +1817,7 @@ function SessionsNav({
           className="sidebar-section-add"
           aria-label={`New ${label.toLowerCase().slice(0, -1)}`}
           data-testid={testId === 'nav-conversations' ? 'conversations-new-btn' : 'sessions-new-btn'}
-          onClick={onNewSession}
+          onClick={() => onNewSession()}
         >
           <Icon name="plus" size={13} />
         </button>
@@ -1354,6 +1924,57 @@ function AgentsNav({
   onNewAgentItem: (kind: 'agent' | 'profile' | 'skill' | 'import' | 'rescan') => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; left: number } | undefined>();
+  const addBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  const toggleMenu = useCallback(() => {
+    setMenuOpen(prev => {
+      const next = !prev;
+      if (next && addBtnRef.current) {
+        const rect = addBtnRef.current.getBoundingClientRect();
+        const menuWidth = 260;
+        const menuHeight = 240;
+        const gap = 6;
+        const left = Math.max(8, rect.right - menuWidth);
+        const spaceBelow = window.innerHeight - rect.bottom;
+        if (spaceBelow < menuHeight + gap) {
+          setMenuPos({
+            bottom: Math.max(8, window.innerHeight - rect.top + gap),
+            left
+          });
+        } else {
+          setMenuPos({
+            top: rect.bottom + gap,
+            left
+          });
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (addBtnRef.current?.contains(target)) return;
+      const menuEl = document.querySelector('.new-menu--portal');
+      if (menuEl?.contains(target)) return;
+      setMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menuOpen]);
+
   // Which of the Agents / Skills sub-headers are folded.
   const [collapsedKinds, setCollapsedKinds] = useState<Record<string, boolean>>({});
   // Agents are their profile — the primary-nav identity is AGENT.md, not the launch binding that runs
@@ -1398,16 +2019,27 @@ function AgentsNav({
         </button>
         <div className="new-menu-anchor">
           <button
+            ref={addBtnRef}
             className="sidebar-section-add"
             aria-label="New agent or skill"
             aria-expanded={menuOpen}
             data-testid="nav-agents-new"
-            onClick={() => setMenuOpen(open => !open)}
+            onClick={toggleMenu}
           >
             <Icon name="plus" size={13} />
           </button>
-          {menuOpen && (
-            <div className="new-menu" role="menu" onMouseLeave={() => setMenuOpen(false)}>
+          {menuOpen && menuPos && createPortal(
+            <div
+              className="new-menu new-menu--portal"
+              role="menu"
+              data-testid="agents-new-menu"
+              style={{
+                position: 'fixed',
+                left: `${menuPos.left}px`,
+                top: menuPos.top !== undefined ? `${menuPos.top}px` : 'auto',
+                bottom: menuPos.bottom !== undefined ? `${menuPos.bottom}px` : 'auto'
+              }}
+            >
               <button role="menuitem" data-testid="new-profile" onClick={() => { setMenuOpen(false); onNewAgentItem('profile'); }}>
                 <Icon name="robot" size={14} /><span><strong>New agent profile</strong><small>A provider-neutral AGENT.md role</small></span>
               </button>
@@ -1420,7 +2052,8 @@ function AgentsNav({
               <button role="menuitem" data-testid="rescan-agents" onClick={() => { setMenuOpen(false); onNewAgentItem('rescan'); }}>
                 <Icon name="refresh" size={14} /><span><strong>Rescan catalog</strong><small>Re-read the discovery paths</small></span>
               </button>
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       </div>

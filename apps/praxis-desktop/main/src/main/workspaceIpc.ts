@@ -83,6 +83,37 @@ export function registerWorkspaceIpc(): void {
     resetWorkspaceScopes();
     return getWorkspaceStore().get(parsed.id);
   });
+  ipcMain.handle('workspaces:openFolder', async (_event, folderPath: string) => {
+    const requested = folderPath?.trim();
+    if (!requested || !path.isAbsolute(requested)) {
+      throw new Error('Choose an existing folder.');
+    }
+    const root = path.resolve(requested);
+    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+      throw new Error('Choose an existing folder.');
+    }
+    const workspacePath = path.join(root, workspaceFileName(path.basename(root)));
+    if (fs.existsSync(workspacePath)) {
+      const parsed = parseWorkspaceFile(await fs.promises.readFile(workspacePath, 'utf8'));
+      await registerWorkspaceLocation({ id: parsed.id, path: workspacePath });
+      resetWorkspaceScopes();
+      return getWorkspaceStore().get(parsed.id);
+    }
+    const workspace = await createWorkspaceInAppStore({
+      name: path.basename(root), description: '', projectIds: []
+    }, app.getVersion());
+    try {
+      await createWorkspaceFile(workspacePath, workspace);
+      await registerWorkspaceLocation({ id: workspace.id, path: workspacePath });
+      resetWorkspaceScopes();
+      await getWorkspaceStore().remove(workspace.id);
+      return getWorkspaceStore().get(workspace.id) ?? { ...workspace, storagePath: workspacePath };
+    } catch (error) {
+      await new WorkspaceStoreCleanup().removeBase(workspace.id);
+      if (fs.existsSync(workspacePath)) await fs.promises.rm(workspacePath, { force: true }).catch(() => undefined);
+      throw error;
+    }
+  });
 }
 
 /** Removes a temporary app-owned record when located-file creation fails. */

@@ -53,8 +53,8 @@ fi
 
 case "$TARGET" in
   native) builder_args=() ;;
-  mac|dmg) builder_args=(--mac dmg) ;;
-  win|windows|nsis) builder_args=(--win nsis) ;;
+  mac|dmg) builder_args=(--mac dmg zip) ;;
+  win|windows|nsis) builder_args=(--win nsis --x64) ;;
   linux) builder_args=(--linux AppImage deb) ;;
   appimage) builder_args=(--linux AppImage) ;;
   deb) builder_args=(--linux deb) ;;
@@ -66,4 +66,4 @@ printf '\033[36m==> Packaging Praxis (%s)\033[0m\n' "$TARGET"
 (cd "$ELECTRON_APP" && npx electron-builder ${builder_args[@]+"${builder_args[@]}"} --publish never)
 
 printf '\033[32m  + Installer artifacts are ready:\033[0m\n'
-find "$ELECTRON_APP/dist" -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' \) -print
+find "$ELECTRON_APP/dist" -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name 'latest*.yml' -o -name '*.blockmap' \) -print

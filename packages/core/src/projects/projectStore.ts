@@ -73,6 +73,7 @@ export class ProjectStore {
     }
     const next: ProjectRecord = {
       ...project,
+      ...(patch.planningMode !== undefined ? { planningMode: patch.planningMode } : {}),
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
       key: nextKey,
       ...(patch.type !== undefined ? { type: patch.type } : {}),

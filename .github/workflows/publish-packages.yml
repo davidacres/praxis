@@ -10,7 +10,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
@@ -34,13 +34,3 @@ jobs:
         run: npm publish --workspace=@praxis/mobile-protocol
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create Release
-        run: |
-          gh release create "$RELEASE_TAG" \
-            --title "Release $RELEASE_TAG" \
-            --generate-notes
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true

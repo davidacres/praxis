@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to release (for example v0.4.0)
+        required: true
+        type: string
 
 # Build jobs run npm ci and third-party build scripts, so they get a read-only
 # token. Only the release job, which runs no project code, can write.
@@ -16,6 +21,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -48,6 +55,9 @@ jobs:
           path: |
             apps/praxis-desktop/main/dist/Praxis-*-arm64.dmg
             apps/praxis-desktop/main/dist/Praxis-*-arm64.dmg.blockmap
+            apps/praxis-desktop/main/dist/Praxis-*-arm64.zip
+            apps/praxis-desktop/main/dist/Praxis-*-arm64.zip.blockmap
+            apps/praxis-desktop/main/dist/latest-mac.yml
           if-no-files-found: error
           retention-days: 1
 
@@ -55,6 +65,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -87,6 +99,7 @@ jobs:
           path: |
             apps/praxis-desktop/main/dist/Praxis-*-setup.exe
             apps/praxis-desktop/main/dist/Praxis-*-setup.exe.blockmap
+            apps/praxis-desktop/main/dist/latest.yml
           if-no-files-found: error
           retention-days: 1
 
@@ -94,6 +107,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -126,6 +141,7 @@ jobs:
           path: |
             apps/praxis-desktop/main/dist/Praxis-*.AppImage
             apps/praxis-desktop/main/dist/Praxis-*.deb
+            apps/praxis-desktop/main/dist/latest-linux.yml
           if-no-files-found: error
           retention-days: 1
 
@@ -142,16 +158,33 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Upload installers to Release
+      - name: Create Release if needed
         run: |
-          gh release upload "$RELEASE_TAG" \
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --title "Release $RELEASE_TAG" \
+              --generate-notes
+          fi
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          GH_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installers and update metadata
+        run: |
+          gh release upload "$RELEASE_TAG" --clobber \
             dist/Praxis-*-arm64.dmg \
             dist/Praxis-*-arm64.dmg.blockmap \
+            dist/Praxis-*-arm64.zip \
+            dist/Praxis-*-arm64.zip.blockmap \
             dist/Praxis-*-setup.exe \
             dist/Praxis-*-setup.exe.blockmap \
             dist/Praxis-*.AppImage \
-            dist/Praxis-*.deb
+            dist/Praxis-*.deb \
+            dist/latest.yml \
+            dist/latest-mac.yml \
+            dist/latest-linux.yml
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
           GH_REPO: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
