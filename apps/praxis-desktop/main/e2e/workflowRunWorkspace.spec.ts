@@ -224,13 +224,15 @@ test('a controller session starts a run: the run is a tree node, its stage sessi
   await toggle.click();
   await expect(childRow).toHaveCount(1);
 
-  // Workflows tree: the run is a node under Runs; opening it fills the workspace.
+  // Sessions tree: the run is under Automations; opening it fills the workspace.
   const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
   if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
   const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
   await expect(runRow).toHaveCount(1);
   await expect(runRow).toHaveAttribute('data-run-status', 'awaiting-approval');
-  await runRow.getByRole('button').first().click();
+  const runToggle = runRow.getByRole('button').first();
+  if ((await runToggle.getAttribute('aria-expanded')) === 'false') await runToggle.click();
+  await runRow.getByTestId('automation-inline-open-run').click();
 
   // Centre: the session doing the work. Right pane: the pipeline, vertically.
   await expect(page.getByTestId('wf-run-session')).toBeVisible();
@@ -259,6 +261,7 @@ test('a controller session starts a run: the run is a tree node, its stage sessi
 
   // Cancel from the tree node.
   await runRow.hover();
+  await runRow.getByRole('button', { name: /Actions for/ }).click();
   await page.getByTestId(`project-run-cancel-${run.runId}`).click();
   await expect.poll(() => runStatus(page, run.runId)).toBe('cancelled');
   await expect(runRow).toHaveAttribute('data-run-status', 'cancelled');
@@ -268,6 +271,7 @@ test('a controller session starts a run: the run is a tree node, its stage sessi
   // Delete from the tree node: a themed confirm, then the run, its stage
   // session and its link on the controller are all gone; the controller stays.
   await runRow.hover();
+  await runRow.getByRole('button', { name: /Actions for/ }).click();
   await page.getByTestId(`project-run-delete-${run.runId}`).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete run', exact: true }).click();
   await expect(runRow).toHaveCount(0);
@@ -302,6 +306,7 @@ test('deleting a live run cancels it first, then removes it', async () => {
   await expect(runsGroup).toContainText('1');
 
   await runRow.hover();
+  await runRow.getByRole('button', { name: /Actions for/ }).click();
   await page.getByTestId(`project-run-delete-${run.runId}`).click();
   // The confirm says the run is live and will be cancelled first.
   await expect(page.getByRole('dialog')).toContainText(/cancelled first/i);
@@ -315,7 +320,7 @@ test('the start-run dialog opens from a workflow row with that workflow preselec
   const { page, seeded } = await launch(true);
   await page.reload();
 
-  await expect(page.getByTestId('project-workflow-run-new')).toHaveCount(0);
+  await expect(page.getByTestId('project-workflow-run-new')).toBeVisible();
   await page.getByTestId('project-workflow-nav-item').hover();
   await page.getByTestId(`project-workflow-run-${seeded.workflowId}`).click();
   const dialog = page.getByTestId('wf-runstart-dialog');
@@ -328,6 +333,95 @@ test('the start-run dialog opens from a workflow row with that workflow preselec
   // A check stage has no conversation: the centre says so rather than staying blank.
   await expect(page.getByTestId('wf-run-nosession')).toBeVisible();
   await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(1);
+});
+
+test('the Automations header opens a new workflow run', async () => {
+  const { page } = await launch(true);
+  await page.reload();
+
+  await page.getByTestId('project-workflow-run-new').click();
+  const dialog = page.getByTestId('wf-runstart-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Start workflow run');
+  await dialog.getByLabel('Run task').fill('From the Automations header');
+  await dialog.getByRole('button', { name: 'Start', exact: true }).click();
+
+  await expect(page.getByTestId('wf-run-panel')).toBeVisible();
+  const runRow = page.getByTestId('project-workflow-run-row').first();
+  await expect(runRow).toHaveCount(1);
+  await expect(runRow.getByTestId('automation-run-status')).toHaveAttribute('aria-label', /Running|Awaiting approval|Succeeded|Failed|Cancelled|Paused/);
+  await expect(runRow.getByTestId('automation-run-status')).toHaveAttribute('title', /Running|Awaiting approval|Succeeded|Failed|Cancelled|Paused/);
+  const toggle = runRow.getByRole('button').first();
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+  expect((await runRow.boundingBox())!.height).toBeGreaterThanOrEqual(82);
+  const timeline = page.getByTestId('automation-timeline');
+  await expect(timeline).toBeVisible();
+  await expect(timeline.locator('[data-testid^="automation-stage-"]')).toHaveCount(2);
+  await expect(runRow.getByTestId('automation-run-stage-summary')).toBeVisible();
+  await runRow.getByTestId('automation-inline-view-workflow').click();
+  const sheet = page.getByTestId('automation-sheet');
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByTestId('automation-sheet-stages').locator('.automation-sheet-stage')).toHaveCount(2);
+  await sheet.getByRole('button', { name: 'Close automation details' }).click();
+  await page.locator('[data-testid="project-tree"]').screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-timeline.png')
+  });
+  await toggle.click();
+  await expect(timeline).not.toBeVisible();
+  expect((await runRow.boundingBox())!.height).toBeLessThanOrEqual(38);
+});
+
+test('a long automation uses a bounded dot rail and exposes every step in the workflow sheet', async () => {
+  const { page, seeded } = await launch(true);
+  await page.evaluate(async projectId => {
+    const now = new Date().toISOString();
+    const nodes = Array.from({ length: 16 }, (_, index) => ({
+      type: 'approval' as const,
+      id: `step-${index + 1}`,
+      name: `Workflow step ${index + 1}`,
+      x: index * 180,
+      y: 0,
+      inputs: [],
+      prompt: `Approve step ${index + 1}?`,
+      requiredGates: [],
+      allowBypass: false
+    }));
+    const workflowId = `long-${Date.now()}`;
+    await window.praxis.workflows.save(projectId, {
+      schemaVersion: 1,
+      id: workflowId,
+      name: 'Long automation',
+      scope: 'project',
+      projectId,
+      version: 1,
+      entryNodeId: nodes[0].id,
+      createdAt: now,
+      updatedAt: now,
+      nodes,
+      edges: nodes.slice(1).map((node, index) => ({ id: `edge-${index}`, from: nodes[index].id, to: node.id, on: 'success', required: true }))
+    } as never);
+    await window.praxis.workflows.startRun(projectId, workflowId, 'Long workflow preview');
+  }, seeded.projectId);
+  await page.reload();
+
+  const row = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Long automation' });
+  await expect(row).toBeVisible();
+  const toggle = row.getByRole('button').first();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  const rail = row.getByTestId('automation-timeline');
+  const visiblePositions = rail.locator('.automation-rail-step, .automation-rail-overflow');
+  expect(await visiblePositions.count()).toBeLessThanOrEqual(12);
+  await expect(rail.locator('.automation-rail-overflow').first()).toBeVisible();
+  await rail.locator('.automation-rail-overflow').first().click();
+
+  const sheet = page.getByTestId('automation-sheet');
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByTestId('automation-sheet-stages').locator('.automation-sheet-stage')).toHaveCount(16);
+  await page.waitForTimeout(250);
+  await sheet.screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-workflow-sheet.png'),
+  });
 });
 
 const gitOut = (cwd: string, ...args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' });
@@ -445,7 +539,9 @@ test('an out-of-credits provider pauses the run instead of failing it, and resum
   if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
   const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
   await expect(runRow).toHaveAttribute('data-run-status', 'paused');
-  await runRow.getByRole('button').first().click();
+  const toggle = runRow.getByRole('button').first();
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+  await runRow.getByTestId('automation-inline-open-run').click();
   await expect(page.getByTestId('wf-run-limit')).toBeVisible();
   await expect(page.getByTestId('wf-vpipe-step-review')).toHaveAttribute('data-lane', 'paused');
   await expect(page.getByTestId('wf-run-bar')).toContainText('paused');
@@ -471,7 +567,10 @@ test('a stage whose AI ran out can be switched to another AI and carries on', as
   await page.reload();
   const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
   if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  await page.getByTestId('project-workflow-run-row').filter({ hasText: /Switch AI/ }).getByRole('button').first().click();
+  const switchRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Switch AI/ });
+  const switchToggle = switchRow.getByRole('button').first();
+  if ((await switchToggle.getAttribute('aria-expanded')) === 'false') await switchToggle.click();
+  await switchRow.getByTestId('automation-inline-open-run').click();
   const notice = page.getByTestId('wf-run-limit');
   await expect(notice).toContainText('Vercel AI Gateway ran out of budget');
   await expect(notice.getByTestId('wf-limit-switch-to')).toHaveAttribute('data-value', 'codex-cli');
@@ -525,7 +624,10 @@ test('with "Stop the run" the run ends saying which AI ran out, and can still ca
   await page.reload();
   const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
   if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  await page.getByTestId('project-workflow-run-row').filter({ hasText: /Stop on limit/ }).getByRole('button').first().click();
+  const stopRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Stop on limit/ });
+  const stopToggle = stopRow.getByRole('button').first();
+  if ((await stopToggle.getAttribute('aria-expanded')) === 'false') await stopToggle.click();
+  await stopRow.getByTestId('automation-inline-open-run').click();
   const notice = page.getByTestId('wf-run-limit');
   await expect(notice).toContainText('The run could not be completed');
   await expect(notice.getByTestId('wf-limit-stop')).toHaveCount(0);
@@ -561,7 +663,10 @@ test('a run in Ask mode stops the stage for a tool permission; the same run in A
   await asked.page.reload();
   const runsGroup = asked.page.getByTestId('project-workflow-runs-nav-item');
   if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  await asked.page.getByTestId('project-workflow-run-row').first().getByRole('button').first().click();
+  const askedRow = asked.page.getByTestId('project-workflow-run-row').first();
+  const askedToggle = askedRow.getByRole('button').first();
+  if ((await askedToggle.getAttribute('aria-expanded')) === 'false') await askedToggle.click();
+  await askedRow.getByTestId('automation-inline-open-run').click();
   await expect(asked.page.getByTestId('wf-run-mode')).toHaveAttribute('data-mode', 'ask');
 
   // Allowing it lets the stage finish and the run reach approval.
@@ -640,7 +745,7 @@ test('a terminal run can be archived, removing it from the sidebar and listing i
 
   await page.reload();
 
-  // Open the Workflows > Runs tree in the sidebar
+  // Open the Sessions > Automations tree in the sidebar
   const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
   if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
   const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
@@ -648,6 +753,7 @@ test('a terminal run can be archived, removing it from the sidebar and listing i
 
   // Archive button on the sidebar run row
   await runRow.hover();
+  await runRow.getByRole('button', { name: /Actions for/ }).click();
   const archiveBtn = page.getByTestId(`project-run-archive-${run.runId}`);
   await expect(archiveBtn).toBeVisible();
   await archiveBtn.click();
@@ -655,7 +761,7 @@ test('a terminal run can be archived, removing it from the sidebar and listing i
   // It is now removed from the active runs tree
   await expect(runRow).toHaveCount(0);
 
-  // Clicking the Runs header opens the workflow runs browser
+  // Clicking the Automations header opens the workflow runs browser
   await runsGroup.click();
   await expect(page.getByTestId('wf-runs-browser')).toBeVisible();
   await expect(page.getByTestId('wf-runs-browser-new-run')).toHaveCount(0);

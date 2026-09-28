@@ -91,10 +91,9 @@ const runBranches = (repo: string): string[] =>
 
 async function openDeleteDialog(page: Page, runId: string): Promise<void> {
   await page.reload();
-  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
   const row = page.getByTestId('project-workflow-run-row').first();
   await row.hover();
+  await row.getByRole('button', { name: /Actions for/ }).click();
   await page.getByTestId(`project-run-delete-${runId}`).click();
   await expect(page.getByRole('dialog', { name: 'Delete this run?' })).toBeVisible();
 }

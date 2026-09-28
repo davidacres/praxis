@@ -128,7 +128,7 @@ export class ProjectManager {
     const project: ProjectRecord = {
       id, name: input.name.trim(), key: input.key.trim().toUpperCase(), type: input.type,
       purpose: input.purpose.trim(), brief: cleanBrief(input.brief), workspaceFolder: folder,
-      storage,
+      storage, planningMode: input.planningMode ?? 'board',
       workflowStages: input.workflowStages.map(stage => ({ id: stage.id, name: stage.name.trim(), ...(stage.category ? { category: stage.category } : {}) })),
       defaultBoardId: `${id}-board`, linkedBoards: [],
       defaultAiToolMode: folder ? input.defaultAiToolMode : 'project-only',

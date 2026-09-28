@@ -1,0 +1,25 @@
+{
+  "name": "@davidacres/praxis-desktop",
+  "version": "0.3.3-selfsigned.1",
+  "description": "Installer launcher for the Praxis desktop application.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidacres/praxis.git",
+    "directory": "packages/desktop-installer"
+  },
+  "bin": {
+    "praxis-desktop": "bin/praxis-desktop.cjs"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  }
+}

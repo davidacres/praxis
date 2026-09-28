@@ -8,11 +8,13 @@ interface GettingStartedProps {
   createdWorkspace?: WorkspaceRecord;
   onOpenWorkspace: (workspaceId: string) => void;
   onOpenWorkspaceFile: () => void;
+  onOpenExistingFolder: () => Promise<boolean | void>;
   onCreateWorkspace: (name: string, description: string, storageFolder?: string) => Promise<void>;
   onStartFirstProject: (wizardMode: 'create' | 'existing') => Promise<void>;
   onSkipSetup: () => void;
   onCreateProject: () => void;
   onAddExistingProject: () => void;
+  onQuickStartFromFolder: () => Promise<boolean | void>;
   onContinueEmpty: () => void;
 }
 
@@ -22,11 +24,13 @@ export function GettingStarted({
   createdWorkspace,
   onOpenWorkspace,
   onOpenWorkspaceFile,
+  onOpenExistingFolder,
   onCreateWorkspace,
   onStartFirstProject,
   onSkipSetup,
   onCreateProject,
   onAddExistingProject,
+  onQuickStartFromFolder,
   onContinueEmpty
 }: GettingStartedProps) {
   const [showSetup, setShowSetup] = useState(false);
@@ -39,6 +43,8 @@ export function GettingStarted({
   const [storageFolder, setStorageFolder] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
+  const [quickStarting, setQuickStarting] = useState(false);
+  const [openingFolder, setOpeningFolder] = useState(false);
   const ordered = useMemo(() => {
     const rank = new Map(recentWorkspaceIds.map((id, index) => [id, index]));
     return [...workspaces].sort((left, right) =>
@@ -66,6 +72,32 @@ export function GettingStarted({
     }
   };
 
+  const quickStart = async () => {
+    if (quickStarting) return;
+    setQuickStarting(true);
+    setError(undefined);
+    try {
+      const completed = await onQuickStartFromFolder();
+      if (completed === false) setQuickStarting(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+      setQuickStarting(false);
+    }
+  };
+
+  const openExistingFolder = async () => {
+    if (openingFolder) return;
+    setOpeningFolder(true);
+    setError(undefined);
+    try {
+      const completed = await onOpenExistingFolder();
+      if (completed === false) setOpeningFolder(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+      setOpeningFolder(false);
+    }
+  };
+
   return (
     <main className="getting-started" data-testid="getting-started">
       <section className="getting-started-copy" aria-labelledby="getting-started-title">
@@ -82,7 +114,11 @@ export function GettingStarted({
               <button className="getting-started-action" type="button" onClick={onAddExistingProject}>
                 <span><Icon name="folder-open" size={18} /></span><strong>Create from existing folder</strong><small>Scan its plans and connect the work to this workspace.</small><Icon name="chevron-right" size={16} />
               </button>
+              <button className="getting-started-action" type="button" onClick={() => void quickStart()} disabled={quickStarting || openingFolder}>
+                <span><Icon name="folder" size={18} /></span><strong>{quickStarting ? 'Opening folder…' : 'Quick start from a folder'}</strong><small>Work with the file structure without creating a board.</small><Icon name="chevron-right" size={16} />
+              </button>
             </div>
+            {error && <div className="form-error" role="alert">{error}</div>}
             <button className="getting-started-text-action" type="button" onClick={onContinueEmpty}>Continue with Empty Workspace</button>
           </div>
         ) : showFirstProject ? (
@@ -100,6 +136,7 @@ export function GettingStarted({
             </div>
             <div className="getting-started-secondary-actions">
               <button className="getting-started-text-action" type="button" onClick={() => setNameWorkspaceFirst(true)}>Name a workspace first</button>
+              <button className="getting-started-text-action" type="button" onClick={() => void openExistingFolder()} disabled={openingFolder}>{openingFolder ? 'Opening folder…' : 'Open an existing folder'}</button>
               <button className="getting-started-text-action" type="button" onClick={onOpenWorkspaceFile}>Open a workspace file</button>
               <button className="getting-started-text-action" type="button" onClick={onSkipSetup}>Skip for now</button>
             </div>
@@ -141,6 +178,7 @@ export function GettingStarted({
             {showAll && <button className="getting-started-text-action" type="button" onClick={() => setShowAll(false)}>Show recent workspaces</button>}
             <div className="getting-started-secondary-actions">
               <button className="btn btn-primary" type="button" onClick={() => { setSetupChosen(true); setShowSetup(true); }}><Icon name="plus" size={14} /> Create Workspace</button>
+              <button className="btn" type="button" onClick={() => void openExistingFolder()} disabled={openingFolder}><Icon name="folder-open" size={14} /> {openingFolder ? 'Opening…' : 'Open existing folder'}</button>
               <button className="btn" type="button" onClick={onOpenWorkspaceFile}><Icon name="folder-open" size={14} /> Open Workspace File</button>
             </div>
           </div>

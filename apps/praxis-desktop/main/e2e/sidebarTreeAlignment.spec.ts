@@ -72,28 +72,37 @@ test('rows at the same depth of the project tree share an icon column and a labe
       return { icon: Math.round(i.left), label: Math.round(l.left), gap: Math.round(l.left - i.right) };
     }, iconSelector);
 
-  // Depth 2 (--tree-indent-2): a board, a workflow, the Runs header, Policies.
+  // Depth 2 (--tree-indent-2): a board, a workflow and Policies. Automations is
+  // now a peer section to Sessions, so it deliberately has no nested tree icon.
   const depth2 = {
     board: await measure('.project-board-row', '.tree-icon'),
     workflow: await measure('.project-workflow-row', '.tree-icon'),
-    runsHeader: await measure('.project-runs-header', '.tree-icon'),
-    policies: await measure('.project-workflow-child:not(.project-runs-header)', '.tree-icon')
+    policies: await measure('.project-workflow-child', '.tree-icon')
   };
   // Depth 1 (--tree-indent-1): flat leaves with no children (deployments).
   const depth1 = {
     deployments: await measure('[data-testid=project-deployments-nav-item]', '.tree-icon')
   };
-  // Depth 3 (--tree-indent-3): a workflow run node, its status dot then its name.
+  // Depth 3 (--tree-indent-3): workflow run rows under the Sessions subgroup.
   const runNodes = [
     await page.getByTestId('project-workflow-run-row').nth(0).evaluate(row => {
-      const dot = row.querySelector('.lane') as HTMLElement;
-      return Math.round(dot.getBoundingClientRect().left);
+      const icon = row.querySelector('.automation-state-mark') as HTMLElement;
+      return Math.round(icon.getBoundingClientRect().left);
     }),
     await page.getByTestId('project-workflow-run-row').nth(1).evaluate(row => {
-      const dot = row.querySelector('.lane') as HTMLElement;
-      return Math.round(dot.getBoundingClientRect().left);
+      const icon = row.querySelector('.automation-state-mark') as HTMLElement;
+      return Math.round(icon.getBoundingClientRect().left);
     })
   ];
+  const [sessionsHeader, automationsHeader] = await Promise.all([
+    page.getByTestId('project-sessions-nav-item').boundingBox(),
+    page.getByTestId('project-workflow-runs-nav-item').boundingBox()
+  ]);
+  expect(Math.abs(sessionsHeader!.x - automationsHeader!.x)).toBeLessThan(2);
+  await expect(page.getByTestId('project-workflow-run-row').first().locator('.automation-state-mark')).toBeVisible();
+  await expect(page.getByTestId('project-general-sessions-nav-item')).toContainText('General');
+  await expect(page.getByTestId('project-ticket-sessions-nav-item')).toContainText('Ticket');
+  await expect(page.getByTestId('project-workflow-runs-nav-item')).toContainText('Automations');
 
   // Verify header action buttons (Graph, Changes, Run) are visible on the project node header
   await expect(page.getByTestId('project-git-nav-item')).toBeVisible();
@@ -113,5 +122,5 @@ test('rows at the same depth of the project tree share an icon column and a labe
   expect(runNodes[0]).toBeGreaterThan(depth2.board.icon);
   expect(runNodes[0]).toBe(runNodes[1]);
 
-  await page.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'sidebar-tree-alignment.png'), clip: { x: 0, y: 40, width: 270, height: 700 } });
+  await page.screenshot({ path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'sidebar-tree-alignment.png'), clip: { x: 0, y: 40, width: 270, height: 700 } });
 });

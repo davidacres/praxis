@@ -38,6 +38,25 @@ async function seedProject(page: Page): Promise<string> {
   });
 }
 
+async function seedProjects(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    for (const [name, key] of [['First project', 'FIRST'], ['Target project', 'TARGET']] as const) {
+      await window.praxis.projects.create({
+        name,
+        key,
+        type: 'product',
+        purpose: '',
+        brief: {},
+        startingPoint: 'app-storage',
+        workflowStages: [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }],
+        starterTickets: [{ summary: `${name} ticket`, description: '', issueType: 'Task', status: 'To do' }],
+        defaultAiToolMode: 'read-only'
+      }, workspace.id);
+    }
+  });
+}
+
 test('the title-bar quick session opens the composer scoped to the current project with quick-change ready', async ({ page: _page }) => {
   mock = await startMockGatewayServer({ mode: 'complete' });
   app = await launchTestApp(undefined, undefined, {
@@ -75,6 +94,23 @@ test('the title-bar quick session opens the composer scoped to the current proje
 
   await page.screenshot({
     path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'quick-session-started.png'),
+    fullPage: true
+  });
+});
+
+test('a project session action scopes the composer to that project', async ({ page: _page }) => {
+  app = await launchTestApp();
+  const page = app.window;
+
+  await seedProjects(page);
+  await page.reload();
+  await expect(page.getByTestId('project-nav-item')).toHaveCount(2);
+
+  await page.getByTestId('project-tree').nth(1).getByTestId('project-session-new').click();
+
+  await expect(page.getByTestId('new-session-scope-heading')).toContainText('Target project');
+  await page.screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'project-session-scope.png'),
     fullPage: true
   });
 });

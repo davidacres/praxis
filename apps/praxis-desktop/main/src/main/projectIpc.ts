@@ -3,7 +3,7 @@ import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReferenc
 import { getProjectManager, getProjectStore } from './projectStoreInstance';
 import { getWorkspaceStore } from './workspaceStoreInstance';
 import { getConnectionStore } from './connectionStoreInstance';
-import { FolderService, buildProjectConnection, discoverPlanFolders } from '@praxis/core';
+import { FolderService, buildProjectConnection, discoverPlanFolders, projectConnectionId } from '@praxis/core';
 import { getServiceForConnection } from './serviceRegistry';
 
 /**
@@ -14,6 +14,16 @@ import { getServiceForConnection } from './serviceRegistry';
  */
 export async function syncProjectConnection(project: ProjectRecord, force = false): Promise<ProjectRecord> {
   const connections = getConnectionStore();
+  if (project.planningMode === 'files') {
+    const existing = connections.getConnection(projectConnectionId(project.id));
+    if (existing) {
+      for (const board of connections.getTrackedBoardsForConnection(existing.id)) {
+        await connections.removeTrackedBoard({ connectionId: existing.id, boardId: board.boardId });
+      }
+      await connections.removeConnection(existing.id);
+    }
+    return project;
+  }
   const connection = buildProjectConnection(project);
   const existing = connections.getConnection(connection.id);
   if (existing?.mode === connection.mode && force) {
@@ -124,6 +134,9 @@ export function registerProjectIpc(): void {
   });
   ipcMain.handle('projects:update', async (_event, projectId: string, patch: UpdateProjectInput) => {
     const updated = await getProjectStore().update(projectId, patch);
+    if (patch.planningMode !== undefined) {
+      await syncProjectConnection(updated, true);
+    }
     // A folder-backed board's columns live in `board.praxis.json` so the
     // workflow travels with the folder (FX-BE-045). Best-effort, exactly like
     // the connection-edit path: an unreadable folder must not block the save.

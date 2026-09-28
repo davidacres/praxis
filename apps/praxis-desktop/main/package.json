@@ -13,8 +13,8 @@
     "copy-renderer": "node scripts/copy-renderer.cjs",
     "postinstall": "node scripts/fixNodePtyPermissions.cjs",
     "dist": "electron-builder --publish never",
-    "dist:mac": "electron-builder --mac dmg --publish never",
-    "dist:mac:publish": "electron-builder --mac dmg --publish always",
+    "dist:mac": "electron-builder --mac dmg zip --publish never",
+    "dist:mac:publish": "electron-builder --mac dmg zip --publish always",
     "dist:win": "electron-builder --win nsis --x64 --publish never",
     "dist:win:publish": "electron-builder --win nsis --x64 --publish always",
     "dist:win:ia32": "electron-builder --win nsis --ia32 --publish never",
@@ -52,6 +52,11 @@
   "build": {
     "appId": "com.praxis.app",
     "productName": "Praxis",
+    "publish": {
+      "provider": "github",
+      "owner": "davidacres",
+      "repo": "praxis"
+    },
     "directories": {
       "output": "dist"
     },
@@ -77,7 +82,10 @@
       }
     ],
     "mac": {
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.productivity",
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "hardenedRuntime": true,

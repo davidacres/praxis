@@ -62,6 +62,9 @@
     "app:dist:win": "npm run app:installer:win",
     "app:dist:portable": "npm run app:installer:portable",
     "app:dist:dir": "npm run app:installer:dir",
+    "release:local:mac": "./scripts/build-signed-installer.sh --target mac",
+    "release:local:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-signed-installer.ps1",
+    "release:local:upload": "./scripts/publish-desktop-release.sh",
     "publish:packages": "npm publish --workspace=@praxis/core --workspace=@praxis/mobile-protocol",
     "release:create": "node scripts/create-release.mjs"
   },

@@ -85,7 +85,7 @@ test('the Security Review add-on installs and creates a workflow from its templa
   const listing = page.locator('[data-testid="workflow-template-marketplace-security-review"]');
   await expect(listing).toContainText('Security Review');
   await listing.getByRole('button', { name: 'Install' }).click();
-  await expect(page.locator('[data-testid="workflow-template-installed-security-review"]')).toContainText('v1.0.0');
+  await expect(page.locator('[data-testid="workflow-template-installed-security-review"]')).toContainText('v1.1.0');
   await page.keyboard.press('Escape');
 
   // It is now a template in the project's New Workflow dialog.
