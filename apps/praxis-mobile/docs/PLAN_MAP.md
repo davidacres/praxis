@@ -1,6 +1,6 @@
 # Mobile Plan Map
 
-Deliver local work execution and release first: FX-BF-028, 029, 031, 032, 033. FX-BF-030 (identity, Azure and cloud notifications) is deferred. No running cloud service is required for the local milestone. IDs remain stable; FX-BE-086 owns the moved optional notification task TASK-232.
+Deliver local work execution and release first: FX-BF-028, 029, 031, 032, 033. FX-BF-030 (account-free relay remote access and cloud notifications) is deferred. No running cloud service is required for the local milestone. IDs remain stable; FX-BE-086 owns the moved optional notification task TASK-232.
 
 **Status reconciliation (2026-09-10, updated 2026-09-22).** The desktop half is
 real and tested: the versioned execution boundary and dispatch, the host
@@ -37,7 +37,7 @@ from helper predicates, loopback fixtures, static screenshots, or Expo Go alone.
 | [FX-BE-076](plans/features/fx-bf-029-local-pairing-and-connectivity/stories/fx-be-076-account-free-device-pairing/story.md) | Story | Account-free device pairing | In Progress | FX-BE-075 |
 | [FX-BE-077](plans/features/fx-bf-029-local-pairing-and-connectivity/stories/fx-be-077-discovery-and-resilient-local-transport/story.md) | Story | Discovery and resilient local transport | In Progress | FX-BE-076 |
 | [FX-BE-078](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-078-genericsystem-and-roleover-integration/story.md) | Story | GenericSystem and Roleover integration | Backlog | FX-BE-075 |
-| [FX-BE-079](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-azure-relay-and-host-registration-service/story.md) | Story | Azure Relay and host registration service | Backlog | FX-BE-078, FX-BE-076 |
+| [FX-BE-079](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-account-free-relay-and-remote-pairing/story.md) | Story | Account-free relay and remote pairing | Backlog | FX-BE-076, FX-BE-077 |
 | [FX-BE-080](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-080-portable-mobile-application-foundation/story.md) | Story | Portable mobile application foundation | In Progress | FX-BE-074 |
 | [FX-BE-081](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-081-read-and-continue-existing-work/story.md) | Story | Read and continue existing work | In Progress | FX-BE-080, FX-BE-077 |
 | [FX-BE-082](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-082-start-and-control-existing-work/story.md) | Story | Start and control existing work | In Progress | FX-BE-081 |
@@ -47,7 +47,7 @@ from helper predicates, loopback fixtures, static screenshots, or Expo Go alone.
 | [FX-BE-086](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-086-deferred-internet-notifications/story.md) | Story | Deferred internet notifications | Backlog | FX-BE-079, FX-BE-085 |
 | [FX-BF-028](plans/features/fx-bf-028-execution-host-and-protocol/feature.md) | Feature | Execution host and mobile protocol | Complete | None |
 | [FX-BF-029](plans/features/fx-bf-029-local-pairing-and-connectivity/feature.md) | Feature | Local pairing and direct connectivity | In Progress | FX-BE-075 |
-| [FX-BF-030](plans/features/fx-bf-030-identity-and-azure-relay/feature.md) | Feature | Optional identity and Azure internet access | Backlog | FX-BE-075 |
+| [FX-BF-030](plans/features/fx-bf-030-identity-and-azure-relay/feature.md) | Feature | Account-free remote access over a relay | Backlog | FX-BE-075 |
 | [FX-BF-031](plans/features/fx-bf-031-mobile-shell-and-continuation/feature.md) | Feature | Mobile shell and work continuation | In Progress | FX-BE-074 |
 | [FX-BF-032](plans/features/fx-bf-032-mobile-execution-and-decisions/feature.md) | Feature | Mobile workflow execution and decisions | In Progress | FX-BE-081 |
 | [FX-BF-033](plans/features/fx-bf-033-mobile-reliability-and-release/feature.md) | Feature | Mobile reliability and release readiness | In Progress | FX-BE-083 |
@@ -66,9 +66,9 @@ from helper predicates, loopback fixtures, static screenshots, or Expo Go alone.
 | [TASK-213](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-078-genericsystem-and-roleover-integration/tasks/task-213-audit-identity-and-resource-authorisation-capabilities.md) | Task | Audit identity and resource authorisation capabilities | Backlog | FX-BE-075 |
 | [TASK-214](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-078-genericsystem-and-roleover-integration/tasks/task-214-implement-optional-desktop-and-required-internet-sign-in.md) | Task | Implement optional desktop and required internet sign-in | Backlog | TASK-213 |
 | [TASK-215](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-078-genericsystem-and-roleover-integration/tasks/task-215-enforce-scoped-roles-revocation-and-sign-out.md) | Task | Enforce scoped roles revocation and sign-out | Backlog | TASK-214 |
-| [TASK-216](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-azure-relay-and-host-registration-service/tasks/task-216-prototype-azure-relay-compatibility-and-cost.md) | Task | Prototype Azure Relay compatibility and cost | Backlog | FX-BE-078, FX-BE-076 |
-| [TASK-217](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-azure-relay-and-host-registration-service/tasks/task-217-implement-host-registry-and-scoped-relay-credentials.md) | Task | Implement host registry and scoped relay credentials | Backlog | TASK-216 |
-| [TASK-218](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-azure-relay-and-host-registration-service/tasks/task-218-secure-end-to-end-relay-traffic-and-route-changes.md) | Task | Secure end-to-end relay traffic and route changes | Backlog | TASK-217 |
+| [TASK-216](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-account-free-relay-and-remote-pairing/tasks/task-216-spike-relay-hosting-and-flutter-websocket-transport.md) | Task | Spike relay hosting and Flutter WebSocket transport | Backlog | FX-BE-076, FX-BE-077 |
+| [TASK-217](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-account-free-relay-and-remote-pairing/tasks/task-217-implement-account-free-byte-relay-with-per-host-quotas.md) | Task | Implement the account-free byte relay with per-host quotas | Backlog | TASK-216 |
+| [TASK-218](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-account-free-relay-and-remote-pairing/tasks/task-218-secure-end-to-end-relay-traffic-and-route-changes.md) | Task | Prove secure end-to-end relay traffic and route changes | Backlog | TASK-390, TASK-391 |
 | [TASK-219](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-080-portable-mobile-application-foundation/tasks/task-219-select-mobile-packaging-and-establish-build-boundaries.md) | Task | Select mobile packaging and establish build boundaries | Complete | FX-BE-074 |
 | [TASK-220](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-080-portable-mobile-application-foundation/tasks/task-220-build-praxis-mobile-navigation-and-shared-appearance.md) | Task | Build Praxis mobile navigation and shared appearance | Complete | TASK-219 |
 | [TASK-221](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-080-portable-mobile-application-foundation/tasks/task-221-add-mock-host-and-isolated-mobile-ci.md) | Task | Add mock host and isolated mobile CI | Complete | TASK-220 |
@@ -92,3 +92,6 @@ from helper predicates, loopback fixtures, static screenshots, or Expo Go alone.
 | [TASK-239](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-082-start-and-control-existing-work/tasks/task-239-enable-live-workflow-execution-commands.md) | Task | Enable live workflow execution commands | Planned | TASK-238 |
 | [TASK-240](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-083-attention-and-request-specific-approvals/tasks/task-240-enable-request-scoped-mobile-decisions.md) | Task | Enable request-scoped mobile decisions | Planned | TASK-239 |
 | [TASK-241](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-083-attention-and-request-specific-approvals/tasks/task-241-prove-live-mobile-desktop-journey.md) | Task | Prove live mobile-desktop journey | Planned | TASK-237, TASK-238, TASK-239, TASK-240 |
+| [TASK-389](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-account-free-relay-and-remote-pairing/tasks/task-389-extend-qr-pairing-with-relay-route-and-host-channel.md) | Task | Extend QR pairing with a relay route and host channel | Backlog | TASK-216, TASK-207 |
+| [TASK-390](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-account-free-relay-and-remote-pairing/tasks/task-390-add-desktop-outbound-relay-listener.md) | Task | Add the desktop outbound relay listener | Backlog | TASK-217, TASK-389 |
+| [TASK-391](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-account-free-relay-and-remote-pairing/tasks/task-391-add-flutter-relay-transport-and-route-selection.md) | Task | Add the Flutter relay transport and route selection | Backlog | TASK-217, TASK-389 |
