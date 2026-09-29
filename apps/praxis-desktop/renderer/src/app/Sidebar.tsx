@@ -86,7 +86,6 @@ export interface SidebarProps {
   /** Opens the lightweight "New conversation" composer (FX-BE-142). */
   onNewConversation: () => void;
   onNewProject: () => void;
-  onAddExistingProject: () => void;
   /** Opens the bulk "import plans folders as projects" wizard. */
   onImportProjects?: () => void;
   onSelectProject: (project: ProjectRecord) => void;
@@ -673,7 +672,6 @@ export function Sidebar({
   onNewSession,
   onNewConversation,
   onNewProject,
-  onAddExistingProject,
   onImportProjects,
   onSelectProject,
   onOpenProjectDocument,
@@ -761,7 +759,8 @@ export function Sidebar({
   const visibleProjects = activeWorkspace
     ? projects.filter(project => activeWorkspace.projectIds.includes(project.id))
     : projects;
-  const hideBoardsForActiveProject = projects.find(project => project.id === selectedProjectId)?.planningMode === 'files';
+  const activeProject = projects.find(project => project.id === selectedProjectId);
+  const hideBoardsForActiveProject = activeProject?.planningMode === 'files' && activeProject.linkedBoards.length === 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -867,7 +866,7 @@ export function Sidebar({
                     type="button"
                     className="feature-section-action"
                     aria-label="Add project"
-                    title="New project"
+                    title="Add project"
                     onClick={onNewProject}
                   >
                     <Icon name="plus" size={13} />

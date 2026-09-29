@@ -229,6 +229,8 @@ export interface CreateProjectInput {
 export interface UpdateProjectInput {
   /** Switch a file-only project into board mode, or back to file-only mode. */
   planningMode?: ProjectPlanningMode;
+  /** Select where the project-owned board stores its work items. */
+  storage?: ProjectStorage;
   name?: string;
   /**
    * Renaming after tickets exist is allowed — tracker association resolves

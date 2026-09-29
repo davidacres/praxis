@@ -559,4 +559,3 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | [FX-BE-146](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-146-simple-dark-theme-and-preview-setting/story.md) | Story | Simple dark theme and preview setting | Complete | FX-BF-046 |
 | [TASK-375](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-146-simple-dark-theme-and-preview-setting/tasks/task-375-settings-contract-and-defaults.md) | Task | Define enableEasyMode setting contract, sanitizer, and renderer defaults | Complete | None |
 | [TASK-376](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-146-simple-dark-theme-and-preview-setting/tasks/task-376-simple-theme-and-preview-toggle.md) | Task | Register Simple dark theme, CSS theme definition, and Settings Preview toggle | Complete | TASK-375 |
-

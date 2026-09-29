@@ -31,7 +31,6 @@ export interface TitleBarProps {
   /** Opens a session composer pre-set for a quick, workflow-driven session. */
   onQuickSession?: () => void;
   onNewProject?: () => void;
-  onAddExistingProject?: () => void;
   onImportProjects?: () => void;
   mode?: SidebarMode;
   onToggleMode?: () => void;
@@ -76,7 +75,6 @@ export function TitleBar({
   onNewSession,
   onQuickSession,
   onNewProject,
-  onAddExistingProject,
   onImportProjects,
   mode = 'classic',
   onToggleMode,
@@ -267,12 +265,7 @@ export function TitleBar({
               <div className="workspace-menu-divider" />
               {onCreateWorkspace && (
                 <button role="menuitem" onClick={() => { onCreateWorkspace(); setWorkspaceMenuOpen(false); }}>
-                  <Icon name="plus" size={13} /><span>Create blank workspace</span>
-                </button>
-              )}
-              {onCloseWorkspace && (
-                <button role="menuitem" onClick={() => { onCloseWorkspace(); setWorkspaceMenuOpen(false); }}>
-                  <Icon name="organization" size={13} /><span>Create New Workspace</span>
+                  <Icon name="plus" size={13} /><span>New workspace</span>
                 </button>
               )}
               {activeWorkspace && onSaveWorkspace && (
@@ -309,13 +302,7 @@ export function TitleBar({
               {newProjectEnabled && onNewProject && (
                 <button role="menuitem" data-testid="new-project" onClick={() => { setNewMenuOpen(false); onNewProject(); }}>
                   <Icon name="plus" size={14} />
-                  <span><strong>Create New Project</strong><small>Start fresh with a brief and board</small></span>
-                </button>
-              )}
-              {newProjectEnabled && onAddExistingProject && (
-                <button role="menuitem" data-testid="add-existing-project" onClick={() => { setNewMenuOpen(false); onAddExistingProject(); }}>
-                  <Icon name="folder-open" size={14} />
-                  <span><strong>Create from existing folder</strong><small>Scan plans and connect them to a project</small></span>
+                  <span><strong>Add Project</strong><small>Open a folder, create one, or start without files</small></span>
                 </button>
               )}
               {newProjectEnabled && onImportProjects && (

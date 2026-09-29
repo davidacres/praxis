@@ -72,6 +72,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
   const [attachMode, setAttachMode] = useState<ProjectStartingPoint>('existing-folder');
   const [attachPath, setAttachPath] = useState('');
   const [folderName, setFolderName] = useState('');
+  const [planningOpen, setPlanningOpen] = useState(false);
 
   const candidates = boards.filter(board => board.connectionId
     && connections.find(connection => connection.id === board.connectionId)?.settings.projectId !== project.id
@@ -85,6 +86,8 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
   const hasOwnedBoard = project.planningMode !== 'files'
     && connections.some(connection => connection.settings.projectId === project.id);
   const boardCount = project.linkedBoards.length + (hasOwnedBoard ? 1 : 0);
+  const isFileOnly = project.planningMode === 'files' && boardCount === 0;
+  const detectedPlanCount = inspection?.planFiles?.length ?? 0;
   const gitState: { label: string; on: boolean } = !project.workspaceFolder
     ? { label: 'No folder', on: false }
     : inspection?.hasGit
@@ -115,6 +118,14 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
   const save = async () => { try { onChanged(await window.praxis.projects.update(project.id, { name, key, icon, color, type, purpose, brief, defaultAiToolMode: toolMode, workflowStages: stages })); setEditing(false); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
   const chooseAttach = async () => { const value = await window.praxis.dialog.pickFolder(attachMode === 'new-folder' ? 'Choose parent folder' : 'Choose existing project folder'); if (value) setAttachPath(value); };
   const attach = async () => { try { const result = await window.praxis.projects.attachFolder(project.id, { startingPoint: attachMode as 'new-folder' | 'existing-folder', folderPath: attachPath, folderName: folderName || undefined, createProjectFile: true }); onChanged(result.project); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
+  const addOwnedBoard = async (storage: 'app' | 'folder') => {
+    try {
+      onChanged(await window.praxis.projects.update(project.id, { planningMode: 'board', storage }));
+      setPlanningOpen(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
 
   return <div className="project-home" data-testid="project-home">
     <header className="project-home-hero">
@@ -194,7 +205,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
     <div className="project-home-chips">
       <span className={`ph-chip${gitState.on ? ' is-on' : ''}`}><Icon name="git-branch" size={12} />{gitState.label}</span>
       <span className="ph-chip"><Icon name="tools" size={12} />{TOOL_MODE_LABEL[project.defaultAiToolMode]}</span>
-      <span className="ph-chip"><Icon name={project.planningMode === 'files' ? 'folder' : 'columns'} size={12} />{project.planningMode === 'files' ? 'File structure' : boardCount ? `${boardCount} board${boardCount === 1 ? '' : 's'}` : 'No boards'}</span>
+      <span className="ph-chip"><Icon name={isFileOnly ? 'folder' : 'columns'} size={12} />{isFileOnly ? 'File structure' : `${boardCount} board${boardCount === 1 ? '' : 's'}`}</span>
     </div>
 
     <div className="project-home-sections">
@@ -279,11 +290,16 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
         <div className="ph-section-head">
           <h2>Planning sources</h2>
           <div className="ph-section-actions">
-            {project.planningMode === 'files' && <button className="btn btn-primary" data-testid="project-add-board" onClick={async () => { try { onChanged(await window.praxis.projects.update(project.id, { planningMode: 'board' })); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } }}>Add board</button>}
+            {project.planningMode === 'files' && <button className="btn btn-primary" data-testid="project-add-board" onClick={() => setPlanningOpen(open => !open)}>Add board</button>}
             {boardCount > 0 && <span className="ph-count">{boardCount}</span>}
           </div>
         </div>
-        {project.planningMode === 'files' && <p className="muted">This project is using its file structure. Add a board when you want tracked work items.</p>}
+        {project.planningMode === 'files' && <p className="muted">This project is using its file structure. Add planning only when you need tracked work items.</p>}
+        {planningOpen && <div className="planning-source-options" data-testid="project-planning-source-dialog">
+          <button type="button" data-testid="planning-source-local-board" onClick={() => void addOwnedBoard('app')}><Icon name="columns" size={16} /><span><strong>Create local board</strong><small>Keep work items in Praxis.</small></span></button>
+          {detectedPlanCount > 0 && <button type="button" data-testid="planning-source-detected-plans" onClick={() => void addOwnedBoard('folder')}><Icon name="markdown" size={16} /><span><strong>Use detected markdown plans</strong><small>{detectedPlanCount} planning file{detectedPlanCount === 1 ? '' : 's'} found in this folder.</small></span></button>}
+          {candidates.length > 0 && <ChipSelect block ariaLabel="Connected board" data-testid="planning-source-external-board" value="" placeholder="Link a connected board…" onChange={async value => { const board = candidates.find(item => `${item.connectionId}:${item.id}` === value); if (!board?.connectionId) return; try { onChanged(await window.praxis.projects.linkBoard(project.id, { connectionId: board.connectionId, boardId: board.id, displayName: board.name })); setPlanningOpen(false); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } }} options={candidates.map(board => ({ value: `${board.connectionId}:${board.id}`, label: board.name }))} />}
+        </div>}
         {project.planningMode !== 'files' && project.linkedBoards.length === 0 && <p className="muted">Your project board is available in the sidebar. Boards connected to this project will appear here.</p>}
         {project.linkedBoards.map(link => <div className="linked-board" key={`${link.connectionId}:${link.boardId}`}>
           <div><strong>{link.displayName}</strong><small>{link.connectionId.startsWith('project-plans-') ? 'Local plans · read-only' : 'Linked board'}</small></div>
