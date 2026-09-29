@@ -175,7 +175,7 @@ export class GadgetService {
     const state = resolveGadgetState(envelope, {
       now,
       supersededIds: collectSupersededIds(this.blocks[scopeContext.sessionId] ?? []),
-      submissionStatus: this.ledger.effectiveStatus(envelope.gadgetId)
+      submissionStatus: this.ledger.effectiveStatus(envelope.gadgetId, envelope.scope.sessionId)
     });
     const inert = inertStateError(state);
     if (inert) return rejectedResult(action, inert, now);
@@ -230,7 +230,7 @@ export class GadgetService {
       const state = resolveGadgetState(block.gadget, {
         now,
         supersededIds,
-        submissionStatus: this.ledger.effectiveStatus(block.gadget.gadgetId),
+        submissionStatus: this.ledger.effectiveStatus(block.gadget.gadgetId, block.gadget.scope.sessionId),
         connected
       });
       return { ...block, gadget: { ...block.gadget, state } };

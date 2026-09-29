@@ -418,6 +418,20 @@ test('published blocks and ledger survive a restart together', async () => {
   assert.equal(replayed.replay, true);
 });
 
+test('a submission in one session does not disable a reused gadget ID in another session', async () => {
+  const store = fakeStore();
+  const first = new GadgetService({ hostId: HOST, store, now: () => '2026-09-13T10:01:00.000Z' });
+  first.publish('session-1', [{ type: 'gadget', gadget: gadget() }]);
+  await first.submit(action(), SCOPE_CONTEXT, async () => ({ message: 'done' }));
+
+  const secondScope = { ...SCOPE, sessionId: 'session-2' };
+  const second = new GadgetService({ hostId: HOST, store, now: () => '2026-09-13T10:02:00.000Z' });
+  second.publish('session-2', [{ type: 'gadget', gadget: gadget({ scope: secondScope }) }]);
+
+  const [block] = second.getBlocks('session-2');
+  assert.equal(block.type === 'gadget' && block.gadget.state, 'active');
+});
+
 test('re-publishing the same message replaces its blocks, including a refused gadget\'s fallback', () => {
   const service = new GadgetService({ hostId: 'host-1', now: () => '2026-09-24T10:00:00.000Z' });
   const scope = { hostId: 'host-1', sessionId: 's-1' };
