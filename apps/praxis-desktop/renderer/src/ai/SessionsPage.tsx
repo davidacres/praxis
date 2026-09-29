@@ -37,6 +37,7 @@ import { GadgetBlockList } from './gadgets';
 import { useSessionGadgets } from './gadgets/useSessionGadgets';
 import { gadgetMessageKey, stripGadgetFences, visibleMessageText } from './gadgets/messageText';
 import type { SessionWorkflowOption } from './NewSession';
+import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
 
 /**
  * Switching mode is not just a flag: the session is told, in its own thread,
@@ -90,7 +91,7 @@ export interface SessionsPageProps {
   sessions: AgentSessionRecord[];
   selectedKey: string | undefined;
   workflowOptions?: SessionWorkflowOption[];
-  onStartWorkflow?: (session: AgentSessionRecord, workflowId: string) => Promise<void>;
+  onStartWorkflow?: (session: AgentSessionRecord, workflowId: string, uncommittedChanges?: UncommittedChoice) => Promise<void>;
   onSelectWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
   onRemoveWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
   onNewSession: () => void;
@@ -310,7 +311,7 @@ function SessionWorkflowControl({
   session: AgentSessionRecord;
   runs: WorkflowRunSummary[];
   options: SessionWorkflowOption[];
-  onStartWorkflow?: (session: AgentSessionRecord, workflowId: string) => Promise<void>;
+  onStartWorkflow?: (session: AgentSessionRecord, workflowId: string, uncommittedChanges?: UncommittedChoice) => Promise<void>;
   onSelectWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
   onRemoveWorkflowRun?: (session: AgentSessionRecord, runId: string) => Promise<void>;
   onError: (message: string | undefined) => void;
@@ -318,6 +319,7 @@ function SessionWorkflowControl({
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<ComposerPopoverPosition>();
   const [busy, setBusy] = useState<string>();
+  const [uncommittedFiles, setUncommittedFiles] = useState<(UncommittedBaseError & { workflowId: string })>();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const select = async (runId: string) => {
     if (!onSelectWorkflowRun || runId === session.workflowRunId) return;
@@ -334,16 +336,21 @@ function SessionWorkflowControl({
     }
   };
 
-  const start = async (workflowId: string) => {
+  const start = async (workflowId: string, uncommittedChanges?: UncommittedChoice) => {
     if (!onStartWorkflow) return;
     setBusy(workflowId);
     onError(undefined);
+    setUncommittedFiles(undefined);
     try {
-      await onStartWorkflow(session, workflowId);
+      await onStartWorkflow(session, workflowId, uncommittedChanges);
       setMenuOpen(false);
       setMenuPosition(undefined);
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : String(cause));
+      if (cause instanceof UncommittedBaseError) {
+        setUncommittedFiles(Object.assign(cause, { workflowId }));
+      } else {
+        onError(cause instanceof Error ? cause.message : String(cause));
+      }
     } finally {
       setBusy(undefined);
     }
@@ -405,6 +412,16 @@ function SessionWorkflowControl({
           data-testid="session-workflow-menu"
           style={{ position: 'fixed', bottom: menuPosition.bottom, left: menuPosition.left }}
         >
+          {uncommittedFiles ? (
+            <UncommittedBaseNotice
+              files={uncommittedFiles.files}
+              projectId={uncommittedFiles.projectId}
+              busy={!!busy}
+              onChoose={choice => void start(uncommittedFiles.workflowId, choice)}
+              onCommitted={() => void start(uncommittedFiles.workflowId)}
+              onDismiss={() => setUncommittedFiles(undefined)}
+            />
+          ) : <>
           {runs.length > 0 && (
             <section aria-label="Current workflows">
               <div className="popover-label">Current workflows</div>
@@ -466,6 +483,7 @@ function SessionWorkflowControl({
               ))}
             </section>
           )}
+          </>}
         </div>
       , document.body)}
     </div>

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-29T11:22:33.343Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-149
 title: Optional bounded parallel lanes
@@ -54,4 +58,14 @@ are independent, while the default path remains sequential and predictable.
 
 Parallel operation exists as a deliberate, capped, auditable mode that cannot
 start dependent or under-budgeted work merely because there are idle lanes.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
 

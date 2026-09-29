@@ -121,9 +121,9 @@ export class GadgetActionLedger {
   }
 
   /** Every record for one gadget, oldest first — the gadget's decision history. */
-  public forGadget(gadgetId: string): GadgetActionRecord[] {
+  public forGadget(gadgetId: string, sessionId?: string): GadgetActionRecord[] {
     return [...this.records.values()]
-      .filter(record => record.gadgetId === gadgetId)
+      .filter(record => record.gadgetId === gadgetId && (sessionId === undefined || record.scope.sessionId === sessionId))
       .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));
   }
 
@@ -133,8 +133,8 @@ export class GadgetActionLedger {
    * A rejected or failed attempt leaves the gadget answerable, so it does not
    * count — otherwise a typo in a form would permanently disable the surface.
    */
-  public effectiveStatus(gadgetId: string): GadgetActionStatus | undefined {
-    const settled = this.forGadget(gadgetId).filter(record => record.status === 'accepted' || record.status === 'completed');
+  public effectiveStatus(gadgetId: string, sessionId?: string): GadgetActionStatus | undefined {
+    const settled = this.forGadget(gadgetId, sessionId).filter(record => record.status === 'accepted' || record.status === 'completed');
     return settled.at(-1)?.status;
   }
 

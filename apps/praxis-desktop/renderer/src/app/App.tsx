@@ -61,7 +61,7 @@ import { GitChangesPage } from '../git/GitChangesPage';
 import { WorkflowDesignerPage } from '../workflows/WorkflowDesignerPage';
 import { WorkflowRunPage } from '../workflows/WorkflowRunPage';
 import { StartRunDialog } from '../workflows/StartRunDialog';
-import { assertRunBaseOrThrow } from '../workflows/UncommittedBaseNotice';
+import { assertRunBaseOrThrow, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
 import { useDeleteRun } from '../workflows/useDeleteRun';
 import { WorkflowPolicyPage } from '../workflows/WorkflowPolicyPage';
 import { NewWorkflowDialog } from '../workflows/NewWorkflowDialog';
@@ -1688,11 +1688,12 @@ export function App() {
               ?? ''
           ] ?? []
           : []}
-        onStartWorkflow={async (session, workflowId) => {
+        onStartWorkflow={async (session, workflowId, uncommittedChanges?: UncommittedChoice) => {
           const projectId = session.projectId ?? projectIdForConnection(session.connectionId, connections) ?? composerProject?.id;
           if (!projectId) {
             throw new Error('This session is not associated with a project. Open it from a project workspace before adding a workflow.');
           }
+          await assertRunBaseOrThrow(projectId, uncommittedChanges);
           await window.praxis.workflows.startRun(
             projectId,
             workflowId,
@@ -1702,7 +1703,8 @@ export function App() {
             undefined,
             {
               ...(session.provider ? { aiProvider: session.provider } : {}),
-              ...(session.model ? { aiModel: session.model } : {})
+              ...(session.model ? { aiModel: session.model } : {}),
+              ...(uncommittedChanges ? { uncommittedChanges } : {})
             }
           );
         }}
