@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-217
 title: "Implement the account-free byte relay with per-host quotas"
-status: backlog
+status: complete
 story: FX-BE-079
 updated: 2026-09-29
 dependencies: [TASK-216]
@@ -38,7 +38,12 @@ Use deterministic host/protocol fixtures and disposable project directories. Run
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented as `packages/mobile-relay` (`@praxis/mobile-relay`, `src/relayServer.ts`, `src/cli.ts`; start with `PORT=8787 npm start --workspace=@praxis/mobile-relay`, optional `TLS_CERT`/`TLS_KEY`).
+
+- Hosts prove a channel with an Ed25519 signature over a per-connection nonce; the channel id is the first 128 bits of the SHA-256 of that key. Phones and hosts connect outbound; the relay pairs them per phone (`/v1/connect` → `incoming` → `/v1/accept`) and forwards bytes.
+- Limits: channels, devices and pending connections per channel, sockets and connects per address, auth and accept timeouts, bounded pre-attach buffering, message-size cap, per-connection byte budget, heartbeat.
+- Verification: `npm test --workspace=@praxis/mobile-relay` — 15 tests pass (forged/replayed signature, guessed channel, unknown/reused conn id, caps, oversize, buffer and rate limits, host-offline cleanup, replacement, per-address rate limit, no payload/key in logs). Two mutations (signature check bypassed; buffer limit removed) each made the suite fail.
+- Remaining: hosting is not chosen (TASK-216), and no TLS termination or reverse-proxy client-address handling is configured; behind a proxy the per-address limits see the proxy's address.
 
 ## Description
 

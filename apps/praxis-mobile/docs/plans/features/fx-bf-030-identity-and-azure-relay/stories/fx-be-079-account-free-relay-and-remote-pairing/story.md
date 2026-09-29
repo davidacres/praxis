@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🚧 In progress
 **Type:** Story
 type: Story
 id: FX-BE-079
 title: "Account-free relay and remote pairing"
-status: backlog
+status: in progress
 feature: FX-BF-030
 updated: 2026-09-29
 dependencies: [FX-BE-076, FX-BE-077]
@@ -55,7 +55,7 @@ Use deterministic host/protocol fixtures and disposable project directories. Run
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Partly implemented; see the task evidence. The relay service, desktop client and QR route are built and tested in Node. The Flutter transport is written but unverified, the relay hosting decision (TASK-216) and the physical-phone proof (TASK-218) are not done.
 
 ## Description
 

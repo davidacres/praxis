@@ -19,6 +19,8 @@ class HostConfiguration {
     this.projectId,
     this.pairingTokenId,
     this.pairingExpiresAt,
+    this.relayUrl,
+    this.relayChannel,
   });
 
   factory HostConfiguration.fromJson(Map<String, dynamic> json) => HostConfiguration(
@@ -30,6 +32,8 @@ class HostConfiguration {
     projectId: json['projectId'] as String?,
     pairingTokenId: json['pairingTokenId'] as String?,
     pairingExpiresAt: json['pairingExpiresAt'] as String?,
+    relayUrl: json['relayUrl'] as String?,
+    relayChannel: json['relayChannel'] as String?,
   );
 
   final String hostId;
@@ -43,6 +47,12 @@ class HostConfiguration {
   final String? pairingTokenId;
   final String? pairingExpiresAt;
 
+  /// Off-LAN route from the invitation (FX-BE-079); absent when the desktop offered none.
+  final String? relayUrl;
+  final String? relayChannel;
+
+  bool get hasRelay => relayUrl != null && relayChannel != null;
+
   Map<String, dynamic> toJson() => {
     'hostId': hostId,
     if (hostName != null) 'hostName': hostName,
@@ -52,6 +62,8 @@ class HostConfiguration {
     if (projectId != null) 'projectId': projectId,
     if (pairingTokenId != null) 'pairingTokenId': pairingTokenId,
     if (pairingExpiresAt != null) 'pairingExpiresAt': pairingExpiresAt,
+    if (relayUrl != null) 'relayUrl': relayUrl,
+    if (relayChannel != null) 'relayChannel': relayChannel,
   };
 
   HostConfiguration withProject(String? projectId) => HostConfiguration(
@@ -63,11 +75,13 @@ class HostConfiguration {
     projectId: projectId,
     pairingTokenId: pairingTokenId,
     pairingExpiresAt: pairingExpiresAt,
+    relayUrl: relayUrl,
+    relayChannel: relayChannel,
   );
 
   /// Confirmed: the invitation is spent, so it is not kept or re-presented.
   HostConfiguration withoutInvitation() =>
-      HostConfiguration(hostId: hostId, hostName: hostName, address: address, port: port, hostPublicKeyHex: hostPublicKeyHex, projectId: projectId);
+      HostConfiguration(hostId: hostId, hostName: hostName, address: address, port: port, hostPublicKeyHex: hostPublicKeyHex, projectId: projectId, relayUrl: relayUrl, relayChannel: relayChannel);
 }
 
 const _deviceKey = 'praxis.mobile.devicePrivateKey.v1';
@@ -152,14 +166,39 @@ class NativeMobileConnection {
   final List<void Function(MobileConnectionStatus)> _statusListeners = [];
   final List<void Function(MobileConnectionError)> _closeListeners = [];
 
+  /// True while a LAN attempt that may fall back to the relay is running: its failure is reported by
+  /// the rejected future, not as a close event, so the store does not see a phantom disconnect.
+  bool _tryingLan = false;
+
+  /// Direct first — the LAN is faster and needs no relay — and through the relay only when the desktop
+  /// could not be reached. Any other failure (revoked, wrong key, access refused) is final: falling back
+  /// would only hide the real reason.
   Future<void> connect() async {
     if (_client != null) throw StateError('This connection was already opened; create a new one to reconnect.');
+    if (!config.hasRelay) return _open(relay: false);
+    _tryingLan = true;
+    try {
+      await _open(relay: false, connectTimeout: const Duration(seconds: 4));
+    } on MobileConnectionError catch (error) {
+      if (error.code != 'unreachable' && error.code != 'timed-out') rethrow;
+      _client = null;
+      _tryingLan = false;
+      await _open(relay: true);
+    } finally {
+      _tryingLan = false;
+    }
+  }
+
+  Future<void> _open({required bool relay, Duration? connectTimeout}) async {
     final client = _client = MobileSecureClient(
       host: config.address,
       port: config.port,
       staticKeyPair: await deviceIdentity(),
       remoteStaticPublicKey: hexToBytes(config.hostPublicKeyHex),
       pairingTokenId: config.pairingTokenId,
+      relayUrl: relay ? config.relayUrl : null,
+      relayChannel: relay ? config.relayChannel : null,
+      connectTimeout: connectTimeout ?? const Duration(seconds: 15),
     );
     client.onEvent((envelope) {
       for (final listener in [..._listeners]) {
@@ -172,6 +211,7 @@ class NativeMobileConnection {
       }
     });
     client.onClose((error) {
+      if (_tryingLan) return;
       for (final listener in [..._closeListeners]) {
         listener(error);
       }

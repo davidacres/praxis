@@ -389,6 +389,25 @@ void main() {
       expect(parsed.expired, false);
     });
 
+    test('a relay route rides on the compact QR as two trailing parts, and only when both are well formed', () {
+      const channel = '0123456789abcdef0123456789abcdef';
+      final parsed = parseMobileInvitation('P1|dave-mac|$key|192.168.1.20:43100|a1b2c3d4e5f6|2026-09-23T10:10:00.000Z|wss://relay.example.com|$channel', now);
+      expect(parsed.kind, InvitationKind.invitation);
+      expect([parsed.details.relayUrl, parsed.details.relayChannel], ['wss://relay.example.com', channel]);
+      expect(parsed.details.address, '192.168.1.20');
+
+      // An older QR (no route), a half route, a bad scheme and a bad channel all yield no route.
+      for (final tail in ['', '|wss://relay.example.com', '|https://relay.example.com|$channel', '|wss://relay.example.com|nope']) {
+        final without = parseMobileInvitation('P1|dave-mac|$key|192.168.1.20:43100|a1b2c3d4e5f6|2026-09-23T10:10:00.000Z$tail', now);
+        expect([without.details.relayUrl, without.details.relayChannel], [null, null], reason: tail);
+      }
+
+      final json = parseMobileInvitation(
+          '{"version":1,"hostId":"dave-mac","publicKeyHex":"$key","endpoints":[{"address":"10.0.0.4","port":43100}],"tokenId":"tok123456789","expiresAt":"2026-09-23T10:10:00.000Z","relay":{"url":"wss://relay.example.com","channel":"$channel"}}',
+          now);
+      expect([json.details.relayUrl, json.details.relayChannel], ['wss://relay.example.com', channel]);
+    });
+
     test('the JSON invitation parses the same, and expiry is caught before connecting', () {
       final parsed = parseMobileInvitation(
           '{"version":1,"hostId":"dave-mac","displayName":"Dave Mac","publicKeyHex":"$key","endpoints":[{"address":"10.0.0.4","port":43100}],"tokenId":"tok123456789","expiresAt":"2026-09-23T09:59:00.000Z"}',
