@@ -1,16 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   type AgentToolMode,
   type CreateProjectInput,
   type FolderInspection,
   type ProjectRecord,
   type ProjectStartingPoint,
-  type ProjectType,
-  type ProjectWorkflowStage
+  type ProjectType
 } from '@praxis/core';
-import { PROJECT_BRIEF_FIELDS, defaultProjectTickets, defaultProjectWorkflow } from './projectBriefFields';
+import { PROJECT_BRIEF_FIELDS, defaultProjectWorkflow } from './projectBriefFields';
 import { Icon } from '../ui/Icon';
-import { ChipSelect } from '../ui/ChipSelect';
 
 const TYPES: Array<{ id: ProjectType; title: string; description: string }> = [
   { id: 'software', title: 'Software Development', description: 'Build or change a software system.' },
@@ -20,10 +18,6 @@ const TYPES: Array<{ id: ProjectType; title: string; description: string }> = [
 ];
 
 type BriefPrompt = { question: string; example: string; hint: string };
-type PlanChoice = 'standard' | 'none' | 'custom';
-/** A board on an already-configured connection, offered as a project's source. */
-type LinkableBoard = { connectionId: string; boardId: string; name: string; connectionName: string };
-
 const BRIEF_DEFAULTS: Record<ProjectType, Record<string, string>> = {
   software: {
     problem: 'Confirm the user or operational problem before committing to a solution.', outcome: 'Define an observable result that will show the software is useful.', stack: 'Prefer the existing project stack unless a change is justified.', integrations: 'Treat external systems and data boundaries as explicit dependencies.', constraints: 'Respect platform, security, time, and budget limits as they are discovered.', quality: 'Prioritise usability, reliability, and practical verification.'
@@ -99,16 +93,16 @@ const EXISTING_STEP_COPY = [
   { title: 'Review and add', detail: 'Confirm what Praxis will record alongside the existing folder.' }
 ] as const;
 
-export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'dialog', mode = 'create', onCancel, onCreated }: { workspaceId: string; workspaceName?: string; presentation?: 'dialog' | 'onboarding'; mode?: 'create' | 'existing'; onCancel: () => void; onCreated: (project: ProjectRecord, options?: { advanced: boolean }) => void }) {
+export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'dialog', mode = 'create', initialStartingPoint, onCancel, onCreated }: { workspaceId: string; workspaceName?: string; presentation?: 'dialog' | 'onboarding'; mode?: 'create' | 'existing'; initialStartingPoint?: ProjectStartingPoint; onCancel: () => void; onCreated: (project: ProjectRecord, options?: { advanced: boolean }) => void }) {
   const [step, setStep] = useState(0);
   // A project needs three decisions: type, name/folder, and a look at what will
-  // be created. Brief, plan and tool access take their recommended defaults and
+  // be created. Brief and tool access take their recommended defaults and
   // move to the project home — unless the user opts into the full six steps.
   // This applies to an existing folder too: someone pointing Praxis at a repo
   // they already have is the least likely person to want six screens.
   const [advanced, setAdvanced] = useState(false);
   const [type, setType] = useState<ProjectType>('software');
-  const [startingPoint, setStartingPoint] = useState<ProjectStartingPoint>(mode === 'existing' ? 'existing-folder' : 'new-folder');
+  const [startingPoint, setStartingPoint] = useState<ProjectStartingPoint>(initialStartingPoint ?? (mode === 'existing' ? 'existing-folder' : 'new-folder'));
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
   const [keyEdited, setKeyEdited] = useState(false);
@@ -117,11 +111,6 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   const [folderName, setFolderName] = useState('');
   const [folderNameEdited, setFolderNameEdited] = useState(false);
   const [inspection, setInspection] = useState<FolderInspection>();
-  /** Where this project's work items come from — asked, not inferred, so the decision is visible. */
-  const [sourceChoice, setSourceChoice] = useState<'folder' | 'app' | 'connection'>('folder');
-  /** Boards on connections the user has already set up, offered as a source. */
-  const [linkableBoards, setLinkableBoards] = useState<LinkableBoard[]>([]);
-  const [linkedBoardKey, setLinkedBoardKey] = useState('');
   const [existingProject, setExistingProject] = useState<ProjectRecord>();
   const [existingDecision, setExistingDecision] = useState<'use' | 'create'>();
   const [brief, setBrief] = useState<Record<string, string>>(() => ({ ...BRIEF_DEFAULTS.software }));
@@ -131,17 +120,12 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   const [briefDraftSkipped, setBriefDraftSkipped] = useState(false);
   const [briefEditorOpen, setBriefEditorOpen] = useState(false);
   const [stages, setStages] = useState(() => defaultProjectWorkflow('software'));
-  const [tickets, setTickets] = useState(() => mode === 'existing' ? [] : defaultProjectTickets('software'));
-  const [workflowChoice, setWorkflowChoice] = useState<PlanChoice>('standard');
-  const [ticketChoice, setTicketChoice] = useState<PlanChoice>('standard');
   const [toolMode, setToolMode] = useState<AgentToolMode>('full');
   const [error, setError] = useState<string>();
   const [creating, setCreating] = useState(false);
-  const workflowEditorRef = useRef<HTMLDivElement>(null);
-  const ticketEditorRef = useRef<HTMLDivElement>(null);
   const briefSectionRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const stepCopy = mode === 'existing' ? EXISTING_STEP_COPY : CREATE_STEP_COPY;
-  const panels = advanced ? [0, 1, 2, 3, 4, 5] : [0, 1, 5];
+  const panels = advanced ? [0, 1, 2, 4, 5] : [0, 1, 5];
   const panel = panels[step];
   const isReview = step === panels.length - 1;
 
@@ -161,126 +145,28 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   }, [briefEditorOpen, creating, onCancel, selectedBriefKey]);
 
   useEffect(() => {
-    if (mode === 'create' && (type === 'product' || type === 'research')) setStartingPoint('app-storage');
-    else if (startingPoint === 'app-storage' && type !== 'product' && type !== 'research') setStartingPoint('new-folder');
-    setStages(defaultProjectWorkflow(type)); setTickets(mode === 'existing' ? [] : defaultProjectTickets(type)); setBrief({ ...BRIEF_DEFAULTS[type] }); setIncludedBrief(recommendedIncluded(type));
-    setSelectedBriefKey(undefined); setBriefDraft(''); setBriefDraftSkipped(false); setBriefEditorOpen(false); setWorkflowChoice('standard'); setTicketChoice('standard');
+    if (!initialStartingPoint && mode === 'create' && (type === 'product' || type === 'research')) setStartingPoint('app-storage');
+    else if (!initialStartingPoint && startingPoint === 'app-storage' && type !== 'product' && type !== 'research') setStartingPoint('new-folder');
+    setStages(defaultProjectWorkflow(type)); setBrief({ ...BRIEF_DEFAULTS[type] }); setIncludedBrief(recommendedIncluded(type));
+    setSelectedBriefKey(undefined); setBriefDraft(''); setBriefDraftSkipped(false); setBriefEditorOpen(false);
     setToolMode(type === 'software' || type === 'experiment' ? 'full' : 'read-only');
-  }, [type]);
+  }, [initialStartingPoint, mode, startingPoint, type]);
   useEffect(() => {
     if (!keyEdited) setKey(slugKey(name));
     if (!folderNameEdited) setFolderName(slugFolder(name));
   }, [name, keyEdited, folderNameEdited]);
-  // Boards the user could point this project at. Demo boards are excluded (they
-  // are fixtures, not a place to plan), as are other projects' own boards — a
-  // board belongs to one project, and linking a second would be rejected.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const stored = new Map(
-          (await window.praxis.connection.list())
-            .filter(connection => connection.mode !== 'project' && connection.mode !== 'demo')
-            .map(connection => [connection.id, connection.name] as const)
-        );
-        if (stored.size === 0) {
-          if (!cancelled) setLinkableBoards([]);
-          return;
-        }
-        const boards = await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' });
-        if (cancelled) return;
-        setLinkableBoards(boards.flatMap(board => {
-          const connectionName = board.connectionId ? stored.get(board.connectionId) : undefined;
-          return board.connectionId && connectionName
-            ? [{ connectionId: board.connectionId, boardId: board.id, name: board.name, connectionName }]
-            : [];
-        }));
-      } catch {
-        if (!cancelled) setLinkableBoards([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
   useEffect(() => { if (startingPoint === 'app-storage') setToolMode('project-only'); else setToolMode(type === 'software' || type === 'experiment' ? 'full' : 'read-only'); }, [startingPoint, type]);
-  useEffect(() => {
-    if (panel !== 3) return;
-    const editor = workflowChoice === 'custom' ? workflowEditorRef.current : ticketChoice === 'custom' ? ticketEditorRef.current : undefined;
-    if (!editor) return;
-    const frame = window.requestAnimationFrame(() => editor.scrollIntoView({ block: 'nearest' }));
-    return () => window.cancelAnimationFrame(frame);
-  }, [panel, workflowChoice, ticketChoice]);
-
   const previewPath = startingPoint === 'new-folder' && folderPath ? `${folderPath.replace(/[\\/]$/, '')}/${folderName}` : folderPath;
   const briefFields = PROJECT_BRIEF_FIELDS[type];
   const selectedBriefField = briefFields.find(field => field.key === selectedBriefKey);
   const selectedBriefPrompt = selectedBriefField ? BRIEF_GUIDANCE[type][selectedBriefField.key] : undefined;
   const isBriefEditorOpen = Boolean(briefEditorOpen && selectedBriefField);
   const selectedBrief = Object.fromEntries(briefFields.filter(field => includedBrief[field.key]).map(field => [field.key, brief[field.key] ?? BRIEF_DEFAULTS[type][field.key]]));
-  /**
-   * An existing folder that already holds markdown plans becomes the project's
-   * source of truth (`storage: 'folder'`) rather than being ignored in favour of
-   * an empty app-storage board — which is what used to happen, and produced a
-   * project whose board silently showed nothing.
-   */
-  const plansDetected = startingPoint === 'existing-folder' && (inspection?.planFiles?.length ?? 0) > 0;
-  // The folder option only exists when there are plans to read, so a lingering
-  // 'folder' choice from an earlier folder reads as the app board.
-  const source = !plansDetected && sourceChoice === 'folder' ? 'app' : sourceChoice;
-  const folderBacked = source === 'folder';
-  const linkedBoard = source === 'connection'
-    ? linkableBoards.find(board => `${board.connectionId}:${board.boardId}` === linkedBoardKey)
-    : undefined;
-  const sourceOptions = plansDetected || linkableBoards.length > 0 ? (
-    <>
-      {plansDetected && (
-        <Choice
-          checked={source === 'folder'}
-          title="Use the plans in this folder"
-          detail={`The board reads the ${inspection?.planFiles?.length ?? 0} markdown planning files directly — they stay the source of truth.`}
-          onClick={() => setSourceChoice('folder')}
-        />
-      )}
-      <Choice
-        checked={source === 'app'}
-        title="Start a fresh Praxis board"
-        detail={plansDetected
-          ? 'Keep work items in the app; the folder’s files are left alone.'
-          : 'Work items live in the app, on this project’s own board.'}
-        onClick={() => setSourceChoice('app')}
-      />
-      {linkableBoards.length > 0 && (
-        <Choice
-          checked={source === 'connection'}
-          title="Use a board from an existing connection"
-          detail="Point this project at a board on a connection you have already set up."
-          onClick={() => setSourceChoice('connection')}
-        />
-      )}
-      {source === 'connection' && (
-        <ChipSelect
-          block
-          ariaLabel="Board"
-          data-testid="source-connection-board"
-          value={linkedBoardKey}
-          placeholder="Choose a board…"
-          searchable
-          onChange={setLinkedBoardKey}
-          options={[
-            { value: '', label: 'Choose a board…' },
-            ...linkableBoards.map(board => ({ value: `${board.connectionId}:${board.boardId}`, label: board.name, meta: board.connectionName }))
-          ]}
-        />
-      )}
-    </>
-  ) : undefined;
-  /** Picking a connection without picking one of its boards leaves nothing to link. */
-  const sourceIncomplete = source === 'connection' && !linkedBoard;
-
   const input: CreateProjectInput = useMemo(() => ({
     name, key, type, purpose, brief: selectedBrief, startingPoint, folderPath: folderPath || undefined,
-    folderName: folderName || undefined, workflowStages: stages, starterTickets: tickets, defaultAiToolMode: toolMode,
-    storage: folderBacked ? 'folder' : 'app'
-  }), [name, key, type, purpose, selectedBrief, startingPoint, folderPath, folderName, stages, tickets, toolMode, folderBacked]);
+    folderName: folderName || undefined, workflowStages: stages, starterTickets: [], defaultAiToolMode: toolMode,
+    storage: 'app', planningMode: 'files'
+  }), [name, key, type, purpose, selectedBrief, startingPoint, folderPath, folderName, stages, toolMode]);
 
   const chooseFolder = async () => {
     const chosen = await window.praxis.dialog.pickFolder(startingPoint === 'new-folder' ? 'Choose where to save the project' : 'Choose existing project folder');
@@ -317,7 +203,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
         // The folder supplies name, key and location; the next panel is a
         // confirmation of what was detected rather than a form to fill in. It
         // used to be skipped outright, which meant the project type — the thing
-        // that picks the brief, workflow and starter tickets — was never seen.
+        // that picks the brief and project defaults — was never seen.
         applyDetectedIdentity(result);
       }
       if (panel === 1) {
@@ -330,7 +216,6 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
           if (result.exists) throw new Error('That folder already exists. Select Existing Folder instead.');
         }
       }
-      if (panel === 3 && (stages.length < 2 || ((startingPoint !== 'existing-folder') && (tickets.length < 1 || tickets.some(ticket => !ticket.summary.trim()))))) throw new Error('Keep at least two stages and one starter ticket with a title.');
       setStep(value => Math.min(panels.length - 1, value + 1));
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   };
@@ -338,27 +223,9 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
     setCreating(true); setError(undefined);
     try {
       const project = await window.praxis.projects.create(input, workspaceId);
-      onCreated(linkedBoard
-        ? await window.praxis.projects.linkBoard(project.id, {
-            connectionId: linkedBoard.connectionId,
-            boardId: linkedBoard.boardId,
-            displayName: linkedBoard.name
-          })
-        : project, { advanced });
+      onCreated(project, { advanced });
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); }
-  };
-  const chooseWorkflow = (choice: PlanChoice) => {
-    setWorkflowChoice(choice);
-    const nextStages = choice === 'none'
-      ? [{ id: 'stage-1', name: 'To do', category: 'todo' as const }, { id: 'stage-2', name: 'Done', category: 'done' as const }]
-      : defaultProjectWorkflow(type);
-    setStages(nextStages);
-    setTickets(current => current.map(ticket => ({ ...ticket, status: nextStages[0].name })));
-  };
-  const chooseTickets = (choice: PlanChoice) => {
-    setTicketChoice(choice);
-    setTickets(choice === 'none' ? [] : defaultProjectTickets(type).map(ticket => ({ ...ticket, status: stages[0]?.name ?? ticket.status })));
   };
   const closeBriefEditor = () => {
     const keyToFocus = selectedBriefKey;
@@ -387,13 +254,13 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
 
   return <div className={`project-wizard project-wizard-${presentation}`} data-testid="new-project-wizard">
     <header className="project-wizard-header">
-      <div className="project-dialog-heading"><span className="project-dialog-brand">PRAXIS<i /></span><div><h1 id="new-project-dialog-title">{mode === 'existing' ? 'Create from existing folder' : 'Create new project'}</h1><p>{workspaceName ? `${workspaceName} workspace` : mode === 'existing' ? 'Scan plans and connect this folder to a project without changing its source files.' : 'A durable brief, local board, and focused starter work.'}</p></div></div>
+      <div className="project-dialog-heading"><span className="project-dialog-brand">PRAXIS<i /></span><div><h1 id="new-project-dialog-title">{mode === 'existing' ? 'Open existing folder' : 'Create new project'}</h1><p>{workspaceName ? `${workspaceName} workspace` : mode === 'existing' ? 'Connect this folder without changing its source files.' : 'Create the project now and add planning only when you need it.'}</p></div></div>
       <div className="project-dialog-header-actions"><div className="step-count">Step {step + 1} of {panels.length}</div><button className="project-dialog-close" aria-label="Close new project dialog" onClick={onCancel}>×</button></div>
     </header>
     <div className="wizard-progress" aria-label={`Step ${step + 1} of ${panels.length}`}>{Array.from({ length: panels.length }, (_, index) => <span key={index} className={index <= step ? 'active' : ''} />)}</div>
     <div className="project-wizard-body">
       <div className="wizard-step-intro"><div><h2>{stepCopy[panel].title}</h2><p>{stepCopy[panel].detail}</p></div></div>
-      {panel === 0 && (mode === 'create' ? <><ProjectTypeCards type={type} onChange={setType} />{advancedToggle}</> : <div className="existing-folder-step"><div className="existing-folder-picker"><div className="existing-folder-visual">↳</div><div><strong>Select the project folder</strong><p>We look for Git, README files, manifests, languages, and frameworks.</p></div><button className="btn btn-primary" onClick={chooseFolder}>Choose folder…</button></div>{inspection ? <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId), { advanced }); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} /> : <div className="inspection-placeholder"><span>Workspace detection will appear here</span><small>No files are created or modified during inspection.</small></div>}{sourceOptions && <div className="project-location-options" data-testid="storage-choice-step0">{sourceOptions}</div>}{advancedToggle}</div>)}
+      {panel === 0 && (mode === 'create' ? <><ProjectTypeCards type={type} onChange={setType} />{advancedToggle}</> : <div className="existing-folder-step"><div className="existing-folder-picker"><div className="existing-folder-visual">↳</div><div><strong>Select the project folder</strong><p>We look for Git, README files, manifests, languages, and frameworks.</p></div><button className="btn btn-primary" onClick={chooseFolder}>Choose folder…</button></div>{inspection ? <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId), { advanced }); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} /> : <div className="inspection-placeholder"><span>Workspace detection will appear here</span><small>No files are created or modified during inspection.</small></div>}{advancedToggle}</div>)}
       {panel === 1 && <div className="project-form-grid">
         {mode === 'existing' && <div className="span-2"><h3 className="wizard-section-title first">Project type</h3><ProjectTypeCards type={type} onChange={setType} compact /></div>}
         <label className="field span-2"><span>Project name</span><input className="input" value={name} onChange={e => setName(e.target.value)} autoFocus /></label>
@@ -403,7 +270,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
         {mode === 'create' && startingPoint !== 'app-storage' && <label className="field span-2"><span>Save project in</span><div className="folder-picker"><input className="input" value={folderPath} placeholder="Choose a location…" readOnly /><button className="btn" onClick={chooseFolder}>Choose…</button></div><small>{folderPath ? <>Praxis will create <strong>{folderName || 'a project folder'}</strong> here.</> : 'Choose the folder that should contain your new project.'}</small></label>}
         <details className="project-advanced-details span-2"><summary>Project identifiers</summary><p>Praxis generates these automatically. Change them only if your team uses a specific convention.</p><div className="project-advanced-grid"><label className="field"><span>Ticket prefix</span><input className="input" value={key} onChange={e => { setKeyEdited(true); setKey(e.target.value.toUpperCase()); }} /><small>Used for ticket IDs such as {key || 'PROJ'}-1.</small></label>{startingPoint === 'new-folder' && <label className="field"><span>Folder name</span><input className="input" value={folderName} onChange={e => { setFolderNameEdited(true); setFolderName(e.target.value); }} /><small>{previewPath || 'Generated automatically.'}</small></label>}</div></details>
         {mode === 'existing' && <label className="field span-2"><span>Purpose <em>Optional</em></span><textarea className="input textarea" value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="Why does this project exist?" /></label>}
-        {mode === 'existing' && inspection && <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId), { advanced }); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} />}{sourceOptions && <div className="project-location-options span-2" data-testid="storage-choice">{sourceOptions}</div>}
+        {mode === 'existing' && inspection && <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId), { advanced }); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} />}
       </div>}
       {panel === 2 && <BriefStep
         type={type}
@@ -424,12 +291,11 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
         onCancel={closeBriefEditor}
         onDone={commitBriefDraft}
       />}
-      {panel === 3 && <InitialPlanStep type={type} stages={stages} tickets={tickets} workflowChoice={workflowChoice} ticketChoice={ticketChoice} allowEmptyTickets={startingPoint === 'existing-folder'} workflowEditorRef={workflowEditorRef} ticketEditorRef={ticketEditorRef} onChooseWorkflow={chooseWorkflow} onChooseTickets={chooseTickets} onStagesChange={setStages} onTicketsChange={setTickets} />}
       {panel === 4 && <ToolAccessStep mode={toolMode} folderless={startingPoint === 'app-storage'} onChange={setToolMode} />}
-      {panel === 5 && <ReviewStep type={type} name={name} projectKey={key} purpose={purpose} workspaceName={workspaceName} folderless={startingPoint === 'app-storage'} previewPath={previewPath} briefCount={briefFields.filter(field => includedBrief[field.key]).length} stages={stages} ticketCount={tickets.length} toolMode={toolMode} />}
+      {panel === 5 && <ReviewStep type={type} name={name} projectKey={key} purpose={purpose} workspaceName={workspaceName} folderless={startingPoint === 'app-storage'} previewPath={previewPath} briefCount={briefFields.filter(field => includedBrief[field.key]).length} toolMode={toolMode} />}
       {error && <div className="form-error" role="alert">{error}</div>}
     </div>
-    <footer className="project-wizard-footer"><button className="btn" onClick={onCancel}>Cancel</button><div className="footer-actions">{step > 0 && <button className="btn" onClick={goBack}>Back</button>}<button className="btn btn-primary" disabled={creating || (isReview && sourceIncomplete)} onClick={isReview ? create : continueStep}>{isReview ? creating ? (mode === 'existing' ? 'Adding…' : 'Creating…') : mode === 'existing' ? 'Add project' : 'Create project' : 'Continue'}</button></div></footer>
+    <footer className="project-wizard-footer"><button className="btn" onClick={onCancel}>Cancel</button><div className="footer-actions">{step > 0 && <button className="btn" onClick={goBack}>Back</button>}<button className="btn btn-primary" disabled={creating} onClick={isReview ? create : continueStep}>{isReview ? creating ? (mode === 'existing' ? 'Adding…' : 'Creating…') : mode === 'existing' ? 'Add project' : 'Create project' : 'Continue'}</button></div></footer>
   </div>;
 }
 
@@ -483,40 +349,20 @@ function BriefStep({ type, fields, brief, included, draft, draftSkipped, selecte
   </section>;
 }
 
-function InitialPlanStep({ type, stages, tickets, workflowChoice, ticketChoice, allowEmptyTickets, workflowEditorRef, ticketEditorRef, onChooseWorkflow, onChooseTickets, onStagesChange, onTicketsChange }: {
-  type: ProjectType;
-  stages: ProjectWorkflowStage[];
-  tickets: Array<{ summary: string; description: string; issueType: string; status: string }>;
-  workflowChoice: PlanChoice;
-  ticketChoice: PlanChoice;
-  allowEmptyTickets: boolean;
-  workflowEditorRef: MutableRefObject<HTMLDivElement | null>;
-  ticketEditorRef: MutableRefObject<HTMLDivElement | null>;
-  onChooseWorkflow: (choice: PlanChoice) => void;
-  onChooseTickets: (choice: PlanChoice) => void;
-  onStagesChange: Dispatch<SetStateAction<ProjectWorkflowStage[]>>;
-  onTicketsChange: Dispatch<SetStateAction<Array<{ summary: string; description: string; issueType: string; status: string }>>>;
-}) {
-  return <div className="initial-plan-step">
-    <section className="plan-section"><div className="plan-section-heading"><div><h3>Workflow</h3><p>Choose how work moves across the first board.</p></div></div><div className="plan-choice-grid"><PlanOption selected={workflowChoice === 'standard'} eyebrow="Recommended" title={`Standard ${typeLabel(type).toLowerCase()} workflow`} detail={defaultProjectWorkflow(type).map(stage => stage.name).join(' → ')} onClick={() => onChooseWorkflow('standard')} /><PlanOption selected={workflowChoice === 'none'} eyebrow="Simple" title="To do and Done" detail="A minimal board with room to grow later." onClick={() => onChooseWorkflow('none')} /><PlanOption selected={workflowChoice === 'custom'} eyebrow="Custom" title="Choose the stages" detail="Edit the suggested workflow before creating the project." onClick={() => onChooseWorkflow('custom')} /></div>{workflowChoice === 'custom' && <div className="plan-custom-editor" ref={workflowEditorRef}><div className="section-heading"><h2>Workflow stages</h2><button className="btn" onClick={() => onStagesChange(current => [...current.slice(0, -1), { id: `stage-${Date.now()}`, name: 'New stage', category: 'indeterminate' as const }, ...current.slice(-1)])}>Add stage</button></div>{stages.map((stage, index) => <div className="editable-row" key={stage.id}><span>{index + 1}</span><input className="input" aria-label={`Workflow stage ${index + 1}`} value={stage.name} onChange={event => { const value = event.target.value; onStagesChange(current => current.map(item => item.id === stage.id ? { ...item, name: value } : item)); onTicketsChange(current => current.map(ticket => ticket.status === stage.name ? { ...ticket, status: value } : ticket)); }} /><button className="icon-btn" aria-label="Remove stage" onClick={() => onStagesChange(current => current.filter(item => item.id !== stage.id))}>×</button></div>)}</div>}</section>
-    <section className="plan-section"><div className="plan-section-heading"><div><h3>Starter tickets</h3><p>{allowEmptyTickets ? 'Existing project detected. Keep its current plan and skip creating starter tickets here, or add prompts if needed.' : 'Choose suggested prompts or customize them. At least one titled ticket is required to start the board.'}</p></div></div><div className="plan-choice-grid"><PlanOption selected={ticketChoice === 'standard'} eyebrow="Recommended" title="Add suggested tickets" detail={`${defaultProjectTickets(type).length} editable prompts for this project type.`} onClick={() => onChooseTickets('standard')} />{allowEmptyTickets && <PlanOption selected={ticketChoice === 'none'} eyebrow="Existing plan" title="No starter tickets" detail="Use the tickets already in this project folder." onClick={() => onChooseTickets('none')} />}<PlanOption selected={ticketChoice === 'custom'} eyebrow="Custom" title="Edit starter tickets" detail="Review, rename, add, or remove the suggestions." onClick={() => onChooseTickets('custom')} /></div>{ticketChoice === 'custom' && <div className="plan-custom-editor" ref={ticketEditorRef}><div className="section-heading"><h2>Starter tickets</h2><button className="btn" onClick={() => onTicketsChange(current => [...current, { summary: '', description: '', issueType: 'Task', status: stages[0]?.name ?? '' }])}>Add ticket</button></div>{tickets.map((ticket, index) => <div className="ticket-edit" key={index}><input className="input" aria-label={`Starter ticket ${index + 1}`} value={ticket.summary} onChange={event => onTicketsChange(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, summary: event.target.value } : item))} /><ChipSelect ariaLabel={`Starter ticket ${index + 1} stage`} value={ticket.status} onChange={value => onTicketsChange(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: value } : item))} options={stages.map(stage => ({ value: stage.name, label: stage.name }))} /><button className="icon-btn" aria-label="Remove ticket" onClick={() => onTicketsChange(current => current.filter((_, itemIndex) => index !== itemIndex))}>×</button></div>)}</div>}</section>
-  </div>;
-}
-
 function ToolAccessStep({ mode, folderless, onChange }: { mode: AgentToolMode; folderless: boolean; onChange: (mode: AgentToolMode) => void }) {
   return <div className="tool-access-step">
-    <div className="access-choice-grid">{folderless ? <button type="button" className="access-choice selected locked" aria-pressed="true"><span>Recommended</span><span className="access-choice-check" aria-hidden="true">✓</span><strong>Project-board tools only</strong><small>Use the brief, boards, and tickets. File and terminal tools become available after a folder is connected.</small></button> : <><button type="button" className={`access-choice${mode === 'full' ? ' selected' : ''}`} aria-pressed={mode === 'full'} onClick={() => onChange('full')}><span>Build</span><span className="access-choice-check" aria-hidden="true">✓</span><strong>Full project tools</strong><small>Read and edit files, run commands, and work with the project board.</small></button><button type="button" className={`access-choice${mode === 'read-only' ? ' selected' : ''}`} aria-pressed={mode === 'read-only'} onClick={() => onChange('read-only')}><span>Inspect</span><span className="access-choice-check" aria-hidden="true">✓</span><strong>Read-only project tools</strong><small>Read files and project context without changing either.</small></button></>}</div>
+    <div className="access-choice-grid">{folderless ? <button type="button" className="access-choice selected locked" aria-pressed="true"><span>Recommended</span><span className="access-choice-check" aria-hidden="true">✓</span><strong>Project tools only</strong><small>Use the brief and project context. File and terminal tools become available after a folder is connected.</small></button> : <><button type="button" className={`access-choice${mode === 'full' ? ' selected' : ''}`} aria-pressed={mode === 'full'} onClick={() => onChange('full')}><span>Build</span><span className="access-choice-check" aria-hidden="true">✓</span><strong>Full project tools</strong><small>Read and edit files, run commands, and work with the project context.</small></button><button type="button" className={`access-choice${mode === 'read-only' ? ' selected' : ''}`} aria-pressed={mode === 'read-only'} onClick={() => onChange('read-only')}><span>Inspect</span><span className="access-choice-check" aria-hidden="true">✓</span><strong>Read-only project tools</strong><small>Read files and project context without changing either.</small></button></>}</div>
     <div className="tool-access-note"><span>✓</span><div><strong>Nothing starts now</strong><p>This only sets the starting permission level. Provider, model, and permissions can still be reviewed when a session begins.</p></div></div>
   </div>;
 }
 
-function ReviewStep({ type, name, projectKey, purpose, workspaceName, folderless, previewPath, briefCount, stages, ticketCount, toolMode }: { type: ProjectType; name: string; projectKey: string; purpose: string; workspaceName?: string; folderless: boolean; previewPath: string; briefCount: number; stages: ProjectWorkflowStage[]; ticketCount: number; toolMode: AgentToolMode }) {
+function ReviewStep({ type, name, projectKey, purpose, workspaceName, folderless, previewPath, briefCount, toolMode }: { type: ProjectType; name: string; projectKey: string; purpose: string; workspaceName?: string; folderless: boolean; previewPath: string; briefCount: number; toolMode: AgentToolMode }) {
   return <div className="review-summary">
-    <header className="review-summary-heading"><span>Ready to create</span><div><h2>{name}</h2><code>{projectKey}</code></div>{purpose && <p>{purpose}</p>}<p>Praxis will add this project to <strong>{workspaceName ?? 'the current workspace'}</strong> and open its default board.</p></header>
+    <header className="review-summary-heading"><span>Ready to create</span><div><h2>{name}</h2><code>{projectKey}</code></div>{purpose && <p>{purpose}</p>}<p>Praxis will add this project to <strong>{workspaceName ?? 'the current workspace'}</strong>. No board is created until you add one from the project.</p></header>
     <dl className="review-summary-list">
       <div><dt>Project type</dt><dd><strong>{typeLabel(type)}</strong><small>{briefCount === 0 ? 'Brief skipped — fill it from the project home' : `${briefCount} brief section${briefCount === 1 ? '' : 's'} drafted`}</small></dd></div>
       <div><dt>Project files</dt><dd><strong>{folderless ? 'Praxis only — no local folder' : previewPath}</strong><small>{folderless ? 'A folder can be connected later.' : 'Praxis creates project.praxis.md without replacing an existing file.'}</small></dd></div>
-      <div><dt>Default board</dt><dd><strong>{ticketCount ? `${ticketCount} starter tickets` : 'Empty board'}</strong><small>{stages.map(stage => stage.name).join(' → ')}</small></dd></div>
+      <div><dt>Planning</dt><dd><strong>No board yet</strong><small>Add a local board, detected plans, or a connected board later.</small></dd></div>
       <div><dt>Session access</dt><dd><strong>{toolModeLabel(toolMode)}</strong><small>No AI session starts during project creation.</small></dd></div>
     </dl>
     <p className="review-summary-note"><span>✓</span>Everything can be changed after the project is created.</p>
@@ -530,16 +376,12 @@ function ProjectTypePreview({ type }: { type: ProjectType }) {
   return <span className="project-type-preview experiment" aria-hidden="true"><span className="project-preview-bar"><b>Hypothesis 01</b><em>Running</em></span><span className="project-preview-metrics"><span><small>SUCCESS</small><strong>68%</strong></span><span className="project-preview-chart"><i /><i /><i /><i /><i /></span></span><span className="project-preview-meter"><i /></span></span>;
 }
 
-function PlanOption({ selected, eyebrow, title, detail, onClick }: { selected: boolean; eyebrow: string; title: string; detail: string; onClick: () => void }) {
-  return <button type="button" className={`plan-option${selected ? ' selected' : ''}`} aria-label={`${eyebrow}: ${title}`} aria-pressed={selected} onClick={onClick}><span className="plan-option-eyebrow">{eyebrow}</span><span className="plan-option-check" aria-hidden="true">✓</span><strong>{title}</strong><small>{detail}</small></button>;
-}
-
 function previewKicker(type: ProjectType) { return type === 'software' ? 'BUILD' : type === 'product' ? 'DELIVER' : type === 'research' ? 'UNDERSTAND' : 'VALIDATE'; }
 function previewDetail(type: ProjectType) { return type === 'software' ? 'Repository · implementation · verification' : type === 'product' ? 'Users · outcomes · roadmap' : type === 'research' ? 'Questions · evidence · synthesis' : 'Hypothesis · method · decision'; }
 
 function Choice({ checked, title, detail, onClick }: { checked: boolean; title: string; detail: string; onClick: () => void }) { return <button className={`start-choice${checked ? ' selected' : ''}`} onClick={onClick}><span className="radio-dot" /><span><strong>{title}</strong><small>{detail}</small></span></button>; }
-function Inspection({ result, existingProject, decision, onUseExisting, onCreateNew }: { result: FolderInspection; existingProject?: ProjectRecord; decision?: 'use' | 'create'; onUseExisting?: () => void; onCreateNew?: () => void }) { return <div className="inspection-card span-2"><strong>Workspace detected</strong><span>{result.hasGit ? 'Git repository' : 'No Git repository'} · {result.readme ?? 'No README'}</span><span>{result.languages.join(', ') || 'No languages detected'}</span><span>{[...result.manifests, ...result.frameworks].join(', ') || 'No manifests or frameworks detected'}</span>{result.planFiles?.length ? <span className="inspection-plans"><Icon name="markdown" size={13} />{result.planFiles.length} planning file{result.planFiles.length === 1 ? '' : 's'} identified — this project's board will read them</span> : <span className="inspection-plans muted"><Icon name="info" size={13} />No planning files identified yet</span>}{result.projectFileExists && <span>Existing project.praxis.md will be retained.</span>}{existingProject && <div className="existing-project-match"><div><strong>This folder is already a project</strong><small>{existingProject.name} · {existingProject.key}</small></div><div className="footer-actions"><button type="button" className={`btn${decision === 'use' ? ' btn-primary' : ''}`} onClick={onUseExisting}>Use existing project</button><button type="button" className={`btn${decision === 'create' ? ' btn-primary' : ''}`} onClick={onCreateNew}>Create a new project</button></div></div>}</div>; }
+function Inspection({ result, existingProject, decision, onUseExisting, onCreateNew }: { result: FolderInspection; existingProject?: ProjectRecord; decision?: 'use' | 'create'; onUseExisting?: () => void; onCreateNew?: () => void }) { return <div className="inspection-card span-2"><strong>Workspace detected</strong><span>{result.hasGit ? 'Git repository' : 'No Git repository'} · {result.readme ?? 'No README'}</span><span>{result.languages.join(', ') || 'No languages detected'}</span><span>{[...result.manifests, ...result.frameworks].join(', ') || 'No manifests or frameworks detected'}</span>{result.planFiles?.length ? <span className="inspection-plans"><Icon name="markdown" size={13} />{result.planFiles.length} planning file{result.planFiles.length === 1 ? '' : 's'} identified — available when you add planning</span> : <span className="inspection-plans muted"><Icon name="info" size={13} />No planning files identified yet</span>}{result.projectFileExists && <span>Existing project.praxis.md will be retained.</span>}{existingProject && <div className="existing-project-match"><div><strong>This folder is already a project</strong><small>{existingProject.name} · {existingProject.key}</small></div><div className="footer-actions"><button type="button" className={`btn${decision === 'use' ? ' btn-primary' : ''}`} onClick={onUseExisting}>Use existing project</button><button type="button" className={`btn${decision === 'create' ? ' btn-primary' : ''}`} onClick={onCreateNew}>Create a new project</button></div></div>}</div>; }
 function slugKey(value: string) { return value.replace(/[^A-Za-z0-9]+/g, '').slice(0, 8).toUpperCase(); }
 function slugFolder(value: string) { return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 function typeLabel(type: ProjectType) { return TYPES.find(item => item.id === type)?.title ?? type; }
-function toolModeLabel(mode: AgentToolMode) { return mode === 'project-only' ? 'project-board tools only' : mode === 'read-only' ? 'read-only tools' : 'full tools'; }
+function toolModeLabel(mode: AgentToolMode) { return mode === 'project-only' ? 'project tools only' : mode === 'read-only' ? 'read-only tools' : 'full tools'; }

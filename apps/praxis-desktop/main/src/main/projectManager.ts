@@ -272,7 +272,7 @@ function validateCreateInput(input: CreateProjectInput, projects: ProjectRecord[
   if (input.workflowStages.length < 2) throw new Error('At least two workflow stages are required.');
   // Existing folders may already contain their own plans/tickets; importing
   // the project should not force Praxis to invent a starter ticket.
-  if (input.startingPoint !== 'existing-folder' && !input.starterTickets.length) throw new Error('At least one starter ticket is required.');
+  if (input.planningMode !== 'files' && input.startingPoint !== 'existing-folder' && !input.starterTickets.length) throw new Error('At least one starter ticket is required.');
 }
 
 function requireExistingDirectory(value: string): void { if (!fs.existsSync(value) || !fs.statSync(value).isDirectory()) throw new Error(`${value} is not an existing folder.`); }

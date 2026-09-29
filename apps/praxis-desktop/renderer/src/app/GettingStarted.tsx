@@ -9,12 +9,9 @@ interface GettingStartedProps {
   onOpenWorkspace: (workspaceId: string) => void;
   onOpenWorkspaceFile: () => void;
   onOpenExistingFolder: () => Promise<boolean | void>;
-  onCreateWorkspace: (name: string, description: string, storageFolder?: string) => Promise<void>;
-  onStartFirstProject: (wizardMode: 'create' | 'existing') => Promise<void>;
+  onCreateWorkspace: (name: string) => Promise<void>;
   onSkipSetup: () => void;
   onCreateProject: () => void;
-  onAddExistingProject: () => void;
-  onQuickStartFromFolder: () => Promise<boolean | void>;
   onContinueEmpty: () => void;
 }
 
@@ -26,24 +23,15 @@ export function GettingStarted({
   onOpenWorkspaceFile,
   onOpenExistingFolder,
   onCreateWorkspace,
-  onStartFirstProject,
   onSkipSetup,
   onCreateProject,
-  onAddExistingProject,
-  onQuickStartFromFolder,
   onContinueEmpty
 }: GettingStartedProps) {
   const [showSetup, setShowSetup] = useState(false);
-  const [setupChosen, setSetupChosen] = useState(false);
-  const [nameWorkspaceFirst, setNameWorkspaceFirst] = useState(false);
-  const firstRun = workspaces.length === 0;
   const [showAll, setShowAll] = useState(false);
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [storageFolder, setStorageFolder] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
-  const [quickStarting, setQuickStarting] = useState(false);
   const [openingFolder, setOpeningFolder] = useState(false);
   const ordered = useMemo(() => {
     const rank = new Map(recentWorkspaceIds.map((id, index) => [id, index]));
@@ -54,10 +42,9 @@ export function GettingStarted({
   const visible = showAll ? ordered : ordered.slice(0, 5);
 
   useEffect(() => {
-    if (workspaces.length > 0 && !setupChosen) setShowSetup(false);
-  }, [setupChosen, workspaces.length]);
-  const showFirstProject = firstRun && !nameWorkspaceFirst && !setupChosen && !createdWorkspace;
-  const showWorkspaceForm = showSetup || (firstRun && nameWorkspaceFirst) || (firstRun && !showFirstProject && !createdWorkspace);
+    if (createdWorkspace) setShowSetup(false);
+  }, [createdWorkspace]);
+  const showWorkspaceForm = showSetup && !createdWorkspace;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -65,23 +52,10 @@ export function GettingStarted({
     setSaving(true);
     setError(undefined);
     try {
-      await onCreateWorkspace(name.trim(), description.trim(), storageFolder);
+      await onCreateWorkspace(name.trim());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
       setSaving(false);
-    }
-  };
-
-  const quickStart = async () => {
-    if (quickStarting) return;
-    setQuickStarting(true);
-    setError(undefined);
-    try {
-      const completed = await onQuickStartFromFolder();
-      if (completed === false) setQuickStarting(false);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-      setQuickStarting(false);
     }
   };
 
@@ -106,57 +80,25 @@ export function GettingStarted({
           <div className="getting-started-complete" data-testid="workspace-created-actions">
             <span className="getting-started-eyebrow">Workspace ready</span>
             <h1 id="getting-started-title">Start building in {createdWorkspace.name}</h1>
-            <p>Your workspace is open. Add its first project now, bring in an existing folder, or continue with an empty workspace.</p>
+            <p>Your workspace is open. Add a project when you are ready, or continue with an empty workspace.</p>
             <div className="getting-started-primary-actions">
               <button className="getting-started-action primary" type="button" onClick={onCreateProject}>
-                <span><Icon name="plus" size={18} /></span><strong>Create New Project</strong><small>Start with a brief, board, and focused starter work.</small><Icon name="chevron-right" size={16} />
-              </button>
-              <button className="getting-started-action" type="button" onClick={onAddExistingProject}>
-                <span><Icon name="folder-open" size={18} /></span><strong>Create from existing folder</strong><small>Scan its plans and connect the work to this workspace.</small><Icon name="chevron-right" size={16} />
-              </button>
-              <button className="getting-started-action" type="button" onClick={() => void quickStart()} disabled={quickStarting || openingFolder}>
-                <span><Icon name="folder" size={18} /></span><strong>{quickStarting ? 'Opening folder…' : 'Quick start from a folder'}</strong><small>Work with the file structure without creating a board.</small><Icon name="chevron-right" size={16} />
+                <span><Icon name="plus" size={18} /></span><strong>Add Project</strong><small>Create a project or connect an existing folder.</small><Icon name="chevron-right" size={16} />
               </button>
             </div>
             {error && <div className="form-error" role="alert">{error}</div>}
             <button className="getting-started-text-action" type="button" onClick={onContinueEmpty}>Continue with Empty Workspace</button>
           </div>
-        ) : showFirstProject ? (
-          <div className="getting-started-complete" data-testid="first-project-actions">
-            <span className="getting-started-eyebrow">Welcome to Praxis</span>
-            <h1 id="getting-started-title">Create your first project</h1>
-            <p>A project holds a brief, a board, and focused starter work. Praxis groups projects into a workspace — one is set up for you now, and you can rename it any time.</p>
-            <div className="getting-started-primary-actions">
-              <button className="getting-started-action primary" type="button" onClick={() => void onStartFirstProject('create')}>
-                <span><Icon name="plus" size={18} /></span><strong>New project</strong><small>Start with a brief, board, and focused starter work.</small><Icon name="chevron-right" size={16} />
-              </button>
-              <button className="getting-started-action" type="button" onClick={() => void onStartFirstProject('existing')}>
-                <span><Icon name="folder-open" size={18} /></span><strong>Create from an existing folder</strong><small>Scan its plans and connect the work to a project.</small><Icon name="chevron-right" size={16} />
-              </button>
-            </div>
-            <div className="getting-started-secondary-actions">
-              <button className="getting-started-text-action" type="button" onClick={() => setNameWorkspaceFirst(true)}>Name a workspace first</button>
-              <button className="getting-started-text-action" type="button" onClick={() => void openExistingFolder()} disabled={openingFolder}>{openingFolder ? 'Opening folder…' : 'Open an existing folder'}</button>
-              <button className="getting-started-text-action" type="button" onClick={onOpenWorkspaceFile}>Open a workspace file</button>
-              <button className="getting-started-text-action" type="button" onClick={onSkipSetup}>Skip for now</button>
-            </div>
-          </div>
         ) : showWorkspaceForm ? (
           <form className="getting-started-form" onSubmit={submit}>
             <span className="getting-started-eyebrow">Create your workspace</span>
             <h1 id="getting-started-title">Give your work a home</h1>
-            <p>A workspace is the top-level context in Praxis. Projects, their boards, and repository work live inside it.</p>
+            <p>A workspace groups projects you want to return to together. You can make it portable later.</p>
             <label htmlFor="getting-started-workspace-name">Workspace name</label>
             <input id="getting-started-workspace-name" autoFocus value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Product delivery" />
-            <label htmlFor="getting-started-workspace-description">Description <span>(optional)</span></label>
-            <textarea id="getting-started-workspace-description" value={description} onChange={event => setDescription(event.target.value)} rows={3} placeholder="What belongs in this workspace?" />
-            <label htmlFor="getting-started-workspace-location">Storage location</label>
-            <div className="workspace-location-picker" id="getting-started-workspace-location"><span>{storageFolder || 'Praxis user folder'}</span><button className="btn" type="button" onClick={async () => { const folder = await window.praxis.dialog.pickFolder('Choose workspace storage folder'); if (folder) setStorageFolder(folder); }}>{storageFolder ? 'Change folder' : 'Choose folder'}</button></div>
-            <p className="workspace-location-help">A selected folder keeps the workspace file with your repository. Credentials stay on this device.</p>
             {error && <div className="form-error" role="alert">{error}</div>}
             <div className="getting-started-form-actions">
-              <button className="btn" type="button" onClick={onSkipSetup}>Skip for now</button>
-              {(workspaces.length > 0 || nameWorkspaceFirst) && <button className="btn" type="button" onClick={() => { setShowSetup(false); setNameWorkspaceFirst(false); }}>Back</button>}
+              <button className="btn" type="button" onClick={() => setShowSetup(false)}>Back</button>
               <button className="btn btn-primary" type="submit" disabled={!name.trim() || saving}>{saving ? 'Creating…' : 'Create Workspace'}</button>
             </div>
           </form>
@@ -164,7 +106,7 @@ export function GettingStarted({
           <div className="getting-started-open">
             <span className="getting-started-eyebrow">Getting started</span>
             <h1 id="getting-started-title">Open a workspace</h1>
-            <p>Choose a recent workspace to continue with its projects and boards, or create a fresh context.</p>
+            <p>Open a recent workspace, start with an existing folder, or create a fresh context.</p>
             <div className="getting-started-recents" aria-label={showAll ? 'All workspaces' : 'Recent workspaces'}>
               {visible.map(workspace => (
                 <button key={workspace.id} type="button" className="getting-started-recent" onClick={() => onOpenWorkspace(workspace.id)}>
@@ -174,12 +116,19 @@ export function GettingStarted({
                 </button>
               ))}
             </div>
-            {!showAll && <button className="getting-started-text-action" type="button" onClick={() => setShowAll(true)}>View all workspaces</button>}
+            {!showAll && ordered.length > 5 && <button className="getting-started-text-action" type="button" onClick={() => setShowAll(true)}>View all workspaces</button>}
             {showAll && <button className="getting-started-text-action" type="button" onClick={() => setShowAll(false)}>Show recent workspaces</button>}
+            <div className="getting-started-primary-actions">
+              <button className="getting-started-action primary" type="button" onClick={() => void openExistingFolder()} disabled={openingFolder}>
+                <span><Icon name="folder-open" size={18} /></span><strong>{openingFolder ? 'Opening folder…' : 'Open Folder'}</strong><small>Use a project folder as your starting point.</small><Icon name="chevron-right" size={16} />
+              </button>
+              <button className="getting-started-action" type="button" onClick={() => { setError(undefined); setShowSetup(true); }}>
+                <span><Icon name="plus" size={18} /></span><strong>New Workspace</strong><small>Create an empty workspace for one or more projects.</small><Icon name="chevron-right" size={16} />
+              </button>
+            </div>
             <div className="getting-started-secondary-actions">
-              <button className="btn btn-primary" type="button" onClick={() => { setSetupChosen(true); setShowSetup(true); }}><Icon name="plus" size={14} /> Create Workspace</button>
-              <button className="btn" type="button" onClick={() => void openExistingFolder()} disabled={openingFolder}><Icon name="folder-open" size={14} /> {openingFolder ? 'Opening…' : 'Open existing folder'}</button>
-              <button className="btn" type="button" onClick={onOpenWorkspaceFile}><Icon name="folder-open" size={14} /> Open Workspace File</button>
+              <button className="getting-started-text-action" type="button" onClick={onOpenWorkspaceFile}>Open Workspace File</button>
+              {workspaces.length === 0 && <button className="getting-started-text-action" type="button" onClick={onSkipSetup}>Continue without opening</button>}
             </div>
           </div>
         )}
@@ -200,28 +149,28 @@ function ProductPreview() {
             <div className="preview-switcher"><Icon name="organization" size={12} /><b>Product Delivery</b><Icon name="chevron-down" size={10} /></div>
             <span className="preview-label">PROJECTS</span>
             <div className="preview-project active"><Icon name="folder-open" size={12} /><span>Praxis Desktop</span></div>
-            <div className="preview-tree"><i /><span>Planning board</span></div>
             <div className="preview-tree"><i /><span>Repository</span></div>
+            <div className="preview-tree"><i /><span>Sessions</span></div>
             <div className="preview-project"><Icon name="folder-open" size={12} /><span>Website</span></div>
             <span className="preview-label lower">WORKSPACE</span>
             <div className="preview-link"><Icon name="home" size={11} /> Overview</div>
             <div className="preview-link"><Icon name="plug" size={11} /> Connections</div>
           </aside>
           <div className="preview-board">
-            <header><div><small>PRAXIS DESKTOP</small><strong>Planning board</strong></div><span>Board</span></header>
+            <header><div><small>PRAXIS DESKTOP</small><strong>Project workspace</strong></div><span>Files</span></header>
             <div className="preview-columns">
-              <PreviewColumn title="BACKLOG" count="3" cards={['Workspace onboarding', 'Project creation']} />
-              <PreviewColumn title="IN PROGRESS" count="1" cards={['Getting Started']} active />
-              <PreviewColumn title="DONE" count="2" cards={['Workspace model', 'Theme tokens']} />
+              <PreviewColumn title="FILES" count="3" cards={['README.md', 'src']} />
+              <PreviewColumn title="SESSIONS" count="1" cards={['Start a session']} active />
+              <PreviewColumn title="PLANNING" count="0" cards={['Add a board later']} />
             </div>
           </div>
         </div>
-        <div className="preview-relationship"><span>Workspace</span><i /><span>Project</span><i /><span>Board</span></div>
+        <div className="preview-relationship"><span>Workspace</span><i /><span>Project</span><i /><span>Files</span></div>
       </div>
     </section>
   );
 }
 
 function PreviewColumn({ title, count, cards, active = false }: { title: string; count: string; cards: string[]; active?: boolean }) {
-  return <div className={`preview-column${active ? ' active' : ''}`}><div><b>{title}</b><span>{count}</span></div>{cards.map((card, index) => <article key={card}><i className={index ? 'gold' : ''} /><strong>{card}</strong><small>{index ? 'TASK' : 'FEATURE'} · P{index + 1}</small></article>)}</div>;
+  return <div className={`preview-column${active ? ' active' : ''}`}><div><b>{title}</b><span>{count}</span></div>{cards.map((card, index) => <article key={card}><i className={index ? 'gold' : ''} /><strong>{card}</strong><small>{title === 'FILES' ? 'PROJECT FILE' : title === 'PLANNING' ? 'OPTIONAL' : 'PROJECT CONTEXT'}</small></article>)}</div>;
 }

@@ -11,23 +11,23 @@ let app: TestApp;
 test.beforeEach(async () => { app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false }); });
 test.afterEach(async () => { await closeTestApp(app); });
 
-test('creates a folderless Product project through the full wizard and opens its board', async () => {
+test('creates a folderless Product project through advanced setup, then adds its board', async () => {
   const page = app.window;
   await expect(page.getByTestId('overview-page')).toBeVisible();
   await page.getByTestId('new-menu').click();
   await page.getByTestId('new-project').click();
+  await page.getByTestId('add-project-no-folder').click();
   await expect(page.getByTestId('new-project-wizard')).toBeVisible();
 
-  // A first project is three steps by default; Advanced setup restores all six,
-  // which this test walks for full coverage.
+  // A first project is three steps by default; Advanced setup adds brief and
+  // tool access while planning remains a separate project-page decision.
   await expect(page.locator('.step-count')).toHaveText('Step 1 of 3');
   await expect(page).toHaveScreenshot('project-wizard-type.png');
   await page.getByRole('button', { name: /Product Development/ }).click();
   await page.getByTestId('wizard-advanced-toggle').check();
-  await expect(page.locator('.step-count')).toHaveText('Step 1 of 6');
+  await expect(page.locator('.step-count')).toHaveText('Step 1 of 5');
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Project name').fill('Customer Portal');
-  await page.getByRole('button', { name: /Keep in Praxis only/ }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   // The recommended brief for the type is included by default — a first-time
   // user gets a real brief to react to, not six empty slots to opt into.
@@ -59,21 +59,7 @@ test('creates a folderless Product project through the full wizard and opens its
   await expect(page.locator('.brief-section-option.included .brief-section-selected')).toHaveCount(6);
   await page.screenshot({ path: 'output/playwright/project-wizard-guided-brief.png', fullPage: true });
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.locator('.plan-illustration')).toHaveCount(0);
-  await expect(page.locator('.plan-section-heading > span')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Recommended: Standard product development workflow' })).toBeVisible();
-  await page.getByRole('button', { name: 'Simple: To do and Done' }).click();
-  await expect(page.getByRole('button', { name: 'Simple: To do and Done' })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Custom: Choose the stages' }).click();
-  await expect(page.locator('.plan-custom-editor').first().getByLabel('Workflow stage 1')).toBeVisible();
-  await page.getByRole('button', { name: 'Recommended: Standard product development workflow' }).click();
-  await page.getByRole('button', { name: 'Custom: Edit starter tickets' }).click();
-  await expect(page.locator('.ticket-edit')).toHaveCount(5);
-  await page.screenshot({ path: 'output/playwright/project-wizard-guided-plan-custom.png', fullPage: true });
-  await page.getByRole('button', { name: 'Recommended: Add suggested tickets' }).click();
-  await page.screenshot({ path: 'output/playwright/project-wizard-guided-plan.png', fullPage: true });
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Project-board tools only')).toBeVisible();
+  await expect(page.getByText('Project tools only')).toBeVisible();
   await expect(page.getByText('Session access', { exact: true })).toHaveCount(0);
   await expect(page.locator('.tool-access-illustration')).toHaveCount(0);
   await expect(page.locator('.access-choice.selected .access-choice-check')).toHaveText('✓');
@@ -94,18 +80,18 @@ test('creates a folderless Product project through the full wizard and opens its
   const projectTree = page.getByTestId('project-tree').filter({ hasText: 'Customer Portal' });
   await expect(page.getByTestId('nav-board')).toHaveCount(0);
   await expect(page.getByTestId('board-nav-item').filter({ hasText: 'Customer Portal Board' })).toHaveCount(0);
-  await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Customer Portal Board');
+  await expect(projectTree.getByTestId('project-default-board-nav-item')).toHaveCount(0);
   await expect(projectTree.getByTestId('project-git-nav-item')).toBeVisible();
   await expect(projectTree.getByTestId('project-git-changes-nav-item')).toBeVisible();
   await expect(projectTree.getByTestId('project-run-nav-item')).toBeVisible();
   const themedColors = await projectTree.evaluate(tree => ({
     accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
     projectIcon: getComputedStyle(tree.querySelector('.project-icon')!).color,
-    boardIcon: getComputedStyle(tree.querySelector('.project-board-icon')!).color
+    boardIcon: tree.querySelector('.project-board-icon') ? getComputedStyle(tree.querySelector('.project-board-icon')!).color : ''
   }));
   expect(themedColors.projectIcon).toBe('rgb(198, 67, 31)');
   expect(themedColors.accent).toBe('#c6431f');
-  expect(themedColors.boardIcon).toBe('rgb(116, 105, 94)');
+  expect(themedColors.boardIcon).toBe('');
   // A freshly-created project lands with a Get Started strip: one lit action
   // and a small checklist, not four zero cards.
   const getStarted = page.getByTestId('project-getstarted');
@@ -129,13 +115,16 @@ test('creates a folderless Product project through the full wizard and opens its
   expect(created?.brief.problem).toBe('Validate the users’ current difficulty before choosing a solution.');
   expect(created?.brief.mvp).toBe('Deliver the smallest coherent release that can test the core value.');
   expect(Object.values(created?.brief ?? {}).filter(Boolean)).toHaveLength(6);
-  expect(created?.workItems).toHaveLength(5);
+  expect(created?.workItems).toHaveLength(0);
   // FX-BE-046 — the workflow is data the user owns, not a value frozen at
   // creation. Every stage carries a category (FX-BE-043) and the last one is
   // what "done" means.
   expect(created?.workflowStages.map(stage => stage.category)).toEqual([
     'todo', 'todo', 'indeterminate', 'indeterminate', 'indeterminate', 'done'
   ]);
+  await page.getByTestId('project-add-board').click();
+  await page.getByTestId('planning-source-local-board').click();
+  await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Customer Portal Board');
   const workflowPanel = page.getByTestId('project-workflow');
   await expect(workflowPanel).toBeVisible();
   await expect(workflowPanel.getByTestId('workflow-stage-0')).toContainText('Backlog');
@@ -183,17 +172,17 @@ test('creates a folderless Product project through the full wizard and opens its
   expect(projectThemeStyles.panelBorderWidth).toBe('0px');
 
   await projectTree.getByTestId('project-default-board-nav-item').click();
-  await expect(page.getByTestId('issue-card')).toHaveCount(5);
+  await expect(page.getByTestId('issue-card')).toHaveCount(0);
   await page.getByTestId('mode-work').click();
   const workProject = page.getByTestId('work-project').filter({ hasText: 'Customer Portal' });
   await expect(workProject).toContainText('1 board');
   await expect(workProject.getByTestId('work-card')).toContainText('Customer Portal Board');
   await page.getByTestId('new-menu').click();
   await page.getByTestId('new-session').click();
-  await expect(page.getByTestId('project-empty-state')).toContainText('Create a new project');
+  await expect(page.getByRole('heading', { name: 'New session in Customer Portal' })).toBeVisible();
 });
 
-test('opens a focused Create from existing folder flow from the New menu', async () => {
+test('opens the unified Add Project flow from the New menu', async () => {
   const page = app.window;
   const repoInspection = await page.evaluate(folder => window.praxis.projects.inspectFolder(folder), path.resolve(__dirname, '../../../..'));
   expect(repoInspection.planFiles?.length ?? 0).toBeGreaterThan(0);
@@ -210,10 +199,13 @@ test('opens a focused Create from existing folder flow from the New menu', async
     return point === menu || menu.contains(point);
   });
   expect(menuIsTopmost).toBe(true);
-  await expect(page.getByTestId('new-project')).toContainText('Create New Project');
-  await page.getByTestId('add-existing-project').click();
-  await expect(page.getByRole('dialog', { name: 'Create from existing folder' })).toBeVisible();
-  await expect(page.getByText('Choose the existing folder')).toBeVisible();
+  await expect(page.getByTestId('new-project')).toContainText('Add Project');
+  await expect(page.getByTestId('add-existing-project')).toHaveCount(0);
+  await page.getByTestId('new-project').click();
+  await expect(page.getByTestId('add-project-options')).toBeVisible();
+  await page.getByTestId('add-project-open-folder').click();
+  await expect(page.getByRole('dialog', { name: 'Open existing folder' })).toBeVisible();
+  await expect(page.getByText('Select the project folder')).toBeVisible();
   await expect(page.getByText('Workspace detection will appear here')).toBeVisible();
   await expect(page).toHaveScreenshot('add-existing-project.png');
   await page.getByRole('button', { name: 'Close new project dialog' }).click();
@@ -225,6 +217,7 @@ test('a first project is three steps: type, name, review', async () => {
   await expect(page.getByTestId('overview-page')).toBeVisible();
   await page.getByTestId('new-menu').click();
   await page.getByTestId('new-project').click();
+  await page.getByTestId('add-project-no-folder').click();
 
   await expect(page.locator('.step-count')).toHaveText('Step 1 of 3');
   await page.getByRole('button', { name: /Product Development/ }).click();
@@ -245,7 +238,8 @@ test('a first project is three steps: type, name, review', async () => {
   const stored = await page.evaluate(() => window.praxis.projects.list());
   const created = stored.find(project => project.name === 'Quick Start');
   expect(Object.values(created?.brief ?? {}).filter(Boolean)).toHaveLength(6);
-  expect(created?.workItems).toHaveLength(5);
+  expect(created?.workItems).toHaveLength(0);
+  expect(created?.planningMode).toBe('files');
   expect(created?.defaultAiToolMode).toBe('project-only');
 });
 
@@ -663,7 +657,8 @@ test('an existing folder is three steps too, and confirms the detected identity'
     }, folder);
 
     await page.getByTestId('new-menu').click();
-    await page.getByTestId('add-existing-project').click();
+    await page.getByTestId('new-project').click();
+    await page.getByTestId('add-project-open-folder').click();
     // The advanced toggle is offered here as well — someone pointing Praxis at
     // a repo they already have is the least likely person to want six screens.
     await expect(page.locator('.step-count')).toHaveText('Step 1 of 3');
@@ -686,7 +681,7 @@ test('an existing folder is three steps too, and confirms the detected identity'
   }
 });
 
-test('ticking advanced setup restores all six steps in existing-folder mode', async () => {
+test('ticking advanced setup adds brief and tool access in existing-folder mode', async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-advanced-'));
   fs.writeFileSync(path.join(folder, 'README.md'), '# Deep Setup\n');
   try {
@@ -695,11 +690,12 @@ test('ticking advanced setup restores all six steps in existing-folder mode', as
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
     }, folder);
     await page.getByTestId('new-menu').click();
-    await page.getByTestId('add-existing-project').click();
+    await page.getByTestId('new-project').click();
+    await page.getByTestId('add-project-open-folder').click();
 
     await expect(page.locator('.step-count')).toHaveText('Step 1 of 3');
     await page.getByTestId('wizard-advanced-toggle').check();
-    await expect(page.locator('.step-count')).toHaveText('Step 1 of 6');
+    await expect(page.locator('.step-count')).toHaveText('Step 1 of 5');
     await page.getByRole('button', { name: 'Choose folder…' }).click();
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByRole('button', { name: 'Continue' }).click();
@@ -712,7 +708,9 @@ test('ticking advanced setup restores all six steps in existing-folder mode', as
 test('the command palette can add a project from an existing folder', async () => {
   const page = app.window;
   await page.keyboard.press('ControlOrMeta+k');
-  await page.getByRole('textbox', { name: 'Go to' }).fill('from folder');
+  await page.getByRole('textbox', { name: 'Go to' }).fill('add project');
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('dialog', { name: 'Create from existing folder' })).toBeVisible();
+  await expect(page.getByTestId('add-project-options')).toBeVisible();
+  await page.getByTestId('add-project-open-folder').click();
+  await expect(page.getByRole('dialog', { name: 'Open existing folder' })).toBeVisible();
 });

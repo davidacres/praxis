@@ -13,7 +13,7 @@ test.afterEach(async () => {
   }
 });
 
-test('first launch leads directly into creating the first project', async () => {
+test('first launch offers one folder-first workspace entry flow', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
 
@@ -23,15 +23,17 @@ test('first launch leads directly into creating the first project', async () => 
   expect(initialSize).toEqual([1664, 936]);
 
   await expect(win.getByTestId('getting-started')).toBeVisible();
-  await expect(win.getByRole('heading', { name: 'Create your first project' })).toBeVisible();
+  await expect(win.getByRole('heading', { name: 'Open a workspace' })).toBeVisible();
   await expect(win.getByTestId('main-content-pane')).toHaveCount(0);
-  await expect(win.getByRole('button', { name: /New project/ })).toBeVisible();
+  await expect(win.getByRole('button', { name: /Open Folder/ })).toBeVisible();
+  await expect(win.getByRole('button', { name: /New Workspace/ })).toBeVisible();
+  await expect(win.getByRole('button', { name: 'Open Workspace File' })).toBeVisible();
   await win.screenshot({ path: 'output/playwright/getting-started-dark.png', fullPage: true });
 
-  // Naming a workspace up front is still available.
-  await win.getByRole('button', { name: 'Name a workspace first' }).click();
+  await win.getByRole('button', { name: /New Workspace/ }).click();
   await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();
   await expect(win.getByRole('textbox', { name: 'Workspace name' })).toBeEditable();
+  await expect(win.getByRole('textbox')).toHaveCount(1);
 });
 
 test('opening an existing folder creates a portable workspace and file-only project', async () => {
@@ -39,15 +41,16 @@ test('opening an existing folder creates a portable workspace and file-only proj
   const win = app.window;
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-open-folder-'));
   fs.writeFileSync(path.join(folder, 'README.md'), '# Existing folder\n');
-  fs.mkdirSync(path.join(folder, 'docs'));
+  fs.mkdirSync(path.join(folder, 'docs', 'plans', 'features', 'fx-test'), { recursive: true });
+  fs.writeFileSync(path.join(folder, 'docs', 'plans', 'features', 'fx-test', 'feature.md'), '# Test feature\n\n**Type:** Feature\n**Status:** Proposed\n');
   try {
     await app.electronApp.evaluate(({ dialog }, chosen) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
     }, folder);
 
-    await expect(win.getByRole('button', { name: 'Open an existing folder' })).toBeVisible();
+    await expect(win.getByRole('button', { name: /Open Folder/ })).toBeVisible();
     await win.screenshot({ path: 'output/playwright/getting-started-open-folder.png', fullPage: true });
-    await win.getByRole('button', { name: 'Open an existing folder' }).click();
+    await win.getByRole('button', { name: /Open Folder/ }).click();
     await expect(win.getByTestId('project-home')).toContainText('praxis-open-folder-');
     await expect(win.getByText('File structure', { exact: true })).toBeVisible();
     await win.screenshot({ path: 'output/playwright/open-existing-folder.png', fullPage: true });
@@ -63,6 +66,14 @@ test('opening an existing folder creates a portable workspace and file-only proj
     expect(state.project?.workspaceFolder).toBe(folder);
     expect(fs.existsSync(path.join(folder, 'project.praxis.md'))).toBe(true);
     expect(fs.existsSync(state.workspace!.storagePath!)).toBe(true);
+    await win.getByTestId('project-add-board').click();
+    await expect(win.getByTestId('planning-source-detected-plans')).toBeVisible();
+    await win.getByTestId('project-planning-source-dialog').screenshot({ path: 'output/playwright/planning-source-detected.png' });
+    await win.getByTestId('planning-source-detected-plans').click();
+    await expect(win.getByTestId('project-default-board-nav-item')).toBeVisible();
+    const plannedProject = await win.evaluate(async projectId => window.praxis.projects.get(projectId), state.project!.id);
+    expect(plannedProject?.planningMode).toBe('board');
+    expect(plannedProject?.storage).toBe('folder');
 
     const reopened = await win.evaluate(folderPath => window.praxis.workspaces.openFolder(folderPath), folder);
     expect(reopened?.id).toBe(state.workspace?.id);
@@ -77,8 +88,8 @@ test('workspace setup can be skipped to the empty Praxis shell', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
 
-  await expect(win.getByRole('heading', { name: 'Create your first project' })).toBeVisible();
-  await win.getByRole('button', { name: 'Skip for now' }).click();
+  await expect(win.getByRole('heading', { name: 'Open a workspace' })).toBeVisible();
+  await win.getByRole('button', { name: 'Continue without opening' }).click();
   await expect(win.getByTestId('getting-started')).toHaveCount(0);
   await expect(win.getByTestId('main-content-pane')).toBeVisible();
 
@@ -89,7 +100,7 @@ test('workspace setup can be skipped to the empty Praxis shell', async () => {
   expect(await win.evaluate(() => window.praxis.workspaces.list().then(list => list.length))).toBe(1);
   await win.getByTestId('new-menu').click();
   await win.getByTestId('new-project').click();
-  await expect(win.getByTestId('new-project-wizard')).toBeVisible();
+  await expect(win.getByTestId('add-project-options')).toBeVisible();
   await expect(win.getByTestId('getting-started')).toHaveCount(0);
 });
 
@@ -97,15 +108,19 @@ test('workspace setup offers project handoff and cancelling the wizard opens the
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
 
-  await win.getByRole('button', { name: 'Name a workspace first' }).click();
+  await win.getByRole('button', { name: /New Workspace/ }).click();
   await win.getByRole('textbox', { name: 'Workspace name' }).fill('Client Delivery');
-  await win.getByRole('textbox', { name: /Description/ }).fill('Release planning');
   await win.getByRole('button', { name: 'Create Workspace' }).click();
   await expect(win.getByTestId('workspace-created-actions')).toBeVisible();
-  await expect(win.getByRole('button', { name: /Create New Project/ })).toBeVisible();
-  await expect(win.getByRole('button', { name: /Create from existing folder/ })).toBeVisible();
+  await expect(win.getByRole('button', { name: /Add Project/ })).toBeVisible();
 
-  await win.getByRole('button', { name: /Create New Project/ }).click();
+  await win.getByRole('button', { name: /Add Project/ }).click();
+  await expect(win.getByTestId('add-project-options')).toBeVisible();
+  await expect(win.getByTestId('add-project-open-folder')).toBeVisible();
+  await expect(win.getByTestId('add-project-new-folder')).toBeVisible();
+  await expect(win.getByTestId('add-project-no-folder')).toBeVisible();
+  await win.screenshot({ path: 'output/playwright/add-project-options.png', fullPage: true });
+  await win.getByTestId('add-project-new-folder').click();
   await expect(win.getByTestId('project-wizard-onboarding')).toBeVisible();
   await expect(win.getByRole('heading', { name: 'Choose a project type' })).toBeVisible();
   await expect(win.locator('.project-choice')).toHaveCount(4);
@@ -121,7 +136,7 @@ test('workspace setup offers project handoff and cancelling the wizard opens the
   await expect(win.getByRole('button', { name: 'Select workspace' })).toContainText('Client Delivery');
 });
 
-test('workspace quick start creates a file-only project without a board', async () => {
+test('workspace Add Project opens a folder without a board and adds planning later', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-quick-start-'));
@@ -132,12 +147,16 @@ test('workspace quick start creates a file-only project without a board', async 
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
     }, folder);
 
-    await win.getByRole('button', { name: 'Name a workspace first' }).click();
+    await win.getByRole('button', { name: /New Workspace/ }).click();
     await win.getByRole('textbox', { name: 'Workspace name' }).fill('File Workspace');
     await win.getByRole('button', { name: 'Create Workspace' }).click();
     await expect(win.getByTestId('workspace-created-actions')).toBeVisible();
-    await expect(win.getByRole('button', { name: /Quick start from a folder/ })).toBeVisible();
-    await win.getByRole('button', { name: /Quick start from a folder/ }).click();
+    await win.getByRole('button', { name: /Add Project/ }).click();
+    await win.getByTestId('add-project-open-folder').click();
+    await win.getByRole('button', { name: 'Choose folder…' }).click();
+    await win.getByRole('button', { name: 'Continue' }).click();
+    await win.getByRole('button', { name: 'Continue' }).click();
+    await win.getByRole('button', { name: 'Add project' }).click();
 
     await expect(win.getByTestId('project-home')).toContainText('praxis-quick-start-');
     await expect(win.getByText('File structure', { exact: true })).toBeVisible();
@@ -159,7 +178,10 @@ test('workspace quick start creates a file-only project without a board', async 
     await win.screenshot({ path: 'output/playwright/quick-start-file-only.png', fullPage: true });
 
     await win.getByTestId('project-add-board').click();
-    await expect(win.getByText('No boards')).toHaveCount(0);
+    await expect(win.getByTestId('project-planning-source-dialog')).toBeVisible();
+    await win.getByTestId('project-planning-source-dialog').scrollIntoViewIfNeeded();
+    await win.getByTestId('project-planning-source-dialog').screenshot({ path: 'output/playwright/planning-source-options.png' });
+    await win.getByTestId('planning-source-local-board').click();
     await expect(win.getByTestId('project-default-board-nav-item')).toBeVisible();
     await win.screenshot({ path: 'output/playwright/quick-start-with-board.png', fullPage: true });
     const boardState = await win.evaluate(async () => {
@@ -177,34 +199,33 @@ test('workspace quick start creates a file-only project without a board', async 
   }
 });
 
-test('walks through every workspace and project onboarding screen to a created project', async () => {
+test('advanced project setup remains available without forcing a board', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
 
-  await expect(win.getByRole('heading', { name: 'Create your first project' })).toBeVisible();
-  await win.getByRole('button', { name: 'Name a workspace first' }).click();
+  await expect(win.getByRole('heading', { name: 'Open a workspace' })).toBeVisible();
+  await win.getByRole('button', { name: /New Workspace/ }).click();
   await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();
   await win.screenshot({ path: 'output/playwright/full-onboarding-01-workspace.png', fullPage: true });
   await win.getByRole('textbox', { name: 'Workspace name' }).fill('Product Studio');
-  await win.getByRole('textbox', { name: /Description/ }).fill('Customer product planning and delivery');
   await win.getByRole('button', { name: 'Create Workspace' }).click();
 
   await expect(win.getByTestId('workspace-created-actions')).toBeVisible();
   await win.screenshot({ path: 'output/playwright/full-onboarding-02-workspace-ready.png', fullPage: true });
-  await win.getByRole('button', { name: /Create New Project/ }).click();
+  await win.getByRole('button', { name: /Add Project/ }).click();
+  await win.getByTestId('add-project-no-folder').click();
 
   await expect(win.getByRole('heading', { name: 'Choose a project type' })).toBeVisible();
   await expect(win.locator('.project-choice')).toHaveCount(4);
   await expect(win.locator('.project-choice').last()).toHaveCSS('opacity', '1');
   await win.screenshot({ path: 'output/playwright/full-onboarding-03-project-type.png', fullPage: true });
   await win.getByRole('button', { name: /Product Development/ }).click();
-  // Advanced setup walks the brief, plan, and tool-access screens this test covers.
+  // Advanced setup keeps brief and tool access available; planning is deferred.
   await win.getByTestId('wizard-advanced-toggle').check();
   await win.getByRole('button', { name: 'Continue' }).click();
 
   await expect(win.getByRole('heading', { name: 'Name and locate your project' })).toBeVisible();
   await win.getByRole('textbox', { name: 'Project name', exact: true }).fill('Customer Hub');
-  await win.getByRole('button', { name: /Keep in Praxis only/ }).click();
   await win.screenshot({ path: 'output/playwright/full-onboarding-04-name-location.png', fullPage: true });
   await win.getByRole('button', { name: 'Continue' }).click();
 
@@ -217,16 +238,8 @@ test('walks through every workspace and project onboarding screen to a created p
   await win.screenshot({ path: 'output/playwright/full-onboarding-05-guided-brief.png', fullPage: true });
   await win.getByRole('button', { name: 'Continue' }).click();
 
-  await expect(win.getByRole('heading', { name: 'Set up the initial plan' })).toBeVisible();
-  await expect(win.locator('.plan-section-heading > span')).toHaveCount(0);
-  await expect(win.getByRole('button', { name: 'Recommended: Standard product development workflow' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(win.getByRole('button', { name: 'Recommended: Add suggested tickets' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(win.locator('.plan-illustration')).toHaveCount(0);
-  await win.screenshot({ path: 'output/playwright/full-onboarding-06-initial-plan.png', fullPage: true });
-  await win.getByRole('button', { name: 'Continue' }).click();
-
   await expect(win.getByRole('heading', { name: 'Choose tool access' })).toBeVisible();
-  await expect(win.getByText('Project-board tools only')).toBeVisible();
+  await expect(win.getByText('Project tools only')).toBeVisible();
   await expect(win.locator('.tool-access-illustration')).toHaveCount(0);
   await win.screenshot({ path: 'output/playwright/full-onboarding-07-tool-access.png', fullPage: true });
   await win.getByRole('button', { name: 'Continue' }).click();
@@ -240,6 +253,7 @@ test('walks through every workspace and project onboarding screen to a created p
   await win.getByRole('button', { name: 'Create project' }).click();
 
   await expect(win.getByTestId('project-home')).toContainText('Customer Hub');
+  await expect(win.getByText('File structure', { exact: true })).toBeVisible();
   await expect(win.getByRole('button', { name: 'Select workspace' })).toContainText('Product Studio');
   await win.screenshot({ path: 'output/playwright/full-onboarding-09-created-project.png', fullPage: true });
 });
@@ -298,10 +312,9 @@ test('Getting Started remains usable in a narrow reduced-motion window and light
 
   await expect(win.locator('html')).toHaveAttribute('data-mode', 'light');
   await expect(win.getByTestId('getting-started')).toBeVisible();
-  // First run now lands on "Create your first project" — the workspace form is
-  // one link behind "Name a workspace first", not the first thing shown.
-  await expect(win.getByTestId('first-project-actions')).toBeVisible();
-  await expect(win.getByRole('button', { name: /New project/ })).toBeVisible();
+  await expect(win.getByRole('heading', { name: 'Open a workspace' })).toBeVisible();
+  await expect(win.getByRole('button', { name: /Open Folder/ })).toBeVisible();
+  await expect(win.getByRole('button', { name: /New Workspace/ })).toBeVisible();
   await win.screenshot({ path: 'output/playwright/getting-started-light-narrow.png', fullPage: true });
 });
 
