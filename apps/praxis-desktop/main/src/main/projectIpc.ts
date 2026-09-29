@@ -134,7 +134,7 @@ export function registerProjectIpc(): void {
   });
   ipcMain.handle('projects:update', async (_event, projectId: string, patch: UpdateProjectInput) => {
     const updated = await getProjectStore().update(projectId, patch);
-    if (patch.planningMode !== undefined) {
+    if (patch.planningMode !== undefined || patch.storage !== undefined) {
       await syncProjectConnection(updated, true);
     }
     // A folder-backed board's columns live in `board.praxis.json` so the

@@ -10550,6 +10550,11 @@ button.session-chat-attachment {
 .project-location-heading p, .project-location-note p, .project-advanced-details > p { margin: 5px 0 0; color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.5; }
 .project-location-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .project-location-options .start-choice { min-height: 84px; background: color-mix(in srgb, var(--bg) calc(var(--surface-panel-opacity) * 100%), transparent); }
+.planning-source-options { display: grid; gap: 8px; margin: 10px 0; }
+.planning-source-options > button { display: grid; grid-template-columns: 24px 1fr; gap: 9px; align-items: center; width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); text-align: left; cursor: pointer; }
+.planning-source-options > button:hover { border-color: var(--accent); background: var(--surface-hover); }
+.planning-source-options > button span { display: grid; gap: 2px; }
+.planning-source-options > button small { color: var(--muted); }
 .project-location-note { display: flex; align-items: center; gap: 12px; padding: 13px 15px; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .project-location-note-icon { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border: 1px solid var(--accent-border); border-radius: 8px; color: var(--accent); background: var(--accent-soft); font-size: var(--text-xl); }
 .project-location-note strong { font-size: var(--text-sm); }

@@ -44,6 +44,7 @@ import { StartupSplash } from './StartupSplash';
 import { CommandPalette, type CommandEntry } from './CommandPalette';
 import { Walkthrough, type WalkthroughStop } from './Walkthrough';
 import { NewProjectWizard } from '../projects/NewProjectWizard';
+import { AddProjectDialog, type AddProjectChoice } from '../projects/AddProjectDialog';
 import { ProjectHome } from '../projects/ProjectHome';
 import { ProjectWorkspace } from '../projects/ProjectWorkspace';
 import { OverviewPage } from './OverviewPage';
@@ -512,7 +513,9 @@ export function App() {
   const [boardSettingsOpenFor, setBoardSettingsOpenFor] = useState<string>();
   const [projectDocument, setProjectDocument] = useState<ProjectDocument>();
   const [projectWizardMode, setProjectWizardMode] = useState<'create' | 'existing'>();
+  const [projectWizardStartingPoint, setProjectWizardStartingPoint] = useState<AddProjectChoice['startingPoint']>();
   const [projectWizardPresentation, setProjectWizardPresentation] = useState<'dialog' | 'onboarding'>('dialog');
+  const [addProjectOpen, setAddProjectOpen] = useState(false);
   const [startupResolved, setStartupResolved] = useState(false);
   const [gettingStarted, setGettingStarted] = useState(true);
   const [createdWorkspaceId, setCreatedWorkspaceId] = useState<string>();
@@ -811,8 +814,8 @@ export function App() {
     }).catch(error => console.error('Failed to create workspace:', error));
   }, [touchWorkspace]);
 
-  const createWorkspaceFromGettingStarted = useCallback(async (name: string, description: string, storageFolder?: string) => {
-    const workspace = await window.praxis.workspaces.create({ name, description, projectIds: [], storageFolder });
+  const createWorkspaceFromGettingStarted = useCallback(async (name: string) => {
+    const workspace = await window.praxis.workspaces.create({ name, projectIds: [] });
     setWorkspaces(current => [...current, workspace]);
     setActiveWorkspaceId(workspace.id);
     localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
@@ -847,23 +850,6 @@ export function App() {
     return project;
   }, []);
 
-  const quickStartFromFolder = useCallback(async () => {
-    if (!activeWorkspaceId) throw new Error('Create a workspace before starting a project.');
-    const folder = await window.praxis.dialog.pickFolder('Choose project folder');
-    if (!folder) return false;
-    const project = await createFileOnlyProjectInWorkspace(activeWorkspaceId, folder);
-    setCreatedWorkspaceId(undefined);
-    setProjects(current => [...current.filter(item => item.id !== project.id), project]);
-    setWorkspaces(current => current.map(workspace => workspace.id === activeWorkspaceId
-      ? { ...workspace, projectIds: [...new Set([...workspace.projectIds, project.id])], defaultProjectId: workspace.defaultProjectId ?? project.id }
-      : workspace));
-    setGettingStarted(false);
-    refreshBoards();
-    refreshConnections();
-    navigate({ projectId: project.id });
-    return true;
-  }, [activeWorkspaceId, createFileOnlyProjectInWorkspace, navigate, refreshBoards, refreshConnections]);
-
   const openExistingFolder = useCallback(async () => {
     const folder = await window.praxis.dialog.pickFolder('Open existing project folder');
     if (!folder) return false;
@@ -892,25 +878,9 @@ export function App() {
     return true;
   }, [createFileOnlyProjectInWorkspace, navigate, refreshBoards, refreshConnections, touchWorkspace]);
 
-  const startFirstProject = useCallback(async (wizardMode: 'create' | 'existing') => {
-    let workspaceId = activeWorkspaceId;
-    if (!workspaceId || !workspaces.some(workspace => workspace.id === workspaceId)) {
-      const workspace = await window.praxis.workspaces.create({ name: 'My workspace', projectIds: [] });
-      setWorkspaces(current => [...current, workspace]);
-      setActiveWorkspaceId(workspace.id);
-      localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
-      touchWorkspace(workspace.id);
-      workspaceId = workspace.id;
-    }
-    setCreatedWorkspaceId(undefined);
-    setGettingStarted(false);
-    setProjectWizardPresentation('onboarding');
-    setProjectWizardMode(wizardMode);
-  }, [activeWorkspaceId, workspaces, touchWorkspace]);
-
   // "Skip for now" means "get out of my way", not "leave me stranded". Without
   // an active workspace the shell cannot create or import a project at all —
-  // requestProjectWizard bounces straight back here and the New menu's import
+  // Add Project bounces straight back here and the New menu's import
   // entry is disabled — so skipping still lands on a usable workspace: the most
   // recent one if any exist, otherwise the same implicit one a first project
   // would have created.
@@ -950,16 +920,21 @@ export function App() {
     }).catch(error => console.error('Failed to open workspace:', error));
   }, [projects, touchWorkspace]);
 
-  const requestProjectWizard = useCallback((wizardMode: 'create' | 'existing', presentation: 'dialog' | 'onboarding' = 'dialog') => {
+  const requestAddProject = useCallback((presentation: 'dialog' | 'onboarding' = 'dialog') => {
     if (!activeWorkspaceId || !workspaces.some(workspace => workspace.id === activeWorkspaceId)) {
-      setProjectWizardMode(undefined);
       setGettingStarted(true);
       return;
     }
     setGettingStarted(false);
     setProjectWizardPresentation(presentation);
-    setProjectWizardMode(wizardMode);
+    setAddProjectOpen(true);
   }, [activeWorkspaceId, workspaces]);
+
+  const chooseAddProject = useCallback((choice: AddProjectChoice) => {
+    setAddProjectOpen(false);
+    setProjectWizardStartingPoint(choice.startingPoint);
+    setProjectWizardMode(choice.mode);
+  }, []);
 
   // Connection health dots: run `connection.check` lazily per non-demo
   // connection, fire-and-forget. A dead or slow backend must never block (or
@@ -1397,8 +1372,7 @@ export function App() {
     entries.push({ id: 'action:new-session', label: 'New session', group: 'Go to', icon: 'plus', keywords: 'start agent', run: () => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) }) });
     entries.push({ id: 'action:new-conversation', label: 'New conversation', group: 'Go to', icon: 'chats', keywords: 'chat talk brainstorm ask', run: () => navigate({ newConversation: true }) });
     entries.push({ id: 'action:quick-session', label: 'Quick session', group: 'Go to', icon: 'zap', keywords: 'quick change workflow fast immediate', run: openQuickSession });
-    entries.push({ id: 'action:new-project', label: 'New project', group: 'Go to', icon: 'plus', run: () => requestProjectWizard('create') });
-    entries.push({ id: 'action:add-existing-project', label: 'Add project from folder', group: 'Go to', icon: 'folder-open', keywords: 'existing repository import scan', run: () => requestProjectWizard('existing') });
+    entries.push({ id: 'action:add-project', label: 'Add project', group: 'Go to', icon: 'plus', keywords: 'new existing folder import', run: () => requestAddProject() });
     if (inSession) {
       entries.push({ id: 'action:toggle-focus-mode', label: 'Toggle focus mode', group: 'Go to', icon: 'layout-focus', keywords: 'zen hide panels sidebars focus', run: toggleFocusMode });
     }
@@ -1453,7 +1427,7 @@ export function App() {
       entries.push({ id: `settings:${id}`, label, hint: 'Settings', group: 'Settings', icon: 'gear', run: () => setSettingsDialogCategory(id) });
     });
     return entries;
-  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestProjectWizard, toggleFocusMode, inSession]);
+  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestAddProject, toggleFocusMode, inSession]);
 
   /** Four stops over controls the shell already renders — see Walkthrough. */
   const walkthroughStops = useMemo<WalkthroughStop[]>(() => [
@@ -1528,6 +1502,7 @@ export function App() {
       || settingsDialogCategory
       || workspaceDialogOpen
       || whatsNewOpen
+      || addProjectOpen
       || projectWizardMode
   );
   const routedProject = route.projectId ? projects.find(p => p.id === route.projectId) : undefined;
@@ -1658,7 +1633,7 @@ export function App() {
       projectCount={workspaceProjects.length}
       {...(composerProject
         ? { onNewWorkflow: () => setNewWorkflowForProject(composerProject.id) }
-        : { onNewProject: newProjectEnabled ? () => requestProjectWizard('create') : undefined })}
+        : { onNewProject: newProjectEnabled ? () => requestAddProject() : undefined })}
       toolModeForBoard={board => projectIdForConnection(board.connectionId, connections)
         ? projects.find(item => item.id === projectIdForConnection(board.connectionId, connections))?.defaultAiToolMode
         : undefined}
@@ -1956,7 +1931,7 @@ export function App() {
           connections={connections}
           sessions={agentSessions}
           connectionChecks={connectionChecks}
-          onNewProject={() => requestProjectWizard('create')}
+          onNewProject={() => requestAddProject()}
           onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
           onNewConversation={() => navigate({ newConversation: true })}
           onOpenProjects={() => navigate({})}
@@ -2230,8 +2205,7 @@ export function App() {
         onCloseWorkspace={closeWorkspace}
         onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
         onQuickSession={openQuickSession}
-        onNewProject={() => requestProjectWizard('create')}
-        onAddExistingProject={() => requestProjectWizard('existing')}
+        onNewProject={() => requestAddProject()}
         onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
         mode={mode}
         onToggleMode={() => setMode(m => m === 'classic' ? 'work' : 'classic')}
@@ -2275,9 +2249,11 @@ export function App() {
             workspaceName={activeWorkspace?.name}
             presentation="onboarding"
             mode={projectWizardMode}
-            onCancel={() => setProjectWizardMode(undefined)}
+            initialStartingPoint={projectWizardStartingPoint}
+            onCancel={() => { setProjectWizardMode(undefined); setProjectWizardStartingPoint(undefined); }}
             onCreated={(project, options) => {
               setProjectWizardMode(undefined);
+              setProjectWizardStartingPoint(undefined);
               setProjects(current => [...current.filter(item => item.id !== project.id), project]);
               setWorkspaces(current => current.map(workspace => workspace.id === activeWorkspaceId
                 ? {
@@ -2310,11 +2286,8 @@ export function App() {
           onOpenWorkspaceFile={openWorkspaceFromFile}
           onOpenExistingFolder={openExistingFolder}
           onCreateWorkspace={createWorkspaceFromGettingStarted}
-          onStartFirstProject={startFirstProject}
           onSkipSetup={() => void skipWorkspaceSetup()}
-          onCreateProject={() => requestProjectWizard('create', 'onboarding')}
-          onAddExistingProject={() => requestProjectWizard('existing', 'onboarding')}
-          onQuickStartFromFolder={quickStartFromFolder}
+          onCreateProject={() => requestAddProject('onboarding')}
           onContinueEmpty={() => {
             setCreatedWorkspaceId(undefined);
             setGettingStarted(false);
@@ -2423,8 +2396,7 @@ export function App() {
                     ...((project ?? composerProject) ? { projectId: (project ?? composerProject)!.id } : {})
                   })}
                   onNewConversation={() => navigate({ newConversation: true })}
-                  onNewProject={() => requestProjectWizard('create')}
-                  onAddExistingProject={() => requestProjectWizard('existing')}
+                  onNewProject={() => requestAddProject()}
                   onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
                   onSelectProject={project => navigate({ projectId: project.id })}
                   onOpenProjectDocument={(project, document) => {
@@ -2731,9 +2703,11 @@ export function App() {
               workspaceId={activeWorkspaceId}
               workspaceName={activeWorkspace?.name}
               mode={projectWizardMode}
-              onCancel={() => setProjectWizardMode(undefined)}
+              initialStartingPoint={projectWizardStartingPoint}
+              onCancel={() => { setProjectWizardMode(undefined); setProjectWizardStartingPoint(undefined); }}
               onCreated={project => {
                 setProjectWizardMode(undefined);
+                setProjectWizardStartingPoint(undefined);
                 setProjects(current => [...current.filter(item => item.id !== project.id), project]);
                 setWorkspaces(current => current.map(workspace => workspace.id === activeWorkspaceId
                   ? {
@@ -2749,6 +2723,9 @@ export function App() {
             />
           </div>
         </div>
+      )}
+      {addProjectOpen && (
+        <AddProjectDialog onCancel={() => setAddProjectOpen(false)} onSelect={chooseAddProject} />
       )}
       {settingsDialogCategory && (
         <div
