@@ -3059,7 +3059,9 @@ function PerformanceSection({
 function compactMobilePairingPayload(invitation: MobilePairingInvitation): string {
   const endpoint = invitation.endpoints[0];
   const host = endpoint ? `${endpoint.address}:${endpoint.port}` : '';
-  return [`P${invitation.version}`, invitation.hostId, invitation.publicKeyHex, host, invitation.tokenId, invitation.expiresAt].join('|');
+  // Trailing and optional (FX-BE-079); mirrors core's compactMobilePairingPayload.
+  const relay = invitation.relay ? [invitation.relay.url, invitation.relay.channel] : [];
+  return [`P${invitation.version}`, invitation.hostId, invitation.publicKeyHex, host, invitation.tokenId, invitation.expiresAt, ...relay].join('|');
 }
 
 function MobileAccessSection({
