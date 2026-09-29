@@ -153,6 +153,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
         projectId: _projectId.text.trim().isEmpty ? null : _projectId.text.trim(),
         pairingTokenId: invitation.tokenId,
         pairingExpiresAt: invitation.expiresAt,
+        relayUrl: invitation.relayUrl,
+        relayChannel: invitation.relayChannel,
       ),
     );
   }

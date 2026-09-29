@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🚧 In progress
 **Type:** Feature
 type: Feature
 id: FX-BF-030
 title: "Account-free remote access over a relay"
-status: backlog
+status: in progress
 slug: identity-and-azure-relay
 stories: [FX-BE-078, FX-BE-079, FX-BE-086]
 updated: 2026-09-29
@@ -54,7 +54,7 @@ Use deterministic host/protocol fixtures and disposable project directories. Run
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Partly implemented; see FX-BE-079. FX-BE-078 and FX-BE-086 are untouched.
 
 ## Description
 

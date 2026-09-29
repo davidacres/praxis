@@ -10,7 +10,7 @@ import 'time.dart';
 // something a person can act on. Port of `renderer/mobilePairingInvitation.ts`.
 
 class InvitationDetails {
-  const InvitationDetails({this.hostId, this.hostName, this.address, this.port, this.hostPublicKeyHex, this.tokenId, this.expiresAt});
+  const InvitationDetails({this.hostId, this.hostName, this.address, this.port, this.hostPublicKeyHex, this.tokenId, this.expiresAt, this.relayUrl, this.relayChannel});
   final String? hostId;
   final String? hostName;
   final String? address;
@@ -18,6 +18,10 @@ class InvitationDetails {
   final String? hostPublicKeyHex;
   final String? tokenId;
   final String? expiresAt;
+
+  /// Where the desktop can be reached off the LAN: a `ws(s)://` relay URL and the desktop's channel on it.
+  final String? relayUrl;
+  final String? relayChannel;
 }
 
 enum InvitationKind { invitation, key, unrecognised }
@@ -30,6 +34,15 @@ class InvitationParse {
 }
 
 final _hexKey = RegExp(r'^[0-9a-fA-F]{64}$');
+final _relayChannel = RegExp(r'^[0-9a-f]{32}$');
+final _relayScheme = RegExp(r'^wss?://[^\s|]+$', caseSensitive: false);
+
+/// A relay route is only kept when both halves are well formed; a half-route would fail later and confusingly.
+({String? url, String? channel}) _relayRoute(Object? url, Object? channel) {
+  final u = url is String ? url.trim() : null;
+  final c = channel is String ? channel.trim().toLowerCase() : null;
+  return u != null && c != null && _relayScheme.hasMatch(u) && _relayChannel.hasMatch(c) ? (url: u, channel: c) : (url: null, channel: null);
+}
 
 ({String? address, int? port}) _splitEndpoint(String? endpoint) {
   final separator = endpoint?.lastIndexOf(':') ?? -1;
@@ -48,6 +61,7 @@ InvitationParse parseMobileInvitation(String raw, [DateTime? now]) {
     String? part(int index) => index < parts.length && parts[index].isNotEmpty ? parts[index] : null;
     final key = part(2);
     final endpoint = _splitEndpoint(part(3));
+    final relay = _relayRoute(part(6), part(7));
     final details = InvitationDetails(
       hostId: part(1),
       hostPublicKeyHex: key != null && _hexKey.hasMatch(key) ? key.toLowerCase() : null,
@@ -55,6 +69,8 @@ InvitationParse parseMobileInvitation(String raw, [DateTime? now]) {
       port: endpoint.port,
       tokenId: part(4),
       expiresAt: part(5),
+      relayUrl: relay.url,
+      relayChannel: relay.channel,
     );
     return details.hostPublicKeyHex != null
         ? InvitationParse(InvitationKind.invitation, details, expired(part(5)))
@@ -85,6 +101,8 @@ InvitationParse parseMobileInvitation(String raw, [DateTime? now]) {
         ? parsed['hostName'] as String
         : null;
     final expiresAt = parsed['expiresAt'] is String ? parsed['expiresAt'] as String : null;
+    final relayJson = parsed['relay'] is Map ? parsed['relay'] as Map : const <Object?, Object?>{};
+    final relay = _relayRoute(relayJson['url'], relayJson['channel']);
     return InvitationParse(
       InvitationKind.invitation,
       InvitationDetails(
@@ -95,6 +113,8 @@ InvitationParse parseMobileInvitation(String raw, [DateTime? now]) {
         hostPublicKeyHex: key,
         tokenId: parsed['tokenId'] is String ? parsed['tokenId'] as String : null,
         expiresAt: expiresAt,
+        relayUrl: relay.url,
+        relayChannel: relay.channel,
       ),
       expired(expiresAt),
     );

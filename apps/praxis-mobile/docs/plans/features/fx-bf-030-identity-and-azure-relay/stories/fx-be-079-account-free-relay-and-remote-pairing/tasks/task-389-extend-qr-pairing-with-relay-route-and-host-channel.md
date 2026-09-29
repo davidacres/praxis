@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🚧 In progress
 **Type:** Task
 type: Task
 id: TASK-389
 title: "Extend QR pairing with a relay route and host channel"
-status: backlog
+status: in progress
 story: FX-BE-079
 updated: 2026-09-29
 dependencies: [TASK-216, TASK-207]
@@ -39,7 +39,12 @@ Use deterministic host/protocol fixtures and disposable project directories. Run
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Route carried end to end in code; the Dart half is unverified.
+
+- Core: `MobilePairingInvitation.relay` and `compactMobilePairingPayload` append `relayUrl|channel` after the existing six parts, so an older phone still parses the QR (`mobilePairingHandshake.ts`, test added). Desktop: registry and pairing instance pass the live relay route (only while registered) into the invitation; the renderer's duplicate of the payload function is updated (`SettingsPage.tsx`).
+- Phone (Dart): `lib/core/invitation.dart` parses the route from the compact and JSON forms and drops a half or malformed route; `HostConfiguration` stores it; test cases added to `test/core/logic_test.dart`.
+- Not verified: no Dart/Flutter SDK is available in this environment (the network blocks its download), so `flutter analyze` and `flutter test` have not been run. The Settings page QR was not viewed.
+- Remaining: expiry, single-use token and replay behaviour are the existing TASK-207 rules and are unchanged; a remote-only QR (no LAN address) is not supported.
 
 ## Description
 

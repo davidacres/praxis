@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🚧 In progress
 **Type:** Task
 type: Task
 id: TASK-390
 title: "Add the desktop outbound relay listener"
-status: backlog
+status: in progress
 story: FX-BE-079
 updated: 2026-09-29
 dependencies: [TASK-217, TASK-389]
@@ -40,7 +40,12 @@ Use deterministic host/protocol fixtures and disposable project directories. Run
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented and tested in Node; not yet exercised in the running Electron app.
+
+- `apps/praxis-desktop/main/src/main/mobileRelayClient.ts`, `mobileRelayStream.ts`, `mobileHostIdentity.ts` (`getMobileRelayIdentity`), `mobileListenerInstance.ts` (`applyRelay`), and `mobileLanServer.ts` (`acceptRelayedStream`, `MobileStream`). `internet` mode holds the relay connection; any other mode closes it.
+- Policy: `evaluateMobileAccess` now treats `internet` as relay plus local peers (previously it refused every direct peer); direct peers in `internet` mode must still be on a private address (`isPrivateAddress`). Bug 107-7 (local-only accepts any address) is unchanged.
+- Verification: `mobileRelayClient.test.ts` (8 tests) drives a real relay, the desktop client, the production `MobileLanServer` and the phone-side `MobileSecureClient`: read through the relay with no listening socket, wrong pinned key fails, local-only and off refuse a relayed peer, stopping the client and revoking a device close the phone, re-registration after a relay restart, and a recording hop shows only ciphertext. `npm run test:mobile --workspace=@praxis/desktop-main` 80 pass; core suite 1325 pass.
+- Remaining: the relay URL comes from `PRAXIS_MOBILE_RELAY_URL` only (no Settings field, so the settings mirror and UI are untouched); no Electron run or e2e; `settings.mobileAccess.remoteSignInRequired` is unused by this path.
 
 ## Description
 
