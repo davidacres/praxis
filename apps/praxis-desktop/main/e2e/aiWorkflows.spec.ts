@@ -253,6 +253,47 @@ test('analysis uses the selected runtime and continues implementation in the sam
   expect(mock.requests[1].body).toContain('I confirm the analysis and implementation plan');
 });
 
+test('analysis for a project ticket starts in the project folder', async () => {
+  const workspaceFolder = makeWorkspaceWithPack();
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(
+    { ai: { analysisPrompt: 'Assess this ticket.', analysisGateEnabled: true } },
+    undefined,
+    gatewayEnv(mock.baseUrl)
+  );
+  const win = app.window;
+
+  const project = await win.evaluate(async folderPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    return window.praxis.projects.create({
+      name: 'Project ticket session',
+      key: 'TICKETSESSION',
+      type: 'software',
+      purpose: '',
+      brief: {},
+      startingPoint: 'existing-folder',
+      folderPath,
+      workflowStages: [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }],
+      starterTickets: [{ summary: 'Start from the project folder', description: '', issueType: 'Task', status: 'To do' }],
+      defaultAiToolMode: 'full'
+    }, workspace.id);
+  }, workspaceFolder);
+
+  await win.reload();
+  await win.getByTestId('project-default-board-nav-item').filter({ hasText: project.name }).click();
+  await win.getByTestId('issue-card').filter({ hasText: 'Start from the project folder' }).click();
+  await win.getByTestId('issue-primary-ai-btn').click();
+  await win.getByTestId('sessions-view').waitFor();
+
+  await expect.poll(async () => win.evaluate(async projectId => {
+    const sessions = await window.praxis.ai.listSessions();
+    return sessions.find(session => session.projectId === projectId);
+  }, project.id)).toMatchObject({
+    projectId: project.id,
+    workingDirectory: workspaceFolder
+  });
+});
+
 test('configured CLI agents remain available in ticket details when analysis is gated', async () => {
   app = await launchTestApp(
     { ai: { analysisPrompt: 'Assess this ticket.', analysisGateEnabled: true } },

@@ -1085,6 +1085,7 @@ export function IssueDetail({
         .delegate({
           issueKey,
           connectionId,
+          ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}),
           provider: selectedProviderStatus.provider,
           model: selectedRuntimeModel || undefined,
           purpose: 'analysis'

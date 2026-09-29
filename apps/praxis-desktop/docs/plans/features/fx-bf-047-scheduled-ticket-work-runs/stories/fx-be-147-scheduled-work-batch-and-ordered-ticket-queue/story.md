@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-29T11:22:33.341Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-147
 title: Scheduled work batch and ordered ticket queue
@@ -53,4 +57,14 @@ decide the exact sequence in which Praxis should attempt the tickets.
 
 A saved schedule can be reopened with the same start time, ticket list, running
 order, and readiness state after an app restart.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
 
