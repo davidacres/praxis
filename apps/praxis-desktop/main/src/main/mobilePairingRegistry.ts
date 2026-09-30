@@ -50,7 +50,7 @@ export class MobilePairingRegistry {
 
   activeInvitation(
     now: string,
-    details: { displayName: string; publicKeyHex: string; endpoints: readonly { address: string; port: number }[] },
+    details: { displayName: string; publicKeyHex: string; endpoints: readonly { address: string; port: number }[]; relay?: { url: string; channel: string } },
   ): MobilePairingInvitation | undefined {
     if (!isActivePairingToken(this.token, now)) return undefined;
     return createMobilePairingInvitation(this.token, details);
@@ -58,7 +58,7 @@ export class MobilePairingRegistry {
 
   issueInvitation(
     hostId: string,
-    details: { displayName: string; publicKeyHex: string; endpoints: readonly { address: string; port: number }[] },
+    details: { displayName: string; publicKeyHex: string; endpoints: readonly { address: string; port: number }[]; relay?: { url: string; channel: string } },
     now = new Date(),
   ): MobilePairingInvitation {
     const tokenId = randomBytes(6).toString('hex');

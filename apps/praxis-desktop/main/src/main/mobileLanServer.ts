@@ -15,6 +15,7 @@
  */
 import * as net from 'node:net';
 import * as os from 'node:os';
+import type { Duplex } from 'node:stream';
 import { createHash } from 'node:crypto';
 import {
   evaluateMobileAccess,
@@ -80,8 +81,14 @@ export interface MobileLanServerDeps {
   onLog?: (line: string) => void;
 }
 
+/**
+ * What the listener needs from a connection: a `net.Socket`, or a relayed
+ * stream (`MobileRelayStream`) carrying the same bytes through the relay.
+ */
+export type MobileStream = Duplex & { localAddress?: string; remoteAddress?: string };
+
 interface TrackedPeer {
-  socket: net.Socket;
+  socket: MobileStream;
   publicKeyHex?: string;
   deviceId?: string;
   attach: (peer: { caller: MobileCaller; projectIds?: readonly string[] }) => void;
@@ -138,7 +145,7 @@ export class MobileLanServer {
     }
     await this.stop();
     this.policy = policy;
-    const server = net.createServer(socket => this.accept(socket));
+    const server = net.createServer(socket => this.accept(socket, false));
     await new Promise<void>((resolve, reject) => {
       server.once('error', error => {
         this.lastError = error instanceof Error ? error.message : String(error);
@@ -231,7 +238,17 @@ export class MobileLanServer {
     }
   }
 
-  private accept(socket: net.Socket): void {
+  /**
+   * Serves a stream that arrived through the relay. It runs the same Noise IK
+   * handshake, pairing and authorisation as a LAN peer; the only difference is
+   * that the access policy sees `relayRoute: true`, which only `internet` mode
+   * admits, and the listener need not be bound for it.
+   */
+  acceptRelayedStream(stream: MobileStream): void {
+    this.accept(stream, true);
+  }
+
+  private accept(socket: MobileStream, relay: boolean): void {
     const channel = SecureChannel.responder({
       staticKeyPair: this.deps.hostStaticKey,
       ...(this.deps.pairingCode ? { prologue: new TextEncoder().encode(this.deps.pairingCode) } : {}),
@@ -285,7 +302,7 @@ export class MobileLanServer {
       interfaceName: interfaceNameFor(socket.localAddress),
       remoteAddress: socket.remoteAddress ?? '',
       authenticated: true,
-      relayRoute: false,
+      relayRoute: relay,
     });
 
     const holdOrClose = (status: MobileConnectionStatus): void => {

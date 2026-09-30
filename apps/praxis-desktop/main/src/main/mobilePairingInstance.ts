@@ -54,6 +54,13 @@ export function attachMobileLanServer(server: MobileLanServer | undefined): void
   lanServer = server;
 }
 
+/** The relay route the QR should carry: set while this desktop is registered with a relay. */
+let relayRoute: { url: string; channel: string } | undefined;
+
+export function setMobileRelayRoute(route: { url: string; channel: string } | undefined): void {
+  relayRoute = route;
+}
+
 export function setMobileBindError(message: string | undefined): void {
   lastBindError = message;
 }
@@ -137,6 +144,7 @@ export async function snapshotMobilePairing(): Promise<MobilePairingSnapshot> {
     displayName: hostName,
     publicKeyHex,
     endpoints,
+    ...(relayRoute ? { relay: relayRoute } : {}),
   });
   const listening = lanServer?.listening === true;
   return {
@@ -180,6 +188,7 @@ export async function createMobilePairingInvitation(): Promise<MobilePairingSnap
       address,
       port: snapshot.listener.port ?? DEFAULT_MOBILE_LISTENER_PORT,
     })),
+    ...(relayRoute ? { relay: relayRoute } : {}),
   });
   emitPairingChanged();
   return snapshotMobilePairing();

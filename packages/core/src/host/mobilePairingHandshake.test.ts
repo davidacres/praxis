@@ -29,3 +29,15 @@ test('rejects expiry, host substitution, proof failure, and missing confirmation
  const invalid=consumeMobilePairing(new InMemoryMobilePairingStore([token]),{...verifier,verify:()=>false},request,'2026-09-09T12:01:00.000Z'); assert.equal(invalid.ok,false); if(!invalid.ok) assert.equal(invalid.reason,'invalid-proof');
  const unconfirmed=consumeMobilePairing(new InMemoryMobilePairingStore([token]),{...verifier,confirmDevice:()=>false},request,'2026-09-09T12:01:00.000Z'); assert.equal(unconfirmed.ok,false); if(!unconfirmed.ok) assert.equal(unconfirmed.reason,'unconfirmed');
 });
+
+test('an invitation carries an optional relay route as trailing QR parts',()=>{
+  const token=issueMobilePairingToken('host-mac','qr-1',new Date('2026-09-09T12:00:00.000Z'),60_000);
+  const base={displayName:'Dave Mac',publicKeyHex:'aa',endpoints:[{address:'192.168.1.2',port:43100}]};
+  const relay={url:'wss://relay.example.com',channel:'0123456789abcdef0123456789abcdef'};
+  const without=compactMobilePairingPayload(createMobilePairingInvitation(token,base));
+  const withRelay=compactMobilePairingPayload(createMobilePairingInvitation(token,{...base,relay}));
+  assert.equal(without.split('|').length,6);
+  assert.deepEqual(withRelay.split('|').slice(0,6),without.split('|'),'the first six parts are unchanged, so an older phone still reads it');
+  assert.deepEqual(withRelay.split('|').slice(6),[relay.url,relay.channel]);
+  assert.equal(createMobilePairingInvitation(token,base).relay,undefined);
+});

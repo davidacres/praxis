@@ -13,8 +13,9 @@ import { getLogBus } from './logBusInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { registerMobileElectronIpc } from './mobileIpc';
 import { composeDesktopMobileHost } from './mobileHostComposition';
-import { getMobileHostId, getMobileHostIdentity } from './mobileHostIdentity';
+import { getMobileHostId, getMobileHostIdentity, getMobileRelayIdentity } from './mobileHostIdentity';
 import { MobileLanServer } from './mobileLanServer';
+import { MobileRelayClient } from './mobileRelayClient';
 import { mobileAccessPolicyFromSettings, resolveMobileListenerChange } from './mobileAccessLifecycle';
 import {
   startMobileDiscoveryAdvertisement,
@@ -27,11 +28,57 @@ import {
   mobileOnUnpairedPeer,
   notifyMobilePairingChanged,
   setMobileBindError,
+  setMobileRelayRoute,
 } from './mobilePairingInstance';
 
 let current: MobileListener | undefined;
 let lanServer: MobileLanServer | undefined;
 let hostApp: MobileHostApplication | undefined;
+let relayClient: MobileRelayClient | undefined;
+let relayClientUrl: string | undefined;
+
+/** The relay to register with. An environment override for now; a Settings field is a follow-up. */
+function configuredRelayUrl(): string | undefined {
+  const url = process.env.PRAXIS_MOBILE_RELAY_URL?.trim();
+  return url && /^wss?:\/\//i.test(url) ? url : undefined;
+}
+
+function stopRelay(): void {
+  relayClient?.stop();
+  relayClient = undefined;
+  relayClientUrl = undefined;
+  setMobileRelayRoute(undefined);
+}
+
+/**
+ * Only `internet` mode holds a relay connection. Any other mode closes it, which
+ * makes the relay drop every phone it was piping to this desktop; the LAN
+ * listener's own policy change drops the rest.
+ */
+async function applyRelay(mode: string): Promise<void> {
+  const url = mode === 'internet' ? configuredRelayUrl() : undefined;
+  if (!url || !lanServer) {
+    stopRelay();
+    return;
+  }
+  if (relayClient && relayClientUrl === url) return;
+  stopRelay();
+  const identity = await getMobileRelayIdentity();
+  const client: MobileRelayClient = new MobileRelayClient({
+    relayUrl: url,
+    identity,
+    onStream: stream => lanServer?.acceptRelayedStream(stream),
+    onLog: line => getLogBus().appendLine(line),
+    onStateChange: () => {
+      if (relayClient !== client) return;
+      setMobileRelayRoute(client.state === 'registered' && client.channel ? { url, channel: client.channel } : undefined);
+      notifyMobilePairingChanged();
+    },
+  });
+  relayClient = client;
+  relayClientUrl = url;
+  client.start();
+}
 
 async function createLanServer(): Promise<void> {
   if (!hostApp) return;
@@ -82,6 +129,11 @@ async function applyMobileAccessFromSettings(): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     setMobileBindError(message);
     getLogBus().appendLine(`[mobile] listener change failed: ${message}`);
+  }
+  try {
+    await applyRelay(settings.mode);
+  } catch (error) {
+    getLogBus().appendLine(`[mobile] relay setup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
   await refreshDiscoveryAdvertisement();
   notifyMobilePairingChanged();
