@@ -33,17 +33,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build core
-        run: npm run build:core
-
-      - name: Build renderer
-        run: npm run build:renderer
-
-      - name: Copy renderer
-        run: npm run desktop:copy-renderer
-
-      - name: Build desktop
-        run: npm run build:desktop
+      - name: Build application
+        run: npm run build
 
       - name: Build DMG installer
         run: npm run dist:mac --workspace=@praxis/desktop-main
@@ -77,17 +68,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build core
-        run: npm run build:core
-
-      - name: Build renderer
-        run: npm run build:renderer
-
-      - name: Copy renderer
-        run: npm run desktop:copy-renderer
-
-      - name: Build desktop
-        run: npm run build:desktop
+      - name: Build application
+        run: npm run build
 
       - name: Build Windows installer
         run: npm run dist:win --workspace=@praxis/desktop-main
@@ -119,17 +101,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build core
-        run: npm run build:core
-
-      - name: Build renderer
-        run: npm run build:renderer
-
-      - name: Copy renderer
-        run: npm run desktop:copy-renderer
-
-      - name: Build desktop
-        run: npm run build:desktop
+      - name: Build application
+        run: npm run build
 
       - name: Build Linux installer
         run: npm run dist:linux --workspace=@praxis/desktop-main
