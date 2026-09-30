@@ -1,0 +1,20 @@
+{
+  "name": "@praxis/mobile-relay",
+  "version": "0.0.0",
+  "type": "commonjs",
+  "main": "./out/index.js",
+  "types": "./out/index.d.ts",
+  "description": "Account-free WebSocket relay for the Praxis mobile companion (FX-BE-079). It pairs two outbound connections by channel and forwards bytes it cannot read; the Noise IK channel runs end to end above it.",
+  "scripts": {
+    "check-types": "tsc --noEmit -p .",
+    "compile": "tsc -p .",
+    "start": "node out/cli.js",
+    "test": "tsc -p . && node --test \"out/**/*.test.js\""
+  },
+  "dependencies": {
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1"
+  }
+}

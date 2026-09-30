@@ -18,6 +18,13 @@ export interface MobilePairingInvitation {
   endpoints: readonly { address: string; port: number }[];
   tokenId: string;
   expiresAt: string;
+  /**
+   * Where a phone off the LAN can reach this desktop (FX-BE-079): the relay's
+   * `ws(s)://` URL and this desktop's channel on it. The channel is a hash of the
+   * desktop's relay public key, so it is a route, not a credential; the desktop
+   * still authenticates the phone with its own key and the invitation token.
+   */
+  relay?: { url: string; channel: string };
 }
 
 export interface MobilePairingPendingRequest {
@@ -47,7 +54,7 @@ export function issueMobilePairingToken(
 
 export function createMobilePairingInvitation(
   token: MobilePairingToken,
-  input: { displayName: string; publicKeyHex: string; endpoints: readonly { address: string; port: number }[] },
+  input: { displayName: string; publicKeyHex: string; endpoints: readonly { address: string; port: number }[]; relay?: { url: string; channel: string } },
 ): MobilePairingInvitation {
   return {
     version: MOBILE_PAIRING_INVITATION_VERSION,
@@ -57,6 +64,7 @@ export function createMobilePairingInvitation(
     endpoints: input.endpoints,
     tokenId: token.tokenId,
     expiresAt: token.expiresAt,
+    ...(input.relay ? { relay: input.relay } : {}),
   };
 }
 
@@ -71,6 +79,8 @@ export function compactMobilePairingPayload(invitation: MobilePairingInvitation)
     host,
     invitation.tokenId,
     invitation.expiresAt,
+    // Trailing and optional: a phone that predates the relay ignores parts it does not know.
+    ...(invitation.relay ? [invitation.relay.url, invitation.relay.channel] : []),
   ].join('|');
 }
 

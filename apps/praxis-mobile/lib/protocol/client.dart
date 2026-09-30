@@ -23,6 +23,8 @@ class MobileSecureClient {
     this.connectTimeout = const Duration(seconds: 15),
     this.requestTimeout = const Duration(seconds: 30),
     this.legacyReadyAfter = const Duration(seconds: 3),
+    this.relayUrl,
+    this.relayChannel,
   });
 
   final String host;
@@ -37,9 +39,17 @@ class MobileSecureClient {
   /// A desktop from before status frames never sends one: silence this long after the handshake means ready.
   final Duration legacyReadyAfter;
 
-  String get endpoint => '$host:$port';
+  /// When both are set the client reaches the desktop through the relay (`ws(s)://` URL and channel id
+  /// from the invitation) instead of dialling [host]:[port]. The Noise IK channel runs end to end above
+  /// the relay, so it forwards bytes it cannot read.
+  final String? relayUrl;
+  final String? relayChannel;
 
-  Socket? _socket;
+  bool get viaRelay => relayUrl != null && relayChannel != null;
+
+  String get endpoint => viaRelay ? 'the relay' : '$host:$port';
+
+  _Link? _link;
   SecureChannel? _channel;
   ConnectionStage _stage = ConnectionStage.connect;
   bool _ready = false;
@@ -83,13 +93,18 @@ class MobileSecureClient {
     final assembler = RecordAssembler();
     _armTimeout();
 
+    if (viaRelay) {
+      _connectViaRelay(channel, assembler);
+      return completer.future;
+    }
+
     Socket.connect(host, port, timeout: const Duration(seconds: 10)).then(
       (socket) {
         if (_closed) {
           socket.destroy();
           return;
         }
-        _socket = socket;
+        _link = _SocketLink(socket);
         socket.setOption(SocketOption.tcpNoDelay, true);
         _stage = ConnectionStage.handshake;
         socket.listen(
@@ -105,6 +120,45 @@ class MobileSecureClient {
       },
     );
     return completer.future;
+  }
+
+  void _connectViaRelay(SecureChannel channel, RecordAssembler assembler) {
+    final base = relayUrl!.replaceAll(RegExp(r'/+$'), '');
+    WebSocket.connect('$base/v1/connect?channel=$relayChannel').timeout(const Duration(seconds: 10)).then(
+      (ws) {
+        if (_closed) {
+          unawaited(ws.close());
+          return;
+        }
+        _link = _WebSocketLink(ws);
+        _stage = ConnectionStage.handshake;
+        ws.listen(
+          (Object? data) {
+            if (data is List<int>) _onData(data, assembler, channel);
+          },
+          onError: (Object error) => _fail(_classifyEnd(error)),
+          onDone: () => _fail(_relayClosed(ws.closeCode)),
+          cancelOnError: true,
+        );
+        ws.add(channel.nextHandshakeMessage());
+      },
+      onError: (Object error) {
+        _fail(classifyMobileTransportFailure(stage: ConnectionStage.connect, endpoint: endpoint, cause: error));
+      },
+    );
+  }
+
+  /// The relay closes with an application code when the desktop is offline (4404), never answered (4408), or it is limiting this connection.
+  MobileConnectionError _relayClosed(int? code) {
+    final last = _lastStatus;
+    if (last != null && isTerminalMobileStatus(last.code)) return MobileConnectionError.fromStatus(last);
+    if (code == 4404 || code == 4408) {
+      return MobileConnectionError('unreachable', 'The Praxis desktop is not connected to the relay. Check that Praxis is running on the desktop and that Mobile access includes the internet.', true);
+    }
+    if (code == 4429 || code == 4430 || code == 4503) {
+      return MobileConnectionError('unreachable', 'The relay is busy or limiting this connection. Try again shortly.', true);
+    }
+    return _classifyEnd(null);
   }
 
   MobileConnectionError _classifyEnd(Object? cause) {
@@ -139,7 +193,7 @@ class MobileSecureClient {
     _legacyTimer?.cancel();
     if (_closed) return;
     _closed = true;
-    _socket?.destroy();
+    _link?.destroy();
     for (final waiting in _pending.values) {
       waiting.timer.cancel();
       waiting.completer.completeError(error);
@@ -262,12 +316,12 @@ class MobileSecureClient {
   }
 
   void _send(Map<String, dynamic> frame) {
-    final socket = _socket;
+    final link = _link;
     final channel = _channel;
-    if (socket == null || channel == null || !channel.open || _closed) {
+    if (link == null || channel == null || !channel.open || _closed) {
       throw MobileConnectionError('connection-lost', 'The Praxis desktop is not connected.', true);
     }
-    socket.add(channel.encrypt(utf8.encode(jsonEncode(frame))));
+    link.add(channel.encrypt(utf8.encode(jsonEncode(frame))));
   }
 
   Future<Object?> request(String kind, Object? payload) {
@@ -313,4 +367,32 @@ class _Pending {
   _Pending(this.completer, this.timer);
   final Completer<Object?> completer;
   final Timer timer;
+}
+
+/// The byte pipe under the secure channel: a TCP socket on the LAN, or a WebSocket to the relay.
+abstract class _Link {
+  void add(List<int> bytes);
+  void destroy();
+}
+
+class _SocketLink implements _Link {
+  _SocketLink(this._socket);
+  final Socket _socket;
+
+  @override
+  void add(List<int> bytes) => _socket.add(bytes);
+
+  @override
+  void destroy() => _socket.destroy();
+}
+
+class _WebSocketLink implements _Link {
+  _WebSocketLink(this._socket);
+  final WebSocket _socket;
+
+  @override
+  void add(List<int> bytes) => _socket.add(bytes);
+
+  @override
+  void destroy() => unawaited(_socket.close());
 }

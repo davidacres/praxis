@@ -14,9 +14,9 @@ Excluded: board/workflow/agent administration, workflow authoring, on-phone agen
 | --- | --- | --- |
 | Off (default) | None | No mobile listener or relay |
 | Local-only (default on first enable) | None; locally confirmed device pairing | Allowed local interfaces/subnets only; no cloud prerequisite |
-| Local + internet relay | Desktop and remote mobile sign-in required for internet | Prefer authenticated LAN; allow Azure relay with current authorisation |
+| Local + internet relay | None; the QR-paired device key is the identity | Prefer authenticated LAN; allow the relay for paired devices |
 
-Desktop normal work never needs an account. A cloud login does not automatically enable remote access or replace local pairing. Signing out closes existing relay sessions, invalidates remote grants and prevents renewal; jobs continue locally and independently permitted LAN pairings survive. Account/token expiry closes remote access when its bounded lease expires; specify and test the maximum revocation window. Roleover/identity outage never permits unbounded stale remote grants. Local-only must work with internet blocked, including pairing.
+Desktop normal work never needs an account, and neither does remote access. Remote access is an access mode the owner enables; it does not replace local pairing. Selecting Off or Local-only closes existing relay sessions and stops registration; revoking a device denies its next connection and drops a live one. Jobs continue locally. Local-only must work with internet blocked, including pairing.
 
 Network restrictions are host-enforced on new and established connections. Bind approved interfaces; validate peer and destination scope, IPv4/IPv6 and network changes. Do not infer locality from RFC1918 addresses, discovery or forwarded headers alone. No VPN/tunnel route is a supported requirement. Local-only disables relay registration/traffic and cloud notification dependencies.
 
@@ -31,7 +31,7 @@ Network restrictions are host-enforced on new and established connections. Bind 
 | GenericSystem | Authentication candidate; inspect actual repository, issuer/token/public-client capabilities before integration |
 | Roleover | Host/project/action authorisation candidate; inspect actual resource/tenant model before integration |
 | Praxis connection API | Proposed small ASP.NET Core service for host registry, paired-device association, authorised host list, grant issuance and minimal notification routing |
-| Azure Relay | Proposed outbound-only Hybrid Connections transport; feasibility/cost gate before implementation commitment |
+| Relay | Proposed small self-hostable WebSocket byte relay; both sides connect outbound; hosting chosen by the TASK-216 spike |
 
 These service names describe intended reuse, not verified API contracts. Host registration is not a generic identity responsibility; keep it in the connection service. Connection API source/deployment ownership is decided during the audit; do not create a second authentication/RBAC implementation. Root host/core changes are tracked once by the mobile initiative and implemented in their owning directories.
 
@@ -47,7 +47,7 @@ Current permissions resolve a FIFO request through a session key; replace this w
 
 Desktop generates a single-use expiring QR token and host identity; mobile registers a device key with explicit desktop confirmation. Discovery/address hints never establish trust. Keys use protected OS storage and a vetted authenticated exchange; host identity persists across IP changes. Support device revocation, host-key change, manual endpoint entry and discovery-disabled networks.
 
-Internet mode: GenericSystem sign-in → Roleover-authorised host registry → short-lived per-host relay grant → authenticated paired-device channel. Desktop listener and mobile sender use outbound connections; no router port forwarding. Namespace management keys remain server-side. Application payloads need endpoint-to-endpoint authenticated encryption through the relay, not merely separate TLS legs. Use established cryptographic protocols/libraries; document replay/key rotation and identity binding. Relay still observes routing/timing/volume metadata. The API carries registration/authorisation, not transcripts or provider secrets.
+Internet mode: the QR carries the relay URL, an opaque host channel ID and the host's relay-registration key beside the LAN hints. Desktop listener and mobile client both connect outbound to the relay; no router port forwarding. The relay pairs the two sockets and forwards bytes; it requires a signed challenge from a registered host key and enforces per-key caps, timeouts and size/rate limits. Application payloads run the existing Noise IK channel end to end through the relay, not merely separate TLS legs, so the relay is untrusted. It still observes routing/timing/volume metadata. A lost phone is recovered by re-pairing at the desktop; there is no account to recover through. GenericSystem/Roleover sign-in (FX-BE-078) is optional and not on this path.
 
 ## Availability and notifications
 
@@ -57,8 +57,8 @@ Cloud push is later and opt-in; use opaque references and fetch current state af
 
 ## Decisions to resolve before shipping
 
-- FX-BE-078: actual GenericSystem/Roleover capabilities and required changes, tenant model, revocation lease and public-client login support.
-- FX-BE-079: Azure Relay compatibility, pricing model, limits, encrypted transport choice and real-device feasibility; provision environments only during implementation.
+- FX-BE-078 (optional, no longer required for remote access): actual GenericSystem/Roleover capabilities and required changes, tenant model, revocation lease and public-client login support.
+- FX-BE-079: relay hosting (VPS/container vs serverless edge), limits, cost, Flutter WebSocket feasibility, and who operates a public relay for other users.
 - FX-BE-080: mobile packaging choice, iOS/Android discovery/secure-storage/browser-login support and reusable asset boundary.
 - FX-BE-085: supported OS releases, distribution/signing, operational ownership, budget and extraction readiness.
 

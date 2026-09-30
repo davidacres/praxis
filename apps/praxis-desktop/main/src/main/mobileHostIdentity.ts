@@ -6,12 +6,14 @@
  * cover headless / e2e machines where safeStorage is unavailable.
  */
 import { generateKeyPair, type KeyPair } from '@praxis/mobile-protocol';
-import { randomBytes } from 'node:crypto';
+import { createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes } from 'node:crypto';
 import { getSecretsStore } from './connectionStoreInstance';
+import type { MobileRelayIdentity } from './mobileRelayClient';
 
 const SECRET_KEY = 'mobile:hostStaticKey';
 const PAIRING_CODE_KEY = 'mobile:pairingCode';
 const HOST_ID_KEY = 'mobile:hostId';
+const RELAY_KEY = 'mobile:relayKey';
 
 function fromHex(hex: string): Uint8Array {
   const clean = hex.trim();
@@ -101,4 +103,41 @@ export function resetMobileHostIdentity(): void {
   cached = undefined;
   cachedPairingCode = undefined;
   cachedHostId = undefined;
+}
+
+let cachedRelay: MobileRelayIdentity | undefined;
+
+function relayIdentityFrom(privateKey: ReturnType<typeof createPrivateKey>): MobileRelayIdentity {
+  const der = createPublicKey(privateKey).export({ format: 'der', type: 'spki' });
+  return { publicKeyHex: der.subarray(der.length - 32).toString('hex'), privateKey };
+}
+
+/**
+ * The Ed25519 key this desktop signs the relay's challenge with (FX-BE-079).
+ * It is separate from the Noise key: the relay verifies it, the phone never
+ * sees it, and the relay channel id is a hash of its public half. Generated
+ * once and kept in the secret store; without safeStorage it lasts for the
+ * process, which changes the channel on restart — the same trade the host key
+ * makes, and relay access defaults to off.
+ */
+export async function getMobileRelayIdentity(): Promise<MobileRelayIdentity> {
+  if (cachedRelay) return cachedRelay;
+  const secrets = getSecretsStore();
+  const stored = await secrets.get(RELAY_KEY).catch(() => undefined);
+  if (stored) {
+    try {
+      cachedRelay = relayIdentityFrom(createPrivateKey({ key: Buffer.from(stored, 'hex'), format: 'der', type: 'pkcs8' }));
+      return cachedRelay;
+    } catch {
+      // Unreadable: fall through and mint a new one.
+    }
+  }
+  const { privateKey } = generateKeyPairSync('ed25519');
+  try {
+    await secrets.store(RELAY_KEY, privateKey.export({ format: 'der', type: 'pkcs8' }).toString('hex'));
+  } catch {
+    // safeStorage unavailable (headless / e2e): process-lifetime only.
+  }
+  cachedRelay = relayIdentityFrom(privateKey);
+  return cachedRelay;
 }

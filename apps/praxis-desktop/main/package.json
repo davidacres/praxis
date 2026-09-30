@@ -31,20 +31,23 @@
     "test:e2e": "npm run copy-renderer && npm run compile && npx playwright test",
     "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/shellEnvironment.test.js out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/workflowMergeRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js",
     "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/projectSnapshot.test.js out/main/adapters/jsonKeyValueStore.test.js out/main/ticketReviewApply.test.js out/main/windowState.test.js out/main/autoUpdate.test.js",
-    "test:mobile": "npm run compile && node --test out/main/mobileHostServices.test.js out/main/mobileRunProjection.test.js out/main/mobileSessionProjection.test.js out/main/mobileSessionChanges.test.js out/main/mobilePermissions.test.js out/main/mobileAccessLifecycle.test.js out/main/mobileLanServer.test.js out/main/mobilePairingRegistry.test.js out/main/mobileDiscoveryAdvertiser.test.js out/main/mobileEndToEnd.test.js out/main/mobileAppearance.test.js"
+    "test:mobile": "npm run compile && node --test out/main/mobileHostServices.test.js out/main/mobileRunProjection.test.js out/main/mobileSessionProjection.test.js out/main/mobileSessionChanges.test.js out/main/mobilePermissions.test.js out/main/mobileAccessLifecycle.test.js out/main/mobileLanServer.test.js out/main/mobileRelayClient.test.js out/main/mobilePairingRegistry.test.js out/main/mobileDiscoveryAdvertiser.test.js out/main/mobileEndToEnd.test.js out/main/mobileAppearance.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@praxis/core": "*",
     "@praxis/mobile-protocol": "*",
+    "@praxis/mobile-relay": "*",
     "electron-updater": "^6.8.9",
     "jsonc-parser": "^3.3.1",
     "node-pty": "^1.1.0",
-    "tar": "^7.5.1"
+    "tar": "^7.5.1",
+    "ws": "8.18.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/node": "^25.5.0",
+    "@types/ws": "8.18.1",
     "electron": "^43.4.1",
     "electron-builder": "^26.15.3",
     "typescript": "^6.0.2"

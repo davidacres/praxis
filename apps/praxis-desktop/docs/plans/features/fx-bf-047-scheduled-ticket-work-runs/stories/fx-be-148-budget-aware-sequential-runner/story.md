@@ -70,4 +70,3 @@ or pause, and the user can understand exactly what happened to every ticket.
 
 ## Comments
 
-
