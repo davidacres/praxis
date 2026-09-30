@@ -55,6 +55,10 @@ jobs:
   build-win:
     runs-on: windows-latest
     steps:
+      - name: Enable Git long paths
+        shell: pwsh
+        run: git config --global core.longpaths true
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_tag || github.ref }}
