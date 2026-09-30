@@ -2,6 +2,7 @@ import { parseHexRgb } from '../ui/hexColor';
 import { NATIVE_ECOSYSTEMS, type NativeEcosystem } from '../ai/agentRuntime/nativeSources';
 import type { AiProvider, BuiltInAiProvider } from '../types';
 import { sanitizeCustomProviders, type CustomProviderConfig } from '../ai/providers/customProviders';
+import { REASONING_EFFORT_LEVELS, type ReasoningEffort } from '../ai/providers/reasoningSupport';
 import type { MobileAccessMode } from '../host/mobileAccessPolicy';
 import type { MobileAccessSettings } from '../host/mobileAccessAdministration';
 
@@ -106,6 +107,13 @@ export interface AiProviderConfig {
    * Custom endpoints are always listed; this flag is for built-ins.
    */
   added?: boolean;
+  /**
+   * Default reasoning/thinking effort per model, keyed by model id (Settings
+   * → AI Provider → Manage models). A new session reads this as its starting
+   * value and the composer's reasoning chip can still override it per turn.
+   * A model with no entry here defaults to `'off'`.
+   */
+  modelReasoningDefaults?: Record<string, ReasoningEffort>;
 }
 
 export interface AiSettings {
@@ -1039,6 +1047,17 @@ function readAiProviderConfigs(value: unknown, known: readonly string[]): Partia
     }
     if (raw.added === true) {
       config.added = true;
+    }
+    if (isRecord(raw.modelReasoningDefaults)) {
+      const levels: Record<string, ReasoningEffort> = {};
+      for (const [modelId, level] of Object.entries(raw.modelReasoningDefaults)) {
+        if ((REASONING_EFFORT_LEVELS as readonly string[]).includes(level as string)) {
+          levels[modelId] = level as ReasoningEffort;
+        }
+      }
+      if (Object.keys(levels).length > 0) {
+        config.modelReasoningDefaults = levels;
+      }
     }
     if (Object.keys(config).length > 0) {
       out[id] = config;

@@ -394,3 +394,26 @@ test('delegating with a model override applies it via session/set_config_option'
   const session = await readSession(win, 'APP-203');
   expect(session?.responseText).toContain('model=fake-fast');
 });
+
+test('a CLI model reasoning default applies through ACP thought_level', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+  await win.evaluate(async () => {
+    await window.praxis.settings.set({
+      ai: {
+        providers: {
+          'claude-code-cli': {
+            modelReasoningDefaults: { 'fake-fast': 'high' }
+          }
+        }
+      }
+    });
+  });
+
+  await delegate(win, 'APP-204', 'claude-code-cli', 'Use the configured reasoning default', 'fake-fast');
+  await expect.poll(async () => (await readSession(win, 'APP-204'))?.state, { timeout: 15000 }).toBe('completed');
+
+  const session = await readSession(win, 'APP-204');
+  expect(session?.responseText).toContain('model=fake-fast, effort=high');
+});

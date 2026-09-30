@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../app/theme.dart';
 import '../core/models.dart';
@@ -38,6 +39,7 @@ class SessionComposer extends StatefulWidget {
     this.onRefreshUsage,
     this.workflows = const [],
     this.onStartWorkflow,
+    this.activityText,
   });
 
   final TextEditingController controller;
@@ -66,6 +68,7 @@ class SessionComposer extends StatefulWidget {
   final VoidCallback? onRefreshUsage;
   final List<WorkflowChoice> workflows;
   final ValueChanged<String>? onStartWorkflow;
+  final String? activityText;
 
   @override
   State<SessionComposer> createState() => _SessionComposerState();
@@ -74,11 +77,15 @@ class SessionComposer extends StatefulWidget {
 class _SessionComposerState extends State<SessionComposer> {
   bool _usageVisible = true;
   String? _notice;
+  bool _inflightExpanded = false;
+  bool _hadTypedInInflight = false;
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onText);
+    _focusNode.addListener(_onFocus);
   }
 
   @override
@@ -88,15 +95,56 @@ class _SessionComposerState extends State<SessionComposer> {
       oldWidget.controller.removeListener(_onText);
       widget.controller.addListener(_onText);
     }
+    if (oldWidget.sending && !widget.sending) {
+      _inflightExpanded = false;
+      _hadTypedInInflight = false;
+    }
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onText);
+    _focusNode.removeListener(_onFocus);
+    _focusNode.dispose();
     super.dispose();
   }
 
-  void _onText() => setState(() {});
+  void _onText() {
+    final text = widget.controller.text;
+    if (widget.sending && _inflightExpanded) {
+      if (text.trim().isEmpty && _hadTypedInInflight) {
+        setState(() {
+          _inflightExpanded = false;
+          _hadTypedInInflight = false;
+        });
+        return;
+      } else if (text.trim().isNotEmpty) {
+        _hadTypedInInflight = true;
+      }
+    }
+    setState(() {});
+  }
+
+  void _onFocus() {
+    if (!_focusNode.hasFocus && widget.sending && _inflightExpanded && widget.controller.text.trim().isEmpty) {
+      setState(() {
+        _inflightExpanded = false;
+        _hadTypedInInflight = false;
+      });
+    }
+  }
+
+  void _handleSend() {
+    if (widget.controller.text.trim().isEmpty || widget.blockedReason != null) return;
+    widget.onSend();
+    if (widget.sending) {
+      setState(() {
+        _inflightExpanded = false;
+        _hadTypedInInflight = false;
+      });
+      _focusNode.unfocus();
+    }
+  }
 
   void _openOptions() {
     showPraxisSheet<void>(
@@ -121,9 +169,10 @@ class _SessionComposerState extends State<SessionComposer> {
     final t = context.t;
     final p = t.palette;
     final lockedHint = widget.lockedReason ?? 'Provider and model are fixed right now.';
-    final canSend = widget.controller.text.trim().isNotEmpty && !widget.sending && widget.blockedReason == null;
+    final hasText = widget.controller.text.trim().isNotEmpty;
+    final canSend = hasText && widget.blockedReason == null;
     final gap = SizedBox(height: t.s(7));
-    final sendEnabled = widget.sending ? widget.onStop != null : canSend;
+    final isCollapsed = widget.sending && !_inflightExpanded;
 
     return Container(
       padding: EdgeInsets.fromLTRB(t.s(10), t.s(7), t.s(10), t.s(9)),
@@ -176,89 +225,251 @@ class _SessionComposerState extends State<SessionComposer> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Semantics(
-                  label: 'Session message',
-                  textField: true,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: t.s(58), maxHeight: 124),
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(t.s(12), t.s(12), t.s(12), t.s(7)),
-                      child: CupertinoTextField.borderless(
-                        textAlignVertical: TextAlignVertical.top,
-                        controller: widget.controller,
-                        padding: EdgeInsets.zero,
-                        maxLines: null,
-                        placeholder: widget.draft ? 'Describe what the agent should do…' : 'Ask the agent to clarify, change, or continue…',
-                        placeholderStyle: ts(context, 13, lineHeight: 18, color: p.textDim),
-                        style: ts(context, 13, lineHeight: 18),
-                        cursorColor: p.accent,
-                        keyboardType: TextInputType.multiline,
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) {
-                          if (canSend) widget.onSend();
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-                Container(
-                  constraints: BoxConstraints(minHeight: t.s(48)),
-                  padding: EdgeInsets.fromLTRB(t.s(5), 0, t.s(5), t.s(5)),
-                  child: Row(
-                    children: [
-                      _Chip(
-                        icon: '‹›',
-                        label: widget.providerLabel,
-                        editable: widget.editable,
-                        hint: widget.editable
-                            ? (widget.draft ? 'Choose the AI provider for this new chat' : 'Hand this session over to another AI provider')
-                            : lockedHint,
-                        onTap: () => widget.editable ? widget.onOpenProviderPicker?.call() : setState(() => _notice = lockedHint),
-                      ),
-                      const SizedBox(width: 1),
-                      _Chip(
-                        icon: '✦',
-                        label: widget.modelLabel,
-                        editable: widget.editable,
-                        hint: widget.editable ? (widget.draft ? 'Choose the model for this new chat' : 'Change the model for the next turn') : lockedHint,
-                        onTap: () => widget.editable ? widget.onOpenModelPicker?.call() : setState(() => _notice = lockedHint),
-                      ),
-                      const Spacer(),
-                      Pressable(
-                        label: 'Session options, ${modeLabels[widget.mode]} mode',
-                        onTap: _openOptions,
-                        excludeChildSemantics: true,
-                        builder: (context, pressed) => Container(
-                          width: t.s(40),
-                          height: t.s(40),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(color: pressed ? p.surfaceRaised : null, borderRadius: BorderRadius.circular(t.s(8))),
-                          child: Text(
-                            '☷',
-                            style: ts(context, 22, lineHeight: 24, weight: FontWeight.w700, color: p.textSecondary),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 1),
-                      Pressable(
-                        label: widget.sending ? 'Stop response' : 'Send message',
-                        enabled: sendEnabled,
-                        onTap: widget.sending ? widget.onStop : widget.onSend,
-                        excludeChildSemantics: true,
-                        builder: (context, pressed) => Opacity(
-                          opacity: !widget.sending && !canSend ? 0.48 : 1,
-                          child: Container(
-                            width: t.s(40),
-                            height: t.s(40),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(color: pressed ? p.surfaceRaised : null, borderRadius: BorderRadius.circular(t.s(8))),
-                            child: Text(
-                              widget.sending ? '■' : '↑',
-                              style: ts(context, 24, lineHeight: 26, weight: FontWeight.w600, color: canSend || widget.sending ? p.text : p.textDim),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  alignment: Alignment.topCenter,
+                  child: isCollapsed
+                      ? const SizedBox.shrink()
+                      : Semantics(
+                          label: 'Session message',
+                          textField: true,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(maxHeight: t.s(124)),
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(t.s(12), t.s(8), t.s(12), t.s(6)),
+                              child: CupertinoTextField.borderless(
+                                focusNode: _focusNode,
+                                textAlignVertical: TextAlignVertical.top,
+                                controller: widget.controller,
+                                padding: EdgeInsets.zero,
+                                minLines: 1,
+                                maxLines: null,
+                                placeholder: widget.sending
+                                    ? 'Queue follow-up (sends automatically when done)…'
+                                    : widget.draft
+                                        ? 'Describe what the agent should do…'
+                                        : 'Ask the agent to clarify, change, or continue…',
+                                placeholderStyle: ts(context, 13, lineHeight: 18, color: p.textDim),
+                                style: ts(context, 13, lineHeight: 18),
+                                cursorColor: p.accent,
+                                keyboardType: TextInputType.multiline,
+                                textInputAction: TextInputAction.send,
+                                onSubmitted: (_) {
+                                  if (canSend) _handleSend();
+                                },
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                ),
+                Container(
+                  constraints: BoxConstraints(minHeight: t.s(40)),
+                  padding: EdgeInsets.fromLTRB(t.s(5), isCollapsed ? t.s(4) : 0, t.s(5), t.s(5)),
+                  child: Row(
+                    children: [
+                      if (isCollapsed) ...[
+                        Container(
+                          height: t.s(29),
+                          padding: EdgeInsets.symmetric(horizontal: t.s(7)),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _ActivityDot(color: p.accent),
+                              SizedBox(width: t.s(6)),
+                              Text(
+                                widget.activityText ?? 'Working…',
+                                style: ts(context, 11, weight: FontWeight.w500, color: p.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Spacer(),
+                        Pressable(
+                          label: 'Ask, queue a follow-up message while the agent is working',
+                          onTap: () {
+                            setState(() {
+                              _inflightExpanded = true;
+                              _hadTypedInInflight = false;
+                            });
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) _focusNode.requestFocus();
+                            });
+                          },
+                          excludeChildSemantics: true,
+                          builder: (context, pressed) => Container(
+                            height: t.s(29),
+                            padding: EdgeInsets.symmetric(horizontal: t.s(8)),
+                            decoration: BoxDecoration(
+                              color: pressed ? p.surfaceRaised : p.surface,
+                              borderRadius: BorderRadius.circular(t.s(6)),
+                              border: Border.all(color: p.border, width: 0.5),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _chatsIcon(p.textSecondary, size: t.s(12)),
+                                SizedBox(width: t.s(5)),
+                                Text('Ask', style: ts(context, 11, weight: FontWeight.w600, color: p.text)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: t.s(4)),
+                        Pressable(
+                          label: 'Stop response',
+                          enabled: widget.onStop != null,
+                          onTap: widget.onStop,
+                          excludeChildSemantics: true,
+                          builder: (context, pressed) => Container(
+                            width: t.s(34),
+                            height: t.s(34),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: pressed ? p.dangerSoft : null,
+                              borderRadius: BorderRadius.circular(t.s(8)),
+                            ),
+                            child: Text(
+                              '×',
+                              style: ts(context, 20, lineHeight: 22, weight: FontWeight.w600, color: p.danger),
+                            ),
+                          ),
+                        ),
+                      ] else if (widget.sending) ...[
+                        Pressable(
+                          label: 'Hide follow-up input',
+                          onTap: () {
+                            setState(() {
+                              _inflightExpanded = false;
+                              _hadTypedInInflight = false;
+                            });
+                            _focusNode.unfocus();
+                          },
+                          excludeChildSemantics: true,
+                          builder: (context, pressed) => Container(
+                            height: t.s(29),
+                            padding: EdgeInsets.symmetric(horizontal: t.s(6)),
+                            decoration: BoxDecoration(
+                              color: pressed ? p.surfaceRaised : null,
+                              borderRadius: BorderRadius.circular(t.s(6)),
+                              border: Border.all(color: p.border, width: 0.5),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('▾', style: ts(context, 9, scaled: false, color: p.textDim)),
+                                SizedBox(width: t.s(3)),
+                                Text('Hide', style: ts(context, 11, color: p.textSecondary)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 1),
+                        _Chip(
+                          icon: '‹›',
+                          label: widget.providerLabel,
+                          editable: false,
+                          hint: lockedHint,
+                          onTap: () => setState(() => _notice = lockedHint),
+                        ),
+                        const Spacer(),
+                        Pressable(
+                          label: 'Stop response',
+                          enabled: widget.onStop != null,
+                          onTap: widget.onStop,
+                          excludeChildSemantics: true,
+                          builder: (context, pressed) => Container(
+                            width: t.s(34),
+                            height: t.s(34),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: pressed ? p.dangerSoft : null,
+                              borderRadius: BorderRadius.circular(t.s(8)),
+                            ),
+                            child: Text(
+                              '×',
+                              style: ts(context, 20, lineHeight: 22, weight: FontWeight.w600, color: p.danger),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: t.s(4)),
+                        Pressable(
+                          label: 'Queue follow-up',
+                          enabled: canSend,
+                          onTap: canSend ? _handleSend : null,
+                          excludeChildSemantics: true,
+                          builder: (context, pressed) => Opacity(
+                            opacity: !canSend ? 0.48 : 1,
+                            child: Container(
+                              width: t.s(34),
+                              height: t.s(34),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: pressed ? p.surfaceRaised : null,
+                                borderRadius: BorderRadius.circular(t.s(8)),
+                              ),
+                              child: Text(
+                                '↑',
+                                style: ts(context, 22, lineHeight: 24, weight: FontWeight.w600, color: canSend ? p.text : p.textDim),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        _Chip(
+                          icon: '‹›',
+                          label: widget.providerLabel,
+                          editable: widget.editable,
+                          hint: widget.editable
+                              ? (widget.draft ? 'Choose the AI provider for this new chat' : 'Hand this session over to another AI provider')
+                              : lockedHint,
+                          onTap: () => widget.editable ? widget.onOpenProviderPicker?.call() : setState(() => _notice = lockedHint),
+                        ),
+                        const SizedBox(width: 1),
+                        _Chip(
+                          icon: '✦',
+                          label: widget.modelLabel,
+                          editable: widget.editable,
+                          hint: widget.editable ? (widget.draft ? 'Choose the model for this new chat' : 'Change the model for the next turn') : lockedHint,
+                          onTap: () => widget.editable ? widget.onOpenModelPicker?.call() : setState(() => _notice = lockedHint),
+                        ),
+                        const Spacer(),
+                        Pressable(
+                          label: 'Session options, ${modeLabels[widget.mode]} mode',
+                          onTap: _openOptions,
+                          excludeChildSemantics: true,
+                          builder: (context, pressed) => Container(
+                            width: t.s(34),
+                            height: t.s(34),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(color: pressed ? p.surfaceRaised : null, borderRadius: BorderRadius.circular(t.s(8))),
+                            child: Text(
+                              '☷',
+                              style: ts(context, 20, lineHeight: 22, weight: FontWeight.w700, color: p.textSecondary),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 1),
+                        Pressable(
+                          label: 'Send message',
+                          enabled: canSend,
+                          onTap: canSend ? widget.onSend : null,
+                          excludeChildSemantics: true,
+                          builder: (context, pressed) => Opacity(
+                            opacity: !canSend ? 0.48 : 1,
+                            child: Container(
+                              width: t.s(34),
+                              height: t.s(34),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(color: pressed ? p.surfaceRaised : null, borderRadius: BorderRadius.circular(t.s(8))),
+                              child: Text(
+                                '↑',
+                                style: ts(context, 22, lineHeight: 24, weight: FontWeight.w600, color: canSend ? p.text : p.textDim),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -269,6 +480,60 @@ class _SessionComposerState extends State<SessionComposer> {
       ),
     );
   }
+}
+
+class _ActivityDot extends StatefulWidget {
+  const _ActivityDot({required this.color});
+  final Color color;
+
+  @override
+  State<_ActivityDot> createState() => _ActivityDotState();
+}
+
+class _ActivityDotState extends State<_ActivityDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) => Opacity(
+        opacity: 0.35 + (_controller.value * 0.65),
+        child: Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
+        ),
+      ),
+    );
+  }
+}
+
+Widget _chatsIcon(Color color, {double size = 12}) {
+  return SvgPicture.string(
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M1.9 3.4h8.4v5.6H5.1L2.6 11.1V9H1.9z"/>'
+    '<path d="M6.2 5.3h7.9v5.6h-.7v2.1l-2.5-2.1H8.4"/>'
+    '</svg>',
+    width: size,
+    height: size,
+    colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+  );
 }
 
 class _Chip extends StatelessWidget {

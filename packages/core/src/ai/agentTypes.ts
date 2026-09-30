@@ -1,5 +1,6 @@
 import type { AiProvider } from '../types';
 import type { ProviderCapabilityManifest } from './providers/providerPreflight';
+import type { ReasoningEffort } from './providers/reasoningSupport';
 import type { TokenUsage, WireImageAttachment } from './gateway';
 
 // ── Agent Task State Machine ─────────────────────────────────────────────
@@ -396,6 +397,12 @@ export interface AgentSessionRecord {
   provider?: AiProvider;
   /** Runtime model selected when the session started; reused for follow-up turns. */
   model?: string;
+  /**
+   * Normalized reasoning/thinking effort selected for this session's turns.
+   * `undefined` falls back to the provider's per-model default from
+   * `AiProviderConfig.modelReasoningDefaults`, then to `'off'`.
+   */
+  reasoningEffort?: ReasoningEffort;
   /** Stable workspace root used for every turn in this session. */
   workingDirectory?: string;
   /** When this session runs in a dedicated git worktree: its checkout path. */

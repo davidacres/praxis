@@ -22,6 +22,7 @@ import type { PermissionDecision } from '../tools';
 import { AcpClientWrapper, type AcpPermissionRequest } from './acpClient';
 import { isProviderLimitError, isLimitNoticeReply, extractProviderLimitMessage } from '../providerLimitError';
 import { probeCliProvider, type ProviderCapabilityManifest } from '../providers/providerPreflight';
+import type { ReasoningEffort } from '../providers/reasoningSupport';
 
 /**
  * Phase-2 peer of `VercelAgentService` for `kind: 'cli-agent'` providers —
@@ -45,6 +46,8 @@ export interface AcpAgentStartOptions {
   workingDirectory?: string;
   /** Model id to select via `session/set_config_option` before prompting; omit to use the agent's own default. */
   model?: string;
+  /** Normalized effort applied through ACP's `thought_level` config category when the agent advertises it. */
+  reasoningEffort?: ReasoningEffort;
   toolMode?: AgentToolMode;
   /** Allow the agent's own tool-permission requests without asking (still bounded by `toolMode`). */
   autoApprovePermissions?: boolean;
@@ -207,6 +210,33 @@ async function applyAcpModel(client: AcpClientWrapper, model?: string): Promise<
     await client.setConfigOption('model', model);
   } catch {
     // Not every ACP agent exposes a model config option; the prompt still runs.
+  }
+}
+
+export function resolveAcpReasoningValue(
+  option: acp.SessionConfigOption | undefined,
+  reasoningEffort: ReasoningEffort | undefined
+): string | undefined {
+  if (!option || option.type !== 'select' || !reasoningEffort) return undefined;
+  const choices = option.options.flatMap(entry => ('group' in entry ? entry.options : [entry]));
+  const preferred = reasoningEffort === 'off' ? ['off', 'none', 'minimal', 'default'] : [reasoningEffort];
+  for (const candidate of preferred) {
+    const match = choices.find(choice =>
+      choice.value.toLowerCase() === candidate || choice.name.toLowerCase() === candidate
+    );
+    if (match) return match.value;
+  }
+  return undefined;
+}
+
+async function applyAcpReasoning(client: AcpClientWrapper, reasoningEffort?: ReasoningEffort): Promise<void> {
+  if (!reasoningEffort) return;
+  try {
+    const option = await client.getConfigOption('thought_level', 'effort');
+    const value = resolveAcpReasoningValue(option, reasoningEffort);
+    if (option && value) await client.setConfigOption(option.id, value);
+  } catch {
+    // Agents that do not expose thought_level keep their own default.
   }
 }
 
@@ -571,7 +601,8 @@ export class AcpAgentHost {
 
     this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider, options.model, {
       workingDirectory,
-      toolMode
+      toolMode,
+      reasoningEffort: options.reasoningEffort ?? 'off'
     });
     if (options.autoApprovePermissions) this.sessionManager.updateAgentRuntime(issue.key, { autoApprovePermissions: true });
     this.sessionManager.updateAgentState(issue.key, 'planning');
@@ -601,6 +632,7 @@ export class AcpAgentHost {
         }
       });
       await applyAcpModel(client, options.model);
+      await applyAcpReasoning(client, options.reasoningEffort);
       // `session/new` triggers no prompt/completion of its own, so reading
       // modes here (rather than only reacting to `current_mode_update` later)
       // costs nothing and means the composer has something to show even
@@ -796,6 +828,7 @@ export class AcpAgentHost {
     task.promptPromise = (async () => {
       await client.connect();
       await applyAcpModel(client, options.model);
+      await applyAcpReasoning(client, record.reasoningEffort ?? options.reasoningEffort);
       const response = await client.prompt(prompt, followUpImages);
       if (client.sessionId) {
         this.sessionManager.updateAgentRuntime(issueKey, { runtimeSessionId: client.sessionId });

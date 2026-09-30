@@ -22,7 +22,7 @@ import { useDialogs } from '../ui/dialogs';
 import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
-import { providerIconName, providerLabel } from './modelProviders';
+import { providerIconName, providerLabel, supportsReasoningEffort } from './modelProviders';
 import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, formatModelCost, getKnownContextLength, getModelPricing, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
@@ -779,7 +779,7 @@ export function SessionsPage({
   const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>(() => getActiveTerminalId());
   const [attachTerminalContext, setAttachTerminalContext] = useState(false);
   const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
-  const [transitionPopover, setTransitionPopover] = useState<{ open: 'model' | 'handover' | 'toolMode' | 'folder'; position: ComposerPopoverPosition }>();
+  const [transitionPopover, setTransitionPopover] = useState<{ open: 'model' | 'reasoning' | 'handover' | 'toolMode' | 'folder'; position: ComposerPopoverPosition }>();
   const [conversationPopoverPosition, setConversationPopoverPosition] = useState<ComposerPopoverPosition>();
   const [conversationInitialProvider, setConversationInitialProvider] = useState<AiProvider>();
   const [conversationTargetId, setConversationTargetId] = useState<string>();
@@ -2475,6 +2475,29 @@ export function SessionsPage({
                         </button>
                       );
                     })()}
+                    {!workflowOwnsRuntime && selected.workflowRole !== 'stage' && supportsReasoningEffort(selected.provider, selected.model) && (
+                      <button
+                        type="button"
+                        className={`composer-chip session-runtime-chip${transitionPopover?.open === 'reasoning' ? ' active' : ''}`}
+                        data-testid="session-reasoning"
+                        title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Change the reasoning effort for the next turn' : "This session's reasoning effort"}
+                        aria-haspopup="listbox"
+                        aria-expanded={transitionPopover?.open === 'reasoning'}
+                        disabled={conversationRunning || !canChangeSessionRuntime(selected)}
+                        onClick={event => {
+                          if (transitionPopover?.open === 'reasoning') {
+                            setTransitionPopover(undefined);
+                            return;
+                          }
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          setConversationPopoverPosition(undefined);
+                          setTransitionPopover({ open: 'reasoning', position: { bottom: window.innerHeight - rect.top + 6, left: rect.left } });
+                        }}
+                      >
+                        <Icon name="lightbulb" size={14} />
+                        <span>{selected.reasoningEffort && selected.reasoningEffort !== 'off' ? selected.reasoningEffort : 'Reasoning'}</span>
+                      </button>
+                    )}
                     <SessionConversationActions
                       session={selected}
                       onStop={() => void stopConversation()}

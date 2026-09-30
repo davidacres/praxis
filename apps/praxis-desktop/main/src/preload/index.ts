@@ -25,6 +25,7 @@ import type {
   IssueFilters,
   ParentItemQueryOptions,
   PermissionDecision,
+  ReasoningEffort,
   SessionMode,
   TaskDesignerPersistedState,
   TaskDesignerRecommendationConnector,
@@ -258,6 +259,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:continueSession', issueKey, message, images),
     updateSessionModel: (issueKey: string, model: string) =>
       ipcRenderer.invoke('ai:updateSessionModel', issueKey, model),
+    updateSessionReasoningEffort: (issueKey: string, reasoningEffort: ReasoningEffort) =>
+      ipcRenderer.invoke('ai:updateSessionReasoningEffort', issueKey, reasoningEffort),
     updateSessionToolAccess: (
       issueKey: string,
       options: { workingDirectory?: string | null; toolMode?: AgentToolMode }

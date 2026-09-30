@@ -9,10 +9,19 @@ import type {
   AiProviderStatus,
   HandoverBrief,
   ModelOptions,
+  ReasoningEffort,
   SessionRuntimeEpoch
 } from '@praxis/core';
 import { Icon, type IconName } from '../ui/Icon';
-import { allModelProviderIds, fetchModelOptions, providerIconName, providerLabel, providerSupportsTools, refreshModelOptions } from './modelProviders';
+import {
+  allModelProviderIds,
+  fetchModelOptions,
+  providerIconName,
+  providerLabel,
+  providerSupportsTools,
+  refreshModelOptions,
+  REASONING_EFFORT_LEVELS
+} from './modelProviders';
 import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing } from './sessionNav';
 import { isProviderUsable } from './providerAvailability';
 import { isTerminalAgentState } from './aiSessionState';
@@ -215,7 +224,7 @@ export interface ComposerPopoverPosition {
 
 interface TransitionDialogsProps {
   session: AgentSessionRecord;
-  open: 'model' | 'handover' | 'toolMode' | 'folder' | undefined;
+  open: 'model' | 'reasoning' | 'handover' | 'toolMode' | 'folder' | undefined;
   position: ComposerPopoverPosition | undefined;
   onClose: () => void;
   onAddProvider?: (provider: AiProvider) => void;
@@ -301,7 +310,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element;
       if (menuRef.current?.contains(target)) return;
-      if (target.closest('[data-testid="session-provider"], [data-testid="session-model"], [data-testid="session-tool-mode"], [data-testid="session-working-directory"]')) return;
+      if (target.closest('[data-testid="session-provider"], [data-testid="session-model"], [data-testid="session-reasoning"], [data-testid="session-tool-mode"], [data-testid="session-working-directory"]')) return;
       onClose();
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -326,6 +335,23 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
     setError(undefined);
     try {
       await window.praxis.ai.updateSessionModel(session.issueKey, model);
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeReasoningEffort = async (reasoningEffort: ReasoningEffort) => {
+    if (reasoningEffort === (session.reasoningEffort ?? 'off')) {
+      onClose();
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      await window.praxis.ai.updateSessionReasoningEffort(session.issueKey, reasoningEffort);
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -434,20 +460,24 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
           ? 'Confirm AI provider handover'
           : open === 'model'
             ? 'Model'
-            : open === 'toolMode'
-              ? 'Tool access'
-              : open === 'folder'
-                ? 'Working folder'
-                : 'AI provider'
+            : open === 'reasoning'
+              ? 'Reasoning effort'
+              : open === 'toolMode'
+                ? 'Tool access'
+                : open === 'folder'
+                  ? 'Working folder'
+                  : 'AI provider'
       }
       data-testid={
         open === 'model'
           ? 'session-model-menu'
-          : open === 'toolMode'
-            ? 'session-tool-mode-menu'
-            : open === 'folder'
-              ? 'session-folder-menu'
-              : 'session-provider-menu'
+          : open === 'reasoning'
+            ? 'session-reasoning-menu'
+            : open === 'toolMode'
+              ? 'session-tool-mode-menu'
+              : open === 'folder'
+                ? 'session-folder-menu'
+                : 'session-provider-menu'
       }
       style={anchoredPopoverStyle(position, open === 'toolMode' ? 320 : 300)}
     >
@@ -615,6 +645,25 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
               </button>
             );
           })}
+          {error && <p className="session-popover-error">{error}</p>}
+        </>
+      ) : open === 'reasoning' ? (
+        <>
+          {REASONING_EFFORT_LEVELS.map(level => (
+            <button
+              key={level}
+              type="button"
+              className={`composer-provider-option${(session.reasoningEffort ?? 'off') === level ? ' active' : ''}`}
+              data-testid={`session-reasoning-option-${level}`}
+              role="option"
+              aria-selected={(session.reasoningEffort ?? 'off') === level}
+              disabled={busy}
+              onClick={() => void changeReasoningEffort(level)}
+            >
+              <Icon name="lightbulb" size={14} />
+              <span className="composer-model-option-name">{level[0].toUpperCase() + level.slice(1)}</span>
+            </button>
+          ))}
           {error && <p className="session-popover-error">{error}</p>}
         </>
       ) : (

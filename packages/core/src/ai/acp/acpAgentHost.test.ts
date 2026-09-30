@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AcpAgentHost } from './acpAgentHost';
+import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
+import { AcpAgentHost, resolveAcpReasoningValue } from './acpAgentHost';
 
 /**
  * A workflow stage that hits a usage limit is retried on another AI under the same
@@ -71,4 +72,27 @@ test('cleaning up the task that is still registered forgets it', async () => {
   internals.activeTasks.set(key, only);
   await internals.cleanupTask(key);
   assert.equal(agentHost.hasActiveTask(key), false);
+});
+
+test('maps normalized reasoning effort to ACP thought-level values', () => {
+  const option: acp.SessionConfigOption = {
+    id: 'effort',
+    name: 'Effort',
+    category: 'thought_level',
+    type: 'select',
+    currentValue: 'high',
+    options: [
+      { value: 'default', name: 'Default' },
+      { value: 'low', name: 'Low' },
+      { value: 'medium', name: 'Medium' },
+      { value: 'high', name: 'High' },
+      { value: 'max', name: 'Max' }
+    ]
+  };
+
+  assert.equal(resolveAcpReasoningValue(option, 'off'), 'default');
+  assert.equal(resolveAcpReasoningValue(option, 'low'), 'low');
+  assert.equal(resolveAcpReasoningValue(option, 'medium'), 'medium');
+  assert.equal(resolveAcpReasoningValue(option, 'high'), 'high');
+  assert.equal(resolveAcpReasoningValue(option, undefined), undefined);
 });

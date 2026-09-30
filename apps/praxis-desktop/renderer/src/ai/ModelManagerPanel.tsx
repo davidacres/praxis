@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
-import type { AiProvider, AiProviderConfig, AppSettingsPatch, ModelOptions } from '@praxis/core';
+import type { AiProvider, AiProviderConfig, AppSettingsPatch, ModelOptions, ReasoningEffort } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { fetchModelOptions } from './modelProviders';
+import { fetchModelOptions, supportsReasoningEffort } from './modelProviders';
 import { ChipSelect } from '../ui/ChipSelect';
+
+const REASONING_EFFORT_OPTIONS: Array<{ value: ReasoningEffort | ''; label: string }> = [
+  { value: '', label: 'Off' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' }
+];
 
 type TierName = 'fast' | 'standard' | 'strong';
 
@@ -50,6 +57,21 @@ export function ModelManagerPanel({
     for (const held of ['fast', 'standard', 'strong'] as const) if (next[held] === modelId) delete next[held];
     if (tier) next[tier] = modelId;
     onTiersChange(next);
+  };
+
+  // Default reasoning/thinking effort per model (Settings → AI Provider →
+  // Manage models). Persisted straight through `providerConfig` — unlike
+  // tiers, this map lives per-provider, not at the top level, so no separate
+  // callback prop is needed.
+  const reasoningDefaultOf = (modelId: string): ReasoningEffort | '' =>
+    providerConfig.modelReasoningDefaults?.[modelId] ?? '';
+  const setReasoningDefault = (modelId: string, level: ReasoningEffort | '') => {
+    const next = { ...(providerConfig.modelReasoningDefaults ?? {}) };
+    if (level) next[modelId] = level;
+    else delete next[modelId];
+    update({ ai: { providers: { [providerId]: { ...providerConfig, modelReasoningDefaults: next } } } }).catch(err => {
+      setError(err instanceof Error ? err.message : String(err));
+    });
   };
   // Local optimistic mirror of the persisted `enabledModelIds` — `update()`
   // doesn't apply its patch optimistically (it waits for the settings
@@ -213,6 +235,19 @@ export function ModelManagerPanel({
                     ]}
                   />
                 </span>
+                {supportsReasoningEffort(providerId, option.value) && (
+                  <span className="model-manager-tier-wrap" onClick={event => event.stopPropagation()}>
+                    <ChipSelect
+                      className="model-manager-tier"
+                      ariaLabel={`Default reasoning effort for ${option.name}`}
+                      title="Default reasoning/thinking effort new sessions on this model start with"
+                      data-testid={`model-manager-reasoning-${option.value}`}
+                      value={reasoningDefaultOf(option.value)}
+                      onChange={value => setReasoningDefault(option.value, value as ReasoningEffort | '')}
+                      options={REASONING_EFFORT_OPTIONS}
+                    />
+                  </span>
+                )}
               </label>
             ))}
           </div>

@@ -3,6 +3,8 @@
  * Host-agnostic (no vscode imports) so this can be extracted later.
  */
 
+import { anthropicThinkingBudget, detectReasoningFamily, geminiThinkingBudget } from '../providers/reasoningSupport';
+
 export type WireRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export interface OpenAiToolCall {
@@ -174,6 +176,13 @@ export interface BuildChatRequestArgs {
   streamUsage?: boolean;
   /** `false` withholds the Vercel-only caching hint — see `GatewayOptions.gatewayCaching`. */
   gatewayCaching?: boolean;
+  /**
+   * Normalized reasoning/thinking effort for this turn — see `ReasoningEffort`
+   * in `providers/reasoningSupport.ts`. `undefined`/`'off'` sends no
+   * reasoning-control parameter at all, matching every request this ever
+   * sent before the setting existed.
+   */
+  reasoningEffort?: 'off' | 'low' | 'medium' | 'high';
 }
 
 /** Build the OpenAI-compatible chat request body for the Vercel AI Gateway. */
@@ -193,13 +202,46 @@ export function buildChatRequest(args: BuildChatRequestArgs): Record<string, unk
     body.temperature = args.temperature;
   }
 
+  const providerOptions: Record<string, unknown> = {};
+  if (args.gatewayCaching !== false && shouldEnableVercelAutoCaching(args.modelId)) {
+    providerOptions.gateway = { caching: 'auto' };
+  }
+
+  // A model id routed through this shared OpenAI-compatible wire can still
+  // be a Claude or Gemini model underneath (e.g. Vercel AI Gateway's
+  // `anthropic/claude-sonnet-4.6`) — that needs the *real* provider's own
+  // reasoning shape, sent through the AI-SDK-style `providerOptions`
+  // passthrough this gateway already uses for caching, not OpenAI's
+  // `reasoning_effort`, which only a genuinely OpenAI-hosted reasoning model
+  // understands.
+  if (args.reasoningEffort && args.reasoningEffort !== 'off') {
+    const family = detectReasoningFamily(args.modelId);
+    if (family === 'anthropic') {
+      const budget = anthropicThinkingBudget(args.reasoningEffort);
+      if (budget) {
+        body.max_tokens = Math.max(body.max_tokens as number, budget + 1024);
+        delete body.temperature; // Anthropic rejects a custom temperature alongside thinking.
+        providerOptions.anthropic = { thinking: { type: 'enabled', budget_tokens: budget } };
+      }
+    } else if (family === 'gemini') {
+      const budget = geminiThinkingBudget(args.reasoningEffort);
+      if (budget) {
+        providerOptions.google = { thinkingConfig: { thinkingBudget: budget, includeThoughts: true } };
+      }
+    } else {
+      // OpenAI-compatible providers and custom endpoints use the standard
+      // field for model ids Praxis does not recognize. Sending it is opt-in:
+      // no existing request changes until the user selects a non-off level.
+      body.reasoning_effort = args.reasoningEffort;
+    }
+  }
+  if (Object.keys(providerOptions).length > 0) {
+    body.providerOptions = providerOptions;
+  }
+
   const tools = toOpenAiTools(args.tools);
   if (tools) {
     body.tools = tools;
-  }
-
-  if (args.gatewayCaching !== false && shouldEnableVercelAutoCaching(args.modelId)) {
-    body.providerOptions = { gateway: { caching: 'auto' } };
   }
 
   return body;

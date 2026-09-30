@@ -18,6 +18,7 @@ export * from './ai/providers/providerPresets';
 export * from './ai/providers/providerProbe';
 export * from './ai/providers/modelCatalog';
 export * from './ai/providers/modelPricing';
+export * from './ai/providers/reasoningSupport';
 export * from './ai/providers/geminiClient';
 export * from './ai/providers/geminiWire';
 export * from './ai/providers/geminiAdapter';

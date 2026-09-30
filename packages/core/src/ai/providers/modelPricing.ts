@@ -113,7 +113,7 @@ const PRICING_BY_PROVIDER: Partial<Record<AiProvider, Record<string, ModelPriceR
   gemini: GEMINI_MODEL_PRICING
 };
 
-function normalizeModelName(raw: string): string {
+export function normalizeModelName(raw: string): string {
   return raw.trim().toLowerCase().replace(/^(openai|anthropic|google|models|vercel|meta)\//, '');
 }
 
