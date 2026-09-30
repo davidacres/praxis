@@ -21,7 +21,8 @@ watch one).
 | Review | agent | `read-only` | inspects snapshot and change diff; satisfies the **review** gate |
 | Install dependencies | check | — | `npm ci`; ensures clean dependency tree in the run worktree |
 | Build | check | — | `npm run build --if-present`; verifies compilation |
-| QA | check | — | `npm test`; satisfies the **qa** gate |
+| QA | check | — | `npm test`; satisfies the **qa** gate; has a bounded self-heal path |
+| Repair QA failures | agent | `full` | Reads failed QA evidence, commits a repair, and reopens verification |
 | Security scan | check | — | `npm audit`; audits against public registry; satisfies the **security** gate |
 | Gates | join | — | waits for all three branches (Review, QA, Security) |
 | Approve | approval | — | requires review + qa + security; no bypass |
@@ -34,8 +35,11 @@ watch one).
 
 QA and security are **deterministic checks**, not agents, so an agent cannot
 mark those gates passed by prose — their outcome is an exit code. Review, QA, and
-security all inspect the *same immutable implementation snapshot* that Implement
-and Test contracts froze, not whatever the worktree holds by the time each runs.
+security all inspect an immutable implementation snapshot. If QA fails, the
+optional recovery agent may make a bounded committed repair; the engine then
+reopens QA and the other verification branches against the new snapshot. Once
+the recovery budget is exhausted, the QA failure remains terminal and the
+existing manual retry/diagnosis path applies.
 
 Agents are referenced by Agent Hub id only. The template stores no manifests; a
 project points `praxis-planner` / `praxis-implementer` / `praxis-test-author` /

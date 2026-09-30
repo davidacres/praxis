@@ -268,6 +268,15 @@ export interface WorkflowCheckNode extends WorkflowNodeBase {
     enabled: boolean;
     provider?: 'github-actions' | 'gitlab-ci';
   };
+  /**
+   * Optional bounded self-healing path. The target must be a mutating
+   * agent-task reached by this node's failure edge. A successful repair opens
+   * a new attempt of this check and re-runs its downstream evidence.
+   */
+  failureRecovery?: {
+    repairNodeId: string;
+    maxAttempts: number;
+  };
 }
 
 /**
