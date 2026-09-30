@@ -84,6 +84,9 @@ test('the governed delivery template converges review, QA, and security before a
   assert.equal(qa?.type, 'check');
   assert.equal(security?.type, 'check');
   assert.equal(qa?.type === 'check' ? qa.maxAttempts : undefined, 2);
+  assert.deepEqual(qa?.type === 'check' ? qa.failureRecovery : undefined, { repairNodeId: 'qa-repair-agent', maxAttempts: 2 });
+  assert.equal(template.edges.some(edge => edge.from === 'qa' && edge.to === 'qa-repair-agent' && edge.on === 'failure'), true);
+  assert.equal(template.nodes.find(node => node.id === 'qa-repair-agent')?.type, 'agent-task');
 });
 
 test('full SDLC templates are ticket-triggered while ordinary delivery remains on-demand', () => {

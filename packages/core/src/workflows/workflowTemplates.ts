@@ -201,6 +201,19 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
       installDependenciesNode(600, 240),
       buildNode(840, 240),
       {
+        type: 'agent-task',
+        id: 'qa-repair-agent',
+        name: 'Repair QA failures',
+        x: 1080,
+        y: 400,
+        inputs: ['change-diff', 'qa-results'],
+        agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full', skillNames: ['verification-report'] },
+        instructions: 'Inspect the failed QA evidence, diagnose the smallest safe fix, implement it in the worktree, and commit the repair. Do not weaken, remove, or bypass tests.',
+        outputs: [{ id: 'qa-repair-diff', kind: 'diff', required: true }],
+        mutatesWorktree: true,
+        maxAttempts: 1
+      },
+      {
         type: 'check',
         id: 'qa',
         name: 'QA',
@@ -213,7 +226,8 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         outputs: [{ id: 'qa-results', kind: 'test-results', required: true }],
         satisfiesGate: 'qa',
         // Keep a failed QA run open so the user can retry QA without rerunning implementation.
-        maxAttempts: 2
+        maxAttempts: 2,
+        failureRecovery: { repairNodeId: 'qa-repair-agent', maxAttempts: 2 }
       },
       {
         type: 'check',
@@ -253,6 +267,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
       { id: 'e-tests-install', from: 'test-contracts', to: 'install', on: 'success', required: true },
       { id: 'e-install-build', from: 'install', to: 'build', on: 'success', required: true },
       { id: 'e-build-qa', from: 'build', to: 'qa', on: 'success', required: true },
+      { id: 'e-qa-repair', from: 'qa', to: 'qa-repair-agent', on: 'failure', required: false },
       { id: 'e-tests-sec', from: 'test-contracts', to: 'security', on: 'success', required: true },
       { id: 'e-review-gates', from: 'review', to: 'gates', on: 'success', required: true },
       { id: 'e-qa-gates', from: 'qa', to: 'gates', on: 'success', required: true },

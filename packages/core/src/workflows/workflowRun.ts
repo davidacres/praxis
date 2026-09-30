@@ -198,6 +198,8 @@ export interface WorkflowRun {
    * Wins over the stage's own choice, mapped tier, and the run's.
    */
   stageModels?: Record<string, string>;
+  /** Number of completed automatic recovery repairs per source node. */
+  recoveryAttempts?: Record<string, number>;
   /**
    * The git worktree this run's stages execute in, once acquired. Recorded on
    * the run so a restart re-attaches to the same tree instead of branching a
@@ -426,13 +428,16 @@ export function reworkWorkflowRun(
   run: WorkflowRun,
   nodeId: string,
   at: string,
-  options: { rerunSource?: boolean } = {}
+  options: { rerunSource?: boolean; resetNodeIds?: string[] } = {}
 ): WorkflowReworkResult {
   const source = findNode(run, nodeId);
   if (!source) return { run, requeued: [], reason: `Stage "${nodeId}" was not found.` };
 
   const affected = downstreamNodeIds(run, nodeId);
   if (options.rerunSource === false) affected.delete(nodeId);
+  for (const resetNodeId of options.resetNodeIds ?? []) {
+    for (const affectedNodeId of downstreamNodeIds(run, resetNodeId)) affected.add(affectedNodeId);
+  }
   if ([...affected].some(id => run.nodes[id]?.outcome === 'running')) {
     return { run, requeued: [], reason: 'Stop the in-progress downstream stage before starting rework.' };
   }
@@ -1032,6 +1037,13 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
       ? {
           stageModels: Object.fromEntries(
             Object.entries(raw.stageModels as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim() !== '')
+          )
+        }
+      : {}),
+    ...(raw.recoveryAttempts && typeof raw.recoveryAttempts === 'object' && !Array.isArray(raw.recoveryAttempts)
+      ? {
+          recoveryAttempts: Object.fromEntries(
+            Object.entries(raw.recoveryAttempts as Record<string, unknown>).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isInteger(entry[1]) && entry[1] >= 0)
           )
         }
       : {}),

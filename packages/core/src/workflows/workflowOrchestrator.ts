@@ -427,6 +427,23 @@ export class WorkflowOrchestrator {
                   ...(result.outcome.provider ? { provider: result.outcome.provider } : {})
                 });
         if (next !== run) {
+          const recoverySource = next.definition.nodes.find(candidate =>
+            candidate.type === 'check'
+            && candidate.failureRecovery?.repairNodeId === nodeId
+          );
+          if (recoverySource && result.kind === 'outcome' && result.outcome.status === 'succeeded') {
+            const completed = next.recoveryAttempts?.[recoverySource.id] ?? 0;
+            const recoveryAttempts = { ...(next.recoveryAttempts ?? {}), [recoverySource.id]: completed + 1 };
+            const counted = { ...next, recoveryAttempts };
+            const revalidate = counted.definition.nodes
+              .filter(candidate => candidate.id !== nodeId && (candidate.type === 'check' || candidate.type === 'approval'))
+              .map(candidate => candidate.id);
+            const refreshed = reworkWorkflowRun(counted, recoverySource.id, at, { resetNodeIds: revalidate });
+            if (!refreshed.reason) {
+              await this.persist(refreshed.run);
+              return;
+            }
+          }
           const stage = next.definition.nodes.find(candidate => candidate.id === nodeId);
           const downstreamHasPriorEvidence = Boolean(
             stage && nodeMutatesWorktree(stage) && result.kind === 'outcome'
@@ -447,6 +464,19 @@ export class WorkflowOrchestrator {
             }
           }
           let saved = await this.persist(next);
+          if (result.kind === 'outcome' && result.outcome.status === 'failed') {
+            const failedNode = next.definition.nodes.find(candidate => candidate.id === nodeId);
+            const recovery = failedNode?.type === 'check' ? failedNode.failureRecovery : undefined;
+            const completed = recovery ? next.recoveryAttempts?.[nodeId] ?? 0 : 0;
+            if (recovery && completed >= recovery.maxAttempts) {
+              saved = await this.persist(applyWorkflowRunCommand(saved, {
+                kind: 'node-skipped',
+                nodeId: recovery.repairNodeId,
+                at,
+                reason: 'Automatic QA recovery budget exhausted.'
+              }));
+            }
+          }
           if (result.kind === 'outcome' && result.outcome.pause === 'provider-limit' && !isRunSettled(saved)) {
             saved = await this.applyProviderLimitPolicy(saved, nodeId);
           }
