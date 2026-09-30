@@ -1,4 +1,4 @@
-import type { AiProvider, CustomProviderConfig, ModelOptions, ProviderCapabilities } from '@praxis/core';
+import type { AiProvider, CustomProviderConfig, ModelOptions, ProviderCapabilities, ReasoningEffort } from '@praxis/core';
 import type { IconName } from '../ui/Icon';
 
 /**
@@ -123,6 +123,18 @@ export function providerSupportsTools(provider: AiProvider | string): boolean {
 }
 
 export const NO_TOOLS_REASON = "Didn't pass tool calling, which agent sessions need — run its connection test in Settings → AI Provider.";
+
+/** Every reasoning/thinking effort level, in menu order. */
+export const REASONING_EFFORT_LEVELS: readonly ReasoningEffort[] = ['off', 'low', 'medium', 'high'];
+
+/**
+ * Browser-safe mirror of core's `supportsReasoningEffort`. Every selectable
+ * model gets the composer control and a per-model default; transport adapters
+ * decide how to apply the normalized value. Keep in sync with core's version.
+ */
+export function supportsReasoningEffort(provider: AiProvider | string | undefined, _model: string | undefined): boolean {
+  return Boolean(provider);
+}
 
 const modelOptionsCache = new Map<AiProvider, ModelOptions>();
 const modelOptionsRequests = new Map<AiProvider, Promise<ModelOptions | undefined>>();

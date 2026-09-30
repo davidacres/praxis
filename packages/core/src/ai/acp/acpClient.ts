@@ -114,6 +114,7 @@ export class AcpClientWrapper {
   private acpModule?: typeof acp;
   private initializeResponse?: acp.InitializeResponse;
   private resumedSessionId?: string;
+  private resumedConfigOptions?: acp.SessionConfigOption[];
   private resumeAttempted = false;
   /**
    * A resumed provider may replay historical session updates while restoring
@@ -288,18 +289,20 @@ export class AcpClientWrapper {
     const useLoad = capabilities.loadSession && (mcpServers.length > 0 || !capabilities.sessionCapabilities?.resume);
     try {
       if (useLoad) {
-        await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_load, {
+        const response = await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_load, {
           sessionId,
           cwd: this.options.workingDirectory,
           mcpServers,
           additionalDirectories: []
         });
+        this.resumedConfigOptions = response.configOptions ?? undefined;
       } else if (capabilities.sessionCapabilities?.resume) {
-        await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_resume, {
+        const response = await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_resume, {
           sessionId,
           cwd: this.options.workingDirectory,
           additionalDirectories: []
         });
+        this.resumedConfigOptions = response.configOptions ?? undefined;
       } else {
         return false;
       }
@@ -350,8 +353,17 @@ export class AcpClientWrapper {
    * prompt/completion of its own (no cost, just protocol data).
    */
   public async getModelOption(): Promise<acp.SessionConfigOption | undefined> {
-    const session = await this.ensureSession();
-    return session.newSessionResponse.configOptions?.find(option => option.id === 'model');
+    return this.getConfigOption('model', 'model');
+  }
+
+  /** Finds a session option by semantic category, with an id fallback for
+   * older agents that predate ACP's category field. */
+  public async getConfigOption(category: string, fallbackId?: string): Promise<acp.SessionConfigOption | undefined> {
+    const options = await this.tryResumeSession()
+      ? this.resumedConfigOptions
+      : (await this.ensureSession()).newSessionResponse.configOptions;
+    return options?.find(option => option.category === category) ??
+      (fallbackId ? options?.find(option => option.id === fallbackId) : undefined);
   }
 
   /** Sets a session config option (e.g. `model`) via `session/set_config_option`. */

@@ -34,6 +34,7 @@ import {
 } from './sessionHandover';
 import { isProviderLimitError, extractProviderLimitMessage } from './providerLimitError';
 import { estimateCostUsd } from './providers/modelPricing';
+import type { ReasoningEffort } from './providers/reasoningSupport';
 
 const STORAGE_KEY = 'praxis.aiSessions';
 const AGENT_STORAGE_KEY = 'praxis.agentSessions';
@@ -147,7 +148,7 @@ export class AiSessionManager {
     taskDefinition: AgentTaskDefinition,
     provider?: AgentRuntimeProvider,
     model?: string,
-    runtime?: Pick<AgentSessionRecord, 'workingDirectory' | 'toolMode' | 'runtimeSessionId' | 'connectionId'>
+    runtime?: Pick<AgentSessionRecord, 'workingDirectory' | 'toolMode' | 'runtimeSessionId' | 'connectionId' | 'reasoningEffort'>
   ): AgentSessionRecord {
     const startedAt = new Date().toISOString();
     const trimmedModel = model?.trim() || undefined;
@@ -160,6 +161,7 @@ export class AiSessionManager {
       toolMode: runtime?.toolMode ?? 'full',
       runtimeSessionId: runtime?.runtimeSessionId,
       connectionId: runtime?.connectionId,
+      reasoningEffort: runtime?.reasoningEffort,
       state: 'not_started',
       taskDefinition,
       purpose: purposeFromTask(taskDefinition, issueKey),
@@ -360,6 +362,25 @@ export class AiSessionManager {
       throw new Error('Session title cannot be empty.');
     }
     record.title = trimmed;
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
+  /**
+   * Set this session's reasoning/thinking effort for its next turn. Unlike
+   * `transitionAgentRuntime`, this never touches native runtime state or
+   * opens a new runtime epoch — the model and provider stay exactly as they
+   * were, only the reasoning-control parameter sent with the next turn
+   * changes.
+   */
+  public updateSessionReasoningEffort(issueKey: string, reasoningEffort: ReasoningEffort): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      throw new Error(`No agent session found for ${issueKey}.`);
+    }
+    assertCanChangeSessionRuntime(record);
+    record.reasoningEffort = reasoningEffort;
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
     return record;

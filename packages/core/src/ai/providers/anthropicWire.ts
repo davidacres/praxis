@@ -7,6 +7,7 @@ import {
   type WireImageAttachment,
   type WireMessage
 } from '../gateway/wire';
+import { anthropicThinkingBudget } from './reasoningSupport';
 
 /**
  * Translation between the canonical OpenAI-shaped `WireMessage[]` `agentLoop.ts`
@@ -134,7 +135,13 @@ export function buildAnthropicRequest(args: BuildChatRequestArgs): Record<string
   if (system) {
     body.system = system;
   }
-  if (typeof args.temperature === 'number') {
+  const thinkingBudget = anthropicThinkingBudget(args.reasoningEffort);
+  if (typeof thinkingBudget === 'number') {
+    // Thinking requires max_tokens to exceed budget_tokens, and is
+    // incompatible with a custom temperature — Anthropic rejects both.
+    body.max_tokens = Math.max(body.max_tokens as number, thinkingBudget + 1024);
+    body.thinking = { type: 'enabled', budget_tokens: thinkingBudget };
+  } else if (typeof args.temperature === 'number') {
     body.temperature = args.temperature;
   }
   const tools = toAnthropicTools(args.tools);
@@ -216,6 +223,8 @@ export async function* consumeAnthropicStream(
       if (delta?.type === 'text_delta' && typeof delta.text === 'string' && delta.text) {
         text += delta.text;
         yield { type: 'text_delta', text: delta.text };
+      } else if (delta?.type === 'thinking_delta' && typeof delta.thinking === 'string' && delta.thinking) {
+        yield { type: 'thought_delta', text: delta.thinking };
       } else if (delta?.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
         const index = typeof evt.index === 'number' ? evt.index : 0;
         const existing = toolCalls.get(index);

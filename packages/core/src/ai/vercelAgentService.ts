@@ -16,6 +16,7 @@ import {
 import { classifyLocalTool, summariseToolArgs } from './toolEventClassify';
 import { listCatalogModels } from './providers/modelCatalog';
 import { estimateTurnCost, getKnownContextLength } from './providers/modelPricing';
+import type { ReasoningEffort } from './providers/reasoningSupport';
 import type { AiSessionManager } from './aiSessionManager';
 import {
   compactHistoryForReplay,
@@ -107,6 +108,8 @@ export interface VercelAgentStartOptions {
   internalConversationTurn?: boolean;
   /** Host-supplied participant and handover context for an AI-to-AI or directed turn. */
   conversationContext?: string;
+  /** Normalized reasoning/thinking effort for this turn. Defaults to `'off'`. */
+  reasoningEffort?: ReasoningEffort;
 }
 
 export class VercelAgentService {
@@ -456,6 +459,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       maxSteps: number;
       timeoutMs: number;
       toolExtension?: VercelAgentStartOptions['toolExtension'];
+      reasoningEffort?: ReasoningEffort;
     }
   ): Promise<void> {
     const task = this.activeTasks.get(issueKey);
@@ -492,6 +496,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       historyBudgetChars: dynamicBudget,
       maxSteps: options.maxSteps,
       timeoutMs: options.timeoutMs,
+      reasoningEffort: options.reasoningEffort,
       signal: task.abortController.signal,
       onEvent: event => {
         const active = this.activeTasks.get(issueKey);
@@ -584,9 +589,11 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     this.activeTasks.set(issue.key, task);
     this.emitActiveTaskChange(issue.key);
 
+    const reasoningEffort = options.reasoningEffort ?? 'off';
     this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider, model, {
       workingDirectory,
-      toolMode
+      toolMode,
+      reasoningEffort
     });
     if (options.autoApprovePermissions) this.sessionManager.updateAgentRuntime(issue.key, { autoApprovePermissions: true });
     // After the record exists, so the limit has somewhere to land.
@@ -615,7 +622,8 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       toolMode,
       maxSteps,
       timeoutMs,
-      toolExtension: options.toolExtension
+      toolExtension: options.toolExtension,
+      reasoningEffort
     }).catch(error => {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.appendLine(`[VercelAgent] Session failed for ${issue.key}: ${message}`);
@@ -658,6 +666,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     const toolMode = record.toolMode ?? options.toolMode ?? 'full';
     const maxSteps = record.taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = record.taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
+    const reasoningEffort = record.reasoningEffort ?? options.reasoningEffort ?? 'off';
     const model = options.model?.trim() || this.requireApiDescriptor(provider).defaultModel;
     this.noteContextLimit(issueKey, provider, gateway, model);
     // Replay the prior turns as a plain text exchange — old tool output does not
@@ -741,7 +750,8 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       toolMode,
       maxSteps,
       timeoutMs,
-      toolExtension: options.toolExtension
+      toolExtension: options.toolExtension,
+      reasoningEffort
     }).catch(error => {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.appendLine(`[VercelAgent] Resume failed for ${issueKey}: ${message}`);

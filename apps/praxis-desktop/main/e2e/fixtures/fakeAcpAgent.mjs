@@ -69,6 +69,7 @@ let browserMcp;
 // `setConfigOption` and the composer's model picker (aiCliAgentHost.spec.ts's
 // model-selection coverage) without a real Claude Code/Codex CLI.
 let currentModel = 'fake-default';
+let currentEffort = 'default';
 const modelConfigOption = () => ({
   id: 'model',
   name: 'Model',
@@ -79,6 +80,20 @@ const modelConfigOption = () => ({
   options: [
     { value: 'fake-default', name: 'Fake Default' },
     { value: 'fake-fast', name: 'Fake Fast' }
+  ]
+});
+const effortConfigOption = () => ({
+  id: 'effort',
+  name: 'Effort',
+  description: 'Fake reasoning effort selector',
+  category: 'thought_level',
+  type: 'select',
+  currentValue: currentEffort,
+  options: [
+    { value: 'default', name: 'Default' },
+    { value: 'low', name: 'Low' },
+    { value: 'medium', name: 'Medium' },
+    { value: 'high', name: 'High' }
   ]
 });
 
@@ -95,7 +110,7 @@ app.onRequest(acp.AGENT_METHODS.session_new, ctx => {
   browserMcp = (ctx.params.mcpServers ?? []).find(server => server.name === 'praxis-browser');
   return {
     sessionId: 'fake-session-1',
-    configOptions: [modelConfigOption()],
+    configOptions: [modelConfigOption(), effortConfigOption()],
     modes: { currentModeId: currentMode, availableModes }
   };
 });
@@ -122,7 +137,10 @@ app.onRequest(acp.AGENT_METHODS.session_set_config_option, ctx => {
   if (ctx.params.configId === 'model' && 'value' in ctx.params) {
     currentModel = ctx.params.value;
   }
-  return { configOptions: [modelConfigOption()] };
+  if (ctx.params.configId === 'effort' && 'value' in ctx.params) {
+    currentEffort = ctx.params.value;
+  }
+  return { configOptions: [modelConfigOption(), effortConfigOption()] };
 });
 
 app.onRequest(acp.AGENT_METHODS.session_set_mode, async ctx => {
@@ -147,7 +165,7 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
         type: 'text',
         text: promptText.includes('DISTINCT_FOLLOW_UP')
           ? 'Fresh response to the current question.'
-          : `Hello from the fake ACP agent. (model=${currentModel})`
+          : `Hello from the fake ACP agent. (model=${currentModel}, effort=${currentEffort})`
       }
     }
   });

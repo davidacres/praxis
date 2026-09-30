@@ -1561,7 +1561,7 @@ export function App() {
       workflowOptions={composerProject ? sessionWorkflowsByProject[composerProject.id] ?? [] : []}
       initialWorkflowId={route.quickSession ? quickSessionWorkflowId : undefined}
       autoFocusGoal={route.quickSession}
-      onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree, agentId, profileId, hostId, skillNames, workflowId, uncommittedChanges }) => {
+      onSubmit={async ({ board, issueKey, title, goal, provider, model, reasoningEffort, toolMode, mode, workingDirectory, runInWorktree, agentId, profileId, hostId, skillNames, workflowId, uncommittedChanges }) => {
         const projectId = projectIdForConnection(board?.connectionId, connections);
         const project = projectId
           ? workspaceProjects.find(item => item.id === projectId)
@@ -1578,6 +1578,7 @@ export function App() {
           task: { goal },
           provider,
           model,
+          ...(reasoningEffort ? { reasoningEffort } : {}),
           toolMode: effectiveToolMode,
           workingDirectory: effectiveWorkingDir,
           ...(runInWorktree ? { runInWorktree: true } : {}),
@@ -1649,12 +1650,13 @@ export function App() {
       conversational
       defaultToolMode="project-only"
       autoFocusGoal
-      onSubmit={async ({ title, goal, provider, model, toolMode, mode, workingDirectory, agentId, profileId, hostId, skillNames }) => {
+      onSubmit={async ({ title, goal, provider, model, reasoningEffort, toolMode, mode, workingDirectory, agentId, profileId, hostId, skillNames }) => {
         const record = await window.praxis.ai.delegate({
           mode,
           task: { goal },
           provider,
           model,
+          ...(reasoningEffort ? { reasoningEffort } : {}),
           toolMode: workingDirectory ? toolMode : 'project-only',
           workingDirectory,
           ...(agentId ? { agentId } : {}),

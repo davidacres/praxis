@@ -52,6 +52,8 @@ export interface AgentLoopOptions {
   timeoutMs?: number;
   idleTimeoutMs?: number;
   signal?: AbortSignal;
+  /** Normalized reasoning/thinking effort for this turn — see `ReasoningEffort`. */
+  reasoningEffort?: 'off' | 'low' | 'medium' | 'high';
   /**
    * Rough character budget for the conversation before the oldest tool output
    * is elided. A proxy for the model's context window — see
@@ -140,7 +142,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         messages,
         tools: options.tools,
         streamUsage: options.gateway.streamUsage,
-        gatewayCaching: options.gateway.gatewayCaching
+        gatewayCaching: options.gateway.gatewayCaching,
+        reasoningEffort: options.reasoningEffort
       });
 
       const handle = await options.adapter.postChatStream(

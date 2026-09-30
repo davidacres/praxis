@@ -10,6 +10,7 @@ import {
   type AiProvider,
   type IssueDetails,
   type AcpAgentStartOptions,
+  type ReasoningEffort,
   type VercelAgentStartOptions,
   type WireImageAttachment
 } from '@praxis/core';
@@ -52,6 +53,8 @@ export interface AgentTaskLaunchInput {
   autoApprovePermissions?: boolean;
   mcpServers?: AcpAgentStartOptions['mcpServers'];
   toolExtension?: VercelAgentStartOptions['toolExtension'];
+  /** Normalized reasoning effort for API adapters or ACP `thought_level`. */
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface AgentTaskContinueInput {
@@ -208,6 +211,7 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
       args: prepared.plan.args,
       workingDirectory: input.workingDirectory,
       model: input.model,
+      reasoningEffort: input.reasoningEffort,
       toolMode: input.toolMode,
       ...(input.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
       ...(input.mcpServers ? { mcpServers: input.mcpServers } : {})
@@ -230,6 +234,7 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
     model: input.model || connection.model,
     provider: input.provider,
     toolMode: input.toolMode,
+    reasoningEffort: input.reasoningEffort,
     ...(input.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
     ...(input.toolExtension ? { toolExtension: input.toolExtension } : {})
   });

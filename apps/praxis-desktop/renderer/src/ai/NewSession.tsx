@@ -7,11 +7,20 @@ import type {
   Board,
   IssueSummary,
   ModelOptions,
+  ReasoningEffort,
   SessionMode
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { ChipSelect } from '../ui/ChipSelect';
 import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
-import { fetchModelOptions, hasModelCatalog, NO_TOOLS_REASON, providerIconName, providerLabel } from './modelProviders';
+import {
+  fetchModelOptions,
+  hasModelCatalog,
+  NO_TOOLS_REASON,
+  providerIconName,
+  providerLabel,
+  supportsReasoningEffort
+} from './modelProviders';
 import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
 import { canRunAgentSessions, isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
@@ -48,6 +57,7 @@ export interface NewSessionProps {
     goal: string;
     provider?: AiProvider;
     model?: string;
+    reasoningEffort?: ReasoningEffort;
     toolMode: AgentToolMode;
     mode: SessionMode;
     workingDirectory?: string;
@@ -163,6 +173,7 @@ export function NewSession({
   const [modelOptions, setModelOptions] = useState<ModelOptions | undefined>();
   const [modelsLoading, setModelsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | undefined>();
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('off');
   const [toolMode, setToolMode] = useState<AgentToolMode>(defaultToolMode ?? (conversational ? 'project-only' : 'full'));
   const [mode, setMode] = useState<SessionMode>('chat');
   const [workingDirectory, setWorkingDirectory] = useState<string | undefined>(defaultWorkingDirectory);
@@ -180,6 +191,9 @@ export function NewSession({
   const selectedBoard = selectableBoards.find(board => board.id === selectedBoardId);
   const enabledModelKey = selectedProvider
     ? JSON.stringify(liveSettings?.ai.providers[selectedProvider]?.enabledModelIds ?? null)
+    : '';
+  const reasoningDefaultsKey = selectedProvider
+    ? JSON.stringify(liveSettings?.ai.providers[selectedProvider]?.modelReasoningDefaults ?? null)
     : '';
 
   useEffect(() => {
@@ -356,6 +370,7 @@ export function NewSession({
     setSelectedModel(undefined);
     setModelOptions(undefined);
     setModelFilter('');
+    setReasoningEffort('off');
     if (!selectedProvider || !hasModelCatalog(selectedProvider)) {
       return;
     }
@@ -370,7 +385,11 @@ export function NewSession({
           ? applyEnabledModelCuration(options, settings.ai.providers[selectedProvider]?.enabledModelIds)
           : undefined;
         setModelOptions(curated);
-        setSelectedModel(pickDefaultModel(curated));
+        const picked = pickDefaultModel(curated);
+        setSelectedModel(picked);
+        setReasoningEffort(
+          (picked && settings.ai.providers[selectedProvider]?.modelReasoningDefaults?.[picked]) || 'off'
+        );
       })
       .catch(() => {
         if (!cancelled) {
@@ -385,7 +404,7 @@ export function NewSession({
     return () => {
       cancelled = true;
     };
-  }, [selectedProvider, enabledModelKey]);
+  }, [selectedProvider, enabledModelKey, reasoningDefaultsKey]);
 
   useEffect(() => {
     if (!workflowMenuPos) return;
@@ -502,6 +521,7 @@ export function NewSession({
         goal: trimmed,
         provider: selectedProvider,
         model: selectedModel,
+        ...(supportsReasoningEffort(selectedProvider, selectedModel) ? { reasoningEffort } : {}),
         toolMode,
         mode,
         ...(workingDirectory ? { workingDirectory } : {}),
@@ -957,6 +977,10 @@ export function NewSession({
                         title={option.description}
                         onClick={() => {
                           setSelectedModel(option.value);
+                          setReasoningEffort(
+                            (selectedProvider && liveSettings?.ai.providers[selectedProvider]?.modelReasoningDefaults?.[option.value]) ||
+                              'off'
+                          );
                           setModelMenuPos(undefined);
                         }}
                       >
@@ -973,6 +997,23 @@ export function NewSession({
                 </div>,
                 document.body
               )}
+            {supportsReasoningEffort(selectedProvider, selectedModel) && (
+              <ChipSelect
+                variant="plain"
+                ariaLabel="Reasoning effort"
+                title="How much reasoning/thinking effort this model spends per turn"
+                icon="lightbulb"
+                value={reasoningEffort}
+                onChange={value => setReasoningEffort(value as ReasoningEffort)}
+                data-testid="new-session-reasoning-chip"
+                options={[
+                  { value: 'off', label: 'Off' },
+                  { value: 'low', label: 'Low' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'high', label: 'High' }
+                ]}
+              />
+            )}
             <span className="spacer" />
             <button className="composer-chip" aria-label="Dictate">
               <Icon name="mic" size={15} />

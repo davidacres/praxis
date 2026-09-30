@@ -28,6 +28,7 @@ import type {
 import type { ModelOptions } from '../ai/providers/modelCatalog';
 import type { CustomProviderConfig, ProviderCapabilities } from '../ai/providers/customProviders';
 import type { ProviderPreset } from '../ai/providers/providerPresets';
+import type { ReasoningEffort } from '../ai/providers/reasoningSupport';
 import type { ProviderProbeResult } from '../ai/providers/providerProbe';
 import type { WireImageAttachment } from '../ai/gateway/wire';
 import type {
@@ -721,6 +722,12 @@ export interface AiDelegateInput {
   provider?: AiProvider;
   /** Model id override for this session; omitted to use the selected provider's default. */
   model?: string;
+  /**
+   * Reasoning/thinking effort for this session's turns. Omitted uses the
+   * provider's per-model default (Settings → AI Provider → Manage models),
+   * then `'off'`.
+   */
+  reasoningEffort?: ReasoningEffort;
   /** Host-enforced tool access for this session. Analysis always uses read-only. */
   toolMode?: AgentToolMode;
   /** Starts the issue's read-only analysis as the first turn of its normal chat session. */
@@ -838,6 +845,8 @@ export interface AiIpc {
   continueSession(issueKey: string, message: string, images?: WireImageAttachment[]): Promise<void>;
   /** Changes the model used for the next turn of an idle session. */
   updateSessionModel(issueKey: string, model: string): Promise<AgentSessionRecord>;
+  /** Changes the reasoning/thinking effort used for the next turn of an idle session. */
+  updateSessionReasoningEffort(issueKey: string, reasoningEffort: ReasoningEffort): Promise<AgentSessionRecord>;
   /** Updates the working directory or tool mode for an idle session. */
   updateSessionToolAccess(
     issueKey: string,

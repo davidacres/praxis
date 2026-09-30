@@ -33,6 +33,7 @@ import {
   type IssueDetails,
   type IssueTrackerService,
   type PermissionDecision,
+  type ReasoningEffort,
   type SessionMode,
   type VercelAgentStartOptions,
   type WireImageAttachment,
@@ -347,6 +348,20 @@ export async function updateSessionModel(issueKey: string, model: string): Promi
     eventSummary: `Model changed to ${trimmed}`,
     eventDetail: record.model ? `Previous model: ${record.model}` : undefined
   });
+}
+
+/** Between-turn reasoning-effort change, mirroring `updateSessionModel` but never touching runtime/native state. */
+export async function updateSessionReasoningEffort(
+  issueKey: string,
+  reasoningEffort: ReasoningEffort
+): Promise<AgentSessionRecord> {
+  const sessionManager = getAiSessionManager();
+  const record = sessionManager.getAgentSession(issueKey);
+  if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+  if (hasActiveTask(issueKey)) {
+    throw new Error('Wait for the session to finish this turn before changing reasoning effort.');
+  }
+  return sessionManager.updateSessionReasoningEffort(issueKey, reasoningEffort);
 }
 
 export async function handoverSession(issueKey: string, input: AiHandoverInput): Promise<AgentSessionRecord> {
@@ -701,6 +716,15 @@ export function registerAiIpc(): void {
       const descriptor = getProviderDescriptor(provider);
       const profileId = input.profileId ?? input.agentId;
       const hostId = input.hostId ?? input.agentId;
+      const effectiveModelForDefaults =
+        input.model?.trim() ||
+        (provider === 'vercel-gateway' ? settings.ai.defaultModel.trim() : settings.ai.providers[provider]?.defaultModel) ||
+        (descriptor.kind === 'api' ? descriptor.defaultModel : undefined);
+      const reasoningEffort =
+        input.reasoningEffort ??
+        (effectiveModelForDefaults
+          ? settings.ai.providers[provider]?.modelReasoningDefaults?.[effectiveModelForDefaults]
+          : undefined);
 
       // Provider-only sessions need an API key up front. A bound ACP host owns
       // its own authentication, so selecting one must not be blocked by an
@@ -898,6 +922,7 @@ export function registerAiIpc(): void {
         model: input.model,
         workingDirectory: effectiveWorkingDirectory,
         toolMode,
+        reasoningEffort,
         ...(browserMcp ? { mcpServers: [browserMcp] } : {}),
         ...(prepared.plan.state === 'gateway'
           ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode)) }
@@ -1020,6 +1045,12 @@ export function registerAiIpc(): void {
   ipcMain.handle(
     'ai:updateSessionModel',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, model: string) => updateSessionModel(issueKey, model)
+  );
+
+  ipcMain.handle(
+    'ai:updateSessionReasoningEffort',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, reasoningEffort: ReasoningEffort) =>
+      updateSessionReasoningEffort(issueKey, reasoningEffort)
   );
 
   ipcMain.handle(

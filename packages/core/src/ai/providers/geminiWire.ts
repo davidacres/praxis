@@ -8,6 +8,7 @@ import {
   type WireImageAttachment,
   type WireMessage
 } from '../gateway/wire';
+import { geminiThinkingBudget } from './reasoningSupport';
 
 /**
  * Translation between the canonical OpenAI-shaped `WireMessage[]` `agentLoop.ts`
@@ -66,6 +67,10 @@ export interface GeminiRequestBody {
   generationConfig?: {
     temperature?: number;
     maxOutputTokens?: number;
+    thinkingConfig?: {
+      thinkingBudget: number;
+      includeThoughts: true;
+    };
   };
 }
 
@@ -214,6 +219,10 @@ export function buildGeminiRequest(args: BuildChatRequestArgs): GeminiRequestBod
   }
   if (typeof args.maxTokens === 'number') {
     generationConfig.maxOutputTokens = args.maxTokens;
+  }
+  const thinkingBudget = geminiThinkingBudget(args.reasoningEffort);
+  if (typeof thinkingBudget === 'number') {
+    generationConfig.thinkingConfig = { thinkingBudget, includeThoughts: true };
   }
   if (Object.keys(generationConfig).length > 0) {
     body.generationConfig = generationConfig;

@@ -199,3 +199,52 @@ test('the Vercel caching hint and stream usage option are only sent when allowed
   assert.equal('providerOptions' in elsewhere, false);
   assert.equal('stream_options' in elsewhere, false);
 });
+
+test('a Claude model id routed through the gateway gets Anthropic thinking via providerOptions, merged with the caching hint', () => {
+  const messages: WireMessage[] = [{ role: 'user', content: 'hi' }];
+  const body = buildChatRequest({
+    modelId: 'anthropic/claude-sonnet-4.6',
+    messages,
+    temperature: 0.7,
+    reasoningEffort: 'high'
+  });
+
+  assert.deepEqual(body.providerOptions, {
+    gateway: { caching: 'auto' },
+    anthropic: { thinking: { type: 'enabled', budget_tokens: 8192 } }
+  });
+  // Thinking requires max_tokens above the budget and is incompatible with a custom temperature.
+  assert.ok((body.max_tokens as number) > 8192);
+  assert.equal('temperature' in body, false);
+  assert.equal('reasoning_effort' in body, false);
+});
+
+test('a Gemini model id routed through the gateway gets thinkingConfig via providerOptions', () => {
+  const messages: WireMessage[] = [{ role: 'user', content: 'hi' }];
+  const body = buildChatRequest({
+    modelId: 'google/gemini-2.5-pro',
+    messages,
+    reasoningEffort: 'medium'
+  });
+
+  assert.deepEqual((body.providerOptions as Record<string, unknown>).google, {
+    thinkingConfig: { thinkingBudget: 4096, includeThoughts: true }
+  });
+  assert.equal('reasoning_effort' in body, false);
+});
+
+test('a genuine OpenAI reasoning model id still gets reasoning_effort directly, not providerOptions', () => {
+  const messages: WireMessage[] = [{ role: 'user', content: 'hi' }];
+  const body = buildChatRequest({ modelId: 'o3', messages, reasoningEffort: 'low' });
+
+  assert.equal(body.reasoning_effort, 'low');
+  assert.equal('providerOptions' in body, false);
+});
+
+test('an unrecognized OpenAI-compatible model receives standard reasoning_effort', () => {
+  const messages: WireMessage[] = [{ role: 'user', content: 'hi' }];
+  const body = buildChatRequest({ modelId: 'gpt-4o-mini', messages, reasoningEffort: 'high' });
+
+  assert.equal(body.reasoning_effort, 'high');
+  assert.equal('providerOptions' in body, false);
+});

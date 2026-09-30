@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
 import { startMockAnthropicServer, type MockAnthropicServer } from './mockAnthropicServer';
+import { chooseOption } from './chipSelect';
 
 /**
  * Phase D — AI foundation. Covers the two halves of the desktop AI plumbing:
@@ -528,6 +529,47 @@ test('the model manager panel curates which models the composer offers', async (
   await expect(menu.locator('[data-testid="new-session-model-option-openai/gpt-5.6"]')).toHaveCount(0);
 });
 
+test('every provider model exposes a persisted reasoning default and composer override', async () => {
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    models: [{ id: 'acme/novel-model', name: 'Novel Model' }]
+  });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+
+  await win.locator('[data-testid="titlebar-settings"]').click();
+  await win.locator('[data-testid="settings-nav-ai"]').click();
+  await win.locator('[data-testid="ai-provider-row-vercel-gateway"]').click();
+  await win.locator('[data-testid="ai-manage-models-btn"]').click();
+
+  const defaultChip = win.locator('[data-testid="model-manager-reasoning-acme/novel-model"]');
+  await expect(defaultChip).toBeVisible({ timeout: 10000 });
+  await chooseOption(defaultChip, 'high');
+  await expect(defaultChip).toHaveAttribute('data-value', 'high');
+  await expect.poll(async () => win.evaluate(async () => {
+    const settings = await window.praxis.settings.get();
+    return settings.ai.providers['vercel-gateway']?.modelReasoningDefaults?.['acme/novel-model'];
+  })).toBe('high');
+
+  await win.locator('[data-testid="model-manager-back"]').click();
+  await win.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
+
+  const composerChip = win.locator('[data-testid="new-session-reasoning-chip"]');
+  await expect(composerChip).toBeVisible({ timeout: 10000 });
+  await expect(composerChip).toHaveAttribute('data-value', 'high');
+  await chooseOption(composerChip, 'medium');
+
+  await win.locator('[data-testid="new-session-view"] textarea').fill('Use the composer reasoning override');
+  await win.locator('[data-testid="new-session-submit"]').click();
+  await expect.poll(() => mock!.requests.length).toBeGreaterThan(0);
+  const body = JSON.parse(mock.requests[0]!.body) as { reasoning_effort?: string };
+  expect(body.reasoning_effort).toBe('medium');
+});
+
 test('delegate succeeds without a working folder in chat/conversation mode and coerces toolMode to project-only', async () => {
   mock = await startMockGatewayServer({ mode: 'complete' });
   app = await launchTestApp({
@@ -619,4 +661,3 @@ test('updateSessionToolAccess attaches a working folder and elevates toolMode mi
   expect(updated.toolMode).toBe('full');
   expect(updated.workingDirectory).toBe('/tmp/test-project');
 });
-
