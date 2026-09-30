@@ -33,6 +33,7 @@ A small relay service (hosting chosen by TASK-216), the QR/pairing payload in `p
 | 4 | [TASK-390](tasks/task-390-add-desktop-outbound-relay-listener.md) | Add the desktop outbound relay listener |
 | 5 | [TASK-391](tasks/task-391-add-flutter-relay-transport-and-route-selection.md) | Add the Flutter relay transport and route selection |
 | 6 | [TASK-218](tasks/task-218-secure-end-to-end-relay-traffic-and-route-changes.md) | Prove secure end-to-end relay traffic and route changes |
+| 7 | [TASK-392](tasks/task-392-qualify-account-free-relay-for-release.md) | Qualify the account-free relay for release |
 
 ## Acceptance criteria
 

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-30T14:53:06.005Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-148
 title: Budget-aware sequential runner and audit trail
@@ -56,4 +60,14 @@ with clear pauses for budget limits, approvals, failures, and user decisions.
 
 A multi-ticket schedule can run sequentially from start time through completion
 or pause, and the user can understand exactly what happened to every ticket.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
 
