@@ -1,11 +1,150 @@
-# Praxis
+<h1 align="center">
+  <img src="apps/praxis-desktop/main/build/icon.png" alt="Praxis" width="64" valign="middle" /> Praxis
+</h1>
 
-Praxis is a desktop app for working with tracked boards, issues, AI sessions, Git,
-and delivery workflows from a single surface. It supports project- and
-board-centric navigation, task design and execution planning, AI-assisted review
-and implementation workflows, a native Git Graph and diff workspace, and multiple
-backend types including Jira MCP, Demo, folder-backed markdown plans, and
-GitLab-oriented delivery flows.
+<p align="center">
+  <a href="https://github.com/davidacres/praxis/stargazers"><img src="https://img.shields.io/github/stars/davidacres/praxis?style=flat&amp;label=%E2%98%85&amp;color=08C" alt="GitHub stars" /></a>
+  <a href="https://github.com/davidacres/praxis/releases"><img src="https://img.shields.io/github/downloads/davidacres/praxis/total?style=flat&amp;color=08C" alt="Total downloads across all releases" /></a>
+  <img src="https://img.shields.io/badge/license-MIT-08C?style=flat" alt="License: MIT" />
+  <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-4493F8?style=flat-square" alt="Supported platforms: macOS, Windows, and Linux" />
+</p>
+
+<p align="center">
+  <strong>The workspace where boards, AI agents and delivery meet.</strong><br/>
+  Plan on a board, hand a ticket to an agent, review the diff, ship it — on your desktop, and from your phone.
+</p>
+
+<h3 align="center"><a href="https://github.com/davidacres/praxis/releases/latest"><ins>Download Praxis</ins></a></h3>
+
+<p align="center">
+  <img src="docs/assets/readme/readme-hero.jpg" alt="Praxis desktop app showing a board, with the Praxis mobile companion app in the corner" width="960" />
+</p>
+
+## Features
+
+<table>
+<tr>
+<td width="50%" valign="middle">
+
+### Mobile Companion
+
+Follow live sessions from your phone, read activity, and approve or deny the agent's permission requests from anywhere on your network — end-to-end encrypted, no cloud relay.
+
+[Docs →](docs/published-artifacts/praxis-on-your-phone.html)
+
+</td>
+<td width="50%">
+  <a href="docs/published-artifacts/praxis-on-your-phone.html"><img src="docs/assets/readme/mobile-companion.jpg" alt="Praxis desktop with the mobile companion app" width="100%" /></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Boards for Any Backend
+
+One board over Jira, GitLab, GitHub, a folder of markdown plans, or app storage. The workflow is data — author the stages once and every backend renders them natively.
+
+[Docs →](docs/published-artifacts/project-details-and-board-surface.html)
+
+</td>
+<td width="50%">
+  <a href="docs/published-artifacts/project-details-and-board-surface.html"><img src="docs/assets/readme/boards.jpg" alt="Praxis board with details panel" width="100%" /></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Hand a Ticket to an Agent
+
+Turn a ticket into a session. The agent plans the work, asks before it uses a tool, and reports what it changed. Switch provider mid-session with a handover brief.
+
+[Docs →](docs/published-artifacts/handing-a-ticket-to-an-agent.html)
+
+</td>
+<td width="50%">
+  <a href="docs/published-artifacts/handing-a-ticket-to-an-agent.html"><img src="docs/assets/readme/agent-sessions.jpg" alt="An AI session with summary and handover brief" width="100%" /></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Review Before You Commit
+
+Every session records the files it touched. Read the diff beside the conversation, then commit or discard in one click. A native Git Graph covers staging, stashes and conflicts.
+
+[Docs →](docs/published-artifacts/handing-a-ticket-to-an-agent.html)
+
+</td>
+<td width="50%">
+  <a href="docs/published-artifacts/handing-a-ticket-to-an-agent.html"><img src="docs/assets/readme/review-diffs.jpg" alt="Session changes with a diff and commit button" width="100%" /></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Themes &amp; Surface Packs
+
+Looks, surface patterns and sidebar styles — Noir, Blueprint, Graphite, Parchment, Aurora Glass and more — switchable in Settings and extensible with add-ons.
+
+[Docs →](docs/published-artifacts/praxis-surface-packs.html)
+
+</td>
+<td width="50%">
+  <a href="docs/published-artifacts/praxis-surface-packs.html"><img src="docs/assets/readme/themes.jpg" alt="Praxis in four different looks" width="100%" /></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Agent Runtime &amp; Add-ons
+
+Built-in Planner, Implementer, Reviewer, Security Analyst and Test Author agents, plus a marketplace for agents, skills, themes and workflow templates.
+
+[Docs →](docs/published-artifacts/praxis-interface-system.html)
+
+</td>
+<td width="50%">
+  <a href="docs/published-artifacts/praxis-interface-system.html"><img src="docs/assets/readme/agent-runtime.jpg" alt="Agent runtime settings" width="100%" /></a>
+</td>
+</tr>
+</table>
+
+**Also in the box:**
+
+- **Native Git Graph** — Working, staged, commit and ref comparisons; inline, split and hunk views; file, hunk and line staging; stashes; three-way conflict resolution.
+- **Workspaces** — Save a shareable set of projects and connections in a `.workspace.praxis.json` file and commit it. Secrets never travel with it.
+- **Governed delivery workflows** — Stage-based runs with policies and bounded QA self-healing.
+- **Folder-backed plans** — Point a project at a folder of markdown plans; the board is synthesised from the files.
+- **Auto-update** — Signed builds check for and install updates in the background.
+
+---
+
+## Supported Agents
+
+Works with the CLI agents you already use — sessions run against your own sign-in.
+
+<p>
+  <a href="https://docs.anthropic.com/claude/docs/claude-code"><kbd>Claude Code</kbd></a> &nbsp;
+  <a href="https://github.com/openai/codex"><kbd>Codex</kbd></a> &nbsp;
+  <a href="https://github.com/google-gemini/gemini-cli"><kbd>Gemini CLI</kbd></a> &nbsp;
+  <a href="https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli"><kbd>GitHub Copilot</kbd></a> &nbsp;
+  <kbd>+ any ACP agent</kbd>
+</p>
+
+---
+
+## Install
+
+### Desktop — macOS, Windows, Linux
+
+- **[Download the latest release](https://github.com/davidacres/praxis/releases/latest)** — `.dmg` (macOS), `-setup.exe` (Windows), `.AppImage` / `.deb` (Linux)
+- Or build from source — see [Development](#development).
+
+### Mobile Companion — iOS, Android
+
+Pair with your desktop app (Settings → Mobile access → *Create pairing code*) to follow sessions and approve agent requests from your phone. The app lives in [`apps/praxis-mobile`](apps/praxis-mobile/README.md).
+
+---
 
 ## Repository layout
 
@@ -152,11 +291,20 @@ The macOS DMG, Linux packages, and Windows assisted installer share the app's wa
 
 ### Signing and updates
 
-The app can check for updates (Settings surfaces the state; the main process
-handles it in `src/main/autoUpdate.ts`), but only from a **packaged build with a
-publish feed**. In development, and in any build made with `--publish never`,
-`update:check` reports `unsupported` with the reason rather than failing
-quietly.
+A packaged build updates itself from the GitHub Releases of the repo named in
+the `publish` config (`src/main/autoUpdate.ts`). It checks 30 seconds after
+launch and every 4 hours, downloads a newer release in the background, and
+installs it on the next quit — or straight away from the title bar's **Restart
+to update** button. **Settings → Workspace → Updates** shows the state and has a
+manual check. Releases must be public (the updater reads them anonymously), must
+not be drafts, and need the `latest*.yml` and `.blockmap` files that
+`scripts/publish-desktop-release.sh` uploads.
+
+In development `update:check` reports `unsupported` with the reason rather than
+failing quietly; `PRAXIS_DISABLE_UPDATES=1` does the same in a packaged build.
+macOS only installs updates into a Developer ID signed build (Squirrel.Mac
+refuses anything else); an unsigned Mac build still finds updates and links to
+the release page instead.
 
 Publishing is driven entirely by environment variables, so an unsigned local
 build behaves exactly as it always did — electron-builder skips signing and
