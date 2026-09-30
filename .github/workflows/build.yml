@@ -14,6 +14,32 @@ permissions:
   contents: read
 
 jobs:
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+
+      - name: Scan the tree
+        run: scripts/check-secrets.sh --tree
+
+      - name: Scan the commits in this change
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            scripts/check-secrets.sh --range "origin/${{ github.base_ref }}..HEAD"
+          else
+            scripts/check-secrets.sh --range "${{ github.event.before }}..${{ github.sha }}"
+          fi
+
   build:
     runs-on: ubuntu-latest
 

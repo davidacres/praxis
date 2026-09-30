@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Enabled with `npm run hooks:install`. Bypassable with --no-verify, which is why
+# the CI "Secret scan" job — not this hook — is the control that holds.
+exec "$(git rev-parse --show-toplevel)/scripts/check-secrets.sh"

@@ -1,6 +1,6 @@
 # [P2] Gate commits and CI on gitleaks with fixture fingerprints suppressed
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:56.538Z
 **Type:** Task
 **Priority:** Medium
@@ -43,4 +43,4 @@ Gitleaks fingerprints are line-anchored, so they go stale whenever a fixture fil
 
 
 ## Comments
-
+- 2026-09-30: Done. `.gitleaks.toml` (path-based allowlist for `*.test.*` / `*.spec.*` / `*_test.dart` fixtures and build output, rather than line-anchored fingerprints), `scripts/check-secrets.sh` (`--tree`, `--range`, staged by default), `.githooks/pre-commit` (enable with `npm run hooks:install`) and a `Secret scan` job in `.github/workflows/build.yml`. Verified locally with gitleaks 8.30.1: clean tree exits 0; a staged fake AWS key exits 1. Still to do by the owner: mark `Secret scan` a required check in branch protection.
