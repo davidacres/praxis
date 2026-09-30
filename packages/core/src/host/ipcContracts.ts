@@ -453,13 +453,14 @@ export interface PreviewIpc {
  * Update state as the main process sees it. `unsupported` is the ordinary case
  * in development and in a build published without a feed — not an error.
  * `available` carries `canInstall: false` when the build can find an update but
- * cannot apply one (an unsigned macOS bundle; Squirrel.Mac refuses those).
+ * cannot apply one (an unsigned macOS bundle; Squirrel.Mac refuses those); the
+ * renderer then points at `releaseUrl` for a manual download instead.
  */
 export type UpdateStatus =
   | { state: 'unsupported'; reason: string }
   | { state: 'checking' }
   | { state: 'current'; version: string }
-  | { state: 'available'; version: string; canInstall: boolean }
+  | { state: 'available'; version: string; canInstall: boolean; releaseUrl?: string }
   | { state: 'downloading'; version: string; percent: number }
   | { state: 'ready'; version: string }
   | { state: 'error'; message: string };

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
 import { useResizable } from '../app/useResizable';
+import { useUpdateStatus } from '../app/useUpdateStatus';
 import { useDialogs } from '../ui/dialogs';
 import { QrCodeSvg } from '../ui/qrCodeSvg';
 import type {
@@ -24,7 +25,8 @@ import type {
   BoardsSidebarMode,
   Connection,
   CustomProviderConfig,
-  ProviderPreset
+  ProviderPreset,
+  UpdateStatus
 } from '@praxis/core';
 import {
   BUILT_IN_LOOKS,
@@ -64,6 +66,7 @@ import {
 export type SettingsCategory =
   | 'overview'
   | 'startup'
+  | 'updates'
   | 'connections'
   | 'mobile'
   | 'marketplace'
@@ -115,7 +118,7 @@ const WORKSPACE_GROUP: NavGroupDef = {
   id: 'workspace-group',
   label: 'Workspace',
   icon: 'home',
-  children: ['startup', 'appearance']
+  children: ['startup', 'updates', 'appearance']
 };
 
 const AI_GROUP: NavGroupDef = {
@@ -154,6 +157,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'Startup',
     icon: 'rocket',
     description: 'Choose what Praxis opens when the desktop app starts.'
+  },
+  {
+    id: 'updates',
+    label: 'Updates',
+    icon: 'refresh',
+    description: 'Praxis checks GitHub Releases for new versions, downloads them in the background, and installs them when you restart.'
   },
   {
     id: 'appearance-themes',
@@ -386,6 +395,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
           />
         )}
         {active === 'startup' && <StartupSection settings={settings} update={update} />}
+        {active === 'updates' && <UpdatesSection />}
         {active === 'connections' && (
           <ConnectionsSection connections={connections} onOpenConnections={onOpenConnections} />
         )}
@@ -1791,6 +1801,69 @@ function StartupSection({
         testId="startup-reopen-last-workspace"
         onChange={next => void update({ startup: { reopenLastWorkspace: next } })}
       />
+    </>
+  );
+}
+
+function describeUpdateStatus(status: UpdateStatus | undefined): string {
+  switch (status?.state) {
+    case undefined: return 'Reading update status…';
+    case 'unsupported': return status.reason;
+    case 'checking': return 'Checking for updates…';
+    case 'current': return `You're on the latest version (${status.version}).`;
+    case 'available': return status.canInstall
+      ? `Version ${status.version} is available.`
+      : `Version ${status.version} is available, but this build can't install updates itself. Download it from the release page.`;
+    case 'downloading': return `Downloading version ${status.version}… ${status.percent}%`;
+    case 'ready': return `Version ${status.version} is downloaded. Restart to install it, or it installs the next time you quit.`;
+    case 'error': return `The last update check failed: ${status.message}`;
+  }
+}
+
+function UpdatesSection() {
+  const category = CATEGORIES.find(c => c.id === 'updates')!;
+  const status = useUpdateStatus();
+  const [version, setVersion] = useState<string>();
+  useEffect(() => {
+    void window.praxis.app.getVersion().then(setVersion).catch(() => undefined);
+  }, []);
+  const busy = status?.state === 'checking' || status?.state === 'downloading';
+  return (
+    <>
+      <CategoryHeader category={category} />
+      <div className="settings-list">
+        <div className="list-row">
+          <div>
+            <div className="list-row-title">Installed version</div>
+            <div className="list-row-meta">{version ?? '…'}</div>
+          </div>
+        </div>
+        <div className="list-row">
+          <div>
+            <div className="list-row-title">Status</div>
+            <div className="list-row-meta" data-testid="settings-update-status">{describeUpdateStatus(status)}</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        {status?.state === 'ready' ? (
+          <button className="btn btn-primary" data-testid="settings-update-restart" onClick={() => void window.praxis.app.update.installNow()}>
+            Restart to update
+          </button>
+        ) : status?.state === 'available' && !status.canInstall && status.releaseUrl ? (
+          <button className="btn btn-primary" data-testid="settings-update-release" onClick={() => void window.praxis.shell.openExternal(status.releaseUrl!)}>
+            Open release page
+          </button>
+        ) : null}
+        <button
+          className="btn"
+          data-testid="settings-update-check"
+          disabled={busy || status?.state === 'unsupported' || status?.state === 'ready'}
+          onClick={() => void window.praxis.app.update.check()}
+        >
+          Check for updates
+        </button>
+      </div>
     </>
   );
 }

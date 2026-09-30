@@ -571,6 +571,9 @@ textarea {
   color: var(--text);
 }
 .titlebar-version { margin-left: 4px; color: var(--text-tertiary); font-size: var(--text-xs); font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.titlebar-update { margin-right: 6px; }
+.titlebar-update-btn { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border: 1px solid var(--accent); border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); font-size: var(--text-xs); white-space: nowrap; cursor: pointer; }
+.titlebar-update-btn:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
 
 /* The centred address group can overlap the right-hand controls before the
    fully compact titlebar takes over. Drop its decorative identity first so
