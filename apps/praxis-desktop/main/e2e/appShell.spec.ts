@@ -17,7 +17,7 @@ let app: TestApp;
 test.beforeEach(async () => {
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
 
-  // A global agent + skill so the Agent Hub shows real content, not the empty state.
+  // A global agent + skill so Agent Runtime shows real content, not the empty state.
   const agentDir = path.join(app.userDataDir, 'agents', 'praxis-reviewer');
   fs.mkdirSync(agentDir, { recursive: true });
   fs.writeFileSync(
@@ -56,21 +56,20 @@ test.afterEach(async () => {
   await closeTestApp(app);
 });
 
-test('the Agent Hub and Workflow designer sit inside the normal app shell', async () => {
+test('agent records and the Workflow designer sit inside the normal app shell', async () => {
   const page = app.window;
 
-  // Agent Hub — the Agents destination expands into its catalog in the sidebar,
-  // the centre carries the record, and the right pane carries the runtime.
-  await page.getByTestId('nav-agents').click();
-  await page.getByTestId('nav-agents-new').click();
-  await page.getByTestId('rescan-agents').click();
-  const tree = page.getByRole('navigation', { name: 'Workspace' });
-  await tree.getByTestId('profile-nav-item').filter({ hasText: 'Praxis Reviewer' }).click();
+  // Agent Runtime settings owns catalog navigation; the centre carries records
+  // and the right pane the runtime, without an Agent Hub sidebar entry.
+  await page.evaluate(async () => window.praxis.agentRuntime.refresh());
+  await page.reload();
+  await expect(page.getByTestId('nav-agents')).toHaveCount(0);
+  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('settings-nav-agent-runtime').click();
+  await page.getByTestId('agent-runtime-profile-praxis-reviewer').getByRole('button', { name: 'Open' }).click();
   await expect(page.getByRole('main').getByRole('heading', { name: 'Praxis Reviewer', level: 1 })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Agent runtime' })).toBeVisible();
-  // The rescan the sidebar triggered above repopulates its own agent list
-  // asynchronously, independently of the centre/right panes already checked —
-  // give it a moment to settle before a whole-page screenshot.
+  // Give the centre/right panes a moment to settle before a whole-page screenshot.
   await page.waitForTimeout(300);
   // The catalog source path is a per-run temp directory, so it is masked out.
   await expect(page).toHaveScreenshot('app-shell-agents.png', { mask: [page.locator('.agent-path')] });

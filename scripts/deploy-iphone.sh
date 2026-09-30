@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy the Praxis phone app (Release build) to a physical iPhone.
-# Default: the Flutter app (apps/praxis-flutter). --app expo: the Expo app (apps/praxis-mobile).
+# Default: the Flutter app (apps/praxis-mobile). --app expo: the Expo app (apps/praxis-mobile).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,7 +47,7 @@ done
 
 case "$APP" in
   flutter)
-    MOBILE_DIR="$REPO_ROOT/apps/praxis-flutter"
+    MOBILE_DIR="$REPO_ROOT/apps/praxis-mobile"
     IOS_DIR="$MOBILE_DIR/ios"
     WORKSPACE="ios/Runner.xcworkspace"; SCHEME="Runner"
     DERIVED_DATA="$IOS_DIR/build/device-release"
