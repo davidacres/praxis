@@ -35,6 +35,16 @@ export interface UpdaterPort {
   onDownloadProgress(listener: (percent: number) => void): void;
 }
 
+interface ElectronAutoUpdater {
+  autoDownload: boolean;
+  autoInstallOnAppQuit: boolean;
+  logger: unknown;
+  checkForUpdates(): Promise<{ isUpdateAvailable: boolean; updateInfo: { version: string } } | null>;
+  downloadUpdate(): Promise<unknown>;
+  quitAndInstall(): void;
+  on(event: 'download-progress', listener: (progress: { percent: number }) => void): void;
+}
+
 export interface UpdateControllerDeps {
   currentVersion: string;
   /** Set when this build cannot check at all (development, no feed, disabled). */
@@ -168,6 +178,16 @@ export function githubReleaseUrl(feedYaml: string, version: string): string | un
   return owner && repo ? `https://github.com/${owner}/${repo}/releases/tag/v${version}` : undefined;
 }
 
+export function resolveElectronAutoUpdater(imported: unknown): ElectronAutoUpdater {
+  const module = imported as {
+    autoUpdater?: ElectronAutoUpdater;
+    default?: { autoUpdater?: ElectronAutoUpdater };
+  };
+  const updater = module.autoUpdater ?? module.default?.autoUpdater;
+  if (!updater) throw new Error('electron-updater did not expose autoUpdater.');
+  return updater;
+}
+
 /**
  * macOS installs updates through Squirrel.Mac, which requires a Developer ID
  * signed bundle. An ad-hoc or unsigned build can still find an update; it just
@@ -187,7 +207,7 @@ function canInstallUpdates(): Promise<boolean> {
 }
 
 async function loadElectronUpdater(): Promise<UpdaterPort> {
-  const { autoUpdater } = await import('electron-updater');
+  const autoUpdater = resolveElectronAutoUpdater(await import('electron-updater'));
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.logger = null;
