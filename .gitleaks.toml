@@ -1,0 +1,25 @@
+# gitleaks configuration (FX security gate, SEC-003 prevention).
+# Extends the default ruleset; only the allowlist below is local.
+title = "praxis gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and generated output. Path-based on purpose: gitleaks fingerprints are line-anchored and go stale whenever a fixture file moves."
+paths = [
+  # Fixtures that exist to prove redaction / validation code strips secrets.
+  '''(^|/)[^/]+\.(test|spec)\.(ts|tsx|mts|cjs|mjs|js)$''',
+  '''(^|/)[^/]+_test\.dart$''',
+  '''(^|/)__fixtures__/''',
+  # Build output and dependencies.
+  '''(^|/)node_modules/''',
+  '''(^|/)(dist|out|build|test-results|playwright-report)/''',
+  '''(^|/)package-lock\.json$''',
+  # Untracked local build products a working-tree scan can walk into
+  # (a fresh CI checkout never contains them).
+  '''(^|/)\.worktrees/''',
+  '''(^|/)Pods/''',
+  '''(^|/)\.run/''',
+  '''(^|/)_CodeSignature/''',
+]
