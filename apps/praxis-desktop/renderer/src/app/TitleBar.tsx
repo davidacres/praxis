@@ -3,6 +3,7 @@ import type { WorkspaceRecord } from '@praxis/core';
 import type { SidebarMode } from './Sidebar';
 import { Icon, type IconName } from '../ui/Icon';
 import { PraxisWordmark } from './StartupSplash';
+import { useUpdateStatus } from './useUpdateStatus';
 import {
   BoardFilterBar,
   countActiveBoardFilters,
@@ -437,6 +438,8 @@ export function TitleBar({
 
       <div className="titlebar-spacer" />
 
+      <UpdateIndicator />
+
       <div className="titlebar-group titlebar-layout-toggles">
         <button
           className={`icon-btn${sidebarVisible ? ' active' : ''}`}
@@ -558,4 +561,45 @@ export function TitleBar({
       )}
     </header>
   );
+}
+
+/**
+ * Quiet until there is something to act on: a downloaded update waiting for a
+ * restart, or a newer release this build cannot install itself (an unsigned
+ * macOS bundle), which links to the release page instead.
+ */
+function UpdateIndicator() {
+  const status = useUpdateStatus();
+  if (status?.state === 'ready') {
+    return (
+      <div className="titlebar-group titlebar-update">
+        <button
+          className="titlebar-update-btn"
+          data-testid="titlebar-update"
+          title={`Praxis ${status.version} has been downloaded. Restart to install it, or it installs when you quit.`}
+          onClick={() => void window.praxis.app.update.installNow()}
+        >
+          <Icon name="refresh" size={12} />
+          Restart to update
+        </button>
+      </div>
+    );
+  }
+  if (status?.state === 'available' && !status.canInstall && status.releaseUrl) {
+    const { releaseUrl } = status;
+    return (
+      <div className="titlebar-group titlebar-update">
+        <button
+          className="titlebar-update-btn"
+          data-testid="titlebar-update"
+          title={`Praxis ${status.version} is available. This build cannot install updates itself; open the release to download it.`}
+          onClick={() => void window.praxis.shell.openExternal(releaseUrl)}
+        >
+          <Icon name="info" size={12} />
+          Update available
+        </button>
+      </div>
+    );
+  }
+  return null;
 }
