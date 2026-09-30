@@ -55,6 +55,7 @@
   "build": {
     "appId": "com.praxis.app",
     "productName": "Praxis",
+    "executableName": "Praxis",
     "publish": {
       "provider": "github",
       "owner": "davidacres",
