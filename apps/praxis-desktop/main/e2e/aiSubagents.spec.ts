@@ -136,9 +136,10 @@ test('parent session displays subagents with status, tokens, and model across in
   await parentLink.click();
   await expect(win.locator('[data-testid="session-purpose-goal"]')).toContainText('Coordinate primary feature delivery');
 
-  // 7. Agent Hub runtime panel subagents
-  await win.locator('[data-testid="nav-agents"]').click();
-  await win.locator('button', { hasText: 'Praxis Implementer' }).first().click();
+  // 7. Open the profile from Agent Runtime to inspect its runtime subagents.
+  await win.getByTestId('titlebar-settings').click();
+  await win.getByTestId('settings-nav-agent-runtime').click();
+  await win.getByTestId('agent-runtime-profile-praxis-implementer').getByRole('button', { name: 'Open' }).click();
 
   // Verify sessions list in Agent Hub includes subagents section
   const hubSubagents = win.locator('[data-testid="agent-runtime-subagents"]');

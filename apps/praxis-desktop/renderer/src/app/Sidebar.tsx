@@ -1,7 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type {
-  AgentRuntimeSnapshot,
   AgentSessionRecord,
   Board,
   BoardDetails,
@@ -13,7 +12,6 @@ import type {
   WorkspaceRecord
 } from '@praxis/core';
 import { agentStateLabel, agentStateLaneClass, isTerminalAgentState } from '../ai/aiSessionState';
-import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
 import { formatElapsed, formatTokens, isConversationSession, isSynthesizedKey, isTicketReviewKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
 import { providerLabel } from '../ai/modelProviders';
 import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
@@ -63,7 +61,6 @@ const FEATURES: FeatureDef[] = [
   { id: 'overview', label: 'Overview', icon: 'home' },
   { id: 'conversations', label: 'Conversations', icon: 'chats' },
   { id: 'connections', label: 'Connections', icon: 'plug' },
-  { id: 'agents', label: 'Agent Hub', icon: 'zap' },
 ];
 
 export interface SidebarProps {
@@ -99,15 +96,6 @@ export interface SidebarProps {
   onDeleteSession: (issueKey: string) => Promise<void>;
   /** Archives or restores a session; archived sessions leave the active tree. */
   onArchiveSession: (issueKey: string, archived: boolean) => Promise<void>;
-  /** The discovered agent/skill catalog, rendered as children of the Agents row. */
-  agentCatalog?: AgentRuntimeSnapshot;
-  activeAgentId?: string;
-  activeAgentProfileId?: string;
-  activeSkillName?: string;
-  onSelectAgent: (agentId: string) => void;
-  onSelectAgentProfile: (profileId: string) => void;
-  onSelectSkill: (skillName: string) => void;
-  onNewAgentItem: (kind: 'agent' | 'profile' | 'skill' | 'import' | 'rescan') => void;
   /** Saved workflows per project id, for the Workflows tree section. */
   projectWorkflows: Record<string, Array<{ id: string; name: string }>>;
   activeWorkflowId?: string;
@@ -676,14 +664,6 @@ export function Sidebar({
   onSelectProject,
   onOpenProjectDocument,
   onSelectGit,
-  agentCatalog,
-  activeAgentId,
-  activeAgentProfileId,
-  activeSkillName,
-  onSelectAgent,
-  onSelectAgentProfile,
-  onSelectSkill,
-  onNewAgentItem,
   projectWorkflows,
   activeWorkflowId,
   runsByProjectId,
@@ -1370,9 +1350,6 @@ export function Sidebar({
         </div>
         {!featuresCollapsed &&
           FEATURES.map(feature =>
-            // Agents is the one destination that carries a catalog, so it
-            // expands into it rather than opening a second navigator in the
-            // centre pane (the Workflows idiom).
             feature.id === 'conversations' ? (
               <SessionsNav
                 key={feature.id}
@@ -1394,26 +1371,6 @@ export function Sidebar({
                 onRenameSession={onRenameSession}
                 onDeleteSession={onDeleteSession}
                 onArchiveSession={onArchiveSession}
-              />
-            ) : feature.id === 'agents' ? (
-              <AgentsNav
-                key={feature.id}
-                icon={feature.icon}
-                label={feature.label}
-                active={activeFeature === 'agents'}
-                collapsed={collapsed['feature:agents'] ?? false}
-                onToggleCollapsed={() =>
-                  setCollapsed(current => ({ ...current, 'feature:agents': !(current['feature:agents'] ?? false) }))
-                }
-                catalog={agentCatalog}
-                activeAgentId={activeAgentId}
-                activeAgentProfileId={activeAgentProfileId}
-                activeSkillName={activeSkillName}
-                onSelectFeature={() => onSelectFeature('agents')}
-                onSelectAgent={onSelectAgent}
-                onSelectAgentProfile={onSelectAgentProfile}
-                onSelectSkill={onSelectSkill}
-                onNewAgentItem={onNewAgentItem}
               />
             ) : (
               <button
@@ -1882,242 +1839,6 @@ function SessionsNav({
             </Fragment>
           );
         })}
-    </>
-  );
-}
-
-/**
- * The Agents destination plus its catalog, grouped by scope. Rows carry the
- * same trust / running vocabulary as the runtime panel so the tree reads as a
- * status board, not just a list.
- */
-function AgentsNav({
-  icon,
-  label,
-  active,
-  collapsed,
-  onToggleCollapsed,
-  catalog,
-  activeAgentId,
-  activeAgentProfileId,
-  activeSkillName,
-  onSelectFeature,
-  onSelectAgent,
-  onSelectAgentProfile,
-  onSelectSkill,
-  onNewAgentItem
-}: {
-  icon: IconName;
-  label: string;
-  active: boolean;
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
-  catalog?: AgentRuntimeSnapshot;
-  activeAgentId?: string;
-  activeAgentProfileId?: string;
-  activeSkillName?: string;
-  onSelectFeature: () => void;
-  onSelectAgent: (agentId: string) => void;
-  onSelectAgentProfile: (profileId: string) => void;
-  onSelectSkill: (skillName: string) => void;
-  onNewAgentItem: (kind: 'agent' | 'profile' | 'skill' | 'import' | 'rescan') => void;
-}) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; left: number } | undefined>();
-  const addBtnRef = useRef<HTMLButtonElement | null>(null);
-
-  const toggleMenu = useCallback(() => {
-    setMenuOpen(prev => {
-      const next = !prev;
-      if (next && addBtnRef.current) {
-        const rect = addBtnRef.current.getBoundingClientRect();
-        const menuWidth = 260;
-        const menuHeight = 240;
-        const gap = 6;
-        const left = Math.max(8, rect.right - menuWidth);
-        const spaceBelow = window.innerHeight - rect.bottom;
-        if (spaceBelow < menuHeight + gap) {
-          setMenuPos({
-            bottom: Math.max(8, window.innerHeight - rect.top + gap),
-            left
-          });
-        } else {
-          setMenuPos({
-            top: rect.bottom + gap,
-            left
-          });
-        }
-      }
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (addBtnRef.current?.contains(target)) return;
-      const menuEl = document.querySelector('.new-menu--portal');
-      if (menuEl?.contains(target)) return;
-      setMenuOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [menuOpen]);
-
-  // Which of the Agents / Skills sub-headers are folded.
-  const [collapsedKinds, setCollapsedKinds] = useState<Record<string, boolean>>({});
-  // Agents are their profile — the primary-nav identity is AGENT.md, not the launch binding that runs
-  // it. A binding with no AGENT.md gets an auto-synthesized placeholder profile so it still has *a*
-  // profile record; that placeholder is advanced/diagnostic-only and lives in Settings -> Agent
-  // Runtime instead of cluttering this tree with raw, uncurated entries. (profile.legacy alone isn't
-  // enough here — it's also true for a genuine old brief.md profile, which does belong.)
-  //
-  // Where an item comes from is row metadata, not a tree level: the project's own sort first and carry a
-  // "project" tag; everything else (yours, built-in) is untagged.
-  const projectFirst = <T extends { scope: string }>(items: T[]): T[] =>
-    [...items].sort((left, right) => Number(right.scope === 'project') - Number(left.scope === 'project'));
-  const profiles = projectFirst((catalog?.profiles ?? []).filter(profile => !isHostShimProfile(profile)));
-  const skills = projectFirst(catalog?.skills ?? []);
-  const total = profiles.length + skills.length;
-
-  return (
-    <>
-      <div className="feature-row-heading">
-        <button
-          data-testid="nav-agents"
-          className={`feature-row${active ? ' active' : ''}`}
-          onClick={() => {
-            onSelectFeature();
-            if (collapsed) onToggleCollapsed();
-          }}
-        >
-          <span className="tree-icon">
-            <Icon name={icon} size={15} />
-          </span>
-          <span className="feature-label">{label}</span>
-          {total > 0 && <span className="feature-count">{total}</span>}
-        </button>
-        <button
-          className="feature-row-expand"
-          aria-label={collapsed ? 'Expand agent catalog' : 'Collapse agent catalog'}
-          aria-expanded={!collapsed}
-          data-testid="nav-agents-toggle"
-          onClick={onToggleCollapsed}
-        >
-          <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
-        </button>
-        <div className="new-menu-anchor">
-          <button
-            ref={addBtnRef}
-            className="sidebar-section-add"
-            aria-label="New agent or skill"
-            aria-expanded={menuOpen}
-            data-testid="nav-agents-new"
-            onClick={toggleMenu}
-          >
-            <Icon name="plus" size={13} />
-          </button>
-          {menuOpen && menuPos && createPortal(
-            <div
-              className="new-menu new-menu--portal"
-              role="menu"
-              data-testid="agents-new-menu"
-              style={{
-                position: 'fixed',
-                left: `${menuPos.left}px`,
-                top: menuPos.top !== undefined ? `${menuPos.top}px` : 'auto',
-                bottom: menuPos.bottom !== undefined ? `${menuPos.bottom}px` : 'auto'
-              }}
-            >
-              <button role="menuitem" data-testid="new-profile" onClick={() => { setMenuOpen(false); onNewAgentItem('profile'); }}>
-                <Icon name="robot" size={14} /><span><strong>New agent profile</strong><small>A provider-neutral AGENT.md role</small></span>
-              </button>
-              <button role="menuitem" data-testid="new-skill" onClick={() => { setMenuOpen(false); onNewAgentItem('skill'); }}>
-                <Icon name="sparkles" size={14} /><span><strong>New skill</strong><small>A SKILL.md package</small></span>
-              </button>
-              <button role="menuitem" data-testid="import-agent-item" onClick={() => { setMenuOpen(false); onNewAgentItem('import'); }}>
-                <Icon name="folder-open" size={14} /><span><strong>Import…</strong><small>Validate and copy an existing folder</small></span>
-              </button>
-              <button role="menuitem" data-testid="rescan-agents" onClick={() => { setMenuOpen(false); onNewAgentItem('rescan'); }}>
-                <Icon name="refresh" size={14} /><span><strong>Rescan catalog</strong><small>Re-read the discovery paths</small></span>
-              </button>
-            </div>,
-            document.body
-          )}
-        </div>
-      </div>
-      {!collapsed && total === 0 && catalog && (
-        <span className="sidebar-empty-hint">No agents or skills yet</span>
-      )}
-      {!collapsed &&
-        (
-          [
-            { id: 'agents', label: 'Agents', count: profiles.length },
-            { id: 'skills', label: 'Skills', count: skills.length }
-          ] as const
-        )
-          .filter(kind => kind.count > 0)
-          .map(kind => {
-            const isCollapsed = collapsedKinds[kind.id] ?? false;
-            return (
-              <div key={kind.id} className="agent-nav-group">
-                <button
-                  className="agent-nav-kind"
-                  aria-expanded={!isCollapsed}
-                  data-testid={`agent-nav-kind-${kind.id}`}
-                  onClick={() => setCollapsedKinds(current => ({ ...current, [kind.id]: !isCollapsed }))}
-                >
-                  <span className="tree-section-icon"><Icon name={isCollapsed ? 'chevron-right' : 'chevron-down'} size={10} /></span>
-                  <span>{kind.label}</span>
-                  <span className="tree-meta">{kind.count}</span>
-                </button>
-                {!isCollapsed && kind.id === 'agents' && profiles.map(profile => (
-                  <button
-                    key={`p:${profile.profile.id}`}
-                    className={`tree-row agent-nav-row${active && activeAgentProfileId === profile.profile.id ? ' active' : ''}`}
-                    data-testid="profile-nav-item"
-                    onClick={() => onSelectAgentProfile(profile.profile.id)}
-                  >
-                    <span className="tree-icon"><Icon name="robot" size={14} /></span>
-                    <span className="tree-label">{profile.profile.name}</span>
-                    <span className="agent-nav-badges">
-                      {profile.scope === 'project' && <span className="agent-nav-project" title="Defined by this project" aria-label="Project" data-testid="agent-nav-project-tag"><Icon name="folder" size={12} /></span>}
-                      {profile.error ? <span className="tree-badge" title="Invalid profile">⚠</span> : profile.legacy ? <span className="tree-badge">legacy</span> : null}
-                    </span>
-                  </button>
-                ))}
-                {!isCollapsed && kind.id === 'skills' && skills.map(skill => (
-                  <button
-                    key={`s:${skill.scope}:${skill.metadata.name}`}
-                    className={`tree-row agent-nav-row${active && activeSkillName === skill.metadata.name ? ' active' : ''}`}
-                    data-testid="skill-nav-item"
-                    onClick={() => onSelectSkill(skill.metadata.name)}
-                  >
-                    <span className="tree-icon"><Icon name="sparkles" size={14} /></span>
-                    <span className="tree-label">{skillTitle(skill.metadata)}</span>
-                    <span className="agent-nav-badges">
-                      {skill.scope === 'project' && <span className="agent-nav-project" title="Defined by this project" aria-label="Project" data-testid="agent-nav-project-tag"><Icon name="folder" size={12} /></span>}
-                      {skill.error ? (
-                        <span className="tree-badge" title="Invalid skill">⚠</span>
-                      ) : !skill.trusted ? (
-                        <span className="tree-badge">approval</span>
-                      ) : null}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            );
-          })}
     </>
   );
 }

@@ -8,13 +8,8 @@ import { chooseOption } from './chipSelect';
 /**
  * FX-BF-009 / FX-BF-010 / FX-BF-011 — the Agent Hub.
  *
- * The user-facing model is Agent + Provider + Model + Skills: the sidebar
- * tree and its `+` menu only ever show agent profiles and skills. A launch
- * binding (the `agent.json` process that actually runs a custom agent) is
- * advanced/diagnostic plumbing that lives in Settings -> Agent Runtime —
- * except the canonical binding for a bundled/seeded profile (same id), which
- * merges into that profile's row so its lifecycle stays reachable from the
- * primary record.
+ * The user-facing model is Agent + Provider + Model + Skills. Profile, skill
+ * and launch-binding navigation lives in Settings -> Agent Runtime.
  */
 
 test.slow();
@@ -33,12 +28,10 @@ function seedSkill(userDataDir: string, name: string, body: string): void {
   fs.writeFileSync(path.join(dir, 'SKILL.md'), body);
 }
 
-/** Open Agents and rescan, so the files seeded after launch are discovered. */
-async function openAgents(page: Page): Promise<void> {
-  await page.getByTestId('nav-agents').click();
-  await page.getByTestId('nav-agents-new').click();
-  await page.getByTestId('rescan-agents').click();
-  await expect(page.getByTestId('profile-nav-item').first()).toBeVisible();
+/** Refresh files seeded after launch so Agent Runtime sees the current catalog. */
+async function refreshAgentCatalog(page: Page): Promise<void> {
+  await page.evaluate(async () => window.praxis.agentRuntime.refresh());
+  await page.reload();
 }
 
 type RuntimeTab = 'agents' | 'skills' | 'runtimes' | 'advanced';
@@ -92,34 +85,19 @@ test.afterEach(async () => {
   await closeTestApp(app);
 });
 
-test('the sidebar tree lists agent profiles and skills only; a profile shows its record and bound runtime', async () => {
+test('Agent Runtime lists profiles and skills and opens their Agent Hub records', async () => {
   const page = app.window;
-  await openAgents(page);
-
-  const tree = page.getByRole('navigation', { name: 'Workspace' });
-  // Agents and Skills are the two sub-headers under Agent Hub; where an item comes from is a row tag,
-  // not a level, so there is no "Global" label.
-  await expect(tree.getByTestId('agent-nav-kind-agents')).toBeVisible();
-  await expect(tree.getByTestId('agent-nav-kind-skills')).toBeVisible();
-  await expect(tree.getByText('Global', { exact: true })).toHaveCount(0);
-  // Broken Agent and Live Agent are launch bindings with no profile, so they
-  // stay out of primary nav (Settings -> Agent Runtime only). Seeded Praxis
-  // Reviewer shares its id with a bundled profile, so it merges into that
-  // one row rather than adding a second. 6 bundled profiles total.
-  await expect(tree.getByTestId('profile-nav-item')).toHaveCount(6);
-  await expect(tree.getByTestId('agent-nav-item')).toHaveCount(0);
-  await expect(tree.getByTestId('skill-nav-item')).toHaveCount(1);
-
-  // A profile's record is the centre pane; the launch binding it runs on is
-  // the right pane's runtime — no separate binding row to pick.
-  await tree.getByTestId('profile-nav-item').filter({ hasText: 'Praxis Reviewer' }).click();
+  await refreshAgentCatalog(page);
+  await openAgentRuntimeSettings(page);
+  const panel = page.getByTestId('settings-agent-runtime');
+  await expect(panel.getByTestId('agent-runtime-profile-praxis-reviewer')).toBeVisible();
+  await panel.getByTestId('agent-runtime-profile-praxis-reviewer').getByRole('button', { name: 'Open' }).click();
   await expect(record(page).getByRole('heading', { name: 'Praxis Reviewer', level: 1 })).toBeVisible();
   await expect(record(page).getByText('praxis-reviewer', { exact: true })).toBeVisible();
   await expect(runtime(page).getByRole('button', { name: 'Start host' })).toBeEnabled();
 
-  // A skill record shows its package facts.
-  await tree.getByTestId('skill-nav-item').click();
-  // Titled for people; the identifier workflows use stays visible as a fact.
+  await openAgentRuntimeSettings(page, 'skills');
+  await panel.getByTestId('agent-runtime-skill-code-audit').getByRole('button', { name: 'Open' }).click();
   await expect(record(page).getByRole('heading', { name: 'Code Audit', level: 1 })).toBeVisible();
   await expect(record(page).getByText('code-audit', { exact: true })).toBeVisible();
   await expect(record(page).getByText('Audits a diff for risky changes.')).toBeVisible();
@@ -128,10 +106,9 @@ test('the sidebar tree lists agent profiles and skills only; a profile shows its
 
 test('Agent Runtime settings separate AI runtimes from agent profiles, and manage standalone launch bindings', async () => {
   const page = app.window;
-  // Rescanning via the sidebar (openAgents) refreshes the catalog the rest
-  // of the shell reads from — Settings' own Refresh only updates its local
-  // view, not the sidebar/record pane "Manage" navigates into.
-  await openAgents(page);
+  // Refresh the shell catalog before Settings opens records from it; Settings'
+  // own Refresh updates only the dialog's local view.
+  await refreshAgentCatalog(page);
   await openAgentRuntimeSettings(page);
 
   const panel = page.getByTestId('settings-agent-runtime');
@@ -162,7 +139,7 @@ test('Agent Runtime settings separate AI runtimes from agent profiles, and manag
 
 test('starting, restarting, and stopping a host moves its lifecycle state', async () => {
   const page = app.window;
-  await openAgents(page);
+  await refreshAgentCatalog(page);
   await openAgentRuntimeSettings(page, 'advanced');
   const panel = page.getByTestId('settings-agent-runtime');
   await panel.getByTestId('agent-runtime-binding-live-agent').getByRole('button', { name: 'Manage' }).click();
@@ -183,10 +160,9 @@ test('starting, restarting, and stopping a host moves its lifecycle state', asyn
 
 test('activating a skill and opening a session carries the agent context', async () => {
   const page = app.window;
-  await openAgents(page);
-  const tree = page.getByRole('navigation', { name: 'Workspace' });
-
-  await tree.getByTestId('skill-nav-item').click();
+  await refreshAgentCatalog(page);
+  await openAgentRuntimeSettings(page, 'skills');
+  await page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-skill-code-audit').getByRole('button', { name: 'Open' }).click();
   await chooseOption(runtime(page).getByLabel('Activate with'), { label: 'Live Agent' });
   await runtime(page).getByRole('button', { name: /^Activate(?! with)/ }).click();
   await expect(runtime(page).getByText(/live-agent · \w+ mode/)).toBeVisible();
@@ -218,16 +194,13 @@ test('the New launch binding wizard writes a validated, discoverable manifest', 
   await dialog.getByRole('button', { name: 'Create agent' }).click();
   await expect(dialog).toBeHidden();
 
-  // The new binding has no profile, so it belongs in Settings, not the
-  // primary sidebar tree.
+  // The new binding has no profile, so it belongs in Agent Runtime settings.
   await openAgentRuntimeSettings(page, 'advanced');
   await expect(page.getByTestId('settings-agent-runtime').getByTestId('agent-runtime-binding-scaffolded-agent')).toBeVisible();
   await page.getByRole('button', { name: 'Done' }).click();
 
-  await openAgents(page);
-  await expect(
-    page.getByRole('navigation', { name: 'Workspace' }).getByTestId('profile-nav-item').filter({ hasText: 'Scaffolded Agent' })
-  ).toHaveCount(0);
+  await expect(page.getByTestId('nav-agents-toggle')).toHaveCount(0);
+  await expect(page.getByTestId('nav-agents')).toHaveCount(0);
 
   const manifest = JSON.parse(
     fs.readFileSync(path.join(app.userDataDir, 'agents', 'scaffolded-agent', 'agent.json'), 'utf8')

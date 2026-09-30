@@ -84,15 +84,15 @@
   },
   "//optionalDependencies": "vite 8 bundles with rolldown and minifies CSS with lightningcss — both load a native binding. npm prunes the non-host platform bindings of TRANSITIVE optional deps from a lockfile generated on one OS (npm/cli#4828), so a lockfile regenerated on macOS left `npm ci` on the Linux CI runner with no binding to load and `vite build` crashed with 'Cannot find native binding'. Declaring the bindings here as direct optional deps forces every listed platform into package-lock.json regardless of the OS the lockfile is regenerated on; npm still skips installing the ones that do not match the host. Keep these versions matched to the resolved `rolldown` / `lightningcss` in the lockfile — a mismatch fails `npm ci` loudly instead of silently.",
   "optionalDependencies": {
-    "@rolldown/binding-linux-x64-gnu": "1.2.5",
-    "@rolldown/binding-linux-arm64-gnu": "1.2.5",
     "@rolldown/binding-darwin-arm64": "1.2.5",
     "@rolldown/binding-darwin-x64": "1.2.5",
+    "@rolldown/binding-linux-arm64-gnu": "1.2.5",
+    "@rolldown/binding-linux-x64-gnu": "1.2.5",
     "@rolldown/binding-win32-x64-msvc": "1.2.5",
-    "lightningcss-linux-x64-gnu": "1.33.0",
-    "lightningcss-linux-arm64-gnu": "1.33.0",
     "lightningcss-darwin-arm64": "1.33.0",
     "lightningcss-darwin-x64": "1.33.0",
+    "lightningcss-linux-arm64-gnu": "1.33.0",
+    "lightningcss-linux-x64-gnu": "1.33.0",
     "lightningcss-win32-x64-msvc": "1.33.0"
   },
   "allowScripts": {
@@ -102,8 +102,11 @@
     "electron-winstaller": false
   },
   "devDependencies": {
-    "typescript": "^6.0.2",
+    "@babel/core": "^7.25.0",
     "babel-preset-expo": "~57.0.11",
-    "@babel/core": "^7.25.0"
+    "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "@davidacres/praxis-desktop": "^0.3.3-selfsigned.1"
   }
 }

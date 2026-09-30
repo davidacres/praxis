@@ -278,11 +278,13 @@ interface SettingsPageProps {
   connections: Connection[];
   onOpenConnections: () => void;
   initialCategory?: SettingsCategory;
-  onNewAgentItem?: (kind: 'agent' | 'import') => void;
+  onNewAgentItem?: (kind: 'agent' | 'profile' | 'skill' | 'import' | 'import-binding') => void;
   onOpenAgent?: (agentId: string) => void;
+  onOpenAgentProfile?: (profileId: string) => void;
+  onOpenSkill?: (skillName: string) => void;
 }
 
-export function SettingsPage({ connections, onOpenConnections, initialCategory = 'overview', onNewAgentItem, onOpenAgent }: SettingsPageProps) {
+export function SettingsPage({ connections, onOpenConnections, initialCategory = 'overview', onNewAgentItem, onOpenAgent, onOpenAgentProfile, onOpenSkill }: SettingsPageProps) {
   const [active, setActive] = useState<SettingsCategory>(initialCategory);
   const [resettingData, setResettingData] = useState(false);
   const [resetConfirmation, setResetConfirmation] = useState<'defaults' | 'sessions' | 'project-data' | 'appearance'>();
@@ -406,7 +408,14 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'ai-usage' && <AiUsageStatsSection />}
         {active === 'gadgets' && <GadgetsSection />}
         {active === 'agent-runtime' && (
-          <AgentRuntimeSection settings={settings} update={update} onNewAgentItem={onNewAgentItem} onOpenAgent={onOpenAgent} />
+          <AgentRuntimeSection
+            settings={settings}
+            update={update}
+            onNewAgentItem={onNewAgentItem}
+            onOpenAgent={onOpenAgent}
+            onOpenAgentProfile={onOpenAgentProfile}
+            onOpenSkill={onOpenSkill}
+          />
         )}
         {active === 'workflow-templates' && <WorkflowTemplatesSection />}
         {active === 'performance' && <PerformanceSection settings={settings} update={update} />}
@@ -702,12 +711,16 @@ function AgentRuntimeSection({
   settings,
   update,
   onNewAgentItem,
-  onOpenAgent
+  onOpenAgent,
+  onOpenAgentProfile,
+  onOpenSkill
 }: {
   settings: AppSettings;
   update: (patch: AppSettingsPatch) => Promise<void>;
-  onNewAgentItem?: (kind: 'agent' | 'import') => void;
+  onNewAgentItem?: (kind: 'agent' | 'profile' | 'skill' | 'import' | 'import-binding') => void;
   onOpenAgent?: (agentId: string) => void;
+  onOpenAgentProfile?: (profileId: string) => void;
+  onOpenSkill?: (skillName: string) => void;
 }) {
   const [snapshot, setSnapshot] = useState<AgentRuntimeSnapshot>();
   const [roots, setRoots] = useState<{ agents: Record<string, string>; runtimeHosts?: Record<string, string>; profiles?: Record<string, string>; skills: Record<string, string> }>();
@@ -871,6 +884,16 @@ function AgentRuntimeSection({
 
         {snapshot && tab === 'agents' && (
           <>
+            {onNewAgentItem && (
+              <div className="settings-section-actions" data-testid="agent-runtime-agent-actions">
+                <button className="btn" type="button" onClick={() => onNewAgentItem('profile')} data-testid="agent-runtime-new-profile">
+                  New agent profile
+                </button>
+                <button className="btn btn-quiet" type="button" onClick={() => onNewAgentItem('import')} data-testid="agent-runtime-import-profile">
+                  Import…
+                </button>
+              </div>
+            )}
             {[
               { heading: 'Built-in', items: profiles.filter(profile => profile.builtIn && !profile.source) },
               { heading: 'Your own', items: profiles.filter(profile => !profile.builtIn && !profile.source && !agentAddonIds.has(profile.profile.id)) },
@@ -910,7 +933,16 @@ function AgentRuntimeSection({
                           ...(profile.source ? [nativeReaders(profile.source.readBy) ?? 'Runs on any runtime through Praxis'] : []),
                           ...(profile.alsoIn?.length ? [`Also in ${profile.alsoIn.join(', ')}`] : [])
                         ].join(' · ') || undefined}
-                        action={profile.source ? nativeActions('agent', profile.profile.id, profile.source.path, profile.trusted) : undefined}
+                        action={(profile.source || onOpenAgentProfile) ? (
+                          <>
+                            {profile.source && nativeActions('agent', profile.profile.id, profile.source.path, profile.trusted)}
+                            {onOpenAgentProfile && (
+                              <button className="btn-compact" type="button" onClick={() => onOpenAgentProfile(profile.profile.id)}>
+                                Open
+                              </button>
+                            )}
+                          </>
+                        ) : undefined}
                       />
                     );
                   })}
@@ -923,6 +955,16 @@ function AgentRuntimeSection({
 
         {snapshot && tab === 'skills' && (
           <>
+            {onNewAgentItem && (
+              <div className="settings-section-actions" data-testid="agent-runtime-skill-actions">
+                <button className="btn" type="button" onClick={() => onNewAgentItem('skill')} data-testid="agent-runtime-new-skill">
+                  New skill
+                </button>
+                <button className="btn btn-quiet" type="button" onClick={() => onNewAgentItem('import')} data-testid="agent-runtime-import-skill">
+                  Import…
+                </button>
+              </div>
+            )}
             {[
               { heading: 'Built-in', items: skills.filter(skill => skill.builtIn && !skill.source && !skillAddonIds.has(skill.metadata.name)) },
               { heading: 'Your own', items: skills.filter(skill => !skill.builtIn && !skill.source && !skillAddonIds.has(skill.metadata.name)) },
@@ -949,7 +991,16 @@ function AgentRuntimeSection({
                         ...(skill.source ? [nativeReaders(skill.source.readBy) ?? 'Used on any runtime through Praxis'] : []),
                         ...(skill.alsoIn?.length ? [`Also in ${skill.alsoIn.join(', ')}`] : [])
                       ].join(' · ') || undefined}
-                      action={skill.source ? nativeActions('skill', skill.metadata.name, skill.source.path, skill.trusted) : undefined}
+                      action={(skill.source || onOpenSkill) ? (
+                        <>
+                          {skill.source && nativeActions('skill', skill.metadata.name, skill.source.path, skill.trusted)}
+                          {onOpenSkill && (
+                            <button className="btn-compact" type="button" onClick={() => onOpenSkill(skill.metadata.name)}>
+                              Open
+                            </button>
+                          )}
+                        </>
+                      ) : undefined}
                     />
                   ))}
                 </div>
@@ -1172,7 +1223,7 @@ function AgentRuntimeSection({
                   <button className="btn" type="button" onClick={() => onNewAgentItem('agent')} data-testid="agent-runtime-new-binding">
                     New launch binding
                   </button>
-                  <button className="btn" type="button" onClick={() => onNewAgentItem('import')} data-testid="agent-runtime-import-binding">
+                  <button className="btn" type="button" onClick={() => onNewAgentItem('import-binding')} data-testid="agent-runtime-import-binding">
                     Import…
                   </button>
                 </div>

@@ -136,9 +136,8 @@ test('every visible icon-only control on the main screens has a tooltip', async 
     await item.click();
     await audit(`settings: ${id.replace('settings-nav-', '')}`);
   }
-  await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
-
-  await page.getByTestId('nav-agents').click();
+  await page.getByTestId('settings-nav-agent-runtime').click();
+  await page.getByTestId('agent-runtime-profile-praxis-planner').getByRole('button', { name: 'Open' }).click();
   await audit('agent hub');
 
   await seedProjectWithWorkflow(page);

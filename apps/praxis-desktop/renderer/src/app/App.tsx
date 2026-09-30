@@ -2410,14 +2410,6 @@ export function App() {
                   selectedIssueKey={route.issueKey}
                   selectedIssueConnectionId={selectedBoard?.connectionId}
                   onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
-                  agentCatalog={agentSnapshot}
-                  activeAgentId={route.feature === 'agents' ? route.agentId : undefined}
-                  activeAgentProfileId={route.feature === 'agents' ? route.agentProfileId : undefined}
-                  activeSkillName={route.feature === 'agents' ? route.skillName : undefined}
-                  onSelectAgent={agentId => navigate({ ...route, feature: 'agents', agentId, agentProfileId: undefined, skillName: undefined })}
-                  onSelectAgentProfile={agentProfileId => navigate({ ...route, feature: 'agents', agentProfileId, agentId: undefined, skillName: undefined })}
-                  onSelectSkill={skillName => navigate({ ...route, feature: 'agents', skillName, agentId: undefined, agentProfileId: undefined })}
-                  onNewAgentItem={kind => (kind === 'rescan' ? void loadAgents(true) : setAgentDialog(kind))}
                   projectWorkflows={workflowsByProject}
                   activeWorkflowId={route.feature === 'workflows' && !route.workflowView ? route.workflowId : undefined}
                   runsByProjectId={runsByProjectId}
@@ -2775,11 +2767,19 @@ export function App() {
                 }}
                 onNewAgentItem={kind => {
                   setSettingsDialogCategory(undefined);
-                  setAgentDialog(kind === 'import' ? 'import-binding' : kind);
+                  setAgentDialog(kind);
                 }}
                 onOpenAgent={agentId => {
                   setSettingsDialogCategory(undefined);
                   navigate({ ...route, feature: 'agents', agentId, agentProfileId: undefined, skillName: undefined });
+                }}
+                onOpenAgentProfile={agentProfileId => {
+                  setSettingsDialogCategory(undefined);
+                  navigate({ ...route, feature: 'agents', agentProfileId, agentId: undefined, skillName: undefined });
+                }}
+                onOpenSkill={skillName => {
+                  setSettingsDialogCategory(undefined);
+                  navigate({ ...route, feature: 'agents', skillName, agentId: undefined, agentProfileId: undefined });
                 }}
               />
             </div>

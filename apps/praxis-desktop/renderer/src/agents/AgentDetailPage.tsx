@@ -7,7 +7,7 @@ import type { CatalogSelection } from './agentSelection';
  * Agent Hub detail (FX-BF-009 / FX-BF-011, revised layout).
  *
  * The centre pane answers "what is this?" — identity, manifest, and where it
- * came from — for whichever catalog item the sidebar has selected. What it is
+ * came from — for whichever catalog item Agent Runtime has opened. What it is
  * *doing* (host state, capabilities, activation, sessions) lives in the right
  * pane, so this surface stays a calm, readable record.
  */
@@ -249,7 +249,7 @@ function CatalogOverview({
         lede={
           empty
             ? 'Agent profiles define behaviour, skills add reusable capabilities, and a provider is picked when a session starts.'
-            : 'Pick an agent or skill in the sidebar to see its record. Runtime state and actions are in the right pane.'
+            : 'Open an agent or skill from Settings → Agent Runtime to see its record. Runtime state and actions are in the right pane.'
         }
         chips={
           <>
