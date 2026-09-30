@@ -31,6 +31,7 @@ import {
   type WorkflowArtifactContract,
   type WorkflowArtifactKind,
   type WorkflowCapabilityRequirement,
+  type WorkflowCheckNode,
   type WorkflowDefinition,
   type WorkflowEdge,
   type WorkflowEdgeOutcome,
@@ -204,7 +205,7 @@ function normalizeNode(value: unknown): WorkflowNode {
       return node;
     }
     case 'check': {
-      const node: WorkflowNode = {
+      const node: WorkflowCheckNode = {
         ...base,
         type: 'check',
         command: typeof raw.command === 'string' ? raw.command : '',
@@ -226,6 +227,12 @@ function normalizeNode(value: unknown): WorkflowNode {
         node.observe = {
           enabled: raw.observe.enabled,
           ...(raw.observe.provider === 'github-actions' || raw.observe.provider === 'gitlab-ci' ? { provider: raw.observe.provider } : {})
+        };
+      }
+      if (isObject(raw.failureRecovery) && typeof raw.failureRecovery.repairNodeId === 'string' && typeof raw.failureRecovery.maxAttempts === 'number') {
+        node.failureRecovery = {
+          repairNodeId: raw.failureRecovery.repairNodeId,
+          maxAttempts: Math.floor(raw.failureRecovery.maxAttempts)
         };
       }
       return node;
@@ -569,6 +576,27 @@ function validateEdges(
         path: `nodes[${index}]`,
         message: `Node "${node.id}" has ${sources.size} concurrent parents (${[...sources].sort().join(', ')}); converge them through a join node.`
       });
+    }
+  });
+
+  definition.nodes.forEach((node, index) => {
+    if (!isCheckNode(node) || !node.failureRecovery) return;
+    const at = `nodes[${index}].failureRecovery`;
+    if (!isText(node.failureRecovery.repairNodeId)) {
+      errors.push({ path: `${at}.repairNodeId`, message: 'A recovery repairNodeId is required.' });
+      return;
+    }
+    if (!Number.isInteger(node.failureRecovery.maxAttempts) || node.failureRecovery.maxAttempts < 1) {
+      errors.push({ path: `${at}.maxAttempts`, message: 'Recovery maxAttempts must be a positive integer.' });
+    }
+    const repair = nodesById.get(node.failureRecovery.repairNodeId);
+    if (!repair || !isAgentTaskNode(repair)) {
+      errors.push({ path: `${at}.repairNodeId`, message: 'A recovery target must be an agent-task node.' });
+    } else if (!repair.mutatesWorktree) {
+      errors.push({ path: `${at}.repairNodeId`, message: 'A recovery agent-task must mutate the worktree.' });
+    }
+    if (!definition.edges.some(edge => edge.from === node.id && edge.to === node.failureRecovery!.repairNodeId && edge.on === 'failure')) {
+      errors.push({ path: 'edges', message: `Recovery target "${node.failureRecovery.repairNodeId}" must have a failure edge from "${node.id}".` });
     }
   });
 }

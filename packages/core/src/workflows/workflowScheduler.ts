@@ -238,7 +238,13 @@ function edgeState(run: WorkflowRun, edge: WorkflowEdge): EdgeState {
       // no edge — failure/always included — is taken. Routing into a fix stage
       // would only spend more effort against the same broken precondition.
       if (isPausedNode(source)) return 'waiting';
-      return edge.on === 'failure' || edge.on === 'always' ? 'satisfied' : 'dead';
+      if (edge.on !== 'failure' && edge.on !== 'always') return 'dead';
+      const sourceNode = run.definition.nodes.find(node => node.id === edge.from);
+      if (sourceNode?.type === 'check' && sourceNode.failureRecovery?.repairNodeId === edge.to) {
+        const completed = run.recoveryAttempts?.[sourceNode.id] ?? 0;
+        if (completed >= sourceNode.failureRecovery.maxAttempts) return 'dead';
+      }
+      return 'satisfied';
     case 'skipped':
     case 'cancelled':
       // The source never ran, so nothing downstream of it can be reached.

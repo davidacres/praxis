@@ -270,6 +270,30 @@ test('success and failure edges from one node may share a target', () => {
   assert.deepEqual(result.errors, []);
 });
 
+test('failure recovery requires a mutating agent target on a failure edge', () => {
+  const definition = deliveryWorkflow();
+  definition.nodes.push({
+    type: 'agent-task',
+    id: 'repair',
+    name: 'Repair',
+    x: 600,
+    y: 0,
+    inputs: ['qa-results'],
+    agent: { agentId: 'coder', scope: 'global', toolMode: 'full' },
+    instructions: 'Repair the failed check.',
+    outputs: [{ id: 'repair-diff', kind: 'diff', required: true }],
+    mutatesWorktree: true
+  });
+  const qa = definition.nodes.find(node => node.id === 'qa');
+  if (qa?.type === 'check') qa.failureRecovery = { repairNodeId: 'repair', maxAttempts: 2 };
+  definition.edges.push({ id: 'qa-repair', from: 'qa', to: 'repair', on: 'failure', required: false });
+  assert.deepEqual(validateWorkflow(definition).errors, []);
+
+  if (qa?.type === 'check') qa.failureRecovery = { repairNodeId: 'missing', maxAttempts: 2 };
+  const invalid = validateWorkflow(definition);
+  assert.ok(invalid.errors.some(issue => issue.path.endsWith('failureRecovery.repairNodeId')));
+});
+
 test('an all-required join with no required inbound edge would never release', () => {
   const definition = deliveryWorkflow();
   const join = definition.nodes.find(node => node.id === 'gates');
