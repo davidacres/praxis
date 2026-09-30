@@ -34,3 +34,13 @@ ledger of spend, pauses, retries, skips, and outcomes.
 Budget checks should be conservative. It is better to pause before starting the
 next ticket than to begin work that is unlikely to finish.
 
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

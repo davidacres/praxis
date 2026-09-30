@@ -104,3 +104,15 @@ and outcome. Sequential execution is the default. Optional parallel execution is
 available only behind an explicit capped policy with clear budget warnings and
 run-ledger evidence.
 
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+
