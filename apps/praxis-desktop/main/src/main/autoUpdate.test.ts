@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { UpdateStatus } from '@praxis/core';
-import { githubReleaseUrl, UpdateController, type UpdaterPort, type UpdateControllerDeps } from './autoUpdate';
+import { githubReleaseUrl, resolveElectronAutoUpdater, UpdateController, type UpdaterPort, type UpdateControllerDeps } from './autoUpdate';
 
 function fakeUpdater(latest: string | null, current = '0.3.3') {
   let progress: ((percent: number) => void) | undefined;
@@ -109,4 +109,11 @@ test('builds the release page link from a GitHub feed config only', () => {
   assert.equal(githubReleaseUrl(feed, '0.4.0'), 'https://github.com/davidacres/praxis/releases/tag/v0.4.0');
   assert.equal(githubReleaseUrl('provider: generic\nurl: https://x.test\n', '0.4.0'), undefined);
   assert.equal(githubReleaseUrl('', '0.4.0'), undefined);
+});
+
+test('resolves autoUpdater from named and CommonJS default import shapes', () => {
+  const updater = { marker: 'updater' };
+  assert.equal(resolveElectronAutoUpdater({ autoUpdater: updater }), updater);
+  assert.equal(resolveElectronAutoUpdater({ default: { autoUpdater: updater } }), updater);
+  assert.throws(() => resolveElectronAutoUpdater({}), /did not expose autoUpdater/);
 });
