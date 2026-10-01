@@ -7822,10 +7822,6 @@ button.session-telemetry-chip:hover {
   0 0 10px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
-.session-follow-up-composer.is-waiting-tool {
-  --session-activity-orbit-duration: 14s;
-}
-
 .session-composer-activity-gradient-leading { stop-color: var(--accent-hover); }
 .session-composer-activity-gradient-core { stop-color: var(--accent); }
 .session-composer-activity-gradient-trailing { stop-color: color-mix(in srgb, var(--accent) 68%, transparent); }
@@ -7843,22 +7839,18 @@ button.session-telemetry-chip:hover {
 
 .session-composer-activity-orbit path {
   fill: none;
-  stroke-width: 4;
-  stroke-linecap: round;
-  stroke-dasharray: 32px var(--session-activity-gap, 2040px);
-  stroke-dashoffset: 0;
-  animation:
-    session-composer-activity-orbit var(--session-activity-orbit-duration, 7s) linear infinite,
-    session-composer-activity-pulse 3.5s ease-in-out infinite;
+  stroke: none;
+  visibility: hidden;
 }
 
-@keyframes session-composer-activity-orbit {
-  from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: calc(-1 * var(--session-activity-perimeter, 2072px)); }
+.session-composer-activity-orbit [data-activity-capsule="true"] {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: session-composer-activity-pulse 3.5s ease-in-out infinite;
 }
 
 @keyframes session-composer-activity-pulse {
-  0%, 100% { opacity: 0.78; }
+  0%, 100% { opacity: 0.72; }
   50% { opacity: 1; }
 }
 
@@ -7877,7 +7869,7 @@ button.session-telemetry-chip:hover {
 
 @media (prefers-reduced-motion: reduce) {
   .session-follow-up-composer.is-running { animation: none; }
-  .session-composer-activity-orbit path { animation: none; opacity: 0.9; }
+  .session-composer-activity-orbit [data-activity-capsule="true"] { animation: none; opacity: 0.9; }
 }
 
 .session-follow-up-composer:focus-within {

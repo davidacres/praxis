@@ -121,42 +121,34 @@ test('composer selects a board and open ticket, names the session, and streams t
   await win.locator('[data-testid="sessions-view"]').waitFor();
   const activityOrbit = win.locator('[data-testid="session-composer-activity-orbit"]');
   await expect(activityOrbit).toBeVisible();
+  await expect(activityOrbit).toHaveAttribute('data-activity-duration', '7000');
   const capsules = activityOrbit.locator('[data-activity-capsule="true"]');
   await expect(capsules).toHaveCount(1);
-  const animationNames = await capsules.first().evaluate(element => getComputedStyle(element).animationName);
-  expect(animationNames).toContain('session-composer-activity-orbit');
-  const animationDuration = await capsules.first().evaluate(element => getComputedStyle(element).animationDuration);
-  expect(animationDuration).toContain('7s');
-  expect(animationDuration).toContain('3.5s');
-  const animationStroke = await capsules.first().getAttribute('stroke');
-  expect(animationStroke).toContain('session-composer-activity-gradient');
-  const capsuleStroke = await capsules.first().evaluate(element => {
-    const style = getComputedStyle(element);
-    return {
-      dashArray: style.strokeDasharray,
-      width: style.strokeWidth,
-      perimeter: Number.parseFloat(style.getPropertyValue('--session-activity-perimeter')),
-      gap: Number.parseFloat(style.getPropertyValue('--session-activity-gap'))
-    };
-  });
-  expect(capsuleStroke.dashArray).toContain('32');
-  expect(capsuleStroke.width).toBe('4px');
-  expect(capsuleStroke.perimeter).toBeGreaterThan(32);
-  expect(capsuleStroke.gap).toBeGreaterThan(0);
+  const capsuleStyle = await capsules.first().evaluate(element => ({
+    animationName: getComputedStyle(element).animationName,
+    animationDuration: getComputedStyle(element).animationDuration,
+    gradient: element.querySelector('rect')?.getAttribute('fill'),
+    rect: element.querySelector('rect')?.getAttribute('width')
+  }));
+  expect(capsuleStyle.animationName).toContain('session-composer-activity-pulse');
+  expect(capsuleStyle.animationDuration).toContain('3.5s');
+  expect(capsuleStyle.gradient).toContain('session-composer-activity-gradient');
+  expect(capsuleStyle.rect).toBe('32');
+  const activityGuide = activityOrbit.locator('[data-activity-guide="true"]');
+  await expect(activityGuide).toHaveAttribute('d', /A 1\.25 4\.75/);
   const firstCapsule = capsules.first();
-  await expect(firstCapsule).toHaveAttribute('d', /A 1\.25 4\.75/);
   const composerBox = await win.locator('.session-follow-up-composer').boundingBox();
   const orbitBox = await activityOrbit.boundingBox();
-  const firstOffset = await firstCapsule.evaluate(element => getComputedStyle(element).strokeDashoffset);
+  const firstTransform = await firstCapsule.getAttribute('transform');
   await win.waitForTimeout(450);
-  const secondOffset = await firstCapsule.evaluate(element => getComputedStyle(element).strokeDashoffset);
+  const secondTransform = await firstCapsule.getAttribute('transform');
   expect(composerBox).not.toBeNull();
   expect(orbitBox).not.toBeNull();
   expect(Math.abs((orbitBox?.x ?? 0) - (composerBox?.x ?? 0))).toBeLessThanOrEqual(1);
   expect(Math.abs((orbitBox?.y ?? 0) - (composerBox?.y ?? 0))).toBeLessThanOrEqual(1);
   expect(Math.abs((orbitBox?.width ?? 0) - (composerBox?.width ?? 0))).toBeLessThanOrEqual(2);
   expect(Math.abs((orbitBox?.height ?? 0) - (composerBox?.height ?? 0))).toBeLessThanOrEqual(2);
-  expect(firstOffset).not.toBe(secondOffset);
+  expect(firstTransform).not.toBe(secondTransform);
   await win.locator('.session-follow-up-composer').screenshot({
     path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'session-composer-activity-orbit.png')
   });
