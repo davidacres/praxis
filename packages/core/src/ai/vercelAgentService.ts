@@ -11,7 +11,8 @@ import {
   type AgentEventType,
   type AgentToolEventData,
   type AgentTaskDefinition,
-  type AgentToolMode
+  type AgentToolMode,
+  type AgentPermissionMode
 } from './agentTypes';
 import { classifyLocalTool, summariseToolArgs } from './toolEventClassify';
 import { listCatalogModels } from './providers/modelCatalog';
@@ -95,6 +96,8 @@ export interface VercelAgentStartOptions {
   toolMode?: AgentToolMode;
   /** Allow tool-permission requests without asking (still bounded by `toolMode`). */
   autoApprovePermissions?: boolean;
+  /** Allow only the curated safety allowlist without prompting. */
+  permissionMode?: AgentPermissionMode;
   /** Host-supplied tools such as the selected issue tracker's capabilities. */
   toolExtension?: {
     definitions: ReadonlyArray<GatewayToolDefinition>;
@@ -456,6 +459,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       model: string;
       workingDirectory: string;
       toolMode: AgentToolMode;
+      permissionMode?: AgentPermissionMode;
       maxSteps: number;
       timeoutMs: number;
       toolExtension?: VercelAgentStartOptions['toolExtension'];
@@ -470,7 +474,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     const toolExecutor = new LocalToolExecutor({
       workingDirectory: options.workingDirectory,
       toolMode: options.toolMode,
-      shouldAutoAllow: shouldAutoAllowToolPermission,
+      shouldAutoAllow: options.permissionMode === 'auto' ? shouldAutoAllowToolPermission : undefined,
       requestPermission: async request => this.requestPermission(issueKey, request)
     });
     const compositeExecutor = {
@@ -593,9 +597,13 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider, model, {
       workingDirectory,
       toolMode,
+      permissionMode: options.permissionMode,
       reasoningEffort
     });
-    if (options.autoApprovePermissions) this.sessionManager.updateAgentRuntime(issue.key, { autoApprovePermissions: true });
+    this.sessionManager.updateAgentRuntime(issue.key, {
+      ...(options.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
+      ...(options.permissionMode ? { permissionMode: options.permissionMode } : {})
+    });
     // After the record exists, so the limit has somewhere to land.
     this.noteContextLimit(issue.key, provider, gateway, model);
     this.sessionManager.updateAgentState(issue.key, 'planning');
@@ -620,6 +628,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       model,
       workingDirectory: workingDirectory || process.cwd(),
       toolMode,
+      permissionMode: options.permissionMode,
       maxSteps,
       timeoutMs,
       toolExtension: options.toolExtension,
@@ -748,6 +757,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       model,
       workingDirectory: workingDirectory || process.cwd(),
       toolMode,
+      permissionMode: record.permissionMode,
       maxSteps,
       timeoutMs,
       toolExtension: options.toolExtension,

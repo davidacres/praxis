@@ -12,7 +12,8 @@ import {
   type AgentTaskDefinition,
   type AgentToolEventData,
   type AgentToolFileChange,
-  type AgentToolMode
+  type AgentToolMode,
+  type AgentPermissionMode
 } from '../agentTypes';
 import { mapAcpToolKind } from '../toolEventClassify';
 import { createUnifiedDiff } from '../tools/unifiedDiff';
@@ -51,6 +52,8 @@ export interface AcpAgentStartOptions {
   toolMode?: AgentToolMode;
   /** Allow the agent's own tool-permission requests without asking (still bounded by `toolMode`). */
   autoApprovePermissions?: boolean;
+  /** Allow read/list requests without prompting; risky requests stay manual. */
+  permissionMode?: AgentPermissionMode;
   runtimeSessionId?: string;
   /**
    * HTTP MCP servers to expose to the agent for this session (e.g. the in-app
@@ -84,6 +87,7 @@ interface ActiveAcpTask {
     resolve: (decision: PermissionDecision) => void;
   }>;
   allowPermissionsForTask: boolean;
+  autoAllowSafePermissions: boolean;
   messageBuffer: string;
   promptPromise?: Promise<void>;
   ending?: boolean;
@@ -374,6 +378,9 @@ export class AcpAgentHost {
     if (task.allowPermissionsForTask) {
       return Promise.resolve('allow_always');
     }
+    if (task.autoAllowSafePermissions && /\b(read|list)\b/.test(permissionText)) {
+      return Promise.resolve('allow_always');
+    }
     return new Promise<PermissionDecision>(resolve => {
       task.pendingPermissions.push({ request, resolve });
       this.sessionManager.updateAgentState(issueKey, 'awaiting_approval');
@@ -594,6 +601,7 @@ export class AcpAgentHost {
       client,
       pendingPermissions: [],
       allowPermissionsForTask: options.autoApprovePermissions === true,
+      autoAllowSafePermissions: options.permissionMode === 'auto',
       messageBuffer: ''
     };
     this.activeTasks.set(issue.key, task);
@@ -604,7 +612,10 @@ export class AcpAgentHost {
       toolMode,
       reasoningEffort: options.reasoningEffort ?? 'off'
     });
-    if (options.autoApprovePermissions) this.sessionManager.updateAgentRuntime(issue.key, { autoApprovePermissions: true });
+    this.sessionManager.updateAgentRuntime(issue.key, {
+      ...(options.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
+      ...(options.permissionMode ? { permissionMode: options.permissionMode } : {})
+    });
     this.sessionManager.updateAgentState(issue.key, 'planning');
     this.appendEvent(issue.key, evt('session_start', 'CLI agent session started'));
     this.logger.appendLine(
@@ -807,6 +818,7 @@ export class AcpAgentHost {
       pendingPermissions: [],
       // A follow-up turn keeps the mode the session was started in.
       allowPermissionsForTask: record.autoApprovePermissions === true,
+      autoAllowSafePermissions: record.permissionMode === 'auto',
       messageBuffer: ''
     };
     this.activeTasks.set(issueKey, task);

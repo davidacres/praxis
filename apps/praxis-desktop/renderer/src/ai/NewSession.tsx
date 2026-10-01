@@ -4,6 +4,7 @@ import type {
   AiProvider,
   AiProviderStatus,
   AgentToolMode,
+  AgentPermissionMode,
   Board,
   IssueSummary,
   ModelOptions,
@@ -11,7 +12,6 @@ import type {
   SessionMode
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { ChipSelect } from '../ui/ChipSelect';
 import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
 import {
   fetchModelOptions,
@@ -58,6 +58,7 @@ export interface NewSessionProps {
     provider?: AiProvider;
     model?: string;
     reasoningEffort?: ReasoningEffort;
+    permissionMode: AgentPermissionMode;
     toolMode: AgentToolMode;
     mode: SessionMode;
     workingDirectory?: string;
@@ -121,6 +122,18 @@ export interface SessionWorkflowOption {
 }
 
 const FREEFORM_BOARD_ID = '__freeform__';
+const PERMISSION_MODE_OPTIONS: Array<{
+  value: AgentPermissionMode;
+  label: string;
+  description: string;
+  icon: 'shield' | 'zap' | 'tools';
+}> = [
+  { value: 'manual', label: 'Manual', description: 'Ask before every action that needs permission.', icon: 'shield' },
+  { value: 'auto', label: 'Auto', description: 'Allow safe checks automatically and pause for anything risky.', icon: 'zap' },
+  { value: 'bypass', label: 'Bypass permissions', description: 'Allow permitted tools without asking during this session.', icon: 'tools' }
+];
+
+const REASONING_EFFORT_LEVELS: ReasoningEffort[] = ['off', 'low', 'medium', 'high'];
 
 /**
  * The default centre view. Laid out against the reference chrome: a muted
@@ -174,6 +187,10 @@ export function NewSession({
   const [modelsLoading, setModelsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | undefined>();
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('off');
+  const [permissionMode, setPermissionMode] = useState<AgentPermissionMode>('manual');
+  const [permissionMenuPos, setPermissionMenuPos] = useState<{ bottom: number; left: number } | undefined>();
+  const permissionChipRef = useRef<HTMLButtonElement | null>(null);
+  const permissionMenuRef = useRef<HTMLDivElement | null>(null);
   const [toolMode, setToolMode] = useState<AgentToolMode>(defaultToolMode ?? (conversational ? 'project-only' : 'full'));
   const [mode, setMode] = useState<SessionMode>('chat');
   const [workingDirectory, setWorkingDirectory] = useState<string | undefined>(defaultWorkingDirectory);
@@ -360,6 +377,17 @@ export function NewSession({
     return () => document.removeEventListener('pointerdown', onDocumentPointerDown);
   }, [modelMenuPos]);
 
+  useEffect(() => {
+    if (!permissionMenuPos) return;
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (permissionMenuRef.current?.contains(target) || permissionChipRef.current?.contains(target)) return;
+      setPermissionMenuPos(undefined);
+    };
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+    return () => document.removeEventListener('pointerdown', onDocumentPointerDown);
+  }, [permissionMenuPos]);
+
   // Model selection applies to `hostKind: 'acp'` providers (Claude Code,
   // Codex — fetched from ACP's `session/new` config options, no cost but a
   // real subprocess handshake) and `kind: 'api'` providers with a real
@@ -522,6 +550,7 @@ export function NewSession({
         provider: selectedProvider,
         model: selectedModel,
         ...(supportsReasoningEffort(selectedProvider, selectedModel) ? { reasoningEffort } : {}),
+        permissionMode,
         toolMode,
         mode,
         ...(workingDirectory ? { workingDirectory } : {}),
@@ -997,22 +1026,75 @@ export function NewSession({
                 </div>,
                 document.body
               )}
+            <button
+              ref={permissionChipRef}
+              type="button"
+              className={`composer-chip session-permission-chip${permissionMenuPos ? ' active' : ''}`}
+              data-testid="new-session-permission-chip"
+              aria-haspopup="listbox"
+              aria-expanded={Boolean(permissionMenuPos)}
+              onClick={() => {
+                if (permissionMenuPos) {
+                  setPermissionMenuPos(undefined);
+                  return;
+                }
+                const rect = permissionChipRef.current?.getBoundingClientRect();
+                if (rect) setPermissionMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+              }}
+            >
+              <Icon name={PERMISSION_MODE_OPTIONS.find(option => option.value === permissionMode)?.icon ?? 'shield'} size={14} />
+              <span>{PERMISSION_MODE_OPTIONS.find(option => option.value === permissionMode)?.label ?? 'Manual'}</span>
+              <Icon name="chevron-down" size={12} />
+            </button>
+            {permissionMenuPos && createPortal(
+              <div
+                ref={permissionMenuRef}
+                className="composer-provider-menu session-permission-menu"
+                role="listbox"
+                aria-label="Permission mode"
+                style={{ position: 'fixed', bottom: permissionMenuPos.bottom, left: permissionMenuPos.left }}
+              >
+                <div className="popover-label">Permissions</div>
+                {PERMISSION_MODE_OPTIONS.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`composer-provider-option session-permission-option${permissionMode === option.value ? ' active' : ''}`}
+                    data-testid={`new-session-permission-option-${option.value}`}
+                    role="option"
+                    aria-selected={permissionMode === option.value}
+                    onClick={() => {
+                      setPermissionMode(option.value);
+                      setPermissionMenuPos(undefined);
+                    }}
+                  >
+                    <Icon name={option.icon} size={16} />
+                    <span className="heading-option-body">
+                      <strong>{option.label}</strong>
+                      <small>{option.description}</small>
+                    </span>
+                    {permissionMode === option.value && <Icon name="check" size={15} />}
+                  </button>
+                ))}
+              </div>,
+              document.body
+            )}
             {supportsReasoningEffort(selectedProvider, selectedModel) && (
-              <ChipSelect
-                variant="plain"
-                ariaLabel="Reasoning effort"
-                title="How much reasoning/thinking effort this model spends per turn"
-                icon="lightbulb"
-                value={reasoningEffort}
-                onChange={value => setReasoningEffort(value as ReasoningEffort)}
-                data-testid="new-session-reasoning-chip"
-                options={[
-                  { value: 'off', label: 'Off' },
-                  { value: 'low', label: 'Low' },
-                  { value: 'medium', label: 'Medium' },
-                  { value: 'high', label: 'High' }
-                ]}
-              />
+              <label className="composer-reasoning-slider" data-testid="new-session-reasoning-chip">
+                <Icon name="lightbulb" size={14} />
+                <span>Effort ({reasoningEffort})</span>
+                <input
+                  type="range"
+                  min="0"
+                  max={REASONING_EFFORT_LEVELS.length - 1}
+                  step="1"
+                  value={REASONING_EFFORT_LEVELS.indexOf(reasoningEffort)}
+                  aria-label="Reasoning effort"
+                  title="How much reasoning this model spends per turn"
+                  onChange={event => setReasoningEffort(REASONING_EFFORT_LEVELS[Number(event.target.value)] ?? 'off')}
+                />
+                <span className="composer-reasoning-dots" aria-hidden="true">{REASONING_EFFORT_LEVELS.map(level => <i key={level} className={level === reasoningEffort ? 'active' : ''} />)}</span>
+              </label>
             )}
             <span className="spacer" />
             <button className="composer-chip" aria-label="Dictate">

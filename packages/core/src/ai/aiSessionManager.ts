@@ -148,7 +148,7 @@ export class AiSessionManager {
     taskDefinition: AgentTaskDefinition,
     provider?: AgentRuntimeProvider,
     model?: string,
-    runtime?: Pick<AgentSessionRecord, 'workingDirectory' | 'toolMode' | 'runtimeSessionId' | 'connectionId' | 'reasoningEffort'>
+    runtime?: Pick<AgentSessionRecord, 'workingDirectory' | 'toolMode' | 'runtimeSessionId' | 'connectionId' | 'reasoningEffort' | 'permissionMode'>
   ): AgentSessionRecord {
     const startedAt = new Date().toISOString();
     const trimmedModel = model?.trim() || undefined;
@@ -230,6 +230,7 @@ export class AiSessionManager {
         | 'workflowRole'
         | 'parentSessionKey'
         | 'autoApprovePermissions'
+        | 'permissionMode'
         | 'agentId'
         | 'profileId'
         | 'hostId'
@@ -253,6 +254,7 @@ export class AiSessionManager {
     if (runtime.providerVersion !== undefined) record.providerVersion = runtime.providerVersion.trim() || undefined;
     if (runtime.runtimeLaunch !== undefined) record.runtimeLaunch = runtime.runtimeLaunch;
     if (runtime.autoApprovePermissions !== undefined) record.autoApprovePermissions = runtime.autoApprovePermissions || undefined;
+    if (runtime.permissionMode !== undefined) record.permissionMode = runtime.permissionMode;
     if (runtime.parentSessionKey !== undefined) record.parentSessionKey = runtime.parentSessionKey.trim() || undefined;
     if (runtime.connectionId !== undefined) record.connectionId = runtime.connectionId;
     if (runtime.projectId !== undefined) record.projectId = runtime.projectId.trim() || undefined;

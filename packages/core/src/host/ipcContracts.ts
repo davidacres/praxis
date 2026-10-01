@@ -74,6 +74,7 @@ import type {
 } from '../marketplace';
 import type {
   AgentSessionRecord,
+  AgentPermissionMode,
   AgentTaskDefinition,
   AgentToolMode,
   AiConversationMessageInput,
@@ -728,6 +729,8 @@ export interface AiDelegateInput {
    * then `'off'`.
    */
   reasoningEffort?: ReasoningEffort;
+  /** Tool-permission policy for this session. */
+  permissionMode?: AgentPermissionMode;
   /** Host-enforced tool access for this session. Analysis always uses read-only. */
   toolMode?: AgentToolMode;
   /** Starts the issue's read-only analysis as the first turn of its normal chat session. */

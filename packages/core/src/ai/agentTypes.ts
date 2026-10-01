@@ -371,6 +371,9 @@ export interface AgentConversationMessage {
 /** Tool access granted to an agent session. Read-only is enforced by the host, not just prompted. */
 export type AgentToolMode = 'read-only' | 'full' | 'project-only';
 
+/** How a session handles tool-permission requests within its host-enforced tool access. */
+export type AgentPermissionMode = 'manual' | 'auto' | 'bypass';
+
 /** The transport that actually owned a session turn. */
 export type AgentRuntimeAdapter = 'acp' | 'gateway' | 'legacy-acp' | 'legacy-gateway';
 
@@ -566,6 +569,8 @@ export interface AgentSessionRecord {
    * session is still denied writes and commands before this is consulted.
    */
   autoApprovePermissions?: boolean;
+  /** The selected session permission policy, retained for runtime behavior and session audit. */
+  permissionMode?: AgentPermissionMode;
 }
 
 /** One slash command the agent advertised via `available_commands_update`. */
