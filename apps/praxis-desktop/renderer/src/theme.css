@@ -1966,18 +1966,19 @@ textarea {
  * rows' own rules further down would otherwise win on source order.
  */
 :root {
-  --sidebar-sticky-0-h: 26px;  /* .sidebar-section-heading */
+  --sidebar-sticky-0-h: 35px;  /* .projects-section-header */
   /* .project-tree-parent — double a subsection header, matching the row's
      own min-height above so the sticky stack and the row stay in step. */
   --sidebar-sticky-1-h: calc(2 * var(--sidebar-sticky-2-h));
   --sidebar-sticky-2-h: 23px;  /* a project subsection header */
-  --sidebar-sticky-3-h: 22px;  /* docs > plans */
+  --sidebar-sticky-3-h: 23px;  /* docs > plans */
   --sidebar-sticky-1: calc(var(--sidebar-sticky-0-h) - var(--space-1));
   --sidebar-sticky-2: calc(var(--sidebar-sticky-1) + var(--sidebar-sticky-1-h));
   --sidebar-sticky-3: calc(var(--sidebar-sticky-2) + var(--sidebar-sticky-2-h));
   --sidebar-sticky-4: calc(var(--sidebar-sticky-3) + var(--sidebar-sticky-3-h));
 }
 .sidebar-scroll > .sidebar-section-heading,
+.sidebar-scroll > .projects-section-header,
 .sidebar-scroll .project-tree-parent,
 .project-tree-children > .sidebar-subsection-toggle,
 .project-tree-children > .tree-subsection-heading,
@@ -1987,6 +1988,7 @@ textarea {
   container-type: scroll-state;
 }
 .sidebar-scroll > .sidebar-section-heading::after,
+.sidebar-scroll > .projects-section-header::after,
 .sidebar-scroll .project-tree-parent::after,
 .project-tree-children > .sidebar-subsection-toggle::after,
 .project-tree-children > .tree-subsection-heading::after,
@@ -2002,6 +2004,7 @@ textarea {
 }
 @container scroll-state(stuck: top) {
   .sidebar-scroll > .sidebar-section-heading::after,
+  .sidebar-scroll > .projects-section-header::after,
   .sidebar-scroll .project-tree-parent::after,
   .project-tree-children > .sidebar-subsection-toggle::after,
   .project-tree-children > .tree-subsection-heading::after,
@@ -2014,6 +2017,7 @@ textarea {
   /* The header's own hover / active wash is translucent and sits under this
      fill, so while stuck the fill carries it instead. */
   .sidebar-scroll .project-tree-parent:hover::after,
+  .sidebar-scroll > .projects-section-header:hover::after,
   .project-tree-children > .sidebar-subsection-toggle:hover::after,
   .project-tree-children > .tree-subsection-heading:hover::after,
   .project-docs-tree > .project-plans-folder:hover::after,
@@ -2752,22 +2756,43 @@ textarea {
 .composer-reasoning-slider {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
+  gap: 0;
+  width: 30px;
+  min-width: 30px;
+  flex: 0 0 30px;
   height: 26px;
+  padding: 0 6px;
+  overflow: hidden;
   color: var(--text-secondary);
   font-size: var(--text-md);
   white-space: nowrap;
+  border-radius: var(--radius-pill);
+  transition: width 140ms ease, background-color 140ms ease;
+}
+
+.composer-reasoning-slider:hover,
+.composer-reasoning-slider:focus-within {
+  width: 94px;
+  flex-basis: 94px;
+  background: var(--bg-sunken);
 }
 
 .composer-reasoning-slider input {
   appearance: none;
-  width: 72px;
+  width: 0;
   height: 4px;
-  margin: 0;
+  margin: 0 0 0 6px;
   border-radius: var(--radius-pill);
   background: var(--border-strong);
   cursor: pointer;
+  opacity: 0;
+  transition: width 140ms ease, opacity 140ms ease;
+}
+
+.composer-reasoning-slider:hover input,
+.composer-reasoning-slider:focus-within input {
+  width: 58px;
+  opacity: 1;
 }
 
 .composer-reasoning-slider input::-webkit-slider-thumb {
@@ -7783,9 +7808,76 @@ button.session-telemetry-chip:hover {
 /* Keep the follow-up input visually continuous with the chat transcript above
    it instead of rendering a raised, theme-coloured card at the bottom. */
 .session-follow-up-composer {
+  position: relative;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   background: var(--bg-input);
+}
+
+.session-follow-up-composer.is-running {
+  border-color: var(--accent-border);
+  animation: session-composer-activity-glow 6s ease-in-out infinite;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+  0 0 10px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.session-follow-up-composer.is-waiting-tool {
+  --session-activity-orbit-duration: 14s;
+}
+
+.session-composer-activity-gradient-leading { stop-color: var(--accent-hover); }
+.session-composer-activity-gradient-core { stop-color: var(--accent); }
+.session-composer-activity-gradient-trailing { stop-color: color-mix(in srgb, var(--accent) 68%, transparent); }
+
+.session-composer-activity-orbit {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  border-radius: var(--radius-lg);
+}
+
+.session-composer-activity-orbit path {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 32px var(--session-activity-gap, 2040px);
+  stroke-dashoffset: 0;
+  animation:
+    session-composer-activity-orbit var(--session-activity-orbit-duration, 7s) linear infinite,
+    session-composer-activity-pulse 3.5s ease-in-out infinite;
+}
+
+@keyframes session-composer-activity-orbit {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: calc(-1 * var(--session-activity-perimeter, 2072px)); }
+}
+
+@keyframes session-composer-activity-pulse {
+  0%, 100% { opacity: 0.78; }
+  50% { opacity: 1; }
+}
+
+@keyframes session-composer-activity-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+      0 0 10px color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent),
+      0 0 14px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-follow-up-composer.is-running { animation: none; }
+  .session-composer-activity-orbit path { animation: none; opacity: 0.9; }
 }
 
 .session-follow-up-composer:focus-within {
@@ -10874,6 +10966,7 @@ button.session-chat-attachment {
 .project-workflow-row,
 .project-workflow-child,
 .project-workflow-empty { padding-left: var(--tree-indent-2); }
+.project-automations-workflows-toggle { padding-left: var(--tree-indent-2); }
 .project-workflow-row { display: flex; align-items: center; min-width: 0; }
 .project-workflow-row .board-tree-main { flex: 1; min-width: 0; gap: 6px; }
 .project-workflow-delete { opacity: 0; margin-right: 4px; flex-shrink: 0; }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEvent, DragEvent, MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type {
@@ -23,6 +23,8 @@ import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { providerIconName, providerLabel, supportsReasoningEffort } from './modelProviders';
+import { ReasoningEffortSlider } from './ReasoningEffortSlider';
+import { SessionComposerToolbar } from './SessionComposerToolbar';
 import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, formatModelCost, getKnownContextLength, getModelPricing, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
@@ -383,7 +385,8 @@ function SessionWorkflowControl({
         aria-expanded={menuOpen}
         aria-haspopup="dialog"
         disabled={!!busy || !hasSelectableWorkflow}
-        title={hasSelectableWorkflow ? 'Choose a workflow for this session' : 'No project workflows are available for this session.'}
+        aria-label={activeRun ? `Workflow: ${activeRun.workflowName}` : 'Choose workflow'}
+        title={activeRun ? `Workflow: ${activeRun.workflowName}` : hasSelectableWorkflow ? 'Choose a workflow for this session' : 'No project workflows are available for this session.'}
         data-testid="session-workflow-add"
         ref={triggerRef}
         onClick={() => {
@@ -401,8 +404,8 @@ function SessionWorkflowControl({
           setMenuOpen(true);
         }}
       >
-        <Icon name="play" size={14} />
-        <span className="session-runtime-chip-label">{activeRun ? activeRun.workflowName : 'Workflow'}</span>
+        <Icon name="split-horizontal" size={14} />
+        {activeRun && <span className="session-runtime-chip-label">{activeRun.workflowName}</span>}
       </button>
       {menuOpen && menuPosition && createPortal(
         <div
@@ -720,6 +723,7 @@ export function SessionsPage({
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
   /** True while an image drag hovers the composer, for the drop highlight. */
   const [composerDragOver, setComposerDragOver] = useState(false);
+  const activityPathRef = useRef<SVGPathElement | null>(null);
   const [submittedTurn, setSubmittedTurn] = useState<{
     issueKey: string;
     message: string;
@@ -791,6 +795,7 @@ export function SessionsPage({
   const browserDismissed = useRef(initialBrowserOpen === false);
   const { settings } = useSettings();
   const eventsRef = useRef<HTMLDivElement>(null);
+  const followChatRef = useRef(true);
   const [copiedMessageKey, setCopiedMessageKey] = useState<string | undefined>();
 
   const copyMessageText = (key: string, text: string) => {
@@ -1148,14 +1153,63 @@ export function SessionsPage({
     };
   }, [contextPopoverPosition]);
 
-  // Follow the stream: whenever the selected session gains events, pin the
-  // console to the latest one (the list replaces the record object on every
-  // push, so the count is the reliable change signal).
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const path = activityPathRef.current;
+    const svg = path?.ownerSVGElement;
+    if (!path || !svg || !followUpCollapsed || !isTurnActive) return;
+
+    const updatePerimeter = () => {
+      const pathLength = path.getTotalLength();
+      const transform = path.getScreenCTM();
+      if (!pathLength || !transform) return;
+      const toScreenPoint = (offset: number) => {
+        const point = path.getPointAtLength(offset);
+        return new DOMPoint(point.x, point.y).matrixTransform(transform);
+      };
+      let perimeter = 0;
+      let previous = toScreenPoint(0);
+      const samples = Math.max(64, Math.ceil(pathLength / 2));
+      for (let index = 1; index <= samples; index += 1) {
+        const current = toScreenPoint((pathLength * index) / samples);
+        perimeter += Math.hypot(current.x - previous.x, current.y - previous.y);
+        previous = current;
+      }
+      const capsuleLength = 32;
+      path.style.setProperty('--session-activity-perimeter', `${perimeter}px`);
+      path.style.setProperty('--session-activity-gap', `${Math.max(perimeter - capsuleLength, 1)}px`);
+    };
+
+    updatePerimeter();
+    const resizeObserver = new ResizeObserver(updatePerimeter);
+    resizeObserver.observe(svg);
+    return () => resizeObserver.disconnect();
+  }, [followUpCollapsed, isTurnActive]);
+
+  useLayoutEffect(() => {
     const node = eventsRef.current;
-    if (node) {
-      node.scrollTop = node.scrollHeight;
-    }
+    if (!node) return;
+    followChatRef.current = true;
+    const onScroll = () => {
+      const distanceFromBottom = node.scrollHeight - node.clientHeight - node.scrollTop;
+      followChatRef.current = distanceFromBottom <= 64;
+    };
+    node.addEventListener('scroll', onScroll, { passive: true });
+    return () => node.removeEventListener('scroll', onScroll);
+  }, [selected?.issueKey]);
+
+  // Follow the stream after the transcript has laid out. The second frame
+  // catches Markdown/image height changes that happen after React commits.
+  // Once the user scrolls meaningfully upward, leave their reading position
+  // alone until they return near the bottom.
+  useLayoutEffect(() => {
+    if (!followChatRef.current) return;
+    const scrollToLatest = () => {
+      const node = eventsRef.current;
+      if (node && followChatRef.current) node.scrollTop = node.scrollHeight;
+    };
+    scrollToLatest();
+    const frame = window.requestAnimationFrame(scrollToLatest);
+    return () => window.cancelAnimationFrame(frame);
   }, [selected?.issueKey, selectedEventCount, selected?.responseText, latestEventResponse, pendingConversationMessages.length, optimisticFollowUp?.message]);
 
   useEffect(() => {
@@ -1976,7 +2030,7 @@ export function SessionsPage({
                 </div>
               )}
               <div
-                className={`composer session-follow-up-composer${composerDragOver ? ' is-drag-over' : ''}`}
+                className={`composer session-follow-up-composer${composerDragOver ? ' is-drag-over' : ''}${followUpCollapsed ? ' is-collapsed' : ''}${isTurnActive ? ' is-running' : ''}${liveActivityText?.startsWith('Running ') ? ' is-waiting-tool' : ''}`}
                 onPaste={handleComposerPaste}
                 onDragOver={event => {
                   if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return;
@@ -1989,6 +2043,30 @@ export function SessionsPage({
                 }}
                 onDrop={handleComposerDrop}
               >
+                {followUpCollapsed && isTurnActive && (
+                  <svg
+                    className="session-composer-activity-orbit"
+                    data-testid="session-composer-activity-orbit"
+                    aria-hidden="true"
+                    viewBox="0 0 100 20"
+                    preserveAspectRatio="none"
+                  >
+                    <defs>
+                      <linearGradient id="session-composer-activity-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop className="session-composer-activity-gradient-leading" offset="0%" />
+                        <stop className="session-composer-activity-gradient-core" offset="55%" />
+                        <stop className="session-composer-activity-gradient-trailing" offset="100%" />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      ref={activityPathRef}
+                      data-activity-capsule="true"
+                      d="M 1.75 0.5 H 98.25 A 1.25 4.75 0 0 1 99.5 5.25 V 14.75 A 1.25 4.75 0 0 1 98.25 19.5 H 1.75 A 1.25 4.75 0 0 1 0.5 14.75 V 5.25 A 1.25 4.75 0 0 1 1.75 0.5 Z"
+                      stroke="url(#session-composer-activity-gradient)"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </svg>
+                )}
                 {/* The session's AI ran out: carry on with another AI, or stop. A workflow stage's run offers this itself. */}
                 {limitSwitchVisible && (
                   <SessionLimitSwitch
@@ -2176,7 +2254,7 @@ export function SessionsPage({
                     }
                   }}
                 />
-              <div className="composer-controls">
+              <SessionComposerToolbar>
                 {isSingleAgentRunning ? (
                   followUpCollapsed ? (
                     <>
@@ -2432,10 +2510,6 @@ export function SessionsPage({
                       </button>
                     ))}
                     {!workflowOwnsRuntime && selected.provider && (() => {
-                      const contextLimit = selected.model
-                        ? selected.contextLimit ?? getKnownContextLength(selected.model, selected.provider)
-                        : undefined;
-                      const contextSize = formatContextLength(contextLimit);
                       const pricing = getModelPricing(selected.provider, selected.model);
                       const cost = formatModelCost(pricing);
                       return selected.workflowRole === 'stage' ? (
@@ -2446,7 +2520,6 @@ export function SessionsPage({
                         >
                           <Icon name="sparkles" size={14} />
                           <span>{selected.model ?? 'Provider default'}</span>
-                          {contextSize && <span className="composer-chip-meta">{contextSize}</span>}
                           {cost && <span className="composer-chip-meta">{cost}</span>}
                         </span>
                       ) : (
@@ -2470,33 +2543,17 @@ export function SessionsPage({
                         >
                           <Icon name="sparkles" size={14} />
                           <span>{selected.model ?? 'Model'}</span>
-                          {contextSize && <span className="composer-chip-meta">{contextSize}</span>}
                           {cost && <span className="composer-chip-meta">{cost}</span>}
                         </button>
                       );
                     })()}
                     {!workflowOwnsRuntime && selected.workflowRole !== 'stage' && supportsReasoningEffort(selected.provider, selected.model) && (
-                      <button
-                        type="button"
-                        className={`composer-chip session-runtime-chip${transitionPopover?.open === 'reasoning' ? ' active' : ''}`}
-                        data-testid="session-reasoning"
-                        title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Change the reasoning effort for the next turn' : "This session's reasoning effort"}
-                        aria-haspopup="listbox"
-                        aria-expanded={transitionPopover?.open === 'reasoning'}
+                      <ReasoningEffortSlider
+                        value={selected.reasoningEffort ?? 'medium'}
+                        onChange={value => void window.praxis.ai.updateSessionReasoningEffort(selected.issueKey, value)}
                         disabled={conversationRunning || !canChangeSessionRuntime(selected)}
-                        onClick={event => {
-                          if (transitionPopover?.open === 'reasoning') {
-                            setTransitionPopover(undefined);
-                            return;
-                          }
-                          const rect = event.currentTarget.getBoundingClientRect();
-                          setConversationPopoverPosition(undefined);
-                          setTransitionPopover({ open: 'reasoning', position: { bottom: window.innerHeight - rect.top + 6, left: rect.left } });
-                        }}
-                      >
-                        <Icon name="lightbulb" size={14} />
-                        <span>{selected.reasoningEffort && selected.reasoningEffort !== 'off' ? selected.reasoningEffort : 'Reasoning'}</span>
-                      </button>
+                        testId="session-reasoning"
+                      />
                     )}
                     <SessionConversationActions
                       session={selected}
@@ -2650,7 +2707,7 @@ export function SessionsPage({
                     )}
                   </>
                 )}
-              </div>
+              </SessionComposerToolbar>
                 </>}
               </div>
               {context && contextPopoverPosition && createPortal(
