@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
 import type { AiProvider, IssueDetails } from '../../types';
 import type { WireImageAttachment } from '../gateway/wire';
-import { BROWSER_TOOLS_PROMPT, buildSystemPrompt } from '../agentPrompt';
+import { AUTOPILOT_SESSION_PROMPT, BROWSER_TOOLS_PROMPT, buildSystemPrompt } from '../agentPrompt';
 import { reviewedIssueKey } from '../ticketReview';
 import {
   AGENT_DEFAULTS,
@@ -570,7 +570,7 @@ export class AcpAgentHost {
         : toolMode === 'project-only'
           ? 'PROJECT ONLY. Do not edit files, execute commands, or read local repository files.'
           : 'FULL. Use tools as needed; honor every permission request.'
-    }${hasBrowser ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}`;
+    }${hasBrowser ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}${options.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}`;
     // ACP's `session/prompt` has no separate system-role slot in the
     // high-level `ActiveSession.prompt(text)` API — the CLI agent supplies
     // its own persona, so the task's own instructions travel as one prompt.
@@ -610,7 +610,7 @@ export class AcpAgentHost {
     this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider, options.model, {
       workingDirectory,
       toolMode,
-      reasoningEffort: options.reasoningEffort ?? 'off'
+      reasoningEffort: options.reasoningEffort ?? 'medium'
     });
     this.sessionManager.updateAgentRuntime(issue.key, {
       ...(options.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
@@ -790,7 +790,7 @@ export class AcpAgentHost {
       (options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false)
         ? `\n\n${BROWSER_TOOLS_PROMPT}`
         : ''
-    }${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
+    }${record.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
     const prompt = [
       systemPrompt,
       this.buildConversationTranscript(record.events),

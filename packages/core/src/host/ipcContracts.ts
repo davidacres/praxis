@@ -780,6 +780,10 @@ export interface AiIpc {
   listProviderStatuses(): Promise<AiProviderStatus[]>;
   /** Runs the ACP handshake for a CLI provider without creating a session or sending a prompt. */
   probeProviderCapability(provider: AiProvider): Promise<ProviderCapabilityProbe | undefined>;
+  /** Installs the allowlisted ACP package for a CLI provider, then returns its output summary. */
+  installCliProvider(provider: AiProvider): Promise<{ message: string }>;
+  /** Looks up the latest published version of a built-in provider's allowlisted ACP package. */
+  getLatestCliProviderVersion(provider: AiProvider): Promise<{ version: string }>;
   /**
    * The available models for a `hostKind: 'acp'` provider (Claude Code,
    * Codex), read live from the agent's `session/new` response — a
@@ -850,6 +854,8 @@ export interface AiIpc {
   updateSessionModel(issueKey: string, model: string): Promise<AgentSessionRecord>;
   /** Changes the reasoning/thinking effort used for the next turn of an idle session. */
   updateSessionReasoningEffort(issueKey: string, reasoningEffort: ReasoningEffort): Promise<AgentSessionRecord>;
+  /** Changes the permission policy used for the next turn of an idle session. */
+  updateSessionPermissionMode(issueKey: string, permissionMode: AgentPermissionMode): Promise<AgentSessionRecord>;
   /** Updates the working directory or tool mode for an idle session. */
   updateSessionToolAccess(
     issueKey: string,

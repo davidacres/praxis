@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import type {
   AgentEventSummary,
   AgentSessionRecord,
+  AgentPermissionMode,
   AiAnalysisState,
   AiProvider,
   AiProviderStatus,
@@ -25,6 +26,7 @@ import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelectio
 import { providerIconName, providerLabel, supportsReasoningEffort } from './modelProviders';
 import { ReasoningEffortSlider } from './ReasoningEffortSlider';
 import { SessionComposerToolbar } from './SessionComposerToolbar';
+import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, formatModelCost, getKnownContextLength, getModelPricing, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
@@ -2740,6 +2742,18 @@ export function SessionsPage({
               </SessionComposerToolbar>
                 </>}
               </div>
+              {!followUpCollapsed && !limitSwitchVisible && (
+                <div className="session-composer-footer">
+                  <SessionPermissionModeControl
+                    value={selected.permissionMode}
+                    onChange={(permissionMode: AgentPermissionMode) => {
+                      void window.praxis.ai.updateSessionPermissionMode(selected.issueKey, permissionMode);
+                    }}
+                    testId="session"
+                    disabled={conversationRunning || !canChangeSessionRuntime(selected)}
+                  />
+                </div>
+              )}
               {context && contextPopoverPosition && createPortal(
                 <div
                   ref={contextPopoverRef}

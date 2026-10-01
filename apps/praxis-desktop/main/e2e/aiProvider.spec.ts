@@ -548,6 +548,7 @@ test('every provider model exposes a persisted reasoning default and composer ov
 
   const defaultChip = win.locator('[data-testid="model-manager-reasoning-acme/novel-model"]');
   await expect(defaultChip).toBeVisible({ timeout: 10000 });
+  await expect(defaultChip).toHaveAttribute('data-value', 'medium');
   await chooseOption(defaultChip, 'high');
   await expect(defaultChip).toHaveAttribute('data-value', 'high');
   await expect.poll(async () => win.evaluate(async () => {
@@ -561,7 +562,14 @@ test('every provider model exposes a persisted reasoning default and composer ov
   const composerChip = win.locator('[data-testid="new-session-reasoning-chip"]');
   await expect(composerChip).toBeVisible({ timeout: 10000 });
   await expect(composerChip).toHaveAttribute('data-value', 'high');
-  await chooseOption(composerChip, 'medium');
+  await expect(composerChip).toHaveAttribute('title', 'Reasoning effort: High');
+  const compactWidth = (await composerChip.boundingBox())?.width ?? 0;
+  await composerChip.hover();
+  await win.waitForTimeout(200);
+  const expandedWidth = (await composerChip.boundingBox())?.width ?? 0;
+  expect(compactWidth).toBeLessThan(expandedWidth);
+  await composerChip.locator('input[type="range"]').fill('2');
+  await expect(composerChip).toHaveAttribute('data-value', 'medium');
 
   await win.locator('[data-testid="new-session-view"] textarea').fill('Use the composer reasoning override');
   await win.locator('[data-testid="new-session-submit"]').click();

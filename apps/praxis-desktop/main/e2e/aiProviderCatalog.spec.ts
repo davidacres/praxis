@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 import { startMockOpenAiCompatibleServer, type MockOpenAiCompatibleServer } from './mockOpenAiCompatibleServer';
@@ -13,10 +14,13 @@ import { chooseOption, chipOptionValues } from './chipSelect';
 
 let app: TestApp | undefined;
 let mock: MockOpenAiCompatibleServer | undefined;
+let providerFixtureDir: string | undefined;
 
 test.afterEach(async () => {
   if (app) await closeTestApp(app);
   if (mock) await mock.close();
+  if (providerFixtureDir) fs.rmSync(providerFixtureDir, { recursive: true, force: true });
+  providerFixtureDir = undefined;
   app = undefined;
   mock = undefined;
 });
@@ -146,6 +150,44 @@ test('the list shows only providers in use; Add provider lists the rest and adds
   // Unconfigured, so it can be taken off the list again; nothing else about it changes.
   await win.getByTestId('ai-provider-remove-openai').click();
   await expect(win.getByTestId('ai-provider-row-openai')).toHaveCount(0);
+
+  // ACP providers offer a guarded app-managed install action alongside the manual CLI path.
+  await win.getByTestId('ai-add-provider').click();
+  await dialog.getByTestId('add-provider-tile-claude-code-cli').click();
+  await expect(win.getByTestId('ai-provider-install-claude-code-cli')).toBeVisible();
+  await expect(win.getByTestId('ai-provider-install-claude-code-cli')).toContainText('Install ACP');
+});
+
+test('ACP settings clearly show installed and latest package versions', async () => {
+  providerFixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-acp-version-fixture-'));
+  const fixtureCommand = path.join(providerFixtureDir, process.platform === 'win32' ? 'claude-agent-acp.exe' : 'claude-agent-acp');
+  fs.copyFileSync(process.execPath, fixtureCommand);
+  app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli' } }, undefined, {
+    AI_GATEWAY_API_KEY: 'gateway-e2e-key',
+    PATH: `${providerFixtureDir}${path.delimiter}${process.env.PATH ?? ''}`
+  });
+  const win = app.window;
+  const startupNotice = win.getByTestId('acp-update-notice');
+  await expect(startupNotice).toBeVisible({ timeout: 15000 });
+  await expect(startupNotice).toContainText('Claude Code (local)');
+  await expect(startupNotice).toContainText('→');
+  const artifactDir = path.resolve(process.cwd(), '../.praxis/session-artifacts');
+  await fs.promises.mkdir(artifactDir, { recursive: true });
+  await startupNotice.screenshot({ path: path.join(artifactDir, 'acp-update-startup-notice.png') });
+  await startupNotice.getByRole('button', { name: 'Update ACP' }).click();
+  await expect(win.getByRole('dialog', { name: 'Update Claude Code (local) ACP?' })).toBeVisible();
+  await win.getByRole('button', { name: 'Cancel' }).click();
+  await startupNotice.getByRole('button', { name: 'AI Provider settings' }).click();
+  await expect(win.getByRole('dialog', { name: 'Settings' })).toBeVisible();
+  await expect(win.getByTestId('settings-nav-ai')).toBeVisible();
+  await win.getByTestId('ai-provider-list').waitFor();
+
+  const versionPanel = win.getByTestId('ai-provider-acp-versions-claude-code-cli');
+  await expect(versionPanel).toBeVisible();
+  await expect(win.getByTestId('ai-provider-acp-current-claude-code-cli')).toHaveText(/^v\d+\.\d+/);
+  await expect(win.getByTestId('ai-provider-acp-latest-claude-code-cli')).toHaveText(/^v\d+\.\d+\.\d+$/, { timeout: 15000 });
+  await expect(win.getByTestId('ai-provider-update-claude-code-cli')).toBeVisible();
+  await versionPanel.screenshot({ path: path.join(artifactDir, 'ai-provider-acp-versions.png') });
 });
 
 test('a custom endpoint is tested, saved, listed with its capabilities and runs an agent session', async () => {

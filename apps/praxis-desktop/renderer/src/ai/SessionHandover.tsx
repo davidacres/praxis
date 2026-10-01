@@ -344,7 +344,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
   };
 
   const changeReasoningEffort = async (reasoningEffort: ReasoningEffort) => {
-    if (reasoningEffort === (session.reasoningEffort ?? 'off')) {
+    if (reasoningEffort === (session.reasoningEffort ?? 'medium')) {
       onClose();
       return;
     }
@@ -653,10 +653,10 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
             <button
               key={level}
               type="button"
-              className={`composer-provider-option${(session.reasoningEffort ?? 'off') === level ? ' active' : ''}`}
+              className={`composer-provider-option${(session.reasoningEffort ?? 'medium') === level ? ' active' : ''}`}
               data-testid={`session-reasoning-option-${level}`}
               role="option"
-              aria-selected={(session.reasoningEffort ?? 'off') === level}
+              aria-selected={(session.reasoningEffort ?? 'medium') === level}
               disabled={busy}
               onClick={() => void changeReasoningEffort(level)}
             >

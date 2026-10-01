@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   AgentSessionRecord,
+  AgentPermissionMode,
   AgentToolMode,
   AgentWorkflowReference,
   AiAnalysisState,
@@ -232,6 +233,8 @@ const praxis: PraxisIpc = {
     setApiKey: (value: string) => ipcRenderer.invoke('ai:setApiKey', value),
     listProviderStatuses: () => ipcRenderer.invoke('ai:listProviderStatuses'),
     probeProviderCapability: (provider: AiProvider) => ipcRenderer.invoke('ai:probeProviderCapability', provider),
+    installCliProvider: (provider: AiProvider) => ipcRenderer.invoke('ai:installCliProvider', provider),
+    getLatestCliProviderVersion: (provider: AiProvider) => ipcRenderer.invoke('ai:getLatestCliProviderVersion', provider) as Promise<{ version: string }>,
     listCliModelOptions: (provider: AiProvider) => ipcRenderer.invoke('ai:listCliModelOptions', provider),
     listApiModelOptions: (provider: AiProvider, forceRefresh?: boolean) =>
       ipcRenderer.invoke('ai:listApiModelOptions', provider, forceRefresh),
@@ -261,6 +264,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:updateSessionModel', issueKey, model),
     updateSessionReasoningEffort: (issueKey: string, reasoningEffort: ReasoningEffort) =>
       ipcRenderer.invoke('ai:updateSessionReasoningEffort', issueKey, reasoningEffort),
+    updateSessionPermissionMode: (issueKey: string, permissionMode: AgentPermissionMode) =>
+      ipcRenderer.invoke('ai:updateSessionPermissionMode', issueKey, permissionMode),
     updateSessionToolAccess: (
       issueKey: string,
       options: { workingDirectory?: string | null; toolMode?: AgentToolMode }

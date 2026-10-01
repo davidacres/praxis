@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { WorkspaceRecord } from '@praxis/core';
+import type { AiProvider, WorkspaceRecord, UpdateStatus } from '@praxis/core';
 import type { SidebarMode } from './Sidebar';
 import { Icon, type IconName } from '../ui/Icon';
 import { PraxisWordmark } from './StartupSplash';
 import { useUpdateStatus } from './useUpdateStatus';
+import { useDialogs } from '../ui/dialogs';
 import {
   BoardFilterBar,
   countActiveBoardFilters,
@@ -53,6 +54,7 @@ export interface TitleBarProps {
   onOpenWhatsNew: () => void;
   settingsOpen: boolean;
   onOpenSettings: () => void;
+  onOpenAiSettings: () => void;
 }
 
 /**
@@ -96,7 +98,8 @@ export function TitleBar({
   boardFilter,
   onOpenWhatsNew,
   settingsOpen,
-  onOpenSettings
+  onOpenSettings,
+  onOpenAiSettings
 }: TitleBarProps) {
   const isFocusMode = explicitFocusMode ?? (!sidebarVisible && !auxVisible && !panelVisible);
   const [maximized, setMaximized] = useState(false);
@@ -438,7 +441,7 @@ export function TitleBar({
 
       <div className="titlebar-spacer" />
 
-      <UpdateIndicator />
+      <UpdateIndicator settingsOpen={settingsOpen} onOpenAiSettings={onOpenAiSettings} />
 
       <div className="titlebar-group titlebar-layout-toggles">
         <button
@@ -564,42 +567,155 @@ export function TitleBar({
 }
 
 /**
- * Quiet until there is something to act on: a downloaded update waiting for a
- * restart, or a newer release this build cannot install itself (an unsigned
- * macOS bundle), which links to the release page instead.
+ * Quiet until there is something to act on: a downloaded app update, a release
+ * this build cannot install itself, or a Praxis-managed ACP package update.
  */
-function UpdateIndicator() {
+function UpdateIndicator({ settingsOpen, onOpenAiSettings }: { settingsOpen: boolean; onOpenAiSettings: () => void }) {
   const status = useUpdateStatus();
-  if (status?.state === 'ready') {
-    return (
-      <div className="titlebar-group titlebar-update">
-        <button
-          className="titlebar-update-btn"
-          data-testid="titlebar-update"
-          title={`Praxis ${status.version} has been downloaded. Restart to install it, or it installs when you quit.`}
-          onClick={() => void window.praxis.app.update.installNow()}
-        >
-          <Icon name="refresh" size={12} />
-          Restart to update
+  const appUpdateIndicator = status?.state === 'ready' ? (
+    <div className="titlebar-group titlebar-update">
+      <button
+        className="titlebar-update-btn"
+        data-testid="titlebar-update"
+        title={`Praxis ${status.version} has been downloaded. Restart to install it, or it installs when you quit.`}
+        onClick={() => void window.praxis.app.update.installNow()}
+      >
+        <Icon name="refresh" size={12} />
+        Restart to update
+      </button>
+    </div>
+  ) : status?.state === 'available' && !status.canInstall && status.releaseUrl ? (
+    <div className="titlebar-group titlebar-update">
+      <button
+        className="titlebar-update-btn"
+        data-testid="titlebar-update"
+        title={`Praxis ${status.version} is available. This build cannot install updates itself; open the release to download it.`}
+        onClick={() => void window.praxis.shell.openExternal(status.releaseUrl!)}
+      >
+        <Icon name="info" size={12} />
+        Update available
+      </button>
+    </div>
+  ) : null;
+
+  return <>{appUpdateIndicator}<AcpUpdateNotice status={status} settingsOpen={settingsOpen} onOpenSettings={onOpenAiSettings} /></>;
+}
+
+type AcpUpdate = { provider: AiProvider; label: string; current: string; latest: string };
+const ACP_MANAGED_PROVIDERS: AiProvider[] = ['claude-code-cli', 'codex-cli', 'antigravity-cli'];
+
+/** Checks alongside the startup app-update check and surfaces actionable ACP package updates. */
+function AcpUpdateNotice({
+  status,
+  settingsOpen,
+  onOpenSettings
+}: {
+  status: UpdateStatus | undefined;
+  settingsOpen: boolean;
+  onOpenSettings: () => void;
+}) {
+  const { confirm } = useDialogs();
+  const checked = useRef(false);
+  const [updates, setUpdates] = useState<AcpUpdate[]>([]);
+  const [updatingProvider, setUpdatingProvider] = useState<AiProvider>();
+  const [error, setError] = useState<string>();
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!status || checked.current) return;
+    const waitingForStartupCheck = status.state === 'unsupported' && status.reason === 'Update checking has not run yet.';
+    if (status.state === 'checking' || status.state === 'downloading' || waitingForStartupCheck) return;
+    checked.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [providerStatuses, settings] = await Promise.all([
+          window.praxis.ai.listProviderStatuses(),
+          window.praxis.settings.get()
+        ]);
+        const installed = providerStatuses.filter(provider =>
+          ACP_MANAGED_PROVIDERS.includes(provider.provider) &&
+          provider.kind === 'cli-agent' && provider.configured &&
+          Boolean(provider.preflight?.providerVersion) &&
+          !settings.ai.providers[provider.provider]?.cliPath?.trim()
+        );
+        const candidates = await Promise.all(installed.map(async provider => {
+          try {
+            const latest = await window.praxis.ai.getLatestCliProviderVersion(provider.provider);
+            const currentVersion = provider.preflight!.providerVersion!.replace(/^v/i, '');
+            return currentVersion === latest.version
+              ? undefined
+              : { provider: provider.provider, label: provider.label, current: currentVersion, latest: latest.version };
+          } catch {
+            return undefined;
+          }
+        }));
+        if (!cancelled) setUpdates(candidates.filter((candidate): candidate is AcpUpdate => Boolean(candidate)));
+      } catch {
+        // An unavailable registry or provider check should not disturb startup.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [status]);
+
+  const updateProvider = async (update: AcpUpdate) => {
+    if (!(await confirm({
+      title: `Update ${update.label} ACP?`,
+      message: `Installed v${update.current}; latest available is v${update.latest}. Praxis will use an available package manager to update the fixed ACP package globally.`,
+      confirmLabel: 'Update ACP'
+    }))) return;
+    setUpdatingProvider(update.provider);
+    setError(undefined);
+    try {
+      await window.praxis.ai.installCliProvider(update.provider);
+      const [providerStatuses, settings] = await Promise.all([
+        window.praxis.ai.listProviderStatuses(),
+        window.praxis.settings.get()
+      ]);
+      const installed = providerStatuses.filter(provider =>
+        ACP_MANAGED_PROVIDERS.includes(provider.provider) && provider.kind === 'cli-agent' &&
+        provider.configured && Boolean(provider.preflight?.providerVersion) &&
+        !settings.ai.providers[provider.provider]?.cliPath?.trim()
+      );
+      const remaining = await Promise.all(installed.map(async provider => {
+        try {
+          const latest = await window.praxis.ai.getLatestCliProviderVersion(provider.provider);
+          const current = provider.preflight!.providerVersion!.replace(/^v/i, '');
+          return current === latest.version ? undefined : {
+            provider: provider.provider, label: provider.label, current, latest: latest.version
+          };
+        } catch { return undefined; }
+      }));
+      setUpdates(remaining.filter((candidate): candidate is AcpUpdate => Boolean(candidate)));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setUpdatingProvider(undefined);
+    }
+  };
+
+  if (!updates.length || dismissed || settingsOpen) return null;
+  return (
+    <aside className="acp-update-notice" role="status" aria-live="polite" data-testid="acp-update-notice">
+      <div className="acp-update-notice-head">
+        <Icon name="info" size={15} />
+        <strong>ACP updates available</strong>
+        <button type="button" className="icon-btn icon-btn-sm" aria-label="Dismiss ACP update notice" onClick={() => setDismissed(true)}>
+          <Icon name="close" size={13} />
         </button>
       </div>
-    );
-  }
-  if (status?.state === 'available' && !status.canInstall && status.releaseUrl) {
-    const { releaseUrl } = status;
-    return (
-      <div className="titlebar-group titlebar-update">
-        <button
-          className="titlebar-update-btn"
-          data-testid="titlebar-update"
-          title={`Praxis ${status.version} is available. This build cannot install updates itself; open the release to download it.`}
-          onClick={() => void window.praxis.shell.openExternal(releaseUrl)}
-        >
-          <Icon name="info" size={12} />
-          Update available
-        </button>
-      </div>
-    );
-  }
-  return null;
+      <ul className="acp-update-list">
+        {updates.map(update => (
+          <li key={update.provider} className="acp-update-row">
+            <span className="acp-update-version"><strong>{update.label}</strong><small>v{update.current} → v{update.latest}</small></span>
+            <button type="button" className="btn btn-compact btn-primary" disabled={Boolean(updatingProvider)} onClick={() => void updateProvider(update)}>
+              {updatingProvider === update.provider ? 'Updating…' : 'Update ACP'}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="acp-update-error">{error}</p>}
+      <button type="button" className="link-button acp-update-settings" onClick={onOpenSettings}>AI Provider settings</button>
+    </aside>
+  );
 }

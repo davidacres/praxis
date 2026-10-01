@@ -22,11 +22,13 @@ class PermissionCard extends StatefulWidget {
 
 class _PermissionCardState extends State<PermissionCard> {
   bool _busy = false;
+  String? _busyDecision;
   String? _failure;
 
   Future<void> _respond(AppStore store, String decision) async {
     setState(() {
       _busy = true;
+      _busyDecision = decision;
       _failure = null;
     });
     try {
@@ -34,8 +36,79 @@ class _PermissionCardState extends State<PermissionCard> {
     } catch (error) {
       if (mounted) setState(() => _failure = Diagnostics.messageOf(error));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _busyDecision = null;
+        });
+      }
     }
+  }
+
+  Widget _cardButton({
+    required BuildContext context,
+    required String label,
+    required String decision,
+    required bool primary,
+    bool danger = false,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    final t = context.t;
+    final p = t.palette;
+    final isThisBusy = _busy && _busyDecision == decision;
+
+    return Pressable(
+      label: label,
+      enabled: enabled && !_busy,
+      onTap: onTap,
+      excludeChildSemantics: true,
+      builder: (context, pressed) {
+        final bg = primary
+            ? (pressed ? Color.lerp(p.accent, Colors.black, 0.15) : p.accent)
+            : (danger && pressed
+                ? p.dangerSoft
+                : pressed
+                    ? p.surfaceRaised
+                    : p.surface);
+        final textColor = primary
+            ? p.onAccent
+            : danger
+                ? p.danger
+                : p.text;
+        final border = primary
+            ? null
+            : Border.all(color: p.border, width: 0.5);
+
+        return Opacity(
+          opacity: !enabled || (_busy && !isThisBusy) ? 0.45 : 1.0,
+          child: Container(
+            height: t.s(36),
+            alignment: Alignment.center,
+            padding: EdgeInsets.symmetric(horizontal: t.s(4)),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(t.s(8)),
+              border: border,
+            ),
+            child: isThisBusy
+                ? Spinner(color: textColor, small: true)
+                : Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: ts(
+                      context,
+                      13,
+                      weight: FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -57,11 +130,40 @@ class _PermissionCardState extends State<PermissionCard> {
         if (item.detail != null && item.detail!.isNotEmpty) Body(item.detail!, dim: true),
         if (_failure != null) Text(_failure!, style: ts(context, 12.5, lineHeight: 18, color: t.palette.danger)),
         Row(
-          mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            PraxisButton(label: 'Deny', ghost: true, expand: false, disabled: !canAnswer, onPressed: () => _respond(store, 'deny')),
+            Expanded(
+              child: _cardButton(
+                context: context,
+                label: 'Deny',
+                decision: 'deny',
+                primary: false,
+                danger: true,
+                enabled: canAnswer,
+                onTap: () => _respond(store, 'deny'),
+              ),
+            ),
             SizedBox(width: t.s(8)),
-            PraxisButton(label: 'Allow once', expand: false, disabled: !canAnswer, onPressed: () => _respond(store, 'allow')),
+            Expanded(
+              child: _cardButton(
+                context: context,
+                label: 'Approve all',
+                decision: 'allow_always',
+                primary: false,
+                enabled: canAnswer,
+                onTap: () => _respond(store, 'allow_always'),
+              ),
+            ),
+            SizedBox(width: t.s(8)),
+            Expanded(
+              child: _cardButton(
+                context: context,
+                label: 'Approve',
+                decision: 'allow',
+                primary: true,
+                enabled: canAnswer,
+                onTap: () => _respond(store, 'allow'),
+              ),
+            ),
           ],
         ),
       ],

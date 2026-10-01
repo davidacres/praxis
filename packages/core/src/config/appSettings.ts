@@ -111,7 +111,7 @@ export interface AiProviderConfig {
    * Default reasoning/thinking effort per model, keyed by model id (Settings
    * → AI Provider → Manage models). A new session reads this as its starting
    * value and the composer's reasoning chip can still override it per turn.
-   * A model with no entry here defaults to `'off'`.
+   * A model with no entry here defaults to `'medium'`.
    */
   modelReasoningDefaults?: Record<string, ReasoningEffort>;
 }

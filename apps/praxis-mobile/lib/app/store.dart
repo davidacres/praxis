@@ -970,7 +970,7 @@ class AppStore extends ChangeNotifier {
 
   /// Allowing asks the person to prove it is them first; false when they cancel.
   Future<bool> respondToPermission(String requestId, String decision) async {
-    if (decision == 'allow' && !await confirmIdentity('Allow the agent to do this on your desktop')) return false;
+    if (decision != 'deny' && !await confirmIdentity('Allow the agent to do this on your desktop')) return false;
     await _command('permissions.respond', 'permission', {'requestId': requestId}, {'decision': decision});
     _markResolved('permission:$requestId');
     return true;
@@ -984,6 +984,30 @@ class AppStore extends ChangeNotifier {
     if (!await confirmIdentity('Approve this workflow run')) return false;
     await _command('workflowGates.approve', 'approve', {'runId': runId}, const {});
     _markResolved('approval:$runId');
+    return true;
+  }
+
+  Future<bool> approveAll([String? currentRunId]) async {
+    if (!await confirmIdentity('Approve all workflow runs')) return false;
+    final toApprove = <String>{
+      if (currentRunId != null) currentRunId,
+    };
+    for (final run in workflowRuns) {
+      if (run.status == 'awaiting-approval' && run.canApprove) {
+        toApprove.add(run.runId);
+      }
+    }
+    for (final item in openAttention) {
+      if (item.kind == 'approval' && item.runId != null) {
+        toApprove.add(item.runId!);
+      }
+    }
+    for (final runId in toApprove) {
+      try {
+        await _command('workflowGates.approve', 'approve', {'runId': runId}, const {});
+        _markResolved('approval:$runId');
+      } catch (_) {}
+    }
     return true;
   }
 

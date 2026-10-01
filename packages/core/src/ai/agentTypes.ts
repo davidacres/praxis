@@ -372,7 +372,7 @@ export interface AgentConversationMessage {
 export type AgentToolMode = 'read-only' | 'full' | 'project-only';
 
 /** How a session handles tool-permission requests within its host-enforced tool access. */
-export type AgentPermissionMode = 'manual' | 'auto' | 'bypass';
+export type AgentPermissionMode = 'manual' | 'auto' | 'autopilot' | 'bypass';
 
 /** The transport that actually owned a session turn. */
 export type AgentRuntimeAdapter = 'acp' | 'gateway' | 'legacy-acp' | 'legacy-gateway';
@@ -403,7 +403,7 @@ export interface AgentSessionRecord {
   /**
    * Normalized reasoning/thinking effort selected for this session's turns.
    * `undefined` falls back to the provider's per-model default from
-   * `AiProviderConfig.modelReasoningDefaults`, then to `'off'`.
+   * `AiProviderConfig.modelReasoningDefaults`, then to `'medium'`.
    */
   reasoningEffort?: ReasoningEffort;
   /** Stable workspace root used for every turn in this session. */

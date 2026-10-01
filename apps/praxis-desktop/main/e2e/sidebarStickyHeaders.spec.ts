@@ -56,11 +56,12 @@ test('tree headers stick nested beneath their parents as the top sidebar panel s
   }, repo);
   await page.reload();
   await expect(page.getByTestId('startup-splash')).toHaveCount(0, { timeout: 15000 });
+  await page.locator('.project-tree').filter({ hasText: 'Sticky Project' }).getByTestId('project-docs-toggle').click();
   await expect(page.getByTestId('project-document-nav-item').first()).toBeVisible({ timeout: 15000 });
 
   const scroll = page.locator('.sidebar-scroll');
   const tree = page.locator('.project-tree').filter({ hasText: 'Sticky Project' });
-  const projectsHeading = page.locator('.sidebar-scroll > .sidebar-section-heading').first();
+  const projectsHeading = page.locator('.sidebar-scroll > .projects-section-header').first();
   const projectRow = tree.locator('.project-tree-parent');
   const docs = tree.getByTestId('project-docs-nav-item');
   const plansFolder = tree.getByTestId('project-plans-nav-item');

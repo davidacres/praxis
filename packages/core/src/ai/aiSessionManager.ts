@@ -8,6 +8,7 @@ import type {
   AgentEventSummary,
   AgentModeOption,
   AgentSessionRecord,
+  AgentPermissionMode,
   AgentConversation,
   AgentConversationParticipant,
   AiStartConversationInput,
@@ -383,6 +384,17 @@ export class AiSessionManager {
     }
     assertCanChangeSessionRuntime(record);
     record.reasoningEffort = reasoningEffort;
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
+  /** Set the permission policy used for this session's next turn. */
+  public updateSessionPermissionMode(issueKey: string, permissionMode: AgentPermissionMode): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+    record.permissionMode = permissionMode;
+    record.autoApprovePermissions = permissionMode === 'bypass' || permissionMode === 'autopilot';
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
     return record;

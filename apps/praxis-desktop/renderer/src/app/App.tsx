@@ -2219,6 +2219,7 @@ export function App() {
         onOpenWhatsNew={() => setWhatsNewOpen(true)}
         settingsOpen={settingsDialogCategory !== undefined}
         onOpenSettings={() => setSettingsDialogCategory(current => current ? undefined : 'overview')}
+        onOpenAiSettings={() => setSettingsDialogCategory('ai')}
         boardFilter={
           selectedBoard && boardDetails && !route.feature && !route.newIssue && !route.view
             ? {

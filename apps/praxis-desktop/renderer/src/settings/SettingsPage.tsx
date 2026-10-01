@@ -2043,6 +2043,8 @@ interface AiProviderMeta {
   cliPathDescription?: string;
   /** `kind: 'cli-agent'` only — shown when the real, free PATH-resolution check finds nothing to spawn. */
   notInstalledHint?: string;
+  /** `kind: 'cli-agent'` only — fixed package Praxis may install after confirmation. */
+  installPackage?: string;
 }
 
 /** Short names for a custom endpoint's tested capabilities, as its row shows them. */
@@ -2105,7 +2107,8 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     urlPlaceholder: '',
     modelPlaceholder: '',
     defaultCommand: 'claude-agent-acp',
-    notInstalledHint: 'Not found on PATH — run "npm install -g @agentclientprotocol/claude-agent-acp".'
+    notInstalledHint: 'Not found on PATH — install the ACP package or set the executable path below.',
+    installPackage: '@agentclientprotocol/claude-agent-acp'
   },
   {
     id: 'codex-cli',
@@ -2115,7 +2118,8 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     urlPlaceholder: '',
     modelPlaceholder: '',
     defaultCommand: 'codex-acp',
-    notInstalledHint: 'Not found on PATH — run "npm install -g @agentclientprotocol/codex-acp".'
+    notInstalledHint: 'Not found on PATH — install the ACP package or set the executable path below.',
+    installPackage: '@agentclientprotocol/codex-acp'
   },
   {
     id: 'copilot-cli',
@@ -2136,7 +2140,8 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     urlPlaceholder: '',
     modelPlaceholder: '',
     defaultCommand: 'agy',
-    notInstalledHint: 'Not found on PATH — run "npm install -g agy" or install via system package manager.'
+    notInstalledHint: 'Not found on PATH — install the ACP package or set the executable path below.',
+    installPackage: 'agy'
   }
 ];
 
@@ -2210,6 +2215,8 @@ function AiSection({
   const [expandedProviderId, setExpandedProviderId] = useState<AiProvider | undefined>(settings.ai.activeProvider);
   const [keyDraft, setKeyDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [installingCli, setInstallingCli] = useState(false);
+  const [latestCliVersion, setLatestCliVersion] = useState<{ provider: AiProvider; version?: string; loading: boolean }>({ provider: settings.ai.activeProvider, loading: false });
   const [resettingKeys, setResettingKeys] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [testSuccess, setTestSuccess] = useState<string | undefined>();
@@ -2235,6 +2242,19 @@ function AiSection({
   };
 
   useEffect(reloadStatuses, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!AI_PROVIDERS.some(provider => provider.id === selectedProviderId && provider.kind === 'cli-agent' && provider.installPackage)) {
+      setLatestCliVersion({ provider: selectedProviderId, loading: false });
+      return;
+    }
+    setLatestCliVersion({ provider: selectedProviderId, loading: true });
+    window.praxis.ai.getLatestCliProviderVersion(selectedProviderId)
+      .then(result => { if (!cancelled) setLatestCliVersion({ provider: selectedProviderId, version: result.version, loading: false }); })
+      .catch(() => { if (!cancelled) setLatestCliVersion({ provider: selectedProviderId, loading: false }); });
+    return () => { cancelled = true; };
+  }, [selectedProviderId]);
 
   // Self-contained, like `reloadStatuses` above — the Settings dialog has no
   // App-level session state threaded into it, so this section fetches and
@@ -2341,6 +2361,27 @@ function AiSection({
       setError(`Connection test failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setTestingKey(false);
+    }
+  };
+
+  const installCli = async (updating = false) => {
+    if (!selectedMeta.installPackage) return;
+    if (!(await confirm({
+      title: `${updating ? 'Update' : 'Install'} ${selectedMeta.label} ACP?`,
+      message: `Praxis will use an available package manager to ${updating ? 'update' : 'install'} ${selectedMeta.installPackage} globally. The package is fixed by this provider and is not editable here.`,
+      confirmLabel: updating ? 'Update ACP' : 'Install ACP'
+    }))) return;
+    setInstallingCli(true);
+    setError(undefined);
+    setTestSuccess(undefined);
+    try {
+      const result = await window.praxis.ai.installCliProvider(selectedProviderId);
+      setTestSuccess(result.message);
+      reloadStatuses();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInstallingCli(false);
     }
   };
 
@@ -2745,11 +2786,57 @@ function AiSection({
                           </div>
                         )}
                         {!configured && rowStatus && (
-                          <p className="settings-hint ai-provider-setup-hint" data-testid={`ai-provider-setup-hint-${meta.id}`}>
-                            {meta.kind === 'cli-agent'
-                              ? 'Install the CLI, or set its path below, to turn this provider on. It switches on as soon as it is found.'
-                              : 'Add an API key below to turn this provider on. It switches on as soon as the key is saved.'}
-                          </p>
+                          <>
+                            <p className="settings-hint ai-provider-setup-hint" data-testid={`ai-provider-setup-hint-${meta.id}`}>
+                              {meta.kind === 'cli-agent'
+                                ? 'Install the CLI, or set its path below, to turn this provider on. It switches on as soon as it is found.'
+                                : 'Add an API key below to turn this provider on. It switches on as soon as the key is saved.'}
+                            </p>
+                            {meta.installPackage && !selectedConfig.cliPath?.trim() && (
+                              <div className="ai-provider-body-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-compact"
+                                  data-testid={`ai-provider-install-${meta.id}`}
+                                  disabled={installingCli}
+                                  onClick={() => void installCli()}
+                                >
+                                  {installingCli ? 'Installing…' : 'Install ACP'}
+                                </button>
+                                <span className="settings-field-help">Uses npm, pnpm, yarn, or bun when available.</span>
+              </div>
+                            )}
+                          </>
+                        )}
+                        {meta.kind === 'cli-agent' && meta.installPackage && rowStatus?.configured && !selectedConfig.cliPath?.trim() && (
+                          <section className="ai-acp-version" aria-label={`${meta.label} ACP versions`} data-testid={`ai-provider-acp-versions-${meta.id}`}>
+                            <div className="ai-acp-version-heading">ACP package version</div>
+                            <dl className="ai-acp-version-list">
+                              <div className="ai-acp-version-item">
+                                <dt>Installed</dt>
+                                <dd data-testid={`ai-provider-acp-current-${meta.id}`}>
+                                  {rowStatus?.preflight?.providerVersion ? `v${rowStatus.preflight.providerVersion}` : rowStatus?.configured ? 'Version unavailable' : 'Not installed'}
+                                </dd>
+                              </div>
+                              <div className="ai-acp-version-item">
+                                <dt>Latest</dt>
+                                <dd data-testid={`ai-provider-acp-latest-${meta.id}`}>
+                                  {latestCliVersion.provider !== meta.id || latestCliVersion.loading ? 'Checking…' : latestCliVersion.version ? `v${latestCliVersion.version}` : 'Could not check'}
+                                </dd>
+                              </div>
+                            </dl>
+                            <div className="ai-provider-body-actions">
+                              <button
+                                type="button"
+                                className="btn btn-compact"
+                                data-testid={`ai-provider-update-${meta.id}`}
+                                disabled={installingCli || !latestCliVersion.version || (rowStatus?.preflight?.providerVersion === latestCliVersion.version)}
+                                onClick={() => void installCli(true)}
+                              >
+                                {installingCli ? 'Updating…' : rowStatus?.preflight?.providerVersion && latestCliVersion.version === rowStatus.preflight.providerVersion ? 'Up to date' : 'Update ACP'}
+                              </button>
+                            </div>
+                          </section>
                         )}
               {isApi && (
                 <>
