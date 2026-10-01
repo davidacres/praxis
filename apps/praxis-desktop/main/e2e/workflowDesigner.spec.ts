@@ -7,9 +7,10 @@ import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 /**
  * FX-BE-021 / FX-BF-014 — the visual workflow designer.
  *
- * Navigation moved to the sidebar: the Workflows row expands to the project's
- * saved workflows plus a Runs child; `+` opens the New Workflow dialog. The
- * stage/connection inspector renders in the shell's right pane.
+ * Navigation lives in the project sidebar: Workflows is a project-level group
+ * for saved definitions, separate from the project's Automations group of run
+ * rows. `+` on Workflows opens the New Workflow dialog. The stage/connection
+ * inspector renders in the shell's right pane.
  */
 
 test.slow();
@@ -830,4 +831,3 @@ test('submenu displays search box when items exceed 10, filters real-time, and c
   await searchInput.press('Escape');
   await expect(agentsSubmenu).not.toBeVisible();
 });
-

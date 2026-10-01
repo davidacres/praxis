@@ -3,7 +3,7 @@ import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 import type { AiProvider, IssueDetails } from '../types';
 import { runAgentLoop, type AgentLoopEvent, type WireImageAttachment, type WireMessage } from './agentRuntime';
-import { BROWSER_TOOLS_PROMPT, buildSystemPrompt, type PermissionInfo } from './agentPrompt';
+import { AUTOPILOT_SESSION_PROMPT, BROWSER_TOOLS_PROMPT, buildSystemPrompt, type PermissionInfo } from './agentPrompt';
 import { reviewedIssueKey } from './ticketReview';
 import {
   AGENT_DEFAULTS,
@@ -45,6 +45,7 @@ interface ActiveTask {
     resolve: (result: PermissionDecision) => void;
   }>;
   allowPermissionsForTask: boolean;
+  autopilot: boolean;
   pendingInput?: {
     resolve: (response: string) => void;
   };
@@ -527,7 +528,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       void this.sessionManager.refreshHandoverBrief(issueKey);
     } else if (result.status === 'aborted') {
       // abortTask already sets state
-    } else if (result.status === 'step_limit') {
+    } else if (result.status === 'step_limit' && active.autopilot) {
       active.maxSteps = Number.MAX_SAFE_INTEGER;
       this.appendEvent(issueKey, evt('info', 'Step limit removed automatically (autopilot mode).'));
       // Continue from history with raised step limit
@@ -575,7 +576,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
         : toolMode === 'project-only'
           ? 'Tool mode: PROJECT ONLY. You do not have local file or shell tools. Converse directly with the user.'
           : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
-    }${hasBrowserTools ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}`;
+    }${hasBrowserTools ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}${options.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}`;
     const userPrompt = this.buildInitialPrompt(issue, taskDefinition, workingDirectory);
 
     const task: ActiveTask = {
@@ -583,6 +584,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       abortController: new AbortController(),
       pendingPermissions: [],
       allowPermissionsForTask: options.autoApprovePermissions === true,
+      autopilot: options.permissionMode === 'autopilot',
       messageBuffer: '',
       reasoningBuffer: '',
       turnStartTime: Date.now(),
@@ -593,7 +595,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     this.activeTasks.set(issue.key, task);
     this.emitActiveTaskChange(issue.key);
 
-    const reasoningEffort = options.reasoningEffort ?? 'off';
+    const reasoningEffort = options.reasoningEffort ?? 'medium';
     this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider, model, {
       workingDirectory,
       toolMode,
@@ -675,7 +677,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     const toolMode = record.toolMode ?? options.toolMode ?? 'full';
     const maxSteps = record.taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = record.taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
-    const reasoningEffort = record.reasoningEffort ?? options.reasoningEffort ?? 'off';
+    const reasoningEffort = record.reasoningEffort ?? options.reasoningEffort ?? 'medium';
     const model = options.model?.trim() || this.requireApiDescriptor(provider).defaultModel;
     this.noteContextLimit(issueKey, provider, gateway, model);
     // Replay the prior turns as a plain text exchange — old tool output does not
@@ -697,7 +699,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       (options.toolExtension?.definitions.some(tool => tool.name === 'browser_navigate') ?? false)
         ? `\n\n${BROWSER_TOOLS_PROMPT}`
         : ''
-    }${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
+    }${record.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
 
     const task: ActiveTask = {
       issueKey,
@@ -705,6 +707,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       pendingPermissions: [],
       // A follow-up turn keeps the mode the session was started in.
       allowPermissionsForTask: record.autoApprovePermissions === true,
+      autopilot: record.permissionMode === 'autopilot',
       messageBuffer: followUpMessage?.trim() ? '' : (record.responseText ?? ''),
       reasoningBuffer: '',
       turnStartTime: Date.now(),

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { IssueDetails } from '../types';
-import { buildSystemPrompt } from './agentPrompt';
+import { AUTOPILOT_SESSION_PROMPT, buildSystemPrompt } from './agentPrompt';
 import { coerceGadgetBlock } from './gadgets/validation';
 import { parseChatBlocks } from './gadgets/blockParser';
 import {
@@ -118,6 +118,11 @@ test('the prompt tells the agent to settle a question with evidence before it as
   assert.match(TICKET_REVIEW_SESSION_PROMPT, /Never ask the user to confirm something you could have looked up/);
   // A ticket that contradicts the evidence is a finding, not a question.
   assert.match(TICKET_REVIEW_SESSION_PROMPT, /is a \*\*finding\*\*/);
+});
+
+test('the Autopilot prompt directs the agent to decide and continue without routine questions', () => {
+  assert.match(AUTOPILOT_SESSION_PROMPT, /without asking the user routine follow-up questions/);
+  assert.match(AUTOPILOT_SESSION_PROMPT, /choose one, continue/);
 });
 
 test('the prompt spells out how to write a gadget that will display', () => {

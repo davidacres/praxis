@@ -1,4 +1,6 @@
+import { execFile } from 'node:child_process';
 import * as path from 'node:path';
+import { promisify } from 'node:util';
 import { app } from 'electron';
 import {
   AcpAgentHost,
@@ -41,6 +43,22 @@ import { JsonKeyValueStore } from './adapters/jsonKeyValueStore';
 import { getSecretsStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { getLogBus } from './logBusInstance';
+import { ensureEnvironmentPath } from './shellEnvironment';
+
+const execFileAsync = promisify(execFile);
+
+const ACP_INSTALL_PACKAGES: Partial<Record<AiProvider, string>> = {
+  'claude-code-cli': '@agentclientprotocol/claude-agent-acp',
+  'codex-cli': '@agentclientprotocol/codex-acp',
+  'antigravity-cli': 'agy'
+};
+
+const ACP_PACKAGE_MANAGERS = [
+  { command: 'npm', args: (packageName: string) => ['install', '--global', packageName] },
+  { command: 'pnpm', args: (packageName: string) => ['add', '--global', packageName] },
+  { command: 'yarn', args: (packageName: string) => ['global', 'add', packageName] },
+  { command: 'bun', args: (packageName: string) => ['add', '--global', packageName] }
+] as const;
 
 let sessionManager: AiSessionManager | undefined;
 let agentService: VercelAgentService | undefined;
@@ -374,6 +392,69 @@ export async function probeProviderCapability(provider: AiProvider): Promise<Pro
   }
 }
 
+/** Reads package metadata only for the fixed ACP package assigned to a built-in CLI provider. */
+export async function getLatestCliProviderVersion(provider: AiProvider): Promise<{ version: string }> {
+  const descriptor = getProviderDescriptor(provider);
+  const packageName = ACP_INSTALL_PACKAGES[provider];
+  if (descriptor.kind !== 'cli-agent' || !packageName) {
+    throw new Error(`${descriptor.label} does not have an app-managed ACP package.`);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+  try {
+    const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`, {
+      headers: { accept: 'application/vnd.npm.install-v1+json' },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Package registry returned ${response.status}.`);
+    const metadata = await response.json() as { 'dist-tags'?: { latest?: unknown } };
+    const version = metadata['dist-tags']?.latest;
+    if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(version)) {
+      throw new Error('The package registry did not return a valid latest version.');
+    }
+    return { version };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not check the latest ${descriptor.label} ACP version: ${detail}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Installs only the known package for a built-in ACP provider; renderer input never becomes a shell command. */
+export async function installCliProvider(provider: AiProvider): Promise<{ message: string }> {
+  const descriptor = getProviderDescriptor(provider);
+  const packageName = ACP_INSTALL_PACKAGES[provider];
+  if (descriptor.kind !== 'cli-agent' || !packageName) {
+    throw new Error(`${descriptor.label} does not have an app-managed ACP package.`);
+  }
+  ensureEnvironmentPath({ force: true });
+  const packageManager = (await Promise.all(
+    ACP_PACKAGE_MANAGERS.map(async candidate => ({
+      candidate,
+      available: await isExecutableAvailable(candidate.command)
+    }))
+  )).find(result => result.available)?.candidate;
+  if (!packageManager) {
+    throw new Error(
+      `No supported JavaScript package manager was found. Install Node.js (which includes npm), ` +
+      `or install ${packageName} manually and set the ACP executable path below.`
+    );
+  }
+  try {
+    const { stdout, stderr } = await execFileAsync(packageManager.command, packageManager.args(`${packageName}@latest`), {
+      env: process.env,
+      windowsHide: true,
+      timeout: 120_000,
+      maxBuffer: 4 * 1024 * 1024
+    });
+    return { message: `${descriptor.label} ACP installed with ${packageManager.command}. ${(stdout || stderr).trim()}`.trim() };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not install ${descriptor.label} ACP with ${packageManager.command}: ${detail}`);
+  }
+}
+
 /** Effective connection options for starting a task on the given provider: secret-store key
  *  (with env fallback for vercel-gateway), configured URL/model. */
 export async function resolveConnectionOptions(provider: AiProvider): Promise<{
@@ -423,6 +504,7 @@ async function buildProviderStatus(provider: AiProvider): Promise<AiProviderStat
     const cliPathOverride = settings.ai.providers[provider]?.cliPath?.trim();
     const command = cliPathOverride || descriptor.defaultCommand;
     const configured = command ? await isExecutableAvailable(command) : true;
+    const preflight = command ? await probeCliProvider(command) : undefined;
     return {
       provider,
       label: descriptor.label,
@@ -433,7 +515,8 @@ async function buildProviderStatus(provider: AiProvider): Promise<AiProviderStat
       gatewayUrl: command || 'bundled runtime',
       defaultModel: '',
       agentName: settings.ai.agentName,
-      activeTasks: getAcpAgentHost().getActiveTaskIssueKeys()
+      activeTasks: getAcpAgentHost().getActiveTaskIssueKeys(),
+      ...(preflight ? { preflight } : {})
     };
   }
 

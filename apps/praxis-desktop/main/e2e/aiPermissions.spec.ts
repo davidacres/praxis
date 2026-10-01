@@ -123,7 +123,7 @@ test('allowing a pending permission lets the session continue to completion', as
   await expect(win.locator('[data-testid="session-chat-tool"]')).toHaveCount(0);
 });
 
-test('the composer bypass mode starts a CLI session without a permission pause', async () => {
+test('the composer Autopilot mode starts a CLI session without a permission pause', async () => {
   app = await launchTestApp();
   const win = app.window;
 
@@ -145,8 +145,8 @@ test('the composer bypass mode starts a CLI session without a permission pause',
   await win.getByTestId('new-session-permission-chip').click();
   await expect(win.getByTestId('new-session-permission-option-manual')).toBeVisible();
   await win.screenshot({ path: '../.praxis/session-artifacts/session-composer-permissions.png', fullPage: true });
-  await win.getByTestId('new-session-permission-option-bypass').click();
-  await expect(win.getByTestId('new-session-permission-chip')).toContainText('Bypass permissions');
+  await win.getByTestId('new-session-permission-option-autopilot').click();
+  await expect(win.getByTestId('new-session-permission-chip')).toContainText('Autopilot');
 
   await win.locator('[data-testid="new-session-view"] textarea').fill('WITH_PERMISSION please');
   await win.locator('[data-testid="new-session-submit"]').click();

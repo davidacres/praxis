@@ -4,8 +4,8 @@ import { Icon } from '../ui/Icon';
 import { fetchModelOptions, supportsReasoningEffort } from './modelProviders';
 import { ChipSelect } from '../ui/ChipSelect';
 
-const REASONING_EFFORT_OPTIONS: Array<{ value: ReasoningEffort | ''; label: string }> = [
-  { value: '', label: 'Off' },
+const REASONING_EFFORT_OPTIONS: Array<{ value: ReasoningEffort; label: string }> = [
+  { value: 'off', label: 'Off' },
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' }
@@ -64,11 +64,10 @@ export function ModelManagerPanel({
   // tiers, this map lives per-provider, not at the top level, so no separate
   // callback prop is needed.
   const reasoningDefaultOf = (modelId: string): ReasoningEffort | '' =>
-    providerConfig.modelReasoningDefaults?.[modelId] ?? '';
-  const setReasoningDefault = (modelId: string, level: ReasoningEffort | '') => {
+    providerConfig.modelReasoningDefaults?.[modelId] ?? 'medium';
+  const setReasoningDefault = (modelId: string, level: ReasoningEffort) => {
     const next = { ...(providerConfig.modelReasoningDefaults ?? {}) };
-    if (level) next[modelId] = level;
-    else delete next[modelId];
+    next[modelId] = level;
     update({ ai: { providers: { [providerId]: { ...providerConfig, modelReasoningDefaults: next } } } }).catch(err => {
       setError(err instanceof Error ? err.message : String(err));
     });
@@ -243,7 +242,7 @@ export function ModelManagerPanel({
                       title="Default reasoning/thinking effort new sessions on this model start with"
                       data-testid={`model-manager-reasoning-${option.value}`}
                       value={reasoningDefaultOf(option.value)}
-                      onChange={value => setReasoningDefault(option.value, value as ReasoningEffort | '')}
+                      onChange={value => setReasoningDefault(option.value, value as ReasoningEffort)}
                       options={REASONING_EFFORT_OPTIONS}
                     />
                   </span>

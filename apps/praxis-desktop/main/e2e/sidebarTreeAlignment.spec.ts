@@ -72,8 +72,8 @@ test('rows at the same depth of the project tree share an icon column and a labe
       return { icon: Math.round(i.left), label: Math.round(l.left), gap: Math.round(l.left - i.right) };
     }, iconSelector);
 
-  // Depth 2 (--tree-indent-2): a board, a workflow and Policies. Automations is
-  // now a peer section to Sessions, so it deliberately has no nested tree icon.
+  // Depth 2 (--tree-indent-2): a board, a workflow and Policies. Workflows and
+  // Automations are project-level peer sections beside Sessions.
   const depth2 = {
     board: await measure('.project-board-row', '.tree-icon'),
     workflow: await measure('.project-workflow-row', '.tree-icon'),
@@ -98,6 +98,9 @@ test('rows at the same depth of the project tree share an icon column and a labe
     page.getByTestId('project-sessions-nav-item').boundingBox(),
     page.getByTestId('project-workflow-runs-nav-item').boundingBox()
   ]);
+  await expect(page.locator('.project-tree-children > .project-workflows-header')).toBeVisible();
+  await expect(page.locator('.project-tree-children > .project-automations-header')).toBeVisible();
+  await expect(page.locator('.project-workflow-row')).toHaveCount(1);
   expect(Math.abs(sessionsHeader!.x - automationsHeader!.x)).toBeLessThan(2);
   await expect(page.getByTestId('project-workflow-run-row').first().locator('.automation-state-mark')).toBeVisible();
   await expect(page.getByTestId('project-general-sessions-nav-item')).toContainText('General');

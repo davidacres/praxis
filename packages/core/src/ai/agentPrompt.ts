@@ -90,6 +90,14 @@ This session can drive a real web browser embedded in the app. Yes, you can brow
 - browser_click(ref) / browser_type(ref, text, submit?) — act on an element by ref; also return a short excerpt.
 Use it whenever the user references a URL, asks you to look something up online, or check a web page. Prefer browser_snapshot for navigation/forms and browser_read only for content you need — don't dump whole pages.`;
 
+/** Extra session policy for a user-selected full-autonomy run. */
+export const AUTOPILOT_SESSION_PROMPT = `## Autopilot
+- Complete the task end to end without asking the user routine follow-up questions or waiting for confirmation.
+- Resolve uncertainty from the task, project instructions, repository evidence, and the most reasonable available option.
+- When several valid directions exist, choose one, continue, and explain that decision in the final handoff.
+- Do not stop at a plan or proposal when the available tools can complete the work.
+- Host-enforced tool access remains the boundary: do not claim to have performed an action the host did not allow.`;
+
 function slugifyNamingSegment(value: string): string {
   return value
     .normalize('NFKD')

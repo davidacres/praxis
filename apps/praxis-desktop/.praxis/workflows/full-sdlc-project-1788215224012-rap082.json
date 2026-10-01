@@ -353,25 +353,6 @@
           }
         ]
       }
-    },
-    {
-      "id": "deploy",
-      "name": "Deploy",
-      "x": 1860,
-      "y": 40,
-      "inputs": [
-        "change-diff"
-      ],
-      "type": "check",
-      "command": "npm",
-      "outputs": [],
-      "successExitCodes": [
-        0
-      ],
-      "args": [
-        "run",
-        "deploy"
-      ]
     }
   ],
   "edges": [
@@ -500,18 +481,11 @@
       "to": "approve",
       "on": "success",
       "required": true
-    },
-    {
-      "id": "e-approve-deploy",
-      "from": "approve",
-      "to": "deploy",
-      "on": "success",
-      "required": false
     }
   ],
   "entryNodeId": "plan",
   "createdAt": "2026-09-27T11:27:46.018Z",
-  "updatedAt": "2026-09-27T11:46:51.871Z",
+  "updatedAt": "2026-10-01T22:07:42.638Z",
   "description": "Complete SDLC automation with parallel lint, typecheck, test coverage, SAST, secrets, SCA, and code review gates.",
   "trigger": "ticket",
   "projectId": "project-1788215224012-rap082"

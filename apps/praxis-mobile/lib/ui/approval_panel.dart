@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app/diagnostics.dart';
@@ -70,41 +71,61 @@ class _ApprovalPanelState extends State<ApprovalPanel> {
       required VoidCallback onTap,
       String? busyKey,
       String? hint,
-    }) => Pressable(
-      label: label,
-      hint: hint,
-      enabled: !disabled,
-      onTap: onTap,
-      excludeChildSemantics: true,
-      builder: (context, pressed) => Opacity(
-        opacity: disabled ? 0.45 : 1,
-        child: Container(
-          constraints: BoxConstraints(minHeight: t.s(44), minWidth: t.s(104)),
-          padding: EdgeInsets.symmetric(horizontal: t.s(14)),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: primary ? p.accent : null,
-            borderRadius: BorderRadius.circular(t.s(10)),
-            border: primary ? null : Border.all(color: danger ? p.danger : p.border),
-          ),
-          child: busyKey != null && _busy == busyKey
-              ? Spinner(color: primary ? p.onAccent : p.danger)
-              : Text(
-                  label,
-                  style: ts(
-                    context,
-                    14.5,
-                    weight: danger || primary ? FontWeight.w700 : FontWeight.w600,
-                    color: primary
-                        ? p.onAccent
-                        : danger
-                        ? p.danger
-                        : p.text,
-                  ),
-                ),
-        ),
-      ),
-    );
+    }) {
+      final isThisBusy = busyKey != null && _busy == busyKey;
+      return Pressable(
+        label: label,
+        hint: hint,
+        enabled: !disabled && _busy == null,
+        onTap: onTap,
+        excludeChildSemantics: true,
+        builder: (context, pressed) {
+          final bg = primary
+              ? (pressed ? Color.lerp(p.accent, Colors.black, 0.15) : p.accent)
+              : (danger && pressed
+                  ? p.dangerSoft
+                  : pressed
+                      ? p.surfaceRaised
+                      : p.surface);
+          final textColor = primary
+              ? p.onAccent
+              : danger
+                  ? p.danger
+                  : p.text;
+          final border = primary
+              ? null
+              : Border.all(color: danger ? p.danger : p.border, width: 0.5);
+
+          return Opacity(
+            opacity: disabled || (_busy != null && !isThisBusy) ? 0.45 : 1,
+            child: Container(
+              height: t.s(36),
+              alignment: Alignment.center,
+              padding: EdgeInsets.symmetric(horizontal: t.s(4)),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(t.s(8)),
+                border: border,
+              ),
+              child: isThisBusy
+                  ? Spinner(color: textColor, small: true)
+                  : Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: ts(
+                        context,
+                        13,
+                        weight: FontWeight.w600,
+                        color: textColor,
+                      ),
+                    ),
+            ),
+          );
+        },
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -200,43 +221,66 @@ class _ApprovalPanelState extends State<ApprovalPanel> {
           ),
           gap,
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              button(
-                'Back',
-                primary: false,
-                disabled: false,
-                onTap: () => setState(() {
-                  _rejecting = false;
-                  _reason.clear();
-                }),
+              Expanded(
+                child: button(
+                  'Back',
+                  primary: false,
+                  disabled: false,
+                  onTap: () => setState(() {
+                    _rejecting = false;
+                    _reason.clear();
+                  }),
+                ),
               ),
               SizedBox(width: t.s(8)),
-              button(
-                'Deny run',
-                primary: false,
-                danger: true,
-                busyKey: 'reject',
-                disabled: reasonEmpty || _busy != null,
-                onTap: () => _act('reject', () => store.reject(widget.runId, _reason.text)),
+              Expanded(
+                child: button(
+                  'Deny run',
+                  primary: false,
+                  danger: true,
+                  busyKey: 'reject',
+                  disabled: reasonEmpty || _busy != null,
+                  onTap: () => _act('reject', () => store.reject(widget.runId, _reason.text)),
+                ),
               ),
             ],
           ),
         ] else
           Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
               if (canReject) ...[
-                button('Deny…', primary: false, danger: true, disabled: _busy != null, onTap: () => setState(() => _rejecting = true)),
+                Expanded(
+                  child: button(
+                    'Deny',
+                    primary: false,
+                    danger: true,
+                    disabled: _busy != null,
+                    onTap: () => setState(() => _rejecting = true),
+                  ),
+                ),
                 SizedBox(width: t.s(8)),
               ],
-              button(
-                'Approve',
-                primary: true,
-                busyKey: 'approve',
-                hint: 'Asks for Face ID or your passcode',
-                disabled: !canApprove || _busy != null,
-                onTap: () => _act('approve', () => store.approve(widget.runId)),
+              Expanded(
+                child: button(
+                  'Approve all',
+                  primary: false,
+                  busyKey: 'approveAll',
+                  hint: 'Asks for Face ID or your passcode',
+                  disabled: !canApprove || _busy != null,
+                  onTap: () => _act('approveAll', () => store.approveAll(widget.runId)),
+                ),
+              ),
+              SizedBox(width: t.s(8)),
+              Expanded(
+                child: button(
+                  'Approve',
+                  primary: true,
+                  busyKey: 'approve',
+                  hint: 'Asks for Face ID or your passcode',
+                  disabled: !canApprove || _busy != null,
+                  onTap: () => _act('approve', () => store.approve(widget.runId)),
+                ),
               ),
             ],
           ),

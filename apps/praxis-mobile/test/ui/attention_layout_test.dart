@@ -9,7 +9,7 @@ import 'package:praxis_mobile/ui/permission_card.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  testWidgets('PermissionCard renders title header, dividing line, and right-aligned buttons', (tester) async {
+  testWidgets('PermissionCard renders title header, dividing line, and 3 equally spaced buttons', (tester) async {
     final theme = ThemeController();
     final store = AppStore(theme: theme);
     addTearDown(store.dispose);
@@ -59,23 +59,28 @@ void main() {
     expect(find.text('Read a file or project resource'), findsOneWidget);
     expect(find.text('The agent needs to inspect index.ts'), findsOneWidget);
 
-    // Verify buttons are present
-    final denyFinder = find.widgetWithText(PraxisButton, 'Deny');
-    final allowFinder = find.widgetWithText(PraxisButton, 'Allow once');
+    // Verify 3 buttons are present: Deny, Approve all, Approve
+    final denyFinder = find.text('Deny');
+    final approveAllFinder = find.text('Approve all');
+    final approveFinder = find.text('Approve');
     expect(denyFinder, findsOneWidget);
-    expect(allowFinder, findsOneWidget);
+    expect(approveAllFinder, findsOneWidget);
+    expect(approveFinder, findsOneWidget);
 
-    // Verify buttons are right-aligned
-    final denyRect = tester.getRect(denyFinder);
-    final allowRect = tester.getRect(allowFinder);
-    final cardRect = tester.getRect(find.byType(PraxisCard));
+    // Verify buttons share equal spacing and width across the card
+    final denyRect = tester.getRect(find.ancestor(of: denyFinder, matching: find.byType(Pressable)));
+    final approveAllRect = tester.getRect(find.ancestor(of: approveAllFinder, matching: find.byType(Pressable)));
+    final approveRect = tester.getRect(find.ancestor(of: approveFinder, matching: find.byType(Pressable)));
 
-    expect(denyRect.right, lessThan(allowRect.left));
-    // Allow button should be near the right padding of the card
-    expect(allowRect.right, closeTo(cardRect.right - theme.data.space, 1.0));
+    expect(denyRect.width, closeTo(approveAllRect.width, 1.0));
+    expect(approveAllRect.width, closeTo(approveRect.width, 1.0));
+    expect(denyRect.height, closeTo(theme.data.s(36), 1.0));
+
+    expect(denyRect.right, lessThan(approveAllRect.left));
+    expect(approveAllRect.right, lessThan(approveRect.left));
   });
 
-  testWidgets('AttentionScreen renders Approval Required with divider and right-aligned buttons', (tester) async {
+  testWidgets('AttentionScreen renders Approval Required with divider and 3 equally spaced buttons', (tester) async {
     final theme = ThemeController();
     final store = AppStore(theme: theme);
     addTearDown(store.dispose);
@@ -128,11 +133,13 @@ void main() {
     expect(find.text('Release review — Checkout 2.4'), findsOneWidget);
     expect(find.text('A run is waiting for your approval.'), findsOneWidget);
 
-    // Verify only 2 action buttons for approval: Deny… and Approve
+    // Verify 3 action buttons for approval: Deny, Approve all, and Approve
+    final denyFinder = find.text('Deny');
+    final approveAllFinder = find.text('Approve all');
     final approveFinder = find.text('Approve');
-    final denyFinder = find.text('Deny…');
-    expect(approveFinder, findsOneWidget);
     expect(denyFinder, findsOneWidget);
+    expect(approveAllFinder, findsOneWidget);
+    expect(approveFinder, findsOneWidget);
 
     // Verify Open run is an inline button in the subject row, not a bottom card button
     final openRunFinder = find.text('Open run');
@@ -140,11 +147,17 @@ void main() {
     // Open run should be above Approve
     expect(tester.getCenter(openRunFinder).dy, lessThan(tester.getCenter(approveFinder).dy));
 
-    // Verify Approve and Deny… are right-aligned
-    final approveCenter = tester.getCenter(approveFinder).dx;
-    final screenCenter = 390 / 2;
-    expect(approveCenter, greaterThan(screenCenter));
-    expect(tester.getCenter(denyFinder).dx, greaterThan(screenCenter - 50));
+    // Verify buttons share equal spacing and width across the card
+    final denyRect = tester.getRect(find.ancestor(of: denyFinder, matching: find.byType(Pressable)));
+    final approveAllRect = tester.getRect(find.ancestor(of: approveAllFinder, matching: find.byType(Pressable)));
+    final approveRect = tester.getRect(find.ancestor(of: approveFinder, matching: find.byType(Pressable)));
+
+    expect(denyRect.width, closeTo(approveAllRect.width, 1.0));
+    expect(approveAllRect.width, closeTo(approveRect.width, 1.0));
+    expect(denyRect.height, closeTo(theme.data.s(36), 1.0));
+
+    expect(denyRect.right, lessThan(approveAllRect.left));
+    expect(approveAllRect.right, lessThan(approveRect.left));
 
     store.dispose();
   });

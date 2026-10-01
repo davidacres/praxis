@@ -11,8 +11,8 @@ const FAKE_ACP_AGENT = path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs');
 /**
  * Runs as tree nodes, and the run workspace.
  *
- * - Each run is a child node under its project's Workflows > Runs group, with
- *   cancel and delete on the node.
+ * - Each run is a direct child under its project's Automations group; saved
+ *   workflow definitions live in the separate project-level Workflows group.
  * - Opening a run puts the session doing the work in the centre and the
  *   pipeline, top to bottom, in the right pane.
  * - A stage session nests under the controller session that started its run.
@@ -224,7 +224,8 @@ test('a controller session starts a run: the run is a tree node, its stage sessi
   await toggle.click();
   await expect(childRow).toHaveCount(1);
 
-  // Sessions tree: the run is under Automations; opening it fills the workspace.
+  // Project tree: runs are direct children of Automations; saved definitions
+  // have their own project-level Workflows group. Opening a run fills workspace.
   const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
   if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
   const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });

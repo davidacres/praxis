@@ -874,6 +874,7 @@ export function Sidebar({
                     const projectWorkflowList = projectWorkflows[project.id] ?? [];
                     const projectRuns = runsByProjectId[project.id] ?? [];
                     const activeProjectRuns = projectRuns.filter(run => !run.archived);
+                    const projectDocsVisible = collapsed[`project:${project.id}:docs-visible`] ?? false;
                     const projectDocsCollapsed = collapsed[`project:${project.id}:docs`] ?? false;
                     const projectPlansCollapsed = collapsed[`project:${project.id}:plans`] ?? false;
                     const projectDocuments = documentsByProjectId[project.id];
@@ -960,6 +961,20 @@ export function Sidebar({
                           <button
                             type="button"
                             className="project-header-action"
+                            data-testid="project-docs-toggle"
+                            title={`${projectDocsVisible ? 'Hide' : 'Show'} docs · ${project.name}`}
+                            aria-label={`${projectDocsVisible ? 'Hide' : 'Show'} docs for ${project.name}`}
+                            aria-pressed={projectDocsVisible}
+                            onClick={e => {
+                              e.stopPropagation();
+                              setCollapsed(current => ({ ...current, [`project:${project.id}:docs-visible`]: !projectDocsVisible }));
+                            }}
+                          >
+                            <Icon name={projectDocsVisible ? 'folder-open' : 'folder'} size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="project-header-action"
                             data-testid="project-workflow-new"
                             title={`New workflow · ${project.name}`}
                             aria-label={`New workflow in ${project.name}`}
@@ -1023,71 +1038,7 @@ export function Sidebar({
                             onClick={() => onSelectDeployments(project)}
                           ><span className="tree-icon"><Icon name="rocket" size={14} /></span><span className="tree-label">Deployments</span></button>
                         )}
-                        <button
-                          className="sidebar-subsection-toggle"
-                          aria-expanded={!projectWorkflowsCollapsed}
-                          data-testid="project-workflows-nav-item"
-                          onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:workflows`]: !projectWorkflowsCollapsed }))}
-                        >
-                          <span className={`tree-section-icon${projectWorkflowsCollapsed ? '' : ' open'}`}><Icon name="split-horizontal" size={13} /></span><span>Workflows</span><span className="tree-meta">{projectWorkflowList.length}</span>
-                        </button>
-                        {!projectWorkflowsCollapsed && <>
-                          {projectWorkflowList.map(workflow => (
-                            <div
-                              key={workflow.id}
-                              className={`tree-row project-workflow-row${activeFeature === 'workflows' && activeWorkflowId === workflow.id && selectedProjectId === project.id ? ' active' : ''}`}
-                            >
-                              <button
-                                type="button"
-                                className="board-tree-main"
-                                data-testid="project-workflow-nav-item"
-                                onClick={() => onSelectWorkflow(project, workflow.id)}
-                              >
-                                <span className="tree-icon"><Icon name="split-horizontal" size={14} /></span>
-                                <span className="tree-label">{workflow.name}</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="board-tree-configure project-workflow-run"
-                                data-testid={`project-workflow-run-${workflow.id}`}
-                                aria-label={`Start a run of ${workflow.name}`}
-                                title="Start a run of this workflow"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  onStartWorkflowRun(project, workflow.id);
-                                }}
-                              >
-                                <Icon name="play" size={12} />
-                              </button>
-                              {onDeleteWorkflow && (
-                                <button
-                                  type="button"
-                                  className="board-tree-delete project-workflow-delete"
-                                  data-testid={`project-workflow-delete-${workflow.id}`}
-                                  aria-label={`Delete workflow ${workflow.name}`}
-                                  title="Delete this workflow"
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    onDeleteWorkflow(project, workflow.id);
-                                  }}
-                                >
-                                  <Icon name="trash" size={12} />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                          {projectWorkflowList.length === 0 && (
-                            <button className="tree-row project-workflow-empty" data-testid="project-workflow-empty" onClick={() => onNewWorkflow(project)}>
-                              <span className="tree-icon"><Icon name="plus" size={13} /></span><span className="tree-label">New workflow…</span>
-                            </button>
-                          )}
-                          <button
-                            className={`tree-row project-workflow-child${activeFeature === 'workflows' && activeWorkflowPolicies && selectedProjectId === project.id ? ' active' : ''}`}
-                            data-testid="project-workflow-policies-nav-item"
-                            onClick={() => onSelectWorkflowPolicies(project)}
-                          ><span className="tree-icon"><Icon name="shield" size={14} /></span><span className="tree-label">Policies</span></button>
-                        </>}
-                        {projectDocuments?.exists && <>
+                        {projectDocsVisible && projectDocuments?.exists && <>
                           <button className="sidebar-subsection-toggle" aria-expanded={!projectDocsCollapsed} data-testid="project-docs-nav-item" onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:docs`]: !projectDocsCollapsed }))}>
                             <span className={`tree-section-icon${projectDocsCollapsed ? '' : ' open'}`}><Icon name="folder-open" size={13} /></span><span>docs</span>
                           </button>
@@ -1195,6 +1146,84 @@ export function Sidebar({
                               <button type="button" className="project-session-empty-action" aria-label={`New ticket session in ${project.name}`} title="New ticket session" onClick={() => onNewSession(project)}><Icon name="plus" size={12} /></button>
                             </div>
                           ))}
+                        </>}
+                        <div className="feature-section-header feature-section-toggle project-workflows-header">
+                          <button
+                            type="button"
+                            className="feature-section-title"
+                            aria-expanded={!projectWorkflowsCollapsed}
+                            data-testid="project-workflows-nav-item"
+                            onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:workflows`]: !projectWorkflowsCollapsed }))}
+                          >
+                            <span className="sidebar-section-label" style={{ margin: 0 }}>Workflows</span><span className="tree-meta">{projectWorkflowList.length}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="feature-section-action"
+                            aria-label={projectWorkflowsCollapsed ? 'Expand workflows' : 'Collapse workflows'}
+                            title={projectWorkflowsCollapsed ? 'Expand workflows' : 'Collapse workflows'}
+                            onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:workflows`]: !projectWorkflowsCollapsed }))}
+                          >
+                            <span className={`tree-section-icon${projectWorkflowsCollapsed ? '' : ' open'}`}>
+                              <Icon name={projectWorkflowsCollapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+                            </span>
+                          </button>
+                        </div>
+                        {!projectWorkflowsCollapsed && <>
+                          {projectWorkflowList.map(workflow => (
+                            <div
+                              key={workflow.id}
+                              className={`tree-row project-workflow-row${activeFeature === 'workflows' && activeWorkflowId === workflow.id && selectedProjectId === project.id ? ' active' : ''}`}
+                            >
+                              <button
+                                type="button"
+                                className="board-tree-main"
+                                data-testid="project-workflow-nav-item"
+                                onClick={() => onSelectWorkflow(project, workflow.id)}
+                              >
+                                <span className="tree-icon"><Icon name="split-horizontal" size={14} /></span>
+                                <span className="tree-label">{workflow.name}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="board-tree-configure project-workflow-run"
+                                data-testid={`project-workflow-run-${workflow.id}`}
+                                aria-label={`Start a run of ${workflow.name}`}
+                                title="Start a run of this workflow"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  onStartWorkflowRun(project, workflow.id);
+                                }}
+                              >
+                                <Icon name="play" size={12} />
+                              </button>
+                              {onDeleteWorkflow && (
+                                <button
+                                  type="button"
+                                  className="board-tree-delete project-workflow-delete"
+                                  data-testid={`project-workflow-delete-${workflow.id}`}
+                                  aria-label={`Delete workflow ${workflow.name}`}
+                                  title="Delete this workflow"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    onDeleteWorkflow(project, workflow.id);
+                                  }}
+                                >
+                                  <Icon name="trash" size={12} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {projectWorkflowList.length === 0 && (
+                            <button className="tree-row project-workflow-empty" data-testid="project-workflow-empty" onClick={() => onNewWorkflow(project)}>
+                              <span className="tree-icon"><Icon name="plus" size={13} /></span><span className="tree-label">New workflow…</span>
+                            </button>
+                          )}
+                          <button
+                            className={`tree-row project-workflow-child${activeFeature === 'workflows' && activeWorkflowPolicies && selectedProjectId === project.id ? ' active' : ''}`}
+                            data-testid="project-workflow-policies-nav-item"
+                            onClick={() => onSelectWorkflowPolicies(project)}
+                          ><span className="tree-icon"><Icon name="shield" size={14} /></span><span className="tree-label">Policies</span></button>
                         </>}
                         <div className="feature-section-header feature-section-toggle project-automations-header">
                           <button

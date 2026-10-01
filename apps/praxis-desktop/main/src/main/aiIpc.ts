@@ -19,6 +19,7 @@ import {
   createBrowserToolExtension,
   WorktreeConflictError,
   type AgentSessionRecord,
+  type AgentPermissionMode,
   type AgentTaskDefinition,
   type AgentToolMode,
   type AgentWorkflowReference,
@@ -52,6 +53,8 @@ import {
   listAiProviderStatuses,
   listApiModelOptions,
   listCliModelOptions,
+  installCliProvider,
+  getLatestCliProviderVersion,
   probeProviderCapability,
   removeCustomProvider,
   resolveConnectionOptions,
@@ -551,6 +554,14 @@ export function registerAiIpc(): void {
     probeProviderCapability(provider)
   );
 
+  ipcMain.handle('ai:installCliProvider', async (_event: Electron.IpcMainInvokeEvent, provider: AiProvider) =>
+    installCliProvider(provider)
+  );
+
+  ipcMain.handle('ai:getLatestCliProviderVersion', async (_event: Electron.IpcMainInvokeEvent, provider: AiProvider) =>
+    getLatestCliProviderVersion(provider)
+  );
+
   ipcMain.handle('ai:listCliModelOptions', async (_event: Electron.IpcMainInvokeEvent, provider: AiProvider) =>
     listCliModelOptions(provider)
   );
@@ -724,7 +735,8 @@ export function registerAiIpc(): void {
         input.reasoningEffort ??
         (effectiveModelForDefaults
           ? settings.ai.providers[provider]?.modelReasoningDefaults?.[effectiveModelForDefaults]
-          : undefined);
+          : undefined) ??
+        'medium';
 
       // Provider-only sessions need an API key up front. A bound ACP host owns
       // its own authentication, so selecting one must not be blocked by an
@@ -924,7 +936,7 @@ export function registerAiIpc(): void {
         toolMode,
         reasoningEffort,
         permissionMode: input.permissionMode ?? 'manual',
-        ...(input.permissionMode === 'bypass' ? { autoApprovePermissions: true } : {}),
+        ...((input.permissionMode === 'bypass' || input.permissionMode === 'autopilot') ? { autoApprovePermissions: true } : {}),
         ...(browserMcp ? { mcpServers: [browserMcp] } : {}),
         ...(prepared.plan.state === 'gateway'
           ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode)) }
@@ -1053,6 +1065,16 @@ export function registerAiIpc(): void {
     'ai:updateSessionReasoningEffort',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, reasoningEffort: ReasoningEffort) =>
       updateSessionReasoningEffort(issueKey, reasoningEffort)
+  );
+
+  ipcMain.handle(
+    'ai:updateSessionPermissionMode',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, permissionMode: AgentPermissionMode) => {
+      if (hasActiveTask(issueKey)) {
+        throw new Error('Wait for the current session turn to finish before changing permission mode.');
+      }
+      return sessionManager.updateSessionPermissionMode(issueKey, permissionMode);
+    }
   );
 
   ipcMain.handle(

@@ -134,7 +134,7 @@ test('an existing project session selects and starts governed workflows from one
     const session = (await window.praxis.ai.listSessions()).find(candidate => candidate.issueKey === key);
     return session?.workflowRunId;
   }, sessionKey)).toBeUndefined();
-  await expect(page.getByTestId('session-workflow-add')).toContainText('Workflow');
+  await expect(page.getByTestId('session-workflow-add')).toHaveAttribute('aria-label', 'Choose workflow');
   await expect(page.getByTestId('session-workflow-runtime')).toHaveCount(0);
   await expect(page.getByTestId('session-provider')).toBeVisible();
   await expect(page.getByTestId('session-model')).toBeVisible();
