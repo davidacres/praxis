@@ -4,6 +4,7 @@ import {
   getProviderDescriptor,
   providerNeedsApiKey,
   type AgentBinding,
+  type AgentPermissionMode,
   type AgentTaskDefinition,
   type AgentToolMode,
   type AgentRuntimeLaunch,
@@ -51,6 +52,7 @@ export interface AgentTaskLaunchInput {
   toolMode: AgentToolMode;
   /** Allow the agent's own tool-permission requests without asking (still bounded by `toolMode`). */
   autoApprovePermissions?: boolean;
+  permissionMode?: AgentPermissionMode;
   mcpServers?: AcpAgentStartOptions['mcpServers'];
   toolExtension?: VercelAgentStartOptions['toolExtension'];
   /** Normalized reasoning effort for API adapters or ACP `thought_level`. */
@@ -213,6 +215,7 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
       model: input.model,
       reasoningEffort: input.reasoningEffort,
       toolMode: input.toolMode,
+      permissionMode: input.permissionMode,
       ...(input.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
       ...(input.mcpServers ? { mcpServers: input.mcpServers } : {})
     });
@@ -234,6 +237,7 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
     model: input.model || connection.model,
     provider: input.provider,
     toolMode: input.toolMode,
+    permissionMode: input.permissionMode,
     reasoningEffort: input.reasoningEffort,
     ...(input.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
     ...(input.toolExtension ? { toolExtension: input.toolExtension } : {})

@@ -923,6 +923,8 @@ export function registerAiIpc(): void {
         workingDirectory: effectiveWorkingDirectory,
         toolMode,
         reasoningEffort,
+        permissionMode: input.permissionMode ?? 'manual',
+        ...(input.permissionMode === 'bypass' ? { autoApprovePermissions: true } : {}),
         ...(browserMcp ? { mcpServers: [browserMcp] } : {}),
         ...(prepared.plan.state === 'gateway'
           ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode)) }

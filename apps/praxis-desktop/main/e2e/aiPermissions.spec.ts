@@ -123,6 +123,38 @@ test('allowing a pending permission lets the session continue to completion', as
   await expect(win.locator('[data-testid="session-chat-tool"]')).toHaveCount(0);
 });
 
+test('the composer bypass mode starts a CLI session without a permission pause', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+
+  await win.evaluate(
+    async ({ cliPath }) => {
+      const w = window as unknown as {
+        praxis: {
+          settings: { set: (patch: { ai: { providers: Record<string, { cliPath: string }> } }) => Promise<unknown> };
+        };
+      };
+      await w.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath } } } });
+    },
+    { cliPath: FIXTURE_PATH }
+  );
+  await win.reload();
+  await win.waitForSelector('[data-testid="new-session-view"]');
+
+  await selectCliProvider(win);
+  await win.getByTestId('new-session-permission-chip').click();
+  await expect(win.getByTestId('new-session-permission-option-manual')).toBeVisible();
+  await win.screenshot({ path: '../.praxis/session-artifacts/session-composer-permissions.png', fullPage: true });
+  await win.getByTestId('new-session-permission-option-bypass').click();
+  await expect(win.getByTestId('new-session-permission-chip')).toContainText('Bypass permissions');
+
+  await win.locator('[data-testid="new-session-view"] textarea').fill('WITH_PERMISSION please');
+  await win.locator('[data-testid="new-session-submit"]').click();
+  await win.locator('[data-testid="sessions-view"]').waitFor();
+  await expect(win.getByTestId('session-nav-state')).toHaveAttribute('title', 'Completed', { timeout: 15000 });
+  await expect(win.locator('[data-testid="session-permission-card"]')).toHaveCount(0);
+});
+
 test('denying a pending permission is honored by the agent', async () => {
   app = await launchTestApp();
   const win = app.window;
