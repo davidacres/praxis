@@ -135,7 +135,7 @@ test('composer selects a board and open ticket, names the session, and streams t
   expect(capsuleStyle.gradient).toContain('session-composer-activity-gradient');
   expect(capsuleStyle.rect).toBe('32');
   const activityGuide = activityOrbit.locator('[data-activity-guide="true"]');
-  await expect(activityGuide).toHaveAttribute('d', /A 1\.25 4\.75/);
+  await expect(activityGuide).toHaveAttribute('d', /A 10 10/);
   const firstCapsule = capsules.first();
   const composerBox = await win.locator('.session-follow-up-composer').boundingBox();
   const orbitBox = await activityOrbit.boundingBox();
