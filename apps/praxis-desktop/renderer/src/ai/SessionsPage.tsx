@@ -724,6 +724,7 @@ export function SessionsPage({
   /** True while an image drag hovers the composer, for the drop highlight. */
   const [composerDragOver, setComposerDragOver] = useState(false);
   const activityPathRef = useRef<SVGPathElement | null>(null);
+  const activityCapsuleRef = useRef<SVGGElement | null>(null);
   const [submittedTurn, setSubmittedTurn] = useState<{
     issueKey: string;
     message: string;
@@ -1026,6 +1027,7 @@ export function SessionsPage({
   // turn is in flight, in place of streaming every tool block. Shared with the
   // inspector's copy of the same line; see `liveActivity` in sessionNav.ts.
   const liveActivityText = selected ? liveActivity(selected) : undefined;
+  const activityOrbitDurationMs = liveActivityText?.startsWith('Running ') ? 14_000 : 7_000;
   // Same conversation-aware speaker lookup as the response-fallback header
   // below, so the "thinking" indicator's icon matches whichever AI actually
   // holds the turn, not just whoever last set `record.provider`.
@@ -1156,34 +1158,31 @@ export function SessionsPage({
   useLayoutEffect(() => {
     const path = activityPathRef.current;
     const svg = path?.ownerSVGElement;
-    if (!path || !svg || !followUpCollapsed || !isTurnActive) return;
+    const capsule = activityCapsuleRef.current;
+    if (!path || !svg || !capsule || !followUpCollapsed || !isTurnActive) return;
 
-    const updatePerimeter = () => {
+    let animationFrame = 0;
+    let startedAt: number | undefined;
+    const duration = activityOrbitDurationMs;
+
+    const updatePerimeter = (now: number = performance.now()) => {
       const pathLength = path.getTotalLength();
-      const transform = path.getScreenCTM();
-      if (!pathLength || !transform) return;
-      const toScreenPoint = (offset: number) => {
-        const point = path.getPointAtLength(offset);
-        return new DOMPoint(point.x, point.y).matrixTransform(transform);
-      };
-      let perimeter = 0;
-      let previous = toScreenPoint(0);
-      const samples = Math.max(64, Math.ceil(pathLength / 2));
-      for (let index = 1; index <= samples; index += 1) {
-        const current = toScreenPoint((pathLength * index) / samples);
-        perimeter += Math.hypot(current.x - previous.x, current.y - previous.y);
-        previous = current;
-      }
-      const capsuleLength = 32;
-      path.style.setProperty('--session-activity-perimeter', `${perimeter}px`);
-      path.style.setProperty('--session-activity-gap', `${Math.max(perimeter - capsuleLength, 1)}px`);
+      if (!pathLength) return;
+      if (startedAt === undefined) startedAt = now;
+      const elapsed = now - startedAt;
+      const distance = ((elapsed % duration) / duration) * pathLength;
+      const point = path.getPointAtLength(distance);
+      const tangentPoint = path.getPointAtLength((distance + Math.min(2, pathLength / 4)) % pathLength);
+      const angle = Math.atan2(tangentPoint.y - point.y, tangentPoint.x - point.x) * (180 / Math.PI);
+      capsule.setAttribute('transform', `translate(${point.x} ${point.y}) rotate(${angle})`);
+      animationFrame = requestAnimationFrame(updatePerimeter);
     };
 
     updatePerimeter();
-    const resizeObserver = new ResizeObserver(updatePerimeter);
-    resizeObserver.observe(svg);
-    return () => resizeObserver.disconnect();
-  }, [followUpCollapsed, isTurnActive]);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [activityOrbitDurationMs, followUpCollapsed, isTurnActive]);
 
   useLayoutEffect(() => {
     const node = eventsRef.current;
@@ -2030,7 +2029,7 @@ export function SessionsPage({
                 </div>
               )}
               <div
-                className={`composer session-follow-up-composer${composerDragOver ? ' is-drag-over' : ''}${followUpCollapsed ? ' is-collapsed' : ''}${isTurnActive ? ' is-running' : ''}${liveActivityText?.startsWith('Running ') ? ' is-waiting-tool' : ''}`}
+                className={`composer session-follow-up-composer${composerDragOver ? ' is-drag-over' : ''}${followUpCollapsed ? ' is-collapsed' : ''}${isTurnActive ? ' is-running' : ''}`}
                 onPaste={handleComposerPaste}
                 onDragOver={event => {
                   if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return;
@@ -2047,6 +2046,7 @@ export function SessionsPage({
                   <svg
                     className="session-composer-activity-orbit"
                     data-testid="session-composer-activity-orbit"
+                    data-activity-duration={activityOrbitDurationMs}
                     aria-hidden="true"
                     viewBox="0 0 100 20"
                     preserveAspectRatio="none"
@@ -2060,11 +2060,13 @@ export function SessionsPage({
                     </defs>
                     <path
                       ref={activityPathRef}
-                      data-activity-capsule="true"
+                      data-activity-guide="true"
                       d="M 1.75 0.5 H 98.25 A 1.25 4.75 0 0 1 99.5 5.25 V 14.75 A 1.25 4.75 0 0 1 98.25 19.5 H 1.75 A 1.25 4.75 0 0 1 0.5 14.75 V 5.25 A 1.25 4.75 0 0 1 1.75 0.5 Z"
-                      stroke="url(#session-composer-activity-gradient)"
                       vectorEffect="non-scaling-stroke"
                     />
+                    <g ref={activityCapsuleRef} data-activity-capsule="true">
+                      <rect x="-16" y="-2" width="32" height="4" rx="2" fill="url(#session-composer-activity-gradient)" />
+                    </g>
                   </svg>
                 )}
                 {/* The session's AI ran out: carry on with another AI, or stop. A workflow stage's run offers this itself. */}
