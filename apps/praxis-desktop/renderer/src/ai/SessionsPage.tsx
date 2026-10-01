@@ -1165,6 +1165,30 @@ export function SessionsPage({
     let startedAt: number | undefined;
     const duration = activityOrbitDurationMs;
 
+    const updateGeometry = () => {
+      const width = svg.clientWidth;
+      const height = svg.clientHeight;
+      if (width < 2 || height < 2) return;
+      const composer = svg.closest('.session-follow-up-composer');
+      const radius = Math.min(
+        Number.parseFloat(getComputedStyle(composer ?? svg).borderTopLeftRadius) || 10,
+        (width - 1) / 2,
+        (height - 1) / 2
+      );
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      path.setAttribute('d', [
+        `M ${radius} 0.5 H ${width - radius}`,
+        `A ${radius} ${radius} 0 0 1 ${width - 0.5} ${radius}`,
+        `V ${height - radius}`,
+        `A ${radius} ${radius} 0 0 1 ${width - radius} ${height - 0.5}`,
+        `H ${radius}`,
+        `A ${radius} ${radius} 0 0 1 0.5 ${height - radius}`,
+        `V ${radius}`,
+        `A ${radius} ${radius} 0 0 1 ${radius} 0.5 Z`
+      ].join(' '));
+      startedAt = undefined;
+    };
+
     const updatePerimeter = (now: number = performance.now()) => {
       const pathLength = path.getTotalLength();
       if (!pathLength) return;
@@ -1178,9 +1202,13 @@ export function SessionsPage({
       animationFrame = requestAnimationFrame(updatePerimeter);
     };
 
+    updateGeometry();
     updatePerimeter();
+    const resizeObserver = new ResizeObserver(updateGeometry);
+    resizeObserver.observe(svg);
     return () => {
       cancelAnimationFrame(animationFrame);
+      resizeObserver.disconnect();
     };
   }, [activityOrbitDurationMs, followUpCollapsed, isTurnActive]);
 
@@ -2061,7 +2089,7 @@ export function SessionsPage({
                     <path
                       ref={activityPathRef}
                       data-activity-guide="true"
-                      d="M 1.75 0.5 H 98.25 A 1.25 4.75 0 0 1 99.5 5.25 V 14.75 A 1.25 4.75 0 0 1 98.25 19.5 H 1.75 A 1.25 4.75 0 0 1 0.5 14.75 V 5.25 A 1.25 4.75 0 0 1 1.75 0.5 Z"
+                      d="M 10 0.5 H 90 A 10 10 0 0 1 99.5 10 V 10 A 10 10 0 0 1 90 19.5 H 10 A 10 10 0 0 1 0.5 10 V 10 A 10 10 0 0 1 10 0.5 Z"
                       vectorEffect="non-scaling-stroke"
                     />
                     <g ref={activityCapsuleRef} data-activity-capsule="true">
