@@ -27,6 +27,7 @@ import type {
 } from '../types';
 import type { ModelOptions } from '../ai/providers/modelCatalog';
 import type { CustomProviderConfig, ProviderCapabilities } from '../ai/providers/customProviders';
+import type { McpServerConfig, McpTestResult } from '../ai/mcp/mcpServerConfig';
 import type { ProviderPreset } from '../ai/providers/providerPresets';
 import type { ReasoningEffort } from '../ai/providers/reasoningSupport';
 import type { ProviderProbeResult } from '../ai/providers/providerProbe';
@@ -780,6 +781,8 @@ export interface AiIpc {
   listProviderStatuses(): Promise<AiProviderStatus[]>;
   /** Runs the ACP handshake for a CLI provider without creating a session or sending a prompt. */
   probeProviderCapability(provider: AiProvider): Promise<ProviderCapabilityProbe | undefined>;
+  /** Connects to a user-added MCP server once and lists its tools, for the settings "Test" button. */
+  testMcpServer(config: McpServerConfig): Promise<McpTestResult>;
   /** Installs the allowlisted ACP package for a CLI provider, then returns its output summary. */
   installCliProvider(provider: AiProvider): Promise<{ message: string }>;
   /** Looks up the latest published version of a built-in provider's allowlisted ACP package. */
@@ -830,6 +833,7 @@ export interface AiIpc {
   loadImagePreview(issueKey: string, filePath: string): Promise<string | undefined>;
   /** Renames a persisted session without changing its ticket binding or task goal. */
   renameSession(issueKey: string, title: string): Promise<AgentSessionRecord>;
+  assignSessionToProject(issueKey: string, projectId: string, ticketKey?: string, workingDirectory?: string): Promise<AgentSessionRecord>;
   /** Aborts a running session if needed, then permanently removes its saved conversation. */
   deleteSession(issueKey: string): Promise<void>;
   /**
@@ -1301,6 +1305,8 @@ export interface WorkflowsIpc {
   listRuns(projectId: string): Promise<WorkflowRunSummary[]>;
   /** One run's summary, or undefined. */
   getRun(runId: string): Promise<WorkflowRunSummary | undefined>;
+  /** Renames one automation run without changing its workflow definition. */
+  renameRun(runId: string, name: string): Promise<WorkflowRunSummary>;
   /**
    * Records a stage outcome. FX-BF-011 will drive stages from real agent
    * sessions; until then the run monitor advances them explicitly, which is

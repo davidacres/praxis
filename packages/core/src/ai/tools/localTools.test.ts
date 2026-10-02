@@ -83,3 +83,74 @@ test('permission prompts identify the tool without exposing its path or command'
     assert.doesNotMatch(requests[0]?.detail ?? '', /npm test|\//);
   });
 });
+
+const PNG_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64'
+);
+
+test('read_image returns base64 image attachments the model can view', async () => {
+  await withTempDir(async dir => {
+    await fs.writeFile(path.join(dir, 'shot.png'), PNG_1PX);
+    const result = await executor(dir).execute('read_image', { path: 'shot.png' });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.images?.length, 1);
+    assert.equal(result.images?.[0].mimeType, 'image/png');
+    assert.equal(result.images?.[0].dataBase64, PNG_1PX.toString('base64'));
+    assert.doesNotMatch(result.images?.[0].dataBase64 ?? '', /^data:/);
+    assert.match(result.content, /shot\.png/);
+  });
+});
+
+test('read_image is offered in read-only mode', async () => {
+  await withTempDir(async dir => {
+    const readOnly = new LocalToolExecutor({
+      workingDirectory: dir,
+      toolMode: 'read-only',
+      requestPermission: async () => 'allow_once'
+    });
+    await fs.writeFile(path.join(dir, 'shot.png'), PNG_1PX);
+    assert.equal((await readOnly.execute('read_image', { path: 'shot.png' })).ok, true);
+  });
+});
+
+test('read_image rejects a non-image path without reading it', async () => {
+  await withTempDir(async dir => {
+    await fs.writeFile(path.join(dir, 'notes.md'), '# hello');
+    const result = await executor(dir).execute('read_image', { path: 'notes.md' });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.images, undefined);
+    assert.match(result.content, /Not a readable image/);
+  });
+});
+
+test('read_image asks for permission and honours a denial', async () => {
+  await withTempDir(async dir => {
+    await fs.writeFile(path.join(dir, 'shot.png'), PNG_1PX);
+    const requests: ToolPermissionRequest[] = [];
+    const localTools = new LocalToolExecutor({
+      workingDirectory: dir,
+      toolMode: 'full',
+      requestPermission: async request => {
+        requests.push(request);
+        return 'deny';
+      }
+    });
+
+    const result = await localTools.execute('read_image', { path: 'shot.png' });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.images, undefined);
+    assert.equal(requests[0]?.toolName, 'read_image');
+    assert.equal(requests[0]?.permissionKey, 'shot.png');
+  });
+});
+
+test('read_image escapes the workspace', async () => {
+  await withTempDir(async dir => {
+    const result = await executor(dir).execute('read_image', { path: '../../etc/hosts' });
+    assert.equal(result.ok, false);
+  });
+});

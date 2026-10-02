@@ -1,4 +1,5 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
+import { broadcastToAllWindows } from './windowBroadcast';
 import type {
   AddonKind,
   MarketplaceConfigPatch,
@@ -88,8 +89,6 @@ export function registerMarketplaceIpc(): void {
   );
 
   onMarketplaceChanged(() => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send('marketplace:changed');
-    }
+    broadcastToAllWindows('marketplace:changed');
   });
 }

@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp as launchApp, type TestApp } from './launchTestApp';
 import { chooseOption } from './chipSelect';
 
 /**
@@ -21,6 +21,12 @@ import { chooseOption } from './chipSelect';
 // Each test boots a full Electron app; the default 30s is tight under
 // suite-wide parallelism.
 test.slow();
+
+// These workflows advance agent stages manually. Satisfy runtime preflight
+// with an isolated test key; no model request is made by those stages.
+const launchTestApp: typeof launchApp = (seed, reuse, env, options) => launchApp(seed, reuse, {
+  AI_GATEWAY_API_KEY: 'e2e-manual-workflow', AI_GATEWAY_URL: 'http://127.0.0.1:1', VERCEL_OIDC_TOKEN: undefined, ...env
+}, options);
 
 let app: TestApp;
 
@@ -76,7 +82,7 @@ async function openRun(page: Page, name: RegExp = /./): Promise<void> {
   const row = page.getByTestId('project-workflow-run-row').filter({ hasText: name }).first();
   const toggle = row.getByRole('button').first();
   if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
-  await row.getByTestId('automation-inline-open-run').click();
+  await row.getByTestId('automation-run-open').click();
   await expect(runPanel(page)).toBeVisible();
 }
 

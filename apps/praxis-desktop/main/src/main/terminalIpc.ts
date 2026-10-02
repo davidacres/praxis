@@ -1,11 +1,10 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
 import type { CreateTerminalInput } from '@praxis/core';
 import { getTerminalManager } from './terminalManager';
+import { broadcastToAllWindows } from './windowBroadcast';
 
 function broadcast(channel: string, payload: unknown): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.webContents.send(channel, payload);
-  }
+  broadcastToAllWindows(channel, payload);
 }
 
 export function registerTerminalIpc(): void {

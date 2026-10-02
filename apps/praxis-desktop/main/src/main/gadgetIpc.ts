@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { BrowserWindow, ipcMain } from 'electron';
+import { broadcastToAllWindows } from './windowBroadcast';
 import {
   TICKET_REVIEW_APPLY_GATE,
   approveStage,
@@ -28,9 +29,7 @@ export function onDidChangeGadgets(listener: (sessionId: string) => void): () =>
 }
 
 function broadcast(sessionId: string): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    window.webContents.send('gadgets:changed', sessionId);
-  }
+  broadcastToAllWindows('gadgets:changed', sessionId);
   for (const listener of gadgetListeners) listener(sessionId);
 }
 

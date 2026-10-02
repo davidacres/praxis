@@ -54,6 +54,8 @@ interface ActiveTask {
   turnStartTime: number;
   turnTools: string[];
   turnUsage?: TokenUsage;
+  /** Running estimate for a turn whose provider reports no usage at all. */
+  turnEstimate?: TokenUsage;
   promptChars?: number;
   loopPromise?: Promise<void>;
   ending?: boolean;
@@ -375,15 +377,27 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
         // If provider did not report usage on wire (e.g. Z.ai PaaS endpoint):
         let tokenUsage = task.turnUsage;
         if (!tokenUsage) {
+          // One estimate per round trip, each added to the session once. The
+          // message carries the turn's running total — like reported usage does —
+          // so the card and the session agree instead of the card showing only
+          // the latest round trip.
           const estimatedInput = task.promptChars ? Math.ceil(task.promptChars / 3.5) : undefined;
           const estimatedOutput = task.messageBuffer ? Math.ceil(task.messageBuffer.length / 3.5) : undefined;
           const totalTokens = (estimatedInput ?? 0) + (estimatedOutput ?? 0);
-          tokenUsage = {
+          const roundTrip: TokenUsage = {
             inputTokens: estimatedInput,
             outputTokens: estimatedOutput,
             totalTokens: totalTokens > 0 ? totalTokens : undefined
           };
-          this.sessionManager.addAgentTokenUsage(issueKey, tokenUsage);
+          this.sessionManager.addAgentTokenUsage(issueKey, roundTrip);
+          const add = (left: number | undefined, right: number | undefined) =>
+            left === undefined && right === undefined ? undefined : (left ?? 0) + (right ?? 0);
+          task.turnEstimate = {
+            inputTokens: add(task.turnEstimate?.inputTokens, roundTrip.inputTokens),
+            outputTokens: add(task.turnEstimate?.outputTokens, roundTrip.outputTokens),
+            totalTokens: add(task.turnEstimate?.totalTokens, roundTrip.totalTokens)
+          };
+          tokenUsage = task.turnEstimate;
         }
 
         const cost = estimateTurnCost(record?.provider, modelId, tokenUsage ?? {});

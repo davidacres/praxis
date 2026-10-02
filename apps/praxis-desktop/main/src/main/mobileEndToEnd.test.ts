@@ -33,6 +33,7 @@ import {
 import { MobileLanServer } from './mobileLanServer';
 import { createMobileHostExecutionHandlers, createMobileHostReads, type MobileHostServiceDeps } from './mobileHostServices';
 import { appendMobileAppearanceEvent, appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
+import { readMobileImagePreview } from './mobileImagePreview';
 
 const HOST = 'host-mac';
 const PROJECT = 'p1';
@@ -92,6 +93,10 @@ function fakeDesktop() {
     listRunChanges: async () => ({}),
     sessionChanges: async sessionId => ({ sessionId, repository: false, files: [] }),
     sessionFileDiff: async () => { throw new Error('No changes in this fixture.'); },
+    sessionImagePreview: async (sessionId, params) => {
+      const record = sessions.get(sessionId);
+      return record ? readMobileImagePreview(record, params) : undefined;
+    },
     findGadget: () => undefined,
     submitGadget: async () => { throw new Error('No gadgets in this fixture.'); },
     rejectRun: async () => ({}),
@@ -211,11 +216,12 @@ test('the phone lists providers and models, and the desktop launches exactly the
     hostStaticKey: hostKey,
     authorizePeer: () => ({ deviceId: 'paired-phone', capabilities: ['view', 'execute', 'approve'], projectIds: [PROJECT] }),
   });
+
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   const phone = nodeClient(server.port!, hostKey, phoneKey);
   try {
     const mirror = await phoneMirror(phone);
-    assert.equal(mirror.info.surfaceRevision, 5);
+    assert.equal(mirror.info.surfaceRevision, 7);
 
     // (1) the real provider list reaches the phone — availability, labels, no secrets
     const providers = await phone.read<MobileProviderCatalog>(read('providers.list'));
@@ -248,6 +254,56 @@ test('the phone lists providers and models, and the desktop launches exactly the
     const handedOver = await phone.command<MobileSessionSnapshot>(command('sessions.configure', { sessionId: created.sessionId }, { provider: 'codex-cli', model: 'gpt-5.5' }));
     assert.deepEqual([handedOver.provider, handedOver.model], ['codex-cli', 'gpt-5.5']);
     assert.deepEqual(desktop.changes, [{ model: 'claude-sonnet-4-6' }, { handover: { provider: 'codex-cli', model: 'gpt-5.5' } }]);
+  } finally {
+    phone.close();
+    await server.stop();
+  }
+});
+
+test('the phone can fetch a user-attached image through the real session snapshot and secure read path', async () => {
+  const desktop = fakeDesktop();
+  const hostKey = generateKeyPair();
+  const phoneKey = generateKeyPair();
+  const server = new MobileLanServer({
+    app: desktop.app,
+    hostStaticKey: hostKey,
+    authorizePeer: () => ({ deviceId: 'paired-phone', capabilities: ['view', 'execute', 'approve'], projectIds: [PROJECT] }),
+  });
+  const imageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+  await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
+  const phone = nodeClient(server.port!, hostKey, phoneKey);
+  try {
+    await phone.connect();
+    const session = await phone.command<MobileSessionSnapshot>(command('sessions.create', {}, {
+      message: 'What is in this picture?', provider: 'anthropic', mode: 'chat',
+    }));
+    desktop.update(session.sessionId, record => ({
+      ...record,
+      state: 'completed',
+      events: [{
+        timestamp: '2026-09-23T09:05:00.000Z',
+        type: 'user_input_completed',
+        summary: 'You',
+        detail: 'What is in this picture?',
+        attachments: [{ mimeType: 'image/png', dataBase64: imageBase64 }],
+      }],
+    }));
+
+    const snapshot = await phone.read<MobileSessionSnapshot>(read('sessions.get', { sessionId: session.sessionId }));
+    const message = snapshot.messages.find(item => item.role === 'user' && item.text === 'What is in this picture?' && item.attachments?.length);
+    assert.deepEqual(message?.attachments, [{ eventIndex: 0, attachmentIndex: 0, mimeType: 'image/png' }]);
+
+    const chunk = await phone.read<Record<string, unknown>>(read('sessions.imagePreview', { sessionId: session.sessionId }, {
+      eventIndex: message!.attachments![0]!.eventIndex,
+      attachmentIndex: message!.attachments![0]!.attachmentIndex,
+      offset: 0,
+    }));
+    assert.deepEqual(chunk, {
+      mimeType: 'image/png',
+      dataBase64: imageBase64,
+      nextOffset: imageBase64.length,
+      totalLength: imageBase64.length,
+    });
   } finally {
     phone.close();
     await server.stop();

@@ -66,18 +66,14 @@ test('closing the active workspace returns to the Open Workspace screen', async 
   await expect(win.getByRole('heading', { name: 'Open a workspace' })).toBeVisible();
 });
 
-test('Create New Workspace uses the Open Workspace screen while blank creation stays separate', async () => {
+test('New workspace opens the workspace creation dialog', async () => {
   app = await launchTestApp();
   const win = app.window;
   await win.reload();
   await win.getByRole('button', { name: 'Select workspace' }).click();
-  await expect(win.getByRole('menuitem', { name: 'Create blank workspace' })).toBeVisible();
-  await expect(win.getByRole('menuitem', { name: 'Create New Workspace' })).toBeVisible();
-  await win.getByRole('menuitem', { name: 'Create New Workspace' }).click();
-  await expect(win.getByTestId('getting-started')).toBeVisible();
-  await expect(win.getByRole('heading', { name: 'Open a workspace' })).toBeVisible();
-  await win.getByRole('button', { name: 'Create Workspace' }).click();
-  await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();
+  await win.getByRole('menuitem', { name: 'New workspace' }).click();
+  await expect(win.getByRole('heading', { name: 'Create workspace' })).toBeVisible();
+
 });
 
 test('each workspace resumes at its own last route, not the other one\'s', async () => {

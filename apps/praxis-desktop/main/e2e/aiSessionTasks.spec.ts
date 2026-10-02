@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 // The agent's self-reported task list (ACP's `plan` update — Claude Code's
 // TodoWrite, Codex's plan tool). Lives in the sessions inspector rather than
 // the transcript specifically so it stays visible and current while the
@@ -39,8 +40,7 @@ test('the task list updates live as the agent works through it, then settles onc
   const win = app.window;
   const key = await delegate(win, 'WITH_PLAN STOP_PLAN_MIDWAY please');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'WITH_PLAN STOP_PLAN_MIDWAY' }).click();
+  await openSession(win, 'WITH_PLAN STOP_PLAN_MIDWAY');
 
   const tasks = win.getByTestId('session-tasks');
   await expect(tasks).toBeVisible();
@@ -80,8 +80,7 @@ test('a fully completed plan shows all three done', async () => {
     .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), key), { timeout: 20000 })
     .toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'WITH_PLAN please' }).click();
+  await openSession(win, 'WITH_PLAN please');
 
   const tasks = win.getByTestId('session-tasks');
   await expect(tasks.getByTestId('session-tasks-count')).toHaveText('3/3');
@@ -101,8 +100,7 @@ test('a session that never reports a plan shows no Tasks block at all', async ()
     .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), key), { timeout: 20000 })
     .toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'just say hello' }).click();
+  await openSession(win, 'just say hello');
   await expect(win.getByTestId('session-state-badge')).toHaveText('Completed');
   await expect(win.getByTestId('session-tasks')).toHaveCount(0);
 });
@@ -112,8 +110,7 @@ test('an ACP agent reporting usage drives the context indicator and shows its co
   const win = app.window;
   await delegate(win, 'WITH_USAGE please');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'WITH_USAGE please' }).click();
+  await openSession(win, 'WITH_USAGE please');
 
   // `used`/`size` from ACP feed exactly the pair the composer indicator reads,
   // so a CLI-hosted session gets the same details an API-provider one does.

@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -76,7 +77,7 @@ test('a worktree session creates the branch + checkout and the console can remov
   expect(fs.existsSync(record.worktreePath!)).toBe(true);
   expect(fs.existsSync(path.join(repo, '.worktrees', record.worktreeName!))).toBe(true);
 
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   await expect(win.locator('[data-testid="session-worktree"]')).toContainText(record.worktreeBranch!);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
 

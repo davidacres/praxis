@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../app/store.dart';
 import '../app/theme.dart';
@@ -122,7 +126,14 @@ class ChatMessage extends StatelessWidget {
               ],
             ),
           ),
-          if (user) SelectableText(message.text, style: ts(context, 13, lineHeight: 19)) else MarkdownView(message.text),
+          if (user && message.text.isNotEmpty) SelectableText(message.text, style: ts(context, 13, lineHeight: 19)),
+          if (!user) MarkdownView(message.text, imageSessionId: message.sessionId),
+          if (user && message.attachments.isNotEmpty)
+            Wrap(
+              spacing: t.s(8),
+              runSpacing: t.s(8),
+              children: [for (final attachment in message.attachments) _AttachedImage(key: ValueKey('${message.id}:${attachment.attachmentIndex}'), sessionId: message.sessionId, attachment: attachment)],
+            ),
           if (hasMeta)
             Container(
               margin: EdgeInsets.only(top: t.s(9)),
@@ -130,16 +141,7 @@ class ChatMessage extends StatelessWidget {
               decoration: BoxDecoration(
                 border: Border(top: BorderSide(color: p.border, width: 0.5)),
               ),
-              child: Wrap(
-                spacing: t.s(6),
-                runSpacing: t.s(6),
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (message.model != null) chip('MODEL', message.model!),
-                  if (tokensText != null) chip('TOKENS', tokensText),
-                  if (costText != null) chip('COST', costText),
-                ],
-              ),
+              child: Wrap(spacing: t.s(6), runSpacing: t.s(6), crossAxisAlignment: WrapCrossAlignment.center, children: [if (message.model != null) chip('MODEL', message.model!), if (tokensText != null) chip('TOKENS', tokensText), if (costText != null) chip('COST', costText)]),
             ),
         ],
       ),
@@ -152,10 +154,10 @@ class ChatMessage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (message.text.isNotEmpty)
+          if (message.text.isNotEmpty || (user && message.attachments.isNotEmpty))
             Semantics(
-              label: '${user ? 'You' : 'Agent'}: ${user ? message.text : markdownPlainText(message.text)}',
-            explicitChildNodes: true,
+              label: user && message.text.isEmpty ? 'You attached ${message.attachments.length} ${message.attachments.length == 1 ? 'image' : 'images'}' : '${user ? 'You' : 'Agent'}: ${user ? message.text : markdownPlainText(message.text)}',
+              explicitChildNodes: true,
               child: user
                   ? LayoutBuilder(
                       builder: (context, box) => Align(
@@ -168,17 +170,86 @@ class ChatMessage extends StatelessWidget {
                     )
                   : bubble,
             ),
-          for (final view in gadgets) ...[
-            if (message.text.isNotEmpty || view != gadgets.first) SizedBox(height: t.s(8)),
-            GadgetViewWidget(
-              key: ValueKey(view.gadget.gadgetId),
-              view: view,
-              connected: connected,
-              onAnswer: onAnswer ?? (_, _, _) async => throw StateError('Answer this on the desktop.'),
-            ),
-          ],
+          for (final view in gadgets) ...[if (message.text.isNotEmpty || view != gadgets.first) SizedBox(height: t.s(8)), GadgetViewWidget(key: ValueKey(view.gadget.gadgetId), view: view, connected: connected, onAnswer: onAnswer ?? (_, _, _) async => throw StateError('Answer this on the desktop.'))],
         ],
       ),
+    );
+  }
+}
+
+class _AttachedImage extends StatefulWidget {
+  const _AttachedImage({super.key, required this.sessionId, required this.attachment});
+  final String? sessionId;
+  final SessionImageAttachment attachment;
+
+  @override
+  State<_AttachedImage> createState() => _AttachedImageState();
+}
+
+class _AttachedImageState extends State<_AttachedImage> {
+  late Future<String?> _preview = _load();
+
+  Future<String?> _load() {
+    final sessionId = widget.sessionId;
+    return sessionId == null ? Future.value(null) : context.read<AppStore>().imageAttachmentPreview(sessionId, widget.attachment);
+  }
+
+  @override
+  void didUpdateWidget(_AttachedImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionId != widget.sessionId || oldWidget.attachment.eventIndex != widget.attachment.eventIndex || oldWidget.attachment.attachmentIndex != widget.attachment.attachmentIndex) {
+      _preview = _load();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    return FutureBuilder<String?>(
+      future: _preview,
+      builder: (context, snapshot) {
+        final dataUrl = snapshot.data;
+        final separator = dataUrl?.indexOf(',') ?? -1;
+        Uint8List? bytes;
+        if (separator >= 0) {
+          try {
+            bytes = base64Decode(dataUrl!.substring(separator + 1));
+          } catch (_) {
+            bytes = null;
+          }
+        }
+        if (bytes == null) {
+          return Container(
+            width: t.s(150),
+            height: t.s(84),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: t.palette.bgSunken,
+              borderRadius: BorderRadius.circular(t.s(7)),
+              border: Border.all(color: t.palette.border),
+            ),
+            child: Text('Image unavailable', style: ts(context, 11, color: t.palette.textDim)),
+          );
+        }
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: t.s(260), maxHeight: t.s(260)),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(t.s(7)),
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              semanticLabel: 'Image attached to your message',
+              errorBuilder: (context, error, stackTrace) => SizedBox(
+                width: t.s(150),
+                height: t.s(84),
+                child: Center(
+                  child: Text('Image unavailable', style: ts(context, 11, color: t.palette.textDim)),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

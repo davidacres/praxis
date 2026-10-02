@@ -248,3 +248,17 @@ test('an unrecognized OpenAI-compatible model receives standard reasoning_effort
   assert.equal(body.reasoning_effort, 'high');
   assert.equal('providerOptions' in body, false);
 });
+
+
+test('Bifrost reasoning deltas are emitted as thought output', async () => {
+  async function* lines() {
+    yield `data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'Checking the result' } }] })}`;
+    yield `data: ${JSON.stringify({ choices: [{ delta: { content: 'Done' }, finish_reason: 'stop' }] })}`;
+    yield 'data: [DONE]';
+  }
+  const events = [];
+  for await (const event of consumeChatStream(lines())) events.push(event);
+  assert.deepEqual(events.find(event => event.type === 'thought_delta'), { type: 'thought_delta', text: 'Checking the result' });
+  assert.ok(events.some(event => event.type === 'text_delta'));
+  assert.ok(events.some(event => event.type === 'done'));
+});

@@ -1,6 +1,7 @@
 import * as os from 'node:os';
 import { BrowserWindow, ipcMain } from 'electron';
 import { getSettingsBackend } from './settingsBackendInstance';
+import { safeSend } from './windowBroadcast';
 
 const confirmedWindows = new WeakSet<BrowserWindow>();
 const APP_ZOOM_MIN = 0.7;
@@ -24,8 +25,12 @@ export function getInitialZoomFactor(): number {
 function publishZoomFactor(win: BrowserWindow, factor: number): number {
   const next = clampZoomFactor(factor);
   if (win.isDestroyed()) return next;
-  win.webContents.setZoomFactor(next);
-  win.webContents.send('window:zoomChanged', next);
+  try {
+    win.webContents.setZoomFactor(next);
+  } catch {
+    // webContents may be destroyed/closing
+  }
+  safeSend(win, 'window:zoomChanged', next);
   try {
     const backend = getSettingsBackend();
     const current = backend.read().appearance.zoomFactor;
@@ -188,18 +193,14 @@ export function attachWindowCloseGuard(win: BrowserWindow, getRunningSessionCoun
     const runningSessionCount = getRunningSessionCount();
     if (runningSessionCount <= 0) return;
     event.preventDefault();
-    if (!win.isDestroyed()) {
-      win.webContents.send('window:closeRequested', { runningSessionCount });
-    }
+    safeSend(win, 'window:closeRequested', { runningSessionCount });
   });
 }
 
 /** Pushes maximize state to the renderer so the caption button can swap its glyph. */
 export function attachWindowStateEvents(win: BrowserWindow): void {
   const send = (maximized: boolean) => {
-    if (!win.isDestroyed()) {
-      win.webContents.send('window:maximizeChanged', maximized);
-    }
+    safeSend(win, 'window:maximizeChanged', maximized);
   };
   win.on('maximize', () => send(true));
   win.on('unmaximize', () => send(false));

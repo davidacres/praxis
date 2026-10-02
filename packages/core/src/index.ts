@@ -41,6 +41,8 @@ export * from './ai/agentRuntime';
 export * from './ai/toolEventClassify';
 export * from './ai/tools';
 export * from './ai/browserMcpServer';
+export * from './ai/mcp/mcpServerConfig';
+export * from './ai/mcp/mcpToolBridge';
 export * from './ai/aiReviewService';
 export * from './ai/ticketReview';
 export * from './ai/aiUsageLog';

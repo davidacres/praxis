@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 // Two previously-unhandled, stable ACP session updates — `available_commands_update`
 // and `current_mode_update` — see the ACP section of packages/core/src/ai/AGENTS.md's table of what
 // the protocol offers versus what this host reads. Neither is invented UI:
@@ -45,8 +46,7 @@ test('Session Modes advertised at start switch over the live connection and upda
   // to a session that hasn't been torn down.
   const key = await delegate(win, 'HANG_UNTIL_CANCELLED please');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'HANG_UNTIL_CANCELLED please' }).click();
+  await openSession(win, 'HANG_UNTIL_CANCELLED please');
 
   await win.getByTestId('session-composer-ask-btn').click();
 
@@ -78,8 +78,7 @@ test('the agent\'s own slash commands populate the composer and insert into the 
     .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), key), { timeout: 20000 })
     .toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'WITH_COMMANDS please' }).click();
+  await openSession(win, 'WITH_COMMANDS please');
 
   const commandsChip = win.getByTestId('session-acp-commands');
   await expect(commandsChip).toBeVisible();
@@ -105,8 +104,7 @@ test('context compaction is offered only when the ACP provider advertises /compa
     .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), key), { timeout: 20000 })
     .toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'WITH_USAGE WITH_COMMANDS please' }).click();
+  await openSession(win, 'WITH_USAGE WITH_COMMANDS please');
   await expect(win.getByTestId('session-context-chip')).toBeVisible();
   const commandsBox = await win.getByTestId('session-acp-commands').boundingBox();
   const contextChipBox = await win.getByTestId('session-context-chip').boundingBox();

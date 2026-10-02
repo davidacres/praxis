@@ -20,6 +20,14 @@ export function mayContainGadget(text: string | undefined): boolean {
  * end its line. Keep the two in step or a gadget renders *and* its raw JSON shows.
  */
 const FENCE = /[ \t]*```[ \t]*praxis-gadget[ \t]*\r?\n[\s\S]*?```[ \t]*$/gm;
+/**
+ * An opening fence with no closing ``` anywhere after it — a reply cut short
+ * (hit a length limit, the stream was interrupted, anything) mid-gadget.
+ * Treated the same as one still being streamed: hidden, rather than left as
+ * half-written JSON that would otherwise sit in the transcript forever,
+ * because nothing else downstream ever revisits a message once it's final.
+ */
+const OPEN_FENCE = /[ \t]*```[ \t]*praxis-gadget[ \t]*\r?\n(?![\s\S]*```[ \t]*$)/m;
 const MEMORY_CITATION_BLOCK = /(?:^|\r?\n)[ \t]*<oai-mem-citation\b[^>]*>[\s\S]*?(?:<\/oai-mem-citation>[ \t]*(?=\r?\n|$)|$)/gi;
 
 /**
@@ -27,12 +35,17 @@ const MEMORY_CITATION_BLOCK = /(?:^|\r?\n)[ \t]*<oai-mem-citation\b[^>]*>[\s\S]*
  *
  * The gadget itself renders directly beneath the message, so leaving the raw
  * JSON in the prose would show the user the same request twice — once as an
- * interactive surface and once as machine noise.
+ * interactive surface and once as machine noise. A fence that never closed
+ * (cut off before the model finished writing it) is dropped the same way,
+ * since there is no complete gadget there for the user to answer.
  */
 export function stripGadgetFences(text: string): string {
   if (!mayContainGadget(text)) return text;
   FENCE.lastIndex = 0;
-  return text.replace(FENCE, '').replace(/\n{3,}/g, '\n\n').trim();
+  const closed = text.replace(FENCE, '');
+  const openIndex = closed.search(OPEN_FENCE);
+  const withoutOpen = openIndex >= 0 ? closed.slice(0, openIndex) : closed;
+  return withoutOpen.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /**

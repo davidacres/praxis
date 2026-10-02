@@ -1,7 +1,7 @@
 import type { ProviderAuth } from './customProviders';
 
 /** Where a preset sits in Settings → AI Provider → Add provider. */
-export type ProviderPresetGroup = 'cloud' | 'local' | 'custom';
+export type ProviderPresetGroup = 'cloud' | 'gateway' | 'local' | 'custom';
 
 /**
  * A template for a user-added OpenAI-compatible endpoint. Adding one copies
@@ -33,7 +33,9 @@ export interface ProviderPreset {
  * is a one-field fix for the user, not a release.
  */
 export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
-  { id: 'openrouter', label: 'OpenRouter', group: 'cloud', note: 'Hundreds of models behind one key', baseUrl: 'https://openrouter.ai', apiPath: '/api/v1', auth: { kind: 'bearer' }, keyRequired: true, keyUrl: 'https://openrouter.ai/keys' },
+  { id: 'bifrost', label: 'Bifrost AI Gateway', group: 'gateway', note: 'Local or remote gateway · virtual keys, budgets and routing', baseUrl: 'http://localhost:8080', apiPath: '/openai', auth: { kind: 'header', name: 'x-bf-vk' }, keyRequired: true },
+  { id: 'openrouter', label: 'OpenRouter', group: 'gateway', note: 'Hundreds of models behind one key', baseUrl: 'https://openrouter.ai', apiPath: '/api/v1', auth: { kind: 'bearer' }, keyRequired: true, keyUrl: 'https://openrouter.ai/settings/keys' },
+  { id: 'minimax', label: 'MiniMax', group: 'cloud', note: 'MiniMax models · token-based pricing', baseUrl: 'https://api.minimax.io', apiPath: '/v1', auth: { kind: 'bearer' }, keyRequired: true, keyUrl: 'https://platform.minimax.io/console/access' },
   { id: 'groq', label: 'Groq', group: 'cloud', note: 'Fast open-weight models', baseUrl: 'https://api.groq.com', apiPath: '/openai/v1', auth: { kind: 'bearer' }, keyRequired: true, keyUrl: 'https://console.groq.com/keys' },
   { id: 'mistral', label: 'Mistral', group: 'cloud', note: 'Mistral and Codestral models', baseUrl: 'https://api.mistral.ai', apiPath: '/v1', auth: { kind: 'bearer' }, keyRequired: true, keyUrl: 'https://console.mistral.ai/api-keys' },
   { id: 'deepseek', label: 'DeepSeek', group: 'cloud', note: 'DeepSeek chat and reasoning models', baseUrl: 'https://api.deepseek.com', apiPath: '/v1', auth: { kind: 'bearer' }, keyRequired: true, keyUrl: 'https://platform.deepseek.com/api_keys' },

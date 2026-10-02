@@ -22,6 +22,23 @@ String _string(Object? value) => value is String
     : '$value';
 List<Json> _maps(Object? value) => value is List ? value.whereType<Json>().toList() : const [];
 
+// Keep this deliberately raster-only, same bound as the desktop's
+// `isPreviewableImage` — the host only turns a bounded image file inside the
+// session's working folder into a data URL for anything else.
+final _previewableImageTypes = {'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/avif'};
+final _previewableImageExtension = RegExp(r'\.(?:png|jpe?g|gif|webp|bmp|avif)$', caseSensitive: false);
+
+bool _isPreviewableImage(String? mediaType, String path) {
+  if (mediaType == null || !_previewableImageTypes.contains(mediaType.toLowerCase())) return false;
+  final withoutQuery = path.split(RegExp(r'[?#]')).first;
+  return _previewableImageExtension.hasMatch(withoutQuery);
+}
+
+String _markdownImageForArtifact(String name, String path) {
+  final alt = name.replaceAll(RegExp(r'[\[\]]'), ' ').trim();
+  return '![${alt.isNotEmpty ? alt : 'Artifact preview'}](<$path>)';
+}
+
 /// One gadget in a conversation. An unknown kind or version, or a body that
 /// cannot read its payload, falls back to the gadget's own text.
 class GadgetViewWidget extends StatelessWidget {
@@ -615,6 +632,14 @@ class _PlainState<T extends _GadgetBody> extends State<T> {
                   style: _mono(context, t.palette.textDim),
                 ),
                 if (artifact['description'] is String) Text(artifact['description'] as String, style: _dim(context)),
+                if (_isPreviewableImage(artifact['mediaType'] as String?, _string(artifact['path'])))
+                  Padding(
+                    padding: EdgeInsets.only(top: t.s(4)),
+                    child: MarkdownView(
+                      _markdownImageForArtifact(_string(artifact['name']), _string(artifact['path'])),
+                      imageSessionId: widget.gadget.imageSessionId,
+                    ),
+                  ),
               ],
             ),
           _ActionBar(gadget: widget.gadget, answerable: widget.answerable, onAnswer: widget.onAnswer, valueFor: _noValue),

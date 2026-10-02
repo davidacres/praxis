@@ -559,3 +559,15 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | [FX-BE-146](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-146-simple-dark-theme-and-preview-setting/story.md) | Story | Simple dark theme and preview setting | Complete | FX-BF-046 |
 | [TASK-375](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-146-simple-dark-theme-and-preview-setting/tasks/task-375-settings-contract-and-defaults.md) | Task | Define enableEasyMode setting contract, sanitizer, and renderer defaults | Complete | None |
 | [TASK-376](/apps/praxis-desktop/docs/plans/features/fx-bf-046-easymode-sidebar-and-agent-activity/stories/fx-be-146-simple-dark-theme-and-preview-setting/tasks/task-376-simple-theme-and-preview-toggle.md) | Task | Register Simple dark theme, CSS theme definition, and Settings Preview toggle | Complete | TASK-375 |
+
+## Agent session communication and resource coordination
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| [FX-BF-048](plans/features/fx-bf-048-agent-session-coordination/feature.md) | Feature | Agent session communication and resource coordination | Backlog | None |
+| [FX-BE-150](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/story.md) | Story | Coordinate session activity and exclusive resources | Backlog | FX-BF-048 |
+| [TASK-391](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-391-coordination-contracts.md) | Task | Define coordination schema and resource conflicts | Backlog | FX-BE-150 |
+| [TASK-392](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-392-coordination-broker.md) | Task | Design and implement the single local broker | Backlog | TASK-391 |
+| [TASK-393](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-393-coordination-runtime.md) | Task | Gate session tools and reconcile their lifecycle | Backlog | TASK-391, TASK-392 |
+| [TASK-394](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-394-coordination-communication.md) | Task | Expose bounded messages and resource waiting status | Backlog | TASK-393 |
+| [TASK-395](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-395-coordination-verification.md) | Task | Prove contention, isolation and safe recovery | Backlog | TASK-393, TASK-394 |

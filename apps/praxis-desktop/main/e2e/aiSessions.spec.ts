@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -31,6 +32,56 @@ const NO_GATEWAY_ENV = {
 
 let app: TestApp | undefined;
 let mock: MockGatewayServer | undefined;
+const ticketProjectFolders: string[] = [];
+
+/** Ticket fixtures need a project owner, just like real tickets. */
+async function seedTicketProject(win: TestApp['window'], toolMode: 'project-only' | 'full', boardPicker = false) {
+  const folderPath = toolMode === 'full' || boardPicker ? fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-ticket-project-')) : undefined;
+  if (folderPath) ticketProjectFolders.push(folderPath);
+  if (boardPicker && folderPath) {
+    fs.writeFileSync(path.join(folderPath, 'board.praxis.json'), JSON.stringify({ projectKey: 'OPS', projectName: 'Operations Board' }));
+    const featureDir = path.join(folderPath, 'features', 'feature-01-operations');
+    fs.mkdirSync(featureDir, { recursive: true });
+    fs.writeFileSync(path.join(featureDir, 'task-01-01-follow-up.md'), '# Operations follow-up\n\n**Status:** Proposed\n**Type:** Task\n\n## Description\n\nRefactor the board store.\n');
+  }
+  const project = await win.evaluate(async ({ defaultAiToolMode, folderPath, boardPicker }) => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create({
+      name: 'Demo ticket project', key: 'DEMO', type: 'product', purpose: '', brief: {},
+      startingPoint: folderPath ? 'existing-folder' : 'app-storage', folderPath, planningMode: 'files',
+      workflowStages: [
+        { id: 'todo', name: 'To do', category: 'todo' },
+        { id: 'done', name: 'Done', category: 'done' }
+      ],
+      starterTickets: [], defaultAiToolMode
+    }, workspace.id);
+    // Multiple projects keep the workspace composer unscoped so this test
+    // exercises its board/ticket picker rather than the single-project shortcut.
+    if (boardPicker) await window.praxis.projects.create({
+      name: 'Other project', key: 'OTHER', type: 'product', purpose: '', brief: {},
+      startingPoint: 'app-storage', planningMode: 'files',
+      workflowStages: [
+        { id: 'todo', name: 'To do', category: 'todo' },
+        { id: 'done', name: 'Done', category: 'done' }
+      ],
+      starterTickets: [], defaultAiToolMode: 'project-only'
+    }, workspace.id);
+    if (boardPicker) await window.praxis.workspaces.update(workspace.id, { defaultProjectId: '' });
+    if (boardPicker) await window.praxis.connection.add({
+      id: 'ticket-project', name: 'Ticket tracker', mode: 'folder',
+      settings: { roots: [folderPath], projectId: project.id, projectKey: 'OPS', projectName: 'Operations Board' }
+    });
+    for (const connection of await window.praxis.connection.list()) {
+      if (connection.mode === 'demo') {
+        await window.praxis.connection.update({
+          ...connection, settings: { ...connection.settings, projectId: project.id }
+        });
+      }
+    }
+    return project;
+  }, { defaultAiToolMode: toolMode, folderPath, boardPicker });
+  return project;
+}
 
 test.afterEach(async () => {
   if (app) {
@@ -40,6 +91,9 @@ test.afterEach(async () => {
   if (mock) {
     await mock.close();
     mock = undefined;
+  }
+  for (const folderPath of ticketProjectFolders.splice(0)) {
+    fs.rmSync(folderPath, { recursive: true, force: true });
   }
 });
 
@@ -85,16 +139,20 @@ test('composer selects a board and open ticket, names the session, and streams t
     ...NO_GATEWAY_ENV,
     AI_GATEWAY_API_KEY: 'e2e-gateway-key',
     AI_GATEWAY_URL: mock.baseUrl
-  });
+  }, { demoMode: false });
   const win = app.window;
 
   // The app opens on the New Session composer.
+  const ticketProject = await seedTicketProject(win, 'full', true);
+  await win.reload();
+  const rendererErrors: Error[] = [];
+  win.on('pageerror', error => rendererErrors.push(error));
   const composer = win.locator('[data-testid="new-session-view"]');
   await composer.waitFor();
   const boardSelect = win.locator('[data-testid="new-session-board-select"]');
   const ticketSelect = win.locator('[data-testid="new-session-ticket-select"]');
   await boardSelect.click();
-  await expect(win.locator('[data-testid="new-session-board-option"]')).toHaveCount(3);
+  await expect(win.locator('[data-testid="new-session-board-option"]')).toHaveCount(1);
   await win.locator('[data-testid="new-session-board-option"]', { hasText: 'Operations Board' }).click();
   await expect(ticketSelect).toBeEnabled();
   await expect(ticketSelect).toContainText(/OPS-/);
@@ -119,6 +177,9 @@ test('composer selects a board and open ticket, names the session, and streams t
 
   // Lands on the Sessions view with the new session selected.
   await win.locator('[data-testid="sessions-view"]').waitFor();
+  await expect.poll(() => win.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.projectId))
+    .toBe(ticketProject.id);
+  await expect(win.getByTestId('nav-sessions')).toHaveCount(0);
   const activityOrbit = win.locator('[data-testid="session-composer-activity-orbit"]');
   await expect(activityOrbit).toBeVisible();
   await expect(activityOrbit).toHaveAttribute('data-activity-duration', '7000');
@@ -152,10 +213,8 @@ test('composer selects a board and open ticket, names the session, and streams t
   await win.locator('.session-follow-up-composer').screenshot({
     path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'session-composer-activity-orbit.png')
   });
-  const row = win.locator('[data-testid="session-list-row"]').first();
-  await row.waitFor();
-  await expect(row).toContainText('Operations follow-up');
-  await expect(row).toContainText(selectedTicket);
+  await expect(win.getByTestId('session-console-title')).toContainText('Operations follow-up');
+  await expect(win.getByTestId('session-console-title')).toContainText(selectedTicket);
 
   // The agent runs to completion against the mock; the badge and console follow.
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
@@ -229,21 +288,23 @@ test('composer selects a board and open ticket, names the session, and streams t
   // Completed is terminal — no abort button.
   await expect(win.locator('[data-testid="session-abort-btn"]')).toHaveCount(0);
 
-  // A row can be renamed in place; the custom title is used by both the list
-  // and console header and survives a renderer reload.
-  await row.locator('[data-testid="session-rename-btn"]').click();
-  const titleInput = row.locator('[data-testid="session-title-input"]');
+  const row = win.getByTestId('project-session-nav-item').first();
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('Operations follow-up');
+  await expect(win.getByTestId('project-tree').filter({ hasText: ticketProject.name })).toContainText('Operations follow-up');
+  await expect(win.getByTestId('session-list-row')).toHaveCount(0);
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/praxis-sidebar-ticket-project.png') });
+  await row.hover();
+  await row.getByTestId('session-rename-btn').click();
+  const titleInput = row.getByTestId('session-title-input');
   await titleInput.fill('Demo store refactor session');
   await titleInput.press('Enter');
-  await expect(row.locator('[data-testid="session-title"]')).toHaveText('Demo store refactor session');
-  await expect(win.locator('[data-testid="session-console-title"]')).toContainText('Demo store refactor session');
+  await expect(row.getByTestId('session-title')).toHaveText('Demo store refactor session');
+  await expect(win.getByTestId('session-console-title')).toContainText('Demo store refactor session');
   await win.reload();
-  await win.locator('[data-testid="nav-sessions"]').click();
-  const persistedRow = win.locator('[data-testid="session-list-row"]', {
-    hasText: 'Demo store refactor session'
-  });
-  await persistedRow.waitFor();
-  await persistedRow.click();
+  await openSession(win, 'Demo store refactor session');
+  const persistedRow = win.getByTestId('project-session-nav-item').filter({ hasText: 'Demo store refactor session' });
+  await persistedRow.hover();
   await expect(win.locator('[data-testid="session-provider"]')).toBeEnabled();
   await expect(win.locator('[data-testid="session-model"]')).toBeEnabled();
   await win.locator('[data-testid="session-model"]').click();
@@ -265,13 +326,17 @@ test('composer selects a board and open ticket, names the session, and streams t
 
   // Delete asks first, in an app-styled dialog with a third "Archive instead" escape hatch,
   // then removes the persisted conversation and leaves the Sessions empty state.
+  await persistedRow.hover();
   await persistedRow.locator('[data-testid="session-delete-btn"]').click();
   const deleteDialog = win.getByRole('dialog');
   await expect(deleteDialog).toContainText('Delete this session?');
   await expect(deleteDialog.getByTestId('app-dialog-tertiary')).toHaveText('Archive instead');
   await deleteDialog.getByRole('button', { name: 'Delete session' }).click();
   await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(0);
+  await expect(win.getByTestId('project-session-nav-item')).toHaveCount(0);
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-deleted.png') });
   await expect(win.locator('[data-testid="sessions-empty"]')).toBeVisible();
+  expect(rendererErrors).toEqual([]);
 });
 
 test('issue detail starts a prompted ticket session and opens its console', async () => {
@@ -282,6 +347,8 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
     AI_GATEWAY_URL: mock.baseUrl
   });
   const win = app.window;
+  const ticketProject = await seedTicketProject(win, 'full');
+  await win.reload();
 
   // Open a demo issue in the aux detail pane.
   await win.locator('[data-testid="nav-overview"]').click();
@@ -324,6 +391,8 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
   // Starting succeeds into the ticket-bound Sessions console instead of
   // leaving the user in the detail pane with no visible response.
   await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect.poll(() => win.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.projectId))
+    .toBe(ticketProject.id);
   await expect(win.locator('[data-testid="session-console-title"]')).toContainText('Deliver the ticket');
   await win.locator('[data-testid="session-abort-btn"]').click();
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Aborted');
@@ -370,7 +439,7 @@ test('API session executes a tracker tool and shows the call and result inline',
       task: { goal: 'Inspect this ticket using the tracker.' }
     });
   });
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
     timeout: 15000
   });
@@ -430,7 +499,7 @@ test('a write_file tool call renders a red/green diff after the write is approve
       task: { goal: 'Add a second line to notes.md.' }
     });
   }, workDir);
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
 
   // The write needs approval before it applies.
   await win.locator('[data-testid="session-permission-allow-once"]').click();
@@ -462,7 +531,11 @@ test('the inspector is tabbed state, not a second copy of the conversation', asy
   await win.evaluate(async () => {
     await window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Summarise the plan.' } });
   });
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
+  await expect(win.getByTestId('nav-sessions')).toHaveCount(0);
+  await expect(win.getByTestId('session-list-row')).toHaveCount(1);
+  await expect(win.getByTestId('project-session-nav-item')).toHaveCount(0);
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/praxis-sidebar-conversation.png') });
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   // The reply is in the transcript, once.
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText('FX-BE-097');
@@ -525,7 +598,7 @@ test('the agent\'s reply uses the pane it has; yours stays a reply beside it', a
   await win.evaluate(async () => {
     await window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Say something long.' } });
   });
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
 
   const assistant = win.locator('[data-testid="session-chat-assistant"]').last();
@@ -562,7 +635,7 @@ test('change model and handover stay unreachable while a turn is running', async
   await win.evaluate(async () => {
     await window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Keep running.' } });
   });
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   // The collapsed composer (a single-agent turn running, no conversation to
   // queue a directed message into) hides the model/provider chips entirely
   // now, rather than showing them disabled — see `followUpCollapsed` in
@@ -577,6 +650,69 @@ test('change model and handover stay unreachable while a turn is running', async
     const sessions = await window.praxis.ai.listSessions();
     if (sessions[0]) await window.praxis.ai.abort(sessions[0].issueKey);
   });
+});
+
+test('the session composer model picker honours the curated enabled models', async () => {
+  // Regression: the composer's per-session Model picker read the provider catalog
+  // directly and ignored Settings -> AI Provider -> Models curation, unlike New
+  // Session, which filtered through applyEnabledModelCuration.
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    models: [{ id: 'mock/model' }, { id: 'mock/other' }, { id: 'mock/third' }]
+  });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-curation-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+  await win.evaluate(async ({ baseUrl }) => {
+    await window.praxis.settings.set({ ai: { providers: { openai: { baseUrl } } } });
+    await window.praxis.ai.setProviderApiKey('openai', 'e2e-openai-curation-key');
+  }, { baseUrl: mock.baseUrl });
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({
+      provider: 'openai',
+      task: { goal: 'Curation reach.', scope: 'Composer picker', definitionOfDone: 'Curated subset shown' }
+    });
+  });
+  await openSession(win);
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+
+  const optionIds = async (menu: import('playwright').Locator) =>
+    menu.locator('[data-testid^="session-model-option-"]').evaluateAll(nodes =>
+      nodes.map(node => node.getAttribute('data-testid')!.replace('session-model-option-', '')));
+
+  // Uncurated: the whole provider catalog is offered.
+  await win.locator('[data-testid="session-model"]').click();
+  const uncurated = win.locator('[data-testid="session-model-menu"]');
+  await expect(uncurated).toBeVisible();
+  // `mock/model` renders as the pinned Default row and the session's own model
+  // (absent from the catalog) as the Current row; both are expected extras.
+  await expect.poll(() => optionIds(uncurated), { timeout: 15000 }).toEqual(
+    expect.arrayContaining(['default', 'current', 'mock/other', 'mock/third'])
+  );
+
+  // Curate down to a single model, then reopen: only that one may remain.
+  await win.keyboard.press('Escape');
+  await win.evaluate(async () => {
+    await window.praxis.settings.set({
+      ai: { providers: { openai: { enabledModelIds: ['mock/other'] } } }
+    });
+  });
+  await win.locator('[data-testid="session-model"]').click();
+  const curated = win.locator('[data-testid="session-model-menu"]');
+  await expect(curated).toBeVisible();
+  // Curation to one model: every other catalog model is gone from the menu, and
+  // the survivor shows as the Default row (its own row is suppressed in favour of
+  // it). The session's out-of-catalog model stays selectable as Current, so
+  // curation can never strand an in-flight conversation.
+  await expect.poll(() => optionIds(curated), { timeout: 15000 })
+    .toEqual(expect.arrayContaining(['default', 'current']));
+  const curatedIds = await optionIds(curated);
+  expect(curatedIds).not.toContain('mock/third');
+  await expect(curated.locator('[data-testid="session-model-option-default"]')).toContainText('mock/other');
+  await expect(curated.locator('[data-testid="session-model-option-current"]')).toContainText('gpt-4o-mini');
 });
 
 test('a completed session can edit its brief, change model, and hand over', async () => {
@@ -600,7 +736,7 @@ test('a completed session can edit its brief, change model, and hand over', asyn
       task: { goal: 'Ship the living brief.', scope: 'Session inspector', definitionOfDone: 'Handover works' }
     });
   });
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   await expect(win.locator('[data-testid="session-purpose-goal"]')).toContainText('Ship the living brief.');
   await expect(win.locator('[data-testid="session-purpose-scope"]')).toContainText('Session inspector');
@@ -618,6 +754,11 @@ test('a completed session can edit its brief, change model, and hand over', asyn
   await expect(modelMenu).toBeVisible();
   await expect(modelMenu.locator('[data-testid="session-model-refresh"]')).toBeVisible();
   await expect(modelMenu.locator('[data-testid="session-model-option-mock/other"]')).toBeVisible({ timeout: 15000 });
+  const defaultModelOption = modelMenu.locator('[data-testid="session-model-option-default"]');
+  await expect(defaultModelOption).toBeVisible();
+  await expect(defaultModelOption).toContainText('mock/model');
+  await expect(modelMenu.locator('[data-testid="session-model-option-mock/model"]')).toHaveCount(0);
+  await modelMenu.screenshot({ path: path.resolve(process.cwd(), '../.praxis/session-artifacts/existing-session-default-model.png') });
   const modelRequestsBeforeRefresh = mock.modelsRequestCount;
   await modelMenu.locator('[data-testid="session-model-refresh"]').click();
   await expect.poll(() => mock.modelsRequestCount).toBe(modelRequestsBeforeRefresh + 1);
@@ -626,6 +767,15 @@ test('a completed session can edit its brief, change model, and hand over', asyn
   await expect(modelMenu).toHaveCount(0);
   await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/other');
   await expect(win.locator('[data-testid="session-runtime-epoch"]')).toHaveCount(2);
+  await win.evaluate(async () => {
+    await window.praxis.settings.set({ ai: { defaultModel: 'mock/configured-default' } });
+  });
+  await win.locator('[data-testid="session-model"]').click();
+  const resetModelMenu = win.locator('[data-testid="session-model-menu"]');
+  await expect(resetModelMenu.locator('[data-testid="session-model-option-default"]')).toContainText('mock/configured-default');
+  await expect(resetModelMenu.locator('[data-testid="session-model-option-default"]')).toHaveAttribute('aria-selected', 'false');
+  await resetModelMenu.locator('[data-testid="session-model-option-default"]').click();
+  await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/configured-default');
 
   await win.locator('[data-testid="session-provider"]').click();
   const providerMenu = win.locator('[data-testid="session-provider-menu"]');
@@ -650,7 +800,7 @@ test('a completed session can edit its brief, change model, and hand over', asyn
   await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/model');
   await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('taking over this Praxis session');
   await expect(win.locator('[data-testid="session-brief-notes"]')).toHaveText('Keep the worktree.');
-  await expect(win.locator('[data-testid="session-runtime-epoch"]')).toHaveCount(3);
+  await expect(win.locator('[data-testid="session-runtime-epoch"]')).toHaveCount(4);
   await expect.poll(() => win.evaluate(() => localStorage.getItem('praxis-ai-handover-confirmation'))).toBe('always');
 });
 
@@ -668,7 +818,7 @@ test('an opt-in conversation alternates attributed AI turns and stops at its cap
   const session = await win.evaluate(async () => window.praxis.ai.delegate({
     provider: 'vercel-gateway', task: { goal: 'Compare the two approaches.' }
   }));
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   const hostModel = await win.evaluate(key => window.praxis.ai.listSessions().then(records =>
     records.find(record => record.issueKey === key)?.model
@@ -709,7 +859,7 @@ test('a human can direct a message to either participant during an AI conversati
   const session = await win.evaluate(async () => window.praxis.ai.delegate({
     provider: 'vercel-gateway', task: { goal: 'Review this implementation together.' }
   }));
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   await win.locator('[data-testid="session-provider"]').click();
   await win.locator('[data-testid="session-provider-add-vercel-gateway"]').click();
@@ -770,7 +920,7 @@ test('an image pasted during a conversation rides with the directed message', as
   const session = await win.evaluate(async () => window.praxis.ai.delegate({
     provider: 'vercel-gateway', task: { goal: 'Review this design together.' }
   }));
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   await win.locator('[data-testid="session-provider"]').click();
   await win.locator('[data-testid="session-provider-add-vercel-gateway"]').click();
@@ -842,7 +992,7 @@ test('focus mode presents sessions as tabs and keeps them available while starti
     keys.map(key => records.find(record => record.issueKey === key)?.state)
   ), sessionKeys), { timeout: 15000 }).toEqual(['completed', 'completed']);
 
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   await win.getByRole('button', { name: 'Toggle sidebar' }).click();
   await win.getByRole('button', { name: 'Toggle secondary sidebar' }).click();
 
@@ -855,6 +1005,7 @@ test('focus mode presents sessions as tabs and keeps them available while starti
   }))).toEqual({ header: 31, tabs: 30 });
   await expect(win.locator('[data-testid="session-focus-tab"]')).toHaveCount(2);
   await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('Second focus chat');
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-focus-navigation.png') });
 
   const activeTab = win.locator('[data-testid="session-focus-tab"][aria-selected="true"]');
   await activeTab.focus();
@@ -866,6 +1017,7 @@ test('focus mode presents sessions as tabs and keeps them available while starti
   await expect(win.locator('[data-testid="new-session-view"]')).toBeVisible();
   await expect(win.locator('[data-testid="session-focus-tabs"]')).toBeVisible();
   await expect(win.locator('[data-testid="session-focus-new"]')).toHaveClass(/active/);
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/new-conversation-focus-tabs.png') });
 
   await win.locator('[data-testid="session-focus-tab"]', { hasText: 'Second focus chat' }).click();
   await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('Second focus chat');
@@ -888,7 +1040,7 @@ test('session failure displays unified error banner above the chat panel and not
     });
   });
 
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Failed', {
     timeout: 15000
   });
@@ -955,7 +1107,7 @@ test('composer paste and drop carries an image to the agent and the transcript',
       task: { goal: 'Describe the attached screenshot.' }
     });
   });
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   const input = win.locator('[data-testid="session-follow-up-input"]');
   await input.waitFor();
 
@@ -1027,7 +1179,7 @@ test('a transcript attachment enlarges in a lightbox and closes on click', async
       task: { goal: 'Describe the attached screenshot.' }
     });
   });
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   const input = win.locator('[data-testid="session-follow-up-input"]');
   await input.waitFor();
 
@@ -1073,7 +1225,7 @@ test('a file dropped outside the composer never navigates the window', async () 
       task: { goal: 'Describe the attached screenshot.' }
     });
   });
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   const input = win.locator('[data-testid="session-follow-up-input"]');
   await input.waitFor();
 
@@ -1122,7 +1274,7 @@ test('a session can be archived from its row and restored from the inspector bro
   )).toBe(2);
 
   // Both rows show in the sidebar tree.
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await openSession(win);
   await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(2);
 
   // The inspector's Sessions tab lists every session under Active.
@@ -1136,6 +1288,7 @@ test('a session can be archived from its row and restored from the inspector bro
   // Free-form sessions get synthesized keys the row deliberately hides, so
   // match on the goal-derived title instead.
   const firstRow = win.locator('[data-testid="session-list-row"]', { hasText: 'First archive-flow session' });
+  await firstRow.hover();
   await firstRow.locator('[data-testid="session-archive-btn"]').click();
 
   // It leaves the sidebar tree but stays listed — now under Archived.

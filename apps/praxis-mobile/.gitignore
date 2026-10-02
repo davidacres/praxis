@@ -91,3 +91,6 @@ tool/.stage-host/
 
 # Xcode build output (deploy script, xcodebuild)
 /ios/build/
+
+# App icons are source assets and must travel with a fresh checkout.
+!ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-*.png

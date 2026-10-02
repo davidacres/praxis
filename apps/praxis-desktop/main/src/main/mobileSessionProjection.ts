@@ -1,4 +1,5 @@
 import { gadgetMessageKey, isConversationEvent, mayContainGadget, stripGadgetFences } from '@praxis/core';
+import { pendingMobilePermissions } from './mobilePermissions';
 import type {
   AgentSessionRecord,
   MobileAppearance,
@@ -108,7 +109,11 @@ function persistedMessages(record: AgentSessionRecord, resolveGadgets?: MobileGa
     const raw = (event.detail || event.summary).trim();
     if (!role || !raw) return;
     if (role === 'user' && handoverBriefs.has(raw)) return;
-    if (role === 'user' && messages.some(message => message.role === 'user' && message.text === raw)) return;
+    if (
+      role === 'user' &&
+      !event.attachments?.length &&
+      messages.some(message => message.role === 'user' && message.text === raw)
+    ) return;
     const hasGadget = role === 'assistant' && mayContainGadget(raw);
     const resolved = hasGadget && resolveGadgets
       ? resolveGadgets(record.sessionId, gadgetMessageKey(conversationIndex), raw)
@@ -123,6 +128,15 @@ function persistedMessages(record: AgentSessionRecord, resolveGadgets?: MobileGa
       role,
       text: boundedText(text, MAX_MOBILE_MESSAGE_CHARS),
       ...(gadgets.length ? { gadgets } : {}),
+      ...(event.type === 'user_input_completed' && event.attachments?.length
+        ? {
+            attachments: event.attachments.map((attachment, attachmentIndex) => ({
+              eventIndex: index,
+              attachmentIndex,
+              mimeType: attachment.mimeType,
+            })),
+          }
+        : {}),
       at: event.timestamp,
       status: event.type === 'error' ? 'failed' : 'complete',
       ...(event.reasoning ? { reasoning: boundedText(event.reasoning, MAX_MOBILE_REASONING_CHARS) } : {}),
@@ -157,19 +171,12 @@ export function mobileSessionSnapshot(
   const rawResponse = record.responseText?.trim();
   const responseText = rawResponse ? streamingText(rawResponse) : undefined;
   const last = messages[messages.length - 1];
-  const pendingPermissions: MobilePendingPermission[] = [];
-  record.events.forEach((event, index) => {
-    if (event.type === 'permission_requested') {
-      pendingPermissions.push({
-        requestId: `${record.sessionId}:permission:${index}`,
-        summary: event.summary,
-        ...(event.detail ? { detail: event.detail } : {}),
-        createdAt: event.timestamp,
-      });
-    } else if (event.type === 'permission_completed') {
-      pendingPermissions.shift();
-    }
-  });
+  const pendingPermissions: MobilePendingPermission[] = pendingMobilePermissions([record]).map(({ requestId, summary, detail, createdAt }) => ({
+    requestId,
+    summary,
+    ...(detail ? { detail } : {}),
+    createdAt,
+  }));
   if (active && responseText && !(last?.role === 'assistant' && last.text === responseText)) {
     messages.push({
       id: `${record.sessionId}:active`,

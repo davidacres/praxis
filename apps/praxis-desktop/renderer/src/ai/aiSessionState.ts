@@ -57,7 +57,12 @@ export function agentStateLaneClass(state: AgentTaskState): string {
   if (state === 'failed' || state === 'aborted') {
     return 'lane lane--failed';
   }
-  if (isTerminalAgentState(state) || state === 'not_started' || state === 'paused') {
+  // Completed is a terminal state but not an idle one: folding it into the
+  // idle lane left a finished session looking like it had never run.
+  if (state === 'completed') {
+    return 'lane lane--done';
+  }
+  if (state === 'not_started' || state === 'paused') {
     return 'lane lane--idle';
   }
   return 'lane lane--running';

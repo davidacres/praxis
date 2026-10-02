@@ -1,5 +1,6 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
 import { getLogBus } from './logBusInstance';
+import { broadcastToAllWindows } from './windowBroadcast';
 
 /**
  * Registers the log IPC channels: `log:getRecent` (the ring-buffer backlog)
@@ -10,11 +11,6 @@ export function registerLogIpc(): void {
   ipcMain.handle('log:getRecent', async () => getLogBus().recent());
 
   getLogBus().subscribe(line => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (win.isDestroyed()) {
-        continue;
-      }
-      win.webContents.send('log:appended', line);
-    }
+    broadcastToAllWindows('log:appended', line);
   });
 }

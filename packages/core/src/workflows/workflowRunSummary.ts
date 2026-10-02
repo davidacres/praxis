@@ -238,7 +238,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
   return {
     runId: run.runId,
     projectId: run.projectId,
-    workflowName: run.definition.name,
+    workflowName: run.displayName ?? run.definition.name,
     status,
     explanation: explainRun(run, status, schedule.blocked),
     stages,

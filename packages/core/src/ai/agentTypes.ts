@@ -430,6 +430,8 @@ export interface AgentSessionRecord {
   connectionId?: string;
   /** Project workspace this interactive session belongs to, when known. */
   projectId?: string;
+  /** Ticket this conversation is filed under in the project's session tree. */
+  linkedIssueKey?: string;
   /**
    * Set when this session is a governed workflow stage (FX-BF-013). Together
    * these make a session traceable back to the run and node that started it —

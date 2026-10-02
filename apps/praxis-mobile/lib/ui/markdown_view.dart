@@ -1,15 +1,25 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../app/store.dart';
 import '../app/theme.dart';
 import '../core/markdown.dart';
 import 'kit.dart';
 
 /// Agent text as formatted blocks. Port of `app/Markdown.tsx`.
 class MarkdownView extends StatefulWidget {
-  const MarkdownView(this.text, {super.key});
+  const MarkdownView(this.text, {super.key, this.imageSessionId});
   final String text;
+
+  /// Enables safe loading of relative/local images (`![alt](path)`) from this
+  /// AI session, mirroring the desktop's `Markdown` `imageSessionId` prop.
+  /// Left null, an image reference falls back to its alt text.
+  final String? imageSessionId;
 
   @override
   State<MarkdownView> createState() => _MarkdownViewState();
@@ -26,12 +36,12 @@ class _MarkdownViewState extends State<MarkdownView> {
   }
 
   @override
-  Widget build(BuildContext context) => _Blocks(_blocks, depth: 0);
+  Widget build(BuildContext context) => _Blocks(_blocks, depth: 0, imageSessionId: widget.imageSessionId);
 }
 
 TextStyle _paragraph(BuildContext context) => ts(context, 13, lineHeight: 19);
 
-List<InlineSpan> inlineSpans(BuildContext context, List<MdInline> spans, TextStyle base) {
+List<InlineSpan> inlineSpans(BuildContext context, List<MdInline> spans, TextStyle base, {String? imageSessionId}) {
   final p = context.p;
   return spans.map<InlineSpan>((span) {
     switch (span) {
@@ -48,34 +58,106 @@ List<InlineSpan> inlineSpans(BuildContext context, List<MdInline> spans, TextSty
           MdStyle.em => base.copyWith(fontStyle: FontStyle.italic),
           MdStyle.strike => base.copyWith(decoration: TextDecoration.lineThrough, color: p.textDim, decorationColor: p.textDim),
         };
-        return TextSpan(children: inlineSpans(context, children, next));
+        return TextSpan(children: inlineSpans(context, children, next, imageSessionId: imageSessionId));
       case MdLink(:final href, :final children):
         final next = base.copyWith(color: p.accent, decoration: TextDecoration.underline, decorationColor: p.accent);
         return TextSpan(
-          children: inlineSpans(context, children, next),
+          children: inlineSpans(context, children, next, imageSessionId: imageSessionId),
           recognizer: TapGestureRecognizer()
             ..onTap = () {
               if (isSafeLink(href)) launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
             },
         );
+      case MdImage(:final href, :final alt):
+        return imageSessionId == null
+            ? TextSpan(text: alt.isNotEmpty ? alt : href, style: base.copyWith(fontStyle: FontStyle.italic, color: p.textDim))
+            : WidgetSpan(alignment: PlaceholderAlignment.middle, child: _InlineImage(href, alt, imageSessionId, base));
     }
   }).toList();
 }
 
+/// Loads one image through `AppStore.imagePreview` — the phone's only route
+/// to session-local bytes — and shows it, or falls back to the alt text if
+/// the host has nothing to offer (unsupported, missing, or out of bounds).
+class _InlineImage extends StatefulWidget {
+  const _InlineImage(this.href, this.alt, this.sessionId, this.style);
+  final String href;
+  final String alt;
+  final String sessionId;
+  final TextStyle style;
+
+  @override
+  State<_InlineImage> createState() => _InlineImageState();
+}
+
+class _InlineImageState extends State<_InlineImage> {
+  late Future<String?> _dataUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _dataUrl = context.read<AppStore>().imagePreview(widget.sessionId, widget.href);
+  }
+
+  @override
+  void didUpdateWidget(_InlineImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.href != widget.href || oldWidget.sessionId != widget.sessionId) {
+      _dataUrl = context.read<AppStore>().imagePreview(widget.sessionId, widget.href);
+    }
+  }
+
+  Uint8List? _decode(String? dataUrl) {
+    if (dataUrl == null) return null;
+    final comma = dataUrl.indexOf(',');
+    if (comma == -1) return null;
+    try {
+      return base64Decode(dataUrl.substring(comma + 1));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    return FutureBuilder<String?>(
+      future: _dataUrl,
+      builder: (context, snapshot) {
+        final bytes = snapshot.connectionState == ConnectionState.done ? _decode(snapshot.data) : null;
+        if (bytes == null) {
+          final label = widget.alt.isNotEmpty ? widget.alt : widget.href;
+          return Text(label, style: widget.style.copyWith(fontStyle: FontStyle.italic, color: context.p.textDim));
+        }
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: t.s(320), maxHeight: t.s(320)),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(t.s(8)),
+            child: Image.memory(bytes, fit: BoxFit.contain, semanticLabel: widget.alt),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _Inline extends StatelessWidget {
-  const _Inline(this.spans, this.style, {this.align});
+  const _Inline(this.spans, this.style, {this.align, this.imageSessionId});
   final List<MdInline> spans;
   final TextStyle style;
   final TextAlign? align;
+  final String? imageSessionId;
 
   @override
-  Widget build(BuildContext context) => Text.rich(TextSpan(children: inlineSpans(context, spans, style)), textAlign: align);
+  Widget build(BuildContext context) =>
+      Text.rich(TextSpan(children: inlineSpans(context, spans, style, imageSessionId: imageSessionId)), textAlign: align);
 }
 
 class _Blocks extends StatelessWidget {
-  const _Blocks(this.blocks, {required this.depth});
+  const _Blocks(this.blocks, {required this.depth, this.imageSessionId});
   final List<MdBlock> blocks;
   final int depth;
+  final String? imageSessionId;
 
   @override
   Widget build(BuildContext context) {
@@ -91,18 +173,19 @@ class _Blocks extends StatelessWidget {
             child: _Inline(
               children,
               level <= 2 ? ts(context, 15, lineHeight: 21, weight: FontWeight.w700) : ts(context, 13.5, lineHeight: 19, weight: FontWeight.w700),
+              imageSessionId: imageSessionId,
             ),
           ),
         ),
-        MdParagraph(:final children) => _Inline(children, _paragraph(context)),
+        MdParagraph(:final children) => _Inline(children, _paragraph(context), imageSessionId: imageSessionId),
         MdCodeBlock() => _CodeBlock(block),
-        MdList() => _ListBlock(block, depth: depth),
+        MdList() => _ListBlock(block, depth: depth, imageSessionId: imageSessionId),
         MdQuote(:final blocks) => Container(
           padding: EdgeInsets.only(left: t.s(10)),
           decoration: BoxDecoration(
             border: Border(left: BorderSide(color: t.palette.borderStrong, width: 3)),
           ),
-          child: _Blocks(blocks, depth: depth),
+          child: _Blocks(blocks, depth: depth, imageSessionId: imageSessionId),
         ),
         MdTable() => _TableBlock(block),
         MdRule() => Container(
@@ -156,9 +239,10 @@ class _CodeBlock extends StatelessWidget {
 }
 
 class _ListBlock extends StatelessWidget {
-  const _ListBlock(this.block, {required this.depth});
+  const _ListBlock(this.block, {required this.depth, this.imageSessionId});
   final MdList block;
   final int depth;
+  final String? imageSessionId;
 
   @override
   Widget build(BuildContext context) {
@@ -187,10 +271,10 @@ class _ListBlock extends StatelessWidget {
                   child: Text(bullet, style: ts(context, 13, lineHeight: 19, color: t.palette.textDim)),
                 ),
                 SizedBox(width: t.s(8)),
-                Expanded(child: _Inline(item.children, _paragraph(context))),
+                Expanded(child: _Inline(item.children, _paragraph(context), imageSessionId: imageSessionId)),
               ],
             ),
-            if (item.sublist != null) _ListBlock(item.sublist!, depth: depth + 1),
+            if (item.sublist != null) _ListBlock(item.sublist!, depth: depth + 1, imageSessionId: imageSessionId),
           ],
         ),
       );

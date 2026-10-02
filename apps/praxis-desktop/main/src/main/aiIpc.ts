@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import * as fsp from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import { BrowserWindow, ipcMain } from 'electron';
+import { broadcastToAllWindows } from './windowBroadcast';
 import {
   clearProviderApiKey,
   discoverWorkspaceAgentWorkflows,
@@ -28,7 +29,9 @@ import {
   type AiHandoverInput,
   type AiStartConversationInput,
   type AiProvider,
+  type AcpMcpServer,
   type CustomProviderConfig,
+  type McpServerConfig,
   type SaveCustomProviderInput,
   buildHandoverEnvelope,
   type IssueDetails,
@@ -70,12 +73,14 @@ import { ElectronFolderConfigProvider } from './adapters/electronFolderConfigPro
 import { getSettingsBackend } from './settingsBackendInstance';
 import { AiBrowserBridge } from './aiBrowser';
 import { browserMcpServerForSession } from './browserMcp';
+import { testUserMcpServer, userMcpAcpServers, userMcpToolExtension } from './userMcp';
 import { deleteAgentSession } from './deleteAgentSession';
 import { getServiceForConnection } from './serviceRegistry';
 import { isAnalysisConfirmed } from './aiWorkflowIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
 import { getCurrentBranch } from './gitService';
 import { getProjectStore } from './projectStoreInstance';
+import { recoverTicketReviewProjects } from './ticketSessionProject';
 import {
   continueAgentTask,
   launchAgentTask,
@@ -297,6 +302,18 @@ function browserToolExtension(toolMode: AgentToolMode): ToolExtension | undefine
   });
 }
 
+/**
+ * The `mcpServers` launch option for an ACP session: the in-app browser (when
+ * on) followed by the servers the user added. Omitted when there are none.
+ */
+function mcpServersOption(
+  browserMcp: Awaited<ReturnType<typeof browserMcpServerForSession>>,
+  toolMode: string | undefined
+): { mcpServers?: AcpMcpServer[] } {
+  const servers: AcpMcpServer[] = [...(browserMcp ? [browserMcp] : []), ...userMcpAcpServers(toolMode)];
+  return servers.length > 0 ? { mcpServers: servers } : {};
+}
+
 /** Concatenates tool extensions into one, dispatching `execute` by tool name. */
 function mergeToolExtensions(...parts: Array<ToolExtension | undefined>): ToolExtension | undefined {
   const active = parts.filter((part): part is ToolExtension => Boolean(part));
@@ -314,6 +331,14 @@ function mergeToolExtensions(...parts: Array<ToolExtension | undefined>): ToolEx
 
 /** Rejects a model the provider's current catalog does not list (an unreadable catalog is not a rejection). */
 async function assertModelAvailable(provider: AiProvider, model: string): Promise<void> {
+  const settings = getSettingsBackend().read();
+  const configuredDefault = provider === 'vercel-gateway'
+    ? settings.ai.defaultModel
+    : settings.ai.providers[provider]?.defaultModel;
+  // An explicit provider-page default is authoritative even when a gateway's
+  // catalog omits it or model curation excludes it.
+  if (configuredDefault?.trim() === model) return;
+
   const descriptor = getProviderDescriptor(provider);
   const options = descriptor.kind === 'cli-agent'
     ? await listCliModelOptions(provider).catch(() => undefined)
@@ -462,9 +487,9 @@ export function registerAiIpc(): void {
       toolMode,
       internalConversationTurn: options?.internalConversationTurn,
       conversationContext: options?.conversationContext,
-      ...(browserMcp ? { mcpServers: [browserMcp] } : {}),
+      ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, toolMode) : {}),
       ...(prepared.plan.state === 'gateway'
-        ? { toolExtension: mergeToolExtensions(trackerToolExtension(trackerService, toolMode), browserToolExtension(toolMode)) }
+        ? { toolExtension: mergeToolExtensions(trackerToolExtension(trackerService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode)) }
         : {})
     });
   }
@@ -548,6 +573,10 @@ export function registerAiIpc(): void {
 
   ipcMain.handle('ai:getStatus', async () => getAiProviderStatus());
 
+  ipcMain.handle('ai:testMcpServer', async (_event: Electron.IpcMainInvokeEvent, config: McpServerConfig) =>
+    testUserMcpServer(config)
+  );
+
   ipcMain.handle('ai:listProviderStatuses', async () => listAiProviderStatuses());
 
   ipcMain.handle('ai:probeProviderCapability', async (_event: Electron.IpcMainInvokeEvent, provider: AiProvider) =>
@@ -626,11 +655,12 @@ export function registerAiIpc(): void {
     return getAiProviderStatus();
   });
 
-  ipcMain.handle('ai:listSessions', async () =>
-    [...sessionManager.getAllAgentSessions().values()].sort((a, b) =>
+  ipcMain.handle('ai:listSessions', async () => {
+    recoverTicketReviewProjects(sessionManager);
+    return [...sessionManager.getAllAgentSessions().values()].sort((a, b) =>
       b.startedAt.localeCompare(a.startedAt)
-    )
-  );
+    );
+  });
 
   ipcMain.handle(
     'ai:loadImagePreview',
@@ -688,6 +718,18 @@ export function registerAiIpc(): void {
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, title: string) =>
       sessionManager.renameAgentSession(issueKey, title)
   );
+
+  ipcMain.handle('ai:assignSessionToProject', async (_event: Electron.IpcMainInvokeEvent, issueKey: string, projectId: string, ticketKey?: string, workingDirectory?: string) => {
+    const session = sessionManager.getAgentSession(issueKey);
+    if (!session) throw new Error(`No agent session found for ${issueKey}.`);
+    if (hasActiveTask(issueKey)) throw new Error('Wait for this conversation to finish before assigning it to a project.');
+    if (!projectId?.trim()) throw new Error('Choose a project.');
+    const project = getProjectStore().get(projectId);
+    if (!project) throw new Error(`Project ${projectId} was not found.`);
+    if (ticketKey && !project.workItems.some(item => item.key === ticketKey)) throw new Error(`Ticket ${ticketKey} does not belong to ${project.name}.`);
+    sessionManager.updateAgentRuntime(issueKey, { projectId, linkedIssueKey: ticketKey, workingDirectory });
+    return sessionManager.getAgentSession(issueKey)!;
+  });
 
   // Archive is reversible, so it only needs to keep a still-running task out:
   // an archived session cannot accept follow-ups while its agent is live, and
@@ -937,9 +979,9 @@ export function registerAiIpc(): void {
         reasoningEffort,
         permissionMode: input.permissionMode ?? 'manual',
         ...((input.permissionMode === 'bypass' || input.permissionMode === 'autopilot') ? { autoApprovePermissions: true } : {}),
-        ...(browserMcp ? { mcpServers: [browserMcp] } : {}),
+        ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, toolMode) : {}),
         ...(prepared.plan.state === 'gateway'
-          ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode)) }
+          ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode)) }
           : {})
       });
       const record = sessionManager.getAgentSession(issue.key);
@@ -1332,12 +1374,7 @@ export function registerAiIpc(): void {
   getAcpAgentHost().onDidChangeActiveTask(scheduleWhenTaskSettles);
 
   sessionManager.onDidChangeAgentSession((record: AgentSessionRecord) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (win.isDestroyed()) {
-        continue;
-      }
-      win.webContents.send('ai:sessionChanged', record);
-    }
+    broadcastToAllWindows('ai:sessionChanged', record);
     // A terminal state is published before each host removes its task. The
     // active-task listeners above schedule the next speaker only after that
     // cleanup, preserving the one-runtime-at-a-time invariant.

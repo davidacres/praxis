@@ -142,6 +142,10 @@ function recorder(overrides: Partial<MobileHostServiceDeps> = {}): Recorder {
       note('sessionFileDiff', sessionId, path);
       return { path, binary: false, additions: 1, deletions: 0, hunks: [], truncated: false };
     },
+    sessionImagePreview: async (sessionId, params) => {
+      note('sessionImagePreview', sessionId, params);
+      return undefined;
+    },
     findGadget: (sessionId, gadgetId) => {
       note('findGadget', sessionId, gadgetId);
       return FAKE_GADGETS[gadgetId];
@@ -286,6 +290,7 @@ test('commands extract payload fields and carry the verified actor', async () =>
   await handlers['workflowRuns.cancel'](command('workflowRuns.cancel', { hostId: 'host-mac', projectId: 'p1', runId: 'r1' }, {}, deviceOnly));
   await handlers['workflowRuns.retryStage'](command('workflowRuns.retryStage', { hostId: 'host-mac', projectId: 'p1', runId: 'r1' }, { nodeId: 'qa' }));
   await handlers['workflowRuns.start'](command('workflowRuns.start', { hostId: 'host-mac', projectId: 'p1' }, { workflowId: 'quick-change', task: 'Fix mobile' }));
+  await handlers['permissions.respond'](command('permissions.respond', { hostId: 'host-mac', projectId: 'p1', requestId: 'q1' }, { decision: 'allow_always' }));
 
   assert.deepEqual(calls.find(c => c[0] === 'createSession'), ['createSession', { projectId: 'p1', title: 'Mobile chat', message: 'start here', provider: 'anthropic', mode: 'chat' }]);
   assert.deepEqual(calls.find(c => c[0] === 'continueSession'), ['continueSession', 's1', 'ship it', 'dave']);
@@ -294,6 +299,7 @@ test('commands extract payload fields and carry the verified actor', async () =>
   assert.deepEqual(calls.find(c => c[0] === 'cancelRun'), ['cancelRun', 'r1', undefined, 'phone-1']);
   assert.deepEqual(calls.find(c => c[0] === 'retryStage'), ['retryStage', 'r1', 'qa', 'dave']);
   assert.deepEqual(calls.find(c => c[0] === 'startRun'), ['startRun', { projectId: 'p1', workflowId: 'quick-change', task: 'Fix mobile' }]);
+  assert.deepEqual(calls.find(c => c[0] === 'respondToPermission'), ['respondToPermission', 'q1', 'allow_always', 'dave', 'p1']);
 });
 
 test('commands reject a missing or malformed payload', async () => {
@@ -302,7 +308,7 @@ test('commands reject a missing or malformed payload', async () => {
   await assert.rejects(handlers['sessions.create'](command('sessions.create', { hostId: 'host-mac', projectId: 'p1' }, { message: '   ' })), /non-empty payload\.message/);
   await assert.rejects(handlers['sessions.continue'](command('sessions.continue', { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' }, { message: '   ' })), /non-empty payload\.message/);
   await assert.rejects(handlers['workflowRuns.start'](command('workflowRuns.start', { hostId: 'host-mac', projectId: 'p1' }, {})), /payload\.workflowId/);
-  await assert.rejects(handlers['permissions.respond'](command('permissions.respond', { hostId: 'host-mac', projectId: 'p1', requestId: 'q1' }, { decision: 'maybe' })), /'allow' or 'deny'/);
+  await assert.rejects(handlers['permissions.respond'](command('permissions.respond', { hostId: 'host-mac', projectId: 'p1', requestId: 'q1' }, { decision: 'maybe' })), /'allow', 'allow_always', or 'deny'/);
   await assert.rejects(handlers['permissions.respond'](command('permissions.respond', { hostId: 'host-mac', projectId: 'p1' }, { decision: 'allow' })), /requires target\.requestId/);
 });
 
@@ -315,7 +321,7 @@ test('host.info advertises the current surface and the live event cursor', async
   const info = await createMobileHostReads(deps, ['sessions.create'])['host.info'](read('host.info', { hostId: 'host-mac' })) as {
     surfaceRevision: number; readOperations: string[]; commandOperations: string[]; latestSequence: number; hostEpoch: string;
   };
-  assert.equal(info.surfaceRevision, 5);
+  assert.equal(info.surfaceRevision, 7);
   for (const operation of ['providers.list', 'models.list', 'sessions.usage', 'access.get', 'host.info']) assert.ok(info.readOperations.includes(operation), operation);
   assert.deepEqual(info.commandOperations, ['sessions.create']);
   assert.equal(info.latestSequence, 41);
@@ -402,7 +408,7 @@ test('access.get reports the verified caller grant, not a claimed one', async ()
   const access = await createMobileHostReads(deps)['access.get'](read('access.get', { hostId: 'host-mac' }));
   assert.deepEqual(access, {
     deviceId: 'phone-1', capabilities: ['view', 'execute', 'approve'], label: 'Dave’s iPhone', projects: [{ projectId: 'p1', name: 'Praxis' }],
-    hostName: 'Dave Mac', accessMode: 'local-only', pairedAt: '2026-09-20T09:00:00.000Z', transport: 'noise-ik', protocolVersion: 1, surfaceRevision: 5,
+    hostName: 'Dave Mac', accessMode: 'local-only', pairedAt: '2026-09-20T09:00:00.000Z', transport: 'noise-ik', protocolVersion: 1, surfaceRevision: 7,
   });
 });
 
@@ -499,6 +505,44 @@ test('changes.get with a session target reads that session\'s working tree, or o
   assert.deepEqual(calls.find(c => c[0] === 'sessionFileDiff'), ['sessionFileDiff', 's1', 'src/a.ts']);
   await assert.rejects(
     reads['changes.get']!({ ...base, target: { hostId: 'host-mac', projectId: 'p2', sessionId: 's1' } }),
+    /not found in project p2/,
+  );
+});
+
+test('sessions.imagePreview reads a chunk from a local or attached image', async () => {
+  const { calls, deps } = recorder();
+  const reads = createMobileHostReads(deps);
+  const base = { protocolVersion: MOBILE_PROTOCOL_VERSION, requestId: 'req-1', caller, operation: 'sessions.imagePreview' as const };
+  const hit = await reads['sessions.imagePreview']!({
+    ...base,
+    target: { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' },
+    params: { path: 'shot.png' },
+  });
+  assert.deepEqual(calls.find(c => c[0] === 'sessionImagePreview'), ['sessionImagePreview', 's1', { path: 'shot.png', offset: 0 }]);
+  assert.deepEqual(hit, {});
+  await reads['sessions.imagePreview']!({
+    ...base,
+    target: { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' },
+    params: { eventIndex: 3, attachmentIndex: 0, offset: 4 },
+  });
+  assert.deepEqual(
+    calls.find(c => c[0] === 'sessionImagePreview' && (c[2] as { eventIndex?: number }).eventIndex === 3),
+    ['sessionImagePreview', 's1', { eventIndex: 3, attachmentIndex: 0, offset: 4 }],
+  );
+  await assert.rejects(
+    reads['sessions.imagePreview']!({ ...base, target: { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' } }),
+    /requires either params.path or both attachment indices/,
+  );
+  await assert.rejects(
+    reads['sessions.imagePreview']!({
+      ...base,
+      target: { hostId: 'host-mac', projectId: 'p1', sessionId: 's1' },
+      params: { eventIndex: 3 },
+    }),
+    /requires either params.path or both attachment indices/,
+  );
+  await assert.rejects(
+    reads['sessions.imagePreview']!({ ...base, target: { hostId: 'host-mac', projectId: 'p2', sessionId: 's1' }, params: { path: 'shot.png' } }),
     /not found in project p2/,
   );
 });

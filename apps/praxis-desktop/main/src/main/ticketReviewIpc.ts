@@ -14,6 +14,7 @@ import { getGadgetService } from './gadgetInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { getServiceForConnection } from './serviceRegistry';
 import { forgetTicketReviewBaseline, recordTicketReviewBaseline } from './ticketReviewApply';
+import { recoverTicketReviewProjects, resolveTicketProject } from './ticketSessionProject';
 
 /**
  * Starts a ticket review as a real agent session.
@@ -41,6 +42,7 @@ async function startTicketReview(input: AiTicketReviewInput): Promise<AgentSessi
   const service = await getServiceForConnection(input.connectionId);
   const issue = await service.getIssue(input.issueKey);
   const sessionKey = ticketReviewSessionKey(issue.key);
+  const project = resolveTicketProject(input.connectionId, issue.key);
 
   // A re-run replaces the previous review. Its gadgets belong to a session that
   // is about to stop existing, so they go with it rather than lingering as
@@ -67,7 +69,7 @@ async function startTicketReview(input: AiTicketReviewInput): Promise<AgentSessi
     provider,
     model: input.model,
     workingDirectory:
-      settings.ai.workingDirectory.trim() || process.env.PRAXIS_AI_WORKING_DIR?.trim() || undefined,
+      project?.workspaceFolder || settings.ai.workingDirectory.trim() || process.env.PRAXIS_AI_WORKING_DIR?.trim() || undefined,
     toolMode: 'read-only',
     ...(prepared.plan.state === 'gateway' ? { toolExtension: trackerToolExtension(service, 'read-only') } : {})
   });
@@ -76,6 +78,7 @@ async function startTicketReview(input: AiTicketReviewInput): Promise<AgentSessi
   if (!record) throw new Error(`The review of ${issue.key} did not start.`);
 
   if (input.connectionId) sessionManager.updateAgentRuntime(sessionKey, { connectionId: input.connectionId });
+  if (project) sessionManager.updateAgentRuntime(sessionKey, { projectId: project.id });
   sessionManager.renameAgentSession(sessionKey, `Review ${issue.key} — ${issue.summary}`);
   recordTicketReviewBaseline(record.sessionId, issue);
 
@@ -88,7 +91,9 @@ export function registerTicketReviewIpc(): void {
     return startTicketReview(input);
   });
 
-  ipcMain.handle('ai:getTicketReview', async (_event, issueKey: string) =>
-    getAiSessionManager().getAgentSession(ticketReviewSessionKey(issueKey))
-  );
+  ipcMain.handle('ai:getTicketReview', async (_event, issueKey: string) => {
+    const manager = getAiSessionManager();
+    recoverTicketReviewProjects(manager);
+    return manager.getAgentSession(ticketReviewSessionKey(issueKey));
+  });
 }

@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import { BrowserWindow, ipcMain } from 'electron';
 import { attachRendererNavigationGuard, rendererDir } from './rendererNavigationGuard';
+import { broadcastToAllWindows } from './windowBroadcast';
 
 /**
  * The floating chat window (FX-BE-143): a standalone conversation popped out
@@ -22,9 +23,7 @@ let lastBounds: { x: number; y: number; width: number; height: number } | undefi
 
 function broadcastChanged(): void {
   const keys = [...detachedWindows.keys()];
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('detachedChat:changed', keys);
-  }
+  broadcastToAllWindows('detachedChat:changed', keys);
 }
 
 export function detachedChatKeys(): string[] {

@@ -305,6 +305,7 @@ test('uses a folder connection for an existing-folder project with plans', async
     await expect(app.window.locator('.sidebar').getByTestId('board-nav-item').filter({ hasText: 'Imported Plans' })).toHaveCount(0);
     await projectTree.getByTestId('project-default-board-nav-item').click();
     await expect(app.window.getByTestId('issue-card')).toContainText('Imported planning work');
+    await projectTree.getByRole('button', { name: 'Show docs for Imported Plans' }).click();
     const importedPlan = projectTree.getByTestId('project-document-nav-item').filter({ hasText: 'Imported planning work' });
     await expect(importedPlan.getByTestId('project-document-status')).toHaveClass(/status-dot/);
     await expect(importedPlan.getByTestId('project-document-status')).toHaveAttribute('title', 'In Progress');

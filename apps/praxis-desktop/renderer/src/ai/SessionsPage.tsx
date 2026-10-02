@@ -40,6 +40,9 @@ import {
 import { GadgetBlockList } from './gadgets';
 import { useSessionGadgets } from './gadgets/useSessionGadgets';
 import { gadgetMessageKey, stripGadgetFences, visibleMessageText } from './gadgets/messageText';
+import { captionText, collectThoughtRuns, thoughtCaption, thoughtRunStartingAt } from './chatThought';
+import { collectTurnTools } from './chatToolCalls';
+import { collectMessageRuns, messageRunCovering, messageRunStartingAt } from './chatTurns';
 import type { SessionWorkflowOption } from './NewSession';
 import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
 
@@ -914,10 +917,21 @@ export function SessionsPage({
   };
   // `tool_start` feeds the live status line, not the transcript — only the
   // grouped completion gadget in Activity does, so the chat stays readable.
-  const conversationEvents = selected?.events.filter(
-    event =>
-      (event.type === 'message' || event.type === 'user_input_completed') && Boolean(event.detail || event.summary)
-  ) ?? [];
+  // Memoised on the event list: this array feeds the run collectors below, and
+  // a fresh array every render made them recompute on every keystroke and tick.
+  const selectedEvents = selected?.events;
+  const conversationEvents = useMemo(
+    () => selectedEvents?.filter(
+      event =>
+        (event.type === 'message' || event.type === 'user_input_completed') && Boolean(event.detail || event.summary)
+    ) ?? [],
+    [selectedEvents]
+  );
+  const turnTools = useMemo(() => collectTurnTools(selectedEvents ?? []), [selectedEvents]);
+  const toolCallsAt = useCallback(
+    (event: AgentEventSummary) => turnTools.get(event)?.calls.length || undefined,
+    [turnTools]
+  );
   // A human can send a directed message while one of the AIs is still
   // speaking. The host keeps those messages in the conversation queue until
   // the current turn settles, so render that queue as part of the live thread
@@ -1023,6 +1037,29 @@ export function SessionsPage({
     : undefined;
 
 
+  // One turn emits one `message` event per model round-trip, so a turn that
+  // used tools carries reasoning on several of them. Fold those into a single
+  // thought run so the transcript shows one collapsed caption per turn rather
+  // than a stack of cards that each reprint the same reasoning.
+  const thoughtRuns = useMemo(
+    () => collectThoughtRuns(conversationEvents),
+    [conversationEvents]
+  );
+
+  // One card per turn rather than one per model round-trip: a turn that used
+  // tools emits several assistant events, and rendering each separately gave a
+  // stack of near-identical cards — each with its own header, timestamp, copy
+  // button and telemetry bar — for what was really a single reply.
+  const messageRuns = useMemo(
+    () => collectMessageRuns(conversationEvents, event =>
+      event.type === 'message'
+        ? visibleMessageText(event.detail ?? event.summary ?? '')
+        : '',
+      { toolCallsAt, isIntermediate: event => turnTools.get(event)?.followedByTools === true }
+    ),
+    [conversationEvents, toolCallsAt, turnTools]
+  );
+
   const { gadgetBlocks, gadgetResults, busyGadgetId, submitGadgetAction } = useSessionGadgets(selected, conversationEvents);
 
   // One line describing what the agent is doing right now — shown only while a
@@ -1117,15 +1154,11 @@ export function SessionsPage({
   // beside Send keeps it visible at every reported level; its popover carries
   // the fuller warning and guidance without permanently occupying composer
   // space.
-  const context = selected
-    ? (contextPressure(selected) ?? {
-        fraction: 0,
-        percent: 0,
-        used: selected.contextTokens ?? selected.tokenUsage?.inputTokens ?? 0,
-        limit: selected.contextLimit ?? 128000,
-        level: 'ok' as const
-      })
-    : undefined;
+  // When the limit is genuinely unknown (no provider figure and a model we
+  // hold no window for), the ring shows nothing rather than a 0% against a
+  // made-up window — an empty context that is actually nearly full is the
+  // failure mode this whole indicator exists to prevent.
+  const context = selected ? contextPressure(selected) : undefined;
   // Spend against the user's own limit, totalled across every session that
   // reported a cost — the budget is theirs, not this session's. Same bands as
   // context, so the two warnings read as one family rather than two designs.
@@ -1773,13 +1806,45 @@ export function SessionsPage({
                 const rawText = event.type === 'message'
                   ? visibleMessageText(event.detail ?? event.summary ?? '')
                   : stripGadgetFences(terminalContext?.message ?? event.detail ?? event.summary ?? '');
+                // Later round-trips of a turn are folded into the card at the
+                // start of their run, so they are not rendered on their own.
+                if (messageRunCovering(messageRuns, index)) return null;
+
+                const thoughtRun = thoughtRunStartingAt(thoughtRuns, index);
+                const messageRun = messageRunStartingAt(messageRuns, index);
+                // Narration reads as the agent talking to itself between tool
+                // calls, so it belongs beside the reasoning rather than in the
+                // transcript — the same text appearing in both is what made
+                // the thread feel repetitive.
+                const narration = messageRun?.narration ?? [];
+                const thoughtSteps = [...(thoughtRun?.steps ?? []), ...narration];
+                const caption = thoughtRun
+                  ? thoughtCaption(thoughtRun, conversationEvents, toolCallsAt)
+                  : captionText(messageRun?.durationMs, messageRun?.toolCalls);
+                const lastMember = messageRun
+                  ? conversationEvents[messageRun.memberIndices[messageRun.memberIndices.length - 1]]
+                  : event;
+                const turnToolCalls = (lastMember && turnTools.get(lastMember)?.calls) ?? [];
+                const hasThought = Boolean(thoughtRun) || narration.length > 0;
+                // The caption already carries duration and tool calls, so the
+                // telemetry bar leaves them out rather than repeating them.
+                const captionShown = hasThought && Boolean(caption);
+                const telemetrySource = messageRun ?? event;
+                const toolNames = messageRun ? messageRun.toolNames : event.toolNames;
                 const hasTelemetry = event.type === 'message' && (
-                  event.durationMs !== undefined ||
-                  event.tokenUsage !== undefined ||
-                  event.cost !== undefined ||
-                  event.modelId !== undefined ||
-                  (event.toolNames && event.toolNames.length > 0)
+                  (!captionShown && telemetrySource.durationMs !== undefined) ||
+                  telemetrySource.tokenUsage !== undefined ||
+                  telemetrySource.cost !== undefined ||
+                  telemetrySource.modelId !== undefined ||
+                  (!captionShown && toolNames && toolNames.length > 0)
                 );
+                const toolCallCount = messageRun?.toolCalls ?? toolNames?.length ?? 0;
+                // Gadgets belong to the message that carried them, and a merged turn
+                // keeps its gadgets on the reply — the last message — so gather them
+                // from every message in the run, not just the one the card starts at.
+                const cardGadgetBlocks = (messageRun ? messageRun.memberIndices : [index])
+                  .flatMap(member => gadgetBlocks[gadgetMessageKey(member)] ?? []);
+                const runText = messageRun ? messageRun.parts.join('\n\n') : rawText;
 
                 return (
                   <div
@@ -1807,7 +1872,7 @@ export function SessionsPage({
                           className="icon-btn icon-btn-sm session-chat-copy-btn"
                           aria-label="Copy message text"
                           title={copiedMessageKey === messageKey ? 'Copied!' : 'Copy message text'}
-                          onClick={() => copyMessageText(messageKey, rawText)}
+                          onClick={() => copyMessageText(messageKey, runText)}
                         >
                           <Icon name={copiedMessageKey === messageKey ? 'check' : 'copy'} size={12} />
                         </button>
@@ -1819,19 +1884,38 @@ export function SessionsPage({
                         <pre>{terminalContext.output}</pre>
                       </details>
                     )}
-                    {event.type === 'message' && event.reasoning && (
-                      <details className="session-chat-thought-disclosure" data-testid="session-thought-disclosure">
-                        <summary>
-                          <Icon name="sparkles" size={12} />
-                          <span>Thought process</span>
+                    {hasThought && (
+                      <details className="session-chat-thought" data-testid="session-thought-disclosure">
+                        <summary className="session-chat-thought-summary" data-testid="session-thought-summary">
+                          <Icon name="sparkles" size={11} />
+                          <span className="session-chat-thought-label">Thought</span>
+                          {caption && <span className="session-chat-thought-meta">{caption}</span>}
                         </summary>
                         <div className="session-chat-thought-content">
-                          <Markdown text={event.reasoning} testId="session-thought-markdown" imageSessionId={selected?.issueKey} />
+                          {turnToolCalls.length > 0 && (
+                            <ul className="session-chat-thought-tools" data-testid="session-thought-tools">
+                              {turnToolCalls.map((call, callIndex) => (
+                                <li key={callIndex} className={call.ok === false ? 'is-failed' : undefined}>
+                                  <Icon name={call.ok === false ? 'close' : call.ok ? 'check' : 'tools'} size={11} />
+                                  <span className="session-chat-thought-tool-name">{call.name}</span>
+                                  {call.detail && <span className="session-chat-thought-tool-detail">{call.detail}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {thoughtSteps.map((step, stepIndex) => (
+                            <Markdown
+                              key={stepIndex}
+                              text={step}
+                              testId="session-thought-markdown"
+                              imageSessionId={selected?.issueKey}
+                            />
+                          ))}
                         </div>
                       </details>
                     )}
                     <Markdown
-                      text={rawText}
+                      text={runText}
                       testId="session-chat-markdown"
                       imageSessionId={selected?.issueKey}
                     />
@@ -1839,40 +1923,40 @@ export function SessionsPage({
                     {/* Whatever this message asked for, rendered where it was
                         asked rather than pooled at the bottom of the thread. */}
                     <GadgetBlockList
-                      blocks={gadgetBlocks[gadgetMessageKey(index)] ?? []}
+                      blocks={cardGadgetBlocks}
                       busyGadgetId={busyGadgetId}
                       results={gadgetResults}
                       onSubmit={(gadgetId, actionId, value) => void submitGadgetAction(gadgetId, actionId, value)}
                     />
                     {hasTelemetry && (
                       <div className="session-chat-telemetry-bar" data-testid="session-chat-telemetry">
-                        {event.durationMs !== undefined && (
-                          <span className="session-telemetry-chip" title={`Turn duration: ${(event.durationMs / 1000).toFixed(1)}s`}>
+                        {!captionShown && telemetrySource.durationMs !== undefined && (
+                          <span className="session-telemetry-chip" title={`Turn duration: ${(telemetrySource.durationMs / 1000).toFixed(1)}s`}>
                             <Icon name="zap" size={11} />
-                            <span>{formatElapsedDuration(event.durationMs)}</span>
+                            <span>{formatElapsedDuration(telemetrySource.durationMs)}</span>
                           </span>
                         )}
-                        {event.tokenUsage && (
+                        {telemetrySource.tokenUsage && (
                           <span
                             className="session-telemetry-chip"
-                            title={`Input: ${(event.tokenUsage.inputTokens ?? 0).toLocaleString()} tokens${event.tokenUsage.cachedInputTokens ? ` (${event.tokenUsage.cachedInputTokens.toLocaleString()} cached)` : ''} · Output: ${(event.tokenUsage.outputTokens ?? 0).toLocaleString()} tokens${event.tokenUsage.reasoningTokens ? ` (${event.tokenUsage.reasoningTokens.toLocaleString()} reasoning)` : ''}`}
+                            title={`Input: ${(telemetrySource.tokenUsage.inputTokens ?? 0).toLocaleString()} tokens${telemetrySource.tokenUsage.cachedInputTokens ? ` (${telemetrySource.tokenUsage.cachedInputTokens.toLocaleString()} cached)` : ''} · Output: ${(telemetrySource.tokenUsage.outputTokens ?? 0).toLocaleString()} tokens${telemetrySource.tokenUsage.reasoningTokens ? ` (${telemetrySource.tokenUsage.reasoningTokens.toLocaleString()} reasoning)` : ''}`}
                           >
                             <Icon name="sparkles" size={11} />
-                            <span>{(event.tokenUsage.totalTokens ?? ((event.tokenUsage.inputTokens ?? 0) + (event.tokenUsage.outputTokens ?? 0))).toLocaleString()} tok</span>
+                            <span>{(telemetrySource.tokenUsage.totalTokens ?? ((telemetrySource.tokenUsage.inputTokens ?? 0) + (telemetrySource.tokenUsage.outputTokens ?? 0))).toLocaleString()} tok</span>
                           </span>
                         )}
-                        {event.cost && event.cost.amount > 0 && (
+                        {telemetrySource.cost && telemetrySource.cost.amount > 0 && (
                           <span className="session-telemetry-chip" title="Estimated turn cost">
-                            <span>{formatCost(event.cost) ?? `${event.cost.amount.toFixed(4)} ${event.cost.currency}`}</span>
+                            <span>{formatCost(telemetrySource.cost) ?? `${telemetrySource.cost.amount.toFixed(4)} ${telemetrySource.cost.currency}`}</span>
                           </span>
                         )}
-                        {event.modelId && (
-                          <span className="session-telemetry-chip" title={`Model: ${event.modelId}`}>
+                        {telemetrySource.modelId && (
+                          <span className="session-telemetry-chip" title={`Model: ${telemetrySource.modelId}`}>
                             <Icon name="robot" size={11} />
-                            <span>{event.modelId}</span>
+                            <span>{telemetrySource.modelId}</span>
                           </span>
                         )}
-                        {event.toolNames && event.toolNames.length > 0 && (
+                        {!captionShown && toolNames && toolNames.length > 0 && (
                           <button
                             type="button"
                             className="session-telemetry-chip is-clickable"
@@ -1882,7 +1966,7 @@ export function SessionsPage({
                             }}
                           >
                             <Icon name="tools" size={11} />
-                            <span>{event.toolNames.length} tool {event.toolNames.length === 1 ? 'call' : 'calls'}</span>
+                            <span>{toolCallCount} tool {toolCallCount === 1 ? 'call' : 'calls'}</span>
                           </button>
                         )}
                       </div>
@@ -2771,7 +2855,7 @@ export function SessionsPage({
                   <div className="session-context-header">
                     <div className="composer-context-heading">
                       <Icon name={context.level === 'critical' ? 'warning' : context.level === 'warn' ? 'zap' : 'info'} size={13} />
-                      <span data-testid="session-context-figure">{context.percent}% of {Math.round(context.limit / 1000)}k context used</span>
+                      <span data-testid="session-context-figure">{context.percent}% of {formatContextLength(context.limit)} context used</span>
                     </div>
                     {canCompactContext && (
                       <button

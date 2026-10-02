@@ -25,12 +25,6 @@ function latestAttachedReview(issue: IssueDetails | undefined): string | undefin
   return undefined;
 }
 
-/** While a reply streams, its gadget fence is incomplete; hide the half-written JSON rather than flash it. */
-function hideOpenGadgetFence(text: string): string {
-  const open = text.search(/[ \t]*```[ \t]*praxis-gadget[ \t]*\r?\n(?![\s\S]*```[ \t]*$)/m);
-  return open >= 0 ? text.slice(0, open).trimEnd() : text;
-}
-
 interface AiReviewPageProps {
   issueKey: string;
   connectionId?: string;
@@ -139,7 +133,7 @@ export function AiReviewPage({
 
   const latestMessage = [...conversationEvents].reverse().find(event => event.type === 'message')?.detail;
   const liveText = running && session?.responseText && session.responseText !== latestMessage
-    ? hideOpenGadgetFence(visibleMessageText(session.responseText))
+    ? visibleMessageText(session.responseText)
     : '';
 
   // Once a review's apply form has written to the ticket, the ticket on screen

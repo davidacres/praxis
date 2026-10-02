@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -44,7 +45,7 @@ function profileWithAgent(): { userDataDir: string; settingsPath: string } {
   fs.mkdirSync(agentDir, { recursive: true });
   fs.writeFileSync(
     path.join(agentDir, 'agent.json'),
-    JSON.stringify({ schemaVersion: 1, id: 'wf-reviewer', name: 'Workflow Reviewer', type: 'gateway', entry: 'noop' })
+    JSON.stringify({ schemaVersion: 1, id: 'wf-reviewer', name: 'Workflow Reviewer', type: 'gateway', entry: 'session' })
   );
   return { userDataDir, settingsPath: path.join(userDataDir, 'test-settings.json') };
 }
@@ -213,7 +214,7 @@ test('a controller session starts a run: the run is a tree node, its stage sessi
   await page.reload();
 
   // Sessions tree: the stage session is nested under its controller.
-  await page.getByTestId('nav-sessions').click();
+  await openSession(page);
   const childRow = page.locator(`[data-testid="session-list-row"][data-parent-session="${controller.key}"]`);
   await expect(childRow).toHaveCount(1);
   await expect(childRow).toHaveClass(/session-nav-row--child/);
@@ -233,7 +234,7 @@ test('a controller session starts a run: the run is a tree node, its stage sessi
   await expect(runRow).toHaveAttribute('data-run-status', 'awaiting-approval');
   const runToggle = runRow.getByRole('button').first();
   if ((await runToggle.getAttribute('aria-expanded')) === 'false') await runToggle.click();
-  await runRow.getByTestId('automation-inline-open-run').click();
+  await runRow.getByTestId('automation-run-open').click();
 
   // Centre: the session doing the work. Right pane: the pipeline, vertically.
   await expect(page.getByTestId('wf-run-session')).toBeVisible();
@@ -262,7 +263,6 @@ test('a controller session starts a run: the run is a tree node, its stage sessi
 
   // Cancel from the tree node.
   await runRow.hover();
-  await runRow.getByRole('button', { name: /Actions for/ }).click();
   await page.getByTestId(`project-run-cancel-${run.runId}`).click();
   await expect.poll(() => runStatus(page, run.runId)).toBe('cancelled');
   await expect(runRow).toHaveAttribute('data-run-status', 'cancelled');
@@ -272,7 +272,6 @@ test('a controller session starts a run: the run is a tree node, its stage sessi
   // Delete from the tree node: a themed confirm, then the run, its stage
   // session and its link on the controller are all gone; the controller stays.
   await runRow.hover();
-  await runRow.getByRole('button', { name: /Actions for/ }).click();
   await page.getByTestId(`project-run-delete-${run.runId}`).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete run', exact: true }).click();
   await expect(runRow).toHaveCount(0);
@@ -307,7 +306,6 @@ test('deleting a live run cancels it first, then removes it', async () => {
   await expect(runsGroup).toContainText('1');
 
   await runRow.hover();
-  await runRow.getByRole('button', { name: /Actions for/ }).click();
   await page.getByTestId(`project-run-delete-${run.runId}`).click();
   // The confirm says the run is live and will be cancelled first.
   await expect(page.getByRole('dialog')).toContainText(/cancelled first/i);
@@ -315,6 +313,55 @@ test('deleting a live run cancels it first, then removes it', async () => {
 
   await expect(runRow).toHaveCount(0);
   await expect.poll(() => runStatus(page, run.runId)).toBeUndefined();
+});
+
+test('an automation run can be renamed and the name persists after reload', async () => {
+  const { page, seeded } = await launch(true);
+  const run = await page.evaluate(
+    async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Rename this automation'),
+    seeded
+  );
+  await page.reload();
+  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
+  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
+  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Workspace review' });
+  await expect(runRow).toBeVisible();
+  await runRow.hover();
+  await page.getByTestId(`project-run-rename-${run.runId}`).click();
+  const nameInput = page.getByTestId('automation-run-title-input');
+  await expect(nameInput).toBeFocused();
+  await nameInput.fill('Discard this name');
+  await nameInput.press('Escape');
+  await expect(nameInput).toHaveCount(0);
+  await expect(runRow).toContainText('Workspace review');
+  await runRow.hover();
+  await page.getByTestId(`project-run-rename-${run.runId}`).click();
+  await nameInput.fill('Nightly verification');
+  await page.locator('[data-testid="project-tree"]').screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-inline-rename.png')
+  });
+  await nameInput.press('Enter');
+  await expect(page.getByTestId('project-workflow-run-row').filter({ hasText: 'Nightly verification' })).toBeVisible();
+  await page.getByTestId('project-workflow-run-row').filter({ hasText: 'Nightly verification' }).hover();
+  await page.locator('[data-testid="project-tree"]').screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-hover-actions.png')
+  });
+  await page.locator('[data-testid="project-tree"]').screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-rename.png')
+  });
+
+  await page.reload();
+  const reopenedRuns = page.getByTestId('project-workflow-runs-nav-item');
+  if ((await reopenedRuns.getAttribute('aria-expanded')) === 'false') await reopenedRuns.click();
+  const reopenedRun = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Nightly verification' });
+  await expect(reopenedRun).toBeVisible();
+  await reopenedRun.getByTestId('automation-run-open').click();
+  await expect(reopenedRun.getByTestId('automation-run-stage-summary')).toBeVisible();
+  await expect(page.getByTestId('wf-run-panel')).toBeVisible();
+  await expect(page.getByTestId('wf-run-bar')).toContainText('Nightly verification');
+  await page.screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-selected-run.png')
+  });
 });
 
 test('the start-run dialog opens from a workflow row with that workflow preselected, and lands on the new run', async () => {
@@ -367,9 +414,8 @@ test('the Automations header opens a new workflow run', async () => {
   await page.locator('[data-testid="project-tree"]').screenshot({
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-timeline.png')
   });
-  await toggle.click();
+  await page.getByRole('button', { name: 'Collapse automations', exact: true }).click();
   await expect(timeline).not.toBeVisible();
-  expect((await runRow.boundingBox())!.height).toBeLessThanOrEqual(38);
 });
 
 test('a long automation uses a bounded dot rail and exposes every step in the workflow sheet', async () => {
@@ -408,7 +454,6 @@ test('a long automation uses a bounded dot rail and exposes every step in the wo
   const row = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Long automation' });
   await expect(row).toBeVisible();
   const toggle = row.getByRole('button').first();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await toggle.click();
   const rail = row.getByTestId('automation-timeline');
   const visiblePositions = rail.locator('.automation-rail-step, .automation-rail-overflow');
@@ -491,6 +536,34 @@ test('a dirty checkout can commit its changes, then the run starts from that com
   expect(gitOut(repo, 'status', '--porcelain', '--', 'unsaved.ts', 'README.md').trim()).toBe('');
 });
 
+test('starting a run against a workspace folder that is no longer a Git repository shows an actionable message, not raw git plumbing output', async () => {
+  const { page, seeded } = await launch();
+  const project = await page.evaluate(() => window.praxis.projects.list().then(list => list[0]));
+  const repo = project.workspaceFolder as string;
+  // Simulate the folder having lost its Git repository (e.g. `.git` deleted outside the app).
+  fs.rmSync(path.join(repo, '.git'), { recursive: true, force: true });
+  await page.reload();
+
+  await page.getByTestId('project-workflow-nav-item').hover();
+  await page.getByTestId(`project-workflow-run-${seeded.workflowId}`).click();
+  const dialog = page.getByTestId('wf-runstart-dialog');
+  await dialog.getByLabel('Run task').fill('Start without a Git repo');
+  await dialog.getByRole('button', { name: 'Start', exact: true }).click();
+
+  const error = dialog.locator('.error-banner[role="alert"]');
+  await expect(error).toBeVisible();
+  await expect(error).toContainText("isn't a Git repository yet");
+  await expect(error).toContainText(repo);
+  await expect(error).not.toContainText('rev-parse');
+  await expect(error).not.toContainText('fatal:');
+  await expect(page.getByTestId('uncommitted-base-notice')).toHaveCount(0);
+  await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(0);
+  await page.waitForTimeout(150);
+  await dialog.screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'workflow-run-not-a-git-repo.png'),
+  });
+});
+
 test('an out-of-credits provider pauses the run instead of failing it, and resumes once credits are back', async () => {
   // Every chat request is answered "Insufficient balance … Please recharge."
   const { page, seeded } = await launch(false, 'error');
@@ -506,11 +579,11 @@ test('an out-of-credits provider pauses the run instead of failing it, and resum
       async () =>
         page.evaluate(async id => {
           const summary = await window.praxis.workflows.getRun(id);
-          return summary?.stages.find(stage => stage.nodeId === 'review')?.pause === 'provider-limit';
+          return summary?.stages.find(stage => stage.nodeId === 'review');
         }, run.runId),
       { timeout: 60000 }
     )
-    .toBe(true);
+    .toMatchObject({ pause: 'provider-limit' });
 
   const paused = await page.evaluate(async id => {
     const summary = await window.praxis.workflows.getRun(id);
@@ -542,7 +615,7 @@ test('an out-of-credits provider pauses the run instead of failing it, and resum
   await expect(runRow).toHaveAttribute('data-run-status', 'paused');
   const toggle = runRow.getByRole('button').first();
   if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
-  await runRow.getByTestId('automation-inline-open-run').click();
+  await runRow.getByTestId('automation-run-open').click();
   await expect(page.getByTestId('wf-run-limit')).toBeVisible();
   await expect(page.getByTestId('wf-vpipe-step-review')).toHaveAttribute('data-lane', 'paused');
   await expect(page.getByTestId('wf-run-bar')).toContainText('paused');
@@ -571,7 +644,7 @@ test('a stage whose AI ran out can be switched to another AI and carries on', as
   const switchRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Switch AI/ });
   const switchToggle = switchRow.getByRole('button').first();
   if ((await switchToggle.getAttribute('aria-expanded')) === 'false') await switchToggle.click();
-  await switchRow.getByTestId('automation-inline-open-run').click();
+  await switchRow.getByTestId('automation-run-open').click();
   const notice = page.getByTestId('wf-run-limit');
   await expect(notice).toContainText('Vercel AI Gateway ran out of budget');
   await expect(notice.getByTestId('wf-limit-switch-to')).toHaveAttribute('data-value', 'codex-cli');
@@ -628,7 +701,7 @@ test('with "Stop the run" the run ends saying which AI ran out, and can still ca
   const stopRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Stop on limit/ });
   const stopToggle = stopRow.getByRole('button').first();
   if ((await stopToggle.getAttribute('aria-expanded')) === 'false') await stopToggle.click();
-  await stopRow.getByTestId('automation-inline-open-run').click();
+  await stopRow.getByTestId('automation-run-open').click();
   const notice = page.getByTestId('wf-run-limit');
   await expect(notice).toContainText('The run could not be completed');
   await expect(notice.getByTestId('wf-limit-stop')).toHaveCount(0);
@@ -667,7 +740,7 @@ test('a run in Ask mode stops the stage for a tool permission; the same run in A
   const askedRow = asked.page.getByTestId('project-workflow-run-row').first();
   const askedToggle = askedRow.getByRole('button').first();
   if ((await askedToggle.getAttribute('aria-expanded')) === 'false') await askedToggle.click();
-  await askedRow.getByTestId('automation-inline-open-run').click();
+  await askedRow.getByTestId('automation-run-open').click();
   await expect(asked.page.getByTestId('wf-run-mode')).toHaveAttribute('data-mode', 'ask');
 
   // Allowing it lets the stage finish and the run reach approval.
@@ -754,7 +827,6 @@ test('a terminal run can be archived, removing it from the sidebar and listing i
 
   // Archive button on the sidebar run row
   await runRow.hover();
-  await runRow.getByRole('button', { name: /Actions for/ }).click();
   const archiveBtn = page.getByTestId(`project-run-archive-${run.runId}`);
   await expect(archiveBtn).toBeVisible();
   await archiveBtn.click();

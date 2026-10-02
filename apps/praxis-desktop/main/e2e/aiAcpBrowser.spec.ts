@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 import * as path from 'node:path';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -55,8 +56,7 @@ test('an ACP session drives the in-app browser via the MCP server', async () => 
   const win = app.window;
   await startAcpBrowserSession(win, app.userDataDir, 'USE_BROWSER and report the needle');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]').first().click();
+  await openSession(win);
 
   await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('needle 90210', { timeout: 20000 });
   await expect(win.locator('[data-testid="browser-pane"]')).toBeVisible({ timeout: 15000 });
@@ -74,8 +74,7 @@ test('the browser stays connected across a follow-up turn', async () => {
   const win = app.window;
   await startAcpBrowserSession(win, app.userDataDir, 'USE_BROWSER first pass');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]').first().click();
+  await openSession(win);
   await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('needle 90210', { timeout: 20000 });
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
 
@@ -103,8 +102,7 @@ test('an unlisted host prompts on the session card, then proceeds when allowed',
   const win = app.window;
   await startAcpBrowserSession(win, app.userDataDir, 'USE_BROWSER');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]').first().click();
+  await openSession(win);
 
   const card = win.locator('[data-testid="session-permission-card"]');
   await expect(card).toBeVisible({ timeout: 20000 });

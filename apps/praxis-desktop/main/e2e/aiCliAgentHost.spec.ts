@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 // e2e coverage for `AcpAgentHost` — the Phase 2 CLI-hosted-agent path
 // (Claude Code / Codex CLI via the Agent Client Protocol). Uses a minimal
 // real ACP agent fixture (`fixtures/fakeAcpAgent.mjs`, built on the same
@@ -139,8 +140,7 @@ test('delegate completes a session against a real ACP agent subprocess', async (
   expect(session?.toolMode).toBe('full');
   expect(session?.runtimeSessionId).toBeTruthy();
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-202' }).click();
+  await openSession(win, 'APP-202');
   await win.locator('[data-testid="session-follow-up-input"]').fill('Explain that result.');
   await win.locator('[data-testid="session-follow-up-send"]').click();
   await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('Explain that result.');
@@ -200,6 +200,60 @@ test('an Agent Hub ACP binding launches its declared host entry point', async ()
   });
 });
 
+test('a CLI-hosted turn shows the agent\'s thought in a collapsed Thought block', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+
+  await delegate(win, 'APP-213', 'claude-code-cli', 'EMIT_THOUGHT then answer.');
+  await expect.poll(async () => (await readSession(win, 'APP-213'))?.state, { timeout: 15000 }).toBe('completed');
+
+  await openSession(win, 'APP-213');
+  const thought = win.locator('[data-testid="session-thought-disclosure"]');
+  await expect(thought).toHaveCount(1);
+  // Collapsed by default, with the streamed chunks joined into one thought.
+  await expect(thought).not.toHaveAttribute('open', '');
+  await thought.locator('summary').click();
+  await expect(thought.locator('[data-testid="session-thought-markdown"]')).toContainText('Checking the ACP thought path.');
+  await expect(win.locator('[data-testid="session-chat-assistant"]')).toHaveCount(1);
+});
+
+test('MCP servers the user added reach a CLI agent at session start', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+  await win.evaluate(async () => {
+    await window.praxis.settings.set({
+      ai: {
+        mcpServers: [
+          { id: 'remote-1', name: 'Docs Search', enabled: true, transport: 'http', url: 'https://mcp.example.com/mcp', headers: { Authorization: 'Bearer abc' }, requireApproval: true },
+          { id: 'local-1', name: 'Files', enabled: true, transport: 'stdio', command: 'npx', args: ['-y', 'some-server', '/tmp'], env: { TOKEN: 'secret' }, requireApproval: true },
+          { id: 'off-1', name: 'Switched Off', enabled: false, transport: 'stdio', command: 'nope', requireApproval: true }
+        ]
+      }
+    });
+  });
+
+  await delegate(win, 'APP-214', 'claude-code-cli', 'ECHO_MCP_SERVERS please.');
+  await expect.poll(async () => (await readSession(win, 'APP-214'))?.state, { timeout: 15000 }).toBe('completed');
+
+  const reply = (await readSession(win, 'APP-214'))?.responseText ?? '';
+  const received = JSON.parse(reply.slice(reply.indexOf('MCP_SERVERS:') + 'MCP_SERVERS:'.length)) as Array<Record<string, unknown>>;
+  const byName = Object.fromEntries(received.map(server => [server.name as string, server]));
+  // Names are slugged the way tool names are; a switched-off server is not sent.
+  expect(Object.keys(byName).sort()).toEqual(['docs_search', 'files']);
+  expect(byName.docs_search).toMatchObject({
+    type: 'http',
+    url: 'https://mcp.example.com/mcp',
+    headers: [{ name: 'Authorization', value: 'Bearer abc' }]
+  });
+  expect(byName.files).toMatchObject({
+    command: 'npx',
+    args: ['-y', 'some-server', '/tmp'],
+    env: [{ name: 'TOKEN', value: 'secret' }]
+  });
+});
+
 test('ACP resume replay does not duplicate the previous answer into a follow-up', async () => {
   app = await launchTestApp(undefined, undefined, { FAKE_ACP_REPLAY_ON_RESUME: '1' });
   const win = app.window;
@@ -208,15 +262,14 @@ test('ACP resume replay does not duplicate the previous answer into a follow-up'
   await delegate(win, 'APP-212', 'claude-code-cli', 'Give the original response.');
   await expect.poll(async () => (await readSession(win, 'APP-212'))?.state, { timeout: 15000 }).toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-212' }).click();
+  await openSession(win, 'APP-212');
   await win.locator('[data-testid="session-follow-up-input"]').fill('DISTINCT_FOLLOW_UP answer only this question.');
   await win.locator('[data-testid="session-follow-up-send"]').click();
 
   await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('DISTINCT_FOLLOW_UP');
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   const replies = win.locator('[data-testid="session-chat-assistant"]');
-  await expect(replies).toHaveCount(2);
+  await expect(replies).toHaveCount(2, { timeout: 15000 });
   await expect(replies.last()).toContainText('Fresh response to the current question.');
   await expect(replies.last()).not.toContainText('replayed');
   const session = await readSession(win, 'APP-212');
@@ -231,8 +284,7 @@ test('a pasted image reaches an ACP agent as an image content block', async () =
   await delegate(win, 'APP-215', 'claude-code-cli', 'Start of the conversation.');
   await expect.poll(async () => (await readSession(win, 'APP-215'))?.state, { timeout: 15000 }).toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-215' }).click();
+  await openSession(win, 'APP-215');
   const input = win.locator('[data-testid="session-follow-up-input"]');
   await input.waitFor();
 
@@ -263,8 +315,7 @@ test('an ACP diff tool call renders as a red/green diff in the console', async (
   await delegate(win, 'APP-203', 'claude-code-cli', 'WITH_DIFF please edit notes.md');
   await expect.poll(async () => (await readSession(win, 'APP-203'))?.state, { timeout: 15000 }).toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-203' }).click();
+  await openSession(win, 'APP-203');
 
   // The grouped completion gadget keeps the diff behind one selected-run
   // detail surface rather than duplicating a transcript disclosure.
@@ -328,8 +379,7 @@ test('an in-flight turn shows one live status line, not streamed tool blocks', a
   await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
 
   await delegate(win, 'APP-206', 'claude-code-cli', 'HANG_UNTIL_CANCELLED please');
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-206' }).click();
+  await openSession(win, 'APP-206');
 
   const status = win.locator('[data-testid="session-activity-status"]');
   await expect(status).toBeVisible({ timeout: 10000 });

@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -173,7 +174,7 @@ test('an agent stage runs a real session and produces its declared artifact', as
 
   // Workflow stage runtime provenance stays visible, but cannot be changed
   // independently of the stage that owns it.
-  await page.getByTestId('nav-sessions').click();
+  await openSession(page);
   const providerChip = page.getByTestId('session-provider');
   const modelChip = page.getByTestId('session-model');
   await expect(providerChip).toContainText('Vercel AI Gateway');

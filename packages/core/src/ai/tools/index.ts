@@ -9,6 +9,8 @@ export {
   type ToolExecutionResult
 } from './localTools';
 
+export type { WireImageAttachment } from '../gateway/wire';
+
 export { resolveSandboxedPath } from './pathSandbox';
 export { createUnifiedDiff } from './unifiedDiff';
 

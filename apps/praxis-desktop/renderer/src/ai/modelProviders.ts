@@ -164,6 +164,19 @@ export function fetchModelOptions(provider: AiProvider, forceRefresh: boolean): 
   return request;
 }
 
+/**
+ * Applies a provider's curated `enabledModelIds` (Settings → AI Provider → Models)
+ * to a fetched catalog. Unset curation returns the catalog unchanged, so every
+ * consumer must call this rather than filtering on its own.
+ */
+export function applyEnabledModelCuration(options: ModelOptions, enabledModelIds: readonly string[] | undefined): ModelOptions {
+  if (!enabledModelIds) {
+    return options;
+  }
+  const allowed = new Set(enabledModelIds);
+  return { ...options, options: options.options.filter(option => allowed.has(option.value)) };
+}
+
 /** Invalidates and reloads one provider's model catalog. */
 export function refreshModelOptions(provider: AiProvider): Promise<ModelOptions | undefined> {
   modelOptionsCache.delete(provider);

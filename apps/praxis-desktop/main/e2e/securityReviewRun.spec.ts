@@ -146,7 +146,8 @@ async function startSecurityReview(page: Page, repo: string): Promise<{ runId: s
       );
       await window.praxis.agentRuntime.refresh();
       await window.praxis.workflows.save(project.id, { ...definition, id: `security-review-${project.id}`, scope: 'project', projectId: project.id } as never);
-      const summary = await window.praxis.workflows.startRun(project.id, `security-review-${project.id}`, 'Security Review', undefined, undefined, undefined, {
+      const instance = await window.praxis.workflows.instantiate(project.id, `security-review-${project.id}`);
+      const summary = await window.praxis.workflows.startRun(project.id, instance.id, 'Security Review', undefined, undefined, undefined, {
         uncommittedChanges: 'omit'
       });
       localStorage.setItem(

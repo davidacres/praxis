@@ -46,9 +46,25 @@ export function workflowBaseBlockingPaths(files: readonly Pick<GitChangedFile, '
  * product changes which the user can currently see and may already have verified in the main app.
  */
 export async function workflowBlockingFiles(projectId: string): Promise<string[]> {
-  const folder = getProjectStore().get(projectId)?.workspaceFolder?.trim();
+  const project = getProjectStore().get(projectId);
+  const folder = project?.workspaceFolder?.trim();
   if (!folder) return [];
-  return workflowBaseBlockingPaths((await getGitStatus(folder)).files);
+  try {
+    return workflowBaseBlockingPaths((await getGitStatus(folder)).files);
+  } catch (error) {
+    // `getGitStatus` surfaces raw git plumbing failures (e.g. "fatal: not a git repository").
+    // A workflow run needs a real Git repository to build its worktree from, so turn that into
+    // an actionable message now rather than let the cryptic one reach the renderer unchanged.
+    const detail = error instanceof Error ? error.message : String(error);
+    if (/not a git repository/i.test(detail)) {
+      throw new Error(
+        `${project?.name ?? 'This project'}'s workspace folder isn't a Git repository yet (${folder}). ` +
+          'A workflow run builds an isolated copy of the project from Git history, so initialize Git there ' +
+          'or attach a different workspace folder before starting a run.'
+      );
+    }
+    throw error;
+  }
 }
 
 /** Commits the product files that would otherwise be left out of a run, so the run starts from a clean base. */

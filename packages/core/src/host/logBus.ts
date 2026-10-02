@@ -19,7 +19,12 @@ export class LogBus implements LogSink {
       this.lines.splice(0, this.lines.length - this.capacity);
     }
     for (const listener of this.listeners) {
-      listener(line);
+      try {
+        listener(line);
+      } catch {
+        // A subscriber error (such as an IPC send during window teardown) must
+        // never fail the bus or throw into the caller logging the message.
+      }
     }
   }
 

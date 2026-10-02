@@ -2,6 +2,7 @@ import { parseHexRgb } from '../ui/hexColor';
 import { NATIVE_ECOSYSTEMS, type NativeEcosystem } from '../ai/agentRuntime/nativeSources';
 import type { AiProvider, BuiltInAiProvider } from '../types';
 import { sanitizeCustomProviders, type CustomProviderConfig } from '../ai/providers/customProviders';
+import { sanitizeMcpServers, type McpServerConfig } from '../ai/mcp/mcpServerConfig';
 import { REASONING_EFFORT_LEVELS, type ReasoningEffort } from '../ai/providers/reasoningSupport';
 import type { MobileAccessMode } from '../host/mobileAccessPolicy';
 import type { MobileAccessSettings } from '../host/mobileAccessAdministration';
@@ -175,6 +176,13 @@ export interface AiSettings {
    * `providers[id]` exactly as for a built-in.
    */
   customProviders?: CustomProviderConfig[];
+  /**
+   * MCP servers the user added for their agents. Handed to CLI agents (ACP) as
+   * session MCP servers and bridged into the tool list of API providers.
+   * Omitted when there are none. Headers and environment values are stored as
+   * written, like any other setting.
+   */
+  mcpServers?: McpServerConfig[];
   /**
    * The in-app browser the AI can drive (navigate / read / click / type) during
    * a full-tools session. Off by default: it lets a model fetch arbitrary web
@@ -1132,6 +1140,7 @@ function readPriorityColors(value: unknown): Record<string, string> {
  */
 export function sanitizeAppSettings(raw: unknown): AppSettings {
   const customProviders = isRecord(raw) && isRecord(raw.ai) ? sanitizeCustomProviders(raw.ai.customProviders) : [];
+  const mcpServers = isRecord(raw) && isRecord(raw.ai) ? sanitizeMcpServers(raw.ai.mcpServers) : [];
   const knownProviders = knownProviderIds(customProviders);
   const ai: AiSettings = isRecord(raw) && isRecord(raw.ai)
     ? {
@@ -1150,6 +1159,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         modelTiers: readModelTiers(raw.ai.modelTiers),
         providers: readAiProviderConfigs(raw.ai.providers, knownProviders),
         ...(customProviders.length > 0 ? { customProviders } : {}),
+        ...(mcpServers.length > 0 ? { mcpServers } : {}),
         browserTools: readBrowserTools(raw.ai.browserTools),
         nativeSources: readNativeSources(raw.ai.nativeSources),
         workingStyle: readWorkingStyle(raw.ai.workingStyle)
@@ -1459,6 +1469,13 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
   };
   if (customProviders.length > 0) ai.customProviders = customProviders;
   else delete ai.customProviders;
+
+  // Also a list: a patch carrying `mcpServers` replaces it wholesale.
+  const mcpServers = patch.ai && 'mcpServers' in patch.ai
+    ? sanitizeMcpServers(patch.ai.mcpServers)
+    : base.ai.mcpServers ?? [];
+  if (mcpServers.length > 0) ai.mcpServers = mcpServers;
+  else delete ai.mcpServers;
   // Removing an endpoint must not leave a setting pointing at it.
   const removed = (base.ai.customProviders ?? []).filter(old => !customProviders.some(kept => kept.id === old.id));
   if (removed.length > 0) {

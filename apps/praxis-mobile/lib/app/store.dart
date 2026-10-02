@@ -108,7 +108,9 @@ class TranscriptMessage {
     required this.text,
     required this.at,
     required this.streaming,
+    this.sessionId,
     this.gadgets = const [],
+    this.attachments = const [],
     this.model,
     this.tokens,
     this.cost,
@@ -120,7 +122,9 @@ class TranscriptMessage {
   final String text;
   final String at;
   final bool streaming;
+  final String? sessionId;
   final List<GadgetView> gadgets;
+  final List<SessionImageAttachment> attachments;
   final String? model;
   final TokenUsage? tokens;
   final Cost? cost;
@@ -131,7 +135,9 @@ class TranscriptMessage {
     text: text,
     at: at,
     streaming: streaming,
+    sessionId: sessionId,
     gadgets: gadgets,
+    attachments: attachments,
     model: this.model ?? model,
     tokens: this.tokens ?? tokens,
     cost: this.cost ?? cost,
@@ -148,7 +154,9 @@ List<TranscriptMessage> transcriptOf(SessionSnapshot? snapshot) {
       text: message.text,
       at: formatDayAndClock(message.at) ?? (formatClock(message.at).isNotEmpty ? formatClock(message.at) : message.at),
       streaming: message.status == 'streaming',
+      sessionId: snapshot.sessionId,
       gadgets: message.gadgets,
+      attachments: message.attachments,
       model: message.model ?? (assistant ? snapshot.model : null),
       tokens: message.tokenUsage ?? (assistant ? snapshot.tokenUsage : null),
       cost: message.cost ?? (assistant ? snapshot.cost : null),
@@ -1061,4 +1069,49 @@ class AppStore extends ChangeNotifier {
 
   Future<FileDiff> fileDiff(String sessionId, String path) async =>
       FileDiff(await _requireConnection().read(readRequest('changes.get', _target({'sessionId': sessionId}), {'path': path})) as Map<String, dynamic>);
+
+  /// Bytes for a reply/gadget image or user attachment. Reads bounded chunks
+  /// because a full image is larger than the mobile protocol's record limit.
+  Future<String?> imagePreview(String sessionId, String path) => _readImagePreview(sessionId, {'path': path});
+
+  Future<String?> imageAttachmentPreview(String sessionId, SessionImageAttachment attachment) =>
+      _readImagePreview(sessionId, {'eventIndex': attachment.eventIndex, 'attachmentIndex': attachment.attachmentIndex});
+
+  Future<String?> _readImagePreview(String sessionId, Map<String, Object?> source) async {
+    if (!_supports('sessions.imagePreview')) {
+      Diagnostics.instance.record('Loading a chat image', StateError('The connected desktop does not support image previews. Update Praxis on the desktop.'));
+      return null;
+    }
+    try {
+      final encoded = StringBuffer();
+      var offset = 0;
+      String? mimeType;
+      int? totalLength;
+      while (true) {
+        final result = await _requireConnection().read(readRequest('sessions.imagePreview', _target({'sessionId': sessionId}), {...source, 'offset': offset})) as Map<String, dynamic>;
+        final legacyDataUrl = result['dataUrl'];
+        if (offset == 0 && legacyDataUrl is String) return legacyDataUrl;
+        final chunkType = result['mimeType'];
+        final chunk = result['dataBase64'];
+        final nextOffset = result['nextOffset'];
+        final chunkLength = result['totalLength'];
+        if (chunkType is! String || chunk is! String || nextOffset is! int || chunkLength is! int || !RegExp(r'^image/(?:png|jpeg|webp|gif|bmp|avif)$').hasMatch(chunkType)) {
+          Diagnostics.instance.record('Loading a chat image', StateError('The desktop returned no image data.'));
+          return null;
+        }
+        mimeType ??= chunkType;
+        totalLength ??= chunkLength;
+        if (mimeType != chunkType || totalLength != chunkLength || nextOffset != offset + chunk.length || nextOffset <= offset || nextOffset > totalLength || nextOffset % 4 != 0 || totalLength > 16 * 1024 * 1024) {
+          Diagnostics.instance.record('Loading a chat image', StateError('The desktop returned an invalid image chunk.'));
+          return null;
+        }
+        encoded.write(chunk);
+        if (nextOffset == totalLength) return 'data:$mimeType;base64,$encoded';
+        offset = nextOffset;
+      }
+    } catch (error) {
+      Diagnostics.instance.record('Loading a chat image', error);
+      return null;
+    }
+  }
 }

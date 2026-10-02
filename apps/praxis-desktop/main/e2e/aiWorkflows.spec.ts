@@ -195,7 +195,7 @@ test('analysis uses the selected runtime and continues implementation in the sam
     ]
   });
   app = await launchTestApp(
-    { ai: { analysisPrompt: 'You are a senior engineer assessing readiness.', analysisGateEnabled: true } },
+    { ai: { analysisPrompt: 'You are a senior engineer assessing readiness.', analysisGateEnabled: true, providers: { 'copilot-cli': { cliPath: path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs') } } } },
     undefined,
     gatewayEnv(mock.baseUrl)
   );
@@ -296,7 +296,7 @@ test('analysis for a project ticket starts in the project folder', async () => {
 
 test('configured CLI agents remain available in ticket details when analysis is gated', async () => {
   app = await launchTestApp(
-    { ai: { analysisPrompt: 'Assess this ticket.', analysisGateEnabled: true } },
+    { ai: { analysisPrompt: 'Assess this ticket.', analysisGateEnabled: true, providers: { 'copilot-cli': { cliPath: path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs') } } } },
     undefined,
     { ...NO_GATEWAY_ENV }
   );

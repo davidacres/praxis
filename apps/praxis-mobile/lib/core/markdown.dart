@@ -31,6 +31,15 @@ class MdLink extends MdInline {
   final List<MdInline> children;
 }
 
+/// `![alt](src)`. `src` is usually workspace-relative — resolved to bytes
+/// through `AppStore.imagePreview` (`sessions.imagePreview`), the same
+/// bounded, session-folder read the desktop's own chat Markdown uses.
+class MdImage extends MdInline {
+  const MdImage(this.href, this.alt);
+  final String href;
+  final String alt;
+}
+
 class MdListItem {
   MdListItem(this.children, {this.checked, this.sublist});
   final List<MdInline> children;
@@ -133,6 +142,7 @@ MdAlign? _alignOf(String cell) {
 
 final _escape = RegExp(r'[\\`*_{}[\]()#+\-.!|~>]');
 final _codeSpan = RegExp(r'^(`+)([\s\S]*?[^`])\1(?!`)');
+final _image = RegExp(r'^!\[([^\]]*)\]\((<[^>\n]+>|[^)\s]+)(?:\s+"[^"]*")?\)');
 final _link = RegExp(r'^\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)');
 final _autolink = RegExp(r'^<(https?://[^>\s]+)>');
 final _strong = RegExp(r'^(\*\*|__)(?=\S)([\s\S]*?\S)\1');
@@ -167,6 +177,16 @@ List<MdInline> parseInline(String source) {
       final unpadded = RegExp(r'^ (.*) $').firstMatch(body);
       out.add(MdCode(unpadded != null ? unpadded.group(1)! : body));
       index += code.group(0)!.length;
+      continue;
+    }
+
+    final image = _image.firstMatch(rest);
+    if (image != null) {
+      flush();
+      var src = image.group(2)!;
+      if (src.startsWith('<') && src.endsWith('>')) src = src.substring(1, src.length - 1);
+      out.add(MdImage(src, image.group(1)!));
+      index += image.group(0)!.length;
       continue;
     }
 
@@ -398,6 +418,7 @@ String inlineText(List<MdInline> spans) => spans
         MdCode(:final text) => text,
         MdStyled(:final children) => inlineText(children),
         MdLink(:final children) => inlineText(children),
+        MdImage(:final alt) => alt,
       },
     )
     .join();

@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { broadcastToAllWindows } from './windowBroadcast';
 import {
   PreviewAccessRegistry,
   RUN_STATE_SCHEMA_VERSION,
@@ -39,9 +39,7 @@ const runs = new Map<string, ProjectRun>();
 export const previewAccess = new PreviewAccessRegistry();
 
 function broadcast(channel: string, ...args: unknown[]): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.webContents.send(channel, ...args);
-  }
+  broadcastToAllWindows(channel, ...args);
 }
 
 function newRunId(): string {

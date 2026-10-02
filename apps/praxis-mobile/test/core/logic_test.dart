@@ -15,19 +15,24 @@ import 'package:praxis_mobile/core/workflow_runs.dart';
 import 'package:praxis_mobile/protocol/wire.dart';
 
 String typeOf(Object block) => switch (block) {
-      MdHeading() => 'heading',
-      MdParagraph() => 'paragraph',
-      MdCodeBlock() => 'code',
-      MdList() => 'list',
-      MdQuote() => 'quote',
-      MdTable() => 'table',
-      MdRule() => 'rule',
-      MdText() => 'text',
-      MdCode() => 'code',
-      MdStyled(:final style) => switch (style) { MdStyle.strong => 'strong', MdStyle.em => 'em', MdStyle.strike => 'strike' },
-      MdLink() => 'link',
-      _ => '?',
-    };
+  MdHeading() => 'heading',
+  MdParagraph() => 'paragraph',
+  MdCodeBlock() => 'code',
+  MdList() => 'list',
+  MdQuote() => 'quote',
+  MdTable() => 'table',
+  MdRule() => 'rule',
+  MdText() => 'text',
+  MdCode() => 'code',
+  MdStyled(:final style) => switch (style) {
+    MdStyle.strong => 'strong',
+    MdStyle.em => 'em',
+    MdStyle.strike => 'strike',
+  },
+  MdLink() => 'link',
+  MdImage() => 'image',
+  _ => '?',
+};
 
 void main() {
   group('markdown', () {
@@ -91,14 +96,25 @@ void main() {
       expect(isSafeLink('https://example.com'), true);
       expect(parseInline('[click](javascript:alert(1))').any((span) => span is MdLink), false);
     });
+
+    test('images parse as MdImage, not a plain link, and keep their alt text', () {
+      final spans = parseInline('before ![a screenshot](shot.png) after');
+      expect(spans.map(typeOf), ['text', 'image', 'text']);
+      final image = spans[1] as MdImage;
+      expect(image.href, 'shot.png');
+      expect(image.alt, 'a screenshot');
+      expect(inlineText(spans), 'before a screenshot after');
+    });
+
+    test('an image reference can carry a path wrapped in angle brackets', () {
+      final image = parseInline('![](<output/shot 1.png>)').single as MdImage;
+      expect(image.href, 'output/shot 1.png');
+      expect(image.alt, '');
+    });
   });
 
   group('usage', () {
-    SessionSnapshot snapshot([Json overrides = const {}]) => SessionSnapshot({
-          'sessionId': 's1', 'sessionKey': 'SESSION-1', 'title': 'x', 'lifecycle': 'completed', 'mode': 'chat', 'archived': false,
-          'startedAt': '2026-09-23T09:00:00.000Z', 'sequence': 10, 'messages': <Object?>[], 'pendingPermissions': <Object?>[], 'canContinue': true, 'canCancel': false,
-          'provider': 'claude-code-cli', 'model': 'opus', ...overrides,
-        });
+    SessionSnapshot snapshot([Json overrides = const {}]) => SessionSnapshot({'sessionId': 's1', 'sessionKey': 'SESSION-1', 'title': 'x', 'lifecycle': 'completed', 'mode': 'chat', 'archived': false, 'startedAt': '2026-09-23T09:00:00.000Z', 'sequence': 10, 'messages': <Object?>[], 'pendingPermissions': <Object?>[], 'canContinue': true, 'canCancel': false, 'provider': 'claude-code-cli', 'model': 'opus', ...overrides});
 
     test('formats token counts and costs compactly', () {
       expect(formatTokenCount(950), '950');
@@ -112,7 +128,15 @@ void main() {
 
     test('real provider, model, token and cost figures when the desktop reports them', () {
       final view = describeUsage(
-        source: latestUsage(snapshot({'tokenUsage': {'inputTokens': 1200, 'outputTokens': 300, 'totalTokens': 1500}, 'contextTokens': 9000, 'contextLimit': 200000, 'cost': {'currency': 'USD', 'amount': 0.42}}), null),
+        source: latestUsage(
+          snapshot({
+            'tokenUsage': {'inputTokens': 1200, 'outputTokens': 300, 'totalTokens': 1500},
+            'contextTokens': 9000,
+            'contextLimit': 200000,
+            'cost': {'currency': 'USD', 'amount': 0.42},
+          }),
+          null,
+        ),
         loading: false,
         providerLabel: 'Claude Code (local)',
       );
@@ -123,7 +147,18 @@ void main() {
     });
 
     test('a provider that reports no cost says so rather than showing zero', () {
-      final view = describeUsage(source: latestUsage(snapshot({'provider': 'anthropic', 'model': 'claude-opus-4-6', 'tokenUsage': {'totalTokens': 50}}), null), loading: false, providerLabel: 'Anthropic');
+      final view = describeUsage(
+        source: latestUsage(
+          snapshot({
+            'provider': 'anthropic',
+            'model': 'claude-opus-4-6',
+            'tokenUsage': {'totalTokens': 50},
+          }),
+          null,
+        ),
+        loading: false,
+        providerLabel: 'Anthropic',
+      );
       expect(view.costReported, false);
       expect(view.cost, 'Cost not reported by Anthropic');
       expect(view.summary, 'claude-opus-4-6 · 50 tokens · no cost data');
@@ -138,11 +173,31 @@ void main() {
     });
 
     test('a streamed snapshot supersedes an older usage read and vice versa', () {
-      Json read = {'sessionId': 's1', 'lifecycle': 'completed', 'costStatus': 'not-reported', 'tokenUsage': {'totalTokens': 100}, 'sequence': 5, 'providerLabel': 'Codex CLI (local)'};
-      final streamed = snapshot({'sequence': 9, 'tokenUsage': {'totalTokens': 900}});
+      Json read = {
+        'sessionId': 's1',
+        'lifecycle': 'completed',
+        'costStatus': 'not-reported',
+        'tokenUsage': {'totalTokens': 100},
+        'sequence': 5,
+        'providerLabel': 'Codex CLI (local)',
+      };
+      final streamed = snapshot({
+        'sequence': 9,
+        'tokenUsage': {'totalTokens': 900},
+      });
       expect(latestUsage(streamed, SessionUsage(read))!.tokenUsage!.totalTokens, 900);
       expect(latestUsage(streamed, SessionUsage(read))!.providerLabel, 'Codex CLI (local)');
-      expect(latestUsage(streamed, SessionUsage({...read, 'sequence': 12, 'tokenUsage': {'totalTokens': 1200}}))!.tokenUsage!.totalTokens, 1200);
+      expect(
+        latestUsage(
+          streamed,
+          SessionUsage({
+            ...read,
+            'sequence': 12,
+            'tokenUsage': {'totalTokens': 1200},
+          }),
+        )!.tokenUsage!.totalTokens,
+        1200,
+      );
     });
   });
 
@@ -151,11 +206,7 @@ void main() {
       'themeId': 'praxis-light',
       'themeName': 'Praxis Light',
       'mode': 'light',
-      'colors': {
-        'bg': '#f5f2eb', 'bgElevated': '#fffdf8', 'bgSunken': '#ebe7de', 'bgInput': '#fffdf8', 'border': '#d5c8b8',
-        'borderStrong': '#ad9a85', 'text': '#2c2620', 'textSecondary': '#74695e', 'textTertiary': '#958878',
-        'accent': '#c6431f', 'accentContrast': '#fffdf8', 'success': '#467a5b', 'warning': '#9b6b22', 'danger': '#b94a48',
-      },
+      'colors': {'bg': '#f5f2eb', 'bgElevated': '#fffdf8', 'bgSunken': '#ebe7de', 'bgInput': '#fffdf8', 'border': '#d5c8b8', 'borderStrong': '#ad9a85', 'text': '#2c2620', 'textSecondary': '#74695e', 'textTertiary': '#958878', 'accent': '#c6431f', 'accentContrast': '#fffdf8', 'success': '#467a5b', 'warning': '#9b6b22', 'danger': '#b94a48'},
     };
 
     test('a desktop theme maps straight onto the phone palette', () {
@@ -176,7 +227,13 @@ void main() {
 
     test('only a complete, hex-coloured appearance is worn', () {
       expect(readMobileAppearance(praxisLight), isNotNull);
-      expect(readMobileAppearance({...praxisLight, 'colors': {...praxisLight['colors'] as Map, 'accent': 'tomato'}}), isNull);
+      expect(
+        readMobileAppearance({
+          ...praxisLight,
+          'colors': {...praxisLight['colors'] as Map, 'accent': 'tomato'},
+        }),
+        isNull,
+      );
       expect(readMobileAppearance({...praxisLight, 'mode': 'sepia'}), isNull);
       expect(readMobileAppearance(null), isNull);
       expect(readMobileAppearance({...praxisLight, 'themeName': ''})!.themeName, 'praxis-light');
@@ -185,9 +242,26 @@ void main() {
     const cornerSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="760" height="760"><rect width="760" height="760"/></svg>';
     test('the motif keeps its corners; a malformed one is dropped while the colours stay', () {
       final layer = {'svg': cornerSvg, 'width': 760, 'height': 760, 'anchor': 'top-right', 'repeat': false};
-      final kept = readMobileAppearance({...praxisLight, 'motif': {'opacity': 0.27, 'layers': [layer, {...layer, 'anchor': 'bottom-left'}]}});
+      final kept = readMobileAppearance({
+        ...praxisLight,
+        'motif': {
+          'opacity': 0.27,
+          'layers': [
+            layer,
+            {...layer, 'anchor': 'bottom-left'},
+          ],
+        },
+      });
       expect(kept!.motif!.layers.map((layer) => layer.anchor), ['top-right', 'bottom-left']);
-      final bad = readMobileAppearance({...praxisLight, 'motif': {'opacity': 0.27, 'layers': [{...layer, 'svg': 'javascript:alert(1)'}]}});
+      final bad = readMobileAppearance({
+        ...praxisLight,
+        'motif': {
+          'opacity': 0.27,
+          'layers': [
+            {...layer, 'svg': 'javascript:alert(1)'},
+          ],
+        },
+      });
       expect(bad!.motif, isNull);
       expect(bad.colors['accent'], '#c6431f');
     });
@@ -201,11 +275,15 @@ void main() {
 
     test('a corner motif keeps its share of the screen', () {
       const lattice = MotifLayer(
-        svg: '<svg xmlns="http://www.w3.org/2000/svg" width="760" height="760" viewBox="0 0 760 760"><defs>'
+        svg:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="760" height="760" viewBox="0 0 760 760"><defs>'
             '<mask id="sm"><rect width="760" height="760" fill="url(#sf)"/></mask>'
             '<pattern id="sp" width="76" height="131.64" patternUnits="userSpaceOnUse"><path d="M0 0"/></pattern></defs>'
             '<rect width="760" height="760" fill="url(#sp)" mask="url(#sm)"/></svg>',
-        width: 760, height: 760, anchor: 'top-right', repeat: false,
+        width: 760,
+        height: 760,
+        anchor: 'top-right',
+        repeat: false,
       );
       const motif = Motif(opacity: 0.27, layers: [lattice], viewport: Size(1664, 936));
       final scale = motifSpreadScale(motif, 430, 630);
@@ -220,27 +298,26 @@ void main() {
   });
 
   group('workflow runs', () {
-    Json stage(String nodeId, [Json patch = const {}]) =>
-        {'nodeId': nodeId, 'name': nodeId[0].toUpperCase() + nodeId.substring(1), 'type': 'agent-task', 'lane': 'idle', 'attempts': 0, ...patch};
+    Json stage(String nodeId, [Json patch = const {}]) => {'nodeId': nodeId, 'name': nodeId[0].toUpperCase() + nodeId.substring(1), 'type': 'agent-task', 'lane': 'idle', 'attempts': 0, ...patch};
     RunSnapshot run([Json patch = const {}]) => RunSnapshot({
-          'runId': '8b14fe21-527f-4f52-b20c-0f1decc4e9fd',
-          'projectId': 'p1',
-          'workflowName': 'Governed delivery — FX-BF-035',
-          'status': 'running',
-          'paused': false,
-          'explanation': 'Implement is running.',
-          'startedAt': '2026-09-23T22:55:59.686Z',
-          'currentNodeId': 'implement',
-          'stages': [
-            stage('plan', {'lane': 'done', 'attempts': 3, 'sessionId': 's-plan', 'sessionKey': 'WF-8B14FE21-plan', 'provider': 'claude-code-cli'}),
-            stage('implement', {'lane': 'running', 'attempts': 2, 'sessionId': 's-impl', 'sessionKey': 'WF-8B14FE21-implement', 'provider': 'claude-code-cli'}),
-            stage('qa', {'type': 'check', 'lane': 'idle'}),
-            stage('approve', {'type': 'approval', 'lane': 'idle'}),
-          ],
-          'canApprove': false,
-          'sequence': 10,
-          ...patch,
-        });
+      'runId': '8b14fe21-527f-4f52-b20c-0f1decc4e9fd',
+      'projectId': 'p1',
+      'workflowName': 'Governed delivery — FX-BF-035',
+      'status': 'running',
+      'paused': false,
+      'explanation': 'Implement is running.',
+      'startedAt': '2026-09-23T22:55:59.686Z',
+      'currentNodeId': 'implement',
+      'stages': [
+        stage('plan', {'lane': 'done', 'attempts': 3, 'sessionId': 's-plan', 'sessionKey': 'WF-8B14FE21-plan', 'provider': 'claude-code-cli'}),
+        stage('implement', {'lane': 'running', 'attempts': 2, 'sessionId': 's-impl', 'sessionKey': 'WF-8B14FE21-implement', 'provider': 'claude-code-cli'}),
+        stage('qa', {'type': 'check', 'lane': 'idle'}),
+        stage('approve', {'type': 'approval', 'lane': 'idle'}),
+      ],
+      'canApprove': false,
+      'sequence': 10,
+      ...patch,
+    });
 
     test('a live snapshot replaces an older one and never a newer one', () {
       final moved = mergeRun(mergeRun([], run()), run({'sequence': 12, 'currentNodeId': 'qa'}));
@@ -253,8 +330,13 @@ void main() {
     test('newest first, and a fresh read keeps a live event that beat it', () {
       final older = run({'runId': 'c7cdfc50-a44c-4c77-ab7d-195ca6b2ccb9', 'startedAt': '2026-09-22T10:00:00.000Z', 'status': 'failed'});
       expect(mergeRun(mergeRun([], older), run()).map((entry) => entry.runId.substring(0, 8)), ['8b14fe21', 'c7cdfc50']);
-      final live = [run({'sequence': 20, 'currentNodeId': 'qa'})];
-      final refreshed = replaceRuns(live, [run({'sequence': 15}), older]);
+      final live = [
+        run({'sequence': 20, 'currentNodeId': 'qa'}),
+      ];
+      final refreshed = replaceRuns(live, [
+        run({'sequence': 15}),
+        older,
+      ]);
       expect(refreshed.firstWhere((entry) => entry.runId == run().runId).currentNodeId, 'qa');
       expect(refreshed.length, 2);
       expect(replaceRuns(live, []), isEmpty);
@@ -287,18 +369,31 @@ void main() {
 
     test('approval context lists the steps before the gate, their outcomes and findings', () {
       Json s(Json overrides) => {'nodeId': 'x', 'name': 'x', 'type': 'check', 'lane': 'done', 'attempts': 1, ...overrides};
-      final context = approvalContext(RunSnapshot({
-        'runId': 'r', 'projectId': 'p', 'workflowName': 'Release', 'status': 'awaiting-approval', 'paused': false, 'explanation': 'Waiting for approval.',
-        'startedAt': 't', 'canApprove': true, 'sequence': 1,
-        'stages': [
-          s({'nodeId': 'impl', 'name': 'Implement', 'type': 'agent-task', 'attempts': 2}),
-          s({'nodeId': 'sast', 'name': 'SAST', 'findingsSummary': {'high': 1, 'low': 3}}),
-          s({'nodeId': 'join', 'name': 'Gates', 'type': 'join'}),
-          s({'nodeId': 'tests', 'name': 'Tests', 'lane': 'failed', 'exitCode': 1}),
-          s({'nodeId': 'approve', 'name': 'Approve release', 'type': 'approval', 'lane': 'awaiting', 'prompt': 'Check the SAST report.', 'gate': 'release'}),
-          s({'nodeId': 'deploy', 'name': 'Deploy', 'type': 'deployment', 'lane': 'idle'}),
-        ],
-      }))!;
+      final context = approvalContext(
+        RunSnapshot({
+          'runId': 'r',
+          'projectId': 'p',
+          'workflowName': 'Release',
+          'status': 'awaiting-approval',
+          'paused': false,
+          'explanation': 'Waiting for approval.',
+          'startedAt': 't',
+          'canApprove': true,
+          'sequence': 1,
+          'stages': [
+            s({'nodeId': 'impl', 'name': 'Implement', 'type': 'agent-task', 'attempts': 2}),
+            s({
+              'nodeId': 'sast',
+              'name': 'SAST',
+              'findingsSummary': {'high': 1, 'low': 3},
+            }),
+            s({'nodeId': 'join', 'name': 'Gates', 'type': 'join'}),
+            s({'nodeId': 'tests', 'name': 'Tests', 'lane': 'failed', 'exitCode': 1}),
+            s({'nodeId': 'approve', 'name': 'Approve release', 'type': 'approval', 'lane': 'awaiting', 'prompt': 'Check the SAST report.', 'gate': 'release'}),
+            s({'nodeId': 'deploy', 'name': 'Deploy', 'type': 'deployment', 'lane': 'idle'}),
+          ],
+        }),
+      )!;
       expect(context.stageName, 'Approve release');
       expect(context.prompt, 'Check the SAST report.');
       expect(context.steps.map((step) => [step.name, step.label, step.detail]), [
@@ -306,31 +401,104 @@ void main() {
         ['SAST', 'Done', null],
         ['Tests', 'Failed', 'exit 1'],
       ]);
-      expect(context.findings.map((f) => [f.severity, f.count]), [['low', 3], ['high', 1]]);
+      expect(context.findings.map((f) => [f.severity, f.count]), [
+        ['low', 3],
+        ['high', 1],
+      ]);
     });
   });
 
   group('gadgets', () {
     final choice = <String, dynamic>{
-      'version': 1, 'gadgetId': 'msg-1-1', 'kind': 'choice', 'fallbackText': 'Pick',
-      'payload': {'question': 'Which?', 'options': [{'value': 'a', 'label': 'A'}]}, 'actions': [{'actionId': 'answer', 'label': 'Answer', 'effect': 'informational'}],
+      'version': 1,
+      'gadgetId': 'msg-1-1',
+      'kind': 'choice',
+      'fallbackText': 'Pick',
+      'payload': {
+        'question': 'Which?',
+        'options': [
+          {'value': 'a', 'label': 'A'},
+        ],
+      },
+      'actions': [
+        {'actionId': 'answer', 'label': 'Answer', 'effect': 'informational'},
+      ],
     };
     GadgetView view([Json overrides = const {}]) => GadgetView({'gadget': choice, 'state': 'active', ...overrides});
 
     test('a gadget is answerable only while active and unanswered', () {
       expect(isGadgetAnswerable(view()), true);
       expect(isGadgetAnswerable(view({'state': 'expired'})), false);
-      expect(isGadgetAnswerable(view({'result': {'status': 'completed', 'message': 'Recorded: A.'}})), false);
-      expect(isGadgetAnswerable(view({'result': {'status': 'rejected'}})), true);
-      expect(inertGadgetReason(view({'result': {'status': 'completed', 'message': 'Recorded: A.'}})), 'Recorded: A.');
+      expect(
+        isGadgetAnswerable(
+          view({
+            'result': {'status': 'completed', 'message': 'Recorded: A.'},
+          }),
+        ),
+        false,
+      );
+      expect(
+        isGadgetAnswerable(
+          view({
+            'result': {'status': 'rejected'},
+          }),
+        ),
+        true,
+      );
+      expect(
+        inertGadgetReason(
+          view({
+            'result': {'status': 'completed', 'message': 'Recorded: A.'},
+          }),
+        ),
+        'Recorded: A.',
+      );
       expect(inertGadgetReason(view({'state': 'superseded'})), 'A newer question replaced this one.');
       expect(inertGadgetReason(view()), isNull);
+    });
+
+    group('mobile session images', () {
+      test('reads attached-image references from a session message', () {
+        final message = SessionMessage({
+          'id': 's1:event:4',
+          'role': 'user',
+          'text': 'What is in this picture?',
+          'at': '2026-09-23T09:00:00.000Z',
+          'status': 'complete',
+          'attachments': [
+            {'eventIndex': 4, 'attachmentIndex': 0, 'mimeType': 'image/png'},
+          ],
+        });
+        final attachment = message.attachments.single;
+        expect(attachment.eventIndex, 4);
+        expect(attachment.attachmentIndex, 0);
+        expect(attachment.mimeType, 'image/png');
+      });
     });
 
     test('unknown kinds and versions fall back to text', () {
       expect(canDrawGadget(GadgetEnvelope(choice)), true);
       expect(canDrawGadget(GadgetEnvelope({'kind': 'choice', 'version': 2})), false);
       expect(canDrawGadget(GadgetEnvelope({'kind': 'hologram', 'version': 1})), false);
+    });
+
+    test('a gadget\'s scope resolves the session an image reference loads against', () {
+      final withWork = GadgetEnvelope({
+        ...choice,
+        'scope': {'hostId': 'host-mac', 'sessionId': 's1', 'workId': 'w1'},
+      });
+      expect(withWork.scope.sessionId, 's1');
+      expect(withWork.scope.workId, 'w1');
+      expect(withWork.imageSessionId, 'w1');
+
+      final sessionOnly = GadgetEnvelope({
+        ...choice,
+        'scope': {'hostId': 'host-mac', 'sessionId': 's1'},
+      });
+      expect(sessionOnly.imageSessionId, 's1');
+
+      final noScope = GadgetEnvelope(choice);
+      expect(noScope.imageSessionId, isNull);
     });
 
     test('approving, changing or dangerous answers need identity', () {
@@ -347,7 +515,14 @@ void main() {
         {'name': 'title', 'label': 'Title', 'type': 'text', 'required': true, 'maxLength': 10},
         {'name': 'count', 'label': 'Count', 'type': 'number', 'min': 1, 'max': 5, 'defaultValue': 2},
         {'name': 'urgent', 'label': 'Urgent', 'type': 'boolean'},
-        {'name': 'kind', 'label': 'Kind', 'type': 'select', 'options': [{'value': 'bug', 'label': 'Bug'}]},
+        {
+          'name': 'kind',
+          'label': 'Kind',
+          'type': 'select',
+          'options': [
+            {'value': 'bug', 'label': 'Bug'},
+          ],
+        },
       ],
     };
 
@@ -365,7 +540,19 @@ void main() {
     });
 
     test('chart bars scale to the largest value and say how many were left off', () {
-      final bars = chartBars({'chartKind': 'bar', 'series': [{'label': 'Runs', 'points': [{'x': 'Mon', 'y': 2}, {'x': 'Tue', 'y': 4}, {'x': 'Wed', 'y': 1}]}]}, 2);
+      final bars = chartBars({
+        'chartKind': 'bar',
+        'series': [
+          {
+            'label': 'Runs',
+            'points': [
+              {'x': 'Mon', 'y': 2},
+              {'x': 'Tue', 'y': 4},
+              {'x': 'Wed', 'y': 1},
+            ],
+          },
+        ],
+      }, 2);
       expect(bars.bars.map((bar) => bar.fraction), [0.5, 1]);
       expect(bars.more, 1);
     });
@@ -384,8 +571,7 @@ void main() {
     test('the compact QR keeps its single-use token and expiry', () {
       final parsed = parseMobileInvitation('P1|dave-mac|$key|192.168.1.20:43100|a1b2c3d4e5f6|2026-09-23T10:10:00.000Z', now);
       expect(parsed.kind, InvitationKind.invitation);
-      expect([parsed.details.hostId, parsed.details.hostPublicKeyHex, parsed.details.address, parsed.details.port, parsed.details.tokenId],
-          ['dave-mac', key, '192.168.1.20', 43100, 'a1b2c3d4e5f6']);
+      expect([parsed.details.hostId, parsed.details.hostPublicKeyHex, parsed.details.address, parsed.details.port, parsed.details.tokenId], ['dave-mac', key, '192.168.1.20', 43100, 'a1b2c3d4e5f6']);
       expect(parsed.expired, false);
     });
 
@@ -402,16 +588,12 @@ void main() {
         expect([without.details.relayUrl, without.details.relayChannel], [null, null], reason: tail);
       }
 
-      final json = parseMobileInvitation(
-          '{"version":1,"hostId":"dave-mac","publicKeyHex":"$key","endpoints":[{"address":"10.0.0.4","port":43100}],"tokenId":"tok123456789","expiresAt":"2026-09-23T10:10:00.000Z","relay":{"url":"wss://relay.example.com","channel":"$channel"}}',
-          now);
+      final json = parseMobileInvitation('{"version":1,"hostId":"dave-mac","publicKeyHex":"$key","endpoints":[{"address":"10.0.0.4","port":43100}],"tokenId":"tok123456789","expiresAt":"2026-09-23T10:10:00.000Z","relay":{"url":"wss://relay.example.com","channel":"$channel"}}', now);
       expect([json.details.relayUrl, json.details.relayChannel], ['wss://relay.example.com', channel]);
     });
 
     test('the JSON invitation parses the same, and expiry is caught before connecting', () {
-      final parsed = parseMobileInvitation(
-          '{"version":1,"hostId":"dave-mac","displayName":"Dave Mac","publicKeyHex":"$key","endpoints":[{"address":"10.0.0.4","port":43100}],"tokenId":"tok123456789","expiresAt":"2026-09-23T09:59:00.000Z"}',
-          now);
+      final parsed = parseMobileInvitation('{"version":1,"hostId":"dave-mac","displayName":"Dave Mac","publicKeyHex":"$key","endpoints":[{"address":"10.0.0.4","port":43100}],"tokenId":"tok123456789","expiresAt":"2026-09-23T09:59:00.000Z"}', now);
       expect(parsed.kind, InvitationKind.invitation);
       expect(parsed.details.hostName, 'Dave Mac');
       expect(parsed.details.tokenId, 'tok123456789');
@@ -458,8 +640,13 @@ void main() {
       ],
     });
     final anthropicModels = ModelCatalog({
-      'provider': 'anthropic', 'status': 'ok', 'defaultModel': 'claude-sonnet-4-6',
-      'models': [{'modelId': 'claude-sonnet-4-6', 'name': 'Claude Sonnet 4.6'}, {'modelId': 'claude-opus-4-6', 'name': 'Claude Opus 4.6'}],
+      'provider': 'anthropic',
+      'status': 'ok',
+      'defaultModel': 'claude-sonnet-4-6',
+      'models': [
+        {'modelId': 'claude-sonnet-4-6', 'name': 'Claude Sonnet 4.6'},
+        {'modelId': 'claude-opus-4-6', 'name': 'Claude Opus 4.6'},
+      ],
     });
 
     test('only configured and enabled providers are offered', () {
@@ -486,8 +673,7 @@ void main() {
 
     test('an unavailable mode is refused with the desktop reason', () {
       expect(effectiveSelection(catalog, const SessionSelection(provider: 'anthropic', mode: 'analysis')).mode, 'chat');
-      expect(validateSelection(catalog, const SessionSelection(provider: 'anthropic', mode: 'analysis')),
-          'Set an analysis system prompt under Settings → AI Provider on the desktop first.');
+      expect(validateSelection(catalog, const SessionSelection(provider: 'anthropic', mode: 'analysis')), 'Set an analysis system prompt under Settings → AI Provider on the desktop first.');
     });
 
     test('model labels name the default the desktop will actually use', () {

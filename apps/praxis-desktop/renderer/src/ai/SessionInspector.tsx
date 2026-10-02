@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AgentSessionRecord, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
@@ -173,18 +173,15 @@ export function SessionInspector({
     void run(() => window.praxis.ai.removeWorktree(session.issueKey));
   };
 
-  const visibleTabs: Array<{ id: InspectorTab; label: string }> = useMemo(() => {
-    const list: Array<{ id: InspectorTab; label: string }> = [
-      { id: 'summary', label: 'Summary' },
-      { id: 'activity', label: 'Activity' },
-      { id: 'changes', label: 'Changes' }
-    ];
-    if (subagents.length > 0 || tab === 'subagents') {
-      list.push({ id: 'subagents', label: 'Subagents' });
-    }
-    list.push({ id: 'sessions', label: 'Sessions' });
-    return list;
-  }, [subagents.length, tab]);
+  const visibleTabs: Array<{ id: InspectorTab; label: string }> = [
+    { id: 'summary', label: 'Summary' },
+    { id: 'activity', label: 'Activity' },
+    { id: 'changes', label: 'Changes' }
+  ];
+  if (subagents.length > 0 || tab === 'subagents') {
+    visibleTabs.push({ id: 'subagents', label: 'Subagents' });
+  }
+  visibleTabs.push({ id: 'sessions', label: 'Sessions' });
 
   return (
     <section className="inspector inspector--tabbed session-inspector" aria-label="Session context" data-testid="session-inspector">
@@ -254,9 +251,16 @@ export function SessionInspector({
               </div>
             )}
 
+            {/* Open while the agent is working, as its current focus; folded away once
+                it has finished, because the same thought is already in the chat. */}
             {reasoning && (
-              <div className="agent-runtime-block session-reasoning" data-testid="session-reasoning">
-                <div className="session-reasoning-header">
+              <details
+                key={finished ? 'finished' : 'live'}
+                className="agent-runtime-block session-reasoning"
+                data-testid="session-reasoning"
+                open={!finished}
+              >
+                <summary className="session-reasoning-header">
                   <span className="rail-sub">Reasoning</span>
                   <button
                     type="button"
@@ -268,11 +272,11 @@ export function SessionInspector({
                     <Icon name={copiedReasoning ? 'check' : 'copy'} size={12} />
                     <span>{copiedReasoning ? 'Copied' : 'Copy'}</span>
                   </button>
-                </div>
+                </summary>
                 <div className="session-reasoning-scroll">
                   <pre className="session-summary-text session-reasoning-text session-reasoning-body">{reasoning}</pre>
                 </div>
-              </div>
+              </details>
             )}
 
             {/* What the agent says it's doing, live */}
@@ -592,12 +596,15 @@ function SessionBrowserRow({
       </span>
       <span className="session-browser-main">
         <span className="session-browser-title">{title}</span>
-        <span className="session-browser-meta">
-          {session.issueKey} · {agentStateLabel(session.state)}
-        </span>
+        <span className="session-browser-meta">{session.issueKey}</span>
       </span>
       {!session.archived && (
-        <span className={agentStateLaneClass(session.state)} title={agentStateLabel(session.state)}>
+        <span
+          className={agentStateLaneClass(session.state)}
+          role="img"
+          aria-label={`Status: ${agentStateLabel(session.state)}`}
+          title={agentStateLabel(session.state)}
+        >
           ●
         </span>
       )}

@@ -42,7 +42,7 @@ import type { ReconciledService, RunLogLine, RunServiceStatus } from '@praxis/co
 import type { BrowserDiagnosticsBundle } from '@praxis/core';
 import type { CreateDiagnosisSessionResult, PreviewVerificationCheck, PreviewVerificationOutcome } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
-import type { CustomProviderConfig, SaveCustomProviderInput } from '@praxis/core';
+import type { CustomProviderConfig, McpServerConfig, SaveCustomProviderInput } from '@praxis/core';
 import type { WorkflowDefinition, WorkflowPlanInput, WorkflowPolicyProfile } from '@praxis/core';
 import type { DeploymentProfile, DeploymentProfileIssue, PublishedArtifact } from '@praxis/core';
 import type { CredentialBindingStatus } from '@praxis/core';
@@ -233,6 +233,7 @@ const praxis: PraxisIpc = {
     setApiKey: (value: string) => ipcRenderer.invoke('ai:setApiKey', value),
     listProviderStatuses: () => ipcRenderer.invoke('ai:listProviderStatuses'),
     probeProviderCapability: (provider: AiProvider) => ipcRenderer.invoke('ai:probeProviderCapability', provider),
+    testMcpServer: (config: McpServerConfig) => ipcRenderer.invoke('ai:testMcpServer', config),
     installCliProvider: (provider: AiProvider) => ipcRenderer.invoke('ai:installCliProvider', provider),
     getLatestCliProviderVersion: (provider: AiProvider) => ipcRenderer.invoke('ai:getLatestCliProviderVersion', provider) as Promise<{ version: string }>,
     listCliModelOptions: (provider: AiProvider) => ipcRenderer.invoke('ai:listCliModelOptions', provider),
@@ -253,6 +254,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:loadImagePreview', issueKey, filePath) as Promise<string | undefined>,
     renameSession: (issueKey: string, title: string) =>
       ipcRenderer.invoke('ai:renameSession', issueKey, title),
+    assignSessionToProject: (issueKey: string, projectId: string, ticketKey?: string, workingDirectory?: string) =>
+      ipcRenderer.invoke('ai:assignSessionToProject', issueKey, projectId, ticketKey, workingDirectory),
     deleteSession: (issueKey: string) => ipcRenderer.invoke('ai:deleteSession', issueKey),
     archiveSession: (issueKey: string, archived: boolean) =>
       ipcRenderer.invoke('ai:archiveSession', issueKey, archived),
@@ -405,6 +408,7 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('workflows:removeControllerRun', sessionKey, runId, reason),
     listRuns: (projectId: string) => ipcRenderer.invoke('workflows:listRuns', projectId),
     getRun: (runId: string) => ipcRenderer.invoke('workflows:getRun', runId),
+    renameRun: (runId: string, name: string) => ipcRenderer.invoke('workflows:renameRun', runId, name),
     advanceStage: (
       runId: string,
       nodeId: string,

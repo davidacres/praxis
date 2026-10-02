@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
@@ -53,8 +54,7 @@ test('an existing project session selects and starts governed workflows from one
   // Reload so the shell refreshes project workflow readiness, then open the
   // existing session rather than starting through New Session.
   await page.reload();
-  await page.getByTestId('nav-sessions').click();
-  await page.getByTestId('session-list-row').filter({ hasText: 'Keep this project conversation available.' }).click();
+  await openSession(page, sessionKey);
 
   // Before a workflow owns the session, the ordinary session runtime controls
   // remain available for changing provider/model.

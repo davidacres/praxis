@@ -8,12 +8,23 @@ import type { AnyGadgetEnvelope, FormGadgetPayload, GadgetActionValue } from './
 import { GADGET_FENCE_LANGUAGE } from './blockParser';
 
 const FENCE = /[ \t]*```[ \t]*praxis-gadget[ \t]*\r?\n[\s\S]*?```[ \t]*$/gm;
+/**
+ * An opening fence with no closing ``` anywhere after it — a reply cut short
+ * (hit a length limit, the stream was interrupted, anything) mid-gadget.
+ * Treated the same as one still being streamed: hidden, rather than left as
+ * half-written JSON that would otherwise sit in the transcript forever,
+ * because nothing else downstream ever revisits a message once it's final.
+ */
+const OPEN_FENCE = /[ \t]*```[ \t]*praxis-gadget[ \t]*\r?\n(?![\s\S]*```[ \t]*$)/m;
 
 /** A message's text with its gadget fences removed — the gadgets are drawn separately. */
 export function stripGadgetFences(text: string): string {
   if (!text.includes(GADGET_FENCE_LANGUAGE)) return text;
   FENCE.lastIndex = 0;
-  return text.replace(FENCE, '').replace(/\n{3,}/g, '\n\n').trim();
+  const closed = text.replace(FENCE, '');
+  const openIndex = closed.search(OPEN_FENCE);
+  const withoutOpen = openIndex >= 0 ? closed.slice(0, openIndex) : closed;
+  return withoutOpen.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /**

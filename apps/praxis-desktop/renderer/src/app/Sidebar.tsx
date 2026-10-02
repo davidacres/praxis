@@ -6,6 +6,7 @@ import type {
   BoardDetails,
   Connection,
   ConnectionCheck,
+  IssueSummary,
   ProjectDocument,
   ProjectRecord,
   WorkflowRunSummary,
@@ -13,6 +14,7 @@ import type {
 } from '@praxis/core';
 import { agentStateLabel, agentStateLaneClass, isTerminalAgentState } from '../ai/aiSessionState';
 import { formatElapsed, formatTokens, isConversationSession, isSynthesizedKey, isTicketReviewKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
+import type { DragEvent as ReactDragEvent } from 'react';
 import { providerLabel } from '../ai/modelProviders';
 import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
@@ -24,6 +26,7 @@ import { useSettings } from '../settings/useSettings';
 import { useDialogs } from '../ui/dialogs';
 import { useResizable } from './useResizable';
 import { WorkModeView } from '../projects/WorkModeView';
+import { ChipSelect } from '../ui/ChipSelect';
 
 export type SidebarMode = 'classic' | 'work';
 
@@ -90,12 +93,14 @@ export interface SidebarProps {
   onSelectGit: (project: ProjectRecord, view: 'graph' | 'changes' | 'conflicts') => void;
   /** Agent sessions, rendered as children of the Sessions row. */
   sessions: AgentSessionRecord[];
+  assignableProjects?: ProjectRecord[];
   activeSessionKey?: string;
   onSelectSession: (issueKey: string) => void;
   onRenameSession: (issueKey: string, title: string) => Promise<void>;
   onDeleteSession: (issueKey: string) => Promise<void>;
   /** Archives or restores a session; archived sessions leave the active tree. */
   onArchiveSession: (issueKey: string, archived: boolean) => Promise<void>;
+  onAssignConversation: (issueKey: string, projectId: string, ticketKey?: string) => Promise<void>;
   /** Saved workflows per project id, for the Workflows tree section. */
   projectWorkflows: Record<string, Array<{ id: string; name: string }>>;
   activeWorkflowId?: string;
@@ -216,8 +221,8 @@ function ProjectSessionRow({
     const choice = await confirmChoice({
       title: 'Delete this session?',
       message: 'This can’t be undone.',
-      confirmLabel: 'Delete session',
-      tertiaryLabel: 'Archive instead',
+      confirmLabel: 'Delete',
+      tertiaryLabel: 'Archive',
       danger: true
     });
     if (choice === 'cancel') return;
@@ -252,8 +257,8 @@ function ProjectSessionRow({
           }
         }}
       >
-        <span className="tree-icon" title={kind === 'ticket' ? 'Ticket session' : 'General chat session'}><Icon name={kind === 'ticket' ? 'ticket' : 'chats'} size={13} /></span>
-        {!editing && <span className={`session-state-mark ${agentStateLaneClass(session.state)}`} aria-label={agentStateLabel(session.state)} title={agentStateLabel(session.state)} />}
+        <span className="tree-icon" title={session.linkedIssueKey ? `Linked to ${session.linkedIssueKey}` : kind === 'ticket' ? 'Ticket session' : 'General chat session'}><Icon name={kind === 'ticket' ? 'ticket' : 'chats'} size={13} /></span>
+        {!editing && <span className={`session-state-mark ${agentStateLaneClass(session.state)}`} aria-hidden="true" />}
         {editing ? (
           <input
             className="session-title-input"
@@ -277,15 +282,15 @@ function ProjectSessionRow({
             }}
           />
         ) : (
-          <span className="tree-label" data-testid="session-title">{title}</span>
+          <span className="tree-label" data-testid="session-title">{session.linkedIssueKey ? <><span className="session-item-key">{session.linkedIssueKey}</span> {title}</> : title}</span>
         )}
         {!editing && (
           <>
             <span
               className="session-inline-telemetry"
               data-testid="project-session-agent-summary"
-              title={`${agentDisplay}${modelName ? ` · ${modelName}` : ''} · ${agentStateLabel(session.state)} · ${elapsed ?? 'Time not available'} · ${tokens ?? 'Tokens not reported'}`}
-            >{agentDisplay}{modelName ? ` · ${modelName}` : ''} · {agentStateLabel(session.state)} · {elapsed ?? '—'} · {tokens ?? '—'}</span>
+              title={`${agentDisplay}${modelName ? ` · ${modelName}` : ''} · ${elapsed ?? 'Time not available'} · ${tokens ?? 'Tokens not reported'}`}
+            >{agentDisplay}{modelName ? ` · ${modelName}` : ''} · {elapsed ?? '—'} · {tokens ?? '—'}</span>
             <span className="session-nav-actions">
               <button
                 className="icon-btn icon-btn-sm"
@@ -544,8 +549,11 @@ function AutomationRunRow({
   const [sheetStageId, setSheetStageId] = useState<string | undefined>();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [expanded, setExpanded] = useState(active);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(run.workflowName);
+  const [renaming, setRenaming] = useState(false);
+  const [renameError, setRenameError] = useState<string>();
+  const cancelRenameRef = useRef(false);
   const live = run.status === 'running' || run.status === 'awaiting-approval';
   const runState = run.paused ? 'paused' : run.status;
   const statusLabel = run.paused ? 'Paused' : RUN_STATUS_LABEL[run.status];
@@ -558,38 +566,78 @@ function AutomationRunRow({
   const selectedStageMeta = selectedStage ? automationStageMeta(selectedStage, sessions) : 'No stage telemetry reported';
 
   useEffect(() => {
-    if (!menuOpen) return;
-    const close = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [menuOpen]);
+    if (active) setExpanded(true);
+  }, [active]);
 
   const openSheet = (stageId?: string) => {
     setSheetStageId(stageId ?? run.stages[activeAutomationStageIndex(run)]?.nodeId);
     setSheetOpen(true);
   };
 
+  const rename = async () => {
+    if (cancelRenameRef.current) {
+      cancelRenameRef.current = false;
+      return;
+    }
+    const name = draft.trim();
+    setEditing(false);
+    if (!name || name === run.workflowName) return;
+    if (name.length > 120) {
+      setRenameError('Use 120 characters or fewer.');
+      return;
+    }
+    setRenaming(true);
+    setRenameError(undefined);
+    try {
+      await window.praxis.workflows.renameRun(run.runId, name);
+    } catch (cause) {
+      setRenameError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setRenaming(false);
+    }
+  };
+
   return (
     <>
       <div className={`automation-run-item${active ? ' active' : ''}${expanded ? ' is-expanded' : ''}`} data-testid="project-workflow-run-row" data-run-status={runState}>
         <div className="automation-run-title-row">
-          <button type="button" className="automation-run-main" aria-label={`${run.workflowName}, ${statusLabel}, ${completed} of ${run.stages.length} steps complete`} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
-            <span className={`automation-state-mark ${statusTone}`} data-testid="automation-run-status" aria-label={statusLabel} title={statusLabel} />
-            <span className="automation-run-title" title={run.explanation}>{run.workflowName}</span>
-            <span className="automation-run-inline-meta" title={selectedStageMeta}>{selectedStageMeta}</span>
-          </button>
+          {editing ? (
+            <input
+              className="session-title-input automation-run-title-input"
+              data-testid="automation-run-title-input"
+              aria-label={`Automation name for ${run.workflowName}`}
+              value={draft}
+              autoFocus
+              onChange={event => setDraft(event.target.value)}
+              onBlur={() => void rename()}
+              onKeyDown={event => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+                else if (event.key === 'Escape') {
+                  cancelRenameRef.current = true;
+                  setEditing(false);
+                }
+              }}
+            />
+          ) : (
+            <button type="button" className="automation-run-main" data-testid="automation-run-open" aria-label={`Open ${run.workflowName}, ${statusLabel}, ${completed} of ${run.stages.length} steps complete`} title="Open full run" onClick={() => { setExpanded(true); onSelectWorkflowRun(project, run.runId); }}>
+              <span className={`automation-state-mark ${statusTone}`} data-testid="automation-run-status" aria-label={statusLabel} title={statusLabel} />
+              <span className="automation-run-title" title={run.explanation}>{run.workflowName}</span>
+              <span className="automation-run-inline-meta" title={selectedStageMeta}>{selectedStageMeta}</span>
+            </button>
+          )}
+          <button type="button" className="icon-btn icon-btn-sm automation-run-expand" aria-label={`${expanded ? 'Hide' : 'Show'} details for ${run.workflowName}`} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}><Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={12} /></button>
           <span className="automation-run-progress-count" aria-label={`${completed} of ${run.stages.length} steps complete`}>{completed}/{run.stages.length}</span>
-          <div className="automation-run-menu-wrap" ref={menuRef}>
-            <button type="button" className="icon-btn icon-btn-sm automation-run-menu-trigger" aria-label={`Actions for ${run.workflowName}`} aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><Icon name="ellipsis" size={13} /></button>
-            {menuOpen && <div className="automation-run-menu" role="menu">
-              {live && <button type="button" role="menuitem" data-testid={`project-run-cancel-${run.runId}`} onClick={() => { setMenuOpen(false); void onCancelWorkflowRun(run.runId); }}><Icon name="close" size={12} />Cancel run</button>}
-              {!live && onArchiveWorkflowRun && <button type="button" role="menuitem" data-testid={`project-run-archive-${run.runId}`} onClick={() => { setMenuOpen(false); void onArchiveWorkflowRun(run.runId, true); }}><Icon name="archive" size={12} />Archive</button>}
-              <button type="button" role="menuitem" className="is-danger" data-testid={`project-run-delete-${run.runId}`} onClick={() => { setMenuOpen(false); onDeleteWorkflowRun(project, run); }}><Icon name="trash" size={12} />Delete</button>
-            </div>}
-          </div>
+          {!editing && <span className="automation-run-actions session-nav-actions">
+            <button type="button" className="icon-btn icon-btn-sm" aria-label={`Rename automation ${run.workflowName}`} title="Rename automation" data-testid={`project-run-rename-${run.runId}`} disabled={renaming} onClick={() => { cancelRenameRef.current = false; setDraft(run.workflowName); setRenameError(undefined); setEditing(true); }}><Icon name="pencil" size={12} /></button>
+            {live ? (
+              <button type="button" className="icon-btn icon-btn-sm" aria-label={`Cancel automation ${run.workflowName}`} title="Cancel run" data-testid={`project-run-cancel-${run.runId}`} onClick={() => void onCancelWorkflowRun(run.runId)}><Icon name="close" size={12} /></button>
+            ) : onArchiveWorkflowRun && (
+              <button type="button" className="icon-btn icon-btn-sm" aria-label={`Archive automation ${run.workflowName}`} title="Archive automation" data-testid={`project-run-archive-${run.runId}`} onClick={() => void onArchiveWorkflowRun(run.runId, true)}><Icon name="archive" size={12} /></button>
+            )}
+            <button type="button" className="icon-btn icon-btn-sm" aria-label={`Delete automation ${run.workflowName}`} title="Delete automation" data-testid={`project-run-delete-${run.runId}`} onClick={() => onDeleteWorkflowRun(project, run)}><Icon name="trash" size={12} /></button>
+          </span>}
         </div>
+        {renameError && <span className="automation-run-error" role="alert">{renameError}</span>}
         <div className={`automation-run-expansion${expanded ? ' is-open' : ''}`}>
           <div className="automation-run-expansion-inner">
             <div className="automation-progress-rail" data-testid="automation-timeline" aria-label={`${run.workflowName} workflow steps`}>
@@ -656,6 +704,8 @@ export function Sidebar({
   onRenameSession,
   onDeleteSession,
   onArchiveSession,
+  onAssignConversation,
+  assignableProjects = [],
   featureCounts,
   onNewSession,
   onNewConversation,
@@ -868,6 +918,14 @@ export function Sidebar({
                 ? <button className="sidebar-empty-project" onClick={onNewProject}>+ New Project</button>
                 : projectEntries.map(({ project, defaultBoard, linkedBoards }) => {
                     const projectCollapsed = collapsed[`project:${project.id}`] ?? false;
+                    const handleProjectDrop = (event: ReactDragEvent<HTMLElement>) => {
+                      const issueKey = event.dataTransfer.getData('application/x-praxis-conversation');
+                      if (!issueKey) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void onAssignConversation(issueKey, project.id);
+                      event.currentTarget.classList.remove('session-drop-target');
+                    };
                     const childCount = (defaultBoard ? 1 : 0) + linkedBoards.length;
                     const projectBoardsCollapsed = collapsed[`project:${project.id}:boards`] ?? false;
                     const projectWorkflowsCollapsed = collapsed[`project:${project.id}:workflows`] ?? false;
@@ -883,14 +941,15 @@ export function Sidebar({
                     const projectItemKeys = new Set(project.workItems?.map(item => item.key) ?? []);
                     const projectSessions = sessions.filter(
                       session =>
-                        !isConversationSession(session) &&
+                        (!isConversationSession(session) || session.projectId === project.id) &&
                         !isWorkflowStageSession(session) &&
                         (session.projectId === project.id ||
+                          Boolean(session.linkedIssueKey && projectItemKeys.has(session.linkedIssueKey)) ||
                           projectItemKeys.has(session.issueKey) ||
                           Boolean(project.workspaceFolder && session.workingDirectory === project.workspaceFolder))
                     );
-                    const generalSessions = projectSessions.filter(session => isSynthesizedKey(session.issueKey) && !isTicketReviewKey(session.issueKey));
-                    const ticketSessions = projectSessions.filter(session => !isSynthesizedKey(session.issueKey) || isTicketReviewKey(session.issueKey));
+                    const generalSessions = projectSessions.filter(session => !session.linkedIssueKey && isSynthesizedKey(session.issueKey) && !isTicketReviewKey(session.issueKey));
+                    const ticketSessions = projectSessions.filter(session => Boolean(session.linkedIssueKey) || !isSynthesizedKey(session.issueKey) || isTicketReviewKey(session.issueKey));
                     const generalSessionsCollapsed = collapsed[`project:${project.id}:general-sessions`] ?? false;
                     const ticketSessionsCollapsed = collapsed[`project:${project.id}:ticket-sessions`] ?? false;
                     const renderProjectSessions = (items: AgentSessionRecord[], kind: 'general' | 'ticket') => items.map(session => (
@@ -906,7 +965,7 @@ export function Sidebar({
                       />
                     ));
                     return <div className="project-tree" key={project.id} data-testid="project-tree">
-                      <div className={`project-tree-parent${selectedProjectId === project.id ? ' active' : ''}`}>
+                      <div className={`project-tree-parent${selectedProjectId === project.id ? ' active' : ''}`} onDragOver={event => { if (event.dataTransfer.types.includes('application/x-praxis-conversation')) { event.preventDefault(); event.currentTarget.classList.add('session-drop-target'); } }} onDragLeave={event => event.currentTarget.classList.remove('session-drop-target')} onDrop={handleProjectDrop}>
                         <button
                           className="project-tree-toggle"
                           aria-label={`${projectCollapsed ? 'Expand' : 'Collapse'} ${project.name}`}
@@ -1058,6 +1117,7 @@ export function Sidebar({
                             })}
                           </div>}
                         </>}
+                        <div className="project-sidebar-section">
                         <div className="feature-section-header feature-section-toggle project-sessions-header">
                           <button
                             type="button"
@@ -1096,6 +1156,7 @@ export function Sidebar({
                           </div>
                         </div>
                         {!projectSessionsCollapsed && <>
+                          <div className="project-session-category">
                           <div className="feature-section-header feature-section-toggle project-session-category-header">
                             <button
                               type="button"
@@ -1121,6 +1182,8 @@ export function Sidebar({
                               <button type="button" className="project-session-empty-action" aria-label={`New general session in ${project.name}`} title="New general session" onClick={() => onNewSession(project)}><Icon name="plus" size={12} /></button>
                             </div>
                           ))}
+                          </div>
+                          <div className="project-session-category">
                           <div className="feature-section-header feature-section-toggle project-session-category-header">
                             <button
                               type="button"
@@ -1146,7 +1209,10 @@ export function Sidebar({
                               <button type="button" className="project-session-empty-action" aria-label={`New ticket session in ${project.name}`} title="New ticket session" onClick={() => onNewSession(project)}><Icon name="plus" size={12} /></button>
                             </div>
                           ))}
+                          </div>
                         </>}
+                        </div>
+                        <div className="project-sidebar-section">
                         <div className="feature-section-header feature-section-toggle project-workflows-header">
                           <button
                             type="button"
@@ -1225,6 +1291,8 @@ export function Sidebar({
                             onClick={() => onSelectWorkflowPolicies(project)}
                           ><span className="tree-icon"><Icon name="shield" size={14} /></span><span className="tree-label">Policies</span></button>
                         </>}
+                        </div>
+                        <div className="project-sidebar-section">
                         <div className="feature-section-header feature-section-toggle project-automations-header">
                           <button
                             type="button"
@@ -1277,6 +1345,7 @@ export function Sidebar({
                         {!projectRunsCollapsed && activeProjectRuns.length === 0 && (
                           <span className="sidebar-empty-hint project-runs-empty">No automations yet</span>
                         )}
+                        </div>
                       </div>}
                     </div>;
                   }))}
@@ -1400,6 +1469,8 @@ export function Sidebar({
                 onRenameSession={onRenameSession}
                 onDeleteSession={onDeleteSession}
                 onArchiveSession={onArchiveSession}
+                onAssignConversation={onAssignConversation}
+                assignableProjects={assignableProjects}
               />
             ) : (
               <button
@@ -1445,7 +1516,9 @@ function SessionsNav({
   onNewSession,
   onRenameSession,
   onDeleteSession,
-  onArchiveSession
+  onArchiveSession,
+  onAssignConversation,
+  assignableProjects = []
 }: {
   testId?: string;
   /** Workflow run id → its workflow's name, for the header over a run's stage sessions. */
@@ -1464,11 +1537,47 @@ function SessionsNav({
   onRenameSession: (issueKey: string, title: string) => Promise<void>;
   onDeleteSession: (issueKey: string) => Promise<void>;
   onArchiveSession: (issueKey: string, archived: boolean) => Promise<void>;
+  onAssignConversation: (issueKey: string, projectId: string, ticketKey?: string) => Promise<void>;
+  assignableProjects?: ProjectRecord[];
 }) {
   const [editingKey, setEditingKey] = useState<string>();
   const [draft, setDraft] = useState('');
   const [mutatingKey, setMutatingKey] = useState<string>();
   const [error, setError] = useState<string>();
+  const [assignSession, setAssignSession] = useState<AgentSessionRecord>();
+  const [assignProjectId, setAssignProjectId] = useState('');
+  const [assignTicketKey, setAssignTicketKey] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [assignProjectTickets, setAssignProjectTickets] = useState<IssueSummary[]>([]);
+  const [assignTicketsLoading, setAssignTicketsLoading] = useState(false);
+
+  /**
+   * A project's tickets live wherever its storage does — `project.workItems`
+   * only for `storage: 'app'`; for `storage: 'folder'` it's always empty and
+   * the real tickets are served by `FolderService` through the project's own
+   * `project:<id>` connection. Fetch through `issue.list` so both storages
+   * populate the Ticket field.
+   */
+  useEffect(() => {
+    if (!assignProjectId) {
+      setAssignProjectTickets([]);
+      return;
+    }
+    let cancelled = false;
+    setAssignTicketsLoading(true);
+    void window.praxis.issue
+      .list(
+        { projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' },
+        0,
+        200,
+        `project:${assignProjectId}`
+      )
+      .then(page => { if (!cancelled) setAssignProjectTickets(page.issues ?? []); })
+      .catch(() => { if (!cancelled) setAssignProjectTickets([]); })
+      .finally(() => { if (!cancelled) setAssignTicketsLoading(false); });
+    return () => { cancelled = true; };
+  }, [assignProjectId]);
+  const [sessionMenuKey, setSessionMenuKey] = useState<string>();
   const { confirmChoice } = useDialogs();
 
   /** Every session nested beneath `session`, deepest last. */
@@ -1527,8 +1636,8 @@ function SessionsNav({
         descendants.length > 0
           ? `It also deletes the ${descendants.length} session${descendants.length === 1 ? '' : 's'} nested beneath it. This can’t be undone.`
           : 'This can’t be undone.',
-      confirmLabel: descendants.length > 0 ? 'Delete sessions' : 'Delete session',
-      tertiaryLabel: 'Archive instead',
+      confirmLabel: 'Delete',
+      tertiaryLabel: 'Archive',
       danger: true
     });
     if (choice === 'cancel') return;
@@ -1573,8 +1682,8 @@ function SessionsNav({
     const choice = await confirmChoice({
       title: 'Delete this run\u2019s sessions?',
       message: `It deletes all ${all.length} session${all.length === 1 ? '' : 's'} of \u201c${label}\u201d${live > 0 ? `, ${live} of them still working` : ''}. The run itself stays under Workflows \u2192 Runs.`,
-      confirmLabel: 'Delete sessions',
-      tertiaryLabel: 'Archive instead',
+      confirmLabel: 'Delete',
+      tertiaryLabel: 'Archive',
       danger: true
     });
     if (choice === 'cancel') return;
@@ -1645,13 +1754,18 @@ function SessionsNav({
       const childrenCollapsed = collapsedParents[session.issueKey] ?? false;
       const liveChildCount = kids.filter(child => !isTerminalAgentState(child.state)).length;
       const mutating = mutatingKey === session.issueKey;
-      const title = sessionTitle(session);
+      const sessionName = sessionTitle(session);
+      const title = isConversationSession(session) && sessionName === 'New session' ? 'New chat' : sessionName;
+      const draggable = isConversationSession(session);
       return (
         <Fragment key={session.issueKey}>
         <div
           className={`tree-row session-nav-row${depth > 0 ? ' session-nav-row--child' : ''}${active && activeSessionKey === session.issueKey ? ' active' : ''}`}
           data-parent-session={session.parentSessionKey || undefined}
           data-testid="session-list-row"
+          draggable={draggable}
+          onDragStart={event => { if (!draggable) return; event.dataTransfer.setData('application/x-praxis-conversation', session.issueKey); event.dataTransfer.effectAllowed = 'move'; }}
+          onDragEnd={() => { document.querySelectorAll('.session-drop-target').forEach(element => element.classList.remove('session-drop-target')); }}
           role="button"
           tabIndex={0}
           onClick={() => !editing && onSelectSession(session.issueKey)}
@@ -1692,7 +1806,7 @@ function SessionsNav({
             />
           ) : (
             <span className="tree-label" title={title} data-testid="session-title">
-              {title}
+              {session.linkedIssueKey ? <><span className="session-item-key">{session.linkedIssueKey}</span> {title}</> : title}
             </span>
           )}
           {kids.length > 0 && (
@@ -1713,7 +1827,7 @@ function SessionsNav({
             <>
               <span
                 className={agentStateLaneClass(session.state)}
-                title={agentStateLabel(session.state)}
+                aria-hidden="true"
                 data-testid="session-nav-state"
               >
                 ●
@@ -1724,6 +1838,31 @@ function SessionsNav({
                 </span>
               )}
               <span className="session-nav-actions">
+                {isConversationSession(session) && <>
+                <button
+                  className="icon-btn icon-btn-sm"
+                  aria-label={`More actions for ${title}`}
+                  title="More actions"
+                  aria-haspopup="menu"
+                  aria-expanded={sessionMenuKey === session.issueKey}
+                  data-testid="session-actions-menu"
+                  disabled={mutating}
+                  onClick={event => {
+                    event.stopPropagation();
+                    setSessionMenuKey(current => current === session.issueKey ? undefined : session.issueKey);
+                  }}
+                ><Icon name="ellipsis" size={12} /></button>
+                {sessionMenuKey === session.issueKey && <div className="session-row-menu" role="menu" data-testid="session-actions-menu-popover">
+                  <button type="button" role="menuitem" data-testid="session-assign-project-menu-item" onClick={event => {
+                    event.stopPropagation();
+                    setSessionMenuKey(undefined);
+                    setAssignProjectId(assignableProjects[0]?.id ?? '');
+                    setAssignTicketKey('');
+                    setError(undefined);
+                    setAssignSession(session);
+                  }}><Icon name="folder" size={13} />Assign to project</button>
+                </div>}
+                </>}
                 <button
                   className="icon-btn icon-btn-sm"
                   aria-label={`Rename session ${title}`}
@@ -1800,8 +1939,8 @@ function SessionsNav({
         </button>
         <button
           className="sidebar-section-add"
-          aria-label={`New ${label.toLowerCase().slice(0, -1)}`}
-          data-testid={testId === 'nav-conversations' ? 'conversations-new-btn' : 'sessions-new-btn'}
+          aria-label="New chat"
+          data-testid="conversations-new-btn"
           onClick={() => onNewSession()}
         >
           <Icon name="plus" size={13} />
@@ -1813,6 +1952,51 @@ function SessionsNav({
       {!collapsed && sessions.length === 0 && (
         <span className="sidebar-empty-hint" data-testid="sessions-nav-empty">No AI sessions yet</span>
       )}
+      {assignSession && <div className="modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !assigning) setAssignSession(undefined); }}>
+        <section className="modal-card session-assign-dialog" role="dialog" aria-modal="true" aria-labelledby="assign-chat-title" data-testid="assign-chat-dialog">
+          <header className="modal-header session-assign-header">
+            <div className="session-assign-heading">
+              <h3 id="assign-chat-title">Assign chat to a project</h3>
+              <p className="session-assign-description">Choose where “{sessionTitle(assignSession)}” belongs.</p>
+            </div>
+            <button type="button" className="icon-btn icon-btn-sm" aria-label="Close assignment dialog" title="Close" onClick={() => { if (!assigning) setAssignSession(undefined); }} disabled={assigning}>
+              <Icon name="close" size={13} />
+            </button>
+          </header>
+          <div className="modal-body session-assign-body">
+            <div className="session-assign-field">
+              <span className="session-assign-field-label">Project</span>
+              <ChipSelect value={assignProjectId} options={assignableProjects.map(project => ({ value: project.id, label: project.name, icon: 'folder' as const }))}
+                onChange={value => { setAssignProjectId(value); setAssignTicketKey(''); }} ariaLabel="Project" placeholder="Select a project" icon="folder" block data-testid="assign-chat-project-select" />
+            </div>
+            <div className="session-assign-field">
+              <span className="session-assign-field-label">Ticket <span>(optional)</span></span>
+              <ChipSelect value={assignTicketKey} options={[
+                { value: '', label: 'General', icon: 'chats' },
+                // A files-only project (`planningMode: 'files'`) has no board connection to
+                // query, so `issue.list` comes back empty there — fall back to the project
+                // record's own `workItems` (its only source of tickets in that mode).
+                ...(assignProjectTickets.length > 0
+                  ? assignProjectTickets
+                  : assignableProjects.find(project => project.id === assignProjectId)?.workItems ?? []
+                ).map(item => ({ value: item.key, label: `${item.key} · ${item.summary}`, icon: 'ticket' as const }))
+              ]} onChange={setAssignTicketKey} ariaLabel="Ticket (optional)" placeholder={assignTicketsLoading ? 'Loading tickets…' : 'General'} icon="ticket" block disabled={!assignProjectId || assignTicketsLoading} data-testid="assign-chat-ticket-select" />
+            </div>
+          </div>
+          {error && <div className="error-banner">{error}</div>}
+          <footer className="modal-footer session-assign-footer">
+            <button type="button" className="btn" onClick={() => setAssignSession(undefined)} disabled={assigning}>Cancel</button>
+            <button type="button" className="btn btn-primary" disabled={!assignProjectId || assigning} data-testid="assign-chat-confirm" onClick={() => {
+              setAssigning(true);
+              setError(undefined);
+              void onAssignConversation(assignSession.issueKey, assignProjectId, assignTicketKey || undefined)
+                .then(() => setAssignSession(undefined))
+                .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
+                .finally(() => setAssigning(false));
+            }}>{assigning ? 'Assigning…' : 'Assign chat'}</button>
+          </footer>
+        </section>
+      </div>}
       {!collapsed &&
         rootItems.map(item => {
           if (item.kind === 'session') return renderNode(item.session, 0);

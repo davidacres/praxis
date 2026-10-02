@@ -73,10 +73,11 @@ async function sessionWithReply(
   await win.evaluate(async () => {
     await window.praxis.ai.delegate({
       provider: 'vercel-gateway',
+      permissionMode: 'auto',
       task: { goal: 'Demonstrate interactive chat gadgets.' }
     });
   });
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="nav-conversations"]').click();
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   return win;
 }
@@ -391,7 +392,7 @@ test('answering a choice records it through the ledger and leaves it answered', 
   // selected session restores the completed choice without triggering another
   // provider request.
   await win.reload();
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="nav-conversations"]').click();
   await expect(win.locator('[data-testid="gadget-choice"]')).toHaveAttribute('data-gadget-state', 'completed');
   await expect(win.locator('[data-testid="gadget-choice"]')).toContainText('This decision has been made');
   expect(mock!.requests).toHaveLength(2);

@@ -60,6 +60,19 @@ export async function startMockGatewayServer(options: {
   usage?: { prompt_tokens: number; completion_tokens: number };
   /** Optional first-turn tool call; the following request receives `reply`. */
   toolCall?: { name: string; arguments: Record<string, unknown> };
+  /**
+   * Explicit per-request round trips, taking precedence over `toolCall`/
+   * `toolCalls`/`reply`. Each entry answers one request: `content` is the
+   * assistant text for that round trip (so a test can reproduce an agent that
+   * narrates between tool calls — the shape that produces one message event
+   * per round trip), and `toolCalls` makes the loop continue. A request with
+   * neither terminates the turn with `reply`. Opt-in, so existing callers are
+   * unaffected.
+   */
+  roundTrips?: Array<{
+    content?: string;
+    toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+  }>;
   /** Optional first-turn tool calls; useful for exercising a long activity history. */
   toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
   /** Delay completion so a test can interact with an in-flight session. */
@@ -97,8 +110,13 @@ export async function startMockGatewayServer(options: {
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive'
         });
-        const toolCalls = options.toolCalls ?? (options.toolCall ? [options.toolCall] : []);
-        const shouldCallTool = toolCalls.length > 0 && requests.length === 1;
+        const roundTrips = options.roundTrips;
+        const roundTrip = roundTrips?.[requests.length - 1];
+        const toolCalls = roundTrip
+          ? roundTrip.toolCalls ?? []
+          : options.toolCalls ?? (options.toolCall ? [options.toolCall] : []);
+        const shouldCallTool = toolCalls.length > 0 && (roundTrips ? roundTrip !== undefined : requests.length === 1);
+        const roundTripContent = roundTrip ? roundTrip.content : undefined;
         res.write(sseChunk({
           id: 'chatcmpl-mock',
           object: 'chat.completion.chunk',
@@ -107,6 +125,11 @@ export async function startMockGatewayServer(options: {
             delta: shouldCallTool
               ? {
                   role: 'assistant',
+                  // A round trip that both talks and calls a tool sends
+                  // `content` alongside `tool_calls` — how a real provider
+                  // narrates before acting, and what makes each round trip
+                  // surface as its own message event.
+                  ...(roundTripContent !== undefined ? { content: roundTripContent } : {}),
                   tool_calls: toolCalls.map((toolCall, index) => ({
                     index,
                     id: `call_mock_${index + 1}`,
@@ -117,7 +140,21 @@ export async function startMockGatewayServer(options: {
                     }
                   }))
                 }
-              : { role: 'assistant', content: options.replyFor?.(body) ?? reply },
+              : {
+                  role: 'assistant',
+                  // A round trip that both talks and calls a tool has to send
+                  // `content` alongside `tool_calls` — that is how a real
+                  // provider narrates before acting, and it is what makes each
+                  // round trip surface as its own message event.
+                  ...(roundTripContent !== undefined
+                    ? { content: roundTripContent, tool_calls: toolCalls.map((tc, index) => ({
+                        index,
+                        id: `call_rt_${index + 1}`,
+                        type: 'function',
+                        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
+                      })) }
+                    : { content: options.replyFor?.(body) ?? reply })
+                },
             finish_reason: null
           }]
         }));

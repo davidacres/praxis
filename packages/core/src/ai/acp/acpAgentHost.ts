@@ -59,7 +59,7 @@ export interface AcpAgentStartOptions {
    * HTTP MCP servers to expose to the agent for this session (e.g. the in-app
    * browser). Applied only when the agent advertises `mcpCapabilities.http`.
    */
-  mcpServers?: AcpHttpMcpServer[];
+  mcpServers?: AcpMcpServer[];
   /** A host-scheduled AI-to-AI turn; do not persist its routing instruction as a user turn. */
   internalConversationTurn?: boolean;
   /** Host-supplied participant and handover context for an AI-to-AI or directed turn. */
@@ -73,6 +73,16 @@ export interface AcpHttpMcpServer {
   url: string;
   headers?: Record<string, string>;
 }
+
+/** A local MCP server the agent launches itself (the transport every ACP agent supports). */
+export interface AcpStdioMcpServer {
+  name: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+export type AcpMcpServer = AcpHttpMcpServer | AcpStdioMcpServer;
 
 export interface AcpPromptOptions extends AcpAgentStartOptions {
   signal?: AbortSignal;
@@ -89,8 +99,19 @@ interface ActiveAcpTask {
   allowPermissionsForTask: boolean;
   autoAllowSafePermissions: boolean;
   messageBuffer: string;
+  /** The turn's thought chunks, attached to its message so the chat can show them. */
+  reasoningBuffer: string;
   promptPromise?: Promise<void>;
   ending?: boolean;
+}
+
+/** The turn's reply, with any thought the agent streamed before it. */
+function assistantMessageEvent(task: ActiveAcpTask) {
+  const reasoning = task.reasoningBuffer.trim();
+  return {
+    ...evt('message', 'Assistant', task.messageBuffer),
+    ...(reasoning ? { reasoning } : {})
+  };
 }
 
 /** How long a `session/cancel` notification is given before we stop waiting. */
@@ -469,7 +490,12 @@ export class AcpAgentHost {
       case 'agent_thought_chunk': {
         const text = update.content.type === 'text' ? update.content.text : '';
         if (text) {
-          this.sessionManager.updateAgentOutput(issueKey, { reasoningText: text }, { persist: false });
+          task.reasoningBuffer += text;
+          this.sessionManager.updateAgentOutput(
+            issueKey,
+            { reasoningText: task.reasoningBuffer },
+            { persist: false }
+          );
         }
         break;
       }
@@ -602,7 +628,8 @@ export class AcpAgentHost {
       pendingPermissions: [],
       allowPermissionsForTask: options.autoApprovePermissions === true,
       autoAllowSafePermissions: options.permissionMode === 'auto',
-      messageBuffer: ''
+      messageBuffer: '',
+      reasoningBuffer: ''
     };
     this.activeTasks.set(issue.key, task);
     this.emitActiveTaskChange(issue.key);
@@ -671,7 +698,7 @@ export class AcpAgentHost {
       // `buildConversationTranscript` — which reads `message` events — left the
       // agent's own first answer out of the next turn's prompt.
       if (active.messageBuffer) {
-        this.appendEvent(issue.key, evt('message', 'Assistant', active.messageBuffer));
+        this.appendEvent(issue.key, assistantMessageEvent(active));
       }
       const isLimitInBuffer = isLimitNoticeReply(active.messageBuffer);
       if (isLimitInBuffer) {
@@ -819,7 +846,8 @@ export class AcpAgentHost {
       // A follow-up turn keeps the mode the session was started in.
       allowPermissionsForTask: record.autoApprovePermissions === true,
       autoAllowSafePermissions: record.permissionMode === 'auto',
-      messageBuffer: ''
+      messageBuffer: '',
+      reasoningBuffer: ''
     };
     this.activeTasks.set(issueKey, task);
     this.emitActiveTaskChange(issueKey);
@@ -848,7 +876,7 @@ export class AcpAgentHost {
       const active = this.activeTasks.get(issueKey);
       if (!active || active.ending) return;
       this.sessionManager.updateAgentOutput(issueKey, { responseText: active.messageBuffer });
-      if (active.messageBuffer) this.appendEvent(issueKey, evt('message', 'Assistant', active.messageBuffer));
+      if (active.messageBuffer) this.appendEvent(issueKey, assistantMessageEvent(active));
       const isLimitInBuffer = isLimitNoticeReply(active.messageBuffer);
       if (isLimitInBuffer) {
         const limitNotice = extractProviderLimitMessage(active.messageBuffer);

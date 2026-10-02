@@ -863,6 +863,18 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
     return run ? summarize(run) : undefined;
   });
 
+  ipcMain.handle('workflows:renameRun', async (_event, runId: string, name: string): Promise<WorkflowRunSummary> => {
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    if (!trimmed) throw new Error('Automation name cannot be empty.');
+    if (trimmed.length > 120) throw new Error('Automation name must be 120 characters or fewer.');
+    const run = runStore().get(runId);
+    if (!run) throw new Error(`Run ${runId} was not found.`);
+    return withRun(runId, current => ({
+      ...current,
+      displayName: trimmed === current.definition.name ? undefined : trimmed
+    }));
+  });
+
   ipcMain.handle(
     'workflows:advanceStage',
     async (

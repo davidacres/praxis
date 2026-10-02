@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { app, ipcMain, type BrowserWindow } from 'electron';
 import type { LogSink, UpdateStatus } from '@praxis/core';
+import { safeSend } from './windowBroadcast';
 
 /**
  * Automatic updates from the GitHub Releases feed.
@@ -230,7 +231,7 @@ export function registerAutoUpdate(windows: () => BrowserWindow[], logger: LogSi
     loadUpdater: loadElectronUpdater,
     publish: status => {
       for (const win of windows()) {
-        if (!win.isDestroyed()) win.webContents.send('update:status', status);
+        safeSend(win, 'update:status', status);
       }
     },
     log: line => logger.appendLine(line)

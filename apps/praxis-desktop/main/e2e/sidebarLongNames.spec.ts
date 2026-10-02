@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -109,16 +110,16 @@ test('long workflow, run and session names leave their action buttons reachable 
   expect(scroller.scrollW, 'the sidebar does not scroll sideways').toBeLessThanOrEqual(scroller.clientW);
 
   // The panes: the run panel, the runs browser, and the session browser tab.
-  await runRow.locator('.board-tree-main').click();
+  await runRow.getByTestId('automation-run-open').click();
   const runPanel = page.getByTestId('wf-run-panel');
   await expect(runPanel).toBeVisible();
   await expectButtonsInside(runPanel, 'run panel');
-  await page.getByTestId('project-sessions-nav-item').click();
+  await page.getByTestId('project-workflow-runs-nav-item').click();
   const card = page.locator('.wf-run-card').first();
   await expect(card).toBeVisible();
   await expectButtonsInside(card, 'runs browser row');
 
-  await page.getByTestId('nav-sessions').click();
+  await openSession(page);
   await sessionRow.click();
   await page.getByRole('tablist', { name: 'Session detail' }).getByRole('tab', { name: 'Sessions' }).click();
   await expectButtonsInside(page.getByTestId('session-browser-row').first(), 'session browser row');

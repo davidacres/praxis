@@ -55,6 +55,8 @@ export interface TitleBarProps {
   settingsOpen: boolean;
   onOpenSettings: () => void;
   onOpenAiSettings: () => void;
+  /** First-run AI setup is pending: every control but the window's own caption buttons is inert. */
+  locked?: boolean;
 }
 
 /**
@@ -99,8 +101,16 @@ export function TitleBar({
   onOpenWhatsNew,
   settingsOpen,
   onOpenSettings,
-  onOpenAiSettings
+  onOpenAiSettings,
+  locked = false
 }: TitleBarProps) {
+  const headerRef = useRef<HTMLElement>(null);
+  // `inert` removes the controls from pointer, keyboard and the accessibility tree in one go.
+  useEffect(() => {
+    const targets = Array.from(headerRef.current?.querySelectorAll<HTMLElement>('.titlebar-group > :not(.caption-controls)') ?? []);
+    for (const element of targets) element.inert = locked;
+    return () => { for (const element of targets) element.inert = false; };
+  }, [locked]);
   const isFocusMode = explicitFocusMode ?? (!sidebarVisible && !auxVisible && !panelVisible);
   const [maximized, setMaximized] = useState(false);
   const [zoomFactor, setZoomFactor] = useState(1);
@@ -228,7 +238,7 @@ export function TitleBar({
   };
 
   return (
-    <header className={`titlebar${isMac ? ' titlebar-mac' : ''}`}>
+    <header ref={headerRef} className={`titlebar${isMac ? ' titlebar-mac' : ''}${locked ? ' titlebar-locked' : ''}`} data-locked={locked || undefined}>
       <div className="titlebar-group titlebar-header-group">
         <div className="workspace-switcher" ref={workspaceMenuRef}>
           <button

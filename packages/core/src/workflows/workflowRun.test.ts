@@ -542,6 +542,12 @@ test('a run survives a JSON round-trip with its history intact', () => {
   assert.ok((restored?.events.length ?? 0) > 0);
 });
 
+test('a custom automation name survives normalization and JSON round-trip', () => {
+  const source = { ...newRun(), displayName: 'Nightly verification' };
+  const restored = normalizeWorkflowRun(JSON.parse(JSON.stringify(source)));
+  assert.equal(restored?.displayName, 'Nightly verification');
+});
+
 test('a run preserves aiProvider and aiModel across normalize round-trip', () => {
   const run = createWorkflowRun({
     runId: 'r-custom-ai',

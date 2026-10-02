@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { chooseOption } from './chipSelect';
@@ -18,6 +19,57 @@ const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'ticketReviewAcpAgent.mjs'
 const UPDATED_DESCRIPTION = 'Reviewed description.\n\n- [ ] Acceptance criterion added by the review.';
 
 let app: TestApp | undefined;
+
+test('ticket reviews retain project ownership and recover older records into the project sidebar', async () => {
+  app = await launchTestApp({ ai: {
+    activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: FIXTURE_PATH } }
+  } });
+  let win = app.window;
+  const folderPath = path.join(app.userDataDir, 'review-project');
+  fs.mkdirSync(folderPath);
+  const project = await win.evaluate(async folderPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    return window.praxis.projects.create({
+      name: 'Review ownership', key: 'REVIEW', type: 'software', purpose: '', brief: {},
+      startingPoint: 'existing-folder', folderPath,
+      workflowStages: [
+        { id: 'todo', name: 'To do', category: 'todo' },
+        { id: 'done', name: 'Done', category: 'done' }
+      ],
+      starterTickets: [{ summary: 'Review this ticket', description: 'Original details.', issueType: 'Task', status: 'To do' }],
+      defaultAiToolMode: 'read-only'
+    }, workspace.id);
+  }, folderPath);
+  const review = await win.evaluate(async project => window.praxis.ai.startTicketReview({
+    issueKey: project.workItems[0].key, connectionId: `project:${project.id}`,
+    provider: 'claude-code-cli'
+  }), project);
+  expect(review.projectId).toBe(project.id);
+  expect(review.workingDirectory).toBe(folderPath);
+  await expect.poll(() => win.evaluate(async key => (await window.praxis.ai.listSessions()).find(s => s.issueKey === key)?.state, review.issueKey))
+    .toBe('completed');
+
+  // Reproduce a legacy record while the isolated app is stopped, then restart.
+  const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
+  await app.electronApp.close();
+  const sessionPath = path.join(reuse.userDataDir, 'ai-sessions.json');
+  const legacy = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
+  delete legacy['praxis.agentSessions'][review.issueKey].projectId;
+  fs.writeFileSync(sessionPath, JSON.stringify(legacy));
+  app = await launchTestApp(undefined, reuse);
+  win = app.window;
+  const row = win.getByTestId('project-session-nav-item').filter({ hasText: 'Review this ticket' });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(win.getByTestId('session-console-title')).toContainText('Review');
+  const recovered = await win.evaluate(async key => (await window.praxis.ai.listSessions()).find(s => s.issueKey === key), review.issueKey);
+  expect(recovered?.projectId).toBe(project.id);
+  expect(recovered?.sessionId).toBe(review.sessionId);
+  expect(recovered?.workingDirectory).toBe(review.workingDirectory);
+  const stored = JSON.parse(fs.readFileSync(path.join(app.userDataDir, 'ai-sessions.json'), 'utf8'));
+  expect(stored['praxis.agentSessions'][review.issueKey].projectId).toBe(project.id);
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/ticket-review-project-ownership.png') });
+});
 
 test.afterEach(async () => {
   if (app) {

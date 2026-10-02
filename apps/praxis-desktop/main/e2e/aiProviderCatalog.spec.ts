@@ -151,21 +151,28 @@ test('the list shows only providers in use; Add provider lists the rest and adds
   await win.getByTestId('ai-provider-remove-openai').click();
   await expect(win.getByTestId('ai-provider-row-openai')).toHaveCount(0);
 
-  // ACP providers offer a guarded app-managed install action alongside the manual CLI path.
+  // A CLI with an explicit path override offers manual setup, not an install
+  // action that would install a different executable and leave that override intact.
   await win.getByTestId('ai-add-provider').click();
   await dialog.getByTestId('add-provider-tile-claude-code-cli').click();
-  await expect(win.getByTestId('ai-provider-install-claude-code-cli')).toBeVisible();
-  await expect(win.getByTestId('ai-provider-install-claude-code-cli')).toContainText('Install ACP');
+  await expect(win.getByTestId('ai-provider-body-claude-code-cli')).toContainText('Install the CLI, or set its path');
+  await expect(win.getByTestId('ai-provider-install-claude-code-cli')).toHaveCount(0);
 });
 
 test('ACP settings clearly show installed and latest package versions', async () => {
   providerFixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-acp-version-fixture-'));
   const fixtureCommand = path.join(providerFixtureDir, process.platform === 'win32' ? 'claude-agent-acp.exe' : 'claude-agent-acp');
-  fs.copyFileSync(process.execPath, fixtureCommand);
+  if (process.platform === 'win32') fs.copyFileSync(process.execPath, fixtureCommand);
+  else fs.writeFileSync(fixtureCommand, '#!/bin/sh\nprintf "0.0.0\\n"\n', { mode: 0o755 });
+  // Keep the fixture first when Praxis resolves the interactive login shell's
+  // PATH. A developer's real ACP may already match the registry version.
+  const fixtureShell = path.join(providerFixtureDir, 'fixture-shell');
+  fs.writeFileSync(fixtureShell, '#!/bin/sh\nprintf "__PRAXIS_PATH_START__%s__PRAXIS_PATH_END__" "$PATH"\n', { mode: 0o755 });
   app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli' } }, undefined, {
     AI_GATEWAY_API_KEY: 'gateway-e2e-key',
+    ...(process.platform === 'win32' ? {} : { SHELL: fixtureShell }),
     PATH: `${providerFixtureDir}${path.delimiter}${process.env.PATH ?? ''}`
-  });
+  }, { discoverInstalledCli: true });
   const win = app.window;
   const startupNotice = win.getByTestId('acp-update-notice');
   await expect(startupNotice).toBeVisible({ timeout: 15000 });

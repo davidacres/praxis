@@ -41,7 +41,7 @@ void main() {
     expect(statuses, ['pairing-required', 'pairing-pending', 'ready']);
 
     final info = await client.read(_read('host.info')) as Map<String, dynamic>;
-    expect(info['surfaceRevision'], 5);
+    expect(info['surfaceRevision'], 7);
     final sessions = await client.read(_read('sessions.list')) as List<dynamic>;
     expect(sessions, isNotEmpty);
     final diff = await client.read(_read('changes.get', {'sessionId': 'sess-pairing'}, {'path': 'package-lock.json'})) as Map<String, dynamic>;
