@@ -92,3 +92,36 @@ test('built-in options are unchanged except that only Vercel may send its cachin
   assert.equal(gatewayOptionsFor('z-ai', undefined, 'k').apiPath, '/api/coding/paas/v4');
   assert.equal(buildHeaders(gatewayOptionsFor('openai', undefined, 'k')).Authorization, 'Bearer k');
 });
+
+
+test('Bifrost uses virtual-key auth and unified reasoning without Vercel options', () => {
+  const preset = PROVIDER_PRESETS.find(p => p.id === 'bifrost')!;
+  assert.equal(preset.apiPath, '/openai');
+  assert.deepEqual(preset.auth, { kind: 'header', name: 'x-bf-vk' });
+  setCustomProviders([{
+    id: 'custom:bifrost', label: 'Bifrost', presetId: 'bifrost', protocol: 'openai-chat',
+    baseUrl: preset.baseUrl, apiPath: preset.apiPath, auth: preset.auth
+  }]);
+  try {
+    const opts = gatewayOptionsFor('custom:bifrost', undefined, 'sk-bf-test');
+    assert.equal(new URL(endpoint(opts, '/chat/completions')).pathname, '/openai/chat/completions');
+    assert.equal(buildHeaders(opts)['x-bf-vk'], 'sk-bf-test');
+    const adapter = resolveProviderAdapter('custom:bifrost');
+    for (const modelId of ['openai/o3', 'anthropic/claude-sonnet-4.6', 'gemini/gemini-2.5-pro', 'team-alias']) {
+      for (const reasoningEffort of ['low', 'medium', 'high'] as const) {
+        const body = adapter.buildChatRequest({ modelId, messages: [], reasoningEffort }) as Record<string, unknown>;
+        assert.deepEqual(body.reasoning, { effort: reasoningEffort });
+        assert.equal(body.model, modelId);
+        assert.equal(body.providerOptions, undefined);
+        assert.equal(body.reasoning_effort, undefined);
+      }
+    }
+    for (const reasoningEffort of [undefined, 'off'] as const) {
+      const body = adapter.buildChatRequest({ modelId: 'team-alias', messages: [], reasoningEffort }) as Record<string, unknown>;
+      assert.equal(body.reasoning, undefined);
+    }
+    assert.equal(resolveProviderAdapter('openai'), openAiCompatibleAdapter);
+  } finally {
+    setCustomProviders([]);
+  }
+});

@@ -1,4 +1,5 @@
 import { BrowserWindow, WebContentsView, session as electronSession } from 'electron';
+import { safeSend } from './windowBroadcast';
 import {
   blockedBrowserUrlReason,
   BrowserDiagnosticsRecorder,
@@ -193,8 +194,8 @@ class AiBrowserManager {
       canGoForward: wc.navigationHistory.canGoForward(),
       loading
     };
-    if (this.host && !this.host.isDestroyed()) {
-      this.host.webContents.send('browser:didNavigate', payload);
+    if (this.host) {
+      safeSend(this.host, 'browser:didNavigate', payload);
     }
   }
 

@@ -16,6 +16,7 @@ import { getSecretsStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { codexCliSnapshot } from './codexUsage';
 import { claudeCodeSnapshot } from './claudeUsage';
+import { isMiniMaxEndpoint, miniMaxUsageSnapshot } from './minimaxUsage';
 
 const USAGE_SECRET_PREFIX = 'ai-usage:';
 
@@ -109,9 +110,23 @@ export function registerProviderUsageAdapter(provider: AiProvider, adapter: Prov
   providerUsageAdapters.set(provider, adapter);
 }
 
+/**
+ * Custom endpoints have their own `AiProvider` ids, so they cannot be in the
+ * adapter map. A few catalog presets do expose a vendor usage API anyway —
+ * resolve those from the saved endpoint, which still knows which preset it was
+ * created from.
+ */
+async function customEndpointSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot | undefined> {
+  const config = getSettingsBackend().read().ai.customProviders?.find(endpoint => endpoint.id === provider);
+  if (isMiniMaxEndpoint(provider, config)) return miniMaxUsageSnapshot(config);
+  return undefined;
+}
+
 async function providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot> {
   const adapter = providerUsageAdapters.get(provider);
   if (adapter) return adapter();
+  const custom = await customEndpointSnapshot(provider);
+  if (custom) return custom;
   return { provider, fetchedAt: new Date().toISOString(), windows: [], unavailableReason: 'This provider does not expose an account usage API to Praxis yet.' };
 }
 

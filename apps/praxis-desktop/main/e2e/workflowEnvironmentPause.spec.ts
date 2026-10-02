@@ -70,7 +70,7 @@ async function launch(mode: 'unsupported' | 'vulnerable'): Promise<{ page: Page;
   }, { openNewSession: false });
   const page = app.window;
 
-  const seeded = await page.evaluate(async repoPath => {
+  const seeded = await page.evaluate(async ({ repoPath, npmPath }) => {
     const workspace = (await window.praxis.workspaces.list())[0];
     const project = await window.praxis.projects.create(
       {
@@ -91,7 +91,7 @@ async function launch(mode: 'unsupported' | 'vulnerable'): Promise<{ page: Page;
       nodes: [
         { type: 'check', id: 'prep', name: 'Prep', x: 0, y: 0, inputs: [], command: 'git', args: ['--version'], successExitCodes: [0],
           outputs: [{ id: 'prep-log', kind: 'log', required: true }] },
-        { type: 'check', id: 'security', name: 'Security scan', x: 200, y: -80, inputs: ['prep-log'], command: 'npm',
+        { type: 'check', id: 'security', name: 'Security scan', x: 200, y: -80, inputs: ['prep-log'], command: npmPath,
           args: ['audit', '--audit-level=high'], successExitCodes: [0],
           outputs: [{ id: 'security-report', kind: 'report', required: true }], satisfiesGate: 'security' },
         { type: 'check', id: 'qa', name: 'QA', x: 200, y: 80, inputs: ['prep-log'], command: 'node',
@@ -110,7 +110,7 @@ async function launch(mode: 'unsupported' | 'vulnerable'): Promise<{ page: Page;
     } as never);
     localStorage.setItem(`praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`, JSON.stringify({ projectId: project.id, feature: 'workflows' }));
     return { projectId: project.id, workflowId };
-  }, repo);
+  }, { repoPath: repo, npmPath: path.join(binDir, 'npm') });
   return { page, modeFile, ...seeded };
 }
 
@@ -129,7 +129,7 @@ test('a registry that cannot audit pauses the run instead of failing it; sibling
   const run = await page.evaluate(async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Audit me'), { projectId, workflowId });
 
   // Security could not run: paused for the environment, not failed.
-  await expect.poll(async () => (await stage(page, run.runId, 'security')).pause, { timeout: 30000 }).toBe('environment');
+  await expect.poll(async () => await stage(page, run.runId, 'security'), { timeout: 30000 }).toMatchObject({ pause: 'environment' });
   const security = await stage(page, run.runId, 'security');
   expect(security.status).toBe('running');
   expect(security.lane).toBe('paused');
@@ -152,7 +152,7 @@ test('a registry that cannot audit pauses the run instead of failing it; sibling
   await expect(row).toHaveAttribute('data-run-status', 'paused');
   const toggle = row.getByRole('button').first();
   if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
-  await row.getByTestId('automation-inline-open-run').click();
+  await row.getByTestId('automation-run-open').click();
   await expect(page.getByTestId('wf-run-limit')).toContainText('could not run in this environment');
   await expect(page.getByTestId('wf-vpipe-step-security')).toHaveAttribute('data-lane', 'paused');
   await expect(page.getByTestId('wf-vpipe-step-security')).toContainText('could not run');

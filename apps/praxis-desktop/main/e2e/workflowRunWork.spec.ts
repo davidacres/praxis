@@ -93,7 +93,6 @@ async function openDeleteDialog(page: Page, runId: string): Promise<void> {
   await page.reload();
   const row = page.getByTestId('project-workflow-run-row').first();
   await row.hover();
-  await row.getByRole('button', { name: /Actions for/ }).click();
   await page.getByTestId(`project-run-delete-${runId}`).click();
   await expect(page.getByRole('dialog', { name: 'Delete this run?' })).toBeVisible();
 }

@@ -64,6 +64,8 @@ app.onRequest(acp.AGENT_METHODS.initialize, () => ({
 
 // Captured from `session/new` — the in-app browser MCP endpoint the client passes.
 let browserMcp;
+// Every MCP server `session/new` carried, so a test can see what the client passed.
+let receivedMcpServers = [];
 
 // Fake model selector for testing `AcpClientWrapper.getModelOption`/
 // `setConfigOption` and the composer's model picker (aiCliAgentHost.spec.ts's
@@ -107,7 +109,8 @@ const availableModes = [
 ];
 
 app.onRequest(acp.AGENT_METHODS.session_new, ctx => {
-  browserMcp = (ctx.params.mcpServers ?? []).find(server => server.name === 'praxis-browser');
+  receivedMcpServers = ctx.params.mcpServers ?? [];
+  browserMcp = receivedMcpServers.find(server => server.name === 'praxis-browser');
   return {
     sessionId: 'fake-session-1',
     configOptions: [modelConfigOption(), effortConfigOption()],
@@ -156,6 +159,16 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
   const promptText = ctx.params.prompt
     .map(block => (block.type === 'text' ? block.text : ''))
     .join('');
+
+  if (promptText.includes('EMIT_THOUGHT')) {
+    // Two chunks, as a real agent streams its reasoning.
+    for (const text of ['Checking the ', 'ACP thought path.']) {
+      await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+        sessionId: ctx.params.sessionId,
+        update: { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text } }
+      });
+    }
+  }
 
   await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
     sessionId: ctx.params.sessionId,
@@ -241,6 +254,17 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
         status: wasAllowed ? 'completed' : 'failed'
       }
     });
+  }
+
+  if (promptText.includes('ECHO_MCP_SERVERS')) {
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: `MCP_SERVERS:${JSON.stringify(receivedMcpServers)}` }
+      }
+    });
+    return { stopReason: 'end_turn' };
   }
 
   if (promptText.includes('USE_BROWSER')) {

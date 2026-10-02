@@ -10,16 +10,17 @@ import type {
   HandoverBrief,
   ModelOptions,
   ReasoningEffort,
-  SessionRuntimeEpoch
+  SessionRuntimeEpoch,
+  AppSettings
 } from '@praxis/core';
 import { Icon, type IconName } from '../ui/Icon';
 import {
   allModelProviderIds,
+  applyEnabledModelCuration,
   fetchModelOptions,
   providerIconName,
   providerLabel,
   providerSupportsTools,
-  refreshModelOptions,
   REASONING_EFFORT_LEVELS
 } from './modelProviders';
 import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing } from './sessionNav';
@@ -48,16 +49,60 @@ function freshnessLabel(brief: HandoverBrief): string {
   return `Updated ${formatStarted(brief.updatedAt)}`;
 }
 
+/**
+ * A paragraph that stops at a few lines and expands on request.
+ *
+ * The brief's fields hold whole assistant replies, so left alone they stretch
+ * the Summary tab to many screens. Full text stays in the DOM (it is only
+ * clamped by CSS), so it remains selectable, searchable and testable.
+ */
+function ClampedText({ text, testId, className }: { text: string; testId: string; className?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const long = text.length > CLAMP_CHARS || text.split('\n').length > CLAMP_LINES;
+  return (
+    <>
+      <p
+        className={`${className ?? 'session-summary-text'}${long && !expanded ? ' is-clamped' : ''}`}
+        data-testid={testId}
+      >
+        {text}
+      </p>
+      {long && (
+        <button
+          type="button"
+          className="session-clamp-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(open => !open)}
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </>
+  );
+}
+
+const CLAMP_CHARS = 280;
+const CLAMP_LINES = 4;
+
 export function SessionPurposeBlock({ session }: { session: AgentSessionRecord }) {
   const purpose = purposeOf(session);
+  const goal = purpose.goal?.trim() ?? '';
+  // A session started without a title is named after its goal, so showing both
+  // prints the same words twice.
+  const title = purpose.title?.trim() || goal.split('\n')[0] || purpose.issueKey;
+  const titleRepeatsGoal = goal !== '' && (title === goal || (!purpose.title?.trim() && !goal.includes('\n')));
   return (
     <div className="agent-runtime-block session-purpose" data-testid="session-purpose">
       <span className="rail-sub">Purpose</span>
-      <strong data-testid="session-purpose-title">{purpose.title?.trim() || purpose.goal.split('\n')[0] || purpose.issueKey}</strong>
+      {!titleRepeatsGoal && <strong data-testid="session-purpose-title">{title}</strong>}
       {purpose.issueKey && !/^SESSION-/i.test(purpose.issueKey) && (
         <p className="session-summary-text" data-testid="session-purpose-key">{purpose.issueKey}</p>
       )}
-      {purpose.goal && <p className="session-summary-text" data-testid="session-purpose-goal">{purpose.goal}</p>}
+      {goal && (
+        titleRepeatsGoal
+          ? <strong data-testid="session-purpose-goal">{goal}</strong>
+          : <ClampedText text={goal} testId="session-purpose-goal" />
+      )}
       {purpose.scope && (
         <p className="session-summary-text" data-testid="session-purpose-scope">
           <span className="rail-sub">Scope</span> {purpose.scope}
@@ -141,8 +186,10 @@ export function SessionHandoverBrief({ session }: { session: AgentSessionRecord 
       {BRIEF_FIELDS.map(field => {
         const value = editing ? draft[field.key] ?? '' : brief[field.key] ?? '';
         if (!editing && !value) return null;
+        // A label would forward clicks on the text to the "Show more" button.
+        const Field = editing ? 'label' : 'div';
         return (
-          <label key={field.key} className="session-brief-field">
+          <Field key={field.key} className="session-brief-field">
             <span className="rail-sub">{field.label}</span>
             {editing ? (
               <textarea
@@ -152,9 +199,9 @@ export function SessionHandoverBrief({ session }: { session: AgentSessionRecord 
                 onChange={event => setDraft(current => ({ ...current, [field.key]: event.target.value }))}
               />
             ) : (
-              <p className="session-summary-text" data-testid={field.testId}>{value}</p>
+              <ClampedText text={value} testId={field.testId} />
             )}
-          </label>
+          </Field>
         );
       })}
       {brief.touchedFiles.length > 0 && !editing && (
@@ -248,9 +295,23 @@ function preferredModel(options: ModelOptions | undefined): string | undefined {
   return options.options[0]?.value;
 }
 
+/** A provider's curated `enabledModelIds` for one provider, or undefined when unset. */
+function curatedModelIds(settings: AppSettings | undefined, provider: AiProvider | undefined): readonly string[] | undefined {
+  return provider ? settings?.ai?.providers?.[provider]?.enabledModelIds : undefined;
+}
+
+/** Fetches one provider's catalog with Settings curation applied. */
+function fetchCuratedModels(provider: AiProvider, forceRefresh: boolean): Promise<ModelOptions | undefined> {
+  return Promise.all([fetchModelOptions(provider, forceRefresh), window.praxis.settings.get()])
+    .then(([options, settings]) => options
+      ? applyEnabledModelCuration(options, curatedModelIds(settings, provider))
+      : undefined);
+}
+
 export function SessionTransitionDialogs({ session, open, position, onClose, onAddProvider }: TransitionDialogsProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [options, setOptions] = useState<ModelOptions>();
+  const [defaultModel, setDefaultModel] = useState<string>();
   const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>();
   const [pendingProvider, setPendingProvider] = useState<AiProvider>();
   const [modelFilter, setModelFilter] = useState('');
@@ -264,6 +325,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
     setModelFilter('');
     setError(undefined);
     setOptions(undefined);
+    setDefaultModel(undefined);
     setProviderStatuses(undefined);
   }, [open, session.issueKey]);
 
@@ -271,9 +333,18 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
     if (open !== 'model' || !session.provider) return;
     let cancelled = false;
     setLoading(true);
-    void fetchModelOptions(session.provider, false)
-      .then(next => {
-        if (!cancelled) setOptions(next);
+    void Promise.all([fetchCuratedModels(session.provider, false), window.praxis.settings.get()])
+      .then(([next, settings]) => {
+        if (cancelled) return;
+        setOptions(next);
+        const configuredDefault = session.provider === 'vercel-gateway'
+          ? settings.ai.defaultModel
+          : settings.ai.providers[session.provider!]?.defaultModel;
+        const pickedDefault = configuredDefault?.trim()
+          || (next?.currentValue && next.options.some(option => option.value === next.currentValue)
+            ? next.currentValue
+            : next?.options[0]?.value);
+        setDefaultModel(pickedDefault);
       })
       .catch(cause => {
         if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
@@ -365,7 +436,19 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
     setLoading(true);
     setError(undefined);
     try {
-      setOptions(await refreshModelOptions(session.provider));
+      const [next, settings] = await Promise.all([
+        fetchCuratedModels(session.provider, true),
+        window.praxis.settings.get()
+      ]);
+      setOptions(next);
+      const configuredDefault = session.provider === 'vercel-gateway'
+        ? settings.ai.defaultModel
+        : settings.ai.providers[session.provider]?.defaultModel;
+      const pickedDefault = configuredDefault?.trim()
+        || (next?.currentValue && next.options.some(option => option.value === next.currentValue)
+          ? next.currentValue
+          : next?.options[0]?.value);
+      setDefaultModel(pickedDefault);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -412,7 +495,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
     setBusy(true);
     setError(undefined);
     try {
-      const providerModels = await fetchModelOptions(provider, false);
+      const providerModels = await fetchCuratedModels(provider, false);
       await window.praxis.ai.handoverSession(session.issueKey, {
         provider,
         model: preferredModel(providerModels),
@@ -445,7 +528,19 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
     setError(undefined);
   };
 
+  // A session can already be running on a model that curation later hid from the
+  // catalog. Pin it so the row stays visible and selectable instead of the menu
+  // appearing to have no active choice.
+  const hiddenCurrentModel = session.model
+    && !(options?.options ?? []).some(option => option.value === session.model)
+    ? session.model
+    : undefined;
+
   const filteredOptions = (options?.options ?? []).filter(option => {
+    // The pinned Default row below represents this exact catalog choice.
+    if (option.value === defaultModel) return false;
+    const normalizedName = option.name.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (defaultModel && (normalizedName === 'default' || normalizedName === 'default (recommended)')) return false;
     const query = modelFilter.trim().toLowerCase();
     return !query || option.name.toLowerCase().includes(query) || option.value.toLowerCase().includes(query);
   });
@@ -617,6 +712,42 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
           </div>
           {loading && <div className="popover-label">Loading models…</div>}
           {!loading && filteredOptions.length === 0 && <div className="popover-label">No models available</div>}
+          {!loading && defaultModel && (
+            <button
+              type="button"
+              className={`composer-provider-option${(!session.model || session.model === defaultModel) ? ' active' : ''}`}
+              data-testid="session-model-option-default"
+              role="option"
+              aria-selected={!session.model || session.model === defaultModel}
+              title="Use the provider’s default model"
+              disabled={busy}
+              onClick={() => void changeModel(defaultModel)}
+            >
+              <Icon name="sparkles" size={14} />
+              <span className="composer-model-option-name">Default</span>
+              <span className="composer-model-option-meta">
+                <span className="composer-model-badge">{options?.options.find(option => option.value === defaultModel)?.name ?? defaultModel}</span>
+              </span>
+            </button>
+          )}
+          {!loading && hiddenCurrentModel && (
+            <button
+              type="button"
+              className="composer-provider-option active"
+              data-testid="session-model-option-current"
+              role="option"
+              aria-selected
+              title="This session's current model. Not in your enabled model list."
+              disabled={busy}
+              onClick={() => void changeModel(hiddenCurrentModel)}
+            >
+              <Icon name="sparkles" size={14} />
+              <span className="composer-model-option-name">Current</span>
+              <span className="composer-model-option-meta">
+                <span className="composer-model-badge">{hiddenCurrentModel}</span>
+              </span>
+            </button>
+          )}
           {filteredOptions.map(option => {
             const contextLimit = option.contextLength ?? getKnownContextLength(option.value, session.provider);
             const contextSize = formatContextLength(contextLimit);
@@ -767,7 +898,7 @@ export function SessionConversationDialog({ session, open, position, onClose, in
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void fetchModelOptions(provider, false).then(next => {
+    void fetchCuratedModels(provider, false).then(next => {
       if (cancelled) return;
       setOptions(next);
       setModel(next?.currentValue || next?.options[0]?.value || '');
@@ -928,7 +1059,7 @@ export function SessionLimitSwitch({ session, onStop }: { session: AgentSessionR
     setError(undefined);
     try {
       if (running) await window.praxis.ai.abort(session.issueKey);
-      const models = await fetchModelOptions(selected, false);
+      const models = await fetchCuratedModels(selected, false);
       await window.praxis.ai.handoverSession(session.issueKey, {
         provider: selected,
         model: preferredModel(models),

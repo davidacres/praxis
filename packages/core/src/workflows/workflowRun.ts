@@ -162,6 +162,8 @@ export interface WorkflowRun {
   status: WorkflowRunStatus;
   /** The definition snapshot this run executes; never re-read from the store. */
   definition: WorkflowDefinition;
+  /** User-facing name for this run; absent uses the snapshotted workflow name. */
+  displayName?: string;
   nodes: Record<string, WorkflowNodeState>;
   events: WorkflowRunEvent[];
   gateDecisions: WorkflowGateDecision[];
@@ -1010,6 +1012,7 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     projectId: typeof raw.projectId === 'string' ? raw.projectId : '',
     status: isStatus(raw.status) ? raw.status : 'running',
     definition,
+    ...(typeof raw.displayName === 'string' && raw.displayName.trim() ? { displayName: raw.displayName.trim().slice(0, 120) } : {}),
     nodes,
     events: Array.isArray(raw.events) ? (raw.events as WorkflowRunEvent[]) : [],
     gateDecisions: Array.isArray(raw.gateDecisions) ? (raw.gateDecisions as WorkflowGateDecision[]) : [],

@@ -55,7 +55,10 @@ export interface AcpClientOptions {
    * Ignored unless the agent's `initialize` response advertises
    * `mcpCapabilities.http`.
    */
-  mcpServers?: Array<{ name: string; url: string; headers?: Record<string, string> }>;
+  mcpServers?: Array<
+    | { name: string; url: string; headers?: Record<string, string> }
+    | { name: string; command: string; args?: string[]; env?: Record<string, string> }
+  >;
   requestPermission: (request: AcpPermissionRequest) => Promise<PermissionDecision>;
   onSessionUpdate: (update: acp.SessionUpdate) => void;
   logSink?: LogSink;
@@ -124,6 +127,7 @@ export class AcpClientWrapper {
   private promptInFlight = false;
   private lastReplayNotificationAt = 0;
   private disposed = false;
+  private shuttingDown = false;
   constructor(private readonly options: AcpClientOptions) {}
 
   /** Spawns the agent subprocess and completes the ACP `initialize` handshake. */
@@ -150,7 +154,7 @@ export class AcpClientWrapper {
       this.options.logSink?.appendLine(`[acp:stderr] ${chunk.toString('utf8').trimEnd()}`);
     });
     const logStreamError = (streamName: string) => (err: Error) => {
-      if (this.disposed) {
+      if (this.disposed || this.shuttingDown) {
         return;
       }
       // A client can close the ACP transport while the agent is still flushing
@@ -166,17 +170,21 @@ export class AcpClientWrapper {
     child.stdout?.on('error', logStreamError('stdout'));
     child.stderr?.on('error', logStreamError('stderr'));
     child.on('error', err => {
+      if (this.disposed || this.shuttingDown) {
+        return;
+      }
       this.options.logSink?.appendLine(`[acp] subprocess error: ${err.message}`);
     });
     child.on('exit', (code, signal) => {
-      if (this.disposed) {
+      if (this.disposed || this.shuttingDown) {
         return;
       }
       // Diagnostics only: killing the child closes the ACP transport, and the
       // SDK already rejects the in-flight turn from that. Verified — a test that
       // kills the agent mid-turn passes with or without any extra signal here.
       const how = signal ? `signal ${signal}` : `code ${code}`;
-      this.options.logSink?.appendLine(`[acp] agent exited unexpectedly (${how})`);
+      const qualifier = code === 0 && !signal ? '' : ' unexpectedly';
+      this.options.logSink?.appendLine(`[acp] agent exited${qualifier} (${how})`);
     });
 
     if (!child.stdin || !child.stdout) {
@@ -285,7 +293,7 @@ export class AcpClientWrapper {
     // `session/resume` carries no `mcpServers` field, so a native resume would
     // drop the in-app browser on every follow-up turn. When we have MCP servers
     // to (re)attach, prefer `session/load`, which takes them.
-    const mcpServers = this.httpMcpServers();
+    const mcpServers = this.mcpServersForSession();
     const useLoad = capabilities.loadSession && (mcpServers.length > 0 || !capabilities.sessionCapabilities?.resume);
     try {
       if (useLoad) {
@@ -317,17 +325,31 @@ export class AcpClientWrapper {
   }
 
   /**
-   * The HTTP MCP servers to advertise on this session — only when the agent
-   * said it supports the `http` MCP transport in its `initialize` response.
+   * The MCP servers to advertise on this session. `stdio` is the one transport
+   * every ACP agent must support; `http` is only sent when the agent said it
+   * supports it in its `initialize` response.
    */
-  private httpMcpServers(): acp.McpServer[] {
-    if (!this.initializeResponse?.agentCapabilities?.mcpCapabilities?.http) return [];
-    return (this.options.mcpServers ?? []).map(server => ({
-      type: 'http' as const,
-      name: server.name,
-      url: server.url,
-      headers: Object.entries(server.headers ?? {}).map(([name, value]) => ({ name, value }))
-    }));
+  private mcpServersForSession(): acp.McpServer[] {
+    const httpSupported = this.initializeResponse?.agentCapabilities?.mcpCapabilities?.http === true;
+    const servers: acp.McpServer[] = [];
+    for (const server of this.options.mcpServers ?? []) {
+      if ('command' in server) {
+        servers.push({
+          name: server.name,
+          command: server.command,
+          args: server.args ?? [],
+          env: Object.entries(server.env ?? {}).map(([name, value]) => ({ name, value }))
+        });
+      } else if (httpSupported) {
+        servers.push({
+          type: 'http' as const,
+          name: server.name,
+          url: server.url,
+          headers: Object.entries(server.headers ?? {}).map(([name, value]) => ({ name, value }))
+        });
+      }
+    }
+    return servers;
   }
 
   /** Creates the ACP session on first call (`session/new`); returns the existing one otherwise. */
@@ -337,7 +359,7 @@ export class AcpClientWrapper {
     }
     if (!this.session) {
       let builder = this.connection.agent.buildSession(this.options.workingDirectory);
-      for (const mcpServer of this.httpMcpServers()) {
+      for (const mcpServer of this.mcpServersForSession()) {
         builder = builder.withMcpServer(mcpServer);
       }
       this.session = await builder.start();
@@ -443,7 +465,8 @@ export class AcpClientWrapper {
    * the cap is kept short rather than a full second.
    */
   public async shutdown(): Promise<void> {
-    if (this.disposed) return;
+    if (this.disposed || this.shuttingDown) return;
+    this.shuttingDown = true;
     await this.closeSession();
     const child = this.child;
     if (child && !child.killed && child.stdin && !child.stdin.destroyed) {

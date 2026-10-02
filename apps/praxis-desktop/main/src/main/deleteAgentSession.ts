@@ -1,6 +1,6 @@
-import { BrowserWindow } from 'electron';
 import { abortActiveTask, getAiSessionManager } from './aiInstance';
 import { disposeBrowserMcpForSession } from './browserMcp';
+import { broadcastToAllWindows } from './windowBroadcast';
 
 /**
  * Stops a session's active task and removes it. Shared by `ai:deleteSession`
@@ -13,9 +13,5 @@ export async function deleteAgentSession(issueKey: string): Promise<void> {
   disposeBrowserMcpForSession(issueKey);
   sessionManager.removeAgentSession(issueKey);
   sessionManager.removeSession(issueKey);
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('ai:sessionDeleted', issueKey);
-    }
-  }
+  broadcastToAllWindows('ai:sessionDeleted', issueKey);
 }

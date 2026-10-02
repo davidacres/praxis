@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -70,10 +71,7 @@ test('parent session displays subagents with status, tokens, and model across in
   ), { timeout: 20000 }).toBe('completed');
 
   // Navigate to Sessions view and select parent session
-  await win.locator('[data-testid="nav-sessions"]').click();
-  const parentRow = win.locator('[data-testid="session-list-row"]', { hasText: 'Coordinate primary feature delivery' });
-  await parentRow.waitFor({ state: 'visible', timeout: 10000 });
-  await parentRow.locator('[data-testid="session-title"]').click();
+  await openSession(win, parent.issueKey);
 
   // 3. Header bar subagents chip
   const headerChip = win.locator('[data-testid="session-header-subagents-chip"]');

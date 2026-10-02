@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain } from 'electron';
+import { broadcastToAllWindows } from './windowBroadcast';
 import {
   GitLabApiService,
   buildDeliveryTaskDefinition,
@@ -61,11 +62,7 @@ export function isAnalysisConfirmed(store: JsonKeyValueStore, issueKey: string):
 const sessionConnections = new Map<string, string | undefined>();
 
 function broadcast(channel: string, payload: unknown): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(channel, payload);
-    }
-  }
+  broadcastToAllWindows(channel, payload);
 }
 
 /**

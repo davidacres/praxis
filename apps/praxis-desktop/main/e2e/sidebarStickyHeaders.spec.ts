@@ -124,8 +124,85 @@ test('tree headers stick nested beneath their parents as the top sidebar panel s
   // Sticking changes nothing horizontal: rows keep their indent.
   expect((await box(tree.getByTestId('project-document-nav-item').last())).left).toBe(docLeftBefore);
 
+  // Session categories used to inherit top: 0 / z-index: 5 from the footer
+  // chrome, covering Projects instead of stacking below Sessions.
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await scroll.evaluate(el => { el.scrollTop = el.scrollHeight; });
+  await page.waitForTimeout(200);
+  const category = tree.locator('.project-session-category-header').last();
+  const categoryBox = await box(category);
+  // Once Sessions ends, its category may be pushed completely out of view.
+  expect(categoryBox.bottom <= (await box(scroll)).top || categoryBox.top >= (await box(projectRow)).bottom).toBe(true);
+  expect(await projectsHeading.evaluate(el => {
+    const r = el.getBoundingClientRect();
+    return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+  })).toBe(true);
+  await page.locator('.sidebar').screenshot({ path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'sidebar-sticky-section-handover.png') });
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await scroll.evaluate(el => { el.scrollTop = el.scrollHeight - el.clientHeight - 200; });
+  await page.waitForTimeout(200);
+
   // A stuck header still works: collapsing the STORY group from its stuck position collapses it.
   await storyGroup.click();
   await expect(storyGroup).toHaveAttribute('aria-expanded', 'false');
   await page.locator('.sidebar').screenshot({ path: test.info().outputPath('sticky-after-collapse.png') });
+});
+
+test('session categories stack below Sessions and hand over within their own lists', async () => {
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const projectId = await app.window.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create({
+      name: 'Session Stack', key: 'STACK', type: 'research', purpose: '', brief: {},
+      startingPoint: 'app-storage', workflowStages: [{ id: 'backlog', name: 'Backlog', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }],
+      starterTickets: [{ summary: 'First', description: '', issueType: 'Task', status: 'Backlog' }], defaultAiToolMode: 'read-only'
+    }, workspace.id);
+    localStorage.setItem(`praxis-last-workspace-route:${workspace.id}`, JSON.stringify({ projectId: project.id }));
+    return project.id;
+  });
+  const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
+  await app.electronApp.close();
+  const now = new Date().toISOString();
+  const records: Record<string, unknown> = {};
+  for (let i = 0; i < 80; i += 1) {
+    const issueKey = i < 40 ? `SESSION-${i.toString(16).padStart(6, '0')}` : `STACK-${i}`;
+    records[issueKey] = { issueKey, sessionId: `stack-${i}`, projectId, title: `Sticky session ${i}`,
+      state: 'completed', provider: 'claude', model: 'test', startedAt: now, completedAt: now,
+      taskDefinition: { goal: `Session ${i}` }, events: [] };
+  }
+  fs.writeFileSync(path.join(profile.userDataDir, 'ai-sessions.json'), JSON.stringify({ 'praxis.agentSessions': records }));
+  app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
+  const page = app.window;
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const tree = page.getByTestId('project-tree').filter({ hasText: 'Session Stack' });
+  const projects = page.locator('.projects-section-header');
+  const project = tree.locator('.project-tree-parent');
+  const sessions = tree.locator('.project-sessions-header');
+  const categories = tree.locator('.project-session-category');
+  await expect(categories.first().locator('.session-nav-row')).toHaveCount(40);
+  const bottom = (el: Element) => el.getBoundingClientRect().bottom;
+  for (const index of [0, 1]) {
+    const group = categories.nth(index);
+    await group.locator('.session-nav-row').nth(20).evaluate(el => el.scrollIntoView({ block: 'start' }));
+    await page.waitForTimeout(200);
+    const header = group.locator('.project-session-category-header');
+    expect(Math.round(await project.evaluate(el => el.getBoundingClientRect().top))).toBe(Math.round(await projects.evaluate(bottom)));
+    expect(Math.round(await sessions.evaluate(el => el.getBoundingClientRect().top))).toBe(Math.round(await project.evaluate(bottom)));
+    expect(Math.round(await header.evaluate(el => el.getBoundingClientRect().top))).toBe(Math.round(await sessions.evaluate(bottom)));
+    for (const ancestor of [projects, project, sessions, header]) {
+      const hitState = await ancestor.evaluate(el => {
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return { onTop: el.contains(hit), header: el.className, hit: hit?.outerHTML };
+      });
+      expect(hitState.onTop, JSON.stringify(hitState)).toBe(true);
+    }
+    if (index === 1) {
+      expect(await categories.first().evaluate(bottom)).toBeLessThanOrEqual(await header.evaluate(el => el.getBoundingClientRect().top));
+      await page.locator('.sidebar').screenshot({ path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'sidebar-sticky-sessions.png') });
+      await header.getByTestId('project-ticket-sessions-nav-item').click();
+      await expect(header.getByTestId('project-ticket-sessions-nav-item')).toHaveAttribute('aria-expanded', 'false');
+    }
+  }
 });

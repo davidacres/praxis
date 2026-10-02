@@ -31,6 +31,8 @@ import {
   type MobileAppearance,
   type MobileHostInfo,
   type MobileHostReads,
+  type MobileImagePreview,
+  type MobileReadParams,
   type MobileModelCatalog,
   type MobileProviderCatalog,
   type MobileReadOperation,
@@ -97,6 +99,11 @@ export interface MobileHostServiceDeps {
   sessionChanges(sessionId: string): Promise<MobileSessionChanges>;
   /** One changed file's bounded diff; refused for a path the session's status does not list. */
   sessionFileDiff(sessionId: string, path: string): Promise<MobileFileDiff>;
+  /** One transport-safe chunk of a local or attached image, or undefined when it cannot be previewed. */
+  sessionImagePreview(
+    sessionId: string,
+    params: Pick<MobileReadParams, 'path' | 'eventIndex' | 'attachmentIndex' | 'offset'>,
+  ): Promise<MobileImagePreview | undefined>;
   /** The gadget as the host holds it, so its action's effect can be checked against the caller. */
   findGadget(sessionId: string, gadgetId: string): AnyGadgetEnvelope | undefined;
   submitGadget(sessionId: string, payload: MobileGadgetSubmitPayload, actor: string): Promise<GadgetActionResult>;
@@ -112,7 +119,7 @@ export interface MobileHostServiceDeps {
   /** Applies validated between-turn changes: mode, then model, then (last, as it starts a turn) a provider handover. */
   configureSession(sessionId: string, change: MobileSessionRuntimeChange, actor: string): Promise<MobileSessionSnapshot>;
   cancelSession(sessionId: string, actor: string): Promise<unknown>;
-  respondToPermission(requestId: string, decision: 'allow' | 'deny', actor: string, projectId: string): Promise<unknown>;
+  respondToPermission(requestId: string, decision: 'allow' | 'allow_always' | 'deny', actor: string, projectId: string): Promise<unknown>;
 }
 
 /** The verified caller's identity — a subject when signed in, otherwise the paired device. */
@@ -344,6 +351,26 @@ export function createMobileHostReads(deps: MobileHostServiceDeps, commandOperat
       return deps.listRunChanges(runId);
     },
     'attention.list': async (request: MobileReadRequest) => deps.listAttention(requireTarget(request, 'projectId')),
+    'sessions.imagePreview': async (request: MobileReadRequest): Promise<MobileImagePreview> => {
+      const sessionId = requireTarget(request, 'sessionId');
+      await requireSessionInProject(deps, sessionId, requireTarget(request, 'projectId'));
+      const params = request.params ?? {};
+      const path = params.path?.trim();
+      const hasAttachmentIndex = Number.isSafeInteger(params.eventIndex);
+      const hasImageIndex = Number.isSafeInteger(params.attachmentIndex);
+      const hasAttachment = hasAttachmentIndex && hasImageIndex;
+      if ((!path && !hasAttachment) || (path && hasAttachment) || (hasAttachmentIndex !== hasImageIndex)) {
+        throw new Error('sessions.imagePreview requires either params.path or both attachment indices.');
+      }
+      const offset = params.offset ?? 0;
+      if (!Number.isSafeInteger(offset) || offset < 0) throw new Error('sessions.imagePreview params.offset must be a non-negative integer.');
+      const preview = await deps.sessionImagePreview(sessionId, {
+        ...(path ? { path } : {}),
+        ...(hasAttachment ? { eventIndex: params.eventIndex, attachmentIndex: params.attachmentIndex } : {}),
+        offset,
+      });
+      return preview ?? {};
+    },
   };
   return reads;
 }
@@ -415,8 +442,8 @@ export function createMobileHostExecutionHandlers(deps: MobileHostServiceDeps): 
     'permissions.respond': async (command: MobileCommand) => {
       const requestId = requireTarget(command, 'requestId');
       const decision = payloadField(command, 'decision');
-      if (decision !== 'allow' && decision !== 'deny') {
-        throw new Error("permissions.respond requires payload.decision of 'allow' or 'deny'.");
+      if (decision !== 'allow' && decision !== 'allow_always' && decision !== 'deny') {
+        throw new Error("permissions.respond requires payload.decision of 'allow', 'allow_always', or 'deny'.");
       }
       return deps.respondToPermission(requestId, decision, mobileActorFor(command.caller), requireTarget(command, 'projectId'));
     },

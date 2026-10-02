@@ -21,6 +21,14 @@ test('identifies the exact unresolved permission after completed requests', () =
   }]);
 });
 
+test('dismisses unresolved permission history once its session is no longer awaiting approval', () => {
+  const events = [{ timestamp: '2026-09-22T09:00:01.000Z', type: 'permission_requested' as const, summary: 'Run tests' }];
+  assert.equal(pendingMobilePermissions([record(events)]).length, 1);
+  for (const state of ['completed', 'failed', 'aborted'] as const) {
+    assert.deepEqual(pendingMobilePermissions([{ ...record(events), state }]), []);
+  }
+});
+
 test('responds only to a current request and rejects a stale id', () => {
   const records = [record([{ timestamp: '2026-09-22T09:00:01.000Z', type: 'permission_requested', summary: 'Run tests' }])];
   let observed: { key: string; decision: PermissionDecision } | undefined;
@@ -37,6 +45,20 @@ test('responds only to a current request and rejects a stale id', () => {
   assert.throws(() => respondToMobilePermission({
     records: [record([])], requestId: 's1:permission:0', projectId: 'p1', decision: 'allow', hasActiveTask: () => true, respond: () => undefined,
   }), /no longer pending/);
+});
+
+test('preserves approve-all as allow_always when responding to the desktop', () => {
+  let observed: PermissionDecision | undefined;
+  const result = respondToMobilePermission({
+    records: [record([{ timestamp: '2026-09-22T09:00:01.000Z', type: 'permission_requested', summary: 'Run tests' }])],
+    requestId: 's1:permission:0',
+    projectId: 'p1',
+    decision: 'allow_always',
+    hasActiveTask: () => true,
+    respond: (_key, decision) => { observed = decision; },
+  });
+  assert.deepEqual(result, { requestId: 's1:permission:0', decision: 'allow_always', sessionId: 's1' });
+  assert.equal(observed, 'allow_always');
 });
 
 test('refuses a later request while an earlier one in the same session waits', () => {

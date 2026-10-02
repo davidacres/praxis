@@ -81,7 +81,7 @@ test('two real CLI agents visibly alternate in a capped read-only consult', asyn
   expect(speakers).toEqual(new Set(['host', 'guest']));
   expect((capped?.events ?? []).filter(event => event.type === 'user_input_completed')).toHaveLength(0);
 
-  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="nav-conversations"]').click();
   const thread = win.locator('[data-testid="session-chat-thread"]');
   await expect(thread).toContainText(PROVIDER_LABELS[HOST_PROVIDER] ?? HOST_PROVIDER);
   await expect(thread).toContainText(PROVIDER_LABELS[GUEST_PROVIDER] ?? GUEST_PROVIDER);

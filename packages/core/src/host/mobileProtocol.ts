@@ -10,18 +10,29 @@ export type MobileCapability = 'view' | 'execute' | 'approve';
  * (between-turn provider handover, model change and mode switch); revision 4 added `host.info`
  * `appearance` and the `host.appearance` event, so the phone wears the desktop's theme; revision 5 added
  * gadgets on session messages and `gadgets.submit`, `workflowGates.reject`, and a session's working-tree
- * changes through `changes.get` (`target.sessionId`, optionally `params.path` for one file's diff). A phone
+ * changes through `changes.get` (`target.sessionId`, optionally `params.path` for one file's diff); revision 6
+ * added `sessions.imagePreview` for images referenced by a reply or gadget; revision 7 made previews chunked
+ * to fit the 1 MiB secure-record limit and added references for images attached to user messages. A phone
  * reads `host.info` first and treats a missing operation (an older desktop) as "unsupported", not an error.
  */
-export const MOBILE_HOST_SURFACE_REVISION = 5 as const;
-export type MobileReadOperation = 'hosts.list' | 'host.info' | 'projects.snapshot' | 'work.list' | 'sessions.list' | 'sessions.get' | 'sessions.usage' | 'workflows.list' | 'workflowRuns.list' | 'workflowRuns.get' | 'changes.get' | 'attention.list' | 'providers.list' | 'models.list' | 'access.get';
+export const MOBILE_HOST_SURFACE_REVISION = 7 as const;
+export type MobileReadOperation = 'hosts.list' | 'host.info' | 'projects.snapshot' | 'work.list' | 'sessions.list' | 'sessions.get' | 'sessions.usage' | 'workflows.list' | 'workflowRuns.list' | 'workflowRuns.get' | 'changes.get' | 'attention.list' | 'providers.list' | 'models.list' | 'access.get' | 'sessions.imagePreview';
 export type MobileCommandOperation = 'sessions.create' | 'sessions.continue' | 'sessions.cancel' | 'sessions.configure' | 'workflowRuns.start' | 'workflowRuns.cancel' | 'workflowRuns.retryStage' | 'permissions.respond' | 'workflowGates.approve' | 'workflowGates.reject' | 'gadgets.submit';
 export type MobileOperation = MobileReadOperation | MobileCommandOperation;
 export interface MobileCaller { deviceId: string; subject?: string; capabilities: readonly MobileCapability[]; }
 export interface MobileTarget { hostId: string; projectId?: string; sessionId?: string; runId?: string; requestId?: string; }
 export interface MobileCommand<TPayload = unknown> { protocolVersion: typeof MOBILE_PROTOCOL_VERSION; commandId: string; issuedAt: string; caller: MobileCaller; target: MobileTarget; operation: MobileCommandOperation; expectedVersion?: number; payload: TPayload; }
-/** Operation-specific read arguments: `models.list` (provider, refresh) and `changes.get` (path). */
-export interface MobileReadParams { provider?: string; refresh?: boolean; path?: string; }
+/** Operation-specific read arguments for model, diff, and image-preview reads. */
+export interface MobileReadParams {
+  provider?: string;
+  refresh?: boolean;
+  path?: string;
+  /** Base64 character offset for a chunked `sessions.imagePreview` response. */
+  offset?: number;
+  /** Source event and image index for an image attached to a user message. */
+  eventIndex?: number;
+  attachmentIndex?: number;
+}
 export interface MobileReadRequest { protocolVersion: typeof MOBILE_PROTOCOL_VERSION; requestId: string; caller: MobileCaller; target: MobileTarget; operation: MobileReadOperation; cursor?: string; limit?: number; params?: MobileReadParams; }
 export interface MobileEventCursor { hostId: string; projectId?: string; sequence: number; }
 export interface MobileEventEnvelope<TEvent = unknown> { protocolVersion: typeof MOBILE_PROTOCOL_VERSION; eventId: string; sequence: number; emittedAt: string; target: MobileTarget; event: TEvent; }
@@ -253,8 +264,15 @@ export interface MobileSessionMessage {
    * `text`, so a phone that cannot draw one shows its `gadget.fallbackText` instead.
    */
   gadgets?: readonly MobileGadgetView[];
+  /** Images attached to this user message; bytes are fetched in bounded chunks from the host. */
+  attachments?: readonly MobileSessionImageAttachment[];
   tokenUsage?: MobileTokenUsage;
   cost?: { currency: string; amount: number };
+}
+export interface MobileSessionImageAttachment {
+  eventIndex: number;
+  attachmentIndex: number;
+  mimeType: string;
 }
 /** A gadget as the host resolves it now: the envelope, whether it still accepts an answer, and the answer's outcome. */
 export interface MobileGadgetView {
@@ -278,6 +296,16 @@ export interface MobileChangedFile {
   deletions?: number;
   /** The session's own tools reported editing it; other changes were already in the tree. */
   reportedBySession: boolean;
+}
+/** `sessions.imagePreview`: a bounded base64 chunk from a local or attached image. */
+export interface MobileImagePreview {
+  mimeType?: string;
+  /** A base64 slice aligned to a 4-character boundary. */
+  dataBase64?: string;
+  /** Character offset for the next request; equal to totalLength when complete. */
+  nextOffset?: number;
+  /** Length of the complete base64 payload in characters. */
+  totalLength?: number;
 }
 export interface MobileSessionChanges {
   sessionId: string;
@@ -383,7 +411,7 @@ const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const CAPABILITY_BY_OPERATION: Record<MobileOperation, MobileCapability> = {
-  'hosts.list':'view','host.info':'view','sessions.usage':'view','providers.list':'view','models.list':'view','access.get':'view','projects.snapshot':'view','work.list':'view','sessions.list':'view','sessions.get':'view','workflows.list':'view','workflowRuns.list':'view','workflowRuns.get':'view','changes.get':'view','attention.list':'view',
+  'hosts.list':'view','host.info':'view','sessions.usage':'view','providers.list':'view','models.list':'view','access.get':'view','projects.snapshot':'view','work.list':'view','sessions.list':'view','sessions.get':'view','workflows.list':'view','workflowRuns.list':'view','workflowRuns.get':'view','changes.get':'view','attention.list':'view','sessions.imagePreview':'view',
   'sessions.create':'execute','sessions.continue':'execute','sessions.configure':'execute','sessions.cancel':'execute','workflowRuns.start':'execute','workflowRuns.cancel':'execute','workflowRuns.retryStage':'execute','permissions.respond':'approve','workflowGates.approve':'approve','workflowGates.reject':'approve',
   // Answering a gadget is a turn in the conversation; an approval-effect answer additionally needs `approve`, checked by the host.
   'gadgets.submit':'execute',

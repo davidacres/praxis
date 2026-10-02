@@ -98,8 +98,8 @@ test('rows at the same depth of the project tree share an icon column and a labe
     page.getByTestId('project-sessions-nav-item').boundingBox(),
     page.getByTestId('project-workflow-runs-nav-item').boundingBox()
   ]);
-  await expect(page.locator('.project-tree-children > .project-workflows-header')).toBeVisible();
-  await expect(page.locator('.project-tree-children > .project-automations-header')).toBeVisible();
+  await expect(page.locator('.project-workflows-header')).toBeVisible();
+  await expect(page.locator('.project-automations-header')).toBeVisible();
   await expect(page.locator('.project-workflow-row')).toHaveCount(1);
   expect(Math.abs(sessionsHeader!.x - automationsHeader!.x)).toBeLessThan(2);
   await expect(page.getByTestId('project-workflow-run-row').first().locator('.automation-state-mark')).toBeVisible();

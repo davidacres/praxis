@@ -230,6 +230,14 @@ whole point is that no row's indent is ever a number typed at the call site.
 
 ## Onboarding and the walkthrough
 
+Before any of that, a profile with no usable AI provider is held at `app/AiSetupWizard.tsx`
+(choose → connect → review; it reuses the project wizard's shell, `.project-choice` cards and
+review styles). `praxis-ai-onboarded` marks it done; `App` sets it silently when a provider is
+already usable, so only a genuinely unconfigured profile sees it and a later key removal never
+re-traps anyone. `launchTestApp` sets the flag by default — pass `aiOnboarding: true` to
+exercise the wizard (`e2e/aiSetupWizard.spec.ts`). CLI agents resolve through the login shell,
+so a spec needing one "missing" must pin its `cliPath` to a nonexistent path.
+
 First run is: Getting Started's "Create your first project" (a default workspace is created
 behind the scenes) → a three-panel wizard → the project dashboard, which carries a Get
 Started strip while the project has no sessions. `praxis-onboarded` marks the profile past

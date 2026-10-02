@@ -1,4 +1,5 @@
-import { BrowserWindow, ipcMain, app } from 'electron';
+import { ipcMain, app } from 'electron';
+import { broadcastToAllWindows } from './windowBroadcast';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { AppSettingsPatch, MobileCapability } from '@praxis/core';
@@ -77,11 +78,6 @@ export function registerSettingsIpc(): void {
   });
 
   getSettingsBackend().onDidChange(settings => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (win.isDestroyed()) {
-        continue;
-      }
-      win.webContents.send('settings:changed', settings);
-    }
+    broadcastToAllWindows('settings:changed', settings);
   });
 }

@@ -13,6 +13,7 @@ export interface MobilePermissionRequest {
 export function pendingMobilePermissions(records: Iterable<AgentSessionRecord>): MobilePermissionRequest[] {
   const pending: MobilePermissionRequest[] = [];
   for (const record of records) {
+    if (record.state !== 'awaiting_approval') continue;
     const sessionPending: MobilePermissionRequest[] = [];
     record.events.forEach((event, index) => {
       if (event.type === 'permission_requested') {
@@ -38,10 +39,10 @@ export function respondToMobilePermission(input: {
   records: Iterable<AgentSessionRecord>;
   requestId: string;
   projectId: string;
-  decision: 'allow' | 'deny';
+  decision: 'allow' | 'allow_always' | 'deny';
   hasActiveTask(sessionKey: string): boolean;
   respond(sessionKey: string, decision: PermissionDecision): void;
-}): { requestId: string; decision: 'allow' | 'deny'; sessionId: string } {
+}): { requestId: string; decision: 'allow' | 'allow_always' | 'deny'; sessionId: string } {
   const pending = pendingMobilePermissions(input.records);
   const request = pending.find(candidate => candidate.requestId === input.requestId);
   if (!request) throw new Error('That permission request is no longer pending.');
@@ -52,6 +53,11 @@ export function respondToMobilePermission(input: {
   }
   if (request.projectId !== input.projectId) throw new Error(`That permission request is not in project ${input.projectId}.`);
   if (!input.hasActiveTask(request.sessionKey)) throw new Error('The session for that permission request is no longer active.');
-  input.respond(request.sessionKey, input.decision === 'allow' ? 'allow_once' : 'deny');
+  const decision: PermissionDecision = input.decision === 'allow'
+    ? 'allow_once'
+    : input.decision === 'allow_always'
+      ? 'allow_always'
+      : 'deny';
+  input.respond(request.sessionKey, decision);
   return { requestId: request.requestId, decision: input.decision, sessionId: request.sessionId };
 }

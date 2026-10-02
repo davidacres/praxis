@@ -61,8 +61,17 @@ export interface LaunchOptions {
    * `false` to land on the workspace's own default route (Overview / project home).
    */
   openNewSession?: boolean;
+  /**
+   * Leave the first-run AI setup wizard in place. By default the profile is
+   * marked as already past it (`praxis-ai-onboarded`), as the wizard would
+   * otherwise stand in front of every spec; pass `true` to exercise it.
+   */
+  aiOnboarding?: boolean;
+  /** Opt in only for tests of discovering CLI agents installed on PATH. */
+  discoverInstalledCli?: boolean;
 }
 
+const AI_ONBOARDED_KEY = 'praxis-ai-onboarded';
 const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
 
@@ -80,7 +89,15 @@ export async function launchTestApp(
   const userDataDir = reuse?.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-e2e-'));
   const settingsPath = reuse?.settingsPath ?? path.join(userDataDir, 'test-settings.json');
   const freeMobilePort = reuse ? undefined : await findFreePort();
-  if (seedSettings) {
+  if (!reuse || seedSettings) {
+    const isolatedProviders = options?.discoverInstalledCli ? {} : Object.fromEntries(
+      ['claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli'].map(id => [id, { cliPath: path.join(userDataDir, 'missing-cli') }])
+    );
+    const seedAi = (seedSettings?.ai ?? {}) as Record<string, unknown>;
+    seedSettings = {
+      ...seedSettings,
+      ai: { workingDirectory: userDataDir, ...seedAi, providers: { ...isolatedProviders, ...((seedAi.providers ?? {}) as Record<string, unknown>) } }
+    };
     const mergedSettings = freeMobilePort && !seedSettings.mobileAccess
       ? { ...seedSettings, mobileAccess: { listenPort: freeMobilePort } }
       : seedSettings;
@@ -123,8 +140,16 @@ export async function launchTestApp(
     await dismissSplash(window);
   }
 
+  const skipAiOnboarding = options?.aiOnboarding !== true;
   if (options?.workspace !== false) {
-    await seedWorkspace(window, options?.openNewSession !== false);
+    await seedWorkspace(window, options?.openNewSession !== false, skipAiOnboarding);
+    await window.waitForLoadState('domcontentloaded');
+    if (!options?.keepSplash) {
+      await dismissSplash(window);
+    }
+  } else if (skipAiOnboarding) {
+    await window.evaluate(key => localStorage.setItem(key, '1'), AI_ONBOARDED_KEY);
+    await window.reload();
     await window.waitForLoadState('domcontentloaded');
     if (!options?.keepSplash) {
       await dismissSplash(window);
@@ -140,9 +165,10 @@ export async function launchTestApp(
  * `openNewSession`, also seeds the durable route so it restores into the New
  * Session composer, matching the pre-onboarding default most specs assume.
  */
-async function seedWorkspace(window: Page, openNewSession: boolean): Promise<void> {
+async function seedWorkspace(window: Page, openNewSession: boolean, skipAiOnboarding: boolean): Promise<void> {
   await window.evaluate(
-    async ({ activeKey, routeKey, openNewSession }) => {
+    async ({ activeKey, routeKey, openNewSession, aiKey, skipAiOnboarding }) => {
+      if (skipAiOnboarding) localStorage.setItem(aiKey, '1');
       const existing = await window.praxis.workspaces.list();
       const workspace = existing[0] ?? (await window.praxis.workspaces.create({ name: 'Test Workspace', projectIds: [] }));
       localStorage.setItem(activeKey, workspace.id);
@@ -155,7 +181,7 @@ async function seedWorkspace(window: Page, openNewSession: boolean): Promise<voi
         localStorage.removeItem(`${routeKey}:${workspace.id}`);
       }
     },
-    { activeKey: ACTIVE_WORKSPACE_KEY, routeKey: LAST_WORKSPACE_ROUTE_KEY, openNewSession }
+    { activeKey: ACTIVE_WORKSPACE_KEY, routeKey: LAST_WORKSPACE_ROUTE_KEY, openNewSession, aiKey: AI_ONBOARDED_KEY, skipAiOnboarding }
   );
   await window.reload();
 }
@@ -205,6 +231,21 @@ export async function expandAllIssueStacks(window: Page): Promise<void> {
 }
 
 export async function closeTestApp(app: TestApp): Promise<void> {
+  // Failed assertions can leave a task awaiting approval. End test-owned work
+  // before closing, so the application's active-session close guard can settle.
+  if (!app.window.isClosed()) {
+    await app.window.evaluate(async () => {
+      const projects = await window.praxis.projects.list();
+      const runs = (await Promise.all(projects.map(project => window.praxis.workflows.listRuns(project.id)))).flat();
+      await Promise.all(runs.filter(run => ['running', 'awaiting-approval'].includes(run.status))
+        .map(run => window.praxis.workflows.cancelRun(run.runId, 'Test teardown')));
+      const sessions = await window.praxis.ai.listSessions();
+      await Promise.all(sessions.map(async session => {
+        if (session.conversation?.state === 'running') await window.praxis.ai.stopConversation(session.issueKey);
+        if (!['completed', 'failed', 'aborted', 'idle'].includes(session.state)) await window.praxis.ai.abort(session.issueKey);
+      }));
+    });
+  }
   await app.electronApp.close();
   fs.rmSync(app.userDataDir, { recursive: true, force: true });
 }

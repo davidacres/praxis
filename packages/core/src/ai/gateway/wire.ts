@@ -576,7 +576,7 @@ export async function* consumeChatStream(
       continue;
     }
 
-    const reasoning = delta.reasoning_content ?? delta.thought;
+    const reasoning = delta.reasoning_content ?? delta.reasoning ?? delta.thought;
     if (typeof reasoning === 'string' && reasoning.length > 0) {
       yield { type: 'thought_delta', text: reasoning };
     }

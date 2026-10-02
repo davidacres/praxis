@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 // A spend limit the *user* sets, checked against the cost agents actually
 // report. Deliberately not a credit balance: nothing Praxis talks to reports
 // one, so there is no "remaining credits" to show and the wording never
@@ -42,8 +43,7 @@ async function runSession(win: TestApp['window'], goal: string): Promise<void> {
 }
 
 async function openSessions(win: TestApp['window'], rowText: string): Promise<void> {
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: rowText }).click();
+  await openSession(win, rowText);
 }
 
 test('spend well under the limit says nothing', async () => {

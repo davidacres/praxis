@@ -64,6 +64,7 @@ import { getDesktopAppearance, onDidChangeDesktopAppearance } from './mobileAppe
 import { appendMobileAppearanceEvent, appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary, type MobileGadgetResolver } from './mobileSessionProjection';
 import { getGadgetService, resolveSessionScope } from './gadgetInstance';
 import { readMobileSessionChanges, readMobileSessionFileDiff, type MobileSessionChangesGit } from './mobileSessionChanges';
+import { findSessionRecord, readMobileImagePreview } from './mobileImagePreview';
 import { getGitComparison, getGitStatus } from './gitService';
 import { onDidChangeGadgets, submitGadgetAction } from './gadgetIpc';
 import { appendMobileRunEvent, mobileRunSnapshot } from './mobileRunProjection';
@@ -81,7 +82,7 @@ function policyFor(projectId: string): WorkflowPolicyProfile | undefined {
 const gitForMobile: MobileSessionChangesGit = { status: getGitStatus, comparison: getGitComparison };
 
 function requireSessionRecord(sessionId: string): AgentSessionRecord {
-  const record = [...getAiSessionManager().getAllAgentSessions().values()].find(candidate => candidate.sessionId === sessionId);
+  const record = findSessionRecord(getAiSessionManager().getAllAgentSessions().values(), sessionId);
   if (!record) throw new Error(`No agent session found for ${sessionId}.`);
   return record;
 }
@@ -291,9 +292,7 @@ export function createDesktopMobileHostServiceDeps(
       .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
       .map(mobileSessionSummary),
     getSession: async sessionId => {
-      const record = [...getAiSessionManager().getAllAgentSessions().values()].find(
-        candidate => candidate.sessionId === sessionId || candidate.issueKey === sessionId,
-      );
+      const record = findSessionRecord(getAiSessionManager().getAllAgentSessions().values(), sessionId);
       if (!record) return undefined;
       return mobileSessionSnapshot(withRunProject(record), ledger.latestSequence(), resolveMobileGadgets);
     },
@@ -313,6 +312,7 @@ export function createDesktopMobileHostServiceDeps(
     },
     sessionChanges: async sessionId => readMobileSessionChanges(requireSessionRecord(sessionId), gitForMobile),
     sessionFileDiff: async (sessionId, path) => readMobileSessionFileDiff(requireSessionRecord(sessionId), path, gitForMobile),
+    sessionImagePreview: async (sessionId, params) => readMobileImagePreview(requireSessionRecord(sessionId), params),
     findGadget: (sessionId, gadgetId) => getGadgetService().findGadget(sessionId, gadgetId),
     submitGadget: async (sessionId, payload, actor) => submitGadgetAction({
       sessionId,

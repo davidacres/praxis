@@ -56,8 +56,9 @@ export const PROBE_STEP_LABELS: Record<ProviderProbeStepId, string> = {
   tools: 'Tool calling'
 };
 
-const GROUP_TITLES: Array<{ group: 'builtin-api' | 'cloud' | 'local' | 'builtin-cli' | 'custom'; title: string; note: string }> = [
+const GROUP_TITLES: Array<{ group: 'builtin-api' | 'cloud' | 'gateway' | 'local' | 'builtin-cli' | 'custom'; title: string; note: string }> = [
   { group: 'builtin-api', title: 'Built-in', note: 'dedicated integrations' },
+  { group: 'gateway', title: 'AI gateways', note: 'connect to multiple model providers' },
   { group: 'cloud', title: 'Cloud', note: 'OpenAI-compatible' },
   { group: 'local', title: 'Local runtimes', note: 'on this machine or your network' },
   { group: 'builtin-cli', title: 'CLI agents', note: 'run a coding agent installed on this machine' },
@@ -111,7 +112,7 @@ export function AddProviderDialog({
           : 'API key required';
       out.push({
         key: entry.id,
-        group: entry.kind === 'api' ? 'builtin-api' : 'builtin-cli',
+        group: entry.id === 'vercel-gateway' ? 'gateway' : entry.kind === 'api' ? 'builtin-api' : 'builtin-cli',
         label: entry.label,
         state,
         stateTone: !added && status?.configured ? 'ok' : undefined,
@@ -363,9 +364,41 @@ export function CustomEndpointForm({
   const insecure = authKind !== 'none' && isInsecureRemoteUrl(baseUrl);
   const canSubmit = Boolean(baseUrl.trim()) && Boolean(label.trim()) && (authKind !== 'header' || Boolean(headerName.trim()));
   const testId = initial ? `custom-endpoint-form-${initial.id}` : 'custom-endpoint-form-new';
+  const isBifrost = (initial?.presetId ?? preset?.id) === 'bifrost';
+  const selectedPresetId = initial?.presetId ?? preset?.id;
+  const isMiniMax = selectedPresetId === 'minimax';
+  const isOpenRouter = selectedPresetId === 'openrouter';
 
   return (
     <div className="custom-endpoint-form" data-testid={testId}>
+      {isBifrost && (
+        <FormRow label="Bifrost gateway" stacked>
+          <div data-testid="bifrost-setup-help">
+            Connect to a Bifrost gateway running locally or remotely. Praxis does not install or start the gateway. Enter its URL and virtual key below. Models can use provider prefixes such as <code>openai/gpt-4o-mini</code>, or aliases configured in Bifrost.
+            {' '}Manage budgets, rate limits, routing and pricing overrides in Bifrost. Praxis shows token usage and local cost estimates for recognized models; these can differ from gateway costs after caching, fallbacks or custom pricing.
+            {' '}<a style={{ color: 'var(--accent)' }} href="https://docs.getbifrost.ai/features/governance/budget-and-limits" target="_blank" rel="noreferrer">Budget documentation</a>
+            {' · '}<a style={{ color: 'var(--accent)' }} href="https://docs.getbifrost.ai/providers/custom-pricing" target="_blank" rel="noreferrer">Pricing documentation</a>
+          </div>
+        </FormRow>
+      )}
+      {isMiniMax && (
+        <FormRow label="MiniMax API" stacked>
+          <div data-testid="minimax-setup-help">
+            Connects to MiniMax’s OpenAI-compatible chat API. Praxis can discover available models and checks chat, streaming, and tool calling. Model prices and plan eligibility vary; check MiniMax’s current billing details before use.
+            {' '}<a style={{ color: 'var(--accent)' }} href="https://platform.minimax.io/docs/guides/models-intro" target="_blank" rel="noreferrer">Models</a>
+            {' · '}<a style={{ color: 'var(--accent)' }} href="https://platform.minimax.io/docs/pricing/overview" target="_blank" rel="noreferrer">Pricing and billing</a>
+          </div>
+        </FormRow>
+      )}
+      {isOpenRouter && (
+        <FormRow label="OpenRouter API" stacked>
+          <div data-testid="openrouter-setup-help">
+            Use an OpenRouter model ID from the live catalog (for example, <code>provider/model</code>). OpenRouter’s model catalog includes per-model pricing, and supports streaming and tool use where the selected model supports them. Charges and routing follow your OpenRouter account settings.
+            {' '}<a style={{ color: 'var(--accent)' }} href="https://openrouter.ai/docs/quickstart" target="_blank" rel="noreferrer">API guide</a>
+            {' · '}<a style={{ color: 'var(--accent)' }} href="https://openrouter.ai/models" target="_blank" rel="noreferrer">Models and pricing</a>
+          </div>
+        </FormRow>
+      )}
       <FormRow label="Name" description="How this endpoint appears in pickers and usage reports.">
         <input className="input" aria-label="Endpoint name" data-testid="custom-endpoint-name" value={label} onChange={event => setLabel(event.target.value)} />
       </FormRow>

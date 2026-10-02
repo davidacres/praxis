@@ -29,6 +29,7 @@ import { setMcpOAuthProviderSource } from '@praxis/core';
 import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
 import { disposeAllServices } from './serviceRegistry';
 import { getAcpAgentHost, getAllActiveTaskIssueKeys } from './aiInstance';
+import { disposeUserMcp } from './userMcp';
 import { registerProjectIpc } from './projectIpc';
 import { registerRunProfileIpc } from './runProfileIpc';
 import { registerRunControlIpc } from './runControlIpc';
@@ -372,4 +373,6 @@ app.on('before-quit', () => {
   getAcpAgentHost().dispose();
   getTerminalManager().dispose();
   void getAgentRuntimeManager().dispose();
+  // User-added local MCP servers are child processes of this one as well.
+  void disposeUserMcp();
 });

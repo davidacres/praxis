@@ -46,6 +46,12 @@ test('a summary names its project, which the phone scopes run actions by', () =>
   assert.equal(summarizeWorkflowRun(source).projectId, source.projectId);
 });
 
+test('a summary uses a custom automation name when one is set', () => {
+  const source = run();
+  assert.equal(summarizeWorkflowRun(source).workflowName, source.definition.name);
+  assert.equal(summarizeWorkflowRun({ ...source, displayName: 'Nightly verification' }).workflowName, 'Nightly verification');
+});
+
 test('a running stage is named in the explanation', () => {
   const started = applyWorkflowRunCommand(run(), { kind: 'node-started', nodeId: 'plan', at: T(1) });
   const summary = summarizeWorkflowRun(started);

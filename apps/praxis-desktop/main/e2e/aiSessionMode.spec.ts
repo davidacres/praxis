@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 // Re-running a finished session in a different mode (Chat/Analysis/Review),
 // driven from the composer chip row it moved into. This never had e2e
 // coverage before — the control existed only in the sidebar inspector, and
@@ -54,8 +55,7 @@ test('switching a finished session to Review sends the mode transition and resum
     ), { timeout: 20000 })
     .toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]').first().click();
+  await openSession(win);
 
   // Lives in the raised mode panel above the composer input, not in the sidebar.
   const toggle = win.locator('[data-testid="session-mode-panel"] .session-mode-toggle');

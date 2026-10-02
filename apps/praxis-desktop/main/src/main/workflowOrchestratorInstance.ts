@@ -1,5 +1,5 @@
 import { WorkflowIssueWriteBack } from './workflowIssueWriteBack';
-import { BrowserWindow } from 'electron';
+import { broadcastToAllWindows } from './windowBroadcast';
 import {
   WorkflowOrchestrator,
   WorkflowRunStore,
@@ -51,9 +51,7 @@ export function onDidChangeWorkflowRun(listener: (runId: string) => void): () =>
 
 /** Tells the desktop windows and every `onDidChangeWorkflowRun` listener that a run changed. */
 export function notifyWorkflowRunChanged(runId: string): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.webContents.send('workflows:runChanged', runId);
-  }
+  broadcastToAllWindows('workflows:runChanged', runId);
   for (const listener of runChangeListeners) {
     try {
       listener(runId);

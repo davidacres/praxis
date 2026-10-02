@@ -2,6 +2,7 @@ import * as nodeFs from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import * as nodeChildProcess from 'node:child_process';
 import type { GatewayToolDefinition } from '../gateway';
+import type { WireImageAttachment } from '../gateway/wire';
 import type { AgentToolEventData, AgentToolMode } from '../agentTypes';
 import { PathSandboxError, resolveSandboxedPath } from './pathSandbox';
 import { createUnifiedDiff } from './unifiedDiff';
@@ -30,10 +31,25 @@ export interface ToolExecutionResult {
   content: string;
   /** Structured metadata for the UI (diffs, shell output). The `content` string stays authoritative for the model. */
   data?: AgentToolEventData;
+  /**
+   * Images to show the model. Serialised as `image_url` parts (OpenAI) or
+   * base64 image blocks (Anthropic) so a vision-capable model can actually
+   * look at the file. Omitted for text tools.
+   */
+  images?: WireImageAttachment[];
 }
 
 const SHELL_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_READ_BYTES = 512 * 1024;
+/** Images are sent inline, so the cap is well under a provider's request limit. */
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_MEDIA_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
+};
 const MAX_LIST_ENTRIES = 500;
 /** Above this size a write is applied but no diff is computed (keeps event payloads bounded). */
 const MAX_DIFF_BYTES = 256 * 1024;
@@ -42,6 +58,18 @@ export const LOCAL_TOOL_DEFINITIONS: GatewayToolDefinition[] = [
   {
     name: 'read_file',
     description: 'Read a UTF-8 text file relative to the working directory.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path relative to the working directory' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'read_image',
+    description:
+      'Read an image file (png, jpg, gif, webp) and return it so it can be viewed. Use this to inspect screenshots or visual output rather than guessing at it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -88,7 +116,7 @@ export const LOCAL_TOOL_DEFINITIONS: GatewayToolDefinition[] = [
   }
 ];
 
-const READ_ONLY_LOCAL_TOOLS = new Set(['read_file', 'list_dir']);
+const READ_ONLY_LOCAL_TOOLS = new Set(['read_file', 'list_dir', 'read_image']);
 
 export function localToolDefinitionsForMode(mode: AgentToolMode): GatewayToolDefinition[] {
   if (mode === 'project-only') return [];
@@ -134,6 +162,8 @@ export class LocalToolExecutor {
       switch (name) {
         case 'read_file':
           return await this.readFile(asString(args.path) ?? '');
+        case 'read_image':
+          return await this.readImage(asString(args.path) ?? '');
         case 'write_file':
           return await this.writeFile(asString(args.path) ?? '', asString(args.content) ?? '');
         case 'list_dir':
@@ -181,6 +211,48 @@ export class LocalToolExecutor {
     }
     const content = await nodeFs.readFile(absolute, 'utf8');
     return { ok: true, content };
+  }
+
+  private async readImage(inputPath: string): Promise<ToolExecutionResult> {
+    if (!inputPath.trim()) {
+      return { ok: false, content: 'path is required' };
+    }
+    const absolute = resolveSandboxedPath(this.ctx.workingDirectory, inputPath);
+    const mediaType = IMAGE_MEDIA_TYPES[nodePath.extname(absolute).toLowerCase()];
+    if (!mediaType) {
+      return {
+        ok: false,
+        content: `Not a readable image: ${inputPath}. Supported: ${Object.keys(IMAGE_MEDIA_TYPES).join(', ')}`
+      };
+    }
+    const allowed = await ensurePermission(
+      this.ctx,
+      {
+        kind: 'read',
+        toolName: 'read_image',
+        permissionKey: inputPath,
+        description: 'Permission requested: read_image',
+        detail: 'The agent wants to view an image in the project workspace.'
+      },
+      this.alwaysAllowed
+    );
+    if (!allowed) {
+      return { ok: false, content: 'Permission denied for read_image' };
+    }
+
+    const stat = await nodeFs.stat(absolute);
+    if (!stat.isFile()) {
+      return { ok: false, content: `Not a file: ${inputPath}` };
+    }
+    if (stat.size > MAX_IMAGE_BYTES) {
+      return { ok: false, content: `Image too large (${stat.size} bytes). Max ${MAX_IMAGE_BYTES} bytes.` };
+    }
+    const base64 = (await nodeFs.readFile(absolute)).toString('base64');
+    return {
+      ok: true,
+      content: `Image: ${inputPath} (${mediaType}, ${stat.size} bytes).`,
+      images: [{ mimeType: mediaType, dataBase64: base64 }]
+    };
   }
 
   private async writeFile(inputPath: string, content: string): Promise<ToolExecutionResult> {

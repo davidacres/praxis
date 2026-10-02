@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { app, BrowserWindow } from 'electron';
+import { app } from 'electron';
+import { broadcastToAllWindows } from './windowBroadcast';
 import {
   fingerprintMobileHostKey,
   type MobileCapability,
@@ -77,9 +78,7 @@ export function lanInterfaces(): MobileLanInterface[] {
 
 function emitPairingChanged(): void {
   void snapshotMobilePairing().then(snapshot => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send('mobile:pairingChanged', snapshot);
-    }
+    broadcastToAllWindows('mobile:pairingChanged', snapshot);
   });
 }
 

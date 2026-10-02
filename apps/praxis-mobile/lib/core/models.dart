@@ -111,8 +111,7 @@ extension type DeviceAccess(Json json) {
   String get deviceId => _str(json, 'deviceId') ?? '';
   String? get label => _str(json, 'label');
   List<String> get capabilities => _strings(json, 'capabilities');
-  List<({String projectId, String name})> get projects =>
-      _list(json, 'projects').map((p) => (projectId: _str(p, 'projectId') ?? '', name: _str(p, 'name') ?? '')).toList();
+  List<({String projectId, String name})> get projects => _list(json, 'projects').map((p) => (projectId: _str(p, 'projectId') ?? '', name: _str(p, 'name') ?? '')).toList();
   String? get pairedAt => _str(json, 'pairedAt');
   String? get lastSeenAt => _str(json, 'lastSeenAt');
   String? get hostKeyFingerprint => _str(json, 'hostKeyFingerprint');
@@ -127,6 +126,17 @@ extension type GadgetActionDescriptor(Json json) {
   String? get description => _str(json, 'description');
 }
 
+/// Where a gadget belongs — carried through as-is from `@praxis/core`'s
+/// `GadgetScope`, so `sessionId` (and `workId`, when a gadget is scoped to
+/// one) is available to resolve a local image the gadget references, exactly
+/// as the desktop's `ArtifactGadget` uses `gadget.scope.workId ?? gadget.scope.sessionId`.
+extension type GadgetScope(Json json) {
+  String get hostId => _str(json, 'hostId') ?? '';
+  String? get projectId => _str(json, 'projectId');
+  String get sessionId => _str(json, 'sessionId') ?? '';
+  String? get workId => _str(json, 'workId');
+}
+
 extension type GadgetEnvelope(Json json) {
   int get version => _int(json, 'version') ?? 0;
   String get gadgetId => _str(json, 'gadgetId') ?? '';
@@ -134,6 +144,14 @@ extension type GadgetEnvelope(Json json) {
   String get fallbackText => _str(json, 'fallbackText') ?? '';
   Json get payload => _map(json, 'payload') ?? const {};
   List<GadgetActionDescriptor> get actions => _list(json, 'actions').map(GadgetActionDescriptor.new).toList();
+  GadgetScope get scope => GadgetScope(_map(json, 'scope') ?? const {});
+
+  /// The session an image reference in this gadget resolves against.
+  String? get imageSessionId {
+    final workId = scope.workId;
+    final sessionId = scope.sessionId;
+    return (workId != null && workId.isNotEmpty) ? workId : (sessionId.isNotEmpty ? sessionId : null);
+  }
 }
 
 extension type GadgetView(Json json) {
@@ -141,6 +159,12 @@ extension type GadgetView(Json json) {
   String get state => _str(json, 'state') ?? 'active';
   String? get resultStatus => _map(json, 'result') == null ? null : _str(_map(json, 'result')!, 'status');
   String? get resultMessage => _map(json, 'result') == null ? null : _str(_map(json, 'result')!, 'message');
+}
+
+extension type SessionImageAttachment(Json json) {
+  int get eventIndex => _int(json, 'eventIndex') ?? -1;
+  int get attachmentIndex => _int(json, 'attachmentIndex') ?? -1;
+  String get mimeType => _str(json, 'mimeType') ?? '';
 }
 
 extension type SessionMessage(Json json) {
@@ -151,6 +175,7 @@ extension type SessionMessage(Json json) {
   String get status => _str(json, 'status') ?? 'complete';
   String? get model => _str(json, 'model');
   List<GadgetView> get gadgets => _list(json, 'gadgets').map(GadgetView.new).toList();
+  List<SessionImageAttachment> get attachments => _list(json, 'attachments').map(SessionImageAttachment.new).toList();
   TokenUsage? get tokenUsage => _map(json, 'tokenUsage') == null ? null : TokenUsage(_map(json, 'tokenUsage')!);
   Cost? get cost => _map(json, 'cost') == null ? null : Cost(_map(json, 'cost')!);
 }
@@ -229,21 +254,7 @@ extension type RunSummary(Json json) {
   String get workflowName => _str(json, 'workflowName') ?? '';
   String get status => _str(json, 'status') ?? '';
   String get explanation => _str(json, 'explanation') ?? '';
-  List<({String nodeId, String name, String outcome, String lane, List<({String contractId, String kind, String? path})> artifacts})> get stages =>
-      _list(json, 'stages')
-          .map(
-            (stage) => (
-              nodeId: _str(stage, 'nodeId') ?? '',
-              name: _str(stage, 'name') ?? '',
-              outcome: _str(stage, 'outcome') ?? '',
-              lane: _str(stage, 'lane') ?? '',
-              artifacts: _list(
-                stage,
-                'artifacts',
-              ).map((artifact) => (contractId: _str(artifact, 'contractId') ?? '', kind: _str(artifact, 'kind') ?? '', path: _str(artifact, 'path'))).toList(),
-            ),
-          )
-          .toList();
+  List<({String nodeId, String name, String outcome, String lane, List<({String contractId, String kind, String? path})> artifacts})> get stages => _list(json, 'stages').map((stage) => (nodeId: _str(stage, 'nodeId') ?? '', name: _str(stage, 'name') ?? '', outcome: _str(stage, 'outcome') ?? '', lane: _str(stage, 'lane') ?? '', artifacts: _list(stage, 'artifacts').map((artifact) => (contractId: _str(artifact, 'contractId') ?? '', kind: _str(artifact, 'kind') ?? '', path: _str(artifact, 'path'))).toList())).toList();
 }
 
 extension type ChangedFile(Json json) {
@@ -270,8 +281,7 @@ extension type DiffLine(Json json) {
 extension type FileDiff(Json json) {
   bool get binary => _bool(json, 'binary');
   bool get truncated => _bool(json, 'truncated');
-  List<({String header, List<DiffLine> lines})> get hunks =>
-      _list(json, 'hunks').map((hunk) => (header: _str(hunk, 'header') ?? '', lines: _list(hunk, 'lines').map(DiffLine.new).toList())).toList();
+  List<({String header, List<DiffLine> lines})> get hunks => _list(json, 'hunks').map((hunk) => (header: _str(hunk, 'header') ?? '', lines: _list(hunk, 'lines').map(DiffLine.new).toList())).toList();
 }
 
 extension type WorkflowChoice(Json json) {
@@ -286,33 +296,9 @@ extension type ProjectSummary(Json json) {
 }
 
 class AttentionItem {
-  AttentionItem({
-    required this.id,
-    required this.kind,
-    required this.hostId,
-    required this.projectId,
-    this.sessionId,
-    this.runId,
-    this.requestId,
-    this.summary,
-    this.detail,
-    required this.createdAt,
-    this.resolved = false,
-  });
+  AttentionItem({required this.id, required this.kind, required this.hostId, required this.projectId, this.sessionId, this.runId, this.requestId, this.summary, this.detail, required this.createdAt, this.resolved = false});
 
-  factory AttentionItem.fromJson(Json json) => AttentionItem(
-    id: _str(json, 'id') ?? '',
-    kind: _str(json, 'kind') ?? 'approval',
-    hostId: _str(json, 'hostId') ?? '',
-    projectId: _str(json, 'projectId') ?? '',
-    sessionId: _str(json, 'sessionId'),
-    runId: _str(json, 'runId'),
-    requestId: _str(json, 'requestId'),
-    summary: _str(json, 'summary'),
-    detail: _str(json, 'detail'),
-    createdAt: _str(json, 'createdAt') ?? '',
-    resolved: _bool(json, 'resolved'),
-  );
+  factory AttentionItem.fromJson(Json json) => AttentionItem(id: _str(json, 'id') ?? '', kind: _str(json, 'kind') ?? 'approval', hostId: _str(json, 'hostId') ?? '', projectId: _str(json, 'projectId') ?? '', sessionId: _str(json, 'sessionId'), runId: _str(json, 'runId'), requestId: _str(json, 'requestId'), summary: _str(json, 'summary'), detail: _str(json, 'detail'), createdAt: _str(json, 'createdAt') ?? '', resolved: _bool(json, 'resolved'));
 
   final String id;
   final String kind;
@@ -326,17 +312,5 @@ class AttentionItem {
   final String createdAt;
   final bool resolved;
 
-  AttentionItem resolve() => AttentionItem(
-    id: id,
-    kind: kind,
-    hostId: hostId,
-    projectId: projectId,
-    sessionId: sessionId,
-    runId: runId,
-    requestId: requestId,
-    summary: summary,
-    detail: detail,
-    createdAt: createdAt,
-    resolved: true,
-  );
+  AttentionItem resolve() => AttentionItem(id: id, kind: kind, hostId: hostId, projectId: projectId, sessionId: sessionId, runId: runId, requestId: requestId, summary: summary, detail: detail, createdAt: createdAt, resolved: true);
 }

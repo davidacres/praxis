@@ -38,7 +38,7 @@ import { backendModeMeta } from '../board/boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from '../board/boardTransitionMatch';
 import { isTerminalAgentState } from '../ai/aiSessionState';
-import { extractSubagents, isConversationSession } from '../ai/sessionNav';
+import { extractSubagents, isConversationSession, sessionTitle } from '../ai/sessionNav';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { StartupSplash } from './StartupSplash';
 import { CommandPalette, type CommandEntry } from './CommandPalette';
@@ -50,6 +50,7 @@ import { ProjectWorkspace } from '../projects/ProjectWorkspace';
 import { OverviewPage } from './OverviewPage';
 import { WorkspaceDialog } from './WorkspaceDialog';
 import { GettingStarted } from './GettingStarted';
+import { AI_ONBOARDED_KEY, AiSetupWizard, hasUsableProvider } from './AiSetupWizard';
 import { useSettings } from '../settings/useSettings';
 import {
   EMPTY_BOARD_FILTER,
@@ -360,7 +361,7 @@ function restoredRouteForWorkspace(
 }
 
 export function App() {
-  const { settings } = useSettings();
+  const { settings, update: updateSettings } = useSettings();
   const { confirm } = useDialogs();
   const deleteRunFlow = useDeleteRun();
   const [appVersion, setAppVersion] = useState<string>();
@@ -561,6 +562,28 @@ export function App() {
     if (startupResolved && activeWorkspaceId && !gettingStarted) writeLastWorkspaceRoute(activeWorkspaceId, route);
   }, [activeWorkspaceId, gettingStarted, route, startupResolved]);
 
+  // Praxis is of no use without AI, so a profile that has never had a usable
+  // provider is stopped at the AI setup wizard before Getting Started. Anyone
+  // who already has one (an existing install) is marked done silently, and the
+  // flag means a later key removal never traps them behind the wizard again —
+  // Settings → AI Provider is where that gets fixed.
+  const [aiSetupNeeded, setAiSetupNeeded] = useState(false);
+  useEffect(() => {
+    let flagged = false;
+    try { flagged = localStorage.getItem(AI_ONBOARDED_KEY) === '1'; } catch { /* private mode */ }
+    if (flagged) return;
+    let cancelled = false;
+    void window.praxis.ai.listProviderStatuses().then(statuses => {
+      if (cancelled) return;
+      if (hasUsableProvider(statuses)) {
+        try { localStorage.setItem(AI_ONBOARDED_KEY, '1'); } catch { /* private mode */ }
+      } else {
+        setAiSetupNeeded(true);
+      }
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     if (startupResolved && !gettingStarted) { try { localStorage.setItem(ONBOARDED_KEY, '1'); } catch { /* private mode */ } }
   }, [startupResolved, gettingStarted]);
@@ -644,7 +667,7 @@ export function App() {
   const updateSessionBrowserRoute = useCallback((patch: Pick<Route, 'browserOpen' | 'browserUrl'>) => {
     setNav(current => {
       const currentRoute = current.entries[current.index];
-      if (currentRoute.feature !== 'sessions') return current;
+      if (currentRoute.feature !== 'sessions' && currentRoute.feature !== 'conversations') return current;
       const nextOpen = patch.browserOpen ?? currentRoute.browserOpen;
       const nextUrl = patch.browserUrl ?? currentRoute.browserUrl;
       // No-op when nothing actually changed — otherwise the BrowserPane's
@@ -1261,6 +1284,9 @@ export function App() {
   }, [mode, boards]);
 
   useEffect(() => {
+    // Until AI is set up, none of the app's global shortcuts may start a
+    // session, open the palette or navigate: the shell they act on isn't there.
+    if (aiSetupNeeded) { setPaletteOpen(false); return; }
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault();
@@ -1278,7 +1304,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [navigate, openQuickSession]);
+  }, [aiSetupNeeded, navigate, openQuickSession]);
 
   const featureCounts = useMemo<Partial<Record<FeatureId, number>>>(
     () => ({
@@ -1395,10 +1421,10 @@ export function App() {
       entries.push({ id: `board:${board.connectionId ?? 'demo'}:${board.id}`, label: board.name, hint: 'Board', group: 'Boards', icon: 'columns', run: () => openBoard(board.id) });
     });
     agentSessions.filter(session => !isConversationSession(session)).forEach(session => {
-      entries.push({ id: `session:${session.issueKey}`, label: session.title || session.issueKey, hint: session.issueKey, group: 'Sessions', icon: 'robot', run: () => navigate({ feature: 'sessions', sessionKey: session.issueKey }) });
+      entries.push({ id: `session:${session.issueKey}`, label: sessionTitle(session), keywords: session.issueKey, hint: session.issueKey, group: 'Sessions', icon: 'robot', run: () => navigate({ feature: 'sessions', sessionKey: session.issueKey }) });
     });
     agentSessions.filter(isConversationSession).forEach(session => {
-      entries.push({ id: `conversation:${session.issueKey}`, label: session.title || 'Conversation', hint: 'Conversation', group: 'Conversations', icon: 'chats', run: () => navigate({ feature: 'conversations', sessionKey: session.issueKey }) });
+      entries.push({ id: `conversation:${session.issueKey}`, label: sessionTitle(session), keywords: session.issueKey, hint: 'Conversation', group: 'Conversations', icon: 'chats', run: () => navigate({ feature: 'conversations', sessionKey: session.issueKey }) });
     });
     (agentSnapshot?.profiles ?? []).filter(profile => !isHostShimProfile(profile)).forEach(profile => {
       entries.push({ id: `profile:${profile.profile.id}`, label: profile.profile.name, hint: 'Agent profile', group: 'Agent Hub', icon: 'robot', run: () => navigate({ feature: 'agents', agentProfileId: profile.profile.id }) });
@@ -1506,7 +1532,9 @@ export function App() {
       || projectWizardMode
   );
   const routedProject = route.projectId ? projects.find(p => p.id === route.projectId) : undefined;
-  const contextLabel = onboardingProjectWizard
+  const contextLabel = aiSetupNeeded
+    ? 'Set up AI'
+    : onboardingProjectWizard
     ? projectWizardMode === 'existing' ? 'Create from folder' : 'Create project'
     : gettingStarted
     ? 'Getting Started'
@@ -1521,7 +1549,9 @@ export function App() {
     : routedProject
     ? routedProject.name
     : selectedBoard?.name ?? selectedProject?.name ?? 'New session';
-  const contextIcon: IconName = onboardingProjectWizard
+  const contextIcon: IconName = aiSetupNeeded
+    ? 'sparkles'
+    : onboardingProjectWizard
     ? 'folder-open'
     : gettingStarted
     ? 'home'
@@ -1613,7 +1643,7 @@ export function App() {
             throw error;
           }
         }
-        navigate({ feature: 'sessions', sessionKey: record.issueKey });
+        navigate({ feature: isConversationSession(record) ? 'conversations' : 'sessions', sessionKey: record.issueKey });
       }}
       {...(route.newSessionAgent
         ? { agentContext: {
@@ -1829,6 +1859,21 @@ export function App() {
       return renderNewSession();
     }
     if (route.newConversation) {
+      if (!sidebarVisible && !auxVisible) {
+        return (
+          <div className="sessions-focus-new-layout">
+            <div className="session-console-header session-focus-header session-focus-new-header">
+              <SessionFocusTabs
+                sessions={activeSessions.filter(isConversationSession)}
+                newSessionActive
+                onSelectSession={sessionKey => navigate({ feature: 'conversations', sessionKey })}
+                onNewSession={() => undefined}
+              />
+            </div>
+            {renderNewConversation()}
+          </div>
+        );
+      }
       return renderNewConversation();
     }
     if (selectedProject && route.feature === 'workflows') {
@@ -2220,6 +2265,7 @@ export function App() {
         settingsOpen={settingsDialogCategory !== undefined}
         onOpenSettings={() => setSettingsDialogCategory(current => current ? undefined : 'overview')}
         onOpenAiSettings={() => setSettingsDialogCategory('ai')}
+        locked={aiSetupNeeded}
         boardFilter={
           selectedBoard && boardDetails && !route.feature && !route.newIssue && !route.view
             ? {
@@ -2249,7 +2295,13 @@ export function App() {
         }
       />
 
-      {projectWizardMode && projectWizardPresentation === 'onboarding' && activeWorkspaceId ? (
+      {aiSetupNeeded ? (
+        <AiSetupWizard
+          activeProvider={settings?.ai.activeProvider ?? 'claude-code-cli'}
+          onSetDefault={provider => updateSettings({ ai: { activeProvider: provider } })}
+          onDone={() => setAiSetupNeeded(false)}
+        />
+      ) : projectWizardMode && projectWizardPresentation === 'onboarding' && activeWorkspaceId ? (
         <div className="project-onboarding-frame" data-testid="project-wizard-onboarding">
           <NewProjectWizard
             workspaceId={activeWorkspaceId}
@@ -2348,6 +2400,7 @@ export function App() {
                 <Sidebar
                   boards={workspaceBoards}
                   projects={workspaceProjects}
+                  assignableProjects={workspaceProjects}
                   workspaces={workspaces}
                   activeWorkspaceId={activeWorkspaceId}
                   searching={sidebarSearching}
@@ -2384,6 +2437,11 @@ export function App() {
                     if (archived && (route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey === issueKey) {
                       navigate({ feature: route.feature });
                     }
+                  }}
+                  onAssignConversation={async (issueKey, projectId, ticketKey) => {
+                    const project = workspaceProjects.find(candidate => candidate.id === projectId);
+                    if (!project) throw new Error('That project is no longer available in this workspace.');
+                    await window.praxis.ai.assignSessionToProject(issueKey, projectId, ticketKey, project.workspaceFolder);
                   }}
                   onDeleteSession={async issueKey => {
                     await window.praxis.ai.deleteSession(issueKey);
@@ -2900,7 +2958,7 @@ export function App() {
         />
       )}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} brief={splashBrief && splashReplayKey === 0} onDone={() => setShowSplash(false)} />}
-      {paletteOpen && (
+      {paletteOpen && !aiSetupNeeded && (
         <CommandPalette entries={paletteEntries} onSearch={searchIssues} onClose={() => setPaletteOpen(false)} />
       )}
       {walkthroughOpen && <Walkthrough stops={walkthroughStops} onDone={finishWalkthrough} />}

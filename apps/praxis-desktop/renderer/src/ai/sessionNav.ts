@@ -49,13 +49,12 @@ export function isWorkflowStageSession(session: AgentSessionRecord): boolean {
  * no project and no ticket — plain "talk to the AI." It rides the existing
  * `AgentSessionRecord`/synthesized-key session engine rather than a new record
  * type: the identity check is what makes it a conversation, not storage. A
- * governed workflow stage and a ticket review both also carry a synthesized
- * key, so both are explicitly excluded rather than inferred from a missing
- * `projectId` — a ticket-backed session can legitimately have none.
+ * ticket always resolves to a project, so any session without one is a
+ * conversation; only a governed workflow stage and a ticket review are
+ * excluded, as each is reached through its run or ticket.
  */
 export function isConversationSession(session: AgentSessionRecord): boolean {
-  return isSynthesizedKey(session.issueKey)
-    && !session.projectId
+  return !session.projectId
     && !session.workflowRunId
     && !isWorkflowStageSession(session)
     && !isTicketReviewKey(session.issueKey);
@@ -431,6 +430,40 @@ export function getModelPricing(
   return undefined;
 }
 
+/**
+ * The context window for a session, in preference order:
+ *
+ * 1. What the provider itself reported (`contextLimit`) — fetched from the
+ *    provider's own model listing for API providers, or sent by an ACP agent
+ *    via `usage_update`. Authoritative: this is the number the next request
+ *    will actually be rejected against.
+ * 2. The selected model's known window, from `getKnownContextLength`, keyed on
+ *    *this session's* model id and provider.
+ * 3. `undefined` — nothing to stand on.
+ *
+ * The per-model step is why this exists. A single hardcoded default (this used
+ * to be a flat 128k) is only ever right for one model: it shows a 200k Claude
+ * as three-quarters full when it is barely used, and a 1M Gemini as nearly
+ * empty when it is about to be rejected. Because the lookup is keyed on the
+ * session's own model, a session that hands over to a different model measures
+ * against that model's window rather than the one it started with — the
+ * number follows the model for the life of the session instead of being fixed
+ * once at creation.
+ *
+ * `undefined` rather than a fallback number: the indicator's whole value is
+ * warning you before a turn is refused, so a percentage computed from a window
+ * the provider never stated is worse than no percentage — it looks
+ * authoritative while being wrong. Callers render nothing in that case.
+ */
+export function sessionContextLimit(session: AgentSessionRecord): number | undefined {
+  const reported = session.contextLimit;
+  if (typeof reported === 'number' && reported > 0) {
+    return reported;
+  }
+  const known = getKnownContextLength(session.model, session.provider);
+  return typeof known === 'number' && known > 0 ? known : undefined;
+}
+
 export interface ContextPressure {
   /** 0–1 share of the model's window the current prompt occupies. */
   fraction: number;
@@ -456,7 +489,7 @@ export interface ContextPressure {
  */
 export function contextPressure(session: AgentSessionRecord): ContextPressure | undefined {
   const used = session.contextTokens ?? session.tokenUsage?.inputTokens;
-  const limit = session.contextLimit ?? 128000;
+  const limit = sessionContextLimit(session);
   if (typeof used !== 'number' || typeof limit !== 'number' || limit <= 0 || used <= 0) {
     return undefined;
   }

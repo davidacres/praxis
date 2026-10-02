@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -171,7 +172,7 @@ test('two stage sessions of one run with no controller gather under one run head
     { projectId }
   );
   await page.reload();
-  await page.getByTestId('nav-sessions').click();
+  await openSession(page);
 
   const group = page.getByTestId('session-run-group');
   await expect(group).toHaveCount(1);
@@ -307,7 +308,7 @@ test('a run header in Sessions archives or deletes all of its stage sessions, an
   const openSessions = async () => {
     await page.reload();
     await expect(page.getByTestId('startup-splash')).toHaveCount(0, { timeout: 15000 });
-    await page.getByTestId('nav-sessions').click();
+    await openSession(page);
   };
 
   // Archive: the header has the same buttons a session row has, and takes both stage sessions with it.
@@ -324,6 +325,7 @@ test('a run header in Sessions archives or deletes all of its stage sessions, an
     return [...row.querySelectorAll('button')].every(button => button.getBoundingClientRect().right <= box.right + 0.5);
   });
   expect(inside).toBe(true);
+  await group.hover();
   await group.getByTestId('session-run-archive-btn').click();
   await expect.poll(async () => (await stageSessions(archivedRun)).every(s => s.archived)).toBe(true);
   await expect(page.getByTestId('session-run-group')).toHaveCount(0);
@@ -333,6 +335,7 @@ test('a run header in Sessions archives or deletes all of its stage sessions, an
   const deletedRun = await startAndWait('To delete');
   await openSessions();
   await expect(page.getByTestId('session-run-group')).toHaveCount(1);
+  await page.getByTestId('session-run-group').hover();
   await page.getByTestId('session-run-delete-btn').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('all 2 sessions');
@@ -340,6 +343,7 @@ test('a run header in Sessions archives or deletes all of its stage sessions, an
   // Cancelling changes nothing.
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   expect((await stageSessions(deletedRun)).length).toBe(2);
+  await page.getByTestId('session-run-group').hover();
   await page.getByTestId('session-run-delete-btn').click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete sessions' }).click();
   await expect.poll(async () => (await stageSessions(deletedRun)).length).toBe(0);

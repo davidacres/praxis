@@ -96,6 +96,12 @@ test('General and Ticket project sessions expose rename, archive, and delete act
   await renamedGeneral.getByTestId('session-delete-btn').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('Delete this session?');
-  await dialog.getByRole('button', { name: 'Delete session' }).click();
+  await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
+  await expect(dialog.locator('.modal-footer')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Archive', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Delete', exact: true })).toBeVisible();
+  await dialog.screenshot({ path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'session-delete-dialog.png') });
+  await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(page.getByTestId('project-session-nav-item')).toHaveCount(0);
 });

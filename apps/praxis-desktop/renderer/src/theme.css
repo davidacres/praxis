@@ -1903,6 +1903,21 @@ textarea {
 }
 .project-tree-parent:hover { background: var(--bg-hover); }
 .project-tree-parent.active { background: var(--accent-soft); border-left-color: var(--accent); }
+.project-tree-parent.session-drop-target { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-soft); }
+.session-assign-dialog { width: min(520px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 40px)); }
+.session-assign-header { align-items: flex-start; padding: var(--space-4) var(--space-5); }
+.session-assign-heading { display: grid; gap: var(--space-1); min-width: 0; flex: 1; }
+.session-assign-header h3 { margin: 0; color: var(--text); font-size: var(--text-md); font-weight: 600; }
+.session-assign-description { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.45; }
+.session-assign-body { gap: var(--space-4); padding: var(--space-5); }
+.session-assign-field { display: grid; gap: var(--space-1); }
+.session-assign-field-label { color: var(--text-secondary); font-size: var(--text-sm); font-weight: 600; }
+.session-assign-field-label > span { color: var(--text-tertiary); font-weight: 400; }
+.session-assign-body .composer-chip { min-height: var(--field-chip-height); justify-content: flex-start; }
+.session-assign-footer { padding: var(--space-3) var(--space-5); }
+.session-row-menu { position: absolute; z-index: 20; top: calc(100% - 2px); right: 4px; display: grid; min-width: 176px; padding: 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--bg-elevated); box-shadow: var(--shadow-panel); }
+.session-row-menu > button { display: flex; align-items: center; gap: var(--space-2); padding: 7px 9px; border: 0; border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.session-row-menu > button:hover { background: var(--bg-hover); }
 .project-tree-toggle,
 .project-tree-content {
   border: 0;
@@ -2051,11 +2066,21 @@ textarea {
 /* The Workflows heading's "+" (26px) would make it 3px taller than its sibling
    subsection headers, and that strip shows beneath the next one to stick. */
 .project-tree-children > .tree-subsection-heading .sidebar-section-add { height: var(--sidebar-sticky-2-h); }
-/* The Sessions header borrows the Praxis-section chrome but lives inside the
-   project tree, so its sticky offset must match the other subsection headers. */
-.project-tree-children > .project-sessions-header { top: var(--sidebar-sticky-2); z-index: 3; }
-.project-tree-children > .project-workflows-header { top: var(--sidebar-sticky-2); z-index: 3; }
-.project-tree-children > .project-automations-header { top: var(--sidebar-sticky-2); z-index: 3; }
+/* Feature headers are 35px, unlike the compact 23px docs headers. Their
+   containers bound sticking to the section/category that owns the rows.
+   Categories must never inherit the footer's top: 0 and z-index: 5. */
+.project-sidebar-section,
+.project-session-category { display: flow-root; isolation: isolate; }
+.project-sidebar-section { position: relative; z-index: 3; }
+.project-sidebar-section > .feature-section-header {
+  top: var(--sidebar-sticky-2);
+  /* Above automation hover actions (4), inside the section's own context. */
+  z-index: 5;
+}
+.project-session-category > .project-session-category-header {
+  top: calc(var(--sidebar-sticky-2) + var(--sidebar-sticky-0-h));
+  z-index: 3;
+}
 /* The Projects header uses the same chrome; it sits at the top of the scroll
    area so it inherits the same sticky offset as the old sidebar-section-heading. */
 .sidebar-scroll > .projects-section-header { top: calc(-1 * var(--space-1)); z-index: 5; }
@@ -5122,6 +5147,18 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .overview-health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-tertiary); }
 .overview-health-dot.ok { background: #4caf50; box-shadow: 0 0 0 3px color-mix(in srgb, #4caf50 14%, transparent); }
 .overview-health-dot.error { background: var(--danger); }
+/* Overview session status reads as an icon colour rather than a written-out
+   state name: green done, red failed, blue in progress. The two marks are
+   built differently, so each needs its own treatment -- the bare dot is a
+   solid fill, while .overview-activity-marker is a disc with a glyph cut into
+   it and so needs a tinted fill with a matching foreground to stay legible. */
+.overview-status-dot.overview-status-completed { background: var(--success); }
+.overview-status-dot.overview-status-failed, .overview-status-dot.overview-status-aborted { background: var(--danger); }
+.overview-status-dot.overview-status-executing, .overview-status-dot.overview-status-planning { background: var(--tone-progress); }
+.overview-activity-marker.overview-status-completed { color: var(--bg); background: var(--success); }
+.overview-activity-marker.overview-status-failed, .overview-activity-marker.overview-status-aborted { color: var(--bg); background: var(--danger); }
+.overview-activity-marker.overview-status-executing, .overview-activity-marker.overview-status-planning { color: #fff; background: var(--tone-progress); }
+
 /* Overview is a pane-level surface: let the active palette/material show
    through instead of covering it with legacy secondary-background tokens. */
 .overview-page { background: transparent; }
@@ -5689,6 +5726,10 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .custom-endpoint-header-row .input { flex: 1 1 0; min-width: 0; }
 .custom-endpoint-header-row .btn-icon { flex-shrink: 0; }
 .custom-endpoint-add-header { align-self: flex-start; }
+/* The MCP server form shares the custom endpoint form's layout; its action row and result need air above them. */
+.mcp-servers .custom-endpoint-form .ai-key-controls { margin-top: var(--space-2); }
+.mcp-servers .custom-endpoint-form .hint,
+.mcp-servers .custom-endpoint-form .settings-hint { margin: var(--space-2) 0 0; }
 .custom-endpoint-probe { display: flex; flex-direction: column; gap: var(--space-1); margin: 0 0 var(--space-2); padding: var(--space-2) var(--space-3); list-style: none; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-sunken); font-size: var(--text-sm); }
 .custom-endpoint-probe-step { display: flex; align-items: flex-start; gap: var(--space-2); }
 .custom-endpoint-probe-dot { display: inline-grid; place-items: center; flex-shrink: 0; width: 18px; height: 18px; margin-top: 1px; border-radius: 50%; background: color-mix(in srgb, var(--text-tertiary) 18%, var(--bg)); color: var(--text-tertiary); }
@@ -6786,6 +6827,8 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 /* A session is a leaf one level under the (now --tree-indent-1) Sessions
    row, so it uses --tree-indent-2. */
 .session-nav-row { position: relative; height: 36px; gap: 6px; padding-left: var(--tree-indent-2); }
+.session-nav-row[draggable="true"] { cursor: grab; }
+.session-nav-row[draggable="true"]:active { cursor: grabbing; }
 .session-nav-row .tree-label { flex: 0 1 42%; }
 .session-inline-telemetry { overflow: hidden; min-width: 0; flex: 1 1 58%; color: var(--text-tertiary); font-size: 9px; font-variant-numeric: tabular-nums; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .session-nav-row .lane { flex-shrink: 0; margin-left: auto; }
@@ -8092,39 +8135,124 @@ button.session-chat-attachment {
   white-space: pre-wrap;
 }
 
-.session-chat-thought-disclosure {
-  margin: 2px 0 var(--space-2);
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--bg-elevated) 60%, transparent);
+/* The agent's reasoning for one turn, folded away behind a single caption
+   line. This is interface chrome about the turn, not something the assistant
+   said, so it gets no bubble, no author header and no copy button — just a
+   muted caption (icon · label · meta) with a rule trailing off to the edge,
+   like a fieldset legend. The rule is a flex item rather than a border the
+   caption is pulled up over, so it can never run through the text whatever
+   material the surface pack paints behind it. */
+.session-chat-thought {
+  margin: 0 0 var(--space-2);
+  border: 0;
 }
 
-.session-chat-thought-disclosure summary {
+.session-chat-thought-summary {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
   cursor: pointer;
   font-size: var(--text-xs);
-  color: var(--text-secondary);
-  font-weight: 500;
+  color: var(--text-tertiary);
   user-select: none;
+  list-style: none;
 }
 
-.session-chat-thought-disclosure summary:hover {
-  color: var(--text-primary);
+.session-chat-thought-summary::-webkit-details-marker { display: none; }
+
+.session-chat-thought-summary::after {
+  content: '';
+  flex: 1 1 16px;
+  min-width: 16px;
+  height: 1px;
+  background: color-mix(in srgb, var(--border) 45%, transparent);
 }
+
+.session-chat-thought-summary > svg { flex: 0 0 auto; color: inherit; }
+
+.session-chat-thought-summary:hover { color: var(--text-secondary); }
+
+.session-chat-thought-label { flex: 0 0 auto; font-weight: 500; }
+
+.session-chat-thought-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-chat-thought[open] .session-chat-thought-summary { color: var(--text-secondary); }
 
 .session-chat-thought-content {
-  max-height: 240px;
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
+  max-height: 260px;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) 2px 0;
   overflow-y: auto;
-  border-top: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
   font-size: var(--text-xs);
   color: var(--text-secondary);
   line-height: 1.5;
-  font-style: italic;
+}
+
+/* Markdown paragraphs bring their own margins; the steps are spaced by the
+   rule between them instead. */
+.session-chat-thought-content .markdown-body {
+  min-width: 0;
+  font-size: inherit;
+  /* Else the newline after each block renders as a blank line. */
+  white-space: normal;
+}
+.session-chat-thought-content .markdown-body p { margin: 0; }
+
+.session-chat-thought-content > *:first-child { margin-top: 0; }
+.session-chat-thought-content > *:last-child { margin-bottom: 0; }
+
+/* Steps within one turn, so a multi-step thought stays readable without
+   being chopped into separate cards. */
+.session-chat-thought-content > * + * {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px dashed color-mix(in srgb, var(--border) 30%, transparent);
+}
+
+/* The turn's tool calls: what was actually done, one quiet row each. */
+.session-chat-thought-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-chat-thought-tools li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.session-chat-thought-tools li.is-failed { color: var(--danger, currentColor); }
+
+.session-chat-thought-tool-name {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-primary);
+}
+
+.session-chat-thought-tool-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary, var(--text-secondary));
 }
 
 .session-runtime-chip {
@@ -8713,8 +8841,12 @@ button.session-chat-attachment {
 
 /* Compact confirm / prompt dialogs — the in-app replacement for
    window.confirm / window.prompt. Narrower than the default modal card. */
-.modal-card.app-dialog { width: min(420px, 90vw); }
-.app-dialog-body { padding: var(--space-3); gap: var(--space-3); }
+.modal-card.app-dialog { width: min(520px, calc(100vw - 32px)); }
+.app-dialog .modal-header { align-items: flex-start; padding: var(--space-4) var(--space-5); }
+.app-dialog .modal-header h3 { margin: 0; color: var(--text); font-size: var(--text-md); font-weight: 600; }
+.app-dialog .modal-header .btn-icon { margin-left: auto; }
+.app-dialog-body { padding: var(--space-5); gap: var(--space-4); }
+.app-dialog-actions { padding: var(--space-3) var(--space-5); }
 .app-dialog-message { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; white-space: pre-wrap; }
 /* What a confirm affects, line by line, and an opt-in for a further destructive step. */
 .app-dialog-details { margin: 0; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -11002,13 +11134,16 @@ button.session-chat-attachment {
 .project-session-category-header { display: flex; align-items: center; min-width: 0; }
 .project-session-category-header .feature-section-title { flex: 1; min-width: 0; padding-left: calc(var(--tree-indent-2) - 10px); gap: 6px; }
 .project-session-entry { min-width: 0; padding-bottom: 0; }
-.automation-run-item { position: relative; min-width: 0; min-height: 36px; margin: 0 4px 2px var(--tree-indent-2); border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; transition: background 140ms ease; }
+.automation-run-item { position: relative; min-width: 0; min-height: 36px; margin: 0 4px 2px; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; transition: background 140ms ease; }
 .automation-run-item::before { content: ''; position: absolute; z-index: 0; inset: 0 auto 0 0; width: 2px; border-radius: 2px; background: transparent; }
 .automation-run-item:hover { background: var(--bg-hover); }
 .automation-run-item.active { background: var(--bg-active); color: var(--text); }
 .automation-run-item.active::before { background: var(--accent); }
-.automation-run-title-row { position: relative; z-index: 3; display: flex; height: 36px; align-items: center; gap: 4px; min-width: 0; padding: 0 4px 0 12px; }
+.automation-run-title-row { position: relative; z-index: 3; display: flex; height: 36px; align-items: center; gap: 4px; min-width: 0; padding: 0 4px 0 calc(var(--tree-indent-3) - 4px); }
+.automation-run-expand { flex: 0 0 20px; width: 20px; height: 24px; opacity: .6; }
+.automation-run-expand:hover, .automation-run-expand[aria-expanded='true'] { opacity: 1; }
 .automation-run-main { display: flex; min-width: 0; flex: 1; align-items: center; gap: 7px; height: 100%; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.automation-run-title-input { flex: 1; min-width: 0; }
 .automation-run-title { overflow: hidden; min-width: 64px; flex: 1 1 auto; font-size: var(--text-sm); font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 .automation-run-inline-meta { overflow: hidden; min-width: 0; max-width: 74px; flex: 0 1 74px; color: var(--text-tertiary); font-size: 9px; font-variant-numeric: tabular-nums; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .automation-run-progress-count { flex-shrink: 0; color: var(--text-tertiary); font-size: 10px; font-variant-numeric: tabular-nums; }
@@ -11019,15 +11154,10 @@ button.session-chat-attachment {
 .automation-state-mark.lane--done { border-color: var(--lane-done); background: var(--lane-done); }
 .automation-state-mark.lane--failed { border-radius: 1px; color: var(--lane-failed); transform: rotate(45deg); }
 .automation-state-mark.lane--skipped { width: 8px; height: 2px; border: 0; border-radius: 1px; background: var(--lane-skipped); }
-.automation-run-menu-wrap { position: relative; flex: 0 0 26px; }
-.automation-run-menu-trigger { opacity: 0; transition: opacity 120ms ease; }
-.automation-run-item:hover .automation-run-menu-trigger,
-.automation-run-item:focus-within .automation-run-menu-trigger,
-.automation-run-menu-trigger[aria-expanded='true'] { opacity: 1; }
-.automation-run-menu { position: absolute; z-index: 30; right: 0; bottom: 27px; width: 140px; padding: 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--bg-elevated); box-shadow: 0 10px 28px rgba(0,0,0,.28); }
-.automation-run-menu button { display: flex; width: 100%; min-height: 28px; align-items: center; gap: 7px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font: inherit; font-size: var(--text-xs); text-align: left; cursor: pointer; }
-.automation-run-menu button:hover { color: var(--text); background: var(--bg-hover); }
-.automation-run-menu button.is-danger { color: var(--danger); }
+.automation-run-actions { z-index: 4; }
+.automation-run-item:hover .automation-run-actions,
+.automation-run-item:focus-within .automation-run-actions { opacity: 1; pointer-events: auto; }
+.automation-run-error { display: block; padding: 0 10px 4px; color: var(--danger); font-size: var(--text-xs); }
 .automation-run-expansion { display: grid; grid-template-rows: 0fr; visibility: hidden; opacity: 0; pointer-events: none; transform: translateY(-5px); transition: grid-template-rows 190ms cubic-bezier(.2,.8,.2,1), visibility 0s linear 190ms, opacity 140ms ease, transform 190ms cubic-bezier(.2,.8,.2,1); }
 .automation-run-expansion.is-open { grid-template-rows: 1fr; visibility: visible; opacity: 1; pointer-events: auto; transform: translateY(0); transition-delay: 0s; }
 .automation-run-expansion-inner { min-height: 0; overflow: hidden; }
@@ -14421,6 +14551,22 @@ button.session-chat-attachment {
    message, reasoning — that sit below the task list. Same label vocabulary
    (`rail-sub`) as Tasks/Changes below, so the whole stack reads as one list
    of "things about this session" rather than mismatched widgets. */
+.session-summary-text.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.session-clamp-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.session-clamp-toggle:hover { text-decoration: underline; }
 .session-summary-text { margin: 2px 0 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.4; overflow-wrap: anywhere; }
 .session-last-message .markdown-body {
   max-height: 280px;
@@ -14438,10 +14584,13 @@ button.session-chat-attachment {
   gap: var(--space-2);
 }
 .session-reasoning-header {
+  cursor: pointer;
+  list-style: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
+.session-reasoning-header::-webkit-details-marker { display: none; }
 .session-reasoning-copy {
   display: inline-flex;
   align-items: center;
@@ -16467,3 +16616,36 @@ button.session-chat-attachment {
   padding: 2px 8px;
   color: var(--danger, #ef4444);
 }
+
+/* AI setup wizard (first run) — reuses the project wizard shell, cards and review styles. */
+.ai-setup-grid { grid-template-columns: repeat(2, minmax(300px, 1fr)); }
+.ai-setup-choice .project-choice-kicker { color: var(--provider-tone, var(--accent)); }
+.ai-setup-preview .ai-setup-preview-body { display: flex; align-items: center; flex: 1; gap: 12px; padding: 10px; background-image: linear-gradient(90deg, color-mix(in srgb, var(--provider-tone, var(--accent)) 10%, transparent), transparent 70%); }
+.ai-setup-preview-mark, .ai-setup-card-mark { display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; border: 1px solid color-mix(in srgb, var(--provider-tone, var(--accent)) 45%, var(--border)); border-radius: 10px; color: var(--provider-tone, var(--accent)); background: color-mix(in srgb, var(--provider-tone, var(--accent)) 12%, var(--bg-elevated)); }
+.ai-setup-preview-lines, .ai-setup-preview-key { display: grid; flex: 1; gap: 6px; min-width: 0; }
+.ai-setup-preview-lines i { display: block; width: 90%; height: 3px; border-radius: 2px; background: var(--border-strong); }
+.ai-setup-preview-lines i.short { width: 45%; background: color-mix(in srgb, var(--provider-tone, var(--accent)) 55%, var(--border)); }
+.ai-setup-preview-lines i.medium { width: 66%; }
+.ai-setup-preview-key { grid-template-columns: repeat(8, 1fr); gap: 3px; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-sunken); }
+.ai-setup-preview-key i { height: 5px; border-radius: 50%; background: var(--text-tertiary); }
+.ai-setup-connect-list { display: grid; gap: 12px; max-width: 900px; }
+.ai-setup-card { display: flex; align-items: flex-start; gap: 16px; padding: 18px 20px; border: 1px solid var(--border); border-radius: 11px; background: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity) * 100%), transparent); backdrop-filter: var(--surface-backdrop); }
+.ai-setup-card.ready { border-color: color-mix(in srgb, var(--success) 55%, var(--border)); }
+.ai-setup-card-body { display: grid; flex: 1; gap: 10px; min-width: 0; }
+.ai-setup-card-body > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ai-setup-card-body p { margin: 0; color: var(--text-secondary); line-height: 1.5; }
+.ai-setup-state { color: var(--text-tertiary); font-size: var(--text-xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.ai-setup-state.ready { color: var(--success); }
+.ai-setup-message { font-size: var(--text-sm); line-height: 1.45; }
+.ai-setup-message.ok { color: var(--success); }
+.ai-setup-message.error { color: var(--danger); }
+.ai-setup-footer-note { color: var(--text-tertiary); font-size: var(--text-sm); }
+.ai-setup-review { max-width: 760px; }
+.ai-setup-default-list { display: grid; gap: 10px; margin: 18px 0; }
+.ai-setup-default.selected { border-color: var(--provider-tone, var(--accent)); box-shadow: inset 0 0 0 1px var(--provider-tone, var(--accent)); }
+.ai-setup-default strong { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
+.ai-setup-default strong svg { color: var(--provider-tone, var(--accent)); }
+@media (max-width: 850px) { .ai-setup-grid { grid-template-columns: 1fr; } }
+
+/* First-run AI setup: the chrome is present but inert until a provider is connected. */
+.titlebar-locked .titlebar-group > :not(.caption-controls) { opacity: .4; }

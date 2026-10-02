@@ -5,6 +5,7 @@ import { DEFAULT_VERCEL_URL } from '../gateway/modelIds';
 import { anthropicAdapter } from './anthropicAdapter';
 import { geminiAdapter } from './geminiAdapter';
 import { DEFAULT_GEMINI_BASE_URL } from './geminiClient';
+import { bifrostAdapter } from './bifrostAdapter';
 import { openAiCompatibleAdapter } from './openAiCompatibleAdapter';
 import type { ApiProviderDescriptor, ProviderAdapter, ProviderDescriptor } from './providerAdapter';
 
@@ -215,7 +216,9 @@ export function providerDisplayName(provider: string): string {
 export function resolveProviderAdapter(id: AiProvider): ProviderAdapter {
   const descriptor = getProviderDescriptor(id);
   // Every user-added endpoint speaks OpenAI chat-completions (its `protocol`).
-  const adapter = descriptor.kind === 'api' && descriptor.custom ? openAiCompatibleAdapter : ADAPTERS[id as BuiltInAiProvider];
+  const adapter = descriptor.kind === 'api' && descriptor.custom
+    ? descriptor.custom.presetId === 'bifrost' ? bifrostAdapter : openAiCompatibleAdapter
+    : ADAPTERS[id as BuiltInAiProvider];
   if (!adapter) {
     throw new Error(`Provider '${id}' has no chat-completions adapter (kind: '${descriptor.kind}').`);
   }

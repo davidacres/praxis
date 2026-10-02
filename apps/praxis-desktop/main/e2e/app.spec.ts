@@ -38,7 +38,7 @@ test('focus mode button in titlebar is available in a session and toggles panels
   await expect(toggles.getByRole('button', { name: 'Toggle focus mode' })).toHaveCount(0);
 
   // Navigate to Sessions
-  await window.locator('[data-testid="nav-sessions"]').click();
+  await window.getByTestId('nav-conversations').click();
 
   // Focus mode button is now available in a session
   const focusBtn = toggles.getByRole('button', { name: 'Toggle focus mode' });

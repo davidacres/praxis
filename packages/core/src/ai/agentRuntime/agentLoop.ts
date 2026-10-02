@@ -31,7 +31,7 @@ export interface AgentToolExecutor {
   execute(
     name: string,
     args: Record<string, unknown>
-  ): Promise<{ ok: boolean; content: string; data?: AgentToolEventData }>;
+  ): Promise<{ ok: boolean; content: string; data?: AgentToolEventData; images?: WireImageAttachment[] }>;
 }
 
 export interface AgentLoopOptions {
@@ -197,6 +197,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       history.push(assistantMessageWithToolCalls(completion.text, completion.toolCalls));
 
       const toolResults: Array<{ callId: string; content: string }> = [];
+      let toolImages: WireImageAttachment[] = [];
       for (const call of completion.toolCalls) {
         if (options.signal?.aborted) {
           return { status: 'aborted', text: completion.text, history, stepCount };
@@ -233,9 +234,24 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           data: result.data
         });
         toolResults.push({ callId: call.id, content: result.content });
+        // A `role: 'tool'` message is text-only on every provider, so an image
+        // read by a tool (read_image, browser_screenshot) would never reach the
+        // model. Collect it here and re-attach it as a user message, which is
+        // the shape all three wires already know how to serialise.
+        if (result.images?.length) {
+          toolImages.push(...result.images);
+        }
       }
 
       history.push(...toolResultMessages(toolResults));
+      if (toolImages.length > 0) {
+        history.push({
+          role: 'user',
+          content: 'The tool output above included image attachments, shown here:',
+          images: toolImages
+        });
+        toolImages = [];
+      }
 
       // Bound the conversation before the provider does it for us with a
       // context-length error. Only old tool output is sacrificed; the assistant

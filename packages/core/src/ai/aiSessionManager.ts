@@ -219,6 +219,7 @@ export class AiSessionManager {
         | 'runtimeLaunch'
         | 'connectionId'
         | 'projectId'
+        | 'linkedIssueKey'
         | 'worktreePath'
         | 'worktreeBranch'
         | 'worktreeBaseBranch'
@@ -259,6 +260,7 @@ export class AiSessionManager {
     if (runtime.parentSessionKey !== undefined) record.parentSessionKey = runtime.parentSessionKey.trim() || undefined;
     if (runtime.connectionId !== undefined) record.connectionId = runtime.connectionId;
     if (runtime.projectId !== undefined) record.projectId = runtime.projectId.trim() || undefined;
+    if (runtime.linkedIssueKey !== undefined) record.linkedIssueKey = runtime.linkedIssueKey.trim() || undefined;
     if (runtime.worktreePath !== undefined) record.worktreePath = runtime.worktreePath.trim() || undefined;
     if (runtime.worktreeBranch !== undefined) record.worktreeBranch = runtime.worktreeBranch.trim() || undefined;
     if (runtime.worktreeBaseBranch !== undefined) {
@@ -365,6 +367,18 @@ export class AiSessionManager {
       throw new Error('Session title cannot be empty.');
     }
     record.title = trimmed;
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
+  /** Move a free-form conversation into a project, optionally linking a ticket. */
+  public assignAgentSession(issueKey: string, projectId: string | undefined, linkedIssueKey?: string, workingDirectory?: string): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+    record.projectId = projectId?.trim() || undefined;
+    record.linkedIssueKey = linkedIssueKey?.trim() || undefined;
+    record.workingDirectory = workingDirectory?.trim() || undefined;
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
     return record;

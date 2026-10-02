@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 // End-to-end for the flow the onboarding calls "hand a ticket to an agent":
 // a ticket describing a small coding task is delegated to a CLI-hosted agent,
 // which reads the project's file, edits it, and reports back — and the change
@@ -105,8 +106,7 @@ test('a ticket for a one-line fix is delegated to an agent and lands on disk', a
 
   // The session is in the UI. A free-form session is listed by its goal, not
   // the synthesized key, which is what a user sees in the sidebar.
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+  await openSession(win, 'Fix the sum() function');
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 10000 });
 
   // The edit renders as a red/green diff in the grouped completion gadget,
@@ -208,8 +208,7 @@ test('each turn records its reply once, and follow-ups carry the earlier answer'
   expect((await messageEvents())[0]).toContain('Ready for review');
 
   // It now renders as a proper assistant turn rather than a trailing stream.
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+  await openSession(win, 'Fix the sum() function');
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText('Ready for review');
 
   // Two follow-ups: each adds exactly one reply. The retroactive flush this
@@ -253,8 +252,7 @@ test('a finished session shows its changeset and can commit it', async () => {
     ), { timeout: 20000 })
     .toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+  await openSession(win, 'Fix the sum() function');
 
   // The changeset is read from the working tree, not reconstructed from the
   // transcript — so it reports what is actually on disk.
@@ -325,8 +323,7 @@ test('committing a session leaves work in progress the session never touched', a
   // be confused for something the session did.
   fs.writeFileSync(path.join(repo, 'notes.md'), 'seeded\nmy own unrelated edit\n');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+  await openSession(win, 'Fix the sum() function');
   await win.locator('[data-testid="session-tab-changes"]').click();
   const changes = win.locator('[data-testid="session-changes"]');
 
@@ -390,8 +387,7 @@ test('a changed file can be read whole, not just as a diff', async () => {
     ), { timeout: 20000 })
     .toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+  await openSession(win, 'Fix the sum() function');
 
   await win.locator('[data-testid="session-tab-changes"]').click();
   const changes = win.locator('[data-testid="session-changes"]');
@@ -476,8 +472,7 @@ test('a single hunk can be discarded without losing the rest of the file\'s edit
   // edits" a hunk-level discard must leave alone.
   fs.writeFileSync(sumFile, fs.readFileSync(sumFile, 'utf8').replace('return a * 1;', 'return a * 2;'));
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+  await openSession(win, 'Fix the sum() function');
 
   await win.locator('[data-testid="session-tab-changes"]').click();
   const changes = win.locator('[data-testid="session-changes"]');
@@ -526,8 +521,7 @@ test('a CLI-agent session reports no token count rather than a misleading zero',
     ), { timeout: 20000 })
     .toBe('completed');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+  await openSession(win, 'Fix the sum() function');
 
   // AcpAgentHost does not read ACP's `usage_update` yet, so a CLI-hosted
   // session has no usage today regardless of what the agent reports. The
@@ -573,8 +567,7 @@ test('an edit can be undone straight from the transcript', async () => {
     .toBe('completed');
   expect(fs.readFileSync(sumFile, 'utf8')).toContain('return a + b;');
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+  await openSession(win, 'Fix the sum() function');
 
   // The edit remains reachable from the grouped completion gadget, without
   // duplicating a tool-call disclosure inside the conversation.

@@ -38,6 +38,46 @@ test('reopened history does not treat responseText as transcript truth', () => {
   assert.equal(snapshot.canCancel, false);
 });
 
+test('drops pending permissions from snapshots after the session stops awaiting approval', () => {
+  const events: AgentSessionRecord['events'] = [
+    { timestamp: '2026-09-22T09:00:01.000Z', type: 'permission_requested', summary: 'Run tests' },
+  ];
+  const awaiting = mobileSessionSnapshot(record({ state: 'awaiting_approval', events }));
+  assert.equal(awaiting.pendingPermissions.length, 1);
+
+  for (const state of ['completed', 'failed', 'aborted'] as const) {
+    const stopped = mobileSessionSnapshot(record({ state, events }));
+    assert.deepEqual(stopped.pendingPermissions, []);
+  }
+});
+
+test('projects user image references without copying large base64 payloads into the snapshot', () => {
+  const snapshot = mobileSessionSnapshot(record({
+    state: 'completed',
+    responseText: undefined,
+    events: [
+      { timestamp: '2026-09-22T09:00:00.000Z', type: 'user_input_completed', summary: 'What is in this picture?' },
+      {
+        timestamp: '2026-09-22T09:00:01.000Z',
+        type: 'user_input_completed',
+        summary: 'What is in this picture?',
+        attachments: [
+          { mimeType: 'image/png', dataBase64: 'x'.repeat(800_000) },
+          { mimeType: 'image/jpeg', dataBase64: 'y'.repeat(800_000) },
+        ],
+      },
+    ],
+  }));
+  const messages = snapshot.messages.filter(item => item.text === 'What is in this picture?');
+  assert.equal(messages.length, 2);
+  const message = messages[1];
+  assert.deepEqual(message?.attachments, [
+    { eventIndex: 1, attachmentIndex: 0, mimeType: 'image/png' },
+    { eventIndex: 1, attachmentIndex: 1, mimeType: 'image/jpeg' },
+  ]);
+  assert.ok(JSON.stringify(snapshot).length < 10_000);
+});
+
 test('bounds large histories so a mobile snapshot stays transportable', () => {
   const events = Array.from({ length: 120 }, (_, index) => ({
     timestamp: `2026-09-22T09:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,

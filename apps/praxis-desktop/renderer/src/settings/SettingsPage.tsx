@@ -41,6 +41,7 @@ import { ModelManagerPanel } from '../ai/ModelManagerPanel';
 import { AiUsageStatsSection } from './AiUsageStatsSection';
 import { fetchModelOptions, hasModelCatalog, providerIconName } from '../ai/modelProviders';
 import { AddProviderDialog, CustomEndpointForm, endpointDisplayUrl, type BuiltInCatalogEntry } from './AiProviderCatalog';
+import { McpServersPanel } from './McpServersPanel';
 import {
   formatCost,
   formatTokenCount,
@@ -3228,6 +3229,10 @@ function AiSection({
                 </div>
               </FieldRow>
             )}
+            <McpServersPanel
+              servers={settings.ai.mcpServers ?? []}
+              onChange={next => update({ ai: { mcpServers: next } })}
+            />
           </>
         )}
       </div>

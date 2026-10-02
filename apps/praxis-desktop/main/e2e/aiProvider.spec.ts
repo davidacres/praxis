@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
@@ -485,7 +487,9 @@ test('the model manager panel curates which models the composer offers', async (
       { id: 'openai/gpt-5.6', name: 'GPT-5.6' }
     ]
   });
-  app = await launchTestApp(undefined, undefined, {
+  app = await launchTestApp({
+    ai: { activeProvider: 'vercel-gateway', defaultModel: 'anthropic/claude-sonnet-5' }
+  }, undefined, {
     ...NO_GATEWAY_ENV,
     AI_GATEWAY_API_KEY: 'e2e-gateway-key',
     AI_GATEWAY_URL: mock.baseUrl
@@ -517,6 +521,13 @@ test('the model manager panel curates which models the composer offers', async (
   expect(persisted?.sort()).toEqual(['anthropic/claude-opus-5', 'anthropic/claude-sonnet-5']);
 
   await win.locator('[data-testid="model-manager-back"]').click();
+  // An explicit provider-page default remains authoritative even when it is
+  // outside the curated model list.
+  await win.getByLabel('AI default model').fill('openai/gpt-5.6');
+  await expect.poll(async () => win.evaluate(async () => {
+    const settings = await window.praxis.settings.get();
+    return settings.ai.defaultModel;
+  })).toBe('openai/gpt-5.6');
   await win.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
 
   // The composer's Model picker only offers the curated subset.
@@ -524,9 +535,22 @@ test('the model manager panel curates which models the composer offers', async (
   await win.locator('[data-testid="new-session-model-chip"]').waitFor({ timeout: 10000 });
   await win.locator('[data-testid="new-session-model-chip"]').click();
   const menu = win.locator('[role="listbox"][aria-label="Model"]');
+  const defaultOption = menu.locator('[data-testid="new-session-model-option-default"]');
+  await expect(defaultOption).toBeVisible();
+  await expect(defaultOption).toContainText('openai/gpt-5.6');
+  await expect(defaultOption).toHaveAttribute('aria-selected', 'true');
+  const artifactPath = path.resolve(process.cwd(), '../.praxis/session-artifacts/composer-default-model-option.png');
+  await fs.promises.mkdir(path.dirname(artifactPath), { recursive: true });
+  await menu.screenshot({ path: artifactPath });
   await expect(menu.locator('[data-testid="new-session-model-option-anthropic/claude-opus-5"]')).toBeVisible();
   await expect(menu.locator('[data-testid="new-session-model-option-anthropic/claude-sonnet-5"]')).toBeVisible();
   await expect(menu.locator('[data-testid="new-session-model-option-openai/gpt-5.6"]')).toHaveCount(0);
+  await menu.locator('[data-testid="new-session-model-option-anthropic/claude-opus-5"]').click();
+  await win.locator('[data-testid="new-session-model-chip"]').click();
+  await expect(defaultOption).toHaveAttribute('aria-selected', 'false');
+  await defaultOption.click();
+  await win.locator('[data-testid="new-session-model-chip"]').click();
+  await expect(defaultOption).toHaveAttribute('aria-selected', 'true');
 });
 
 test('every provider model exposes a persisted reasoning default and composer override', async () => {

@@ -1,3 +1,4 @@
+import { openSession } from './sessionNavigation';
 // The context indicator, driven end to end through the real stack: a mock
 // gateway reports usage the way a provider does (a final chunk with no
 // `choices`), and publishes a `context_length` on `/v1/models`. Everything
@@ -73,8 +74,7 @@ async function runSession(promptTokens: number): Promise<TestApp['window']> {
     ), { timeout: 10000 })
     .toBe(MODEL.context_length);
 
-  await win.locator('[data-testid="nav-sessions"]').click();
-  await win.locator('[data-testid="session-list-row"]').first().click();
+  await openSession(win);
   return win;
 }
 

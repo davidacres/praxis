@@ -14,6 +14,7 @@ import type {
 import { Icon } from '../ui/Icon';
 import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
 import {
+  applyEnabledModelCuration,
   fetchModelOptions,
   hasModelCatalog,
   NO_TOOLS_REASON,
@@ -28,17 +29,9 @@ import { formatContextLength, formatModelCost, getKnownContextLength, getModelPr
 import { useSettings } from '../settings/useSettings';
 import { canRunAgentSessions, isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
 
-/** Applies a provider's curated `enabledModelIds` (Settings → AI Provider → Models) to a fetched catalog. */
-function applyEnabledModelCuration(options: ModelOptions, enabledModelIds: string[] | undefined): ModelOptions {
-  if (!enabledModelIds) {
-    return options;
-  }
-  const allowed = new Set(enabledModelIds);
-  return { ...options, options: options.options.filter(option => allowed.has(option.value)) };
-}
-
-/** The provider's own current model if curation left it selectable, otherwise the first curated option. */
-function pickDefaultModel(options: ModelOptions | undefined): string | undefined {
+/** An explicit Settings model wins even when model curation hides it from the catalog. */
+function pickDefaultModel(options: ModelOptions | undefined, configuredDefault?: string): string | undefined {
+  if (configuredDefault?.trim()) return configuredDefault.trim();
   if (!options) {
     return undefined;
   }
@@ -197,6 +190,10 @@ export function NewSession({
   const enabledModelKey = selectedProvider
     ? JSON.stringify(liveSettings?.ai.providers[selectedProvider]?.enabledModelIds ?? null)
     : '';
+  const configuredDefaultModel = selectedProvider === 'vercel-gateway'
+    ? liveSettings?.ai.defaultModel
+    : selectedProvider ? liveSettings?.ai.providers[selectedProvider]?.defaultModel : undefined;
+  const configuredDefaultModelKey = configuredDefaultModel ?? '';
   const reasoningDefaultsKey = selectedProvider
     ? JSON.stringify(liveSettings?.ai.providers[selectedProvider]?.modelReasoningDefaults ?? null)
     : '';
@@ -390,7 +387,10 @@ export function NewSession({
           ? applyEnabledModelCuration(options, settings.ai.providers[selectedProvider]?.enabledModelIds)
           : undefined;
         setModelOptions(curated);
-        const picked = pickDefaultModel(curated);
+        const configuredDefault = selectedProvider === 'vercel-gateway'
+          ? settings.ai.defaultModel
+          : settings.ai.providers[selectedProvider]?.defaultModel;
+        const picked = pickDefaultModel(curated, configuredDefault);
         setSelectedModel(picked);
         setReasoningEffort(
           (picked && settings.ai.providers[selectedProvider]?.modelReasoningDefaults?.[picked]) || 'medium'
@@ -409,7 +409,7 @@ export function NewSession({
     return () => {
       cancelled = true;
     };
-  }, [selectedProvider, enabledModelKey, reasoningDefaultsKey]);
+  }, [selectedProvider, enabledModelKey, configuredDefaultModelKey, reasoningDefaultsKey]);
 
   useEffect(() => {
     if (!workflowMenuPos) return;
@@ -441,15 +441,23 @@ export function NewSession({
           ? applyEnabledModelCuration(options, settings.ai.providers[selectedProvider]?.enabledModelIds)
           : undefined;
         setModelOptions(curated);
-        setSelectedModel(current =>
-          current && curated?.options.some(o => o.value === current) ? current : pickDefaultModel(curated)
-        );
+        const configuredDefault = selectedProvider === 'vercel-gateway'
+          ? settings.ai.defaultModel
+          : settings.ai.providers[selectedProvider]?.defaultModel;
+        setSelectedModel(current => current && curated?.options.some(o => o.value === current)
+          ? current
+          : pickDefaultModel(curated, configuredDefault));
       })
       .catch(() => setModelOptions(undefined))
       .finally(() => setModelsLoading(false));
   };
 
+  const defaultModel = pickDefaultModel(modelOptions, configuredDefaultModel);
+  const defaultModelOption = modelOptions?.options.find(option => option.value === defaultModel);
   const filteredModelOptions = (modelOptions?.options ?? []).filter(option => {
+    if (option.value === defaultModel) return false;
+    const normalizedName = option.name.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (defaultModel && (normalizedName === 'default' || normalizedName === 'default (recommended)')) return false;
     const query = modelFilter.trim().toLowerCase();
     return !query || option.name.toLowerCase().includes(query) || option.value.toLowerCase().includes(query);
   });
@@ -962,6 +970,27 @@ export function NewSession({
                       <Icon name="refresh" size={13} />
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    className={`composer-provider-option${selectedModel === defaultModel ? ' active' : ''}`}
+                    data-testid="new-session-model-option-default"
+                    role="option"
+                    aria-selected={selectedModel === defaultModel}
+                    title={defaultModelOption?.description ?? 'Use the provider’s default model'}
+                    onClick={() => {
+                      setSelectedModel(defaultModel);
+                      setReasoningEffort(
+                        (selectedProvider && defaultModel && liveSettings?.ai.providers[selectedProvider]?.modelReasoningDefaults?.[defaultModel]) ||
+                          'medium'
+                      );
+                      setModelMenuPos(undefined);
+                    }}
+                  >
+                    <span className="composer-model-option-name">Default</span>
+                    <span className="composer-model-option-meta">
+                      <span className="composer-model-badge">{defaultModelOption?.name ?? defaultModel ?? 'Provider default'}</span>
+                    </span>
+                  </button>
                   {filteredModelOptions.length === 0 && (
                     <div className="popover-label">No matching models</div>
                   )}
