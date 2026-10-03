@@ -27,6 +27,7 @@ import { useDialogs } from '../ui/dialogs';
 import { useResizable } from './useResizable';
 import { WorkModeView } from '../projects/WorkModeView';
 import { ChipSelect } from '../ui/ChipSelect';
+import { SessionOrganizer } from './SessionOrganizer';
 
 export type SidebarMode = 'classic' | 'work';
 
@@ -917,7 +918,6 @@ export function Sidebar({
               {!projectsCollapsed && (projects.length === 0
                 ? <button className="sidebar-empty-project" onClick={onNewProject}>+ New Project</button>
                 : projectEntries.map(({ project, defaultBoard, linkedBoards }) => {
-                    const projectCollapsed = collapsed[`project:${project.id}`] ?? false;
                     const handleProjectDrop = (event: ReactDragEvent<HTMLElement>) => {
                       const issueKey = event.dataTransfer.getData('application/x-praxis-conversation');
                       if (!issueKey) return;
@@ -952,7 +952,7 @@ export function Sidebar({
                     const ticketSessions = projectSessions.filter(session => Boolean(session.linkedIssueKey) || !isSynthesizedKey(session.issueKey) || isTicketReviewKey(session.issueKey));
                     const generalSessionsCollapsed = collapsed[`project:${project.id}:general-sessions`] ?? false;
                     const ticketSessionsCollapsed = collapsed[`project:${project.id}:ticket-sessions`] ?? false;
-                    const renderProjectSessions = (items: AgentSessionRecord[], kind: 'general' | 'ticket') => items.map(session => (
+                    const renderProjectSessions = (items: AgentSessionRecord[], kind: 'general' | 'ticket') => <SessionOrganizer key={`project:${project.id}:${kind}`} scope={`project:${project.id}:${kind}`} items={items.map(session => ({ id: session.issueKey, node: (
                       <ProjectSessionRow
                         key={session.issueKey}
                         session={session}
@@ -963,15 +963,9 @@ export function Sidebar({
                         onDeleteSession={onDeleteSession}
                         onArchiveSession={onArchiveSession}
                       />
-                    ));
+                    ) }))} />;
                     return <div className="project-tree" key={project.id} data-testid="project-tree">
                       <div className={`project-tree-parent${selectedProjectId === project.id ? ' active' : ''}`} onDragOver={event => { if (event.dataTransfer.types.includes('application/x-praxis-conversation')) { event.preventDefault(); event.currentTarget.classList.add('session-drop-target'); } }} onDragLeave={event => event.currentTarget.classList.remove('session-drop-target')} onDrop={handleProjectDrop}>
-                        <button
-                          className="project-tree-toggle"
-                          aria-label={`${projectCollapsed ? 'Expand' : 'Collapse'} ${project.name}`}
-                          aria-expanded={!projectCollapsed}
-                          onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}`]: !projectCollapsed }))}
-                        ><span className="tree-section-icon"><Icon name={projectCollapsed ? 'chevron-right' : 'chevron-down'} size={12} /></span></button>
                         <button className="project-tree-content" data-testid="project-nav-item" onClick={() => onSelectProject(project)}>
                           <span className="tree-icon project-icon" style={{ color: projectColorValue(project.color) }}><Icon name={project.icon ?? 'folder-open'} size={15} /></span>
                           <span className="tree-stack"><span className="tree-label">{project.name}</span><span className="tree-sub">{project.type}</span></span>
@@ -1046,7 +1040,7 @@ export function Sidebar({
                           </button>
                         </div>
                       </div>
-                      {!projectCollapsed && <div className="project-tree-children">
+                      <div className="project-tree-children">
                         {childCount > 0 && <>
                         <button className="sidebar-subsection-toggle" aria-expanded={!projectBoardsCollapsed} onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:boards`]: !projectBoardsCollapsed }))}>
                           <span className={`tree-section-icon${projectBoardsCollapsed ? '' : ' open'}`}><Icon name="columns" size={13} /></span><span>Boards</span><span className="tree-meta">{childCount}</span>
@@ -1346,7 +1340,7 @@ export function Sidebar({
                           <span className="sidebar-empty-hint project-runs-empty">No automations yet</span>
                         )}
                         </div>
-                      </div>}
+                      </div>
                     </div>;
                   }))}
             </>}
@@ -1998,7 +1992,7 @@ function SessionsNav({
         </section>
       </div>}
       {!collapsed &&
-        rootItems.map(item => {
+        <SessionOrganizer scope={testId} items={rootItems.map(item => ({ id: item.kind === 'session' ? item.session.issueKey : `run:${item.runId}`, node: (() => {
           if (item.kind === 'session') return renderNode(item.session, 0);
           const runCollapsed = collapsedRuns[item.runId] ?? false;
           const live = item.members.filter(member => !isTerminalAgentState(member.state)).length;
@@ -2051,7 +2045,7 @@ function SessionsNav({
               {!runCollapsed && item.members.map(member => renderNode(member, 1))}
             </Fragment>
           );
-        })}
+        })() }))} />}
     </>
   );
 }
