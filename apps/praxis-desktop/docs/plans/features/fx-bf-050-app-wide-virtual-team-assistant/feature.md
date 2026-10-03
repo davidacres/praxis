@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Feature
 **Priority:** High
@@ -87,3 +87,19 @@ The assistant switches seamlessly between a lightweight **Floating Overlay** (fo
 ## Comments
 
 
+
+
+**PRX-F50** — 2026-10-03T17:27:21.175Z
+Kickoff plan (ticket moved to In Progress). Following the feature's 4 stories:
+1. FX-BE-152 core: `ai/assistant/assistantTypes.ts` + `assistantPersonas.ts` (+ node:test), exported from core index.
+2. FX-BE-152 main: `assistantIpc.ts` (assistant:turn, assistant:teamReview, chat CRUD stored as JSON under userData), preload + `PraxisIpc` contract; unit tests.
+3. FX-BE-153 renderer `src/assistant/`: shell (floating/docked, Cmd+J, TitleBar button), message feed w/ persona badges, context banner, @mention composer, Team Review button.
+4. FX-BE-154: page-context registry hook; register Board, Issue detail, Git changes, Workflow designer (replaces WorkflowAssistantPopover); action cards (apply workflow, open as coding session).
+5. FX-BE-155: `Team Chats` sidebar node, persistence, e2e `assistant.spec.ts`, screenshots, parity docs.
+Verification: check-types, test:core, build + copy-renderer, assistant/affected e2e specs, visual capture.
+
+**PRX-F50** — 2026-10-03T17:56:21.097Z
+Completion summary (FX-BF-050).
+Built: core `ai/assistant/` (types, 5 personas, turn + team-review engine, TeamChatStore, 12 node:tests); main `assistantIpc.ts` (assistant:turn/teamReview/chat CRUD, `userData/team-chats.json`) + preload + `AssistantIpc` contract; renderer `assistant/` (provider, floating+docked shells, persona feed, @mention composer, context pill, action cards, TeamChatsSection); ⌘J/Ctrl+J, title-bar button, command-palette entry; page context registered by Board, Issue, Git changes, Workflow designer (WorkflowAssistantPopover + its CSS removed); New Session accepts `initialGoal` for "Open as Coding Session"; Team Chats node in the project tree; parity doc + renderer AGENTS.md updated.
+Verified: check-types clean; test:core 1384/1384; renderer build + copy-renderer + desktop build OK; e2e assistant.spec.ts 4/4 (⌘J/float/dock keeps transcript, @mention + choices + coding-session handoff, team review order, context switching/detach/persistence/delete); regression: sidebarTreeAlignment, keyboardFocus, iconButtonTooltips, paneInset, workflowDesigner (34), folder/folderMulti/editIssue/newIssue all pass. Screenshots inspected (floating, docked, tree); fixed a wrapping action button found there.
+Not done / follow-ups: full test:desktop suite not run (scoped to affected specs); no per-theme/surface-pack baseline screenshots; main-side IPC unit tests are covered via the core engine tests instead; `workflows:assistant` IPC is now unused by the renderer and left in place; workflow edits apply to the canvas and need Save.

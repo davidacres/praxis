@@ -1,3 +1,11 @@
+import type {
+  AssistantTeamReviewRequest,
+  AssistantTurnRequest,
+  AssistantTurnResult,
+  AssistantMessage,
+  TeamChatRecord,
+  TeamChatSummary
+} from '../ai/assistant/assistantTypes';
 import type { AiUsageEvent } from '../ai/aiUsageLog';
 import type { UsageBucket, UsageComparison, UsageDashboardSummary, UsageGranularity } from '../ai/aiUsageStats';
 import type { ProviderUsageSnapshot } from '../ai/providerUsage';
@@ -1061,7 +1069,24 @@ export interface GadgetSubmitRequest {
   correlationId?: string;
 }
 
+/** The app-wide Virtual Team Assistant: persona turns, team reviews and persisted chats. */
+export interface AssistantIpc {
+  /** One persona answers; an `@mention` in the message picks the persona. */
+  turn(request: AssistantTurnRequest): Promise<AssistantTurnResult>;
+  /** Dev → QA → Security → Lead pass over the supplied page context. */
+  teamReview(request: AssistantTeamReviewRequest): Promise<AssistantTurnResult>;
+  listChats(projectId: string): Promise<TeamChatSummary[]>;
+  getChat(chatId: string): Promise<TeamChatRecord | undefined>;
+  createChat(projectId: string, issueKey?: string): Promise<TeamChatRecord>;
+  saveChat(chatId: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord>;
+  renameChat(chatId: string, title: string): Promise<TeamChatRecord>;
+  deleteChat(chatId: string): Promise<void>;
+  /** Fires after any chat is created, saved, renamed or deleted, so the sidebar can refresh. */
+  onChatsChanged(listener: () => void): () => void;
+}
+
 export interface PraxisIpc {
+  assistant: AssistantIpc;
   app: AppIpc;
   board: BoardIpc;
   issue: IssueIpc;

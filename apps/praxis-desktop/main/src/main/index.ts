@@ -19,6 +19,7 @@ import { registerBoardPrefsIpc } from './boardPrefsIpc';
 import { registerAiIpc } from './aiIpc';
 import { registerAiUsageIpc, startAiUsageTracking } from './aiUsageIpc';
 import { registerAiWorkflowIpc } from './aiWorkflowIpc';
+import { registerAssistantIpc } from './assistantIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { registerWorkflowIpc, recoverWorkflowRunsOnStartup } from './workflowIpc';
 import { registerGitIpc } from './gitIpc';
@@ -299,6 +300,7 @@ void app.whenReady().then(async () => {
   registerAiUsageIpc();
   startAiUsageTracking();
   registerAiWorkflowIpc();
+  registerAssistantIpc();
   registerTaskDesignerIpc();
   registerWorkflowIpc();
   void recoverWorkflowRunsOnStartup().catch(error => console.error('Workflow run recovery failed:', error));

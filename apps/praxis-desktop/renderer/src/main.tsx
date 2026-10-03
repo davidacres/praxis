@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { DetachedChatWindow } from './ai/DetachedChatWindow';
 import { DialogHost } from './ui/dialogs';
+import { AssistantProvider } from './assistant/AssistantProvider';
 import { installIconButtonTooltips } from './ui/iconButtonTooltips';
 import {
   applySurfacePack,
@@ -137,7 +138,7 @@ const detachedSessionKey = new URLSearchParams(window.location.search).get('deta
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <DialogHost>
-      {detachedSessionKey ? <DetachedChatWindow issueKey={detachedSessionKey} /> : <App />}
+      {detachedSessionKey ? <DetachedChatWindow issueKey={detachedSessionKey} /> : <AssistantProvider><App /></AssistantProvider>}
     </DialogHost>
   </StrictMode>
 );

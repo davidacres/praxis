@@ -28,6 +28,7 @@ import { useResizable } from './useResizable';
 import { WorkModeView } from '../projects/WorkModeView';
 import { ChipSelect } from '../ui/ChipSelect';
 import { SessionOrganizer } from './SessionOrganizer';
+import { TeamChatsSection } from '../assistant/TeamChatsSection';
 
 export type SidebarMode = 'classic' | 'work';
 
@@ -1206,6 +1207,12 @@ export function Sidebar({
                           </div>
                         </>}
                         </div>
+                        <TeamChatsSection
+                          projectId={project.id}
+                          projectName={project.name}
+                          collapsed={collapsed[`project:${project.id}:team-chats`] ?? false}
+                          onToggle={() => setCollapsed(current => ({ ...current, [`project:${project.id}:team-chats`]: !(current[`project:${project.id}:team-chats`] ?? false) }))}
+                        />
                         <div className="project-sidebar-section">
                         <div className="feature-section-header feature-section-toggle project-workflows-header">
                           <button

@@ -43,6 +43,8 @@ export interface TitleBarProps {
   onToggleAux: () => void;
   panelVisible: boolean;
   onTogglePanel: () => void;
+  assistantOpen?: boolean;
+  onToggleAssistant?: () => void;
   focusMode?: boolean;
   onToggleFocusMode?: () => void;
   focusModeAvailable?: boolean;
@@ -90,6 +92,8 @@ export function TitleBar({
   onToggleAux,
   panelVisible,
   onTogglePanel,
+  assistantOpen,
+  onToggleAssistant,
   focusMode: explicitFocusMode,
   onToggleFocusMode,
   focusModeAvailable = false,
@@ -478,6 +482,18 @@ export function TitleBar({
         >
           <Icon name="sidebar-right" />
         </button>
+        {onToggleAssistant && (
+          <button
+            className={`icon-btn${assistantOpen ? ' active' : ''}`}
+            aria-label="Toggle virtual team assistant"
+            aria-pressed={assistantOpen}
+            data-testid="titlebar-assistant"
+            title="Virtual team assistant (⌘J)"
+            onClick={onToggleAssistant}
+          >
+            <Icon name="sparkles" />
+          </button>
+        )}
         {focusModeAvailable && (
           <button
             className={`icon-btn${isFocusMode ? ' active' : ''}`}
