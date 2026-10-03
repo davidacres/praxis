@@ -467,3 +467,37 @@ test('a CLI model reasoning default applies through ACP thought_level', async ()
   const session = await readSession(win, 'APP-204');
   expect(session?.responseText).toContain('model=fake-fast, effort=high');
 });
+
+test('a CLI agent\'s reply shows the turn\'s time, tokens, cost and model, and the session total grows', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+
+  await delegate(win, 'APP-201', 'claude-code-cli', 'REPORT_USAGE please');
+  await expect.poll(async () => (await readSession(win, 'APP-201'))?.state, { timeout: 15000 }).toBe('completed');
+
+  await openSession(win, 'APP-201');
+  const bar = win.locator('[data-testid="session-chat-telemetry"]').last();
+  await expect(bar).toBeVisible();
+  await expect(bar).toContainText('1,234 tok');
+  await expect(bar).toContainText('claude-sonnet-5-5');
+  await expect(bar).not.toContainText('haiku');
+  await expect(bar).toContainText('US$0.01');
+  const artifacts = path.resolve(__dirname, '../../../../.praxis/session-artifacts');
+  await win.screenshot({ path: path.join(artifacts, 'acp-reply-telemetry.png'), fullPage: true });
+
+  const tokens = () => win.evaluate(async () => {
+    const w = window as unknown as { praxis: { ai: { listSessions: () => Promise<Array<{ issueKey: string; tokenUsage?: { totalTokens?: number }; contextTokens?: number }>> } } };
+    const sessions = await w.praxis.ai.listSessions();
+    const found = sessions.find(s => s.issueKey === 'APP-201');
+    return { total: found?.tokenUsage?.totalTokens, context: found?.contextTokens };
+  });
+  expect(await tokens()).toEqual({ total: 1234, context: 1500 });
+
+  await win.locator('[data-testid="session-follow-up-input"]').fill('REPORT_USAGE again');
+  await win.locator('[data-testid="session-follow-up-send"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  await expect(win.locator('[data-testid="session-chat-telemetry"]')).toHaveCount(2);
+  // Tokens add up per turn; the window's occupancy stays what the agent said it is.
+  expect(await tokens()).toEqual({ total: 2468, context: 1500 });
+});

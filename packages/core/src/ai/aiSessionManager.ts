@@ -560,7 +560,7 @@ export class AiSessionManager {
    * several model calls when tools are involved, so this accumulates rather
    * than replaces — and a provider that reports nothing leaves the field unset.
    */
-  public addAgentTokenUsage(issueKey: string, usage: TokenUsage): void {
+  public addAgentTokenUsage(issueKey: string, usage: TokenUsage, options: { updateContext?: boolean } = {}): void {
     const record = this.agentSessions.get(issueKey);
     if (!record) {
       return;
@@ -583,7 +583,9 @@ export class AiSessionManager {
       };
     }
     // Context pressure is this turn's prompt, not the running total — replace.
-    if (typeof usage.inputTokens === 'number') {
+    // ACP hosts opt out: they read occupancy from `usage_update`, and a turn's
+    // `inputTokens` (which can exclude cached reads) would overwrite it.
+    if (options.updateContext !== false && typeof usage.inputTokens === 'number') {
       record.contextTokens = usage.inputTokens;
     }
     // API providers report only tokens, never cost (ACP hosts are the

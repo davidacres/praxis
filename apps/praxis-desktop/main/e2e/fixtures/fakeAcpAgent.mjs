@@ -183,6 +183,28 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     }
   });
 
+  if (promptText.includes('REPORT_USAGE')) {
+    // What Claude Code sends: the context window and a cumulative cost as an update,
+    // then this turn's tokens on the prompt response, with every model the turn used
+    // (including a small internal one) under `_meta.quota`. Shapes are from a live probe.
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: { sessionUpdate: 'usage_update', used: 1500, size: 200000, cost: { amount: 0.0123, currency: 'USD' } }
+    });
+    return {
+      stopReason: 'end_turn',
+      usage: { inputTokens: 2, outputTokens: 12, cachedReadTokens: 1000, cachedWriteTokens: 220, totalTokens: 1234 },
+      _meta: {
+        quota: {
+          model_usage: [
+            { model: 'claude-haiku-4-5-20251001', token_count: { totalTokens: 90 } },
+            { model: 'claude-sonnet-5-5', token_count: { totalTokens: 1234 } }
+          ]
+        }
+      }
+    };
+  }
+
   if (promptText.includes('ECHO_PROMPT')) {
     await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
       sessionId: ctx.params.sessionId,

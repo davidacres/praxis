@@ -124,6 +124,18 @@ test('token usage accumulates across a session\'s turns', () => {
   });
 });
 
+test('an ACP turn adds to the token total without disturbing the context occupancy', () => {
+  const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('executing') }));
+  mgr.setAgentContextUsage('SESSION-abc', { contextTokens: 17_741, contextLimit: 1_000_000 });
+
+  // `inputTokens` can exclude cached reads, so it is not the window's occupancy.
+  mgr.addAgentTokenUsage('SESSION-abc', { inputTokens: 2, outputTokens: 4, totalTokens: 17_741 }, { updateContext: false });
+
+  const record = mgr.getAgentSession('SESSION-abc');
+  assert.equal(record?.tokenUsage?.totalTokens, 17_741);
+  assert.equal(record?.contextTokens, 17_741, 'occupancy stays what usage_update said');
+});
+
 test('a session with no reported usage keeps tokenUsage unset', () => {
   const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('executing') }));
 

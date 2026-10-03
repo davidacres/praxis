@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
-import { AcpAgentHost, resolveAcpReasoningValue } from './acpAgentHost';
+import { AcpAgentHost, acpTurnTelemetry, resolveAcpReasoningValue } from './acpAgentHost';
 
 /**
  * A workflow stage that hits a usage limit is retried on another AI under the same
@@ -134,4 +134,97 @@ test('an executing ACP turn still refuses a concurrent continuation', async () =
   await assert.rejects(agentHost.continueTask(key, 'next turn', { command: 'fixture' }), /still working/);
   assert.equal(shutdowns, 0);
   assert.equal(agentHost.hasActiveTask(key), true);
+});
+
+/**
+ * Response shapes below are copied from live probes of the installed agents (Claude
+ * Code, Codex, Copilot), not invented: what a reply's chips can show is exactly what
+ * these carry.
+ */
+const CLAUDE_TURN = {
+  usage: { inputTokens: 2, outputTokens: 5, cachedReadTokens: 10_434, cachedWriteTokens: 9_472, totalTokens: 19_913 },
+  _meta: {
+    quota: {
+      model_usage: [
+        { model: 'claude-haiku-4-5-20251001', token_count: { totalTokens: 913 } },
+        { model: 'claude-sonnet-5-5', token_count: { totalTokens: 19_913 } }
+      ]
+    }
+  }
+};
+
+test('an ACP reply reports the turn\'s tokens, the model that did the work, and its duration', () => {
+  const telemetry = acpTurnTelemetry({ response: CLAUDE_TURN, startedAt: 1_000, endedAt: 3_500 });
+
+  assert.equal(telemetry.durationMs, 2_500);
+  assert.equal(telemetry.modelId, 'claude-sonnet-5-5', 'the small internal Haiku call is not the reply\'s model');
+  assert.deepEqual(telemetry.tokenUsage, { inputTokens: 2, outputTokens: 5, totalTokens: 19_913, cachedInputTokens: 10_434 });
+});
+
+test('a turn\'s cost is what the session\'s cumulative cost grew by', () => {
+  const telemetry = acpTurnTelemetry({
+    response: CLAUDE_TURN,
+    startedAt: 0,
+    endedAt: 1,
+    costBefore: { amount: 0.0393, currency: 'USD' },
+    costAfter: { amount: 0.0793, currency: 'USD' }
+  });
+
+  assert.equal(telemetry.cost?.currency, 'USD');
+  assert.ok(telemetry.cost && Math.abs(telemetry.cost.amount - 0.04) < 1e-9);
+});
+
+test('the first turn\'s cost is the whole cumulative cost, and a cost that did not grow is not shown', () => {
+  const first = acpTurnTelemetry({ response: CLAUDE_TURN, startedAt: 0, endedAt: 1, costAfter: { amount: 0.039, currency: 'USD' } });
+  assert.equal(first.cost?.amount, 0.039);
+
+  const unchanged = acpTurnTelemetry({
+    response: CLAUDE_TURN,
+    startedAt: 0,
+    endedAt: 1,
+    costBefore: { amount: 0.05, currency: 'USD' },
+    costAfter: { amount: 0.05, currency: 'USD' }
+  });
+  assert.equal(unchanged.cost, undefined);
+
+  const otherCurrency = acpTurnTelemetry({
+    response: CLAUDE_TURN,
+    startedAt: 0,
+    endedAt: 1,
+    costBefore: { amount: 9, currency: 'EUR' },
+    costAfter: { amount: 0.04, currency: 'USD' }
+  });
+  assert.equal(otherCurrency.cost?.amount, 0.04, 'a baseline in another currency is not subtracted');
+});
+
+test('an agent that reports no cost, no model rows or no usage leaves those chips off', () => {
+  // Copilot: tokens, but no cost and no per-model rows.
+  const copilot = acpTurnTelemetry({
+    response: { usage: { inputTokens: 27_069, outputTokens: 5, totalTokens: 27_074, thoughtTokens: 0, cachedReadTokens: 27_011, cachedWriteTokens: 56 } },
+    startedAt: 0,
+    endedAt: 1_800,
+    fallbackModel: 'auto'
+  });
+  assert.equal(copilot.cost, undefined);
+  assert.equal(copilot.modelId, 'auto', 'falls back to the model the session was asked for');
+  assert.equal(copilot.tokenUsage?.reasoningTokens, undefined, 'a zero thought count is not a reasoning chip');
+
+  // Nothing to read: only the duration, which Praxis measures itself.
+  const bare = acpTurnTelemetry({ response: {}, startedAt: 10, endedAt: 25 });
+  assert.deepEqual(bare, { durationMs: 15 });
+});
+
+test('Codex reports its last turn, which is used as given', () => {
+  const telemetry = acpTurnTelemetry({
+    response: {
+      usage: { totalTokens: 23_498, inputTokens: 197, cachedReadTokens: 23_296, outputTokens: 5, thoughtTokens: 0 },
+      _meta: { quota: { model_usage: [{ model: 'gpt-6.1-sol', token_count: { totalTokens: 23_498 } }] } }
+    },
+    startedAt: 0,
+    endedAt: 2_600
+  });
+
+  assert.equal(telemetry.modelId, 'gpt-6.1-sol');
+  assert.equal(telemetry.tokenUsage?.inputTokens, 197);
+  assert.equal(telemetry.tokenUsage?.totalTokens, 23_498);
 });

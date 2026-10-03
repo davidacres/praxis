@@ -35,7 +35,9 @@ agy stream-json output event shapes (observed):
 
 ACP session/update notification body shape (agent_message_chunk):
   {"sessionId": "...", "update": {"sessionUpdate": "agent_message_chunk",
-                                  "delta": {"type": "text", "text": "..."}}}
+                                  "content": {"type": "text", "text": "..."}}}
+  (`content`, not `delta`: that is the field ACP defines and the one Praxis reads —
+  with `delta` the reply streamed but never reached the transcript.)
 """
 
 from __future__ import annotations
@@ -271,7 +273,7 @@ class Session:
                                 "sessionId": self.session_id,
                                 "update": {
                                     "sessionUpdate": "agent_message_chunk",
-                                    "delta": {"type": "text", "text": text_delta},
+                                    "content": {"type": "text", "text": text_delta},
                                 },
                             },
                         )
@@ -304,30 +306,25 @@ class Session:
             )
             return
 
-        # Emit a usage_update notification so Praxis can track token costs.
+        # Report the run's tokens the way ACP does: `usage` on the prompt response.
+        # (A `usage_update` notification means something else — `used`/`size` are the
+        # context window's occupancy and capacity — and `agy` reports neither.) Praxis
+        # starts a fresh adapter and `agy` conversation per turn, so this is the turn's
+        # own usage; a client that kept one adapter running would see it accumulate.
+        response: dict[str, Any] = {
+            "stopReason": stop_reason,
+            "output": [{"type": "text", "text": full_response}],
+        }
         if usage:
-            input_tok = usage.get("input_tokens", 0)
-            output_tok = usage.get("output_tokens", 0)
-            send_notification(
-                CLIENT_METHODS["session_update"],
-                {
-                    "sessionId": self.session_id,
-                    "update": {
-                        "sessionUpdate": "usage_update",
-                        "inputTokens": input_tok,
-                        "outputTokens": output_tok,
-                        "totalTokens": input_tok + output_tok,
-                    },
-                },
-            )
+            input_tok = int(usage.get("input_tokens", 0) or 0)
+            output_tok = int(usage.get("output_tokens", 0) or 0)
+            response["usage"] = {
+                "inputTokens": input_tok,
+                "outputTokens": output_tok,
+                "totalTokens": input_tok + output_tok,
+            }
 
-        send_response(
-            req_id,
-            {
-                "stopReason": stop_reason,
-                "output": [{"type": "text", "text": full_response}],
-            },
-        )
+        send_response(req_id, response)
 
 
 # ── Request dispatcher ────────────────────────────────────────────────────────
