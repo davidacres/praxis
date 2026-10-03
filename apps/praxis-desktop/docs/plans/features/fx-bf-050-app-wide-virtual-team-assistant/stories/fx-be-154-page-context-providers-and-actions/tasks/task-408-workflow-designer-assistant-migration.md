@@ -33,3 +33,14 @@ priority: Medium
 - Opening Workflow Designer registers context and shows workflow suggestions in the global assistant.
 - Requesting a valid workflow modification produces an interactive Action Card; clicking Apply updates the canvas and marks the definition dirty/saved.
 - Pruning `WorkflowAssistantPopover` leaves zero unused CSS or dead imports.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

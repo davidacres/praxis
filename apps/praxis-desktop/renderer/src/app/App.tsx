@@ -1991,6 +1991,7 @@ export function App() {
           onOpenSessions={() => navigate({ feature: 'sessions' })}
           onOpenConversations={sessionKey => navigate({ feature: 'conversations', ...(sessionKey ? { sessionKey } : {}) })}
           onOpenConnections={() => { refreshConnections(); navigate({ feature: 'connections' }); }}
+          onOpenAiUsage={() => setSettingsDialogCategory('ai-usage')}
           onOpenBoard={board => openBoard(board.id)}
           onOpenProject={project => navigate({ projectId: project.id })}
         />

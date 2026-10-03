@@ -1,10 +1,13 @@
 import { ipcMain } from 'electron';
 import {
   compareLatestPeriod,
+  dashboardUsageSummary,
   hasReportableUsage,
+  periodStart as usagePeriodStart,
   usageSeries,
   type AgentSessionRecord,
   type AiUsageEventInput,
+  type UsageDashboardSummary,
   type UsageGranularity,
   type AiProvider,
   type ProviderUsageSnapshot,
@@ -130,6 +133,22 @@ async function providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnap
   return { provider, fetchedAt: new Date().toISOString(), windows: [], unavailableReason: 'This provider does not expose an account usage API to Praxis yet.' };
 }
 
+let dashboardMemo: { key: string; summary: UsageDashboardSummary } | undefined;
+
+/**
+ * The summary rescans the whole ledger, and the Overview page asks for it on
+ * every visit, so it is memoised. The key is the event count plus the last
+ * event's id (the count alone stops changing once the ledger hits its cap) plus
+ * the UTC hour, because "today" and the hourly peak move with the clock.
+ */
+export function dashboardSummary(): UsageDashboardSummary {
+  const events = getAiUsageLog().list();
+  const hour = usagePeriodStart(new Date(), 'hour').toISOString();
+  const key = `${events.length}:${events[events.length - 1]?.id ?? ''}:${hour}`;
+  if (dashboardMemo?.key !== key) dashboardMemo = { key, summary: dashboardUsageSummary(events) };
+  return dashboardMemo.summary;
+}
+
 /**
  * Registers the read-side `aiUsage:*` handlers — see `AiUsageIpc` in
  * `ipcContracts.ts` for why there's no renderer-facing write method.
@@ -144,6 +163,7 @@ export function registerAiUsageIpc(): void {
   ipcMain.handle('aiUsage:compareLatestPeriod', async (_event, granularity: UsageGranularity) =>
     compareLatestPeriod(getAiUsageLog().list(), granularity)
   );
+  ipcMain.handle('aiUsage:dashboardSummary', async () => dashboardSummary());
   ipcMain.handle('aiUsage:listEvents', async () => getAiUsageLog().list());
   ipcMain.handle('aiUsage:providerSnapshot', async (_event, provider: AiProvider) => providerSnapshot(provider));
   ipcMain.handle('aiUsage:setProviderUsageKey', async (_event, provider: AiProvider, value: string) => {

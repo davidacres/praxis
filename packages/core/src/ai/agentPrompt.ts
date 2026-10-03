@@ -206,7 +206,7 @@ ${VERIFICATION_EVIDENCE_PROMPT}
 ${task.goal}
 ## Scope
 ${task.scope}
-${nonGoals}${completionContract}`;
+${task.ticketContext ? `\n${task.ticketContext}\n` : ''}${nonGoals}${completionContract}`;
   }
 
   if (task.kind === 'ticket-review') {
@@ -229,6 +229,17 @@ ${completionContract}
 `;
   }
 
+  const issueContextBlock = task.ticketContext?.trim()
+    ? `\n${task.ticketContext.trim()}\n`
+    : `
+## Issue Context
+- Key: ${issue.key}
+- Summary: ${issue.summary}
+- Type: ${issue.issueType}
+- Status: ${issue.status}
+${issue.description ? `- Description:\n${issue.description.slice(0, 4000)}` : ''}
+`;
+
   return `${sessionPrompt}
 ${INTERACTIVE_RESPONSE_SURFACES_PROMPT}
 ${VERIFICATION_EVIDENCE_PROMPT}
@@ -240,14 +251,7 @@ ${workflow}
 ${attachments}
 ${nonGoals}
 ${completionContract}
-
-## Issue Context
-- Key: ${issue.key}
-- Summary: ${issue.summary}
-- Type: ${issue.issueType}
-- Status: ${issue.status}
-${issue.description ? `- Description:\n${issue.description.slice(0, 4000)}` : ''}
-
+${issueContextBlock}
 ## Execution Conventions
 - If you create a git worktree, its name MUST start with ${issue.key}.
 - Use a worktree name like: ${worktreeName}

@@ -1,5 +1,6 @@
 import { abortActiveTask, getAiSessionManager } from './aiInstance';
 import { disposeBrowserMcpForSession } from './browserMcp';
+import { disposeTrackerMcpForSession } from './trackerMcp';
 import { broadcastToAllWindows } from './windowBroadcast';
 
 /**
@@ -11,6 +12,7 @@ export async function deleteAgentSession(issueKey: string): Promise<void> {
   const sessionManager = getAiSessionManager();
   await abortActiveTask(issueKey);
   disposeBrowserMcpForSession(issueKey);
+  disposeTrackerMcpForSession(issueKey);
   sessionManager.removeAgentSession(issueKey);
   sessionManager.removeSession(issueKey);
   broadcastToAllWindows('ai:sessionDeleted', issueKey);

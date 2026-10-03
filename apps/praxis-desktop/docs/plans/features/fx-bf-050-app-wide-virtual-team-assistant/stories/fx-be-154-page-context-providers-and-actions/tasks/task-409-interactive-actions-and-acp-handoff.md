@@ -33,3 +33,14 @@ priority: High
 
 - Clicking an action card button successfully executes the registered handler with visual confirmation.
 - Clicking "Open as Coding Session" opens the New Session composer with pre-seeded task prompt and project context.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

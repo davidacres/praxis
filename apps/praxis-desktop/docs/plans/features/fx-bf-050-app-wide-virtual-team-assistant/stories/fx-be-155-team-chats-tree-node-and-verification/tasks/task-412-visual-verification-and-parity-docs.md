@@ -32,3 +32,14 @@ priority: Medium
 
 - Visual screenshots approved for both floating and docked modes across theme variants.
 - `iconButtonTooltips.spec.ts` and `keyboardFocus.spec.ts` pass without regressions.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

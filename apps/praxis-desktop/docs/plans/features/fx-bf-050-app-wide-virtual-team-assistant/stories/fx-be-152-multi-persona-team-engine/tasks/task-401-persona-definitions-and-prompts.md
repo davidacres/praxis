@@ -33,3 +33,14 @@ priority: High
 
 - Core unit test verifying default persona registry completeness, valid icons, and non-empty system prompts.
 - Export checks ensuring all types compile cleanly under `npm run check-types`.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

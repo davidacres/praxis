@@ -37,3 +37,14 @@ priority: High
 - Creating a new chat adds an entry to the sidebar tree immediately.
 - Restarting the app preserves the chat history and sidebar list.
 - Deleting a chat cleans up the record and resets the active assistant view.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

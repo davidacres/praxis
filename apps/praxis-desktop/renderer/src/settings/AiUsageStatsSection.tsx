@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { UsageBucket, UsageComparison, UsageGranularity } from '@praxis/core';
+import type { UsageBucket, UsageComparison, UsageDashboardSummary, UsageGranularity } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { UsageModelBreakdown, formatUsageCost } from '../ai/UsageModelBreakdown';
 
 /**
  * Settings → AI Usage: the AI usage ledger (`AiUsageLog`) bucketed by
@@ -17,6 +18,13 @@ import { Icon } from '../ui/Icon';
  * muted tint of the same hue rather than a second, unrelated color.
  */
 
+/** Exact, grouped counts for the chart and table; the compact k/M form lives in `ai/sessionNav`. */
+const numberFormatter = new Intl.NumberFormat(undefined);
+
+function formatTokens(value: number): string {
+  return numberFormatter.format(Math.round(value));
+}
+
 const GRANULARITIES: { value: UsageGranularity; label: string }[] = [
   { value: 'hour', label: 'Hour' },
   { value: 'day', label: 'Day' },
@@ -25,12 +33,6 @@ const GRANULARITIES: { value: UsageGranularity; label: string }[] = [
 ];
 
 const PERIODS_SHOWN = 8;
-
-const numberFormatter = new Intl.NumberFormat(undefined);
-
-function formatTokens(value: number): string {
-  return numberFormatter.format(Math.round(value));
-}
 
 function formatPeriodLabel(iso: string, granularity: UsageGranularity): string {
   const date = new Date(iso);
@@ -113,11 +115,7 @@ function UsageBarChart({ buckets, granularity }: UsageBarChartProps) {
         <div className="ai-usage-tooltip" data-testid="ai-usage-tooltip">
           <strong>{formatPeriodLabel(buckets[hoverIndex].periodStart, granularity)}</strong>
           <span>{formatTokens(buckets[hoverIndex].totalTokens)} tokens</span>
-          {buckets[hoverIndex].costByCurrency.length === 1 && (
-            <span>
-              {buckets[hoverIndex].costByCurrency[0].amount.toFixed(2)} {buckets[hoverIndex].costByCurrency[0].currency}
-            </span>
-          )}
+          <span>{formatUsageCost(buckets[hoverIndex].costByCurrency)}</span>
           {buckets[hoverIndex].byModel.length > 0 && (
             <span className="ai-usage-tooltip-models">
               {buckets[hoverIndex].byModel
@@ -183,11 +181,7 @@ function UsageTable({ buckets, granularity }: { buckets: UsageBucket[]; granular
             <td>{formatTokens(bucket.totalTokens)}</td>
             <td>{formatTokens(bucket.inputTokens)}</td>
             <td>{formatTokens(bucket.outputTokens)}</td>
-            <td>
-              {bucket.costByCurrency.length === 0
-                ? '—'
-                : bucket.costByCurrency.map(entry => `${entry.amount.toFixed(2)} ${entry.currency}`).join(', ')}
-            </td>
+            <td>{formatUsageCost(bucket.costByCurrency)}</td>
             <td>{bucket.eventCount}</td>
           </tr>
         ))}
@@ -200,6 +194,7 @@ export function AiUsageStatsSection() {
   const [granularity, setGranularity] = useState<UsageGranularity>('week');
   const [buckets, setBuckets] = useState<UsageBucket[] | undefined>();
   const [comparison, setComparison] = useState<UsageComparison | undefined>();
+  const [summary, setSummary] = useState<UsageDashboardSummary | undefined>();
   const [showTable, setShowTable] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
@@ -222,6 +217,14 @@ export function AiUsageStatsSection() {
       cancelled = true;
     };
   }, [granularity]);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.praxis.aiUsage.dashboardSummary()
+      .then(result => { if (!cancelled) setSummary(result); })
+      .catch(() => { /* the breakdown is supplementary; the chart reports its own errors */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const hasAnyUsage = useMemo(() => (buckets ?? []).some(bucket => bucket.eventCount > 0), [buckets]);
 
@@ -272,6 +275,7 @@ export function AiUsageStatsSection() {
             </button>
           </div>
           {showTable && <UsageTable buckets={buckets} granularity={granularity} />}
+          {summary && <UsageModelBreakdown summary={summary} testIdPrefix="ai-usage" />}
         </>
       )}
     </>

@@ -42,3 +42,10 @@ The application gains a flexible, multi-persona AI backend capable of answering 
 
 - `FX-BF-017` — AI session UX and workflow ticket integration.
 - `FX-BF-044` — AI provider catalog and OpenAI-compatible endpoints.
+
+## Description
+
+
+## Comments
+
+

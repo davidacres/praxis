@@ -85,6 +85,8 @@ export interface AgentTaskDefinition {
   attachments?: AgentTaskAttachment[];
   nonGoals?: string[];
   completionContract?: string;
+  /** Comprehensive details of the active ticket and related issues (parent, dependencies, sub-tasks, transitions). */
+  ticketContext?: string;
   /** Hard limit on tool invocations before the session is stopped. Default: 200. */
   maxSteps?: number;
   /** Hard timeout in ms for the entire task. Default: 10 800 000 (3 h). */

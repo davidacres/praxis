@@ -44,3 +44,10 @@ Conversations with the virtual engineering team are preserved as permanent proje
 
 - `FX-BE-153` — Dockable and floating assistant UI shell with multi-persona chat feed.
 - `FX-BE-154` — Page context providers and interactive in-app actions.
+
+## Description
+
+
+## Comments
+
+

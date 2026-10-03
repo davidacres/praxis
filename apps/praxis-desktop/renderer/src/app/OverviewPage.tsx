@@ -3,6 +3,7 @@ import type { AgentSessionRecord, Board, Connection, ConnectionCheck, ProjectRec
 import { Icon } from '../ui/Icon';
 import { isTerminalAgentState } from '../ai/aiSessionState';
 import { isConversationSession } from '../ai/sessionNav';
+import { AiUsageDashboardPanel } from './AiUsageDashboardPanel';
 
 interface OverviewPageProps {
   projects: ProjectRecord[];
@@ -19,6 +20,8 @@ interface OverviewPageProps {
   /** Opens Conversations, optionally to one conversation directly. */
   onOpenConversations: (sessionKey?: string) => void;
   onOpenConnections: () => void;
+  /** Opens Settings → AI Usage. */
+  onOpenAiUsage: () => void;
   onOpenBoard: (board: Board) => void;
   onOpenProject: (project: ProjectRecord) => void;
 }
@@ -28,7 +31,7 @@ const stateLabel: Record<AgentSessionRecord['state'], string> = {
   awaiting_input: 'Awaiting input', paused: 'Paused', completed: 'Completed', failed: 'Failed', aborted: 'Aborted'
 };
 
-export function OverviewPage({ projects, boards, connections, sessions, connectionChecks, onNewProject, onNewSession, onNewConversation, onOpenProjects, onOpenSessions, onOpenConversations, onOpenConnections, onOpenBoard, onOpenProject }: OverviewPageProps) {
+export function OverviewPage({ projects, boards, connections, sessions, connectionChecks, onNewProject, onNewSession, onNewConversation, onOpenProjects, onOpenSessions, onOpenConversations, onOpenConnections, onOpenAiUsage, onOpenBoard, onOpenProject }: OverviewPageProps) {
   const activeSessions = sessions.filter(session => !isTerminalAgentState(session.state) && !isConversationSession(session));
   const healthyConnections = connections.filter(connection => connectionChecks[connection.id]?.status !== 'error').length;
   const recentProjects = [...projects].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4);
@@ -57,6 +60,8 @@ export function OverviewPage({ projects, boards, connections, sessions, connecti
         <button className="overview-starter-card starter-connection" type="button" onClick={onOpenConnections}><span className="overview-starter-number">02</span><span className="overview-starter-art"><Icon name="plug" size={24} /></span><strong>Connect your tracker</strong><small>Bring tickets into one workspace.</small><Icon name="chevron-right" size={15} /></button>
         <button className="overview-starter-card starter-session" type="button" onClick={onNewSession}><span className="overview-starter-number">03</span><span className="overview-starter-art"><Icon name="robot" size={24} /></span><strong>Start an AI session</strong><small>Turn a ticket into visible progress.</small><Icon name="chevron-right" size={15} /></button>
       </section>}
+
+      <AiUsageDashboardPanel onOpenDetails={onOpenAiUsage} onNewConversation={onNewConversation} />
 
       <div className="overview-columns overview-columns-3">
         <section className="overview-panel overview-sessions"><PanelHeading title="Active AI sessions" action={activeSessions.length ? 'View all' : undefined} onAction={onOpenSessions} />

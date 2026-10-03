@@ -252,3 +252,11 @@ answer open questions → edit and apply the resulting ticket text). Code: `pack
 - **e2e:** `e2e/aiTicketReview.spec.ts` drives `e2e/fixtures/ticketReviewAcpAgent.mjs`, a real ACP
   subprocess with a fixed script — the session, gadget pipeline, follow-up turn and apply are the
   production path; only the model's words are canned.
+
+## Ticket context, dependencies, and tracker tools (`ticketContext.ts`, `trackerMcpServer.ts`)
+
+When starting an AI session on a ticket ("Start AI"):
+- **Deep Context Resolution:** `resolveTicketContext` resolves the active ticket's full description, comments, and attachments, plus its parent feature/epic (with brief and sibling tasks for boundary context), direct dependencies (`dependsOn`), and linked blockers/issues.
+- **System Prompt Integration:** `AgentTaskDefinition.ticketContext` carries this structured markdown package into `buildTaskSystemPrompt`. The prompt includes explicit lifecycle directives instructing the AI to transition the ticket to "In Progress" with a plan comment at kickoff, post milestone updates as stages progress, and submit a completion summary before transitioning to "In Review" or "Done".
+- **Universal Tracker Tools via MCP (`TrackerMcpServer`):** ACP agents (Claude Code, Codex, Copilot CLI) and API Gateway agents alike receive tracker tools (`tracker_get_ticket`, `tracker_list_transitions`, `tracker_add_comment`, `tracker_update_ticket`, `tracker_transition_ticket`). In ACP sessions, `trackerMcpServerForSession` binds a local loopback MCP endpoint and routes tool calls to the session's `IssueTrackerService`.
+- **Flexible Transition Matching:** `tracker_transition_ticket` accepts either transition ID, target status name, or transition name, matching against available workflow transitions so agents can naturally transition tickets without guessing backend-specific IDs.

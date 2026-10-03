@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compareLatestPeriod, periodStart, usageSeries } from './aiUsageStats';
+import { compareLatestPeriod, dashboardUsageSummary, periodStart, usageSeries } from './aiUsageStats';
 import type { AiUsageEvent } from './aiUsageLog';
 
 function event(partial: Partial<AiUsageEvent> & { timestamp: string; totalTokens: number }): AiUsageEvent {
@@ -105,4 +105,97 @@ test('compareLatestPeriod: deltaPercent is undefined (not Infinity) when the pre
   const comparison = compareLatestPeriod(events, 'day', reference);
   assert.equal(comparison.previous.totalTokens, 0);
   assert.equal(comparison.deltaPercent, undefined);
+});
+
+// Wednesday 2026-09-16; week starts Monday 2026-09-14; month starts 2026-09-01.
+const NOW = new Date('2026-09-16T12:00:00.000Z');
+
+function ledger(): AiUsageEvent[] {
+  return [
+    event({ timestamp: '2026-09-16T09:00:00.000Z', totalTokens: 100, inputTokens: 60, outputTokens: 40, provider: 'claude-code-cli', model: 'opus', cost: { amount: 0.5, currency: 'USD' } }),
+    event({ timestamp: '2026-09-16T10:00:00.000Z', totalTokens: 300, provider: 'openai', model: 'gpt' }),
+    event({ timestamp: '2026-09-14T09:00:00.000Z', totalTokens: 200, provider: 'claude-code-cli', model: 'opus', cost: { amount: 1, currency: 'USD' } }),
+    event({ timestamp: '2026-09-02T09:00:00.000Z', totalTokens: 50, provider: 'openai', model: 'gpt' }),
+    event({ timestamp: '2026-08-31T23:59:00.000Z', totalTokens: 1000, provider: 'codex-cli', model: 'codex', cost: { amount: 2, currency: 'EUR' } })
+  ];
+}
+
+test('dashboardUsageSummary: period totals match usageSeries', () => {
+  const events = ledger();
+  const summary = dashboardUsageSummary(events, NOW);
+  const [day] = usageSeries(events, 'day', 1, NOW);
+  const [week] = usageSeries(events, 'week', 1, NOW);
+  const [month] = usageSeries(events, 'month', 1, NOW);
+  for (const [window, bucket] of [[summary.today, day], [summary.week, week], [summary.month, month]] as const) {
+    assert.equal(window.totalTokens, bucket.totalTokens);
+    assert.equal(window.inputTokens, bucket.inputTokens);
+    assert.equal(window.outputTokens, bucket.outputTokens);
+    assert.equal(window.eventCount, bucket.eventCount);
+    assert.deepEqual(window.costByCurrency, bucket.costByCurrency);
+  }
+  assert.equal(summary.today.totalTokens, 400);
+  assert.equal(summary.week.totalTokens, 600);
+  assert.equal(summary.month.totalTokens, 650);
+  assert.equal(summary.allTime.totalTokens, 1650);
+  assert.equal(summary.allTime.eventCount, 5);
+});
+
+test('dashboardUsageSummary: all-time carries first and last event and keeps currencies separate', () => {
+  const { allTime } = dashboardUsageSummary(ledger(), NOW);
+  assert.equal(allTime.firstEventAt, '2026-08-31T23:59:00.000Z');
+  assert.equal(allTime.lastEventAt, '2026-09-16T10:00:00.000Z');
+  assert.deepEqual(allTime.costByCurrency, [{ currency: 'EUR', amount: 2 }, { currency: 'USD', amount: 1.5 }]);
+});
+
+test('dashboardUsageSummary: model breakdown ranks, shares and attributes cost to the right model', () => {
+  const { allTime, month } = dashboardUsageSummary(ledger(), NOW);
+  assert.deepEqual(allTime.models.map(model => model.model), ['codex', 'gpt', 'opus']);
+  const opus = allTime.models.find(model => model.model === 'opus')!;
+  assert.equal(opus.totalTokens, 300);
+  assert.equal(opus.eventCount, 2);
+  assert.deepEqual(opus.costByCurrency, [{ currency: 'USD', amount: 1.5 }]);
+  assert.equal(opus.provider, 'claude-code-cli');
+  assert.ok(Math.abs(allTime.models.reduce((sum, model) => sum + model.tokenShare, 0) - 1) < 1e-9);
+  // codex's event is in August, so it is outside the month window.
+  assert.deepEqual(month.models.map(model => model.model), ['gpt', 'opus']);
+});
+
+test('dashboardUsageSummary: a model that reports no cost has an empty cost list, not zero', () => {
+  const { allTime } = dashboardUsageSummary(ledger(), NOW);
+  assert.deepEqual(allTime.models.find(model => model.model === 'gpt')!.costByCurrency, []);
+  const zero = dashboardUsageSummary([event({ timestamp: '2026-09-16T09:00:00.000Z', totalTokens: 5, model: 'free', cost: { amount: 0, currency: 'USD' } })], NOW);
+  assert.deepEqual(zero.allTime.models[0].costByCurrency, [{ currency: 'USD', amount: 0 }]);
+});
+
+test('dashboardUsageSummary: highs use UTC boundaries and Monday weeks', () => {
+  const { highs } = dashboardUsageSummary(ledger(), NOW);
+  assert.deepEqual(highs.day, { periodStart: '2026-08-31T00:00:00.000Z', granularity: 'day', totalTokens: 1000 });
+  assert.equal(highs.week?.periodStart, '2026-08-31T00:00:00.000Z');
+  assert.equal(highs.week?.totalTokens, 1050);
+  assert.equal(highs.month?.periodStart, '2026-08-01T00:00:00.000Z');
+});
+
+test('dashboardUsageSummary: period peaks sit inside their own window', () => {
+  const summary = dashboardUsageSummary(ledger(), NOW);
+  assert.deepEqual(summary.today.peak, { periodStart: '2026-09-16T10:00:00.000Z', granularity: 'hour', totalTokens: 300 });
+  assert.equal(summary.week.peak?.periodStart, '2026-09-16T00:00:00.000Z');
+  assert.equal(summary.week.peak?.totalTokens, 400);
+  assert.equal(summary.allTime.peak?.periodStart, '2026-08-01T00:00:00.000Z');
+});
+
+test('dashboardUsageSummary: a tie resolves to the earlier period', () => {
+  const tied = dashboardUsageSummary([
+    event({ timestamp: '2026-09-15T09:00:00.000Z', totalTokens: 100 }),
+    event({ timestamp: '2026-09-14T09:00:00.000Z', totalTokens: 100 })
+  ], NOW);
+  assert.equal(tied.highs.day?.periodStart, '2026-09-14T00:00:00.000Z');
+});
+
+test('dashboardUsageSummary: an empty ledger yields zeroed windows and no peaks', () => {
+  const summary = dashboardUsageSummary([], NOW);
+  assert.equal(summary.allTime.totalTokens, 0);
+  assert.equal(summary.allTime.firstEventAt, undefined);
+  assert.deepEqual(summary.allTime.models, []);
+  assert.equal(summary.today.peak, undefined);
+  assert.deepEqual([summary.highs.day, summary.highs.week, summary.highs.month], [undefined, undefined, undefined]);
 });

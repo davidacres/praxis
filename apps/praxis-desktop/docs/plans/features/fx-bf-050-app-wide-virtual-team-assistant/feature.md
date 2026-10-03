@@ -74,3 +74,16 @@ The assistant switches seamlessly between a lightweight **Floating Overlay** (fo
 - `FX-BF-017` — AI session UX and workflow ticket integration (owns conversation state models and ticket linkage).
 - `FX-BF-044` — AI provider catalog and endpoints (owns multi-provider runtime resolution and streaming).
 - `FX-BF-019` — Project workflow as data (owns workflow stage taxonomy).
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

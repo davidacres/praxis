@@ -34,3 +34,14 @@ priority: High
 - Visual test confirming that turns from Dev, QA, Security, and Lead display their distinctive colors and icons.
 - Clicking an interactive choice chip triggers the follow-up turn immediately.
 - Markdown links, code blocks, and lists format cleanly within message cards.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

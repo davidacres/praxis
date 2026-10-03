@@ -38,3 +38,14 @@ priority: High
 
 - Automated tests exercising `assistant:turn` with mock AI runtime, asserting correct persona prompt selection and context injection.
 - Automated tests verifying `assistant:teamReview` execution order and output structure.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
