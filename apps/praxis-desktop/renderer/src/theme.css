@@ -12713,9 +12713,14 @@ button.session-chat-attachment {
 .session-limit-switch-text { flex: 1 1 240px; min-width: 0; }
 .session-limit-switch-text strong { color: var(--text); }
 .session-limit-switch-error { color: var(--danger); }
-.session-limit-switch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.session-limit-provider-list { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-input); }
-.session-limit-provider-list .composer-chip { min-height: 26px; }
+.session-limit-switch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; max-width: 100%; }
+.session-limit-switch-actions .chip-select { min-width: 0; max-width: 100%; }
+.session-limit-switch-actions .chip-select-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-limit-split-button { display: inline-flex; flex-shrink: 0; }
+.session-limit-split-button > .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.session-limit-split-button > .btn:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid var(--border); }
+.session-limit-action-menu { width: min(260px, calc(100vw - 24px)); min-width: 0; }
+.session-limit-action-menu .composer-provider-option { overflow-wrap: anywhere; white-space: normal; }
 /* A stage's AI ran out: switch (label + select + button), retry, stop — wrapping on a narrow rail. */
 .wf-run-limit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .wf-run-limit-switch { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
