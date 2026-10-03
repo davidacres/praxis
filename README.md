@@ -10,6 +10,9 @@
 </p>
 
 <p align="center">
+
+<h1>This is a preview, if you would like to contribute or have any ideas, suggestions then please contact me in the discussion board.</h1>
+  
   <strong>The workspace where boards, AI agents and delivery meet.</strong><br/>
   Plan on a board, hand a ticket to an agent, review the diff, ship it — on your desktop, and from your phone.
 </p>
