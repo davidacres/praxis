@@ -1,3 +1,4 @@
+import { getLogBus } from './logBusInstance';
 import { randomUUID } from 'node:crypto';
 import * as fsp from 'node:fs/promises';
 import * as nodePath from 'node:path';
@@ -677,6 +678,26 @@ export function registerAiIpc(): void {
       await clearProviderApiKey(getSecretsStore(), settings.ai.activeProvider);
     }
     return getAiProviderStatus();
+  });
+
+  ipcMain.handle('ai:listInterruptedSessions', async () => sessionManager.getInterruptedAgentSessions());
+  ipcMain.handle('ai:dismissInterruptedSessions', async (_event, issueKeys: string[]) => {
+    if (!Array.isArray(issueKeys) || issueKeys.some(key => typeof key !== 'string')) throw new Error('Invalid session selection.');
+    await sessionManager.dismissInterruptedAgentSessions(issueKeys);
+  });
+  const recoveringSessions = new Set<string>();
+  ipcMain.handle('ai:resumeInterruptedSession', async (_event, issueKey: string) => {
+    const record = sessionManager.getInterruptedAgentSessions().find(session => session.issueKey === issueKey);
+    if (!record || hasActiveTask(issueKey) || recoveringSessions.has(issueKey)) throw new Error('This session is no longer awaiting startup recovery.');
+    recoveringSessions.add(issueKey);
+    try {
+      // A restarted conversation recovers as a single-agent turn; never schedule
+      // the other participants merely because their saved conversation was running.
+      if (record.conversation?.state === 'running') sessionManager.finishAgentConversation(issueKey, 'stopped');
+      await continueRecordedSession(issueKey, 'Resume the task interrupted by the app restart. Review the existing conversation and current state before continuing.');
+      await sessionManager.dismissInterruptedAgentSessions([issueKey]);
+      getLogBus().appendLine(`[ai] Resuming interrupted session provider=${record.provider} session=${issueKey} at=${new Date().toISOString()}`);
+    } finally { recoveringSessions.delete(issueKey); }
   });
 
   ipcMain.handle('ai:listSessions', async () => {

@@ -250,6 +250,9 @@ const praxis: PraxisIpc = {
     saveCustomProvider: (input: SaveCustomProviderInput) => ipcRenderer.invoke('ai:saveCustomProvider', input),
     removeCustomProvider: (id: AiProvider) => ipcRenderer.invoke('ai:removeCustomProvider', id),
     listSessions: () => ipcRenderer.invoke('ai:listSessions'),
+    listInterruptedSessions: () => ipcRenderer.invoke('ai:listInterruptedSessions'),
+    resumeInterruptedSession: issueKey => ipcRenderer.invoke('ai:resumeInterruptedSession', issueKey),
+    dismissInterruptedSessions: issueKeys => ipcRenderer.invoke('ai:dismissInterruptedSessions', issueKeys),
     loadImagePreview: (issueKey: string, filePath: string) =>
       ipcRenderer.invoke('ai:loadImagePreview', issueKey, filePath) as Promise<string | undefined>,
     renameSession: (issueKey: string, title: string) =>
@@ -354,6 +357,7 @@ const praxis: PraxisIpc = {
     dashboardSummary: () => ipcRenderer.invoke('aiUsage:dashboardSummary'),
     listEvents: () => ipcRenderer.invoke('aiUsage:listEvents'),
     providerSnapshot: (provider: AiProvider) => ipcRenderer.invoke('aiUsage:providerSnapshot', provider),
+    providerSnapshots: () => ipcRenderer.invoke('aiUsage:providerSnapshots'),
     setProviderUsageKey: (provider: AiProvider, value: string) => ipcRenderer.invoke('aiUsage:setProviderUsageKey', provider, value)
   },
   taskDesigner: {

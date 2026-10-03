@@ -1,12 +1,12 @@
 ---
-**Status:** ✅ Complete
+**Status:** 🔄 In Progress
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Feature
 **Priority:** High
 id: FX-BF-050
 slug: app-wide-virtual-team-assistant
 title: App-wide Virtual Team Assistant
-status: Backlog
+status: Complete
 created: 2026-10-03
 owner: Electron desktop app
 ---
@@ -45,10 +45,10 @@ The assistant switches seamlessly between a lightweight **Floating Overlay** (fo
 
 | Ref | Story | Status | Depends on |
 | --- | --- | --- | --- |
-| FX-BE-152 | Multi-persona team engine and assistant IPC | Backlog | FX-BF-017, FX-BF-044 |
-| FX-BE-153 | Dockable and floating assistant UI shell with multi-persona chat feed | Backlog | FX-BE-152 |
-| FX-BE-154 | Page context providers and interactive in-app actions | Backlog | FX-BE-152, FX-BE-153 |
-| FX-BE-155 | Team Chats sidebar tree node, persistence, and visual verification | Backlog | FX-BE-153, FX-BE-154 |
+| FX-BE-152 | Multi-persona team engine and assistant IPC | Complete | FX-BF-017, FX-BF-044 |
+| FX-BE-153 | Dockable and floating assistant UI shell with multi-persona chat feed | Complete | FX-BE-152 |
+| FX-BE-154 | Page context providers and interactive in-app actions | Complete | FX-BE-152, FX-BE-153 |
+| FX-BE-155 | Team Chats sidebar tree node, persistence, and visual verification | In progress | FX-BE-153, FX-BE-154 |
 
 ## Delivery order
 
@@ -103,3 +103,6 @@ Completion summary (FX-BF-050).
 Built: core `ai/assistant/` (types, 5 personas, turn + team-review engine, TeamChatStore, 12 node:tests); main `assistantIpc.ts` (assistant:turn/teamReview/chat CRUD, `userData/team-chats.json`) + preload + `AssistantIpc` contract; renderer `assistant/` (provider, floating+docked shells, persona feed, @mention composer, context pill, action cards, TeamChatsSection); ⌘J/Ctrl+J, title-bar button, command-palette entry; page context registered by Board, Issue, Git changes, Workflow designer (WorkflowAssistantPopover + its CSS removed); New Session accepts `initialGoal` for "Open as Coding Session"; Team Chats node in the project tree; parity doc + renderer AGENTS.md updated.
 Verified: check-types clean; test:core 1384/1384; renderer build + copy-renderer + desktop build OK; e2e assistant.spec.ts 4/4 (⌘J/float/dock keeps transcript, @mention + choices + coding-session handoff, team review order, context switching/detach/persistence/delete); regression: sidebarTreeAlignment, keyboardFocus, iconButtonTooltips, paneInset, workflowDesigner (34), folder/folderMulti/editIssue/newIssue all pass. Screenshots inspected (floating, docked, tree); fixed a wrapping action button found there.
 Not done / follow-ups: full test:desktop suite not run (scoped to affected specs); no per-theme/surface-pack baseline screenshots; main-side IPC unit tests are covered via the core engine tests instead; `workflows:assistant` IPC is now unused by the renderer and left in place; workflow edits apply to the canvas and need Save.
+
+**PRX-F50** — 2026-10-03T18:26:37.494Z
+Reopened: the earlier "Done" was premature. Audit against the task specs found unmet criteria: create-subtask action (409), Preview Changes button (405), auto-expanding 6-line composer and per-turn context detach (406), git diff hunks in context (407), no e2e for update-ticket / update-workflow / git context / rename / restart persistence (409, 408, 411, 410), no main-process assistantIpc tests (402/403), and no theme / surface-pack visual validation or assistant coverage in keyboard-focus + tooltip specs (412). Will implement and verify these, then re-close with evidence.

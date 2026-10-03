@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Story
 **Priority:** High
 id: FX-BE-153
 type: Story
-status: Backlog
+status: Complete
 created: 2026-10-03
 owner: Electron desktop app
 ---
@@ -36,9 +36,9 @@ Users gain a versatile, always-accessible assistant interface that operates both
 
 | Ref | Task | Status | Priority |
 | --- | --- | --- | --- |
-| TASK-404 | Global Assistant drawer shell with docked vs floating state and resize handle | Backlog | High |
-| TASK-405 | Multi-persona message feed component with role badges and interactive choice cards | Backlog | High |
-| TASK-406 | Context banner, suggestion chips, and composer with mention autocomplete | Backlog | High |
+| TASK-404 | Global Assistant drawer shell with docked vs floating state and resize handle | Complete | High |
+| TASK-405 | Multi-persona message feed component with role badges and interactive choice cards | Complete | High |
+| TASK-406 | Context banner, suggestion chips, and composer with mention autocomplete | Complete | High |
 
 ## Dependencies
 

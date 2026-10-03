@@ -67,3 +67,10 @@ Engineers delegating tasks to AI agents ("Start AI") no longer need to manually 
   - 100% test pass on `ticketContext.test.ts` and `trackerMcpServer.test.ts`.
   - Monorepo `check-types`, `build`, and core tests (1,372 passed) clean.
   - E2E tests `issueDetail.spec.ts` and `aiSessions.spec.ts` verified passing.
+
+## Description
+
+
+## Dependencies
+
+

@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Story
 **Priority:** High
 id: FX-BE-152
 type: Story
-status: Backlog
+status: Complete
 created: 2026-10-03
 owner: Electron desktop app
 ---
@@ -34,9 +34,9 @@ The application gains a flexible, multi-persona AI backend capable of answering 
 
 | Ref | Task | Status | Priority |
 | --- | --- | --- | --- |
-| TASK-401 | Assistant persona definitions and multi-agent system prompts in core | Backlog | High |
-| TASK-402 | Page context protocol and assistant IPC handlers in main | Backlog | High |
-| TASK-403 | Unit tests for persona dispatch, team review orchestration, and context serialization | Backlog | Medium |
+| TASK-401 | Assistant persona definitions and multi-agent system prompts in core | Complete | High |
+| TASK-402 | Page context protocol and assistant IPC handlers in main | Complete | High |
+| TASK-403 | Unit tests for persona dispatch, team review orchestration, and context serialization | Complete | Medium |
 
 ## Dependencies
 

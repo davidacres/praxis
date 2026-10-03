@@ -3,6 +3,7 @@ import type { UsagePeak, UsageDashboardSummary, UsageWindowSummary } from '@prax
 import { Icon } from '../ui/Icon';
 import { formatTokenCompact } from '../ai/sessionNav';
 import { UsageModelBreakdown, formatUsageCost } from '../ai/UsageModelBreakdown';
+import { ProviderBudgets } from '../ai/ProviderBudgetsPanel';
 
 interface AiUsageDashboardPanelProps {
   /** Opens Settings → AI Usage. */
@@ -91,6 +92,8 @@ export function AiUsageDashboardPanel({ onOpenDetails, onNewConversation }: AiUs
           <p className="overview-usage-note">Totals come from the usage ledger, so they can differ from Settings → AI → Spend, which excludes internal one-shot AI calls.</p>
         </>
       )}
+
+      <ProviderBudgets />
     </section>
   );
 }

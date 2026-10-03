@@ -1124,6 +1124,7 @@ export class AcpAgentHost {
 
   public dispose(): void {
     for (const issueKey of [...this.activeTasks.keys()]) {
+      this.sessionManager.markAgentSessionInterrupted(issueKey);
       void this.abortTask(issueKey);
     }
   }

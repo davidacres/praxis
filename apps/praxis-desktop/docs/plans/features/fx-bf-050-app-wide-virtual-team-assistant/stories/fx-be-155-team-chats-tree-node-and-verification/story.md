@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🚧 In progress
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Story
 **Priority:** High
 id: FX-BE-155
 type: Story
-status: Backlog
+status: In Progress
 created: 2026-10-03
 owner: Electron desktop app
 ---
@@ -36,9 +36,9 @@ Conversations with the virtual engineering team are preserved as permanent proje
 
 | Ref | Task | Status | Priority |
 | --- | --- | --- | --- |
-| TASK-410 | Team chat persistence and Project tree `Team Chats` sidebar node | Backlog | High |
-| TASK-411 | Playwright E2E test suite covering floating/docked toggles, persona chat rendering, and page context switching | Backlog | High |
-| TASK-412 | Visual inspection, surface pack theme validation, and desktop documentation updates | Backlog | Medium |
+| TASK-410 | Team chat persistence and Project tree `Team Chats` sidebar node | Complete | High |
+| TASK-411 | Playwright E2E test suite covering floating/docked toggles, persona chat rendering, and page context switching | Complete | High |
+| TASK-412 | Visual inspection, surface pack theme validation, and desktop documentation updates | In progress | Medium |
 
 ## Dependencies
 

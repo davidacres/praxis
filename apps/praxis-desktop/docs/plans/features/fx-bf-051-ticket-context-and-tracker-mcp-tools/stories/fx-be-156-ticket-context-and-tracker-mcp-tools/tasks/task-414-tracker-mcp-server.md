@@ -42,3 +42,10 @@ story: FX-BE-156
 - Implemented `TrackerMcpServer` with stdio/message transport support in `packages/core/src/ai/trackerMcpServer.ts`.
 - Added unit tests in `packages/core/src/ai/trackerMcpServer.test.ts` testing tool enumeration, tool execution, fuzzy transition matching, and read-only rejection.
 - All unit tests pass cleanly.
+
+## Description
+
+
+## Dependencies
+
+

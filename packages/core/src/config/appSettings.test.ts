@@ -536,3 +536,14 @@ test('appearance zoomFactor defaults to 1 and is sanitized and merged within 0.7
   assert.equal(merged.appearance.zoomFactor, 1.3);
 });
 
+
+
+test('removed built-in providers stay removed across settings reads and unrelated patches', () => {
+  const removed = sanitizeAppSettings({ ai: { providers: { openai: { added: false, enabled: false } } } });
+  assert.equal(removed.ai.providers.openai?.added, false);
+  const patched = mergeAppSettings(removed, { ai: { defaultModel: 'another-model' } });
+  assert.equal(patched.ai.providers.openai?.added, false);
+  const added = mergeAppSettings(patched, { ai: { providers: { openai: { ...patched.ai.providers.openai, added: true, enabled: true } } } });
+  assert.equal(added.ai.providers.openai?.added, true);
+  assert.equal(added.ai.providers.openai?.enabled, true);
+});

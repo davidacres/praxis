@@ -19,6 +19,7 @@ import { TitleBar } from './TitleBar';
 import { useAssistant } from '../assistant/AssistantProvider';
 import { AssistantDock, AssistantFloating } from '../assistant/AssistantShell';
 import { Sidebar, type FeatureId, type SidebarMode } from './Sidebar';
+import { SessionRecoveryDialog } from '../ai/SessionRecoveryDialog';
 import { NewSession, type SessionWorkflowOption } from '../ai/NewSession';
 import { NewIssuePage } from '../issues/NewIssuePage';
 import { ImportProjectsWizard } from '../projects/ImportProjectsWizard';
@@ -1463,7 +1464,7 @@ export function App() {
     const settingsPages: Array<[SettingsCategory, string]> = [
       ['overview', 'Settings'], ['startup', 'Startup'], ['appearance', 'Appearance'],
       ['appearance-themes', 'Themes'], ['appearance-surfaces', 'Surfaces'], ['appearance-looks', 'Looks'],
-      ['ai', 'AI Provider'], ['agent-runtime', 'Agent Runtime'], ['mcp', 'MCP Server'], ['delivery', 'Delivery'],
+      ['ai', 'AI Provider'], ['ai-usage', 'AI Usage & Spend'], ['agent-runtime', 'Agent Runtime'], ['mcp', 'MCP Server'], ['delivery', 'Delivery'],
       ['connections', 'Connections'], ['jira', 'Jira'], ['terminal', 'Terminal'], ['performance', 'Performance'], ['preview', 'Preview']
     ];
     settingsPages.forEach(([id, label]) => {
@@ -2982,6 +2983,7 @@ export function App() {
           onImported={snap => { setAgentSnapshot(snap); setAgentDialog(undefined); }}
         />
       )}
+      {startupResolved && !showSplash && !aiSetupNeeded && <SessionRecoveryDialog />}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} brief={splashBrief && splashReplayKey === 0} onDone={() => setShowSplash(false)} />}
       {paletteOpen && !aiSetupNeeded && (
         <CommandPalette entries={paletteEntries} onSearch={searchIssues} onClose={() => setPaletteOpen(false)} />

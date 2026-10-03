@@ -1,0 +1,9 @@
+.session-recovery-dialog { width: min(620px, calc(100vw - 32px)); }
+.session-recovery-list { max-height: 45vh; overflow: auto; margin-top: 12px; }
+.session-recovery-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.session-recovery-row label { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.session-recovery-row input { accent-color: var(--accent); margin-top: 3px; }
+.session-recovery-row span { min-width: 0; }
+.session-recovery-row strong, .session-recovery-row small { display: block; overflow-wrap: anywhere; }
+.session-recovery-row small { color: var(--text-secondary); margin-top: 4px; }
+.session-recovery-error { color: var(--danger); }

@@ -434,6 +434,26 @@ export class AiSessionManager {
     return record;
   }
 
+  /** Interactive sessions offered for explicit startup recovery. */
+  public getInterruptedAgentSessions(): AgentSessionRecord[] {
+    return [...this.agentSessions.values()].filter(record => record.interruptedByRestart
+      && !record.archived && !record.workflowNodeId
+      && (record.state === 'aborted' || record.state === 'paused'));
+  }
+
+  public markAgentSessionInterrupted(issueKey: string): void {
+    const record = this.agentSessions.get(issueKey);
+    if (record) record.interruptedByRestart = true;
+  }
+
+  public async dismissInterruptedAgentSessions(issueKeys: string[]): Promise<void> {
+    for (const issueKey of issueKeys) {
+      const record = this.agentSessions.get(issueKey);
+      if (record) delete record.interruptedByRestart;
+    }
+    await this.persistAgentSessions();
+  }
+
   /** Update agent session state and optionally set completedAt and failure reason. */
   public updateAgentState(issueKey: string, state: AgentTaskState, reason?: string): void {
     const record = this.agentSessions.get(issueKey);
@@ -441,6 +461,7 @@ export class AiSessionManager {
       return;
     }
     record.state = state;
+    if (state === 'executing') delete record.interruptedByRestart;
     if (state === 'completed') {
       this.updateSessionStatus(issueKey, 'completed');
       record.lastError = undefined;
@@ -1196,6 +1217,7 @@ export class AiSessionManager {
           ...value,
           toolMode: value.toolMode === 'read-only' || value.toolMode === 'project-only' ? value.toolMode : 'full',
           state: interrupted ? 'aborted' : value.state,
+          ...(interrupted ? { interruptedByRestart: true } : {}),
           completedAt: interrupted ? (value.completedAt ?? new Date().toISOString()) : value.completedAt,
           events: interrupted
             ? [
