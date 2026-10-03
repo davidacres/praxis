@@ -13,7 +13,8 @@ test('renders the workspace overview dashboard', async () => {
   await expect(page.getByText('Workspace overview')).toBeVisible();
   await expect(page.getByText('Active AI sessions')).toBeVisible();
   await expect(page.getByText('Recent projects')).toBeVisible();
-  await expect(page.getByText('Delivery worktrees')).toBeVisible();
+  await expect(page.getByText('Recent activity')).toBeVisible();
+  await expect(page.getByText('Delivery worktrees')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Workspace health' })).toBeVisible();
   await page.screenshot({ path: 'output/playwright/overview-dashboard.png', fullPage: true });
   await page.locator('[data-testid="titlebar-settings"]').click();

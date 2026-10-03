@@ -71,7 +71,7 @@ export function AiUsageDashboardPanel({ onOpenDetails, onNewConversation }: AiUs
       {!error && !summary && <div className="overview-empty"><span>Loading usage…</span></div>}
 
       {summary && empty && (
-        <div className="overview-empty" data-testid="overview-usage-empty">
+        <div className="overview-empty overview-empty-sessions" data-testid="overview-usage-empty">
           <Icon name="graph" size={22} />
           <span>No AI usage yet.<small>Token and cost usage appears here once you run a conversation or session.</small></span>
           <button className="btn btn-primary" type="button" onClick={onNewConversation}>New conversation</button>
