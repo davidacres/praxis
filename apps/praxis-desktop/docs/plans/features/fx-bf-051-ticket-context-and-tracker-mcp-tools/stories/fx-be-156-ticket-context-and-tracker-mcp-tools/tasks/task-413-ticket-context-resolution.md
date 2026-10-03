@@ -37,3 +37,10 @@ story: FX-BE-156
 - Implemented `packages/core/src/ai/ticketContext.ts`.
 - Added unit tests in `packages/core/src/ai/ticketContext.test.ts` testing parent brief resolution, sibling task demarcation, dependency mapping, comments rendering, and read-only directives.
 - All unit tests pass cleanly.
+
+## Description
+
+
+## Dependencies
+
+

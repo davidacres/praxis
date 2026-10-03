@@ -63,3 +63,7 @@ When clicking "Start AI" on a ticket, Praxis automatically collects and passes t
   - `npm run check-types`: Clean across all monorepo packages.
   - Playwright e2e tests `e2e/issueDetail.spec.ts` and `e2e/aiSessions.spec.ts`: Passed.
   - Documentation updated in `packages/core/src/ai/AGENTS.md` and `apps/praxis-desktop/docs/desktop-feature-parity.md`.
+
+## Dependencies
+
+

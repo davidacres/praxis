@@ -172,6 +172,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     const text = raw.trim();
     if (!text) return;
     const context = pageContextRef.current;
+    // "Detach" lasts one message: the page context re-attaches itself for the next turn.
+    setDetachedTitle(undefined);
     const userMessage: AssistantMessage = {
       id: newMessageId(),
       role: 'user',
@@ -195,6 +197,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const runTeamReview = useCallback(async () => {
     const context = pageContextRef.current;
+    setDetachedTitle(undefined);
     const marker: AssistantMessage = {
       id: newMessageId(),
       role: 'user',

@@ -105,3 +105,15 @@ test('team chat store persists, titles from the first message, renames and delet
   await store.remove(chat.id);
   assert.equal(store.list('p1').length, 0);
 });
+
+test('ticket actions are only offered on an issue page', async () => {
+  const sub = 'x\n```praxis-assistant\n{"action":{"kind":"create-subtask","label":"A","summary":"s","title":"Add test","description":"d"}}\n```';
+  const upd = 'x\n```praxis-assistant\n{"action":{"kind":"update-ticket","label":"A","summary":"s","description":"new"}}\n```';
+  for (const reply of [sub, upd]) {
+    assert.equal((await runAssistantTurn({ message: 'hi', context: { ...context, pageType: 'board' } }, recorder(reply).complete)).messages[0].proposedAction, undefined);
+    assert.equal((await runAssistantTurn({ message: 'hi' }, recorder(reply).complete)).messages[0].proposedAction, undefined);
+  }
+  const on = await runAssistantTurn({ message: 'hi', context }, recorder(sub).complete);
+  assert.deepEqual(on.messages[0].proposedAction, { kind: 'create-subtask', label: 'A', summary: 's', title: 'Add test', description: 'd' });
+  assert.equal(parseAssistantReply('x\n```praxis-assistant\n{"action":{"kind":"create-subtask","label":"A","summary":"s","title":"  ","description":"d"}}\n```').proposedAction, undefined);
+});

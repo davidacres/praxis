@@ -147,8 +147,9 @@ test('the list shows only providers in use; Add provider lists the rest and adds
   await expect(win.getByTestId('ai-api-key-input')).toBeFocused();
   expect(await win.evaluate(async () => (await window.praxis.settings.get()).ai.providers.openai?.added)).toBe(true);
 
-  // Unconfigured, so it can be taken off the list again; nothing else about it changes.
+  // Even an unconfigured provider can be removed through the same confirmation.
   await win.getByTestId('ai-provider-remove-openai').click();
+  await win.getByTestId('ai-provider-removal-confirm').click();
   await expect(win.getByTestId('ai-provider-row-openai')).toHaveCount(0);
 
   // A CLI with an explicit path override offers manual setup, not an install
@@ -314,7 +315,7 @@ test('an endpoint without tool calling is listed as chat only, kept out of sessi
   await openAiSettings(win);
   await win.getByTestId(`ai-provider-row-${id}`).locator('.ai-provider-head').click();
   await win.getByTestId('custom-endpoint-remove').click();
-  await win.getByRole('button', { name: 'Remove endpoint' }).last().click();
+  await win.getByTestId('ai-provider-removal-confirm').click();
   await expect(win.getByTestId(`ai-provider-row-${id}`)).toHaveCount(0);
   const after = await win.evaluate(async () => {
     const settings = await window.praxis.settings.get();
@@ -333,4 +334,75 @@ test('the built-in API key row keeps its buttons inside the row without overlapp
   const cluster = body.locator('.ai-key-controls').first();
   await expectNoOverlap(cluster, cluster.locator('> .input, > .btn'));
   await win.screenshot({ path: path.join(shots, 'ai-provider-key-row-narrow.png') });
+});
+
+
+test('configured providers can be removed, re-added, and replace the default while keeping one', async () => {
+  const win = await launch();
+  await win.evaluate(async () => {
+    await window.praxis.settings.set({ ai: { providers: { openai: { added: true } } } });
+    await window.praxis.ai.setProviderApiKey('openai', 'removal-test-key');
+  });
+  await openAiSettings(win);
+  await win.getByTestId('ai-provider-remove-openai').focus();
+  await win.keyboard.press('Enter');
+  await win.getByRole('dialog', { name: 'Remove OpenAI?' }).getByRole('button', { name: 'Cancel' }).click();
+  await expect(win.getByTestId('ai-provider-row-openai')).toBeVisible();
+  await win.getByTestId('ai-provider-remove-openai').click();
+  await win.getByTestId('ai-provider-removal-confirm').click();
+  await expect(win.getByTestId('ai-provider-row-openai')).toHaveCount(0);
+  const removed = await win.evaluate(async () => ({
+    config: (await window.praxis.settings.get()).ai.providers.openai,
+    status: (await window.praxis.ai.listProviderStatuses()).find(status => status.provider === 'openai')
+  }));
+  expect(removed.config).toMatchObject({ added: false, enabled: false });
+  expect(removed.status).toMatchObject({ configured: true, enabled: false });
+  await win.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
+  await openAiSettings(win);
+  await expect(win.getByTestId('ai-provider-row-openai')).toHaveCount(0);
+  await expect(win.getByTestId('ai-provider-remove-vercel-gateway')).toBeDisabled();
+  await win.getByTestId('ai-add-provider').click();
+  await win.getByTestId('add-provider-tile-openai').click();
+  await expect(win.getByTestId('ai-provider-row-openai')).toBeVisible();
+  await win.getByTestId('ai-provider-remove-vercel-gateway').click();
+  await expect(win.getByTestId('ai-provider-removal-confirm')).toBeDisabled();
+  await chooseOption(win.getByTestId('ai-provider-removal-replacement'), 'openai');
+  const artifacts = path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await win.screenshot({ path: path.join(artifacts, 'provider-removal-confirmation.png') });
+  await win.getByTestId('ai-provider-removal-confirm').click();
+  await expect(win.getByTestId('ai-provider-row-vercel-gateway')).toHaveCount(0);
+  await expect(win.getByTestId('ai-provider-default-openai')).toBeVisible();
+  await expect(win.getByTestId('ai-provider-remove-openai')).toBeDisabled();
+  await win.screenshot({ path: path.join(artifacts, 'provider-removal-minimum.png') });
+  expect((await win.evaluate(async () => window.praxis.settings.get())).ai.activeProvider).toBe('openai');
+});
+
+
+test('a custom endpoint can be the only provider and its default removal uses the chosen replacement', async () => {
+  app = await launchTestApp({ ai: {
+    activeProvider: 'custom:only',
+    recommendationProvider: 'custom:only',
+    customProviders: [{ id: 'custom:only', label: 'Only endpoint', protocol: 'openai-chat', baseUrl: 'http://127.0.0.1:11434', apiPath: '/v1', auth: { kind: 'none' } }],
+    providers: { 'vercel-gateway': { added: false, enabled: false } }
+  } }, undefined, { AI_GATEWAY_API_KEY: 'gateway-e2e-key' });
+  const win = app.window;
+  await win.waitForSelector('[data-testid="new-session-view"]');
+  await openAiSettings(win);
+  await expect(win.getByTestId('ai-provider-row-vercel-gateway')).toHaveCount(0);
+  await expect(win.getByTestId('ai-provider-remove-custom:only')).toBeDisabled();
+  await expect(win.getByTestId('custom-endpoint-remove')).toHaveCount(0);
+  await expect(win.getByTestId('ai-providers-footnote')).toContainText('Keep at least one');
+  await win.getByTestId('ai-add-provider').click();
+  await win.getByTestId('add-provider-tile-vercel-gateway').click();
+  await win.getByTestId('ai-provider-remove-custom:only').click();
+  await chooseOption(win.getByTestId('ai-provider-removal-replacement'), 'vercel-gateway');
+  await win.getByTestId('ai-provider-removal-confirm').click();
+  await expect(win.getByTestId('ai-provider-row-custom:only')).toHaveCount(0);
+  await expect(win.getByTestId('ai-provider-default-vercel-gateway')).toBeVisible();
+  await expect(win.getByTestId('ai-provider-remove-vercel-gateway')).toBeDisabled();
+  const settings = await win.evaluate(async () => window.praxis.settings.get());
+  expect(settings.ai.activeProvider).toBe('vercel-gateway');
+  expect(settings.ai.customProviders ?? []).toEqual([]);
+  expect(settings.ai.recommendationProvider).toBeUndefined();
 });

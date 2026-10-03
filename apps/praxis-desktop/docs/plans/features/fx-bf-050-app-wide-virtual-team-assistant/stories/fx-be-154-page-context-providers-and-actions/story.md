@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Story
 **Priority:** High
 id: FX-BE-154
 type: Story
-status: Backlog
+status: Complete
 created: 2026-10-03
 owner: Electron desktop app
 ---
@@ -36,9 +36,9 @@ The assistant becomes deeply aware of what the user is working on by subscribing
 
 | Ref | Task | Status | Priority |
 | --- | --- | --- | --- |
-| TASK-407 | `usePageAssistantContext` hook and surface integrations for Board, Issue Detail, and Git | Backlog | High |
-| TASK-408 | Workflow Designer assistant migration to unified assistant with mutation action | Backlog | Medium |
-| TASK-409 | Interactive action proposals with 1-click apply and ACP coding session delegation | Backlog | High |
+| TASK-407 | `usePageAssistantContext` hook and surface integrations for Board, Issue Detail, and Git | Complete | High |
+| TASK-408 | Workflow Designer assistant migration to unified assistant with mutation action | Complete | Medium |
+| TASK-409 | Interactive action proposals with 1-click apply and ACP coding session delegation | Complete | High |
 
 ## Dependencies
 

@@ -493,6 +493,8 @@ export interface AgentSessionRecord {
   stepCount: number;
   startedAt: string;
   completedAt?: string;
+  /** A restart stopped this session; execution requires an explicit recovery choice. */
+  interruptedByRestart?: boolean;
   /**
    * Tokens this session has consumed, summed across its turns — present only
    * for the API providers whose usage the gateway wire parser reads. ACP

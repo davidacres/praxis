@@ -41,16 +41,8 @@ import { ModelManagerPanel } from '../ai/ModelManagerPanel';
 import { AiUsageStatsSection } from './AiUsageStatsSection';
 import { fetchModelOptions, hasModelCatalog, providerIconName } from '../ai/modelProviders';
 import { AddProviderDialog, CustomEndpointForm, endpointDisplayUrl, type BuiltInCatalogEntry } from './AiProviderCatalog';
+import { RemoveProviderDialog } from './RemoveProviderDialog';
 import { McpServersPanel } from './McpServersPanel';
-import {
-  formatCost,
-  formatTokenCount,
-  sessionsWithinDays,
-  summariseSpend,
-  summariseSpendByConnection,
-  summariseSpendByProviderModel,
-  type SpendGroupRow
-} from '../ai/sessionNav';
 import { useSettings } from './useSettings';
 import { useKindAddons } from './marketplaceAddons';
 import { isHostShimProfile, NATIVE_TOOL_LABELS, nativeReaders, nativeSourceLabel, skillTitle } from '../agents/agentCatalog';
@@ -215,9 +207,9 @@ const CATEGORIES: CategoryDef[] = [
   },
   {
     id: 'ai-usage',
-    label: 'AI Usage',
+    label: 'AI Usage & Spend',
     icon: 'graph',
-    description: 'Token and cost usage across every session and internal AI feature, by day, week, or month.'
+    description: 'Token and cost usage across sessions and features, budget limits, and connection breakdowns.'
   },
   {
     id: 'gadgets',
@@ -406,7 +398,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'marketplace' && <MarketplaceSection />}
         {active === 'jira' && <JiraSection settings={settings} update={update} />}
         {active === 'ai' && <AiSection settings={settings} update={update} connections={connections} />}
-        {active === 'ai-usage' && <AiUsageStatsSection />}
+        {active === 'ai-usage' && <AiUsageStatsSection settings={settings} update={update} connections={connections} />}
         {active === 'gadgets' && <GadgetsSection />}
         {active === 'agent-runtime' && (
           <AgentRuntimeSection
@@ -2029,7 +2021,7 @@ function JiraSection({
  * it goes straight to the OS-keychain secrets store via `ai:setApiKey` and is
  * never read back over IPC; the status snapshot only reports the key source.
  */
-type AiTab = 'providers' | 'defaults' | 'spend' | 'tools';
+type AiTab = 'providers' | 'defaults' | 'tools';
 
 interface AiProviderMeta {
   id: AiProvider;
@@ -2114,7 +2106,7 @@ const AI_PROVIDERS: AiProviderMeta[] = [
   {
     id: 'codex-cli',
     kind: 'cli-agent',
-    label: 'Codex CLI (local)',
+    label: 'OpenAI Codex (local)',
     keyLabel: '',
     urlPlaceholder: '',
     modelPlaceholder: '',
@@ -2146,21 +2138,6 @@ const AI_PROVIDERS: AiProviderMeta[] = [
   }
 ];
 
-/**
- * A group row's meta line: session count, cost per currency (only currencies
- * that actually reported — never a blended total, per `summariseSpend`), and
- * tokens if any session in the group reported those instead. A row can show
- * both when its sessions mix ACP and API providers.
- */
-function spendGroupMeta(row: SpendGroupRow): string {
-  const parts = [`${row.sessionCount} session${row.sessionCount === 1 ? '' : 's'}`];
-  const cost = row.costByCurrency
-    .map(({ currency, amount }) => formatCost({ amount, currency }))
-    .filter((value): value is string => Boolean(value));
-  if (cost.length > 0) parts.push(cost.join(' + '));
-  if (typeof row.totalTokens === 'number') parts.push(formatTokenCount(row.totalTokens));
-  return parts.join(' · ');
-}
 
 function UsageAdminKeyField({ provider }: { provider: AiProvider }) {
   const [draft, setDraft] = useState('');
@@ -2223,9 +2200,10 @@ function AiSection({
   const [testSuccess, setTestSuccess] = useState<string | undefined>();
   const [testingKey, setTestingKey] = useState(false);
   const [managingModels, setManagingModels] = useState(false);
-  const [spendSessions, setSpendSessions] = useState<AgentSessionRecord[]>([]);
-  const [spendRangeDays, setSpendRangeDays] = useState<number | undefined>(undefined);
   const [addingProvider, setAddingProvider] = useState(false);
+  const [removingProvider, setRemovingProvider] = useState<AiProviderMeta>();
+  const [removing, setRemoving] = useState(false);
+  const [removalError, setRemovalError] = useState<string>();
   const [presets, setPresets] = useState<ProviderPreset[]>([]);
   /** A new endpoint being set up from a preset — shown as its own open row until saved or cancelled. */
   const [newEndpointPreset, setNewEndpointPreset] = useState<ProviderPreset>();
@@ -2257,38 +2235,6 @@ function AiSection({
     return () => { cancelled = true; };
   }, [selectedProviderId]);
 
-  // Self-contained, like `reloadStatuses` above — the Settings dialog has no
-  // App-level session state threaded into it, so this section fetches and
-  // stays live on its own rather than growing App's already large prop
-  // surface for a section-local concern.
-  useEffect(() => {
-    let cancelled = false;
-    window.praxis.ai
-      .listSessions()
-      .then(sessions => {
-        if (!cancelled) setSpendSessions(sessions);
-      })
-      .catch(() => undefined);
-    const unsubscribeChanged = window.praxis.ai.onSessionChanged(record => {
-      setSpendSessions(current => [record, ...current.filter(session => session.issueKey !== record.issueKey)]);
-    });
-    const unsubscribeDeleted = window.praxis.ai.onSessionDeleted(issueKey => {
-      setSpendSessions(current => current.filter(session => session.issueKey !== issueKey));
-    });
-    return () => {
-      cancelled = true;
-      unsubscribeChanged();
-      unsubscribeDeleted();
-    };
-  }, []);
-
-  const spendRangeSessions = sessionsWithinDays(spendSessions, spendRangeDays);
-  const spendTotals = summariseSpend(spendRangeSessions);
-  const spendByProviderModel = summariseSpendByProviderModel(spendRangeSessions);
-  const spendByConnection = summariseSpendByConnection(spendRangeSessions, connections);
-  const spendReportingCount = spendRangeSessions.filter(
-    session => (session.cost && session.cost.amount > 0) || (session.tokenUsage?.totalTokens ?? 0) > 0
-  ).length;
   useEffect(() => {
     setKeyDraft('');
     setManagingModels(false);
@@ -2435,7 +2381,9 @@ function AiSection({
    * endpoint. Everything else waits in Add provider.
    */
   const isListed = (id: AiProvider): boolean => {
-    if (settings.ai.activeProvider === id || settings.ai.providers[id]?.added) return true;
+    if (settings.ai.activeProvider === id) return true;
+    if (settings.ai.providers[id]?.added === false) return false;
+    if (settings.ai.providers[id]?.added) return true;
     if (id.startsWith('custom:')) return true;
     return statuses.find(status => status.provider === id)?.configured === true;
   };
@@ -2461,7 +2409,7 @@ function AiSection({
 
   const addBuiltIn = async (id: AiProvider) => {
     setAddingProvider(false);
-    await update({ ai: { providers: { [id]: { ...(settings.ai.providers[id] ?? {}), added: true } } } });
+    await update({ ai: { providers: { [id]: { ...(settings.ai.providers[id] ?? {}), added: true, enabled: true } } } });
     openRow(id);
     if (statuses.find(status => status.provider === id)?.configured !== true) setSetupFocus(id);
   };
@@ -2472,26 +2420,37 @@ function AiSection({
     setExpandedProviderId(undefined);
   };
 
-  const removeFromList = async (id: AiProvider) => {
-    await update({ ai: { providers: { [id]: { ...(settings.ai.providers[id] ?? {}), added: undefined } } } });
-    setExpandedProviderId(undefined);
+  const requestRemoval = (meta: AiProviderMeta) => {
+    if (listedMetas.length <= 1) return;
+    setRemovalError(undefined);
+    setRemovingProvider(meta);
   };
 
-  const removeEndpoint = async (config: CustomProviderConfig) => {
-    const confirmed = await confirm({
-      title: `Remove ${config.label}?`,
-      message: 'Its stored API key is deleted too. Sessions that already ran on it stay in your history.',
-      confirmLabel: 'Remove endpoint',
-      danger: true
-    });
-    if (!confirmed) return;
+  const removeProvider = async (replacement?: AiProvider) => {
+    if (!removingProvider || removing || listedMetas.length <= 1) return;
+    const id = removingProvider.id;
+    const isDefault = settings.ai.activeProvider === id;
+    if (isDefault && (!replacement || !listedMetas.some(meta => meta.id === replacement && meta.id !== id))) return;
+    setRemoving(true);
+    setRemovalError(undefined);
     try {
-      await window.praxis.ai.removeCustomProvider(config.id);
+      await update({ ai: {
+        ...(isDefault ? { activeProvider: replacement } : {}),
+        ...(settings.ai.recommendationProvider === id ? { recommendationProvider: undefined } : {}),
+        providers: {
+          [id]: { ...(settings.ai.providers[id] ?? {}), added: false, enabled: false },
+          ...(isDefault && replacement ? { [replacement]: { ...(settings.ai.providers[replacement] ?? {}), enabled: true } } : {})
+        }
+      } });
+      if (id.startsWith('custom:')) await window.praxis.ai.removeCustomProvider(id);
       setExpandedProviderId(undefined);
-      setSelectedProviderId(settings.ai.activeProvider === config.id ? 'vercel-gateway' : settings.ai.activeProvider);
+      setSelectedProviderId(replacement ?? settings.ai.activeProvider);
+      setRemovingProvider(undefined);
       reloadStatuses();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setRemovalError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -2543,12 +2502,15 @@ function AiSection({
   const tabs: Array<{ id: AiTab; label: string }> = [
     { id: 'providers', label: 'Providers' },
     { id: 'defaults', label: 'Defaults' },
-    { id: 'spend', label: 'Spend' },
     { id: 'tools', label: 'Tools' }
   ];
 
   return (
     <>
+      {removingProvider && <RemoveProviderDialog provider={removingProvider}
+        isDefault={settings.ai.activeProvider === removingProvider.id}
+        remaining={listedMetas.filter(meta => meta.id !== removingProvider.id)} busy={removing} error={removalError}
+        onClose={() => setRemovingProvider(undefined)} onRemove={replacement => void removeProvider(replacement)} />}
       <CategoryHeader category={category} />
       {error && (
         <div className="error-banner">
@@ -2717,6 +2679,13 @@ function AiSection({
                           Make default
                         </button>
                       )}
+                      <button type="button" className="btn btn-compact" data-testid={`ai-provider-remove-${meta.id}`}
+                        aria-label={`Remove ${meta.label}`} disabled={listedMetas.length <= 1 || removing}
+                        title={listedMetas.length <= 1 ? 'Keep at least one AI provider' : `Remove ${meta.label}`}
+                        onKeyDown={event => event.stopPropagation()}
+                        onClick={event => { event.stopPropagation(); requestRemoval(meta); }}>
+                        Remove
+                      </button>
                       <button
                         type="button"
                         role="switch"
@@ -2749,7 +2718,7 @@ function AiSection({
                           defaultModel={settings.ai.providers[custom.id]?.defaultModel ?? ''}
                           keySaved={rowStatus?.keySource === 'secret'}
                           onSaved={() => reloadStatuses()}
-                          onRemove={() => void removeEndpoint(custom)}
+                          onRemove={listedMetas.length > 1 ? () => requestRemoval(meta) : undefined}
                         />
                         <FieldRow
                           label="Models"
@@ -2779,13 +2748,6 @@ function AiSection({
                     )}
                     {isOpen && !custom && (
                       <div className="ai-provider-body" data-testid={`ai-provider-body-${meta.id}`}>
-                        {!configured && rowStatus && settings.ai.providers[meta.id]?.added && !isDefault && (
-                          <div className="ai-provider-body-actions">
-                            <button type="button" className="btn btn-compact" data-testid={`ai-provider-remove-${meta.id}`} onClick={() => void removeFromList(meta.id)}>
-                              Remove from list
-                            </button>
-                          </div>
-                        )}
                         {!configured && rowStatus && (
                           <>
                             <p className="settings-hint ai-provider-setup-hint" data-testid={`ai-provider-setup-hint-${meta.id}`}>
@@ -3033,7 +2995,7 @@ function AiSection({
               <button type="button" className="link-button" onClick={() => setAddingProvider(true)}>
                 Add provider
               </button>
-              .
+              .{listedMetas.length === 1 && ' Keep at least one AI provider.'}
             </p>
             {addingProvider && (
               <AddProviderDialog
@@ -3123,90 +3085,6 @@ function AiSection({
           </>
         )}
 
-        {tab === 'spend' && (
-          <>
-            <FieldRow
-              label="Spend limit"
-              description="A budget you set, warned against the cost your agent reports. 0 turns it off. This is not an account balance — no provider tells Praxis one, and only CLI agents (Claude Code, Codex) report cost at all."
-            >
-              <DebouncedNumberField
-                ariaLabel="Spend limit"
-                value={settings.ai.spendLimit}
-                min={0}
-                onCommit={value => update({ ai: { spendLimit: value } })}
-              />
-            </FieldRow>
-            <div className="settings-section-block" data-testid="ai-spend-report">
-              <div className="settings-section-subhead">
-                <span>Spend report</span>
-                <div className="chip-row" role="group" aria-label="Spend report time range">
-                  {(
-                    [
-                      { label: 'All time', days: undefined },
-                      { label: '30 days', days: 30 },
-                      { label: '7 days', days: 7 }
-                    ] as const
-                  ).map(range => (
-                    <button
-                      key={range.label}
-                      type="button"
-                      className={`chip${spendRangeDays === range.days ? ' filter-active' : ''}`}
-                      onClick={() => setSpendRangeDays(range.days)}
-                      data-testid={`ai-spend-range-${range.days ?? 'all'}`}
-                    >
-                      {range.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {spendRangeSessions.length === 0 ? (
-                <p className="settings-hint">No sessions in this range.</p>
-              ) : (
-                <>
-                  <div className="list-row is-static">
-                    <div>
-                      <div className="list-row-title">Total cost</div>
-                      <div className="list-row-meta" data-testid="ai-spend-total-cost">
-                        {spendTotals.byCurrency.length === 0
-                          ? 'No session in this range reported a cost.'
-                          : spendTotals.byCurrency
-                              .map(({ currency, amount }) => formatCost({ amount, currency }))
-                              .filter((value): value is string => Boolean(value))
-                              .join(' + ')}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="list-row is-static">
-                    <div>
-                      <div className="list-row-title">Sessions reporting cost or tokens</div>
-                      <div className="list-row-meta">
-                        {spendReportingCount} of {spendRangeSessions.length}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="settings-section-subhead"><span>By provider &amp; model</span></div>
-                  {spendByProviderModel.map(row => (
-                    <div className="list-row is-static" key={row.label} data-testid="ai-spend-provider-row">
-                      <div>
-                        <div className="list-row-title">{row.label}</div>
-                        <div className="list-row-meta">{spendGroupMeta(row)}</div>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="settings-section-subhead"><span>By connection</span></div>
-                  {spendByConnection.map(row => (
-                    <div className="list-row is-static" key={row.label} data-testid="ai-spend-connection-row">
-                      <div>
-                        <div className="list-row-title">{row.label}</div>
-                        <div className="list-row-meta">{spendGroupMeta(row)}</div>
-                      </div>
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-          </>
-        )}
 
         {tab === 'tools' && (
           <>

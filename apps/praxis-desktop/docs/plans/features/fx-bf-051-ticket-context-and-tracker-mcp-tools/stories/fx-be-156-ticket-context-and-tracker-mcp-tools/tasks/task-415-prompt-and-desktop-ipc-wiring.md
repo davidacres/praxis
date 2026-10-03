@@ -42,3 +42,10 @@ story: FX-BE-156
 - Wired `resolveTicketContext` into `aiIpc.ts` delegate handler.
 - Configured MCP loopback server `praxis-tracker` on `AcpAgentHost` with prompt permissions.
 - Added session cleanup hooks in `deleteAgentSession.ts`.
+
+## Description
+
+
+## Dependencies
+
+

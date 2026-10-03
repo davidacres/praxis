@@ -678,7 +678,18 @@ export function IssueDetail({
         }
       : undefined,
     async action => {
-      if (action.kind !== 'update-ticket') throw new Error('Only a ticket description change can be applied here.');
+      if (!issue) throw new Error('The ticket has not finished loading.');
+      if (action.kind === 'create-subtask') {
+        // A parent that can hold children is used directly; under a task the new item joins its siblings.
+        const parentKey = issue.issueType === 'Feature' || issue.issueType === 'Epic' ? issue.key : issue.parentKey ?? issue.key;
+        const created = await window.praxis.issue.create(
+          { projectKey: issue.projectKey, issueType: 'Task', summary: action.title, description: action.description, parentKey },
+          connectionId
+        );
+        onChanged();
+        return `Created ${created.key} under ${parentKey}.`;
+      }
+      if (action.kind !== 'update-ticket') throw new Error('Only a ticket change can be applied here.');
       await window.praxis.issue.update(issueKey, { description: action.description }, connectionId);
       const loaded = await window.praxis.issue.get(issueKey, connectionId);
       setIssue(loaded);

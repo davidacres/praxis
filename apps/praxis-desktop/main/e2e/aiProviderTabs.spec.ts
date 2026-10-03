@@ -62,12 +62,11 @@ test('the page is split into tabs and each tab shows only its own settings', asy
   await openAiSettings(win);
 
   const tabs = win.getByRole('tablist', { name: 'AI provider settings' });
-  await expect(tabs.getByRole('tab')).toHaveText(['Providers', 'Defaults', 'Spend', 'Tools']);
+  await expect(tabs.getByRole('tab')).toHaveText(['Providers', 'Defaults', 'Tools']);
   await expect(tabs.getByRole('tab', { name: 'Providers' })).toHaveAttribute('aria-selected', 'true');
 
   // Providers: the rows, and none of the other tabs' content.
   await expect(win.getByTestId('ai-provider-list')).toBeVisible();
-  await expect(win.getByTestId('ai-spend-report')).toHaveCount(0);
   await expect(win.getByTestId('ai-browser-tools-toggle')).toHaveCount(0);
   await expect(win.getByTestId('ai-recommendation-provider-select')).toHaveCount(0);
 
@@ -77,10 +76,6 @@ test('the page is split into tabs and each tab shows only its own settings', asy
   await expect(win.getByTestId('ai-provider-list')).toHaveCount(0);
 
   await win.screenshot({ path: path.join(path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts'), 'ai-provider-tabs-defaults.png') });
-
-  await tabs.getByRole('tab', { name: 'Spend' }).click();
-  await expect(win.getByTestId('ai-spend-report')).toBeVisible();
-  await expect(win.getByLabel('Spend limit')).toBeVisible();
 
   await tabs.getByRole('tab', { name: 'Tools' }).click();
   await expect(win.getByTestId('ai-browser-tools-toggle')).toBeVisible();

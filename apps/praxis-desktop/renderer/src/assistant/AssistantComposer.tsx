@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from '../ui/Icon';
-import { PERSONAS } from './personaMeta';
+import { useAssistantMention } from './useAssistantMention';
+
+const MAX_LINES = 6;
 
 interface AssistantComposerProps {
   value: string;
@@ -12,44 +14,46 @@ interface AssistantComposerProps {
   focusSignal: number;
 }
 
-/** The `@partial` token ending at the caret, if any. */
-function mentionQuery(text: string, caret: number): { start: number; query: string } | undefined {
-  const match = /(^|\s)@(\w*)$/.exec(text.slice(0, caret));
-  return match ? { start: caret - match[2].length - 1, query: match[2].toLowerCase() } : undefined;
-}
-
 export function AssistantComposer({ value, onChange, busy, onSend, onTeamReview, focusSignal }: AssistantComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
-  const [highlight, setHighlight] = useState(0);
-  const mention = mentionQuery(value, caret);
-  const matches = mention ? PERSONAS.filter(persona => persona.id.startsWith(mention.query)) : [];
-  const menuOpen = matches.length > 0;
+  const mention = useAssistantMention(value, caret);
 
   useEffect(() => { ref.current?.focus(); }, [focusSignal]);
-  useEffect(() => setHighlight(0), [mention?.query]);
+
+  // Grow with the text up to MAX_LINES, then scroll.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const style = getComputedStyle(el);
+    const lineHeight = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.3 || 18;
+    const chrome = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    el.style.height = 'auto';
+    const max = lineHeight * MAX_LINES + chrome;
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+    el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden';
+  }, [value]);
 
   const insert = (id: string) => {
-    if (!mention) return;
-    const next = `${value.slice(0, mention.start)}@${id} ${value.slice(caret)}`;
-    const position = mention.start + id.length + 2;
-    onChange(next);
-    setCaret(position);
+    const next = mention.insert(id);
+    if (!next) return;
+    onChange(next.text);
+    setCaret(next.caret);
     requestAnimationFrame(() => {
       ref.current?.focus();
-      ref.current?.setSelectionRange(position, position);
+      ref.current?.setSelectionRange(next.caret, next.caret);
     });
   };
 
   return (
     <div className="assistant-composer composer">
-      {menuOpen && (
+      {mention.open && (
         <ul className="assistant-mention-menu" role="listbox" aria-label="Mention a team member" data-testid="assistant-mention-menu">
-          {matches.map((persona, index) => (
-            <li key={persona.id} role="option" aria-selected={index === highlight}>
+          {mention.matches.map((persona, index) => (
+            <li key={persona.id} role="option" aria-selected={index === mention.highlight}>
               <button
                 type="button"
-                className={`assistant-mention-option${index === highlight ? ' is-active' : ''}`}
+                className={`assistant-mention-option${index === mention.highlight ? ' is-active' : ''}`}
                 onMouseDown={event => { event.preventDefault(); insert(persona.id); }}
               >
                 <span className={`persona-badge persona-badge--${persona.id}`}><Icon name={persona.icon} size={12} /></span>
@@ -72,11 +76,12 @@ export function AssistantComposer({ value, onChange, busy, onSend, onTeamReview,
         onChange={event => { onChange(event.target.value); setCaret(event.target.selectionStart); }}
         onSelect={event => setCaret(event.currentTarget.selectionStart)}
         onKeyDown={event => {
-          if (menuOpen) {
-            if (event.key === 'ArrowDown') { event.preventDefault(); setHighlight(index => (index + 1) % matches.length); return; }
-            if (event.key === 'ArrowUp') { event.preventDefault(); setHighlight(index => (index - 1 + matches.length) % matches.length); return; }
-            if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); insert(matches[highlight].id); return; }
-            if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setCaret(0); return; }
+          if (mention.open) {
+            const count = mention.matches.length;
+            if (event.key === 'ArrowDown') { event.preventDefault(); mention.setHighlight(index => (index + 1) % count); return; }
+            if (event.key === 'ArrowUp') { event.preventDefault(); mention.setHighlight(index => (index - 1 + count) % count); return; }
+            if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); insert(mention.matches[mention.highlight].id); return; }
+            if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); mention.dismiss(); return; }
           }
           if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();

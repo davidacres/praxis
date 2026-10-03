@@ -105,7 +105,8 @@ export interface AiProviderConfig {
    * Picked from Settings → AI Provider → Add provider. The Providers tab lists
    * a provider when it is configured, the default, or `added` — so an
    * unconfigured built-in stays in the catalog until someone asks for it.
-   * Custom endpoints are always listed; this flag is for built-ins.
+   * Explicit `false` removes a built-in from the list even when detected, until
+   * it is added again. Custom endpoints are always listed.
    */
   added?: boolean;
   /**
@@ -1053,8 +1054,8 @@ function readAiProviderConfigs(value: unknown, known: readonly string[]): Partia
     if (typeof raw.enabled === 'boolean') {
       config.enabled = raw.enabled;
     }
-    if (raw.added === true) {
-      config.added = true;
+    if (typeof raw.added === 'boolean') {
+      config.added = raw.added;
     }
     if (isRecord(raw.modelReasoningDefaults)) {
       const levels: Record<string, ReasoningEffort> = {};

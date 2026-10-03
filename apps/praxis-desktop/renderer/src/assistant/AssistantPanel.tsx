@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Icon } from '../ui/Icon';
 import { AssistantComposer } from './AssistantComposer';
+import { AssistantContextBanner } from './AssistantContextBanner';
 import { AssistantMessageCard } from './AssistantMessageCard';
 import { useAssistant } from './AssistantProvider';
 import { PERSONAS } from './personaMeta';
@@ -82,27 +83,14 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
 
       {a.error && <div className="error-banner assistant-error" role="alert">{a.error}</div>}
 
-      <div className="assistant-context-row">
-        {a.availableContext && (
-          <button
-            type="button"
-            className={`assistant-context-pill${a.contextDetached ? ' is-detached' : ''}`}
-            data-testid="assistant-context-pill"
-            aria-label={a.contextDetached ? `Attach context: ${a.availableContext.title}` : `Detach context: ${a.availableContext.title}`}
-            onClick={() => a.setContextDetached(!a.contextDetached)}
-          >
-            <Icon name={a.contextDetached ? 'plus' : 'close'} size={10} />
-            <span>Context: {a.availableContext.title}</span>
-          </button>
-        )}
-        {prompts.length > 0 && (
-          <div className="assistant-suggestions" data-testid="assistant-suggestions">
-            {prompts.map(prompt => (
-              <button key={prompt} type="button" className="assistant-chip" disabled={a.busy} onClick={() => send(prompt)}>{prompt}</button>
-            ))}
-          </div>
-        )}
-      </div>
+      <AssistantContextBanner
+        context={a.availableContext}
+        detached={a.contextDetached}
+        onToggleDetached={() => a.setContextDetached(!a.contextDetached)}
+        prompts={prompts}
+        busy={a.busy}
+        onPrompt={send}
+      />
 
       <AssistantComposer
         value={a.draft}

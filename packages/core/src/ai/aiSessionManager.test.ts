@@ -483,3 +483,25 @@ test('updateAgentSessionToolAccess updates workingDirectory and toolMode', () =>
   assert.equal(detached.workingDirectory, undefined);
   assert.equal(detached.toolMode, 'project-only');
 });
+
+test('startup recovery is explicit, excludes workflow stages, and dismissal persists', async () => {
+  const store = storeWith({
+    'SESSION-a': { ...baseRecord('executing'), issueKey: 'SESSION-a' },
+    'SESSION-b': { ...baseRecord('completed'), issueKey: 'SESSION-b' },
+    'STAGE-a': { ...baseRecord('executing'), issueKey: 'STAGE-a', workflowNodeId: 'node-a' },
+    'ARCHIVED-a': { ...baseRecord('executing'), issueKey: 'ARCHIVED-a', archived: true }
+  });
+  const manager = new AiSessionManager(store);
+  assert.deepEqual(manager.getInterruptedAgentSessions().map(record => record.issueKey), ['SESSION-a']);
+  assert.equal(manager.getAgentSession('SESSION-a')?.state, 'aborted');
+  await manager.dismissInterruptedAgentSessions(['SESSION-a']);
+  assert.equal(new AiSessionManager(store).getInterruptedAgentSessions().length, 0);
+  assert.equal(manager.getAgentSession('SESSION-a')?.state, 'aborted');
+});
+
+test('starting an approved turn clears the restart recovery marker', () => {
+  const manager = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('executing') }));
+  assert.equal(manager.getInterruptedAgentSessions().length, 1);
+  manager.updateAgentState('SESSION-abc', 'executing');
+  assert.equal(manager.getAgentSession('SESSION-abc')?.interruptedByRestart, undefined);
+});

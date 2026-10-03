@@ -23,6 +23,7 @@ const PROTOCOL_PROMPT = `Optional structured footer: after your answer you MAY a
 - "choices": at most 3 follow-up options, only when the user has a real decision to make.
 - "action" (optional, only when the user clearly asked for it): one of
   {"kind":"update-ticket","label":"Apply to ticket","summary":"...","description":"full replacement description"}
+  {"kind":"create-subtask","label":"Create subtask","summary":"...","title":"short task title","description":"task description"} (only on an issue page)
   {"kind":"delegate-session","label":"Open as Coding Session","summary":"...","prompt":"task prompt for an autonomous coding agent"}
   {"kind":"update-workflow","label":"Apply workflow changes","summary":"...","workflow":{complete workflow definition}} (only on the workflow page)
 Omit the block entirely when you have nothing to offer.`;
@@ -52,6 +53,9 @@ function parseAction(raw: unknown): AssistantProposedAction | undefined {
   if (!isRecord(raw) || typeof raw.label !== 'string' || typeof raw.summary !== 'string') return undefined;
   const base = { label: raw.label.slice(0, 80), summary: raw.summary.slice(0, 600) };
   if (raw.kind === 'update-ticket' && typeof raw.description === 'string') return { kind: 'update-ticket', ...base, description: raw.description };
+  if (raw.kind === 'create-subtask' && typeof raw.title === 'string' && raw.title.trim() && typeof raw.description === 'string') {
+    return { kind: 'create-subtask', ...base, title: raw.title.trim().slice(0, 200), description: raw.description };
+  }
   if (raw.kind === 'delegate-session' && typeof raw.prompt === 'string') return { kind: 'delegate-session', ...base, prompt: raw.prompt };
   if (raw.kind === 'update-workflow' && isRecord(raw.workflow)) return { kind: 'update-workflow', ...base, workflow: raw.workflow };
   return undefined;
@@ -87,6 +91,12 @@ function messageId(): string {
   return `msg-${Date.now().toString(36)}-${counter}`;
 }
 
+function actionAllowedOn(action: AssistantProposedAction, context: PageAssistantContext | undefined): boolean {
+  if (action.kind === 'update-workflow') return context?.pageType === 'workflow';
+  if (action.kind === 'update-ticket' || action.kind === 'create-subtask') return context?.pageType === 'issue';
+  return true;
+}
+
 function buildMessage(role: AssistantRole, raw: string, context: PageAssistantContext | undefined): AssistantMessage {
   const parsed = parseAssistantReply(raw);
   return {
@@ -96,8 +106,8 @@ function buildMessage(role: AssistantRole, raw: string, context: PageAssistantCo
     createdAt: new Date().toISOString(),
     ...(context ? { contextTitle: context.title } : {}),
     ...(parsed.choices ? { choices: parsed.choices } : {}),
-    // Only the workflow page may author a workflow; elsewhere the proposal is dropped.
-    ...(parsed.proposedAction && (parsed.proposedAction.kind !== 'update-workflow' || context?.pageType === 'workflow')
+    // Only the page that can apply a change may be offered it; elsewhere the proposal is dropped.
+    ...(parsed.proposedAction && actionAllowedOn(parsed.proposedAction, context)
       ? { proposedAction: parsed.proposedAction }
       : {})
   };

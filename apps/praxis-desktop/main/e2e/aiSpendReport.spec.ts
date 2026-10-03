@@ -42,13 +42,12 @@ async function waitCompleted(win: TestApp['window'], issueKey: string): Promise<
     .toBe('completed');
 }
 
-async function openAiProviderSettings(win: TestApp['window']): Promise<void> {
+async function openAiSpendSettings(win: TestApp['window']): Promise<void> {
   await win.keyboard.press('ControlOrMeta+k');
   const palette = win.getByRole('dialog', { name: 'Go to' });
-  await palette.getByRole('textbox').fill('ai provider');
-  await palette.getByRole('option', { name: /AI Provider/ }).first().click();
+  await palette.getByRole('textbox').fill('ai usage');
+  await palette.getByRole('option', { name: /AI Usage/ }).first().click();
   await expect(win.getByRole('dialog', { name: 'Settings' })).toBeVisible();
-  await win.getByTestId('ai-tab-spend').click();
   await expect(win.getByTestId('ai-spend-report')).toBeVisible();
 }
 
@@ -95,7 +94,7 @@ test('totals real ACP cost and real gateway tokens, never blended, grouped by pr
   );
   await waitCompleted(win, gatewaySession.issueKey);
 
-  await openAiProviderSettings(win);
+  await openAiSpendSettings(win);
 
   // Total cost: only the ACP session's $0.42 counts — the gateway session
   // contributed no cost, and nothing here invents one from its tokens.
@@ -127,6 +126,6 @@ test('totals real ACP cost and real gateway tokens, never blended, grouped by pr
 test('a range with no sessions shows the empty state, not an empty report', async () => {
   app = await launchTestApp();
   const win = app.window;
-  await openAiProviderSettings(win);
+  await openAiSpendSettings(win);
   await expect(win.getByText('No sessions in this range.')).toBeVisible();
 });

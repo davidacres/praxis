@@ -17,7 +17,7 @@ export const PROVIDER_LABELS: Record<AiProvider, string> = {
   gemini: 'Google Gemini',
   'z-ai': 'Z.ai',
   'claude-code-cli': 'Claude Code',
-  'codex-cli': 'Codex CLI',
+  'codex-cli': 'OpenAI Codex',
   'copilot-cli': 'GitHub Copilot',
   'antigravity-cli': 'Antigravity'
 };

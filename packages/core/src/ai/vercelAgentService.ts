@@ -140,7 +140,7 @@ export class VercelAgentService {
         listener(issueKey);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.logger.appendLine(`[VercelAgent] Active task listener failed for ${issueKey}: ${message}`);
+        this.logger.appendLine(`[ApiAgent] Active task listener failed for ${issueKey}: ${message}`);
       }
     }
   }
@@ -633,7 +633,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     }, timeoutMs);
 
     this.logger.appendLine(
-      `[VercelAgent] Starting session for ${issue.key} provider=${provider} model=${model} cwd=${workingDirectory}`
+      `[ApiAgent] Starting session for ${issue.key} provider=${provider} model=${model} cwd=${workingDirectory}`
     );
 
     task.loopPromise = this.runLoopForIssue(issue.key, {
@@ -651,7 +651,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       reasoningEffort
     }).catch(error => {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.appendLine(`[VercelAgent] Session failed for ${issue.key}: ${message}`);
+      this.logger.appendLine(`[ApiAgent] Session failed for ${issue.key}: ${message}`);
       const record = this.sessionManager.getAgentSession(issue.key);
       if (record && !this.isTerminalState(record.state)) {
         const limitCandidate = isProviderLimitError(error)
@@ -749,7 +749,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
           : evt('user_input_completed', 'You', followUp, undefined, followUpImages)
         : evt('session_start', 'Session resumed')
     );
-    this.logger.appendLine(`[VercelAgent] Resumed session for ${issueKey}`);
+    this.logger.appendLine(`[ApiAgent] Starting follow-up turn provider=${provider} session=${issueKey} model=${model} at=${new Date().toISOString()}`);
 
     task.timeoutHandle = setTimeout(() => {
       void this.failTaskForTimeout(issueKey, timeoutMs);
@@ -781,7 +781,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       reasoningEffort
     }).catch(error => {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.appendLine(`[VercelAgent] Resume failed for ${issueKey}: ${message}`);
+      this.logger.appendLine(`[ApiAgent] Follow-up turn failed for ${issueKey}: ${message}`);
       const current = this.sessionManager.getAgentSession(issueKey);
       if (current && !this.isTerminalState(current.state)) {
         const limitCandidate = isProviderLimitError(error)
@@ -872,7 +872,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     await this.stopTask(issueKey, {
       terminalState: 'aborted',
       event: evt('aborted', 'Task aborted by user'),
-      logLine: `[VercelAgent] Aborted task for ${issueKey}`
+      logLine: `[ApiAgent] Aborted task for ${issueKey}`
     });
   }
 
@@ -888,7 +888,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     await this.stopTask(issueKey, {
       terminalState: 'paused',
       event: evt('info', reason ?? 'Session paused.'),
-      logLine: `[VercelAgent] Paused task for ${issueKey}`
+      logLine: `[ApiAgent] Paused task for ${issueKey}`
     });
   }
 
@@ -910,7 +910,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
         'error',
         `Task stopped after timing out at ${Math.round(timeoutMs / 1000)}s. Start a new session to continue.`
       ),
-      logLine: `[VercelAgent] Timeout reached for ${issueKey} (${timeoutMs}ms)`
+      logLine: `[ApiAgent] Timeout reached for ${issueKey} (${timeoutMs}ms)`
     });
   }
 

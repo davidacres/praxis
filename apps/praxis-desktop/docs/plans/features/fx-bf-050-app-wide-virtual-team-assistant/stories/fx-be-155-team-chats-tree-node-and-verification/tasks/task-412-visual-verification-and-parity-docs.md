@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🚧 In progress
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-412
 type: Task
-status: Backlog
+status: In Progress
 created: 2026-10-03
 priority: Medium
 ---

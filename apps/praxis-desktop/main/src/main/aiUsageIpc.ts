@@ -14,12 +14,13 @@ import {
   type ProviderUsageWindow
 } from '@praxis/core';
 import { getAiUsageLog } from './aiUsageLogInstance';
-import { getAiSessionManager } from './aiInstance';
+import { getAiSessionManager, listAiProviderStatuses } from './aiInstance';
 import { getSecretsStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { codexCliSnapshot } from './codexUsage';
 import { claudeCodeSnapshot } from './claudeUsage';
 import { isMiniMaxEndpoint, miniMaxUsageSnapshot } from './minimaxUsage';
+import { enabledUsageProviders, readProviderSnapshots } from './providerUsageBatch';
 
 const USAGE_SECRET_PREFIX = 'ai-usage:';
 
@@ -57,6 +58,20 @@ function numberAt(value: unknown, keys: string[]): number | undefined {
   return undefined;
 }
 
+function nextHourResetIso(): string {
+  const next = new Date();
+  next.setUTCMinutes(60, 0, 0);
+  return next.toISOString();
+}
+
+function nextWeeklyResetIso(): string {
+  const now = new Date();
+  const day = now.getUTCDay();
+  const daysUntilMonday = ((7 - day) % 7) || 7;
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysUntilMonday, 0, 0, 0));
+  return next.toISOString();
+}
+
 async function openAiSnapshot(): Promise<ProviderUsageSnapshot> {
   const fetchedAt = new Date().toISOString();
   const key = process.env.OPENAI_ADMIN_KEY || await getSecretsStore().get(`${USAGE_SECRET_PREFIX}openai`);
@@ -80,7 +95,10 @@ async function openAiSnapshot(): Promise<ProviderUsageSnapshot> {
           tokens += numberAt(result, ['total_tokens']) ?? ((numberAt(result, ['input_tokens']) ?? 0) + (numberAt(result, ['output_tokens']) ?? 0));
         }
       }
-      return { period, usedTokens: tokens };
+      const label = period === 'hour' ? '5-hour window' : period === 'week' ? 'Weekly window' : undefined;
+      const resetsAt = period === 'hour' ? nextHourResetIso() : period === 'week' ? nextWeeklyResetIso() : undefined;
+      const windowDurationMinutes = period === 'hour' ? 300 : undefined;
+      return { period, label, resetsAt, windowDurationMinutes, usedTokens: tokens };
     }));
     // Costs are a separate Admin API resource. Keep this best-effort: token
     // usage is still useful when an account cannot read cost records.
@@ -166,6 +184,17 @@ export function registerAiUsageIpc(): void {
   ipcMain.handle('aiUsage:dashboardSummary', async () => dashboardSummary());
   ipcMain.handle('aiUsage:listEvents', async () => getAiUsageLog().list());
   ipcMain.handle('aiUsage:providerSnapshot', async (_event, provider: AiProvider) => providerSnapshot(provider));
+  ipcMain.handle('aiUsage:providerSnapshots', async () => {
+    const settings = getSettingsBackend().read().ai;
+    let configured: AiProvider[] = [];
+    try {
+      const statuses = await listAiProviderStatuses();
+      configured = statuses.filter(s => s.configured && s.enabled).map(s => s.provider);
+    } catch {
+      // best-effort
+    }
+    return readProviderSnapshots(enabledUsageProviders(settings, configured), providerSnapshot);
+  });
   ipcMain.handle('aiUsage:setProviderUsageKey', async (_event, provider: AiProvider, value: string) => {
     const key = `${USAGE_SECRET_PREFIX}${provider}`;
     if (value.trim()) await getSecretsStore().store(key, value.trim());

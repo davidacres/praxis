@@ -31,11 +31,11 @@ export async function startMockOpenAiCompatibleServer(options: {
   /** When false, a request carrying `tools` is answered in plain text — like a model with no tool support. */
   tools?: boolean;
   /** Reply text for chat requests. */
-  reply?: string;
+  reply?: string | (() => string);
 }): Promise<MockOpenAiCompatibleServer> {
   const apiPath = options.apiPath ?? '/v1';
   const models = options.models ?? ['mock-model'];
-  const reply = options.reply ?? 'Mock endpoint reply: done.';
+  const currentReply = (): string => (typeof options.reply === 'function' ? options.reply() : options.reply ?? 'Mock endpoint reply: done.');
   const requests: MockOpenAiCompatibleRequest[] = [];
 
   const server = http.createServer((req, res) => {
@@ -75,7 +75,7 @@ export async function startMockOpenAiCompatibleServer(options: {
             finish_reason: callTool ? 'tool_calls' : 'stop',
             message: callTool
               ? { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: toolName, arguments: '{"timezone":"UTC"}' } }] }
-              : { role: 'assistant', content: reply }
+              : { role: 'assistant', content: currentReply() }
           }],
           usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 }
         });
@@ -84,7 +84,7 @@ export async function startMockOpenAiCompatibleServer(options: {
 
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       const chunk = (value: unknown) => res.write(`data: ${JSON.stringify(value)}\n\n`);
-      chunk({ id: 'chatcmpl-mock', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { role: 'assistant', content: reply }, finish_reason: null }] });
+      chunk({ id: 'chatcmpl-mock', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { role: 'assistant', content: currentReply() }, finish_reason: null }] });
       chunk({ id: 'chatcmpl-mock', object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] });
       if (payload.stream_options) {
         chunk({ id: 'chatcmpl-mock', object: 'chat.completion.chunk', choices: [], usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25 } });

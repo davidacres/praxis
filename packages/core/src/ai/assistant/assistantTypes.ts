@@ -45,6 +45,8 @@ export interface AssistantChoiceOption {
 export type AssistantProposedAction =
   | { kind: 'update-workflow'; label: string; summary: string; workflow: unknown }
   | { kind: 'update-ticket'; label: string; summary: string; description: string }
+  /** A new child task under the ticket the user is looking at. */
+  | { kind: 'create-subtask'; label: string; summary: string; title: string; description: string }
   | { kind: 'delegate-session'; label: string; summary: string; prompt: string };
 
 export interface AssistantMessage {

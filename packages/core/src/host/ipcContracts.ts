@@ -8,7 +8,7 @@ import type {
 } from '../ai/assistant/assistantTypes';
 import type { AiUsageEvent } from '../ai/aiUsageLog';
 import type { UsageBucket, UsageComparison, UsageDashboardSummary, UsageGranularity } from '../ai/aiUsageStats';
-import type { ProviderUsageSnapshot } from '../ai/providerUsage';
+import type { ProviderUsageSnapshot, ProviderUsageSnapshotsResult } from '../ai/providerUsage';
 import type { AgentRecommendationCandidate, AgentRecommendationResult } from '../ai/workflowAgentRecommendation';
 import type { StoredAgentRecommendation } from '../ai/workflowRecommendationCache';
 import type { TemplateRecommendationResult } from '../ai/workflowTemplateRecommendation';
@@ -833,6 +833,9 @@ export interface AiIpc {
   removeCustomProvider(id: AiProvider): Promise<void>;
   /** Every persisted agent session, most recently started first. */
   listSessions(): Promise<AgentSessionRecord[]>;
+  listInterruptedSessions(): Promise<AgentSessionRecord[]>;
+  resumeInterruptedSession(issueKey: string): Promise<void>;
+  dismissInterruptedSessions(issueKeys: string[]): Promise<void>;
   /**
    * Loads a raster image from the selected session's working folder for an
    * in-app chat preview. The host enforces the session-folder boundary and
@@ -1026,6 +1029,13 @@ export interface AiUsageIpc {
   listEvents(): Promise<AiUsageEvent[]>;
   /** Provider account usage/limits, when the provider exposes a supported API. */
   providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot>;
+  /**
+   * Every enabled provider's account usage in one read (FX-BF-050). The
+   * Overview dashboard needs all of them at once and the Codex adapter spawns
+   * a CLI process, so a per-provider loop from the renderer would be N process
+   * spawns per page load. One provider failing never fails the batch.
+   */
+  providerSnapshots(): Promise<ProviderUsageSnapshotsResult>;
   /** Stores a provider's optional admin/usage credential in the OS keychain. */
   setProviderUsageKey(provider: AiProvider, value: string): Promise<void>;
 }

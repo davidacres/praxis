@@ -26,11 +26,38 @@ export function GitChangesPage({ repositoryPath, onOpenGraph }: GitChangesPagePr
   const [diffInitialPath, setDiffInitialPath] = useState<string>();
   const [conflictPath, setConflictPath] = useState<string>();
 
+  // Hunks for the assistant, so it can review the actual change rather than a file list.
+  const [assistantDiff, setAssistantDiff] = useState('');
+  const changeSignature = status ? status.files.map(file => `${file.path}:${file.indexStatus}${file.worktreeStatus}`).join('|') : '';
+  useEffect(() => {
+    if (!snapshot || !status || status.files.length === 0) { setAssistantDiff(''); return; }
+    let cancelled = false;
+    void (async () => {
+      const parts: string[] = [];
+      for (const kind of ['staged', 'working'] as const) {
+        try {
+          const document = await window.praxis.git.getComparison(snapshot.repositoryPath, { kind, contextLines: 1 });
+          for (const file of document.files.slice(0, 20)) {
+            if (file.isBinary) { parts.push(`--- ${kind}: ${file.displayPath} (binary)`); continue; }
+            parts.push(`--- ${kind}: ${file.displayPath}`);
+            for (const hunk of file.hunks.slice(0, 6)) {
+              parts.push(hunk.header);
+              for (const line of hunk.lines) parts.push(`${line.kind === 'addition' ? '+' : line.kind === 'deletion' ? '-' : ' '}${line.content}`);
+            }
+          }
+        } catch { /* a failed diff just leaves the file list */ }
+      }
+      if (!cancelled) setAssistantDiff(parts.join('\n'));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot?.repositoryPath, changeSignature]);
+
   useRegisterPageAssistantContext(status ? {
     pageType: 'git',
     title: `Git changes${status.branch ? ` on ${status.branch}` : ''}`,
     summary: `${status.files.length} changed files on ${status.branch ?? 'a detached HEAD'} (ahead ${status.ahead}, behind ${status.behind}).`,
-    data: status.files.slice(0, 200).map(file => `${file.staged ? 'staged  ' : 'unstaged'} ${file.indexStatus}${file.worktreeStatus} ${file.path}${file.additions !== undefined ? ` (+${file.additions} -${file.deletions ?? 0})` : ''}`).join('\n'),
+    data: `${status.files.slice(0, 200).map(file => `${file.staged ? 'staged  ' : 'unstaged'} ${file.indexStatus}${file.worktreeStatus} ${file.path}${file.additions !== undefined ? ` (+${file.additions} -${file.deletions ?? 0})` : ''}`).join('\n')}${assistantDiff ? `\n\nDiff:\n${assistantDiff}` : ''}`,
     suggestedPrompts: ['Draft conventional commit message', 'Scan diff for leaked secrets or console logs']
   } : undefined);
 
