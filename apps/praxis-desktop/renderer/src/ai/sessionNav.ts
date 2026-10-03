@@ -870,19 +870,20 @@ export function sessionLimitNotice(session?: AgentSessionRecord): string | undef
   // that operational detail out of the session error banner.
   const concise = 'This provider has reached its usage limit. Switch providers to continue, or stop this session.';
   if (session.lastError && isProviderLimitMessage(session.lastError)) return concise;
-  // A reply is only read as a limit message when the session did not complete: a completed
-  // session's reply is its work, and a security report recommending rate limits is not a limit.
-  if (session.state !== 'completed' && session.responseText && isProviderLimitMessage(session.responseText)) return concise;
-  // Only a limit the session has not moved past: a reply (or a new session start,
-  // as after a handover to another AI) since the error means the limit is behind it.
+  if (session.providerLimitReached) return concise;
+  // Runtime transitions retain historical errors. A handover starts continuing
+  // before its first completed message, so it must also retire the old warning.
   const events = session.events ?? [];
   const lastErrorIndex = events.map(e => e.type).lastIndexOf('error');
   const lastErrorEvent = lastErrorIndex >= 0 ? events[lastErrorIndex] : undefined;
-  const movedOn = events.slice(lastErrorIndex + 1).some(e => e.type === 'message' || e.type === 'session_start');
+  const movedOn = lastErrorIndex >= 0 && events.slice(lastErrorIndex + 1).some(e =>
+    e.type === 'message' || e.type === 'session_start' || e.type === 'user_input_completed' || e.type === 'provider_handover'
+      || e.type === 'model_change' || e.type === 'conversation_turn'
+  );
+  // A response buffer can still belong to the failed turn during handover.
+  // Completed replies are work, not active errors (e.g. a report on rate limits).
+  if (!movedOn && session.state !== 'completed' && session.responseText && isProviderLimitMessage(session.responseText)) return concise;
   if (lastErrorEvent && !movedOn && isProviderLimitMessage(lastErrorEvent.summary || lastErrorEvent.detail)) {
-    return concise;
-  }
-  if (session.providerLimitReached) {
     return concise;
   }
   return undefined;

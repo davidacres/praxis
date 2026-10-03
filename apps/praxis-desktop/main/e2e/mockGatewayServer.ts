@@ -34,6 +34,8 @@ export interface MockGatewayServer {
   modelsRequestCount: number;
   /** Switches how chat requests are answered from now on — e.g. `error` → `complete` to simulate a credit top-up. */
   setMode(mode: 'complete' | 'hang' | 'error'): void;
+  /** Finish held streams and let subsequent requests complete normally. */
+  releaseCompletion(): void;
   close(): Promise<void>;
 }
 
@@ -77,12 +79,16 @@ export async function startMockGatewayServer(options: {
   toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
   /** Delay completion so a test can interact with an in-flight session. */
   responseDelayMs?: number;
+  /** Hold completion until the test has inspected the in-flight UI. */
+  holdCompletion?: boolean;
 }): Promise<MockGatewayServer> {
   const reply = options.reply ?? COMPLETE_REPLY;
   const models = options.models ?? [{ id: 'mock/model' }];
   let currentMode = options.mode;
   const requests: MockGatewayRequest[] = [];
   const openResponses = new Set<http.ServerResponse>();
+  let holdCompletion = options.holdCompletion ?? false;
+  const heldCompletions = new Map<http.ServerResponse, () => void>();
   let modelsRequestCount = 0;
 
   const server = http.createServer((req, res) => {
@@ -187,7 +193,14 @@ export async function startMockGatewayServer(options: {
             res.write('data: [DONE]\n\n');
             res.end();
           };
-          if (options.responseDelayMs) setTimeout(finish, options.responseDelayMs);
+          if (holdCompletion) {
+            heldCompletions.set(res, finish);
+            openResponses.add(res);
+            res.on('close', () => {
+              heldCompletions.delete(res);
+              openResponses.delete(res);
+            });
+          } else if (options.responseDelayMs) setTimeout(finish, options.responseDelayMs);
           else finish();
         } else {
           // 'hang': keep the stream open so the session stays in-flight.
@@ -220,6 +233,11 @@ export async function startMockGatewayServer(options: {
     },
     setMode(mode) {
       currentMode = mode;
+    },
+    releaseCompletion() {
+      holdCompletion = false;
+      for (const finish of heldCompletions.values()) finish();
+      heldCompletions.clear();
     },
     close: () =>
       new Promise<void>(resolve => {

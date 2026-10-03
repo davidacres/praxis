@@ -46,8 +46,8 @@ async function outOfBudgetSession(): Promise<TestApp['window']> {
 test('a session whose AI ran out can switch to another AI and carry on', async () => {
   const win = await outOfBudgetSession();
   const notice = win.getByTestId('session-limit-switch');
-  await expect(notice).toContainText('Vercel AI Gateway ran out of budget.');
-  await expect(notice.getByTestId('session-limit-switch-to').getByRole('option', { selected: true })).toContainText('Codex');
+  await expect(notice).toContainText('Vercel AI Gateway reached its usage limit.');
+  await expect(notice.getByTestId('session-limit-provider')).toContainText('Codex');
   await expect(win.getByTestId('session-follow-up-input')).toHaveCount(0);
   await expect(win.getByTestId('session-provider')).toHaveCount(0);
   await win.mouse.move(0, 0);
@@ -63,7 +63,8 @@ test('a session whose AI ran out can switch to another AI and carry on', async (
 test('a session whose AI ran out can be stopped instead', async () => {
   const win = await outOfBudgetSession();
   const notice = win.getByTestId('session-limit-switch');
-  await notice.getByTestId('session-limit-stop').click();
+  await notice.getByTestId('session-limit-actions').click();
+  await win.getByTestId('session-limit-stop').click();
   await expect(notice).toHaveCount(0);
   await expect(win.getByTestId('session-follow-up-input')).toBeVisible();
   await expect(win.getByTestId('session-provider')).toBeVisible();

@@ -24,7 +24,7 @@ import {
   REASONING_EFFORT_LEVELS
 } from './modelProviders';
 import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing } from './sessionNav';
-import { isProviderUsable } from './providerAvailability';
+import { isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
 import { isTerminalAgentState } from './aiSessionState';
 import { ChipSelect } from '../ui/ChipSelect';
 
@@ -1031,14 +1031,23 @@ export function SessionConversationActions({ session, onStop, onToolOwner, targe
 export function SessionLimitSwitch({ session, onStop }: { session: AgentSessionRecord; onStop: () => void }) {
   const [usable, setUsable] = useState<AiProvider[]>();
   const [choice, setChoice] = useState<AiProvider>();
+  const [model, setModel] = useState('');
+  const [modelOptions, setModelOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [loadedProvider, setLoadedProvider] = useState<AiProvider>();
+  const [catalogError, setCatalogError] = useState<string>();
+  const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const busyRef = useRef(false);
+  const actionRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = useState<ComposerPopoverPosition>();
   useEffect(() => {
     let cancelled = false;
     void window.praxis.ai
       .listProviderStatuses()
       .then(statuses => {
-        if (!cancelled) setUsable(statuses.filter(isProviderUsable).map(status => status.provider));
+        if (!cancelled) setUsable(statuses.filter(isProviderUsableForSessions).map(status => status.provider));
       })
       .catch(() => {
         if (!cancelled) setUsable([]);
@@ -1046,47 +1055,90 @@ export function SessionLimitSwitch({ session, onStop }: { session: AgentSessionR
     return () => {
       cancelled = true;
     };
-  }, [session.issueKey]);
+  }, [session.issueKey, session.provider]);
 
   const who = session.provider ? aiName(session.provider) : 'This AI';
   const choices = (usable ?? []).filter(provider => provider !== session.provider);
   const selected = choice && choices.includes(choice) ? choice : choices[0];
   const running = !isTerminalAgentState(session.state);
+  const modelsReady = Boolean(selected && loadedProvider === selected && model);
 
-  const switchAndContinue = async () => {
+  useEffect(() => {
+    let cancelled = false;
+    setLoadedProvider(undefined);
+    setModel('');
+    setModelOptions([]);
+    setCatalogError(undefined);
     if (!selected) return;
+    void Promise.all([fetchModelOptions(selected, refresh > 0), window.praxis.settings.get()])
+      .then(([catalog, settings]) => {
+        if (cancelled) return;
+        const options = catalog ? applyEnabledModelCuration(catalog, curatedModelIds(settings, selected)) : undefined;
+        const configuredDefault = (selected === 'vercel-gateway'
+          ? settings.ai.defaultModel : settings.ai.providers[selected]?.defaultModel)?.trim();
+        const choices = options?.options.map(option => ({ value: option.value, label: option.name || option.value })) ?? [];
+        if (configuredDefault) {
+          choices.splice(0, choices.length, { value: configuredDefault, label: `Default · ${configuredDefault}` }, ...choices.filter(option => option.value !== configuredDefault));
+        } else if (!catalog) {
+          choices.push({ value: '__provider_default__', label: 'Provider default — model not exposed' });
+        }
+        setModelOptions(choices);
+        setModel(configuredDefault || preferredModel(options) || choices[0]?.value || '');
+        setLoadedProvider(selected);
+      })
+      .catch(cause => {
+        if (!cancelled) setCatalogError(cause instanceof Error ? cause.message : String(cause));
+      });
+    return () => { cancelled = true; };
+  }, [selected, refresh]);
+
+  useEffect(() => {
+    if (!menuPosition) return;
+    menuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    const outside = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node) && !actionRef.current?.contains(event.target as Node)) setMenuPosition(undefined);
+    };
+    document.addEventListener('pointerdown', outside, true);
+    return () => document.removeEventListener('pointerdown', outside, true);
+  }, [menuPosition]);
+
+  const perform = async (action: 'switch' | 'retry' | 'stop') => {
+    if (busyRef.current || (action === 'switch' && !modelsReady)) return;
+    busyRef.current = true;
     setBusy(true);
     setError(undefined);
+    setMenuPosition(undefined);
     try {
       if (running) await window.praxis.ai.abort(session.issueKey);
-      const models = await fetchCuratedModels(selected, false);
-      await window.praxis.ai.handoverSession(session.issueKey, {
-        provider: selected,
-        model: preferredModel(models),
-        expectedBriefRevision: session.handoverBrief?.revision ?? 0
-      });
+      if (action === 'switch' && selected) {
+        await window.praxis.ai.handoverSession(session.issueKey, {
+          provider: selected,
+          model: model === '__provider_default__' ? undefined : model,
+          expectedBriefRevision: session.handoverBrief?.revision ?? 0
+        });
+      } else if (action === 'retry') {
+        const turn = [...session.events].reverse().find(event => event.type === 'user_input_completed' && event.detail?.trim());
+        await window.praxis.ai.continueSession(session.issueKey, turn?.detail || session.taskDefinition.goal, turn?.attachments);
+      } else if (action === 'stop') {
+        onStop();
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
-  const stop = async () => {
-    setBusy(true);
-    try {
-      if (running) await window.praxis.ai.abort(session.issueKey);
-      onStop();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(false);
-    }
+  const toggleMenu = () => {
+    if (menuPosition) { setMenuPosition(undefined); return; }
+    const rect = actionRef.current?.getBoundingClientRect();
+    if (rect) setMenuPosition({ left: rect.right - 260, bottom: window.innerHeight - rect.top + 4 });
   };
 
   return (
     <div className="session-limit-switch" role="alert" data-testid="session-limit-switch">
       <div className="session-limit-switch-text">
-        <strong>{who} ran out of budget.</strong>{' '}
+        <strong>{who} reached its usage limit.</strong>{' '}
         {choices.length > 0
           ? 'Switch to another AI to carry on where it stopped, or stop here.'
           : usable
@@ -1097,31 +1149,34 @@ export function SessionLimitSwitch({ session, onStop }: { session: AgentSessionR
       <div className="session-limit-switch-actions">
         {choices.length > 0 && (
           <>
-            <div className="session-limit-provider-list" role="listbox" aria-label="Switch to" data-testid="session-limit-switch-to">
-              {choices.map(provider => (
-                <button
-                  key={provider}
-                  type="button"
-                  className={`composer-chip${selected === provider ? ' active' : ''}`}
-                  role="option"
-                  aria-selected={selected === provider}
-                  disabled={busy}
-                  onClick={() => setChoice(provider)}
-                >
-                  <Icon name={providerIconName(provider)} size={14} />
-                  {aiName(provider)}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="btn btn-primary btn-compact" data-testid="session-limit-switch-go" disabled={busy} onClick={() => void switchAndContinue()}>
-              Switch and continue
-            </button>
+            <ChipSelect ariaLabel="Replacement provider" data-testid="session-limit-provider" value={selected ?? ''} disabled={busy} icon={selected ? providerIconName(selected) : 'sparkles'} onChange={value => setChoice(value as AiProvider)} options={choices.map(provider => ({ value: provider, label: aiName(provider), icon: providerIconName(provider) }))} />
+            <ChipSelect ariaLabel="Replacement model" data-testid="session-limit-model" value={loadedProvider === selected ? model : ''} disabled={busy || loadedProvider !== selected || modelOptions.length === 0} placeholder={catalogError ? 'Models unavailable' : loadedProvider === selected ? 'No models enabled' : 'Loading models…'} icon="sparkles" onChange={setModel} options={modelOptions} />
           </>
         )}
-        <button type="button" className="btn btn-quiet btn-compact" data-testid="session-limit-stop" disabled={busy} onClick={() => void stop()}>
-          Stop
-        </button>
+        <div className="session-limit-split-button">
+          <button type="button" className="btn btn-primary btn-compact" data-testid="session-limit-switch-go" disabled={busy || !modelsReady} onClick={() => void perform('switch')}>{busy ? 'Working…' : 'Switch'}</button>
+          <button ref={actionRef} type="button" className="btn btn-primary btn-compact" aria-label="Recovery actions" aria-haspopup="menu" aria-expanded={Boolean(menuPosition)} aria-controls={menuPosition ? 'session-limit-action-menu' : undefined} disabled={busy} data-testid="session-limit-actions" onClick={toggleMenu} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); if (!menuPosition) toggleMenu(); } }}><Icon name="chevron-down" size={12} /></button>
+        </div>
       </div>
+      {catalogError && <div className="session-limit-switch-error" role="alert">Could not load models: {catalogError} <button type="button" className="btn btn-quiet btn-compact" disabled={busy} data-testid="session-limit-model-reload" onClick={() => setRefresh(value => value + 1)}>Reload models</button></div>}
+      {menuPosition && createPortal(
+        <div ref={menuRef} id="session-limit-action-menu" className="composer-provider-menu session-limit-action-menu" role="menu" aria-label="Recovery actions" data-testid="session-limit-action-menu" style={anchoredPopoverStyle(menuPosition, 260)} onKeyDown={event => {
+          if (event.key === 'Escape' || event.key === 'Tab') {
+            setMenuPosition(undefined);
+            if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); actionRef.current?.focus(); }
+          } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault();
+            const buttons = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
+            const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+            buttons[next]?.focus();
+          }
+        }}>
+          <button type="button" role="menuitem" className="composer-provider-option" disabled={!modelsReady} onClick={() => void perform('switch')}>Switch{selected ? ` to ${aiName(selected)}` : ''}</button>
+          <button type="button" role="menuitem" className="composer-provider-option" data-testid="session-limit-retry" onClick={() => void perform('retry')}>Retry with {who}{session.model ? ` · ${session.model}` : ''}</button>
+          <button type="button" role="menuitem" className="composer-provider-option" data-testid="session-limit-stop" onClick={() => void perform('stop')}>Stop</button>
+        </div>, document.body
+      )}
     </div>
   );
 }

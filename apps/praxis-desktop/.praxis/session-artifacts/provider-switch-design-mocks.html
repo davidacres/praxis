@@ -1,0 +1,130 @@
+<div id="provider-switch-design" class="viz-carousel viz-dotted-background" aria-label="Provider recovery designs">
+  <section data-variant="Current inline providers" aria-label="Current inline provider layout">
+    <div class="ps-stage">
+      <div class="ps-window">
+        <div class="ps-heading">Session · Review the changes</div>
+        <div class="ps-thread"><div class="ps-message">I’ve reviewed the first set of changes. There are two files left to check.</div><div class="ps-warning">Vercel AI Gateway reached its usage limit.</div></div>
+        <div class="ps-current">
+          <div><strong>Vercel AI Gateway ran out of budget.</strong> Switch to another AI to carry on where it stopped, or stop here.</div>
+          <div class="ps-actions"><div class="ps-provider-buttons" data-current-list></div><button class="ps-button ps-primary" type="button" data-current-go>Switch and continue</button><button class="ps-button" type="button" data-stop>Stop</button></div>
+        </div>
+        <div class="ps-status" data-current-status aria-live="polite">Model chosen automatically · no model picker</div>
+      </div>
+    </div>
+  </section>
+  <section data-variant="Compact banner and dialog" aria-label="Recommended provider and model dialog" hidden>
+    <div class="ps-stage">
+      <div class="ps-window" data-dialog-window>
+        <div class="ps-heading">Session · Review the changes</div>
+        <div class="ps-thread"><div class="ps-message">I’ve reviewed the first set of changes. There are two files left to check.</div></div>
+        <div class="ps-banner"><div><strong>Vercel AI Gateway reached its usage limit.</strong><div class="ps-muted">Choose another provider to continue this session.</div></div><div class="ps-actions"><button class="ps-button ps-primary" type="button" data-open-dialog>Choose provider…</button><button class="ps-button" type="button" data-stop>Stop</button></div></div>
+        <div class="ps-dialog-area" data-dialog-area>
+          <div class="ps-dialog" role="dialog" aria-label="Continue with another provider">
+            <div class="ps-heading">Continue with another provider</div>
+            <div class="ps-dialog-body">
+              <label class="ps-field">Provider<select class="ps-select" data-provider="dialog" aria-label="Replacement provider"></select></label>
+              <label class="ps-field">Model<select class="ps-select" data-model="dialog" aria-label="Replacement model"></select></label>
+              <div class="ps-muted">Same session and handover brief. The new provider may incur its own charges.</div>
+              <div class="ps-actions ps-end"><button class="ps-button" type="button" data-cancel>Cancel</button><button class="ps-button ps-primary" type="button" data-continue="dialog">Continue with OpenAI</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="ps-status" data-status="dialog" aria-live="polite">Five alternatives · one provider field · one model field</div>
+      </div>
+    </div>
+  </section>
+  <section data-variant="Inline provider and model" aria-label="Alternative compact inline selectors" hidden>
+    <div class="ps-stage">
+      <div class="ps-window">
+        <div class="ps-heading">Session · Review the changes</div>
+        <div class="ps-thread"><div class="ps-message">I’ve reviewed the first set of changes. There are two files left to check.</div></div>
+        <div class="ps-inline">
+          <strong>Vercel AI Gateway reached its usage limit.</strong>
+          <div class="ps-fields"><label class="ps-field">Provider<select class="ps-select" data-provider="inline" aria-label="Inline replacement provider"></select></label><label class="ps-field">Model<select class="ps-select" data-model="inline" aria-label="Inline replacement model"></select></label></div>
+          <div class="ps-actions"><button class="ps-button ps-primary" type="button" data-continue="inline">Continue with OpenAI</button><button class="ps-button" type="button" data-stop>Stop</button></div>
+        </div>
+        <div class="ps-status" data-status="inline" aria-live="polite">Provider choices stay in the dropdown; controls remain in the composer.</div>
+      </div>
+    </div>
+  </section>
+</div>
+<style>
+  #provider-switch-design { --ps-bg:light-dark(#fffdf8,#252321); --ps-panel:light-dark(#f5f0e8,#302c29); --ps-text:light-dark(#302a25,#f1e9df); --ps-muted:light-dark(#74695d,#baaea0); --ps-line:light-dark(#d8c9b8,#5e5046); --ps-accent:light-dark(#b63816,#e49a77); --ps-on-accent:light-dark(#fffdf8,#29190f); --ps-error:light-dark(#b22d21,#f2a194); --ps-error-bg:light-dark(#fae4df,#492c28); color:var(--ps-text); }
+  #provider-switch-design .ps-stage { min-height:660px; padding:16px 0; }
+  #provider-switch-design .ps-window { position:relative; background:var(--ps-bg); border:1px solid var(--ps-line); border-radius:10px; font-family:system-ui,sans-serif; font-size:14px; line-height:1.5; overflow-wrap:anywhere; }
+  #provider-switch-design .ps-heading { padding:12px 16px; border-bottom:1px solid var(--ps-line); font-weight:600; }
+  #provider-switch-design .ps-thread { padding:22px 16px; min-height:70px; }
+  #provider-switch-design .ps-message { max-width:420px; padding:12px; background:var(--ps-panel); border:1px solid var(--ps-line); border-radius:8px; }
+  #provider-switch-design .ps-warning { margin-top:18px; padding:10px; color:var(--ps-error); background:var(--ps-error-bg); border-radius:6px; }
+  #provider-switch-design .ps-current, #provider-switch-design .ps-inline, #provider-switch-design .ps-banner { padding:12px 16px; border-top:1px solid var(--ps-line); background:var(--ps-panel); }
+  #provider-switch-design .ps-current { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+  #provider-switch-design .ps-current > div:first-child { flex:1 1 240px; }
+  #provider-switch-design .ps-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+  #provider-switch-design .ps-provider-buttons { display:flex; flex-wrap:wrap; gap:4px; border:1px solid var(--ps-line); padding:3px; border-radius:6px; }
+  #provider-switch-design .ps-button { font:inherit; background:var(--ps-bg); color:var(--ps-text); border:1px solid var(--ps-line); border-radius:6px; padding:6px 10px; max-width:100%; }
+  #provider-switch-design .ps-button[aria-pressed="true"] { border-color:var(--ps-accent); color:var(--ps-accent); }
+  #provider-switch-design .ps-primary { background:var(--ps-accent); color:var(--ps-on-accent); border-color:var(--ps-accent); }
+  #provider-switch-design .ps-muted { color:var(--ps-muted); }
+  #provider-switch-design .ps-status { padding:10px 16px; color:var(--ps-muted); font-size:12px; }
+  #provider-switch-design .ps-banner { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+  #provider-switch-design .ps-banner > div:first-child { flex:1 1 300px; }
+  #provider-switch-design .ps-dialog-area { padding:20px 16px; background:var(--ps-panel); }
+  #provider-switch-design .ps-dialog { max-width:440px; margin:auto; background:var(--ps-bg); border:1px solid var(--ps-line); border-radius:10px; box-shadow:0 8px 20px light-dark(#302a2520,#00000040); }
+  #provider-switch-design .ps-dialog-body { padding:16px; display:grid; gap:16px; }
+  #provider-switch-design .ps-field { display:grid; gap:6px; min-width:0; }
+  #provider-switch-design .ps-select { width:100%; min-width:0; padding:9px; border:1px solid var(--ps-line); border-radius:6px; background:var(--ps-bg); color:var(--ps-text); font:inherit; }
+  #provider-switch-design .ps-end { justify-content:flex-end; }
+  #provider-switch-design .ps-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:12px 0; }
+  #provider-switch-design [hidden] { display:none; }
+  @media(max-width:440px) { #provider-switch-design .ps-stage { min-height:760px; } #provider-switch-design .ps-fields { grid-template-columns:1fr; } }
+  @media(pointer:coarse) { #provider-switch-design .ps-button, #provider-switch-design .ps-select { min-height:44px; } #provider-switch-design .ps-select { font-size:16px; } }
+</style>
+<script>
+(() => {
+  const root = document.getElementById('provider-switch-design');
+  const alternatives = ['OpenAI','Anthropic','Google Gemini','Z.ai','Bifrost','Custom endpoint'];
+  const settings = { providers:6 };
+  let currentChoice = 'OpenAI';
+  function modelsFor(provider) { return ['Configured default · '+provider, 'Fast model (example)', 'Standard model (example)']; }
+  function updateModels(kind) {
+    const provider = root.querySelector('[data-provider="'+kind+'"]');
+    const model = root.querySelector('[data-model="'+kind+'"]');
+    model.replaceChildren(...modelsFor(provider.value).map(label => new Option(label,label)));
+    root.querySelector('[data-continue="'+kind+'"]').textContent = 'Continue with '+provider.value;
+  }
+  function renderProviders() {
+    const choices = alternatives.slice(0,settings.providers-1);
+    if (!choices.includes(currentChoice)) currentChoice=choices[0];
+    const list=root.querySelector('[data-current-list]');
+    list.replaceChildren(...choices.map(name => {
+      const button=document.createElement('button');
+      button.type='button'; button.className='ps-button'; button.textContent=name;
+      button.setAttribute('aria-pressed',String(name===currentChoice));
+      button.onclick=()=>{currentChoice=name; renderProviders();}; return button;
+    }));
+    for (const kind of ['dialog','inline']) {
+      const select=root.querySelector('[data-provider="'+kind+'"]');
+      const previous=select.value;
+      select.replaceChildren(...choices.map(name=>new Option(name,name)));
+      if(choices.includes(previous)) select.value=previous;
+      updateModels(kind);
+    }
+    root.querySelector('[data-status="dialog"]').textContent=(settings.providers-1)+' alternatives · one provider field · one model field';
+  }
+  renderProviders();
+  for(const kind of ['dialog','inline']) {
+    root.querySelector('[data-provider="'+kind+'"]').onchange=()=>updateModels(kind);
+    root.querySelector('[data-continue="'+kind+'"]').onclick=()=>{
+      const provider=root.querySelector('[data-provider="'+kind+'"]').value;
+      const model=root.querySelector('[data-model="'+kind+'"]').value;
+      root.querySelector('[data-status="'+kind+'"]').textContent='Mock: continuing with '+provider+' · '+model;
+      if(kind==='dialog') root.querySelector('[data-dialog-area]').hidden=true;
+    };
+  }
+  root.querySelector('[data-open-dialog]').onclick=()=>{root.querySelector('[data-dialog-area]').hidden=false;};
+  root.querySelector('[data-cancel]').onclick=()=>{root.querySelector('[data-dialog-area]').hidden=true;};
+  root.querySelector('[data-current-go]').onclick=()=>{root.querySelector('[data-current-status]').textContent='Mock: continuing with '+currentChoice+' · automatically selected model';};
+  root.querySelectorAll('[data-stop]').forEach(button=>{button.onclick=()=>{button.closest('.ps-window').querySelector('.ps-status').textContent='Mock: stopped; no provider switched.';};});
+  if(globalThis.Tweak) { const tweak=new Tweak({container:root,onChange:renderProviders}); tweak.addSlider(settings,'providers',{label:'Usable providers including failed provider',min:2,max:7,step:1}); }
+})();
+</script>
