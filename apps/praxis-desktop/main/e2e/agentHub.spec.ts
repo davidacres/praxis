@@ -85,6 +85,50 @@ test.afterEach(async () => {
   await closeTestApp(app);
 });
 
+test('Agent Runtime record buttons follow the app theme', async () => {
+  const page = app.window;
+  await refreshAgentCatalog(page);
+  await openAgentRuntimeSettings(page);
+  const panel = page.getByTestId('settings-agent-runtime');
+  const artifactDir = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifactDir, { recursive: true });
+
+  // Compare painted styles to a standard app button, including hover. Removing
+  // the base btn class fails on native background/border/radius (proven against
+  // the original profile button), even though btn-compact still sizes it.
+  for (const mode of ['light', 'dark'] as const) {
+    await page.getByTestId('settings-nav-appearance-themes').click();
+    await page.getByTestId(`theme-card-praxis-${mode}`).click();
+    await page.getByRole('button', { name: mode === 'light' ? 'Light' : 'Dark', exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', `praxis-${mode}`);
+    await page.getByTestId('settings-nav-agent-runtime').click();
+    for (const tab of ['agents', 'skills', 'advanced'] as const) {
+      await showRuntimeTab(page, tab);
+      const buttons = panel.locator('button.btn-compact');
+      await expect(buttons.first()).toBeVisible();
+      for (const button of await buttons.all()) {
+        await panel.locator('.settings-section-title').hover();
+        const styles = await button.evaluate(element => {
+          const actual = getComputedStyle(element);
+          const reference = getComputedStyle(document.querySelector('[data-testid="agent-runtime-refresh"]')!);
+          return {
+            actual: [actual.color, actual.backgroundColor, actual.borderTopColor, actual.borderTopStyle, actual.borderRadius],
+            reference: [reference.color, reference.backgroundColor, reference.borderTopColor, reference.borderTopStyle, reference.borderRadius]
+          };
+        });
+        expect(styles.actual).toEqual(styles.reference);
+        await button.hover();
+        const hoverBackground = await button.evaluate(element => getComputedStyle(element).backgroundColor);
+        await page.getByTestId('agent-runtime-refresh').hover();
+        await expect(page.getByTestId('agent-runtime-refresh')).toHaveCSS('background-color', hoverBackground);
+      }
+      if (tab === 'agents') {
+        await panel.screenshot({ path: path.join(artifactDir, `agent-runtime-buttons-${mode}.png`) });
+      }
+    }
+  }
+});
+
 test('Agent Runtime lists profiles and skills and opens their Agent Hub records', async () => {
   const page = app.window;
   await refreshAgentCatalog(page);

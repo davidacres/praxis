@@ -257,20 +257,164 @@ test('an agent that never fixes its gadget is asked at most twice, not forever',
   await expect(win.locator('[data-testid="gadget-choice"]')).toHaveCount(0);
 });
 
-test('the composer shows Cancel while the reviewer is working, and cancelling ends the turn', async () => {
+// These interactions fail against the former lightweight review composer:
+// it had no Ask action, queue editing, or image clipboard/drop handling.
+const COMPOSER_ARTIFACTS = path.resolve(__dirname, '../../../../.praxis/session-artifacts');
+
+async function composerScreenshot(win: TestApp['window'], name: string): Promise<void> {
+  fs.mkdirSync(COMPOSER_ARTIFACTS, { recursive: true });
+  if (name === 'running') {
+    await expect.poll(async () => (await win.getByTestId('ai-review-followup').boundingBox())?.height ?? 0).toBeLessThanOrEqual(1);
+  }
+  await win.screenshot({ path: path.join(COMPOSER_ARTIFACTS, `shared-session-composer-${name}.png`), fullPage: true });
+}
+
+test('the review composer can queue, edit and cancel a follow-up while the reviewer is working', async () => {
   const { win } = await openReview({ TICKET_REVIEW_FIXTURE_MODE: 'hang' });
+  const box = win.getByTestId('ai-review-followup');
+  await expect(win.getByTestId('session-composer-ask-btn')).toBeVisible({ timeout: 20000 });
+  await expect(win.getByTestId('ai-review-activity')).toBeVisible();
+  await win.getByTestId('session-composer-ask-btn').click();
+  await expect(box).toBeEnabled();
+  await box.fill('FOLLOW_UP_NOTE original queued question');
+  await win.getByRole('button', { name: 'Queue follow-up', exact: true }).click();
+  const queued = win.getByTestId('session-queued-pill');
+  await expect(queued).toContainText('original queued');
+  await queued.locator('.session-runtime-chip-label').click();
+  await expect(box).toHaveValue('FOLLOW_UP_NOTE original queued question');
+  await expect(queued).toHaveCount(0);
+  await box.fill('FOLLOW_UP_NOTE edited question');
+  await win.getByRole('button', { name: 'Queue follow-up', exact: true }).click();
+  await expect(queued).toContainText('edited question');
+  await composerScreenshot(win, 'running');
+  await win.getByRole('button', { name: 'Cancel queued message', exact: true }).click();
+  await expect(queued).toHaveCount(0);
+  await expect(win.getByTestId('ai-review-you')).toHaveCount(0);
+  await win.getByRole('button', { name: 'Cancel response', exact: true }).click();
+  await expect(win.getByRole('button', { name: 'Cancel response', exact: true })).toHaveCount(0, { timeout: 20000 });
+  await expect(win.getByTestId('ai-review-run')).toHaveText(/Run review again/);
+  await expect(win.getByTestId('ai-review-you')).toHaveCount(0);
+});
 
-  // Mid-turn the box is disabled and the send arrow is the red close-icon Cancel.
-  const box = win.locator('[data-testid="ai-review-followup"]');
-  await expect(box).toBeDisabled({ timeout: 20000 });
-  await expect(box).toHaveAttribute('placeholder', 'The reviewer is working…');
-  // Collapsed to the controls row with an activity chip, as in the console.
-  await expect(win.locator('[data-testid="ai-review-activity"]')).toContainText('Reviewing');
-  expect((await box.boundingBox())?.height ?? 0).toBeLessThan(4);
-  await expect(win.locator('[data-testid="ai-review-followup-send"]')).toHaveCount(0);
-  await win.screenshot({ path: 'output/playwright/ticket-review-working.png', fullPage: true });
+test('a queued review follow-up is sent exactly once when the current turn completes', async () => {
+  const { win, issueKey } = await openReview({ TICKET_REVIEW_FIXTURE_MODE: 'slow' });
+  await win.getByTestId('session-composer-ask-btn').click();
+  const message = 'FOLLOW_UP_NOTE automatically delivered queue';
+  await win.getByTestId('ai-review-followup').fill(message);
+  await win.getByRole('button', { name: 'Queue follow-up', exact: true }).click();
+  await expect(win.getByTestId('session-queued-pill')).toBeVisible();
+  await expect(win.getByTestId('ai-review-message').last()).toContainText('Understood', { timeout: 20000 });
+  await expect(win.getByTestId('session-queued-pill')).toHaveCount(0);
+  await expect(win.getByTestId('ai-review-you')).toHaveCount(1);
+  await expect.poll(() => win.evaluate(async ({ issueKey, message }) => {
+    const records = await window.praxis.ai.listSessions();
+    return records.find(record => record.issueKey === `review~${issueKey}`)?.events.filter(turn => turn.type === 'user_input_completed' && turn.detail === message).length;
+  }, { issueKey, message })).toBe(1);
+});
 
-  await win.locator('[data-testid="ai-review-followup-cancel"]').click();
-  await expect(win.locator('[data-testid="ai-review-followup-cancel"]')).toHaveCount(0, { timeout: 20000 });
-  await expect(win.locator('[data-testid="ai-review-run"]')).toHaveText(/Run review again/);
+test('the review composer pastes and drops images, removes one and sends the retained image to the agent', async () => {
+  const { win, issueKey } = await openReview();
+  await expect(win.getByTestId('ai-review-content')).toContainText('Verdict: Needs work', { timeout: 20000 });
+  const input = win.getByTestId('ai-review-followup');
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4z8DAAMQACf4B/4PiLjgAAAAASUVORK5CYII=';
+  await input.evaluate((node, encoded) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([Uint8Array.from(atob(encoded), c => c.charCodeAt(0))], 'paste.png', { type: 'image/png' }));
+    node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
+  }, png);
+  await expect(win.getByTestId('session-image-chip')).toHaveCount(1);
+  await win.getByTestId('ai-review-followup-composer').evaluate((node, encoded) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([Uint8Array.from(atob(encoded), c => c.charCodeAt(0))], 'drop.png', { type: 'image/png' }));
+    node.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }));
+  }, png);
+  await expect(win.getByTestId('session-image-chip')).toHaveCount(2);
+  await win.getByRole('button', { name: 'Remove image 1', exact: true }).click();
+  await expect(win.getByTestId('session-image-chip')).toHaveCount(1);
+  await input.fill('FOLLOW_UP_NOTE inspect the retained screenshot');
+  await composerScreenshot(win, 'ready');
+  await input.press('Enter');
+  await expect(win.getByTestId('ai-review-message').last()).toContainText('Images received: 1', { timeout: 20000 });
+  await expect(win.getByTestId('session-image-chip')).toHaveCount(0);
+  const retained = await win.evaluate(async key => {
+    const session = (await window.praxis.ai.listSessions()).find(record => record.issueKey === `review~${key}`);
+    return session?.events.filter(event => event.type === 'user_input_completed').at(-1)?.attachments;
+  }, issueKey);
+  expect(retained).toHaveLength(1);
+  expect(retained?.[0].mimeType).toBe('image/png');
+});
+
+test('review exposes shared runtime controls while preserving its review boundaries', async () => {
+  const { win, issueKey } = await openReview();
+  await expect(win.getByTestId('ai-review-content')).toContainText('Verdict: Needs work', { timeout: 20000 });
+  const composer = win.getByTestId('ai-review-followup-composer');
+  await expect(composer.getByTestId('session-provider')).toContainText('Claude');
+  await composer.getByTestId('session-provider').click();
+  await expect(win.locator('[data-testid^="session-provider-add-"]')).toHaveCount(0);
+  // Close the provider menu before opening the model catalog.
+  await composer.getByTestId('session-provider').click();
+  await win.evaluate(() => window.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { defaultModel: 'sonnet' } } } }));
+  await composer.getByTestId('session-model').click();
+  await expect(win.getByTestId('session-model-menu')).toBeVisible();
+  await expect(win.getByTestId('session-model-option-default')).toBeVisible();
+  await win.getByTestId('session-model-option-default').click();
+  await expect.poll(() => win.evaluate(async key => (await window.praxis.ai.listSessions()).find(record => record.issueKey === `review~${key}`)?.model, issueKey)).toBe('sonnet');
+  await expect(win.getByTestId('review-runtime')).toContainText('sonnet');
+
+  const reasoning = composer.getByTestId('session-reasoning');
+  await expect(reasoning).toBeVisible();
+  await reasoning.locator('input[type="range"]').focus();
+  await reasoning.locator('input[type="range"]').press('End');
+  await expect(reasoning).toHaveAttribute('data-value', 'high');
+  await win.getByTestId('session-permission-chip').click();
+  await win.getByTestId('session-permission-option-auto').click();
+  await expect(win.getByTestId('session-permission-chip')).toContainText('Auto');
+  await expect.poll(() => win.evaluate(async key => {
+    const session = (await window.praxis.ai.listSessions()).find(record => record.issueKey === `review~${key}`);
+    return { reasoning: session?.reasoningEffort, permission: session?.permissionMode, toolMode: session?.toolMode };
+  }, issueKey)).toEqual({ reasoning: 'high', permission: 'auto', toolMode: 'read-only' });
+
+  await expect(composer.getByTestId('session-tool-mode')).toBeDisabled();
+  await expect(composer.locator('[data-testid="session-working-directory"], [data-testid="session-attach-folder"]')).toBeDisabled();
+  await expect(composer.locator('[data-testid^="session-switch-mode-"]')).toHaveCount(0);
+  await expect(composer.getByTestId('session-workflow-chips')).toHaveCount(0);
+  await expect(composer.getByTestId('session-workflow-add')).toHaveCount(0);
+  await expect(win.getByTestId('session-workflow-trigger')).toHaveCount(0);
+  await expect(win.getByTestId('session-chat-thread')).toHaveCount(0);
+  await expect(composer.getByTestId('session-conversation-target')).toHaveCount(0);
+  await expect(win.getByTestId('session-conversation-dialog')).toHaveCount(0);
+
+  await win.evaluate(() => window.praxis.settings.set({ appearance: { themeId: 'praxis-dark', themeMode: 'dark' } }));
+  await win.reload();
+  await expect(win.locator('html')).toHaveAttribute('data-mode', 'dark');
+  await win.getByTestId('board-nav-item').first().click();
+  await win.locator(`[data-testid="issue-card"][data-issue-key="${issueKey}"]`).click();
+  await win.getByTestId('issue-ai-review-btn').click();
+  await expect(composer).toBeVisible();
+  await app!.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1100, 800));
+  await expect.poll(() => composer.evaluate(node => {
+    const bounds = node.getBoundingClientRect();
+    return Array.from(node.querySelectorAll<HTMLElement>('button, input[type=range]')).filter(control => {
+      const rect = control.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && (rect.left < bounds.left - 1 || rect.right > bounds.right + 1 || rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1);
+    }).length;
+  })).toBe(0);
+  await composerScreenshot(win, 'dark-narrow');
+});
+
+
+test('a pending read permission is answered directly in the review composer', async () => {
+  const { win, issueKey } = await openReview({ TICKET_REVIEW_FIXTURE_MODE: 'permission' });
+  const card = win.getByTestId('session-permission-card');
+  await expect(card).toBeVisible({ timeout: 20000 });
+  await expect(card).toContainText('read');
+  await win.getByTestId('session-permission-allow-once').click();
+  await expect(win.getByTestId('ai-review-content')).toContainText('Verdict: Needs work', { timeout: 20000 });
+  await expect(card).toHaveCount(0);
+  await expect.poll(() => win.evaluate(async key => {
+    const session = (await window.praxis.ai.listSessions()).find(record => record.issueKey === `review~${key}`);
+    return { toolMode: session?.toolMode, permissions: session?.events.filter(event => event.type === 'permission_completed').length };
+  }, issueKey)).toEqual({ toolMode: 'read-only', permissions: 1 });
+  await expect(win.getByTestId('ai-review-page')).toBeVisible();
+  await expect(win.getByTestId('session-chat-thread')).toHaveCount(0);
 });

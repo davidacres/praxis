@@ -171,7 +171,7 @@ test('composer selects a board and open ticket, names the session, and streams t
   await win.locator('[data-testid="new-session-title-input"]').fill('Operations follow-up');
   await win.locator('[data-testid="new-session-title-input"]').press('Enter');
   await composer.locator('textarea').fill('Refactor the demo board store');
-  await expect(win.locator('[data-testid="new-session-tool-mode"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="new-session-tool-mode"]')).toBeVisible();
   await expect(win.locator('[data-testid="new-session-folder"]')).toHaveCount(0);
   await win.locator('[data-testid="new-session-submit"]').click();
 

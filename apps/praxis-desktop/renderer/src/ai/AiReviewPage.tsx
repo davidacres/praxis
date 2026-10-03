@@ -3,6 +3,7 @@ import type { AgentSessionRecord, AiProvider, IssueDetails } from '@praxis/core'
 import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
 import { isTerminalAgentState } from './aiSessionState';
+import { TranscriptAttachments } from './SessionsPage';
 import { SessionComposer } from './SessionComposer';
 import { GadgetBlockList } from './gadgets';
 import { gadgetMessageKey, visibleMessageText } from './gadgets/messageText';
@@ -30,6 +31,7 @@ interface AiReviewPageProps {
   connectionId?: string;
   provider?: AiProvider;
   model?: string;
+  sessions?: AgentSessionRecord[];
   onClose: () => void;
   /** Opens the review's session in Sessions, e.g. to answer a permission request. */
   onOpenSession?: (sessionKey: string) => void;
@@ -53,6 +55,7 @@ export function AiReviewPage({
   connectionId,
   provider,
   model,
+  sessions,
   onClose,
   onOpenSession,
   onTicketChanged
@@ -62,9 +65,6 @@ export function AiReviewPage({
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [posted, setPosted] = useState(false);
-  const [followUp, setFollowUp] = useState('');
-  const [sendingFollowUp, setSendingFollowUp] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
   // The review session is stored under its own key, not the ticket's; the host
   // tells us what it is (from `startTicketReview` / `getTicketReview`).
   const sessionKey = session?.issueKey;
@@ -75,7 +75,6 @@ export function AiReviewPage({
     setSession(undefined);
     setError(undefined);
     setPosted(false);
-    setFollowUp('');
     void window.praxis.issue.get(issueKey, connectionId).then(loaded => {
       if (!cancelled) setIssue(loaded);
     }).catch(() => undefined);
@@ -118,10 +117,9 @@ export function AiReviewPage({
     if (thread) thread.scrollTop = thread.scrollHeight;
   }, [conversationEvents.length, session?.responseText, resultCount]);
 
-  const awaitingPermission = session?.state === 'awaiting_approval';
   const running = Boolean(
     session && !isTerminalAgentState(session.state) && session.state !== 'awaiting_approval' && session.state !== 'awaiting_input'
-  ) || starting || sendingFollowUp;
+  ) || starting;
   const failed = session?.state === 'failed';
 
   const firstReviewIndex = conversationEvents.findIndex(event => event.type === 'message');
@@ -152,25 +150,12 @@ export function AiReviewPage({
     setStarting(true);
     setError(undefined);
     setPosted(false);
-    setFollowUp('');
     try {
       setSession(await window.praxis.ai.startTicketReview({ issueKey, connectionId, provider, model }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setStarting(false);
-    }
-  };
-
-  const cancel = async () => {
-    if (!sessionKey) return;
-    setCancelling(true);
-    try {
-      await window.praxis.ai.abort(sessionKey);
-    } catch {
-      // Already finished or gone; the session record says which.
-    } finally {
-      setCancelling(false);
     }
   };
 
@@ -186,23 +171,7 @@ export function AiReviewPage({
     }
   };
 
-  const sendFollowUp = async () => {
-    const message = followUp.trim();
-    if (!message || !sessionKey || running) return;
-    setSendingFollowUp(true);
-    setError(undefined);
-    try {
-      await window.praxis.ai.continueSession(sessionKey, message);
-      setFollowUp('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSendingFollowUp(false);
-    }
-  };
-
   const shownError = error ?? (failed ? (session?.lastError || 'The review stopped before it finished.') : undefined);
-  const canFollowUp = Boolean(session && isTerminalAgentState(session.state) && !failed);
 
   return (
     <div className="ai-tool-page" data-testid="ai-review-page">
@@ -210,9 +179,9 @@ export function AiReviewPage({
         <Icon name="robot" size={14} />
         <h3>AI review — {issueKey}</h3>
         <span className="detail-meta">{issue?.summary ?? ''}</span>
-        {(provider || model) && (
+        {(session?.provider || session?.model || provider || model) && (
           <span className="detail-meta" data-testid="review-runtime">
-            {[provider, model].filter(Boolean).join(' · ')}
+            {[session?.provider ?? provider, session?.model ?? model].filter(Boolean).join(' · ')}
           </span>
         )}
         <span style={{ flex: 1 }} />
@@ -249,12 +218,6 @@ export function AiReviewPage({
       </div>
 
       {shownError && <div className="error-banner" data-testid="ai-review-error">{shownError}</div>}
-      {awaitingPermission && (
-        <div className="error-banner" data-testid="ai-review-permission">
-          The reviewer is waiting for permission to use a tool. Answer it in Sessions to continue.
-        </div>
-      )}
-
       <div className="ai-tool-content ai-review-thread" data-testid="ai-review-thread" ref={threadRef}>
         {!session && !starting && !shownError && (
           attachedReview ? (
@@ -274,10 +237,10 @@ export function AiReviewPage({
         {conversationEvents.map((event, index) => {
           const text = visibleMessageText(event.detail ?? event.summary ?? '');
           if (event.type === 'user_input_completed') {
-            return text ? (
+            return text || event.attachments?.length ? (
               <div className="ai-review-you" key={`${event.timestamp}-${index}`} data-testid="ai-review-you">
                 <span className="ai-review-you-label">You</span>
-                <span>{text}</span>
+                <span>{text}<TranscriptAttachments attachments={event.attachments} /></span>
               </div>
             ) : null;
           }
@@ -306,29 +269,19 @@ export function AiReviewPage({
 
       {session && (
         <SessionComposer
-          testId="ai-review-followup"
-          value={followUp}
-          onChange={setFollowUp}
-          onSubmit={() => void sendFollowUp()}
-          running={running}
-          onCancel={() => void cancel()}
-          cancelling={cancelling}
-          disabled={!canFollowUp}
-          placeholder={
-            running
-              ? 'The reviewer is working…'
-              : canFollowUp
-                ? 'Ask the reviewer to clarify, change, or continue…'
-                : 'This review stopped. Run it again to continue.'
-          }
-        >
-          {running && (
-            <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid="ai-review-activity">
-              <span className="session-activity-dot" aria-hidden="true" />
-              <span>{starting ? 'Starting review…' : 'Reviewing…'}</span>
-            </span>
-          )}
-        </SessionComposer>
+          key={session.sessionId}
+          session={session}
+          sessions={sessions}
+          options={{
+            testId: 'ai-review-followup',
+            activityTestId: 'ai-review-activity',
+            placeholder: 'Ask the reviewer to clarify, change, or continue…',
+            allowModeChange: false,
+            allowToolAccessChange: false,
+            showWorkflowControl: false,
+            allowConversation: false
+          }}
+        />
       )}
     </div>
   );

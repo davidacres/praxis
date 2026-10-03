@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type {
+  AgentSessionRecord,
   AiProvider,
   AiProviderStatus,
   AgentToolMode,
@@ -11,6 +12,7 @@ import type {
   ReasoningEffort,
   SessionMode
 } from '@praxis/core';
+import { ChipSelect } from '../ui/ChipSelect';
 import { Icon } from '../ui/Icon';
 import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
 import {
@@ -23,7 +25,10 @@ import {
   supportsReasoningEffort
 } from './modelProviders';
 import { ReasoningEffortSlider } from './ReasoningEffortSlider';
+import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionComposerToolbar } from './SessionComposerToolbar';
+import { SessionUsageSummary } from './SessionUsageSummary';
+import { workflowPreview } from './workflowPreview';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
@@ -43,6 +48,8 @@ function pickDefaultModel(options: ModelOptions | undefined, configuredDefault?:
 
 export interface NewSessionProps {
   boards: Board[];
+  /** Existing sessions, so the usage summary can total spend against the limit. */
+  sessions?: AgentSessionRecord[];
   /** Project-scoped governed definitions that can be attached to this session. */
   workflowOptions?: SessionWorkflowOption[];
   /** Starts the session; rejects (e.g. provider not configured) surface inline. */
@@ -119,6 +126,16 @@ export interface SessionWorkflowOption {
 
 const FREEFORM_BOARD_ID = '__freeform__';
 
+const TOOL_MODE_OPTIONS: Array<{ value: AgentToolMode; label: string; description: string; icon: 'tools' | 'search' | 'folder' }> = [
+  { value: 'full', label: 'Full tools', description: 'Read, edit and run commands in the working folder', icon: 'tools' },
+  { value: 'read-only', label: 'Read only', description: 'Read files but never change them', icon: 'search' },
+  { value: 'project-only', label: 'Project only', description: 'Project and ticket tools, no file access', icon: 'folder' }
+];
+
+function folderName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
 /**
  * The default centre view. Laid out against the reference chrome: a muted
  * sentence with inline chips, then a single composer card whose first row is the
@@ -126,6 +143,7 @@ const FREEFORM_BOARD_ID = '__freeform__';
  */
 export function NewSession({
   boards,
+  sessions = [],
   onSubmit,
   connectionCount,
   onOpenConnections,
@@ -561,6 +579,14 @@ export function NewSession({
       setSubmitting(false);
     }
   };
+  const pickWorkingDirectory = async () => {
+    try {
+      const picked = await window.praxis.dialog.pickFolder('Choose working folder for this session');
+      if (picked) setWorkingDirectory(picked);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
   const selectedWorkflow = workflowOptionsForPicker.find(option => option.id === selectedWorkflowId);
 
   return (
@@ -771,7 +797,15 @@ export function NewSession({
           </button>
         </div>
 
-        <div className="composer">
+        <div className="session-usage-wrapper">
+          <SessionUsageSummary
+            sessions={sessions}
+            draftProvider={selectedProvider}
+            draftModel={selectedModel}
+            spendLimit={liveSettings?.ai.spendLimit ?? 0}
+          />
+        </div>
+        <SessionComposerCard>
           {uncommittedFiles && (
             <UncommittedBaseNotice
               files={uncommittedFiles.files}
@@ -822,25 +856,7 @@ export function NewSession({
             </div>
           )}
 
-          <textarea
-            ref={composerInputRef}
-            className="composer-input"
-            placeholder={conversational ? 'Ask anything, brainstorm, or get something done…' : "What's the goal?"}
-            value={goal}
-            rows={2}
-            onChange={event => {
-              setGoal(event.target.value);
-              if (error) setError(undefined);
-            }}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                void submit();
-              }
-            }}
-          />
-
-          <SessionComposerToolbar>
+          <SessionComposerHeader data-testid="new-session-mode-panel">
             <div className="session-mode-toggle" role="group" aria-label="Session mode">
               {(['chat', 'analysis', 'review'] as SessionMode[]).map(option => (
                 <button
@@ -855,9 +871,48 @@ export function NewSession({
                 </button>
               ))}
             </div>
-            <button className="composer-chip" aria-label="Attach">
-              <Icon name="plus" size={16} />
-            </button>
+            <div className="session-mode-panel-meta">
+              <ChipSelect
+                variant="plain"
+                className="session-runtime-chip"
+                data-testid="new-session-tool-mode"
+                ariaLabel="Tool access"
+                title="Tool access for this session"
+                icon={toolMode === 'full' ? 'tools' : 'search'}
+                value={toolMode}
+                options={TOOL_MODE_OPTIONS.map(({ value, label, description, icon }) => ({ value, label, description, icon }))}
+                onChange={value => setToolMode(value as AgentToolMode)}
+              />
+              <button
+                type="button"
+                className="composer-chip session-runtime-chip"
+                data-testid="new-session-working-directory"
+                disabled={Boolean(defaultWorkingDirectory)}
+                title={workingDirectory ? `${workingDirectory}${defaultWorkingDirectory ? '' : ' — click to change'}` : 'Attach a working folder to this session'}
+                onClick={() => void pickWorkingDirectory()}
+              >
+                <Icon name="folder" size={14} />
+                <span className="session-runtime-chip-label">{workingDirectory ? folderName(workingDirectory) : 'Attach folder…'}</span>
+              </button>
+            </div>
+          </SessionComposerHeader>
+          <SessionComposerInput
+            ref={composerInputRef}
+            placeholder={conversational ? 'Ask anything, brainstorm, or get something done…' : "What's the goal?"}
+            value={goal}
+            onChange={event => {
+              setGoal(event.target.value);
+              if (error) setError(undefined);
+            }}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+          />
+
+          <SessionComposerToolbar>
             <button
               ref={providerChipRef}
               className="composer-chip session-provider-chip"
@@ -1038,9 +1093,6 @@ export function NewSession({
               />
             )}
             <span className="spacer" />
-            <button className="composer-chip" aria-label="Dictate">
-              <Icon name="mic" size={15} />
-            </button>
             {workflowOptionsForPicker.length > 0 && (
               <>
                 <button
@@ -1092,16 +1144,19 @@ export function NewSession({
                         aria-selected={selectedWorkflowId === option.id}
                         data-testid={`new-session-workflow-option-${option.id}`}
                         disabled={!option.ready}
-                        title={option.ready ? option.description : option.blockers?.join(' ')}
+                        title={[option.name, option.description, ...(!option.ready ? option.blockers ?? [] : [])].filter(Boolean).join(' — ')}
                         onClick={() => {
                           setSelectedWorkflowId(option.id);
                           setWorkflowMenuPos(undefined);
                         }}
                       >
                         <Icon name={selectedWorkflowId === option.id ? 'check' : 'play'} size={14} />
-                        <span className="heading-option-body">
-                          <strong>{option.name}</strong>
-                          <small>{option.ready ? (option.description || `Version ${option.version}`) : (option.blockers?.join(' ') || 'Not ready')}</small>
+                        <span className="session-workflow-option-text">
+                          <span title={option.name}>{workflowPreview(option.name)}</span>
+                          {(() => {
+                            const detail = option.ready ? (option.description || `Version ${option.version}`) : (option.blockers?.join(' ') || 'Not ready');
+                            return <small className={option.ready ? undefined : 'is-danger'} title={detail}>{workflowPreview(detail)}</small>;
+                          })()}
                         </span>
                       </button>
                     ))}
@@ -1110,6 +1165,15 @@ export function NewSession({
                 )}
               </>
             )}
+            <span
+              className="session-context-chip is-ok"
+              data-testid="new-session-context-indicator"
+              title="0% of context used"
+              role="img"
+              aria-label="Context usage: 0% used"
+            >
+              <SessionContextRing percent={0} />
+            </span>
             <button
               className="composer-send"
               aria-label="Start session"
@@ -1120,7 +1184,7 @@ export function NewSession({
               <Icon name="arrow-up" size={15} />
             </button>
           </SessionComposerToolbar>
-        </div>
+        </SessionComposerCard>
         <div className="session-composer-footer">
           <SessionPermissionModeControl value={permissionMode} onChange={setPermissionMode} testId="new-session" />
         </div>

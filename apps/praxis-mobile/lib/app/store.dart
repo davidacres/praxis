@@ -32,6 +32,7 @@ class WorkItem {
     required this.status,
     required this.sessionId,
     this.runId,
+    this.projectId,
     this.provider,
     this.model,
     this.mode = 'chat',
@@ -44,6 +45,7 @@ class WorkItem {
   final String status;
   final String sessionId;
   final String? runId;
+  final String? projectId;
   final String? provider;
   final String? model;
   final String mode;
@@ -58,6 +60,7 @@ class WorkItem {
     status: status,
     sessionId: sessionId,
     runId: runId,
+    projectId: projectId,
     provider: provider,
     model: model,
     mode: mode,
@@ -75,6 +78,7 @@ WorkItem workFromSession(SessionSnapshot session) => WorkItem(
   provider: session.provider,
   model: session.model,
   runId: session.runId,
+  projectId: session.projectId,
 );
 
 enum FollowUpState { pending, completed, failed }

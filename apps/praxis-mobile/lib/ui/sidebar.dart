@@ -98,8 +98,29 @@ class _AppSidebarState extends State<AppSidebar> {
     final t = context.t;
     final p = t.palette;
     final stageKeys = runStageSessionKeys(store.workflowRuns);
-    final chats = store.work.where((item) => item.draft || (!stageKeys.contains(item.workId) && !isStageSessionKey(item.workId, item.runId))).toList();
+    final visible = store.work.where((item) => item.draft || (!stageKeys.contains(item.workId) && !isStageSessionKey(item.workId, item.runId))).toList();
+    // The desktop's rule: a conversation belongs to no project, run or stage.
+    final conversations = visible.where((item) => item.draft || ((item.projectId ?? '').isEmpty && (item.runId ?? '').isEmpty)).toList();
+    final sessions = visible.where((item) => !conversations.contains(item)).toList();
     final unresolved = store.attention.where((item) => !item.resolved).length;
+
+    Widget workRow(WorkItem item) => _NavRow(
+      icon: item.draft
+          ? '＋'
+          : (item.status == 'active' || item.status == 'awaiting-input')
+          ? '●'
+          : '✓',
+      label: item.title,
+      caption: item.draft
+          ? 'Draft · not sent yet'
+          : '${item.mode == 'chat' ? '' : '${item.mode[0].toUpperCase()}${item.mode.substring(1)} · '}${item.status}${item.model != null ? ' · ${item.model}' : ''}',
+      active: store.openWorkId == item.workId,
+      onTap: () {
+        store.setRoute('work');
+        store.openWork(item.workId);
+        widget.onClose();
+      },
+    );
 
     void navigate(String route) {
       store.setRoute(route);
@@ -142,6 +163,30 @@ class _AppSidebarState extends State<AppSidebar> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(10, 10, 10, 24),
             children: [
+              Pressable(
+                label: 'New chat',
+                onTap: () {
+                  store.startNewChat();
+                  widget.onClose();
+                },
+                excludeChildSemantics: true,
+                builder: (context, pressed) => Container(
+                  height: t.s(44),
+                  decoration: BoxDecoration(
+                    color: pressed ? p.accentMuted : p.accentSoft,
+                    borderRadius: BorderRadius.circular(t.s(10)),
+                    border: Border.all(color: p.accent),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('＋', style: ts(context, 16, scaled: false, lineHeight: 18, color: p.accent)),
+                      SizedBox(width: t.s(8)),
+                      Text('New chat', style: ts(context, 13, weight: FontWeight.w700, color: p.text)),
+                    ],
+                  ),
+                ),
+              ),
               const _SectionLabel('NAVIGATION'),
               for (final route in _routes)
                 _NavRow(
@@ -151,16 +196,32 @@ class _AppSidebarState extends State<AppSidebar> {
                   badge: route.$1 == 'attention' && unresolved > 0 ? '$unresolved' : null,
                   onTap: () => navigate(route.$1),
                 ),
+              _SectionHeading(label: 'CONVERSATIONS', trailing: Padding(padding: const EdgeInsets.only(top: 8, right: 8), child: _count(context, conversations.length))),
+              if (conversations.isEmpty)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(t.s(8), 0, t.s(8), t.s(6)),
+                  child: Text('No conversations yet. Start one with New chat.', style: ts(context, 11, lineHeight: 16, color: p.textDim)),
+                )
+              else
+                for (final item in conversations) workRow(item),
+              _SectionHeading(label: 'SESSIONS', trailing: Padding(padding: const EdgeInsets.only(top: 8, right: 8), child: _count(context, sessions.length))),
+              if (sessions.isEmpty)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(t.s(8), 0, t.s(8), t.s(6)),
+                  child: Text('No project or ticket sessions yet.', style: ts(context, 11, lineHeight: 16, color: p.textDim)),
+                )
+              else
+                for (final item in sessions) workRow(item),
               if (store.runsSupported) ...[
                 _SectionHeading(
-                  label: 'WORKFLOW RUNS',
+                  label: 'AUTOMATIONS',
                   trailing: Padding(padding: const EdgeInsets.only(top: 8, right: 8), child: _count(context, store.workflowRuns.length)),
                 ),
                 if (store.workflowRuns.isEmpty)
                   Padding(
                     padding: EdgeInsets.fromLTRB(t.s(8), 0, t.s(8), t.s(6)),
                     child: Text(
-                      'No workflow runs in this project yet. Start one from a chat’s workflow menu or on the desktop.',
+                      'No automations in this project yet. Start one from a chat’s workflow menu or on the desktop.',
                       style: ts(context, 11, lineHeight: 16, color: p.textDim),
                     ),
                   )
@@ -177,81 +238,30 @@ class _AppSidebarState extends State<AppSidebar> {
                       },
                     ),
               ],
-              _SectionHeading(
-                label: 'SESSIONS',
-                trailing: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _count(context, chats.length),
-                      const SizedBox(width: 7),
-                      Pressable(
-                        label: 'New chat',
-                        onTap: () {
-                          store.startNewChat();
-                          widget.onClose();
-                        },
-                        excludeChildSemantics: true,
-                        builder: (context, pressed) => Container(
-                          height: 28,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          decoration: BoxDecoration(
-                            color: pressed ? p.surfaceRaised : p.surface,
-                            borderRadius: BorderRadius.circular(7),
-                            border: Border.all(color: p.border),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('＋', style: ts(context, 15, scaled: false, lineHeight: 17, color: p.accent)),
-                              const SizedBox(width: 4),
-                              Text(
-                                'New chat',
-                                style: ts(context, 10, scaled: false, weight: FontWeight.w700, color: p.textSecondary),
-                              ),
-                            ],
-                          ),
+              if (store.openWorkId != null) ...[
+                const _SectionLabel('THIS SESSION'),
+                Row(
+                  children: [
+                    for (final view in const ['chat', 'progress', 'changes']) ...[
+                      if (view != 'chat') const SizedBox(width: 6),
+                      Expanded(
+                        child: _ViewTab(
+                          label: '${view[0].toUpperCase()}${view.substring(1)}',
+                          active: store.detail == view,
+                          onTap: () {
+                            store.setRoute('work');
+                            store.setDetail(view);
+                            widget.onClose();
+                          },
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-              ),
-              for (final item in chats)
-                _NavRow(
-                  icon: item.draft
-                      ? '＋'
-                      : (item.status == 'active' || item.status == 'awaiting-input')
-                      ? '●'
-                      : '✓',
-                  label: item.title,
-                  caption: item.draft
-                      ? 'Draft · not sent yet'
-                      : '${item.mode == 'chat' ? '' : '${item.mode[0].toUpperCase()}${item.mode.substring(1)} · '}${item.status}${item.model != null ? ' · ${item.model}' : ''}',
-                  active: store.openWorkId == item.workId,
-                  onTap: () {
-                    store.setRoute('work');
-                    store.openWork(item.workId);
-                    widget.onClose();
-                  },
-                ),
-              if (store.openWorkId != null) ...[
-                const _SectionLabel('SESSION VIEWS'),
-                for (final view in const [('chat', '☷'), ('progress', '◔'), ('changes', '⌁')])
-                  _NavRow(
-                    icon: view.$2,
-                    label: '${view.$1[0].toUpperCase()}${view.$1.substring(1)}',
-                    active: store.detail == view.$1,
-                    onTap: () {
-                      store.setRoute('work');
-                      store.setDetail(view.$1);
-                      widget.onClose();
-                    },
-                  ),
               ],
               const _SectionLabel('SETTINGS'),
-              for (final item in _settings) _NavRow(icon: item.$2, label: item.$3, caption: item.$4, onTap: () => setState(() => _page = item.$1)),
+              for (final item in _settings)
+                _NavRow(icon: item.$2, label: item.$3, caption: item.$4, drillsIn: true, onTap: () => setState(() => _page = item.$1)),
             ],
           ),
         ),
@@ -298,12 +308,13 @@ class _SectionHeading extends StatelessWidget {
 }
 
 class _NavRow extends StatelessWidget {
-  const _NavRow({required this.icon, required this.label, this.caption, this.active = false, this.badge, required this.onTap});
+  const _NavRow({required this.icon, required this.label, this.caption, this.active = false, this.badge, this.drillsIn = false, required this.onTap});
   final String icon;
   final String label;
   final String? caption;
   final bool active;
   final String? badge;
+  final bool drillsIn;
   final VoidCallback onTap;
 
   @override
@@ -375,9 +386,44 @@ class _NavRow extends StatelessWidget {
                 ),
               ),
             ],
-            SizedBox(width: t.s(9)),
-            Text('›', style: ts(context, 18, scaled: false, color: p.textDim)),
+            if (drillsIn) ...[SizedBox(width: t.s(9)), Text('›', style: ts(context, 18, scaled: false, color: p.textDim))],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ViewTab extends StatelessWidget {
+  const _ViewTab({required this.label, required this.active, required this.onTap});
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final p = t.palette;
+    return Pressable(
+      label: label,
+      selected: active,
+      onTap: onTap,
+      excludeChildSemantics: true,
+      builder: (context, pressed) => Container(
+        constraints: BoxConstraints(minHeight: t.s(40)),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: pressed
+              ? p.surfaceRaised
+              : active
+              ? p.accentSoft
+              : p.surface,
+          borderRadius: BorderRadius.circular(t.s(8)),
+          border: Border.all(color: active ? p.accent : p.border),
+        ),
+        child: Text(
+          label,
+          style: ts(context, 12, weight: FontWeight.w700, color: active ? p.text : p.textSecondary),
         ),
       ),
     );

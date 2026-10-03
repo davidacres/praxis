@@ -96,3 +96,42 @@ test('maps normalized reasoning effort to ACP thought-level values', () => {
   assert.equal(resolveAcpReasoningValue(option, 'high'), 'high');
   assert.equal(resolveAcpReasoningValue(option, undefined), undefined);
 });
+
+
+test('a continuation waits for completed ACP client cleanup without closing it twice', async () => {
+  const key = 'review~APP-209';
+  const manager = { getAgentSession: () => ({ state: 'completed' }) };
+  const agentHost = new AcpAgentHost(manager as never, { appendLine: () => {} });
+  const internals = agentHost as unknown as HostInternals;
+  let finishShutdown!: () => void;
+  let shutdowns = 0;
+  const completed = task(key, () => {
+    shutdowns += 1;
+    return new Promise<void>(resolve => { finishShutdown = resolve; });
+  });
+  internals.activeTasks.set(key, completed);
+  const cleanup = internals.cleanupTask(key, completed);
+  // Blank input isolates the readiness gate: it must reach input validation
+  // only after cleanup, rather than reject a completed task as still working.
+  let settled = false;
+  const continuation = agentHost.continueTask(key, '', { command: 'fixture' });
+  const validation = assert.rejects(continuation, /Enter a follow-up message/).then(() => { settled = true; });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  assert.equal(shutdowns, 1);
+  finishShutdown();
+  await Promise.all([cleanup, validation]);
+  assert.equal(agentHost.hasActiveTask(key), false);
+});
+
+test('an executing ACP turn still refuses a concurrent continuation', async () => {
+  const key = 'APP-209';
+  const manager = { getAgentSession: () => ({ state: 'executing' }) };
+  const agentHost = new AcpAgentHost(manager as never, { appendLine: () => {} });
+  const internals = agentHost as unknown as HostInternals;
+  let shutdowns = 0;
+  internals.activeTasks.set(key, task(key, async () => { shutdowns += 1; }));
+  await assert.rejects(agentHost.continueTask(key, 'next turn', { command: 'fixture' }), /still working/);
+  assert.equal(shutdowns, 0);
+  assert.equal(agentHost.hasActiveTask(key), true);
+});
