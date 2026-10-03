@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
 import type { AiProvider, IssueDetails } from '../../types';
-import type { WireImageAttachment } from '../gateway/wire';
+import type { TokenUsage, WireImageAttachment } from '../gateway/wire';
 import { AUTOPILOT_SESSION_PROMPT, BROWSER_TOOLS_PROMPT, buildSystemPrompt } from '../agentPrompt';
 import { reviewedIssueKey } from '../ticketReview';
 import {
@@ -104,14 +104,107 @@ interface ActiveAcpTask {
   promptPromise?: Promise<void>;
   shutdownPromise?: Promise<void>;
   ending?: boolean;
+  /** When the turn began, so its reply can say how long it took. */
+  startedAt: number;
+  /** The session's cumulative cost as the turn began; the turn's own cost is what it added. */
+  costBefore?: { amount: number; currency: string };
+  /** The model the agent says it is running, for a reply whose turn names none. */
+  agentModel?: string;
 }
 
-/** The turn's reply, with any thought the agent streamed before it. */
-function assistantMessageEvent(task: ActiveAcpTask) {
+/** What a finished ACP turn can say about itself — the fields the reply's chips read. */
+export interface AcpTurnTelemetry {
+  durationMs: number;
+  tokenUsage?: TokenUsage;
+  cost?: { currency: string; amount: number };
+  modelId?: string;
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Maps ACP's `PromptResponse.usage` onto the app's `TokenUsage`. Every provider
+ * Praxis hosts reports it for the turn that just ended, because each turn runs in a
+ * fresh agent process that resumes the session (`session/load`) and token counters
+ * restart with the process — measured against Claude Code and Copilot, whose
+ * counters would otherwise be session-cumulative. Codex reports its last turn
+ * outright. If a client is ever reused for a second prompt, this needs a baseline.
+ */
+function acpTokenUsage(usage: acp.PromptResponse['usage']): TokenUsage | undefined {
+  if (!usage) return undefined;
+  const mapped: TokenUsage = {};
+  const input = finiteNumber(usage.inputTokens);
+  const output = finiteNumber(usage.outputTokens);
+  const total = finiteNumber(usage.totalTokens);
+  const reasoning = finiteNumber(usage.thoughtTokens);
+  const cached = finiteNumber(usage.cachedReadTokens);
+  if (input !== undefined) mapped.inputTokens = input;
+  if (output !== undefined) mapped.outputTokens = output;
+  if (total !== undefined) mapped.totalTokens = total;
+  if (reasoning) mapped.reasoningTokens = reasoning;
+  if (cached) mapped.cachedInputTokens = cached;
+  return Object.keys(mapped).length > 0 ? mapped : undefined;
+}
+
+/**
+ * The model that did the turn's work. Claude Code and Codex list every model a
+ * turn touched under `_meta.quota.model_usage` — Claude includes small internal
+ * calls (a Haiku title/summary call rode along in testing) — so the main model is
+ * the row that did the most. Agents without it fall back to the model the session
+ * was asked to use.
+ */
+function acpTurnModel(meta: acp.PromptResponse['_meta'], fallback: string | undefined): string | undefined {
+  const quota = meta && typeof meta === 'object' ? (meta as { quota?: { model_usage?: unknown } }).quota : undefined;
+  const rows = Array.isArray(quota?.model_usage) ? quota.model_usage : [];
+  let best: { model: string; total: number } | undefined;
+  for (const row of rows as Array<{ model?: unknown; token_count?: { totalTokens?: unknown } }>) {
+    if (typeof row?.model !== 'string' || !row.model.trim()) continue;
+    const total = finiteNumber(row.token_count?.totalTokens) ?? 0;
+    if (!best || total > best.total) best = { model: row.model.trim(), total };
+  }
+  return best?.model ?? (fallback?.trim() || undefined);
+}
+
+/**
+ * Per-turn telemetry for an ACP reply. Cost is the one figure ACP reports only
+ * cumulatively (`usage_update.cost`, and unlike tokens it survives a resume), so a
+ * turn's cost is what the session total grew by. Agents that report no cost leave
+ * it unset — the app does not price their tokens itself.
+ */
+export function acpTurnTelemetry(input: {
+  response: Pick<acp.PromptResponse, 'usage' | '_meta'>;
+  startedAt: number;
+  endedAt?: number;
+  costBefore?: { amount: number; currency: string };
+  costAfter?: { amount: number; currency: string };
+  fallbackModel?: string;
+}): AcpTurnTelemetry {
+  const { response, costBefore, costAfter } = input;
+  const tokenUsage = acpTokenUsage(response.usage);
+  const modelId = acpTurnModel(response._meta, input.fallbackModel);
+  let cost: AcpTurnTelemetry['cost'];
+  if (costAfter && costAfter.amount > 0) {
+    const base = costBefore && costBefore.currency === costAfter.currency ? costBefore.amount : 0;
+    const turnAmount = costAfter.amount - base;
+    if (turnAmount > 0) cost = { currency: costAfter.currency, amount: turnAmount };
+  }
+  return {
+    durationMs: Math.max(0, (input.endedAt ?? Date.now()) - input.startedAt),
+    ...(tokenUsage ? { tokenUsage } : {}),
+    ...(cost ? { cost } : {}),
+    ...(modelId ? { modelId } : {})
+  };
+}
+
+/** The turn's reply, with any thought the agent streamed before it and what the turn cost. */
+function assistantMessageEvent(task: ActiveAcpTask, telemetry?: AcpTurnTelemetry) {
   const reasoning = task.reasoningBuffer.trim();
   return {
     ...evt('message', 'Assistant', task.messageBuffer),
-    ...(reasoning ? { reasoning } : {})
+    ...(reasoning ? { reasoning } : {}),
+    ...(telemetry ?? {})
   };
 }
 
@@ -228,6 +321,20 @@ function readAcpToolContent(content: acp.ToolCallContent[] | null | undefined): 
     }
   }
   return { fileChanges, output: textParts.join('\n').trim() };
+}
+
+/**
+ * The model the agent reports it is running, from `session/new` — already in hand,
+ * so no request. Read before the prompt: the turn's bookkeeping after the response
+ * has no `await` in it, so a stop or provider switch cannot slip in between.
+ */
+async function currentAcpModel(client: AcpClientWrapper): Promise<string | undefined> {
+  try {
+    const option = await client.getModelOption();
+    return option?.type === 'select' ? option.currentValue : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function applyAcpModel(client: AcpClientWrapper, model?: string): Promise<void> {
@@ -449,6 +556,31 @@ export class AcpAgentHost {
     );
   }
 
+  /**
+   * Reads a finished turn's telemetry off the prompt response, folds its tokens into
+   * the session's running total, and returns what the reply should show. The total
+   * leaves `contextTokens` alone: that is the window's occupancy from `usage_update`,
+   * a different quantity from what this turn spent.
+   */
+  private recordTurnTelemetry(
+    issueKey: string,
+    task: ActiveAcpTask,
+    response: acp.PromptResponse,
+    requestedModel: string | undefined
+  ): AcpTurnTelemetry {
+    const telemetry = acpTurnTelemetry({
+      response,
+      startedAt: task.startedAt,
+      costBefore: task.costBefore,
+      costAfter: this.sessionManager.getAgentSession(issueKey)?.cost,
+      fallbackModel: requestedModel ?? task.agentModel
+    });
+    if (telemetry.tokenUsage) {
+      this.sessionManager.addAgentTokenUsage(issueKey, telemetry.tokenUsage, { updateContext: false });
+    }
+    return telemetry;
+  }
+
   private handleSessionUpdate(issueKey: string, update: acp.SessionUpdate, task: ActiveAcpTask): void {
     switch (update.sessionUpdate) {
       case 'agent_message_chunk': {
@@ -478,9 +610,8 @@ export class AcpAgentHost {
         // `used` is tokens *currently in context*, not tokens consumed to date —
         // it maps to contextTokens/contextLimit, the pair that drives the
         // composer's context banner, and NOT to `tokenUsage`, which totals every
-        // turn. ACP reports no cumulative token count, so a CLI-hosted session
-        // still shows no token total; it does report a cumulative cost, which is
-        // a different figure and is kept as one.
+        // turn. Spend arrives elsewhere: the prompt response's `usage` (folded in by
+        // `recordTurnTelemetry`) for tokens, and this update's cumulative `cost`.
         this.sessionManager.setAgentContextUsage(issueKey, {
           contextTokens: update.used,
           contextLimit: update.size,
@@ -630,6 +761,8 @@ export class AcpAgentHost {
       allowPermissionsForTask: options.autoApprovePermissions === true,
       autoAllowSafePermissions: options.permissionMode === 'auto',
       messageBuffer: '',
+      startedAt: Date.now(),
+      costBefore: this.sessionManager.getAgentSession(issue.key)?.cost,
       reasoningBuffer: ''
     };
     this.activeTasks.set(issue.key, task);
@@ -684,6 +817,7 @@ export class AcpAgentHost {
           modes.availableModes.map(mode => ({ id: mode.id, name: mode.name, description: mode.description ?? undefined }))
         );
       }
+      task.agentModel = options.model ? undefined : await currentAcpModel(client);
       const response = await client.prompt(combinedPrompt);
       if (client.sessionId) {
         this.sessionManager.updateAgentRuntime(issue.key, { runtimeSessionId: client.sessionId });
@@ -698,8 +832,9 @@ export class AcpAgentHost {
       // `responseText`: it never appeared in the transcript the user reads, and
       // `buildConversationTranscript` — which reads `message` events — left the
       // agent's own first answer out of the next turn's prompt.
+      const telemetry = this.recordTurnTelemetry(issue.key, active, response, options.model);
       if (active.messageBuffer) {
-        this.appendEvent(issue.key, assistantMessageEvent(active));
+        this.appendEvent(issue.key, assistantMessageEvent(active, telemetry));
       }
       const isLimitInBuffer = isLimitNoticeReply(active.messageBuffer);
       if (isLimitInBuffer) {
@@ -856,6 +991,8 @@ export class AcpAgentHost {
       allowPermissionsForTask: record.autoApprovePermissions === true,
       autoAllowSafePermissions: record.permissionMode === 'auto',
       messageBuffer: '',
+      startedAt: Date.now(),
+      costBefore: this.sessionManager.getAgentSession(issueKey)?.cost,
       reasoningBuffer: ''
     };
     this.activeTasks.set(issueKey, task);
@@ -878,6 +1015,7 @@ export class AcpAgentHost {
       await client.connect();
       await applyAcpModel(client, options.model);
       await applyAcpReasoning(client, record.reasoningEffort ?? options.reasoningEffort);
+      task.agentModel = (record.model ?? options.model) ? undefined : await currentAcpModel(client);
       const response = await client.prompt(prompt, followUpImages);
       if (client.sessionId) {
         this.sessionManager.updateAgentRuntime(issueKey, { runtimeSessionId: client.sessionId });
@@ -885,7 +1023,8 @@ export class AcpAgentHost {
       const active = this.activeTasks.get(issueKey);
       if (!active || active.ending) return;
       this.sessionManager.updateAgentOutput(issueKey, { responseText: active.messageBuffer });
-      if (active.messageBuffer) this.appendEvent(issueKey, assistantMessageEvent(active));
+      const telemetry = this.recordTurnTelemetry(issueKey, active, response, record.model ?? options.model);
+      if (active.messageBuffer) this.appendEvent(issueKey, assistantMessageEvent(active, telemetry));
       const isLimitInBuffer = isLimitNoticeReply(active.messageBuffer);
       if (isLimitInBuffer) {
         const limitNotice = extractProviderLimitMessage(active.messageBuffer);

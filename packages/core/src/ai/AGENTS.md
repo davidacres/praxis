@@ -95,14 +95,28 @@ the next gap is found by reading it rather than by assuming.
   wire formats (OpenAI's final `usage` chunk, which the request already asks for via
   `stream_options.include_usage`, and Anthropic's `message_start` / `message_delta`
   pair), the loop emits a `usage` event per turn, and `addAgentTokenUsage` sums them
-  into `tokenUsage`. ACP agents report the *other* half: `usage_update` carries `used`
+  into `tokenUsage`. ACP agents report it in two places. `usage_update` carries `used`
   (tokens **currently in the window**) and `size`, which feed `contextTokens` /
-  `contextLimit`, plus an optional cumulative `cost`. So an ACP session shows a context
-  bar and a cost but no token total — the protocol has no cumulative token count to
-  give — and an API session shows tokens. **Never map `used` onto `tokenUsage`**: it is
-  occupancy, not spend, and the two diverge the moment a conversation is trimmed.
-  Anthropic also sends input and output in *different* events, so a running total must
-  not be derived until the stream ends.
+  `contextLimit`, plus an optional cumulative `cost`. The **prompt response** carries
+  `usage` (tokens for the turn; experimental in the spec) and, from Claude Code and
+  Codex, `_meta.quota.model_usage` naming the model(s). `recordTurnTelemetry` in
+  `acpAgentHost.ts` reads the response: it puts duration, tokens, model and cost on the
+  reply event (the chips under a reply) and adds the tokens to `tokenUsage`.
+  **Never map `used` onto `tokenUsage`**: it is occupancy, not spend, and the two
+  diverge the moment a conversation is trimmed. Anthropic also sends input and output
+  in *different* events, so a running total must not be derived until the stream ends.
+  Measured against the installed agents (re-run the probe if one changes):
+  - `usage` is **per turn here only because every turn is a fresh agent process** that
+    resumes the session — counters restart with the process (Claude Code and Copilot are
+    session-cumulative within one process; Codex reports its last turn). Reusing one
+    client for a second prompt would need a baseline.
+  - **Cost is the opposite**: `usage_update.cost` is cumulative and survives a resume, so
+    a turn's cost is the growth in the session total. Only Claude Code reports it; Codex,
+    Copilot and Antigravity show no cost chip and the app does not price their tokens.
+  - Claude's `model_usage` includes small internal calls (a Haiku call rode along), so
+    the reply's model is the row that did the most work.
+  - `packages/antigravity-acp` is ours: it returns `usage` on the response. `agy` reports
+    no model and no context window, so its replies show the requested model and no ring.
 - **`ai.spendLimit` is a budget the user sets, not a balance anyone reports.**
   Nothing Praxis talks to exposes credits: ACP carries a cumulative `cost` but no
   limit, and the gateway client only calls `/v1/models` and `/v1/chat/completions`.
