@@ -7813,9 +7813,8 @@ button.session-telemetry-chip:hover {
   margin-bottom: var(--space-2);
 }
 
-/* Error banner inside the new-session composer (.composer without the
-   session-follow-up-composer modifier): layout is in CSS, not inline styles. */
-.composer > .error-banner:not(.session-follow-up-composer .error-banner) {
+/* Draft errors share the composer card, with their own dismissible row. */
+.composer > [data-testid="new-session-error"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -8411,6 +8410,7 @@ button.session-chat-attachment {
    so messages read as one flow with their gadgets sitting under the message that
    asked for them. The follow-up composer is a plain row under the card. */
 .ai-review-thread {
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -8442,7 +8442,9 @@ button.session-chat-attachment {
 }
 
 /* The shared session composer sits under the thread and never shrinks with it. */
-.ai-tool-page > .composer {
+.ai-tool-page > .composer,
+.ai-tool-page > .session-chat-composer,
+.ai-tool-page > .session-request-dock {
   flex-shrink: 0;
 }
 
@@ -14014,6 +14016,11 @@ button.session-chat-attachment {
 .session-workflow-current-activity strong { color: var(--text); }
 .session-workflow-open-run { align-self: flex-start; margin-top: var(--space-1); }
 .session-workflow-control { position: relative; flex: 0 1 auto; min-width: 0; }
+.session-workflow-picker { width: max-content; min-width: 0; box-sizing: border-box; overflow-x: hidden; overflow-y: auto; max-height: min(320px, calc(100vh - 80px)); }
+.session-workflow-picker .composer-provider-option { align-items: flex-start; text-align: left; }
+.session-workflow-option-text { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; text-align: left; }
+.session-workflow-option-text > span, .session-workflow-option-text > small { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.session-workflow-picker .session-workflow-option-text > small { margin-left: 0; }
 .session-workflow-menu-divider { height: 1px; margin: var(--space-2) var(--space-1); background: var(--border); }
 .session-workflow-runtime-popover { width: min(320px, calc(100vw - 16px)); }
 .session-workflow-runtime-details { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); }

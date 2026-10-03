@@ -102,6 +102,7 @@ interface ActiveAcpTask {
   /** The turn's thought chunks, attached to its message so the chat can show them. */
   reasoningBuffer: string;
   promptPromise?: Promise<void>;
+  shutdownPromise?: Promise<void>;
   ending?: boolean;
 }
 
@@ -788,6 +789,14 @@ export class AcpAgentHost {
     options: AcpAgentStartOptions
   ): Promise<void> {
     const followUpImages = options.images;
+    const completedTask = this.activeTasks.get(issueKey);
+    // Completion is published before the ACP subprocess closes. A queued turn
+    // may arrive in that gap; finish closing the old client before registering
+    // its successor instead of refusing an otherwise completed conversation.
+    if (completedTask && this.sessionManager.getAgentSession(issueKey)?.state === 'completed') {
+      await this.cleanupTask(issueKey, completedTask);
+    }
+    // Another caller may have registered a new turn while we awaited shutdown.
     if (this.activeTasks.has(issueKey)) {
       throw new Error(`The agent is still working on ${issueKey}.`);
     }
@@ -1028,7 +1037,8 @@ export class AcpAgentHost {
     if (!task) {
       return;
     }
-    await task.client.shutdown();
+    task.shutdownPromise ??= task.client.shutdown();
+    await task.shutdownPromise;
     if (this.activeTasks.get(issueKey) !== task) {
       return;
     }

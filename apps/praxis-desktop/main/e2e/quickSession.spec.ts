@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { chooseOption } from './chipSelect';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
 
@@ -113,4 +114,48 @@ test('a project session action scopes the composer to that project', async ({ pa
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'project-session-scope.png'),
     fullPage: true
   });
+});
+
+test('draft and existing sessions share the composer frame and input layout', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, {
+    AI_GATEWAY_API_KEY: 'composer-frame-e2e-key', AI_GATEWAY_URL: mock.baseUrl
+  });
+  const page = app.window;
+  await seedProject(page);
+  await page.reload();
+  await page.getByTestId('project-session-new').first().click();
+  const draft = page.getByTestId('new-session-view');
+  const card = draft.locator('.session-follow-up-composer');
+  await expect(draft.getByTestId('session-usage-summary')).toContainText('Not started');
+  await draft.getByTestId('session-usage-summary').locator('summary').click();
+  await expect(draft.locator('.session-usage-details-content')).toContainText('No usage recorded for this session yet');
+  await draft.getByTestId('session-usage-summary').locator('summary').click();
+  await expect(draft.locator('.session-usage-details-content')).toBeHidden();
+  await expect(draft.getByTestId('new-session-context-indicator')).toBeVisible();
+  await expect(card.locator('.session-mode-panel')).toBeVisible();
+  await expect(card.locator('.composer-controls .session-mode-toggle')).toHaveCount(0);
+  await expect(draft.getByTestId('new-session-tool-mode')).toBeVisible();
+  await chooseOption(draft.getByTestId('new-session-tool-mode'), 'read-only');
+  await page.evaluate(() => window.praxis.settings.set({ ai: { spendLimit: 25 } }));
+  await expect(draft.getByTestId('new-session-tool-mode')).toHaveAttribute('data-value', 'read-only');
+  const input = card.locator('textarea');
+  await expect(input).toHaveAttribute('rows', '1');
+  await input.fill('Compare composer frames.');
+  const inputStyle = await input.evaluate(element => {
+    const style = getComputedStyle(element);
+    return [style.fontSize, style.lineHeight, style.paddingTop, style.maxHeight];
+  });
+  const artifacts = path.resolve(__dirname, '../../../../.praxis/session-artifacts');
+  await page.screenshot({ path: path.join(artifacts, 'composer-draft-matched.png'), fullPage: true });
+  await draft.getByTestId('new-session-submit').click();
+  await expect(page.getByTestId('session-console')).toBeVisible();
+  await expect(page.getByTestId('session-follow-up-input')).toBeEnabled();
+  const active = page.getByTestId('session-follow-up-input');
+  expect(await active.evaluate(element => {
+    const style = getComputedStyle(element);
+    return [style.fontSize, style.lineHeight, style.paddingTop, style.maxHeight];
+  })).toEqual(inputStyle);
+  await expect(page.getByTestId('session-mode-panel')).toBeVisible();
+  await page.screenshot({ path: path.join(artifacts, 'composer-existing-matched.png'), fullPage: true });
 });

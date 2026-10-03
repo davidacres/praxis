@@ -81,7 +81,7 @@ const applyForm = note => fence({
 
 app.onRequest(acp.AGENT_METHODS.initialize, () => ({
   protocolVersion: acp.PROTOCOL_VERSION,
-  agentCapabilities: {}
+  agentCapabilities: { promptCapabilities: { image: true } }
 }));
 app.onRequest(acp.AGENT_METHODS.session_new, () => ({ sessionId: 'ticket-review-session-1' }));
 let resolveCancel;
@@ -110,6 +110,23 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     return { stopReason: 'cancelled' };
   }
 
+  if (MODE === 'permission' && newest === 'review') {
+    const response = await ctx.client.request(acp.CLIENT_METHODS.session_request_permission, {
+      sessionId: ctx.params.sessionId,
+      toolCall: { toolCallId: 'review-read', title: 'Read ticket context', name: 'read_file', kind: 'read' },
+      options: [
+        { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+        { optionId: 'reject', name: 'Reject', kind: 'reject_once' }
+      ]
+    });
+    if (response.outcome.outcome !== 'selected' || response.outcome.optionId !== 'allow') {
+      return { stopReason: 'cancelled' };
+    }
+  }
+
+  // Hold only the initial review so a queued follow-up can finish normally.
+  if (MODE === 'slow' && newest === 'review') await new Promise(resolve => setTimeout(resolve, 4000));
+
   // What the review's first reply looks like: valid, or badly formatted per MODE.
   const firstReply = () => {
     if (MODE === 'sloppy') return SLOPPY;
@@ -128,7 +145,8 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
   } else if (newest === 'review') {
     reply = firstReply();
   } else {
-    reply = 'Understood — ask again if you want another change.';
+    const imageCount = ctx.params.prompt.filter(block => block.type === 'image').length;
+    reply = `Understood — ask again if you want another change. Images received: ${imageCount}.`;
   }
 
   await ctx.client.notify(acp.CLIENT_METHODS.session_update, {

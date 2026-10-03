@@ -67,6 +67,15 @@ test('an existing project session selects and starts governed workflows from one
   await expect(page.getByTestId('session-workflow-menu')).toBeVisible();
   const startOptions = page.getByTestId('session-workflow-menu').locator('[aria-label="Start workflow"]');
   await expect(startOptions.getByRole('button', { name: /Quick change/ })).toHaveCount(1);
+  const menu = page.getByTestId('session-workflow-menu');
+  const labels = menu.locator('.session-workflow-option-text');
+  await expect(labels.first()).toBeVisible();
+  expect(await labels.evaluateAll(elements => elements.every(element =>
+    getComputedStyle(element).textAlign === 'left' &&
+    Array.from(element.children).every(child => Array.from(child.textContent ?? '').length <= 50)
+  ))).toBe(true);
+  expect(await menu.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.screenshot({ path: path.resolve(__dirname, '../../../../.praxis/session-artifacts/workflow-picker-alignment.png'), fullPage: true });
   await startOptions.getByRole('button', { name: /Quick change/ }).click();
 
   await expect.poll(async () => page.evaluate(async key => {

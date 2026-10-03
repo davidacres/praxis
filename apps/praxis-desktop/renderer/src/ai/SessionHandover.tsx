@@ -822,7 +822,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
             >
               <Icon name={providerIconName(provider)} size={14} />
               <span>{providerLabel(provider)}</span>
-              <button
+              {onAddProvider && <button
                 type="button"
                 className="composer-provider-add"
                 aria-label={`Add ${providerLabel(provider)} to this chat`}
@@ -833,7 +833,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
                 }}
               >
                 <Icon name="plus" size={13} />
-              </button>
+              </button>}
             </div>
           ))}
           {!loading && allModelProviderIds().every(provider => !providerIsSelectable(provider)) && (

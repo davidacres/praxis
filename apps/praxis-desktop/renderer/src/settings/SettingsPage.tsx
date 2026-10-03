@@ -938,7 +938,7 @@ function AgentRuntimeSection({
                           <>
                             {profile.source && nativeActions('agent', profile.profile.id, profile.source.path, profile.trusted)}
                             {onOpenAgentProfile && (
-                              <button className="btn-compact" type="button" onClick={() => onOpenAgentProfile(profile.profile.id)}>
+                              <button className="btn btn-compact" type="button" onClick={() => onOpenAgentProfile(profile.profile.id)}>
                                 Open
                               </button>
                             )}
@@ -996,7 +996,7 @@ function AgentRuntimeSection({
                         <>
                           {skill.source && nativeActions('skill', skill.metadata.name, skill.source.path, skill.trusted)}
                           {onOpenSkill && (
-                            <button className="btn-compact" type="button" onClick={() => onOpenSkill(skill.metadata.name)}>
+                            <button className="btn btn-compact" type="button" onClick={() => onOpenSkill(skill.metadata.name)}>
                               Open
                             </button>
                           )}
@@ -1238,7 +1238,7 @@ function AgentRuntimeSection({
                 </div>
                 {onOpenAgent && (
                   <div className="settings-field-control">
-                    <button className="btn-compact" type="button" onClick={() => onOpenAgent(binding.manifest.id)}>
+                    <button className="btn btn-compact" type="button" onClick={() => onOpenAgent(binding.manifest.id)}>
                       Manage
                     </button>
                   </div>

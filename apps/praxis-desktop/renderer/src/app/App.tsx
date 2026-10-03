@@ -1587,6 +1587,7 @@ export function App() {
 
   const renderNewSession = () => (
     <NewSession
+      sessions={agentSessions}
       boards={workspaceBoards}
       workflowOptions={composerProject ? sessionWorkflowsByProject[composerProject.id] ?? [] : []}
       initialWorkflowId={route.quickSession ? quickSessionWorkflowId : undefined}
@@ -1677,6 +1678,7 @@ export function App() {
    *  chrome, since a conversation belongs to neither. */
   const renderNewConversation = () => (
     <NewSession
+      sessions={agentSessions}
       boards={[]}
       conversational
       defaultToolMode="project-only"
@@ -2072,6 +2074,7 @@ export function App() {
     if (route.issueKey && route.view === 'review') {
       return (
         <AiReviewPage
+          sessions={agentSessions}
           issueKey={route.issueKey}
           connectionId={selectedBoard?.connectionId}
           provider={route.aiProvider}
