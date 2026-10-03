@@ -147,6 +147,30 @@ in-app dialog by its `confirmLabel`.
 `import-projects-card`) carries the active surface pack's material; see
 "Surface packs and motifs" for the recipe before adding a new overlay shell.
 
+## Virtual Team Assistant (`assistant/`, FX-BF-050)
+
+One conversation, two homes. `AssistantProvider` (mounted in `main.tsx` around `<App/>`) owns all state — messages,
+draft, open/docked, registered page contexts, the saved chat id — so `AssistantFloating` (a fixed popover) and
+`AssistantDock` (a column inside `.pane-row`, after `.pane-aux`) are just two shells around the same
+`AssistantPanel`, and pinning never remounts a transcript. Both read `tm-assistant-docked` / `tm-assistant-open`;
+the dock width is `tm-assistant-width` via `useResizable`.
+
+- **A page advertises itself with `useRegisterPageAssistantContext(context, onApply?)`** — Board, Issue detail, Git
+  changes and the Workflow designer do. When two are mounted (a board and its open ticket) the higher
+  `CONTEXT_PRIORITY` wins; ties go to the later registration. `onApply` receives the action the model proposed
+  (`update-ticket`, `update-workflow`); `delegate-session` is handled by `App` (`setSessionDelegate`) and opens the
+  New Session composer through `route.newSessionGoal`. The hook is a no-op outside the provider.
+- **Personas live in core** (`ai/assistant/`: prompts, mention parsing, the turn / team-review engine, `TeamChatStore`).
+  `assistant/personaMeta.ts` is the browser-safe mirror of their display fields — core can't be value-imported here,
+  so add a persona in both.
+- **Persona colours are `--persona-<role>` tokens**, used only as a tint behind theme-coloured text (`.persona-badge`),
+  so contrast never depends on the persona hue. `.assistant-floating` / `.assistant-docked` follow the overlay-shell
+  surface recipe above.
+- **Only the workflow page may apply a workflow edit** — the engine drops an `update-workflow` proposal on any other
+  page, and the designer re-validates over IPC and only marks the canvas dirty (the user still saves).
+- The Team Chats tree node is `TeamChatsSection` (own row classes on `--tree-indent-2`, per the indentation rule).
+- Specs: `e2e/assistant.spec.ts` drives it against `mockOpenAiCompatibleServer` as the active provider.
+
 ## Command palette
 
 `⌘K` opens `app/CommandPalette.tsx` over a flat index built in `App` (`paletteEntries`) from

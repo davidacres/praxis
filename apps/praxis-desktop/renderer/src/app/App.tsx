@@ -16,6 +16,8 @@ import { IssueDetail } from '../issues/IssueDetail';
 import { Connections } from '../connections/Connections';
 import { SettingsPage, type SettingsCategory } from '../settings/SettingsPage';
 import { TitleBar } from './TitleBar';
+import { useAssistant } from '../assistant/AssistantProvider';
+import { AssistantDock, AssistantFloating } from '../assistant/AssistantShell';
 import { Sidebar, type FeatureId, type SidebarMode } from './Sidebar';
 import { NewSession, type SessionWorkflowOption } from '../ai/NewSession';
 import { NewIssuePage } from '../issues/NewIssuePage';
@@ -135,6 +137,8 @@ interface Route {
   newSessionAgent?: string;
   newSessionProfile?: string;
   newSessionSkills?: string[];
+  /** Team assistant handoff: pre-fills the New Session goal. Transient. */
+  newSessionGoal?: string;
   /** The catalog item selected in the Agents tree (`feature === 'agents'`). */
   agentId?: string;
   agentProfileId?: string;
@@ -1283,6 +1287,14 @@ export function App() {
     };
   }, [mode, boards]);
 
+  const assistant = useAssistant();
+  const { setProjectId: setAssistantProject, setSessionDelegate: setAssistantDelegate, toggle: toggleAssistant } = assistant;
+  useEffect(() => setAssistantProject(activeProjectId), [activeProjectId, setAssistantProject]);
+  useEffect(() => {
+    setAssistantDelegate(prompt => navigate({ newSession: true, newSessionGoal: prompt, ...(activeProjectId ? { projectId: activeProjectId } : {}) }));
+    return () => setAssistantDelegate(undefined);
+  }, [activeProjectId, navigate, setAssistantDelegate]);
+
   useEffect(() => {
     // Until AI is set up, none of the app's global shortcuts may start a
     // session, open the palette or navigate: the shell they act on isn't there.
@@ -1301,10 +1313,14 @@ export function App() {
         event.preventDefault();
         setPaletteOpen(open => !open);
       }
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        toggleAssistant();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [aiSetupNeeded, navigate, openQuickSession]);
+  }, [aiSetupNeeded, navigate, openQuickSession, toggleAssistant]);
 
   const featureCounts = useMemo<Partial<Record<FeatureId, number>>>(
     () => ({
@@ -1385,6 +1401,7 @@ export function App() {
 
   const paletteEntries = useMemo<CommandEntry[]>(() => {
     const entries: CommandEntry[] = [];
+    entries.push({ id: 'assistant:toggle', label: 'Ask the virtual team', hint: '⌘J', group: 'Go to', icon: 'sparkles', keywords: 'assistant ai chat tech lead qa security', run: toggleAssistant });
     (Object.keys(FEATURE_TITLES) as FeatureId[]).forEach(feature => {
       if (feature === 'deployments' && !settings?.preview?.enableDeployments) return;
       entries.push({
@@ -1453,7 +1470,7 @@ export function App() {
       entries.push({ id: `settings:${id}`, label, hint: 'Settings', group: 'Settings', icon: 'gear', run: () => setSettingsDialogCategory(id) });
     });
     return entries;
-  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestAddProject, toggleFocusMode, inSession]);
+  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestAddProject, toggleFocusMode, inSession, toggleAssistant]);
 
   /** Four stops over controls the shell already renders — see Walkthrough. */
   const walkthroughStops = useMemo<WalkthroughStop[]>(() => [
@@ -1592,6 +1609,7 @@ export function App() {
       workflowOptions={composerProject ? sessionWorkflowsByProject[composerProject.id] ?? [] : []}
       initialWorkflowId={route.quickSession ? quickSessionWorkflowId : undefined}
       autoFocusGoal={route.quickSession}
+      initialGoal={route.newSessionGoal}
       onSubmit={async ({ board, issueKey, title, goal, provider, model, reasoningEffort, permissionMode, toolMode, mode, workingDirectory, runInWorktree, agentId, profileId, hostId, skillNames, workflowId, uncommittedChanges }) => {
         const projectId = projectIdForConnection(board?.connectionId, connections);
         const project = projectId
@@ -2285,6 +2303,8 @@ export function App() {
         onToggleAux={() => setAuxVisible(visible => !visible)}
         panelVisible={panelVisible}
         onTogglePanel={() => setPanelVisible(visible => !visible)}
+        assistantOpen={assistant.open}
+        onToggleAssistant={toggleAssistant}
         focusMode={!sidebarVisible && !auxVisible && !panelVisible}
         onToggleFocusMode={toggleFocusMode}
         focusModeAvailable={inSession}
@@ -2710,6 +2730,7 @@ export function App() {
                 </aside>
               </>
             )}
+            {!detailIsExpanded && <AssistantDock />}
           </div>
 
           {panelVisible && !detailIsExpanded && (
@@ -2966,6 +2987,7 @@ export function App() {
         <CommandPalette entries={paletteEntries} onSearch={searchIssues} onClose={() => setPaletteOpen(false)} />
       )}
       {walkthroughOpen && <Walkthrough stops={walkthroughStops} onDone={finishWalkthrough} />}
+      {!aiSetupNeeded && <AssistantFloating />}
     </div>
   );
 }

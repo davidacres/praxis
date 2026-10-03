@@ -94,6 +94,8 @@ export interface NewSessionProps {
    * placeholder reads as a prompt to chat rather than a task to plan.
    */
   conversational?: boolean;
+  /** Pre-fills the goal, e.g. when the team assistant hands a discussion over as a coding session. */
+  initialGoal?: string;
   /** Seeds the tool-mode toggle — e.g. the scoped project's configured default. */
   defaultToolMode?: AgentToolMode;
   /**
@@ -159,10 +161,11 @@ export function NewSession({
   defaultWorkingDirectory,
   scopeLabel,
   conversational,
-  defaultToolMode
+  defaultToolMode,
+  initialGoal
 }: NewSessionProps) {
   const { settings: liveSettings } = useSettings();
-  const [goal, setGoal] = useState('');
+  const [goal, setGoal] = useState(initialGoal ?? '');
   const [selectedBoardId, setSelectedBoardId] = useState('');
   const [openTickets, setOpenTickets] = useState<IssueSummary[]>([]);
   const [selectedIssueKey, setSelectedIssueKey] = useState('');

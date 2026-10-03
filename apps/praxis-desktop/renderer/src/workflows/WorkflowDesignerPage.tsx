@@ -19,7 +19,7 @@ import { ChipSelect, type ChipSelectOption } from '../ui/ChipSelect';
 import { Icon, type IconName } from '../ui/Icon';
 import { NODE_KINDS, WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
 import { WorkflowValidationPane } from './WorkflowValidationPane';
-import { WorkflowAssistantPopover } from './WorkflowAssistantPopover';
+import { useRegisterPageAssistantContext } from '../assistant/AssistantProvider';
 import { useResizable } from '../app/useResizable';
 import {
   addNode,
@@ -281,6 +281,33 @@ export function WorkflowDesignerPage({
     setDefinition(next);
     setSavedAt(undefined);
   }, []);
+
+  useRegisterPageAssistantContext(
+    definition
+      ? {
+          pageType: 'workflow',
+          title: `Workflow ${definition.name}`,
+          summary: `Workflow "${definition.name}" (${definition.nodes.length} nodes). ${feedback ? (feedback.valid ? 'Currently valid.' : `${feedback.errors.length} validation errors.`) : ''}`.trim(),
+          data: [
+            `Workflow definition:\n${JSON.stringify(definition, null, 2)}`,
+            feedback ? `Validation:\n${JSON.stringify({ valid: feedback.valid, errors: feedback.errors, warnings: feedback.warnings }, null, 2)}` : ''
+          ].filter(Boolean).join('\n\n'),
+          projectId: project.id,
+          suggestedPrompts: ['Verify this workflow for policy compliance', 'Add a QA test gate before approval', 'Explain this workflow']
+        }
+      : undefined,
+    async action => {
+      if (action.kind !== 'update-workflow' || !definition) throw new Error('Only a workflow change can be applied here.');
+      const proposed = action.workflow as WorkflowDefinition;
+      if (proposed.id !== definition.id || proposed.scope !== 'project' || proposed.projectId !== project.id) {
+        throw new Error('The team can only change the workflow open in this designer.');
+      }
+      const result = await window.praxis.workflows.validate(project.id, proposed);
+      if (!result.valid) throw new Error(`That change is invalid: ${result.errors.map(issue => issue.message).join('; ')}`);
+      mutate(proposed);
+      return 'Applied to the canvas — save to keep it.';
+    }
+  );
 
   const save = useCallback(async () => {
     if (!definition) return;
@@ -581,11 +608,6 @@ export function WorkflowDesignerPage({
             />
           </div>
         </>
-      )}
-
-      {createPortal(
-        <WorkflowAssistantPopover projectId={project.id} definition={definition} onWorkflowChange={mutate} onSaved={onSaved} />,
-        document.body
       )}
 
       {auxSlot ? createPortal(inspector, auxSlot) : null}

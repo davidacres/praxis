@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { GitDiffRequest, GitRepositorySnapshot, GitStatusSnapshot } from '@praxis/core';
 import { GitConflictWorkspace } from './GitConflictWorkspace';
 import { GitDiffWorkspace } from './GitDiffWorkspace';
+import { useRegisterPageAssistantContext } from '../assistant/AssistantProvider';
 
 interface GitChangesPageProps {
   repositoryPath?: string;
@@ -24,6 +25,14 @@ export function GitChangesPage({ repositoryPath, onOpenGraph }: GitChangesPagePr
   const [diffRequest, setDiffRequest] = useState<GitDiffRequest>();
   const [diffInitialPath, setDiffInitialPath] = useState<string>();
   const [conflictPath, setConflictPath] = useState<string>();
+
+  useRegisterPageAssistantContext(status ? {
+    pageType: 'git',
+    title: `Git changes${status.branch ? ` on ${status.branch}` : ''}`,
+    summary: `${status.files.length} changed files on ${status.branch ?? 'a detached HEAD'} (ahead ${status.ahead}, behind ${status.behind}).`,
+    data: status.files.slice(0, 200).map(file => `${file.staged ? 'staged  ' : 'unstaged'} ${file.indexStatus}${file.worktreeStatus} ${file.path}${file.additions !== undefined ? ` (+${file.additions} -${file.deletions ?? 0})` : ''}`).join('\n'),
+    suggestedPrompts: ['Draft conventional commit message', 'Scan diff for leaked secrets or console logs']
+  } : undefined);
 
   const load = async (target?: string, force = false) => {
     if (!target) {

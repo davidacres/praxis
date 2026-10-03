@@ -14,6 +14,7 @@ import { PriorityIndicator } from './PriorityIndicator';
 import type { BoardFilterPresentation, BoardFilterValue } from './BoardFilterBar';
 import { BoardSettingsMenu } from './BoardSettingsMenu';
 import { useSettings } from '../settings/useSettings';
+import { useRegisterPageAssistantContext } from '../assistant/AssistantProvider';
 import {
   DEFAULT_BOARD_PREFS,
   applyIssueOrder,
@@ -615,6 +616,20 @@ export function BoardView({
     () => filterIssuesByMaxAge(issues, prefs.maxAgeWeeks),
     [issues, prefs.maxAgeWeeks]
   );
+  const assistantContext = useMemo(() => {
+    const byStatus = new Map<string, string[]>();
+    for (const issue of visibleIssues.slice(0, 150)) {
+      byStatus.set(issue.status, [...(byStatus.get(issue.status) ?? []), `${issue.key} ${issue.summary}${issue.assignee ? ` (${issue.assignee})` : ''}`]);
+    }
+    return {
+      pageType: 'board' as const,
+      title: `Board ${details.board.name}`,
+      summary: `Kanban board "${details.board.name}" with ${visibleIssues.length} visible issues across ${byStatus.size} columns.`,
+      data: [...byStatus].map(([status, items]) => `## ${status} (${items.length})\n${items.map(item => `- ${item}`).join('\n')}`).join('\n\n'),
+      suggestedPrompts: ['Summarize blocked tickets', 'Suggest backlog grooming priorities']
+    };
+  }, [visibleIssues, details.board.name]);
+  useRegisterPageAssistantContext(assistantContext);
   const statusOrder = useMemo(
     () => effectiveStatusOrder(details.columnStatusOrder, prefs),
     [details.columnStatusOrder, prefs]

@@ -33,6 +33,7 @@ import { resolveBackendMode } from '../board/boardMeta';
 import { fetchModelOptions, hasModelCatalog, providerIconName, providerLabel } from '../ai/modelProviders';
 import { isProviderUsableForSessions } from '../ai/providerAvailability';
 import { ChipSelect } from '../ui/ChipSelect';
+import { useRegisterPageAssistantContext } from '../assistant/AssistantProvider';
 
 /** Centre-pane AI tooling views the detail panel can hand off to. */
 export type IssueAiView = 'review' | 'lpr';
@@ -660,6 +661,33 @@ export function IssueDetail({
     setDescriptionEditing(false);
     setShowSessionSetup(false);
   }, []);
+
+  useRegisterPageAssistantContext(
+    issue
+      ? {
+          pageType: 'issue',
+          title: `Issue ${issue.key}`,
+          summary: `${issue.issueType} ${issue.key}: ${issue.summary} (${issue.status}).`,
+          data: [
+            `Description:\n${issue.description ?? '(none)'}`,
+            ...(issue.comments?.length ? [`Comments:\n${issue.comments.slice(-10).map(comment => `${comment.author ?? 'someone'}: ${comment.body}`).join('\n---\n')}`] : [])
+          ].join('\n\n'),
+          issueKey: issue.key,
+          ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}),
+          suggestedPrompts: ['Review acceptance criteria', 'Suggest unit and edge test cases', 'Check security considerations']
+        }
+      : undefined,
+    async action => {
+      if (action.kind !== 'update-ticket') throw new Error('Only a ticket description change can be applied here.');
+      await window.praxis.issue.update(issueKey, { description: action.description }, connectionId);
+      const loaded = await window.praxis.issue.get(issueKey, connectionId);
+      setIssue(loaded);
+      syncDraftFromIssue(loaded);
+      onChanged();
+      return 'Ticket description updated.';
+    }
+  );
+
 
   useEffect(() => {
     setIssue(undefined);

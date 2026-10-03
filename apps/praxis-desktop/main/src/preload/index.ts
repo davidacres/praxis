@@ -375,6 +375,21 @@ const praxis: PraxisIpc = {
       state: TaskDesignerPersistedState
     ) => ipcRenderer.invoke('taskDesigner:generateMasterPlan', boardId, connectionId, state)
   },
+  assistant: {
+    turn: (request: unknown) => ipcRenderer.invoke('assistant:turn', request),
+    teamReview: (request: unknown) => ipcRenderer.invoke('assistant:teamReview', request),
+    listChats: (projectId: string) => ipcRenderer.invoke('assistant:listChats', projectId),
+    getChat: (chatId: string) => ipcRenderer.invoke('assistant:getChat', chatId),
+    createChat: (projectId: string, issueKey?: string) => ipcRenderer.invoke('assistant:createChat', projectId, issueKey),
+    saveChat: (chatId: string, messages: unknown) => ipcRenderer.invoke('assistant:saveChat', chatId, messages),
+    renameChat: (chatId: string, title: string) => ipcRenderer.invoke('assistant:renameChat', chatId, title),
+    deleteChat: (chatId: string) => ipcRenderer.invoke('assistant:deleteChat', chatId),
+    onChatsChanged: (listener: () => void) => {
+      const handler = () => listener();
+      ipcRenderer.on('assistant:chatsChanged', handler);
+      return () => ipcRenderer.removeListener('assistant:chatsChanged', handler);
+    }
+  },
   workflows: {
     listTemplates: (projectId: string) => ipcRenderer.invoke('workflows:listTemplates', projectId),
     getRecommendedTemplate: (projectId: string) => ipcRenderer.invoke('workflows:getRecommendedTemplate', projectId),
