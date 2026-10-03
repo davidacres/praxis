@@ -35,3 +35,14 @@ priority: High
 - Typing `@` and selecting an item from the menu inserts the mention tag cleanly.
 - Clicking a suggestion chip populates the input and sends the query.
 - Detaching context removes the context badge and confirms the turn sends without page context data.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -40,3 +40,14 @@ priority: High
 
 - `npm run test:desktop` passes with all `assistant.spec.ts` tests green.
 - No flaky timeouts or race conditions in test harness.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

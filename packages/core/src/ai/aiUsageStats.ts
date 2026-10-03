@@ -11,6 +11,7 @@
  * silently wrong local one.
  */
 
+import type { AiProvider } from '../types';
 import type { AiUsageEvent, AiUsageSource } from './aiUsageLog';
 
 export type UsageGranularity = 'hour' | 'day' | 'week' | 'month';
@@ -195,4 +196,185 @@ export function compareLatestPeriod(
   const deltaTokens = current.totalTokens - previous.totalTokens;
   const deltaPercent = previous.totalTokens > 0 ? (deltaTokens / previous.totalTokens) * 100 : undefined;
   return { granularity, current, previous, deltaTokens, deltaPercent };
+}
+
+/** Cost never summed across currencies; an empty list means "not reported", which is not the same as zero. */
+export type UsageCost = Array<{ currency: string; amount: number }>;
+
+export interface ModelUsage {
+  model: string;
+  provider?: AiProvider;
+  totalTokens: number;
+  /** Fraction (0..1) of the window's total tokens. */
+  tokenShare: number;
+  eventCount: number;
+  /** Empty when no event for this model reported cost. */
+  costByCurrency: UsageCost;
+}
+
+export interface UsagePeak {
+  /** ISO 8601 UTC start of the busiest sub-period. */
+  periodStart: string;
+  granularity: UsageGranularity;
+  totalTokens: number;
+}
+
+export interface UsageWindowSummary {
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  eventCount: number;
+  costByCurrency: UsageCost;
+  /** Ranked by tokens, highest first. */
+  models: ModelUsage[];
+  /** Busiest sub-period inside this window: hour for today, day for week/month, month for all time. */
+  peak?: UsagePeak;
+}
+
+export interface UsageAllTimeSummary extends UsageWindowSummary {
+  /** The ledger is capped, so "all time" is only as old as its first event. */
+  firstEventAt?: string;
+  lastEventAt?: string;
+}
+
+export interface UsageDashboardSummary {
+  generatedAt: string;
+  today: UsageWindowSummary;
+  week: UsageWindowSummary;
+  month: UsageWindowSummary;
+  allTime: UsageAllTimeSummary;
+  /** Busiest day, week and month across the whole ledger, by tokens. */
+  highs: { day?: UsagePeak; week?: UsagePeak; month?: UsagePeak };
+}
+
+interface WindowAccumulator {
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  eventCount: number;
+  cost: Map<string, number>;
+  models: Map<string, { model: string; provider?: AiProvider; totalTokens: number; eventCount: number; cost: Map<string, number> }>;
+}
+
+function newAccumulator(): WindowAccumulator {
+  return { totalTokens: 0, inputTokens: 0, outputTokens: 0, eventCount: 0, cost: new Map(), models: new Map() };
+}
+
+function costList(cost: Map<string, number>): UsageCost {
+  return [...cost.entries()].map(([currency, amount]) => ({ currency, amount })).sort((left, right) => right.amount - left.amount);
+}
+
+function accumulate(acc: WindowAccumulator, event: AiUsageEvent): void {
+  const tokens = typeof event.totalTokens === 'number' ? event.totalTokens : 0;
+  acc.eventCount += 1;
+  acc.totalTokens += tokens;
+  if (typeof event.inputTokens === 'number') acc.inputTokens += event.inputTokens;
+  if (typeof event.outputTokens === 'number') acc.outputTokens += event.outputTokens;
+  const reportsCost = !!event.cost && Number.isFinite(event.cost.amount);
+  if (reportsCost) acc.cost.set(event.cost!.currency, (acc.cost.get(event.cost!.currency) ?? 0) + event.cost!.amount);
+
+  const model = event.model || 'Unknown model';
+  const key = `${event.provider ?? ''}\u0000${model}`;
+  let entry = acc.models.get(key);
+  if (!entry) {
+    entry = { model, provider: event.provider, totalTokens: 0, eventCount: 0, cost: new Map() };
+    acc.models.set(key, entry);
+  }
+  entry.eventCount += 1;
+  entry.totalTokens += tokens;
+  if (reportsCost) entry.cost.set(event.cost!.currency, (entry.cost.get(event.cost!.currency) ?? 0) + event.cost!.amount);
+}
+
+type PeakMap = Map<number, number>;
+
+function bump(map: PeakMap, key: number, tokens: number): void {
+  map.set(key, (map.get(key) ?? 0) + tokens);
+}
+
+/** Busiest entry at or after `from` (and before `to`); an earlier period wins a tie so the answer is stable. */
+function busiest(map: PeakMap, granularity: UsageGranularity, from = -Infinity, to = Infinity): UsagePeak | undefined {
+  let best: { key: number; tokens: number } | undefined;
+  for (const [key, tokens] of [...map.entries()].sort((left, right) => left[0] - right[0])) {
+    if (key < from || key >= to || tokens <= 0) continue;
+    if (!best || tokens > best.tokens) best = { key, tokens };
+  }
+  return best && { periodStart: new Date(best.key).toISOString(), granularity, totalTokens: best.tokens };
+}
+
+function finalize(acc: WindowAccumulator, peak: UsagePeak | undefined): UsageWindowSummary {
+  const models = [...acc.models.values()]
+    .map<ModelUsage>(entry => ({
+      model: entry.model,
+      provider: entry.provider,
+      totalTokens: entry.totalTokens,
+      tokenShare: acc.totalTokens > 0 ? entry.totalTokens / acc.totalTokens : 0,
+      eventCount: entry.eventCount,
+      costByCurrency: costList(entry.cost)
+    }))
+    .sort((left, right) => right.totalTokens - left.totalTokens || left.model.localeCompare(right.model));
+  return {
+    totalTokens: acc.totalTokens,
+    inputTokens: acc.inputTokens,
+    outputTokens: acc.outputTokens,
+    eventCount: acc.eventCount,
+    costByCurrency: costList(acc.cost),
+    models,
+    peak
+  };
+}
+
+/**
+ * Everything the Overview usage panel and the Settings model breakdown show,
+ * in one pass over the ledger — today / this week / this month / all time, each
+ * with a per-model breakdown, plus the busiest day, week and month overall.
+ * Reuses `periodStart`, so "this week" means exactly what `usageSeries` says.
+ */
+export function dashboardUsageSummary(events: readonly AiUsageEvent[], referenceDate: Date = new Date()): UsageDashboardSummary {
+  const dayStart = periodStart(referenceDate, 'day');
+  const weekStart = periodStart(referenceDate, 'week');
+  const monthStart = periodStart(referenceDate, 'month');
+  const dayEnd = nextPeriodStart(dayStart, 'day').getTime();
+  const weekEnd = nextPeriodStart(weekStart, 'week').getTime();
+  const monthEnd = nextPeriodStart(monthStart, 'month').getTime();
+
+  const today = newAccumulator();
+  const week = newAccumulator();
+  const month = newAccumulator();
+  const all = newAccumulator();
+  const hours: PeakMap = new Map();
+  const days: PeakMap = new Map();
+  const weeks: PeakMap = new Map();
+  const months: PeakMap = new Map();
+  let first: number | undefined;
+  let last: number | undefined;
+
+  for (const event of events) {
+    const at = new Date(event.timestamp);
+    const time = at.getTime();
+    if (Number.isNaN(time)) continue;
+    accumulate(all, event);
+    if (first === undefined || time < first) first = time;
+    if (last === undefined || time > last) last = time;
+    if (time >= dayStart.getTime() && time < dayEnd) accumulate(today, event);
+    if (time >= weekStart.getTime() && time < weekEnd) accumulate(week, event);
+    if (time >= monthStart.getTime() && time < monthEnd) accumulate(month, event);
+    const tokens = typeof event.totalTokens === 'number' ? event.totalTokens : 0;
+    bump(hours, periodStart(at, 'hour').getTime(), tokens);
+    bump(days, periodStart(at, 'day').getTime(), tokens);
+    bump(weeks, periodStart(at, 'week').getTime(), tokens);
+    bump(months, periodStart(at, 'month').getTime(), tokens);
+  }
+
+  return {
+    generatedAt: referenceDate.toISOString(),
+    today: finalize(today, busiest(hours, 'hour', dayStart.getTime(), dayEnd)),
+    week: finalize(week, busiest(days, 'day', weekStart.getTime(), weekEnd)),
+    month: finalize(month, busiest(days, 'day', monthStart.getTime(), monthEnd)),
+    allTime: {
+      ...finalize(all, busiest(months, 'month')),
+      firstEventAt: first === undefined ? undefined : new Date(first).toISOString(),
+      lastEventAt: last === undefined ? undefined : new Date(last).toISOString()
+    },
+    highs: { day: busiest(days, 'day'), week: busiest(weeks, 'week'), month: busiest(months, 'month') }
+  };
 }

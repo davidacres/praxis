@@ -36,3 +36,14 @@ priority: High
 - Pressing `Cmd+J` toggles visibility from any screen.
 - Clicking the Pin button transitions the panel smoothly from floating to docked column, and the main card shrinks accordingly.
 - Resizing the docked divider persists the chosen width.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

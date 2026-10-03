@@ -42,7 +42,8 @@ import {
   type VercelAgentStartOptions,
   type WireImageAttachment,
   isProviderLimitError,
-  extractProviderLimitMessage
+  extractProviderLimitMessage,
+  resolveTicketContext
 } from '@praxis/core';
 import { buildReadOnlyModeTask } from './sessionModeTask';
 import {
@@ -73,6 +74,7 @@ import { ElectronFolderConfigProvider } from './adapters/electronFolderConfigPro
 import { getSettingsBackend } from './settingsBackendInstance';
 import { AiBrowserBridge } from './aiBrowser';
 import { browserMcpServerForSession } from './browserMcp';
+import { trackerMcpServerForSession } from './trackerMcp';
 import { testUserMcpServer, userMcpAcpServers, userMcpToolExtension } from './userMcp';
 import { deleteAgentSession } from './deleteAgentSession';
 import { getServiceForConnection } from './serviceRegistry';
@@ -264,10 +266,24 @@ export function trackerToolExtension(
           return { ok: true, content: JSON.stringify(await service.updateIssue(issueKey, update), null, 2) };
         }
         if (name === 'tracker_transition_ticket') {
-          const transitionId = str(args, 'transitionId');
-          if (!transitionId) return { ok: false, content: 'transitionId is required.' };
-          await service.transitionIssue(issueKey, transitionId);
-          return { ok: true, content: `Transition ${transitionId} applied to ${issueKey}.` };
+          const rawTransition = str(args, 'transitionId') || str(args, 'targetStatus') || str(args, 'status');
+          if (!rawTransition) return { ok: false, content: 'transitionId is required.' };
+          let effectiveId = rawTransition;
+          try {
+            const available = await service.getTransitions(issueKey);
+            const match = available.find(
+              t =>
+                t.id === rawTransition ||
+                t.name.toLowerCase() === rawTransition.toLowerCase() ||
+                t.toStatus?.toLowerCase() === rawTransition.toLowerCase() ||
+                t.name.toLowerCase().includes(rawTransition.toLowerCase())
+            );
+            if (match) effectiveId = match.id;
+          } catch {
+            // fallback to raw ID
+          }
+          await service.transitionIssue(issueKey, effectiveId);
+          return { ok: true, content: `Transition ${effectiveId} applied to ${issueKey}.` };
         }
         return { ok: false, content: `Unknown tracker tool: ${name}` };
       } catch (error) {
@@ -308,9 +324,14 @@ function browserToolExtension(toolMode: AgentToolMode): ToolExtension | undefine
  */
 function mcpServersOption(
   browserMcp: Awaited<ReturnType<typeof browserMcpServerForSession>>,
+  trackerMcp: Awaited<ReturnType<typeof trackerMcpServerForSession>>,
   toolMode: string | undefined
 ): { mcpServers?: AcpMcpServer[] } {
-  const servers: AcpMcpServer[] = [...(browserMcp ? [browserMcp] : []), ...userMcpAcpServers(toolMode)];
+  const servers: AcpMcpServer[] = [
+    ...(browserMcp ? [browserMcp] : []),
+    ...(trackerMcp ? [trackerMcp] : []),
+    ...userMcpAcpServers(toolMode)
+  ];
   return servers.length > 0 ? { mcpServers: servers } : {};
 }
 
@@ -478,6 +499,9 @@ export function registerAiIpc(): void {
     const browserMcp = prepared.plan.state === 'acp'
       ? await browserMcpServerForSession(issueKey, toolMode)
       : undefined;
+    const trackerMcp = prepared.plan.state === 'acp'
+      ? await trackerMcpServerForSession(issueKey, trackerService, toolMode)
+      : undefined;
     await continueAgentTask(prepared, {
       issueKey,
       message: followUp,
@@ -487,7 +511,7 @@ export function registerAiIpc(): void {
       toolMode,
       internalConversationTurn: options?.internalConversationTurn,
       conversationContext: options?.conversationContext,
-      ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, toolMode) : {}),
+      ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode) : {}),
       ...(prepared.plan.state === 'gateway'
         ? { toolExtension: mergeToolExtensions(trackerToolExtension(trackerService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode)) }
         : {})
@@ -966,8 +990,20 @@ export function registerAiIpc(): void {
       const prepared = await prepareAgentLaunch({ profileId, hostId, provider, skillNames: input.skillNames });
       if (prepared.binding) taskDefinition.goal += `\n\n${await getAgentRuntimeManager().bindingContext(prepared.binding)}`;
       const skillActivations = prepared.skillActivations;
+
+      if (input.issueKey && !taskDefinition.ticketContext) {
+        taskDefinition.ticketContext = await resolveTicketContext({
+          issue,
+          backendService: issueService,
+          toolMode
+        });
+      }
+
       const browserMcp = prepared.plan.state === 'acp'
         ? await browserMcpServerForSession(issue.key, toolMode)
+        : undefined;
+      const trackerMcp = prepared.plan.state === 'acp'
+        ? await trackerMcpServerForSession(issue.key, issueService, toolMode)
         : undefined;
       await launchAgentTask(prepared, {
         issue,
@@ -979,7 +1015,7 @@ export function registerAiIpc(): void {
         reasoningEffort,
         permissionMode: input.permissionMode ?? 'manual',
         ...((input.permissionMode === 'bypass' || input.permissionMode === 'autopilot') ? { autoApprovePermissions: true } : {}),
-        ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, toolMode) : {}),
+        ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode) : {}),
         ...(prepared.plan.state === 'gateway'
           ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode)) }
           : {})

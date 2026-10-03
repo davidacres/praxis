@@ -1,0 +1,296 @@
+{
+  "schemaVersion": 1,
+  "id": "praxis-desktop-feature-delivery-project-1788215224012-rap082",
+  "name": "Praxis Desktop Feature Delivery",
+  "description": "Rigorous SDLC pipeline tailored for Praxis Desktop: implementation, core import check, multi-workspace typecheck, unit tests, fresh renderer bundle, Playwright E2E suite, security review, and mandatory visual inspection approval.",
+  "scope": "project",
+  "projectId": "project-1788215224012-rap082",
+  "version": 1,
+  "entryNodeId": "implement",
+  "createdAt": "2026-10-03T16:43:00.000Z",
+  "updatedAt": "2026-10-03T16:43:00.000Z",
+  "nodes": [
+    {
+      "id": "implement",
+      "name": "Implement feature story",
+      "x": 40,
+      "y": 40,
+      "inputs": [],
+      "type": "agent-task",
+      "agent": {
+        "agentId": "praxis-implementer",
+        "profileId": "praxis-implementer",
+        "hostId": "praxis-implementer",
+        "scope": "global",
+        "toolMode": "full"
+      },
+      "instructions": "Implement the tasks for the active story. Ensure core import rules (no value imports from @praxis/core in renderer) and TypeScript typing rules are strictly respected. Commit or stage the change.",
+      "outputs": [
+        {
+          "id": "change-diff",
+          "kind": "diff",
+          "required": true,
+          "description": "The implemented change."
+        }
+      ],
+      "mutatesWorktree": true,
+      "maxAttempts": 2,
+      "modelTier": "strong"
+    },
+    {
+      "id": "lint-imports",
+      "name": "Check core imports",
+      "x": 300,
+      "y": 40,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "check",
+      "command": "npm",
+      "args": [
+        "run",
+        "check-core-imports"
+      ],
+      "outputs": [
+        {
+          "id": "lint-log",
+          "kind": "log",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "timeoutMs": 120000
+    },
+    {
+      "id": "typecheck",
+      "name": "Type check all workspaces",
+      "x": 560,
+      "y": 40,
+      "inputs": [
+        "change-diff",
+        "lint-log"
+      ],
+      "type": "check",
+      "command": "npm",
+      "args": [
+        "run",
+        "check-types"
+      ],
+      "outputs": [
+        {
+          "id": "typecheck-log",
+          "kind": "log",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "timeoutMs": 300000
+    },
+    {
+      "id": "unit-tests",
+      "name": "Core unit tests",
+      "x": 820,
+      "y": 40,
+      "inputs": [
+        "change-diff",
+        "typecheck-log"
+      ],
+      "type": "check",
+      "command": "npm",
+      "args": [
+        "run",
+        "test:core"
+      ],
+      "outputs": [
+        {
+          "id": "unit-test-results",
+          "kind": "test-results",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "timeoutMs": 300000
+    },
+    {
+      "id": "build-renderer",
+      "name": "Build and copy renderer",
+      "x": 1080,
+      "y": 40,
+      "inputs": [
+        "change-diff",
+        "unit-test-results"
+      ],
+      "type": "check",
+      "command": "npm",
+      "args": [
+        "run",
+        "desktop:copy-renderer"
+      ],
+      "outputs": [
+        {
+          "id": "build-log",
+          "kind": "log",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "timeoutMs": 300000
+    },
+    {
+      "id": "security-review",
+      "name": "Security & architecture review",
+      "x": 1080,
+      "y": 200,
+      "inputs": [
+        "change-diff",
+        "unit-test-results"
+      ],
+      "type": "agent-task",
+      "agent": {
+        "agentId": "praxis-reviewer",
+        "profileId": "praxis-reviewer",
+        "hostId": "praxis-reviewer",
+        "scope": "global",
+        "toolMode": "read-only"
+      },
+      "instructions": "Review changes for prompt injection defenses, secret leaks, XSS in markdown rendering, and clean architectural boundaries. Rate findings by severity.",
+      "outputs": [
+        {
+          "id": "review-report",
+          "kind": "report",
+          "required": true
+        }
+      ],
+      "mutatesWorktree": false,
+      "satisfiesGate": "review",
+      "modelTier": "standard"
+    },
+    {
+      "id": "e2e-tests",
+      "name": "Playwright desktop tests",
+      "x": 1340,
+      "y": 40,
+      "inputs": [
+        "change-diff",
+        "build-log"
+      ],
+      "type": "check",
+      "command": "npm",
+      "args": [
+        "run",
+        "test:desktop"
+      ],
+      "outputs": [
+        {
+          "id": "e2e-results",
+          "kind": "test-results",
+          "required": true
+        }
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "satisfiesGate": "qa",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "gates",
+      "name": "SDLC Gates",
+      "x": 1600,
+      "y": 40,
+      "inputs": [],
+      "type": "join",
+      "mode": "all"
+    },
+    {
+      "id": "approve",
+      "name": "Visual inspection & approval",
+      "x": 1860,
+      "y": 40,
+      "inputs": [
+        "e2e-results",
+        "review-report"
+      ],
+      "type": "approval",
+      "prompt": "Static checks, unit tests, Playwright E2E suite, and security review have passed. Launch Praxis, visually inspect the assistant in floating and docked modes, test theme contrast across light and dark modes, and approve.",
+      "requiredGates": [
+        "qa",
+        "review"
+      ],
+      "allowBypass": false
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-impl-lint",
+      "from": "implement",
+      "to": "lint-imports",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-lint-type",
+      "from": "lint-imports",
+      "to": "typecheck",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-type-unit",
+      "from": "typecheck",
+      "to": "unit-tests",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-unit-build",
+      "from": "unit-tests",
+      "to": "build-renderer",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-build-e2e",
+      "from": "build-renderer",
+      "to": "e2e-tests",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-unit-sec",
+      "from": "unit-tests",
+      "to": "security-review",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-e2e-gates",
+      "from": "e2e-tests",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-sec-gates",
+      "from": "security-review",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-gates-approve",
+      "from": "gates",
+      "to": "approve",
+      "on": "success",
+      "required": true
+    }
+  ]
+}

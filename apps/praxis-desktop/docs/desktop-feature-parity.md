@@ -75,7 +75,7 @@ and Electron integration. Last audited: 2026-09-15.
 |---|---|---|
 | AI provider setup (Vercel gateway) | ✓ | Settings → AI Provider; stores encrypted API key in `safeStorage` |
 | Provider catalog + OpenAI-compatible endpoints | ✓ | Settings → AI Provider lists providers in use; **Add provider** picks a built-in, a preset (OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, Fireworks, Cerebras, Ollama, LM Studio, vLLM, llama.cpp) or a custom endpoint. Each endpoint is tested (models / chat / streaming usage / tool calling) before save; one without tool calling is kept out of sessions and workflows but still serves recommendations (FX-BF-044) |
-| Delegate issue to AI agent | ✓ | Issue detail action; picker selects agent + assigns workflow pack |
+| Delegate issue to AI agent | ✓ | Issue detail action; picker selects agent + assigns workflow pack; full ticket context (summary, description, parent feature, sibling tasks, dependencies, linked issues, comments, transitions) automatically injected into system prompt and tracker tools exposed via loopback MCP server (`praxis-tracker`) and Gateway tools |
 | Agent selection | ✓ | Agent Hub browser; runs system runtime or CLI executable |
 | Assign workflow pack | ✓ | Dropdown in delegate picker; attaches pack to session |
 | Active sessions view + view/abort session | ✓ | Sessions sidebar section; console shows live event stream |
@@ -93,6 +93,7 @@ and Electron integration. Last audited: 2026-09-15.
 | Live session event stream | ✓ | Console shows agent messages, tool calls, reasoning (ACP protocol) |
 | Cost tracking per session | ✓ | Shows cumulative cost if provider reports it; warning at `ai.spendLimit` |
 | Cost/token reporting over time | ✓ | Settings → AI Provider spend report; grouped by provider/model and connection, time-range filter (FX-BE-039) |
+| AI usage on the Overview dashboard | ✓ | Full-width panel: today / week / month / all-time tokens, cost and peak, plus ranked top models (FX-BF-049). Reads the durable usage ledger, and Settings → AI Usage shows the same model breakdown. Cost is "Not reported" for providers that do not report it (only ACP agents do), never `$0.00`. The total deliberately differs from Settings → AI → Spend, which reads `AgentSessionRecord`s and excludes internal one-shot AI calls; "all time" is bounded by the 20,000-event ledger cap and labelled `since <first event>` |
 | Agent's own operating mode (ACP Session Modes) | ✓ | Composer mode chip, live while the task is active — distinct from Praxis's own chat/analysis/review toggle (FX-BE-038) |
 | Agent's own slash commands (ACP `available_commands_update`) | ✓ | Composer commands chip inserts `/name ` into the draft (FX-BE-038) |
 | Workflow run started from a ticket, outcome written back | ✓ | Run monitor's Start form takes an optional ticket; a settled run posts a comment back to it (FX-BE-040) |

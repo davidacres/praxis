@@ -38,3 +38,14 @@ priority: High
 
 - Navigating between Board, Issue Detail, and Git Changes updates the Assistant's context badge and suggestion chips immediately.
 - Sending a message on an issue screen includes the issue context in the turn prompt.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

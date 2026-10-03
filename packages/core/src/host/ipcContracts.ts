@@ -1,5 +1,5 @@
 import type { AiUsageEvent } from '../ai/aiUsageLog';
-import type { UsageBucket, UsageComparison, UsageGranularity } from '../ai/aiUsageStats';
+import type { UsageBucket, UsageComparison, UsageDashboardSummary, UsageGranularity } from '../ai/aiUsageStats';
 import type { ProviderUsageSnapshot } from '../ai/providerUsage';
 import type { AgentRecommendationCandidate, AgentRecommendationResult } from '../ai/workflowAgentRecommendation';
 import type { StoredAgentRecommendation } from '../ai/workflowRecommendationCache';
@@ -1012,6 +1012,8 @@ export interface AiUsageIpc {
   series(granularity: UsageGranularity, periodsBack: number): Promise<UsageBucket[]>;
   /** The latest period vs. the one before it — "more or less AI than last week", generalised to day/week/month. */
   compareLatestPeriod(granularity: UsageGranularity): Promise<UsageComparison>;
+  /** Today / week / month / all-time totals, per-model breakdowns and peaks in one read — the Overview panel and Settings model breakdown. */
+  dashboardSummary(): Promise<UsageDashboardSummary>;
   /** The raw ledger, newest last — for a detail table; not meant for charting directly. */
   listEvents(): Promise<AiUsageEvent[]>;
   /** Provider account usage/limits, when the provider exposes a supported API. */

@@ -44,3 +44,10 @@ The assistant becomes deeply aware of what the user is working on by subscribing
 
 - `FX-BE-152` — Multi-persona team engine and assistant IPC.
 - `FX-BE-153` — Dockable and floating assistant UI shell with multi-persona chat feed.
+
+## Description
+
+
+## Comments
+
+

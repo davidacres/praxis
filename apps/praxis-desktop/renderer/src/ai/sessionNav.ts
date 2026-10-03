@@ -135,9 +135,14 @@ export function formatTokens(usage: AgentSessionRecord['tokenUsage']): string | 
 
 /** The compact k/M rendering `formatTokens` uses, for a total already summed across sessions (e.g. a spend report's grouped rows). */
 export function formatTokenCount(total: number): string {
-  if (total < 1000) return `${total} tokens`;
-  if (total < 1_000_000) return `${(total / 1000).toFixed(total < 10_000 ? 1 : 0)}k tokens`;
-  return `${(total / 1_000_000).toFixed(1)}M tokens`;
+  return `${formatTokenCompact(total)} tokens`;
+}
+
+/** `formatTokenCount` without the unit — "240k", for figures that carry their own label. */
+export function formatTokenCompact(total: number): string {
+  if (total < 1000) return `${total}`;
+  if (total < 1_000_000) return `${(total / 1000).toFixed(total < 10_000 ? 1 : 0)}k`;
+  return `${(total / 1_000_000).toFixed(1)}M`;
 }
 
 /** Compact representation of a model's context window, e.g. "128k" or "1M". */

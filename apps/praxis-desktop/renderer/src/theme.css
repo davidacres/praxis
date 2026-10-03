@@ -5082,6 +5082,30 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .overview-panel { min-width: 0; padding: 17px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-secondary); }
 .overview-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .overview-panel-heading h2 { margin: 0; font-size: 14px; }
+/* AI usage panel (FX-BF-049): full width, between "Start here" and the three-column row. Theme tokens only. */
+.overview-usage { margin-bottom: 16px; }
+.overview-usage-updated { margin-left: auto; color: var(--text-tertiary); font-size: var(--text-xs); }
+.overview-usage-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.overview-usage-tile { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 13px 15px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg); }
+.overview-usage-tile small { color: var(--text-secondary); font-size: var(--text-xs); }
+.overview-usage-tile strong { font-size: 23px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.overview-usage-tile strong span { color: var(--text-tertiary); font-size: var(--text-xs); font-weight: 500; }
+.overview-usage-tile em { color: var(--text-secondary); font-size: var(--text-sm); font-style: normal; font-variant-numeric: tabular-nums; }
+.overview-usage-peak { color: var(--text-tertiary); font-size: var(--text-xs); }
+.overview-usage-note { margin: 10px 0 0; color: var(--text-tertiary); font-size: var(--text-xs); }
+.usage-models { margin-top: var(--space-3); }
+.usage-models-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.usage-models-heading h4 { margin: 0; font-size: var(--text-sm); }
+.usage-models-list { margin: 0; padding: 0; list-style: none; }
+.usage-model-row { display: grid; grid-template-columns: 22px minmax(120px, 1.4fr) minmax(80px, 2fr) 96px 40px minmax(90px, 1fr); align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.usage-model-rank { color: var(--text-tertiary); }
+.usage-model-name { overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+.usage-model-bar { height: 6px; overflow: hidden; border-radius: 3px; background: var(--bg-tertiary); }
+.usage-model-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.usage-model-tokens, .usage-model-share, .usage-model-cost { color: var(--text-secondary); text-align: right; white-space: nowrap; }
+.usage-model-cost-absent { color: var(--text-tertiary); font-style: italic; }
+.usage-models-empty, .usage-models-more { margin: 0; color: var(--text-tertiary); font-size: var(--text-xs); }
+@media (max-width: 900px) { .overview-usage-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .btn-quiet { display: inline-flex; align-items: center; gap: 3px; padding: 3px 5px; border-color: transparent; background: transparent; color: var(--text-secondary); font-size: var(--text-xs); }
 .btn-quiet:hover { border-color: var(--border); background: var(--bg-hover); color: var(--text); }
 .overview-session-card { display: block; width: 100%; margin-top: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: inherit; text-align: left; cursor: pointer; }
