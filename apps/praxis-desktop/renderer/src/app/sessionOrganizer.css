@@ -1,0 +1,15 @@
+.session-organizer-item, .session-organizer-group { position: relative; }
+.session-organizer-group { padding-left: var(--tree-indent-2); gap: 6px; min-height: calc(30px * var(--ui-scale)); }
+.session-organizer-group .tree-label { flex: 1; }
+.session-organizer-members { margin-left: calc(var(--tree-indent-3) - var(--tree-indent-2)); border-left: 1px solid var(--border); }
+.session-organizer [data-drop-position='before']::before,
+.session-organizer [data-drop-position='after']::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: var(--accent); z-index: 2; pointer-events: none; }
+.session-organizer [data-drop-position='before']::before { top: 0; }
+.session-organizer [data-drop-position='after']::after { bottom: 0; }
+.session-organizer [data-drop-position='group'], .session-organizer [data-drop-position='join'] { background: color-mix(in srgb, var(--accent) 18%, transparent); outline: 1px solid var(--accent); }
+.session-organizer-end { padding: 5px var(--tree-indent-2); font-size: 10px; color: var(--text-tertiary); display: none; }
+.session-organizer--dragging .session-organizer-end { display: block; }
+.session-organizer-end:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
+.session-organizer-item[draggable="true"], .session-organizer-group[draggable="true"] { cursor: grab; }
+.session-organizer-item[draggable="true"]:active, .session-organizer-group[draggable="true"]:active { cursor: grabbing; }
