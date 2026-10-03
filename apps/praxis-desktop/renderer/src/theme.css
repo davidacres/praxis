@@ -5088,6 +5088,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .overview-panel { min-width: 0; padding: 17px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-secondary); }
 .overview-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .overview-panel-heading h2 { margin: 0; font-size: 14px; }
+.overview-health-list { display: flex; flex-direction: column; gap: 8px; }
 /* AI usage panel (FX-BF-049): full width, between "Start here" and the three-column row. Theme tokens only. */
 .overview-usage { margin-bottom: 16px; }
 .overview-usage-updated { margin-left: auto; color: var(--text-tertiary); font-size: var(--text-xs); }
@@ -5157,19 +5158,6 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .overview-board-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .overview-board-card { min-height: 64px; padding: 11px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: inherit; text-align: left; cursor: pointer; }
 .overview-board-card { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; min-height: 68px; }.overview-board-card:hover { border-color: var(--board-color); }.overview-board-art { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; color: var(--board-color); background: color-mix(in srgb, var(--board-color) 14%, var(--bg)); }.overview-board-card > span:nth-child(2) { display: flex; min-width: 0; flex-direction: column; gap: 3px; }.overview-board-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.board-tone-0 { --board-color: #2d8cff; }.board-tone-1 { --board-color: #8b72ff; }.board-tone-2 { --board-color: #4caf78; }.board-tone-3 { --board-color: #d99a2b; }
-.overview-lower-grid { margin-bottom: 0; }
-.overview-delivery-list, .overview-health-list { display: flex; flex-direction: column; gap: 8px; }
-.overview-delivery-card { display: block; width: 100%; padding: 11px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: inherit; text-align: left; cursor: pointer; }
-.overview-delivery-card:hover { border-color: var(--accent-border); background: var(--bg-hover); }
-.overview-delivery-heading { display: flex; align-items: center; gap: 7px; }
-.overview-delivery-heading svg { color: var(--accent); }
-.overview-delivery-heading span { margin-left: auto; color: var(--text-secondary); font-size: var(--text-xs); text-transform: capitalize; }
-.overview-delivery-card small { display: block; margin-top: 6px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.overview-delivery-steps { display: flex; gap: 0; margin-top: 11px; color: var(--text-tertiary); font-size: var(--text-xs); }
-.overview-delivery-steps span { display: flex; align-items: center; flex: 1; }
-.overview-delivery-steps span:not(:last-child)::after { height: 1px; flex: 1; margin: 0 6px; background: var(--border); content: ''; }
-.overview-delivery-steps span.done { color: var(--success); }
-.overview-delivery-steps span.current { color: var(--tone-progress); }
 .overview-health-row { display: flex; align-items: center; gap: 9px; padding: 9px 3px; border-bottom: 1px solid var(--border-subtle); }
 .overview-health-row > span:nth-child(2) { display: flex; flex: 1; flex-direction: column; gap: 2px; }
 .overview-health-row > svg { color: var(--text-tertiary); }
@@ -5194,7 +5182,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .overview-page { background: transparent; }
 .overview-stat, .overview-panel { background: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity) * 100%), transparent); backdrop-filter: var(--surface-backdrop); }
 .overview-starter-strip { background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated)); }
-.overview-starter-card, .overview-session-card, .overview-project-card, .overview-board-card, .overview-delivery-card, .overview-runtime-widget { background: color-mix(in srgb, var(--bg) 62%, transparent); }
+.overview-starter-card, .overview-session-card, .overview-project-card, .overview-board-card, .overview-runtime-widget { background: color-mix(in srgb, var(--bg) 62%, transparent); }
 .starter-connection .overview-starter-art, .overview-stat-icon.warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, var(--bg)); }
 .starter-session .overview-starter-art { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
 .overview-session-copilot::before, .overview-session-anthropic::before, .overview-session-openai::before { background: var(--accent); }
