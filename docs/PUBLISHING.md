@@ -13,37 +13,52 @@ ship the Praxis Desktop installers through GitHub Releases.
    export GITHUB_TOKEN=your_github_token
    ```
 
+### Release workflow
+
+A `v*` tag runs `.github/workflows/publish-packages.yml`. It builds the libraries,
+stages their compiled output under the repository owner's GitHub namespace, and
+publishes the tag version. For this repository the packages are:
+
+- `@davidacres/praxis-core`
+- `@davidacres/praxis-mobile-protocol`
+
+The internal workspace names remain `@praxis/core` and `@praxis/mobile-protocol`.
+They are not GitHub Packages names: the registry scope must name the owning
+GitHub account. Both `GITHUB_TOKEN` (the repository's `.npmrc`) and
+`NODE_AUTH_TOKEN` (setup-node's generated configuration) are supplied in CI.
+
 ### Manual Publishing
 
-To publish packages manually:
+From the repository root, with `GITHUB_TOKEN` set as described above:
 
 ```bash
-npm run publish:packages
+npm run build:core
+npm run build:mobile-protocol
+package_dir="$(mktemp -d)"
+node apps/praxis-desktop/main/scripts/stagePublishedLibraries.cjs "$package_dir" davidacres 0.4.0
+npm publish "$package_dir/core"
+npm publish "$package_dir/mobile-protocol"
 ```
 
-This publishes:
-- `@praxis/core` 
-- `@praxis/mobile-protocol`
+Choose the release version explicitly. Do not republish an existing version.
+The old `npm run publish:packages` command publishes the internal workspace
+names and must not be used for GitHub Packages.
 
 ### Using Published Packages
 
-Once published, you can install the packages in another project:
+Configure `@davidacres:registry=https://npm.pkg.github.com` and a token with
+`read:packages` in your npm configuration, then install the published library:
 
 ```bash
-# Create .npmrc in your project
-echo "@praxis:registry=https://npm.pkg.github.com" >> .npmrc
-echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> .npmrc
-
-# Install the package
-npm install @praxis/core
+npm install @davidacres/praxis-core
 ```
 
-Or use it in your `package.json`:
+A consumer retaining the internal import name can use an npm alias:
 
 ```json
 {
   "dependencies": {
-    "@praxis/core": "^0.0.0"
+    "@praxis/core": "npm:@davidacres/praxis-core@^0.4.0"
   }
 }
 ```

@@ -18,19 +18,37 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           registry-url: 'https://npm.pkg.github.com'
+          scope: '@${{ github.repository_owner }}'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Publish @praxis/core
-        run: npm publish --workspace=@praxis/core
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build libraries
+        run: |
+          npm run build:core
+          npm run build:mobile-protocol
 
-      - name: Publish @praxis/mobile-protocol
-        run: npm publish --workspace=@praxis/mobile-protocol
+      - name: Stage release packages in the owning GitHub namespace
+        env:
+          PACKAGE_OWNER: ${{ github.repository_owner }}
+        run: |
+          package_version="$(node -p "require('./apps/praxis-desktop/main/package.json').version")"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            package_version="${GITHUB_REF_NAME#v}"
+          fi
+          node apps/praxis-desktop/main/scripts/stagePublishedLibraries.cjs "$RUNNER_TEMP/praxis-packages" "$PACKAGE_OWNER" "$package_version"
+
+      - name: Publish core
+        run: npm publish "$RUNNER_TEMP/praxis-packages/core"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish mobile protocol
+        run: npm publish "$RUNNER_TEMP/praxis-packages/mobile-protocol"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

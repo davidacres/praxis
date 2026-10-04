@@ -158,7 +158,7 @@ test('Agent Runtime settings separate AI runtimes from agent profiles, and manag
   const panel = page.getByTestId('settings-agent-runtime');
   await showRuntimeTab(page, 'runtimes');
   await expect(panel.getByTestId('agent-runtime-provider-claude-code-cli')).toContainText('Claude Code (local)');
-  await expect(panel.getByTestId('agent-runtime-provider-codex-cli')).toContainText('Codex CLI (local)');
+  await expect(panel.getByTestId('agent-runtime-provider-codex-cli')).toContainText('OpenAI Codex (local)');
 
   await showRuntimeTab(page, 'agents');
   const reviewer = panel.getByTestId('agent-runtime-profile-praxis-reviewer');

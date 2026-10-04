@@ -58,6 +58,9 @@ jobs:
       - name: Build core
         run: npm run build:core
 
+      - name: Build mobile protocol declarations
+        run: npm run build:mobile-protocol
+
       - name: Typecheck
         run: npm run check-types
 
@@ -124,6 +127,10 @@ jobs:
         run: npm run build
       # Each shard has its own machine and Electron bundle. Keep launches
       # serial within a runner to retain the macOS signature stability fix.
+      - name: Install Playwright Chromium
+        working-directory: apps/praxis-desktop/main
+        run: npx playwright install chromium
+
       - name: Desktop tests
         working-directory: apps/praxis-desktop/main
         run: npx playwright test ${{ matrix.args }} --workers=1 --reporter=list,html

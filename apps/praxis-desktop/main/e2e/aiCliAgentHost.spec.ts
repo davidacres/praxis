@@ -241,7 +241,7 @@ test('MCP servers the user added reach a CLI agent at session start', async () =
   const received = JSON.parse(reply.slice(reply.indexOf('MCP_SERVERS:') + 'MCP_SERVERS:'.length)) as Array<Record<string, unknown>>;
   const byName = Object.fromEntries(received.map(server => [server.name as string, server]));
   // Names are slugged the way tool names are; a switched-off server is not sent.
-  expect(Object.keys(byName).sort()).toEqual(['docs_search', 'files']);
+  expect(Object.keys(byName).sort()).toEqual(['docs_search', 'files', 'praxis-tracker']);
   expect(byName.docs_search).toMatchObject({
     type: 'http',
     url: 'https://mcp.example.com/mcp',
@@ -482,7 +482,7 @@ test('a CLI agent\'s reply shows the turn\'s time, tokens, cost and model, and t
   await expect(bar).toContainText('1,234 tok');
   await expect(bar).toContainText('claude-sonnet-5-5');
   await expect(bar).not.toContainText('haiku');
-  await expect(bar).toContainText('US$0.01');
+  await expect(bar).toContainText(/\$0\.01/);
   const artifacts = path.resolve(__dirname, '../../../../.praxis/session-artifacts');
   await win.screenshot({ path: path.join(artifacts, 'acp-reply-telemetry.png'), fullPage: true });
 

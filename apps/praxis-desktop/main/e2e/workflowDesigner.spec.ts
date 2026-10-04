@@ -465,8 +465,8 @@ test('a stage can run on its own AI and model, chosen from the AIs that are set 
   await expect(inspector.getByTestId('wf-node-model')).toHaveCount(0);
   await ai.click();
   const aiList = page.getByRole('listbox', { name: 'AI options' });
-  await expect(aiList.getByRole('option')).toHaveText([/^Run’s AI/, /^Codex CLI/]);
-  await aiList.getByRole('option', { name: /^Codex CLI/ }).click();
+  await expect(aiList.getByRole('option')).toHaveText([/^Run’s AI/, /^OpenAI Codex/]);
+  await aiList.getByRole('option', { name: /^OpenAI Codex/ }).click();
   await expect(ai).toHaveAttribute('data-value', 'codex-cli');
   // A model that is not in the AI's list can still be typed into the picker's filter and used.
   await inspector.getByTestId('wf-node-model').click();
