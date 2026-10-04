@@ -1016,7 +1016,7 @@ test('focus mode presents sessions as tabs and keeps them available while starti
   await win.locator('[data-testid="session-focus-new"]').click();
   await expect(win.locator('[data-testid="new-session-view"]')).toBeVisible();
   await expect(win.locator('[data-testid="session-focus-tabs"]')).toBeVisible();
-  await expect(win.locator('[data-testid="session-focus-new"]')).toHaveClass(/active/);
+  await expect(win.locator('.titlebar [data-testid="session-focus-new"]')).toBeVisible();
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/new-conversation-focus-tabs.png') });
 
   await win.locator('[data-testid="session-focus-tab"]', { hasText: 'Second focus chat' }).click();

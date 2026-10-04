@@ -14,6 +14,7 @@ import {
 } from '@praxis/core';
 import { getAcpAgentHost, resolveAcpStartOptions, resolveConnectionOptions } from './aiInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
+import type { ReasoningEffort } from '@praxis/core';
 
 const DEFAULT_REVIEW_PROMPT = `You are a technical product manager reviewing tickets for completeness and quality.
 Analyze the ticket and provide concise, actionable feedback on clarity, completeness, missing technical context, and ambiguities.
@@ -22,6 +23,8 @@ Be constructive and specific. Format the response in markdown.`;
 export interface AiReviewRuntimeOptions {
   provider: AiProvider;
   model?: string;
+  reasoningEffort?: ReasoningEffort;
+  permissionMode?: import('@praxis/core').AgentPermissionMode;
   systemPrompt?: string;
   signal?: AbortSignal;
   onUpdate?: (markdown: string) => void;
@@ -69,7 +72,7 @@ export async function reviewIssueWithRuntime(
     return review(issue, connection.apiKey ?? '', agentName, {
       gatewayUrl: connection.gatewayUrl,
       model: options.model?.trim() || connection.model,
-      systemPrompt,
+      systemPrompt: [systemPrompt, options.reasoningEffort && options.reasoningEffort !== 'off' ? `Use ${options.reasoningEffort} reasoning effort.` : undefined].filter(Boolean).join('\n\n'),
       signal: options.signal,
       onUpdate: options.onUpdate,
       ...(descriptor.apiPath ? { apiPath: descriptor.apiPath } : {}),
@@ -81,6 +84,7 @@ export async function reviewIssueWithRuntime(
 
   const prompt = [
     systemPrompt,
+    options.reasoningEffort && options.reasoningEffort !== 'off' ? `Use ${options.reasoningEffort} reasoning effort.` : undefined,
     options.allowMutations
       ? 'This is a constrained Workflow Designer assistant. You may propose only changes to the supplied workflow definition; do not modify files, run commands, access tickets, or perform any other action.'
       : 'This is a read-only ticket review. Do not modify files or run destructive commands.',
@@ -92,6 +96,7 @@ export async function reviewIssueWithRuntime(
   const content = await getAcpAgentHost().promptOnce(prompt, {
     ...resolveAcpStartOptions(options.provider),
     model: options.model,
+    reasoningEffort: options.reasoningEffort,
     workingDirectory,
     signal: options.signal,
     onUpdate: emit

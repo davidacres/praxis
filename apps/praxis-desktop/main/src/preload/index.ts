@@ -255,6 +255,8 @@ const praxis: PraxisIpc = {
     dismissInterruptedSessions: issueKeys => ipcRenderer.invoke('ai:dismissInterruptedSessions', issueKeys),
     loadImagePreview: (issueKey: string, filePath: string) =>
       ipcRenderer.invoke('ai:loadImagePreview', issueKey, filePath) as Promise<string | undefined>,
+    openHtmlArtifactPreview: (issueKey: string, filePath: string, title?: string) =>
+      ipcRenderer.invoke('ai:openHtmlArtifactPreview', issueKey, filePath, title) as Promise<void>,
     renameSession: (issueKey: string, title: string) =>
       ipcRenderer.invoke('ai:renameSession', issueKey, title),
     assignSessionToProject: (issueKey: string, projectId: string, ticketKey?: string, workingDirectory?: string) =>

@@ -47,6 +47,10 @@ test('General and Ticket project sessions expose rename, archive, and delete act
       issueKey: 'APP-101',
       task: { goal: 'Ticket sidebar action session' }
     });
+    await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      task: { goal: 'Standalone sidebar action session' }
+    });
     return project.id;
   });
 
@@ -59,10 +63,15 @@ test('General and Ticket project sessions expose rename, archive, and delete act
 
   const general = page.getByTestId('project-session-nav-item').filter({ hasText: 'General sidebar action session' });
   const ticket = page.getByTestId('project-session-nav-item').filter({ hasText: 'Ticket sidebar action session' });
+  await expect(ticket.locator('.session-nav-card-meta')).toContainText('APP-101');
   for (const row of [general, ticket]) {
     await expect(row).toBeVisible();
     await expect(row.locator('.tree-icon')).toHaveAttribute('title', /session/);
+    await expect(row.locator('.session-nav-card-title-row')).toBeVisible();
+    await expect(row.locator('.session-nav-card-status')).toBeVisible();
     await expect(row.getByTestId('project-session-agent-summary')).toBeVisible();
+    await expect(row.locator('.session-nav-card-meta')).not.toBeEmpty();
+    expect(await row.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThan(48);
     await expect(row.locator('.session-nav-actions')).toHaveCSS('opacity', '0');
     await row.hover();
     await expect(row.locator('.session-nav-actions')).toHaveCSS('opacity', '1');
@@ -70,6 +79,13 @@ test('General and Ticket project sessions expose rename, archive, and delete act
     await expect(row.getByTestId('session-archive-btn')).toBeVisible();
     await expect(row.getByTestId('session-delete-btn')).toBeVisible();
   }
+
+  const standalone = page.getByTestId('session-list-row').filter({ hasText: 'Standalone sidebar action session' });
+  await expect(standalone).toBeVisible();
+  await expect(standalone.locator('.session-nav-card-title-row')).toBeVisible();
+  await expect(standalone.locator('.session-nav-card-status')).toBeVisible();
+  await expect(standalone.locator('.session-nav-card-meta')).toContainText(/Vercel|Model not reported/);
+  expect(await standalone.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThan(48);
 
   await page.mouse.move(900, 120);
   await page.waitForTimeout(180);

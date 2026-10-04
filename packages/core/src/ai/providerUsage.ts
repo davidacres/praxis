@@ -16,6 +16,25 @@ export interface ProviderUsageWindow {
   resetsAt?: string;
 }
 
+/**
+ * Why a provider has no account data. The display layer must switch on this
+ * rather than on `unavailableReason` prose: an optional credential that was
+ * never added is not the same as a provider that exposes no usage API, and
+ * neither is the same as a read that genuinely failed.
+ *
+ * Mirrors `MobileProviderUnavailableReason` in host/mobileProtocol.ts so the
+ * desktop and mobile surfaces speak the same vocabulary.
+ */
+export type ProviderUsageUnavailableCode =
+  /** An optional credential (for example an OpenAI Admin key) is not set up. The provider works. */
+  | 'not-configured'
+  /** The provider exposes no account usage API at all. This will not change on its own. */
+  | 'not-supported'
+  /** The provider's CLI is not installed, or Praxis cannot find it. */
+  | 'cli-unavailable'
+  /** The read was attempted and genuinely failed. The only case that is actually offline. */
+  | 'fetch-failed';
+
 export interface ProviderModelCost {
   model: string;
   inputPerMillion?: number;
@@ -32,7 +51,13 @@ export interface ProviderUsageSnapshot {
   /** Optional prepaid/account balance. Most providers do not expose this. */
   credits?: { remaining: number; currency: string };
   modelCosts?: ProviderModelCost[];
+  /** Human-readable reason, suitable to show as-is. */
   unavailableReason?: string;
+  /**
+   * Machine-readable counterpart to `unavailableReason`. Always set alongside
+   * it. UI status must derive from this, never from testing the message text.
+   */
+  unavailableReasonCode?: ProviderUsageUnavailableCode;
 }
 
 /**

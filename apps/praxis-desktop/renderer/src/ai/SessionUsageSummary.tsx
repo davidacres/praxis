@@ -10,7 +10,8 @@ export function SessionUsageSummary({
   spendLimit,
   onHide,
   draftProvider,
-  draftModel
+  draftModel,
+  activityLabel
 }: {
   session?: AgentSessionRecord;
   sessions: AgentSessionRecord[];
@@ -18,6 +19,7 @@ export function SessionUsageSummary({
   onHide?: () => void;
   draftProvider?: AiProvider;
   draftModel?: string;
+  activityLabel?: string;
 }) {
   const selectedProvider = session?.provider ?? draftProvider;
   const selectedModel = session?.model ?? draftModel;
@@ -119,7 +121,7 @@ export function SessionUsageSummary({
         <span>Usage</span>
         <span className="session-usage-summary-meta">
           {selectedModel ? `${selectedModel} · ` : ''}
-          {sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : session ? 'No token data' : 'Not started'}
+          {sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : session ? 'No token data' : activityLabel ?? 'Not started'}
           {session?.cost ? ` · ${formatCost(session?.cost)}` : ''}
         </span>
         {providerWarning && (
@@ -151,9 +153,9 @@ export function SessionUsageSummary({
               <span className="session-usage-label">This session</span>
               <strong>
                 {selectedModel ? `${selectedModel} · ` : ''}
-                {sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : !session ? 'Not started' : isLimit ? 'Limit reached' : 'Not reported'}
+                {sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : !session ? activityLabel ?? 'Not started' : isLimit ? 'Limit reached' : 'Not reported'}
               </strong>
-              <small>{isLimit ? (session?.lastError ?? 'Provider limit reached') : session?.cost ? formatCost(session.cost) : !session ? 'No usage recorded for this session yet' : 'Cost not reported by provider'}</small>
+              <small>{isLimit ? (session?.lastError ?? 'Provider limit reached') : session?.cost ? formatCost(session.cost) : !session ? activityLabel ? 'Chat token and cost totals are not available' : 'No usage recorded for this session yet' : 'Cost not reported by provider'}</small>
             </div>
             {(['hour', 'day', 'week', 'month'] as const).map(period => (
               <div className="session-usage-card" key={period}>
@@ -198,4 +200,3 @@ export function SessionUsageSummary({
     </details>
   );
 }
-

@@ -7,6 +7,7 @@ import type {
   Connection,
   ProviderUsageSnapshot,
   ProviderUsageSnapshotsResult,
+  ProviderUsageUnavailableCode,
   UsageBucket,
   UsageComparison,
   UsageDashboardSummary,
@@ -198,7 +199,8 @@ interface ProviderFleetItem {
   label: string;
   typeCategory: 'cli' | 'api' | 'gateway' | 'local';
   typeLabel: string;
-  status: 'active' | 'warn' | 'offline';
+  /** 'nodata' = no measurement, for a reason that is not a failed read. */
+  status: 'active' | 'warn' | 'offline' | 'nodata';
   rollingLimit: {
     label: string;
     resetsInText: string;
@@ -209,9 +211,11 @@ interface ProviderFleetItem {
     resetsInText: string;
     usedPercent: number;
   };
-  rateLimitPill: string;
-  mtdSpendFormatted: string;
+  rateLimitPill: string | null;
+  /** Null when there is no measured spend. Never a placeholder figure. */
+  mtdSpendFormatted: string | null;
   unavailableReason?: string;
+  unavailableReasonCode?: ProviderUsageUnavailableCode;
 }
 
 interface ProviderBaseline {
@@ -223,85 +227,17 @@ interface ProviderBaseline {
   rollingResets: string;
   quotaUsed: number;
   quotaResets: string;
-  rateLimitPill: string;
-  fallbackSpend: string;
+  rateLimitPill: string | null;
+  fallbackSpend: string | null;
 }
 
-const DEFAULT_FLEET_BASELINES: ProviderBaseline[] = [
-  {
-    id: 'codex-cli',
-    label: 'OpenAI Codex',
-    typeCategory: 'cli',
-    typeLabel: 'CLI Autonomous Agent',
-    rollingUsed: 43,
-    rollingResets: '2h 14m',
-    quotaUsed: 19,
-    quotaResets: '4d 18h',
-    rateLimitPill: 'Tier 1 • 500 RPM',
-    fallbackSpend: '$0.54'
-  },
-  {
-    id: 'claude-code-cli',
-    label: 'Claude Code',
-    typeCategory: 'cli',
-    typeLabel: 'CLI Autonomous Agent',
-    rollingUsed: 71,
-    rollingResets: '1h 38m',
-    quotaUsed: 38,
-    quotaResets: '2d 11h',
-    rateLimitPill: 'Tier 4 • 40k TPM',
-    fallbackSpend: '$0.43'
-  },
-  {
-    id: 'gemini',
-    label: 'Google Gemini',
-    typeCategory: 'api',
-    typeLabel: 'Cloud Model API',
-    rollingUsed: 28,
-    rollingResets: '3h 45m',
-    quotaUsed: 64,
-    quotaResets: '6d 04h',
-    rateLimitPill: 'Pay-As-You-Go • 1M TPM',
-    fallbackSpend: '$0.28'
-  },
-  {
-    id: 'vercel-gateway',
-    label: 'Vercel AI Gateway',
-    typeCategory: 'gateway',
-    typeLabel: 'Cloud Gateway',
-    rollingUsed: 12,
-    rollingResets: '4h 02m',
-    quotaUsed: 8,
-    quotaResets: '5d 20h',
-    rateLimitPill: 'Enterprise • Multi-Region',
-    fallbackSpend: '$0.12'
-  },
-  {
-    id: 'z-ai',
-    label: 'MiniMax',
-    typeCategory: 'api',
-    typeLabel: 'Cloud Model API',
-    rollingUsed: 84,
-    rollingResets: '0h 42m',
-    quotaUsed: 52,
-    quotaResets: '1d 16h',
-    rateLimitPill: 'Developer Tier • 60 RPM',
-    fallbackSpend: '$0.00'
-  },
-  {
-    id: 'custom:ollama',
-    label: 'Ollama',
-    typeCategory: 'local',
-    typeLabel: 'Local LLM Host',
-    rollingUsed: 0,
-    rollingResets: '5h 00m',
-    quotaUsed: 0,
-    quotaResets: '7d 00h',
-    rateLimitPill: 'Local Metal • Unlimited',
-    fallbackSpend: '$0.00'
-  }
-];
-
+/**
+ * Baseline entries for providers that report no data. Deliberately empty: this
+ * used to hold invented figures (Codex at "43% used, resets in 2h 14m, $0.54")
+ * that rendered identically to a real reading. A provider with no measurement
+ * must show no measurement.
+ */
+const DEFAULT_FLEET_BASELINES: ProviderBaseline[] = [];
 export interface AiUsageStatsSectionProps {
   settings?: AppSettings;
   update?: (patch: AppSettingsPatch) => Promise<void>;
@@ -494,7 +430,8 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
       let rollingResets = b.rollingResets;
       let quotaUsed = b.quotaUsed;
       let quotaResets = b.quotaResets;
-      let unavailableReason = snap?.unavailableReason;
+      const unavailableReason = snap?.unavailableReason;
+      const code: ProviderUsageUnavailableCode | undefined = snap?.unavailableReasonCode;
 
       if (snap && snap.windows.length > 0) {
         const hourWin = snap.windows.find(w => w.period === 'hour' || (w.windowDurationMinutes && w.windowDurationMinutes <= 360));
@@ -509,13 +446,10 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
         }
       }
 
-      const liveMtd = computeProviderMtd(b.id);
-      const mtdSpend = liveMtd ?? b.fallbackSpend;
-      const status: ProviderFleetItem['status'] = unavailableReason
-        ? 'offline'
-        : Math.max(rollingUsed, quotaUsed) >= 80
-          ? 'warn'
-          : 'active';
+      const mtdSpend = computeProviderMtd(b.id) ?? null;
+      // Derive from the reason code, not the prose: only a genuinely failed
+      // read is offline.
+      const status: ProviderFleetItem['status'] = !code ? (Math.max(rollingUsed, quotaUsed) >= 80 ? 'warn' : 'active') : code === 'fetch-failed' ? 'offline' : 'nodata';
 
       items.push({
         id: b.id,
@@ -533,9 +467,10 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
           resetsInText: quotaResets,
           usedPercent: Math.min(100, Math.max(0, quotaUsed))
         },
-        rateLimitPill: b.rateLimitPill,
-        mtdSpendFormatted: mtdSpend,
-        unavailableReason
+        rateLimitPill: b.rateLimitPill ?? null,
+        mtdSpendFormatted: mtdSpend ?? null,
+        unavailableReason,
+        unavailableReasonCode: code
       });
     }
 
@@ -567,12 +502,9 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
         }
       }
 
+      const code: ProviderUsageUnavailableCode | undefined = snap.unavailableReasonCode ?? (snap.unavailableReason ? 'fetch-failed' : undefined);
       const liveMtd = computeProviderMtd(snap.provider);
-      const status: ProviderFleetItem['status'] = snap.unavailableReason
-        ? 'offline'
-        : Math.max(rollingUsed, quotaUsed) >= 80
-          ? 'warn'
-          : 'active';
+      const status: ProviderFleetItem['status'] = !code ? (Math.max(rollingUsed, quotaUsed) >= 80 ? 'warn' : 'active') : code === 'fetch-failed' ? 'offline' : 'nodata';
 
       items.push({
         id: snap.provider,
@@ -590,9 +522,10 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
           resetsInText: quotaResets,
           usedPercent: Math.min(100, Math.max(0, quotaUsed))
         },
-        rateLimitPill: isCli ? 'Tier 2 • 300 RPM' : isLocal ? 'Local Metal • Unlimited' : 'Standard Tier • 100 RPM',
-        mtdSpendFormatted: liveMtd ?? '$0.00',
-        unavailableReason: snap.unavailableReason
+        rateLimitPill: null,
+        mtdSpendFormatted: liveMtd ?? null,
+        unavailableReason: snap.unavailableReason,
+        unavailableReasonCode: snap.unavailableReasonCode
       });
     }
 
@@ -615,7 +548,9 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
 
     // Category filter
     if (activeCategory === 'active') {
-      result = result.filter(item => item.status === 'active' || item.status === 'warn');
+      // 'nodata' providers stay visible here: hiding them made configured-but-unkeyed
+      // providers vanish from the fleet entirely.
+      result = result.filter(item => item.status !== 'offline');
     } else if (activeCategory === 'cli') {
       result = result.filter(item => item.typeCategory === 'cli');
     } else if (activeCategory === 'api') {
@@ -635,12 +570,12 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
         return a.label.localeCompare(b.label);
       }
       if (sortOption === 'spend') {
-        const valA = parseFloat(a.mtdSpendFormatted.replace(/[^0-9.]/g, '')) || 0;
-        const valB = parseFloat(b.mtdSpendFormatted.replace(/[^0-9.]/g, '')) || 0;
+        const valA = a.mtdSpendFormatted ? parseFloat(a.mtdSpendFormatted.replace(/[^0-9.]/g, '')) || 0 : -1;
+        const valB = b.mtdSpendFormatted ? parseFloat(b.mtdSpendFormatted.replace(/[^0-9.]/g, '')) || 0 : -1;
         return valB - valA;
       }
       if (sortOption === 'rate') {
-        return a.rateLimitPill.localeCompare(b.rateLimitPill);
+        return (a.rateLimitPill ?? '~').localeCompare(b.rateLimitPill ?? '~');
       }
       return 0;
     });
@@ -903,9 +838,9 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
                       <div className="ai-provider-card-type">{item.typeLabel}</div>
                     </div>
                   </div>
-                  <div className={`ai-provider-card-status is-${item.status}`}>
+                  <div className={`ai-provider-card-status is-${item.status}`} data-testid={`ai-usage-budgets-status-${item.id}`}>
                     <span className="ai-provider-status-dot" />
-                    <span>{item.status === 'warn' ? 'Near Limit' : item.status === 'offline' ? 'Offline' : 'Active'}</span>
+                    <span>{item.status === 'warn' ? 'Near Limit' : item.status === 'offline' ? 'Offline' : item.status === 'nodata' ? (item.unavailableReasonCode === 'not-configured' ? 'Setup' : 'No data') : 'Active'}</span>
                   </div>
                 </div>
 
@@ -962,11 +897,11 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
                 <div className="ai-provider-card-footer">
                   <div className="ai-provider-card-footer-col">
                     <span className="ai-provider-card-footer-label">Rate Limit:</span>
-                    <span className="ai-rate-limit-pill">{item.rateLimitPill}</span>
+                    {item.rateLimitPill && <span className="ai-rate-limit-pill">{item.rateLimitPill}</span>}
                   </div>
                   <div className="ai-provider-card-footer-col">
                     <span className="ai-provider-card-footer-label">MTD Spend:</span>
-                    <span className="ai-provider-card-footer-spend">{item.mtdSpendFormatted}</span>
+                    {item.mtdSpendFormatted ? <span className="ai-provider-card-footer-spend">{item.mtdSpendFormatted}</span> : <span className="ai-provider-card-footer-spend">Not reported</span>}
                   </div>
                 </div>
               </div>

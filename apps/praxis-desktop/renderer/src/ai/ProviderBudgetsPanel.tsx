@@ -66,24 +66,6 @@ function getProviderCategory(providerId: string): { typeCategory: 'cli' | 'api' 
   return { typeCategory: 'api', typeLabel: 'Cloud Model API' };
 }
 
-const BASELINE_FALLBACKS: Record<string, { rateLimitPill: string; fallbackSpend: string }> = {
-  'codex-cli': { rateLimitPill: 'Tier 1 • 500 RPM', fallbackSpend: '$0.54' },
-  'claude-code-cli': { rateLimitPill: 'Tier 2 • 300 RPM', fallbackSpend: '$1.42' },
-  'antigravity-cli': { rateLimitPill: 'Ultra High • 1,200 RPM', fallbackSpend: '$0.18' },
-  'copilot-cli': { rateLimitPill: 'Business Tier • 200 RPM', fallbackSpend: '$0.00' },
-  openai: { rateLimitPill: 'Tier 4 • 10,000 TPM', fallbackSpend: '$2.15' },
-  anthropic: { rateLimitPill: 'Build Tier 3 • 4,000 RPM', fallbackSpend: '$3.80' },
-  gemini: { rateLimitPill: 'Pay-As-You-Go • 1,000 RPM', fallbackSpend: '$0.12' },
-  minimax: { rateLimitPill: 'Default Tier • 60 RPM', fallbackSpend: '$0.00' },
-  ollama: { rateLimitPill: 'Local Metal • Unlimited', fallbackSpend: '$0.00' },
-  openrouter: { rateLimitPill: 'Global Gateway • Dynamic', fallbackSpend: '$0.45' },
-  bifrost: { rateLimitPill: 'Enterprise Gateway • 5,000 RPM', fallbackSpend: '$0.88' },
-  groq: { rateLimitPill: 'LPU Inference • 30 RPM', fallbackSpend: '$0.00' },
-  mistral: { rateLimitPill: 'Platform API • 500 RPM', fallbackSpend: '$0.00' },
-  deepseek: { rateLimitPill: 'DeepSeek V3 • 100 RPM', fallbackSpend: '$0.00' },
-  together: { rateLimitPill: 'Serverless • 600 RPM', fallbackSpend: '$0.00' },
-  lmstudio: { rateLimitPill: 'Local Server • Unlimited', fallbackSpend: '$0.00' }
-};
 
 function QuotaWindow({ window, now, testIdPrefix }: { window: ProviderUsageWindow; now: number; testIdPrefix: string }) {
   const percent = typeof window.usedPercent === 'number'
@@ -185,7 +167,7 @@ function ProviderCard({
   const quotaWindows = snapshot.windows.filter(isQuota);
   const consumptionWindows = snapshot.windows.filter(window => !isQuota(window));
   const { typeLabel } = getProviderCategory(snapshot.provider);
-  const baseline = BASELINE_FALLBACKS[snapshot.provider];
+  const code = snapshot.unavailableReasonCode ?? (snapshot.unavailableReason ? 'fetch-failed' : undefined);
 
   const maxUsed = Math.max(
     0,
@@ -197,19 +179,20 @@ function ProviderCard({
     })
   );
 
-  const status: 'active' | 'warn' | 'offline' = snapshot.unavailableReason
-    ? 'offline'
-    : maxUsed >= 80
-      ? 'warn'
-      : 'active';
+  // Derived from the reason *code*, never from the message text: an optional
+  // key that was never added is not the same as a failed read, and calling both
+  // "Offline" is what made this badge wrong.
+  const status: 'active' | 'warn' | 'offline' | 'nodata' = !code ? (maxUsed >= 80 ? 'warn' : 'active') : code === 'fetch-failed' ? 'offline' : 'nodata';
 
+  // Only ever a real provider-reported figure. Invented "Tier 2 • 300 RPM"
+  // strings were showing on every card and read as if we had measured them.
   const rateLimitPill = snapshot.credits
     ? `${snapshot.credits.remaining.toFixed(2)} ${snapshot.credits.currency}`
-    : baseline?.rateLimitPill ?? (snapshot.provider.endsWith('-cli') ? 'Tier 2 • 300 RPM' : 'Standard Tier • 100 RPM');
+    : null;
 
-  const displaySpend = spendFormatted && spendFormatted !== '$0.00'
-    ? spendFormatted
-    : baseline?.fallbackSpend ?? '$0.00';
+  // A hardcoded per-provider dollar figure (OpenAI $2.15, Anthropic $3.80) is a
+  // fabrication. If we have no measured spend, say nothing.
+  const displaySpend = spendFormatted && spendFormatted !== '$0.00' ? spendFormatted : null;
 
   return (
     <div
@@ -226,7 +209,7 @@ function ProviderCard({
             <div className="ai-provider-card-type">{typeLabel}</div>
           </div>
         </div>
-        <div className={`ai-provider-card-status is-${status}`}>
+        <div className={`ai-provider-card-status is-${status}`} data-testid={`overview-budgets-status-${snapshot.provider}`}>
           <span className="ai-provider-status-dot" />
           <span>
             {status === 'warn' ? (
@@ -235,6 +218,8 @@ function ProviderCard({
               </span>
             ) : status === 'offline' ? (
               'Offline'
+            ) : status === 'nodata' ? (
+              code === 'not-configured' ? 'Setup' : 'No data'
             ) : (
               'Active'
             )}
@@ -294,18 +279,24 @@ function ProviderCard({
       )}
 
       {/* Symmetrical Two-Column Footer matching AI Usage page */}
-      <div className="ai-provider-card-footer">
-        <div className="ai-provider-card-footer-col">
-          <span className="ai-provider-card-footer-label">
-            {snapshot.credits ? 'Balance:' : 'Rate Limit:'}
-          </span>
-          <span className="ai-rate-limit-pill">{rateLimitPill}</span>
+      {(rateLimitPill || displaySpend) && (
+        <div className="ai-provider-card-footer">
+          {rateLimitPill && (
+            <div className="ai-provider-card-footer-col">
+              <span className="ai-provider-card-footer-label">
+                {snapshot.credits ? 'Balance:' : 'Rate Limit:'}
+              </span>
+              <span className="ai-rate-limit-pill">{rateLimitPill}</span>
+            </div>
+          )}
+          {displaySpend && (
+            <div className="ai-provider-card-footer-col">
+              <span className="ai-provider-card-footer-label">MTD Spend:</span>
+              <span className="ai-provider-card-footer-spend">{displaySpend}</span>
+            </div>
+          )}
         </div>
-        <div className="ai-provider-card-footer-col">
-          <span className="ai-provider-card-footer-label">MTD Spend:</span>
-          <span className="ai-provider-card-footer-spend">{displaySpend}</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

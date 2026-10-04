@@ -93,3 +93,19 @@ test('no providers is a valid, empty batch', async () => {
   assert.deepEqual(result.snapshots, []);
   assert.ok(result.checkedAt);
 });
+
+
+test('a rejected read is tagged fetch-failed, so the UI can stop guessing from prose', async () => {
+  const { snapshots } = await readProviderSnapshots(['codex-cli'], async () => {
+    throw new Error('Codex CLI not found on PATH');
+  });
+  assert.equal(snapshots[0].unavailableReasonCode, 'fetch-failed');
+});
+
+test('an adapter that returns a reason but no code still reaches the UI with a code', async () => {
+  // A snapshot built by an adapter that predates the code must not render as a
+  // bare "has a reason" case, which is what made the Offline badge wrong.
+  const { snapshots } = await readProviderSnapshots(['anthropic'], async provider => snapshot(provider, 'no usage API'));
+  assert.equal(snapshots[0].unavailableReasonCode, 'fetch-failed');
+  assert.equal(snapshots[0].unavailableReason, 'no usage API');
+});

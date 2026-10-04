@@ -1,5 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { AssistantMessage, AssistantProposedAction, PageAssistantContext } from '@praxis/core';
+import type { AgentPermissionMode, AgentSessionRecord, AgentToolMode, AssistantMessage, AssistantProposedAction, AssistantRole, AiProvider, PageAssistantContext, ReasoningEffort } from '@praxis/core';
+
+export interface AssistantRuntimeOptions {
+  provider?: AiProvider;
+  model?: string;
+  reasoningEffort?: ReasoningEffort;
+  permissionMode?: AgentPermissionMode;
+  mode?: 'chat' | 'analysis' | 'review';
+  toolMode?: AgentToolMode;
+  workingDirectory?: string;
+}
 
 /** A page's own handler for an action the assistant proposed on it. Returns a short outcome line. */
 export type AssistantActionHandler = (action: AssistantProposedAction) => Promise<string | void> | string | void;
@@ -32,9 +42,13 @@ export interface AssistantController {
   setDocked: (docked: boolean) => void;
   messages: AssistantMessage[];
   busy: boolean;
+  activeToolSession?: AgentSessionRecord;
+  lastToolSession?: AgentSessionRecord;
   error?: string;
   draft: string;
   setDraft: (draft: string) => void;
+  teamMembers: readonly AssistantRole[];
+  toggleTeamMember: (role: AssistantRole) => void;
   /** The page context that will accompany the next turn, if attached. */
   pageContext?: PageAssistantContext;
   /** The registered context even when the user has detached it, so the pill can offer re-attach. */
@@ -44,8 +58,7 @@ export interface AssistantController {
   projectId?: string;
   setProjectId: (projectId: string | undefined) => void;
   chatId?: string;
-  send: (text: string) => Promise<void>;
-  runTeamReview: () => Promise<void>;
+  send: (text: string, members?: readonly AssistantRole[], runtime?: AssistantRuntimeOptions) => Promise<void>;
   newChat: () => void;
   loadChat: (chatId: string) => Promise<void>;
   /** Called after a chat is deleted elsewhere (the sidebar) so an open transcript can reset. */
@@ -73,8 +86,18 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [docked, setDockedState] = useState(() => readBool(DOCKED_KEY, false));
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [busy, setBusy] = useState(false);
+  const [activeToolSession, setActiveToolSession] = useState<AgentSessionRecord>();
+  const [lastToolSession, setLastToolSession] = useState<AgentSessionRecord>();
+  const activeToolPrefix = useRef<string>();
+  useEffect(() => window.praxis.ai.onSessionChanged(record => {
+    if (activeToolPrefix.current && record.issueKey.startsWith(`${activeToolPrefix.current}-`)) {
+      setActiveToolSession(record);
+      if (['completed', 'failed', 'aborted'].includes(record.state)) setLastToolSession(record);
+    }
+  }), []);
   const [error, setError] = useState<string | undefined>();
   const [draft, setDraft] = useState('');
+  const [teamMembers, setTeamMembers] = useState<AssistantRole[]>(['dev']);
   const [projectId, setProjectIdState] = useState<string | undefined>();
   const [chatId, setChatId] = useState<string | undefined>();
   const [registrations, setRegistrations] = useState<Registration[]>([]);
@@ -158,6 +181,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setMessages([]);
     setChatId(undefined);
     setError(undefined);
+    setLastToolSession(undefined);
     setAppliedActions({});
   }, []);
 
@@ -168,10 +192,17 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     reset();
   }, [reset]);
 
-  const send = useCallback(async (raw: string) => {
+  const toggleTeamMember = useCallback((role: AssistantRole) => {
+    setTeamMembers(current => current.includes(role) ? current.filter(member => member !== role) : [...current, role]);
+  }, []);
+
+  const send = useCallback(async (raw: string, members: readonly AssistantRole[] = teamMembers, runtime?: AssistantRuntimeOptions) => {
     const text = raw.trim();
     if (!text) return;
     const context = pageContextRef.current;
+    // A deliberate @mention remains a direct one-to-one override of the selected roster.
+    const mention = /(?:^|\s)@(lead|dev|qa|security|product)\b/i.exec(text)?.[1]?.toLowerCase() as AssistantRole | undefined;
+    const selected = mention ? [mention] : [...members];
     // "Detach" lasts one message: the page context re-attaches itself for the next turn.
     setDetachedTitle(undefined);
     const userMessage: AssistantMessage = {
@@ -185,39 +216,46 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     persist([...history, userMessage]);
     setError(undefined);
     setBusy(true);
+    const toolSessionPrefix = runtime?.toolMode && runtime.toolMode !== 'project-only' ? `ASSISTANT-${crypto.randomUUID()}` : undefined;
+    activeToolPrefix.current = toolSessionPrefix;
+    setActiveToolSession(undefined);
+    const selectedRuntime = { ...runtime, ...(toolSessionPrefix ? { toolSessionPrefix } : {}) };
     try {
-      const result = await window.praxis.assistant.turn({ message: text, context, history });
-      persist([...messagesRef.current, ...result.messages]);
+      if (selected.length > 1) {
+        // Run only the selected seats. Keep the lead last when selected so it can
+        // synthesise the earlier replies; the UI default is a one-to-one with Dev.
+        const order: AssistantRole[] = ['dev', 'qa', 'security', 'product', 'lead'];
+        const produced: AssistantMessage[] = [];
+        for (const personaId of order.filter(role => selected.includes(role))) {
+          const result = await window.praxis.assistant.turn({
+            message: text,
+            personaId,
+            context,
+            history: [...history, ...produced],
+            ...selectedRuntime
+          } as Parameters<typeof window.praxis.assistant.turn>[0]);
+          produced.push(...result.messages);
+          persist([...messagesRef.current, ...result.messages]);
+          if (result.messages.some(message => message.error)) break;
+        }
+      } else {
+        const result = await window.praxis.assistant.turn({
+          message: text,
+          ...(selected[0] ? { personaId: selected[0] } : {}),
+          context,
+          history,
+          ...selectedRuntime
+        } as Parameters<typeof window.praxis.assistant.turn>[0]);
+        persist([...messagesRef.current, ...result.messages]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+      activeToolPrefix.current = undefined;
+      setActiveToolSession(undefined);
     }
-  }, [persist]);
-
-  const runTeamReview = useCallback(async () => {
-    const context = pageContextRef.current;
-    setDetachedTitle(undefined);
-    const marker: AssistantMessage = {
-      id: newMessageId(),
-      role: 'user',
-      text: context ? `Team review: ${context.title}` : 'Team review',
-      createdAt: new Date().toISOString(),
-      ...(context ? { contextTitle: context.title } : {})
-    };
-    const history = messagesRef.current;
-    persist([...history, marker]);
-    setError(undefined);
-    setBusy(true);
-    try {
-      const result = await window.praxis.assistant.teamReview({ context, history });
-      persist([...messagesRef.current, ...result.messages]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }, [persist]);
+  }, [persist, teamMembers]);
 
   const loadChat = useCallback(async (id: string) => {
     const chat = await window.praxis.assistant.getChat(id);
@@ -265,12 +303,13 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }), [reset]);
 
   const value = useMemo<AssistantController>(() => ({
-    open, setOpen, toggle, docked, setDocked, messages, busy, error, draft, setDraft,
+    open, setOpen, toggle, docked, setDocked, messages, busy, activeToolSession, lastToolSession, error, draft, setDraft, teamMembers, toggleTeamMember,
     pageContext, availableContext, contextDetached, setContextDetached,
-    projectId, setProjectId, chatId, send, runTeamReview, newChat: reset, loadChat, chatDeleted,
+    projectId, setProjectId, chatId, send, newChat: reset, loadChat, chatDeleted,
     applyAction, appliedActions, register, unregister, setSessionDelegate
-  }), [open, setOpen, toggle, docked, setDocked, messages, busy, error, draft, pageContext, availableContext, contextDetached,
-    setContextDetached, projectId, setProjectId, chatId, send, runTeamReview, reset, loadChat, chatDeleted, applyAction,
+  }), [open, setOpen, toggle, docked, setDocked, messages, busy, activeToolSession, lastToolSession, error, draft, pageContext, availableContext, contextDetached,
+    setContextDetached, projectId, setProjectId, chatId, send, reset, loadChat, chatDeleted, applyAction,
+    teamMembers, toggleTeamMember,
     appliedActions, register, unregister, setSessionDelegate]);
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;

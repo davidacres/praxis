@@ -32,18 +32,22 @@ export async function startMockOpenAiCompatibleServer(options: {
   tools?: boolean;
   /** Reply text for chat requests. */
   reply?: string | (() => string);
+  responseDelayMs?: number;
+  /** One tool request for agent-session tests; subsequent completions answer normally. */
+  toolCall?: { name: string; arguments: string };
 }): Promise<MockOpenAiCompatibleServer> {
   const apiPath = options.apiPath ?? '/v1';
   const models = options.models ?? ['mock-model'];
   const currentReply = (): string => (typeof options.reply === 'function' ? options.reply() : options.reply ?? 'Mock endpoint reply: done.');
   const requests: MockOpenAiCompatibleRequest[] = [];
+  let toolCallSent = false;
 
   const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => {
       body += chunk.toString('utf8');
     });
-    req.on('end', () => {
+    req.on('end', async () => {
       requests.push({ method: req.method ?? '', url: req.url ?? '', headers: req.headers, body });
       const json = (status: number, value: unknown) => {
         res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -57,6 +61,7 @@ export async function startMockOpenAiCompatibleServer(options: {
         json(404, { error: { message: `No route ${req.method} ${req.url}` } });
         return;
       }
+      if (options.responseDelayMs) await new Promise(resolve => setTimeout(resolve, options.responseDelayMs));
       const payload = JSON.parse(body || '{}') as {
         stream?: boolean;
         stream_options?: unknown;
@@ -65,6 +70,9 @@ export async function startMockOpenAiCompatibleServer(options: {
       // Only the connection test's `get_time` tool is ever called; an agent session's turn is answered in text.
       const toolName = options.tools !== false ? payload.tools?.[0]?.function?.name : undefined;
       const callTool = toolName === 'get_time';
+      const agentTool = options.toolCall && payload.tools?.some(tool => tool.function?.name === options.toolCall?.name) && !toolCallSent
+        ? options.toolCall : undefined;
+      if (agentTool) toolCallSent = true;
 
       if (!payload.stream) {
         json(200, {
@@ -72,9 +80,11 @@ export async function startMockOpenAiCompatibleServer(options: {
           object: 'chat.completion',
           choices: [{
             index: 0,
-            finish_reason: callTool ? 'tool_calls' : 'stop',
+            finish_reason: callTool || agentTool ? 'tool_calls' : 'stop',
             message: callTool
               ? { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: toolName, arguments: '{"timezone":"UTC"}' } }] }
+              : agentTool
+                ? { role: 'assistant', content: null, tool_calls: [{ id: 'call_agent_1', type: 'function', function: agentTool }] }
               : { role: 'assistant', content: currentReply() }
           }],
           usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 }
@@ -84,6 +94,12 @@ export async function startMockOpenAiCompatibleServer(options: {
 
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       const chunk = (value: unknown) => res.write(`data: ${JSON.stringify(value)}\n\n`);
+      if (agentTool) {
+        chunk({ id: 'chatcmpl-mock', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { role: 'assistant', tool_calls: [{ index: 0, id: 'call_agent_1', type: 'function', function: agentTool }] }, finish_reason: null }] });
+        chunk({ id: 'chatcmpl-mock', object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] });
+        res.end('data: [DONE]\n\n');
+        return;
+      }
       chunk({ id: 'chatcmpl-mock', object: 'chat.completion.chunk', choices: [{ index: 0, delta: { role: 'assistant', content: currentReply() }, finish_reason: null }] });
       chunk({ id: 'chatcmpl-mock', object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] });
       if (payload.stream_options) {

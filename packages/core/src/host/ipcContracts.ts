@@ -842,6 +842,8 @@ export interface AiIpc {
    * returns a data URL so the renderer never receives filesystem access.
    */
   loadImagePreview(issueKey: string, filePath: string): Promise<string | undefined>;
+  /** Opens a bounded HTML file from the session's working folder in a restricted in-app preview window. */
+  openHtmlArtifactPreview(issueKey: string, filePath: string, title?: string): Promise<void>;
   /** Renames a persisted session without changing its ticket binding or task goal. */
   renameSession(issueKey: string, title: string): Promise<AgentSessionRecord>;
   assignSessionToProject(issueKey: string, projectId: string, ticketKey?: string, workingDirectory?: string): Promise<AgentSessionRecord>;
