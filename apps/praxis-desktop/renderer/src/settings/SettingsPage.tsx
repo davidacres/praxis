@@ -40,6 +40,7 @@ import { ChipSelect } from '../ui/ChipSelect';
 import { ModelManagerPanel } from '../ai/ModelManagerPanel';
 import { AiUsageStatsSection } from './AiUsageStatsSection';
 import { fetchModelOptions, hasModelCatalog, providerIconName } from '../ai/modelProviders';
+import { ProviderBrandLogo } from '../ai/ProviderBrandLogo';
 import { AddProviderDialog, CustomEndpointForm, endpointDisplayUrl, type BuiltInCatalogEntry } from './AiProviderCatalog';
 import { RemoveProviderDialog } from './RemoveProviderDialog';
 import { McpServersPanel } from './McpServersPanel';
@@ -1624,7 +1625,16 @@ function MarketplaceSection() {
         {!status?.ready && (
           <div className="settings-field-help">Enable the marketplace with an owner and token first.</div>
         )}
-        {testError && <div className="error-banner" data-testid="marketplace-test-error">{testError}</div>}
+        {testError && (
+          <div className="error-banner" data-testid="marketplace-test-error">
+            <div>{testError}</div>
+            {testError.includes('Bad credentials') && (
+              <p style={{ marginTop: 8, fontSize: '0.85em', opacity: 0.9, lineHeight: 1.4 }}>
+                GitHub rejected the stored token (expired, revoked, or incorrect). Even for public repositories, GitHub Packages mandates authentication. Generate a new <strong>Personal Access Token (classic)</strong> with the <code>read:packages</code> scope on GitHub (Settings → Developer settings → Personal access tokens → Tokens classic) and save it above.
+              </p>
+            )}
+          </div>
+        )}
         {testCounts && (
           <div className="settings-section-description" data-testid="marketplace-test-results">
             {(Object.keys(ADDON_KIND_LABELS) as AddonKind[]).map((kind, index) => (
@@ -2635,80 +2645,88 @@ function AiSection({
                         }
                       }}
                     >
-                      <span className="ai-provider-chevron" aria-hidden>
-                        <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={13} />
-                      </span>
-                      <div className="ai-provider-text">
-                        <div className="ai-provider-name">
-                          {meta.label}
-                          <span className="ai-provider-kind">{kindTag}</span>
-                          {isDefault && <span className="chip ai-provider-default" data-testid={`ai-provider-default-${meta.id}`}>Default</span>}
+                      <div className="ai-provider-card-identity">
+                        <div className="ai-provider-card-logo">
+                          <ProviderBrandLogo provider={meta.id} size={32} />
                         </div>
-                        <div className="ai-provider-meta" data-testid={isOpen ? 'ai-provider-status' : undefined}>
-                          {enabled ? '' : 'Turned off. '}
-                          {statusText(rowStatus, meta)}
-                        </div>
-                        {custom?.capabilities && (
-                          <div className="ai-provider-caps" data-testid={`ai-provider-caps-${meta.id}`}>
-                            {(['models', 'chat', 'streamUsage', 'tools'] as const).map(capability => (
-                              <span
-                                key={capability}
-                                className={`ai-provider-cap${custom.capabilities![capability] ? '' : ' is-missing'}`}
-                                data-capability={capability}
-                                data-ok={custom.capabilities![capability] ? 'true' : 'false'}
-                              >
-                                <Icon name={custom.capabilities![capability] ? 'check' : 'close'} size={10} />
-                                {CAPABILITY_LABELS[capability]}
-                              </span>
-                            ))}
+                        <div className="ai-provider-card-names">
+                          <div className="ai-provider-name">
+                            <span>{meta.label}</span>
+                            <span className="ai-provider-kind">{kindTag}</span>
+                            {isDefault && <span className="chip ai-provider-default" data-testid={`ai-provider-default-${meta.id}`}>Default</span>}
                           </div>
-                        )}
+                          <div className="ai-provider-meta" data-testid={isOpen ? 'ai-provider-status' : undefined}>
+                            {enabled ? '' : 'Turned off. '}
+                            {statusText(rowStatus, meta)}
+                          </div>
+                          {custom?.capabilities && (
+                            <div className="ai-provider-caps" data-testid={`ai-provider-caps-${meta.id}`}>
+                              {(['models', 'chat', 'streamUsage', 'tools'] as const).map(capability => (
+                                <span
+                                  key={capability}
+                                  className={`ai-provider-cap${custom.capabilities![capability] ? '' : ' is-missing'}`}
+                                  data-capability={capability}
+                                  data-ok={custom.capabilities![capability] ? 'true' : 'false'}
+                                >
+                                  <Icon name={custom.capabilities![capability] ? 'check' : 'close'} size={10} />
+                                  {CAPABILITY_LABELS[capability]}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <span className="spacer" />
-                      {!isDefault && enabled && (
+                      <div className="ai-provider-card-actions">
+                        <span className={`ai-provider-card-status ${!configured ? 'is-warn' : !on ? 'is-offline' : ''}`}>
+                          <span className="ai-provider-status-dot" />
+                          <span>{!configured ? (meta.kind === 'cli-agent' ? 'Not on PATH' : 'Setup') : on ? 'Active' : 'Off'}</span>
+                        </span>
+                        {!isDefault && enabled && (
+                          <button
+                            type="button"
+                            className="btn btn-compact"
+                            data-testid={`ai-provider-set-active-${meta.id}`}
+                            aria-label={`Use ${meta.label} for new sessions`}
+                            onClick={event => {
+                              event.stopPropagation();
+                              void update({ ai: { activeProvider: meta.id } });
+                            }}
+                          >
+                            Make default
+                          </button>
+                        )}
+                        <button type="button" className="btn btn-compact" data-testid={`ai-provider-remove-${meta.id}`}
+                          aria-label={`Remove ${meta.label}`} disabled={listedMetas.length <= 1 || removing}
+                          title={listedMetas.length <= 1 ? 'Keep at least one AI provider' : `Remove ${meta.label}`}
+                          onKeyDown={event => event.stopPropagation()}
+                          onClick={event => { event.stopPropagation(); requestRemoval(meta); }}>
+                          Remove
+                        </button>
                         <button
                           type="button"
-                          className="btn btn-compact"
-                          data-testid={`ai-provider-set-active-${meta.id}`}
-                          aria-label={`Use ${meta.label} for new sessions`}
+                          role="switch"
+                          aria-checked={on}
+                          aria-label={`${meta.label} enabled`}
+                          title={switchTitle}
+                          className="switch"
+                          data-testid={`ai-provider-enabled-${meta.id}`}
+                          disabled={!rowStatus || (configured && isDefault)}
                           onClick={event => {
                             event.stopPropagation();
-                            void update({ ai: { activeProvider: meta.id } });
+                            if (!configured) {
+                              setSelectedProviderId(meta.id);
+                              setSetupFocus(meta.id);
+                              return;
+                            }
+                            void update({
+                              ai: { providers: { [meta.id]: { ...(settings.ai.providers[meta.id] ?? {}), enabled: !on } } }
+                            });
                           }}
-                        >
-                          Make default
-                        </button>
-                      )}
-                      <button type="button" className="btn btn-compact" data-testid={`ai-provider-remove-${meta.id}`}
-                        aria-label={`Remove ${meta.label}`} disabled={listedMetas.length <= 1 || removing}
-                        title={listedMetas.length <= 1 ? 'Keep at least one AI provider' : `Remove ${meta.label}`}
-                        onKeyDown={event => event.stopPropagation()}
-                        onClick={event => { event.stopPropagation(); requestRemoval(meta); }}>
-                        Remove
-                      </button>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={on}
-                        aria-label={`${meta.label} enabled`}
-                        title={switchTitle}
-                        className="switch"
-                        data-testid={`ai-provider-enabled-${meta.id}`}
-                        disabled={!rowStatus || (configured && isDefault)}
-                        onClick={event => {
-                          event.stopPropagation();
-                          if (!configured) {
-                            // Nothing to switch on yet: take the user to the setup instead of a dead control. It turns
-                            // itself on once configured (an unset `enabled` means enabled).
-                            setSelectedProviderId(meta.id);
-                            setSetupFocus(meta.id);
-                            return;
-                          }
-                          void update({
-                            ai: { providers: { [meta.id]: { ...(settings.ai.providers[meta.id] ?? {}), enabled: !on } } }
-                          });
-                        }}
-                      />
+                        />
+                        <span className="ai-provider-chevron" aria-hidden>
+                          <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={13} />
+                        </span>
+                      </div>
                     </div>
                     {isOpen && custom && (
                       <div className="ai-provider-body" data-testid={`ai-provider-body-${meta.id}`}>

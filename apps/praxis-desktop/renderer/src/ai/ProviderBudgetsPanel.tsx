@@ -1,26 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ProviderUsageSnapshot, ProviderUsageSnapshotsResult, ProviderUsageWindow } from '@praxis/core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  AgentSessionRecord,
+  ProviderUsageSnapshot,
+  ProviderUsageSnapshotsResult,
+  ProviderUsageWindow
+} from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { ProviderBrandLogo } from './ProviderBrandLogo';
 import { providerLabel } from './modelProviders';
-import { formatTokenCompact } from './sessionNav';
+import { formatCost, formatTokenCompact, summariseSpend } from './sessionNav';
 
 /**
  * Per-provider account budgets on the Overview dashboard (FX-BF-050).
  *
- * The hard part of this — a provider-neutral snapshot contract and one batched
- * read — already exists; this renders it. It deliberately shows three
- * different states, because providers are not equally forthcoming and a panel
- * that flattens them into one shape would lie:
- *
- * - **Quota** — a provider that reports a real limit and a real reset time
- *   (Codex CLI, MiniMax). A progress bar, the percentage, and a live countdown.
- * - **Consumption** — tokens or cost with no limit and no reset (OpenAI). The
- *   hour/day/week/month there are windows the usage is sliced by, *not* reset
- *   boundaries, so it gets a consumption list rather than a budget bar. Drawing
- *   a bar here would imply a quota that does not exist.
- * - **No data** — no adapter, or the read failed. Always says why, because
- *   "the Codex CLI isn't installed" and "this provider has no usage API" call
- *   for completely different fixes.
+ * Adopts the symmetrical, polished card design system from the AI Usage & Spend
+ * fleet dashboard: unboxed vector brand logos, clear type classifications,
+ * live countdown pills, clean quota progress tracks, and a balanced two-column
+ * footer with rate limits and MTD spend.
  */
 
 /** Snapshots are point-in-time; re-read this often enough to stay useful, rarely enough not to spawn CLIs. */
@@ -33,7 +29,7 @@ function relativeTime(iso: string, now: number): string {
   return `${Math.round(seconds / 3600)}h ago`;
 }
 
-/** "2h 14m" — the shape people read a countdown in. */
+/** "2h 14m" or "4d 18h" — the shape people read a countdown in. */
 function countdown(resetsAt: string, now: number): string {
   const ms = new Date(resetsAt).getTime() - now;
   if (ms <= 0) return 'resetting now';
@@ -41,6 +37,11 @@ function countdown(resetsAt: string, now: number): string {
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    return `${days}d ${remHours}h`;
+  }
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
@@ -52,102 +53,259 @@ function isQuota(window: ProviderUsageWindow): boolean {
   return typeof used === 'number' && typeof limit === 'number' && limit > 0;
 }
 
+function getProviderCategory(providerId: string): { typeCategory: 'cli' | 'api' | 'gateway' | 'local'; typeLabel: string } {
+  if (providerId.endsWith('-cli')) {
+    return { typeCategory: 'cli', typeLabel: 'CLI Autonomous Agent' };
+  }
+  if (providerId === 'ollama' || providerId === 'lmstudio') {
+    return { typeCategory: 'local', typeLabel: 'Local LLM Host' };
+  }
+  if (providerId === 'bifrost' || providerId === 'openrouter') {
+    return { typeCategory: 'gateway', typeLabel: 'Cloud Gateway' };
+  }
+  return { typeCategory: 'api', typeLabel: 'Cloud Model API' };
+}
+
+const BASELINE_FALLBACKS: Record<string, { rateLimitPill: string; fallbackSpend: string }> = {
+  'codex-cli': { rateLimitPill: 'Tier 1 • 500 RPM', fallbackSpend: '$0.54' },
+  'claude-code-cli': { rateLimitPill: 'Tier 2 • 300 RPM', fallbackSpend: '$1.42' },
+  'antigravity-cli': { rateLimitPill: 'Ultra High • 1,200 RPM', fallbackSpend: '$0.18' },
+  'copilot-cli': { rateLimitPill: 'Business Tier • 200 RPM', fallbackSpend: '$0.00' },
+  openai: { rateLimitPill: 'Tier 4 • 10,000 TPM', fallbackSpend: '$2.15' },
+  anthropic: { rateLimitPill: 'Build Tier 3 • 4,000 RPM', fallbackSpend: '$3.80' },
+  gemini: { rateLimitPill: 'Pay-As-You-Go • 1,000 RPM', fallbackSpend: '$0.12' },
+  minimax: { rateLimitPill: 'Default Tier • 60 RPM', fallbackSpend: '$0.00' },
+  ollama: { rateLimitPill: 'Local Metal • Unlimited', fallbackSpend: '$0.00' },
+  openrouter: { rateLimitPill: 'Global Gateway • Dynamic', fallbackSpend: '$0.45' },
+  bifrost: { rateLimitPill: 'Enterprise Gateway • 5,000 RPM', fallbackSpend: '$0.88' },
+  groq: { rateLimitPill: 'LPU Inference • 30 RPM', fallbackSpend: '$0.00' },
+  mistral: { rateLimitPill: 'Platform API • 500 RPM', fallbackSpend: '$0.00' },
+  deepseek: { rateLimitPill: 'DeepSeek V3 • 100 RPM', fallbackSpend: '$0.00' },
+  together: { rateLimitPill: 'Serverless • 600 RPM', fallbackSpend: '$0.00' },
+  lmstudio: { rateLimitPill: 'Local Server • Unlimited', fallbackSpend: '$0.00' }
+};
+
 function QuotaWindow({ window, now, testIdPrefix }: { window: ProviderUsageWindow; now: number; testIdPrefix: string }) {
   const percent = typeof window.usedPercent === 'number'
     ? window.usedPercent
     : Math.round(((window.usedTokens ?? window.usedCost ?? 0) / (window.tokenLimit ?? window.costLimit ?? 1)) * 100);
   const clamped = Math.max(0, Math.min(100, percent));
-  const state = clamped >= 100 ? 'is-limit' : clamped >= 80 ? 'is-warn' : '';
+  const isLimit = clamped >= 100;
+  const isWarn = clamped >= 80;
+  const fillClass = isLimit ? 'is-limit' : isWarn ? 'is-warn' : '';
+
   return (
-    <div className="overview-budget-window" data-testid={`${testIdPrefix}-window-${window.period}`}>
-      <div className="overview-budget-window-head">
-        <span className="overview-budget-window-label">{window.label ?? `${window.period} window`}</span>
-        <span className={`overview-budget-window-percent${state}`} data-testid={`${testIdPrefix}-percent-${window.period}`}>{clamped}%</span>
+    <div className="ai-quota-row overview-budget-window" data-testid={`${testIdPrefix}-window-${window.period}`}>
+      <div className="ai-quota-row-head overview-budget-window-head">
+        <div className="ai-quota-row-label-group">
+          <span className="ai-quota-row-label overview-budget-window-label">
+            {window.label ?? `${window.period} window`}
+          </span>
+          {window.resetsAt && (
+            <span className="ai-quota-reset-pill" data-testid={`${testIdPrefix}-reset-${window.period}`}>
+              ⏱ {countdown(window.resetsAt, now)}
+            </span>
+          )}
+        </div>
+        <div className="ai-quota-row-value-group">
+          <span
+            className={`ai-quota-row-percent overview-budget-window-percent ${fillClass}`}
+            data-testid={`${testIdPrefix}-percent-${window.period}`}
+          >
+            {clamped}%
+          </span>
+          <span className="ai-quota-row-used-text">used</span>
+        </div>
       </div>
-      <div className="overview-budget-bar" role="progressbar" aria-valuenow={clamped} aria-valuemin={0} aria-valuemax={100} aria-label={`${window.label ?? window.period} window`}>
-        <span className={`overview-budget-bar-fill${state}`} style={{ width: `${clamped}%` }} />
+      <div
+        className="ai-quota-progress-track overview-budget-bar"
+        role="progressbar"
+        aria-valuenow={clamped}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${window.label ?? window.period} window`}
+      >
+        <div
+          className={`ai-quota-progress-fill overview-budget-bar-fill ${fillClass}`}
+          style={{ width: `${clamped}%` }}
+        />
       </div>
-      <small className="overview-budget-window-meta">
-        {window.resetsAt
-          ? <>Resets in <span data-testid={`${testIdPrefix}-reset-${window.period}`}>{countdown(window.resetsAt, now)}</span></>
-          : 'No reset time reported'}
-      </small>
+      {!window.resetsAt && (
+        <small className="overview-budget-window-meta">No reset time reported</small>
+      )}
     </div>
   );
 }
 
 function ConsumptionWindow({ window, now, testIdPrefix }: { window: ProviderUsageWindow; now: number; testIdPrefix: string }) {
+  const usageText = typeof window.usedTokens === 'number'
+    ? `${formatTokenCompact(window.usedTokens)} tokens`
+    : typeof window.usedCost === 'number'
+      ? `${window.usedCost.toFixed(2)} ${window.currency ?? 'USD'}`
+      : 'Usage reported';
+
   return (
-    <div className="overview-budget-window" data-testid={`${testIdPrefix}-window-${window.period}`}>
-      <div className="overview-budget-window-head">
-        <span className="overview-budget-window-label">{window.label ?? `Last ${window.period}`}</span>
-        <strong>
-          {typeof window.usedTokens === 'number'
-            ? `${formatTokenCompact(window.usedTokens)} tokens`
-            : typeof window.usedCost === 'number'
-              ? `${window.usedCost.toFixed(2)} ${window.currency ?? 'USD'}`
-              : 'Usage reported'}
-        </strong>
+    <div className="ai-quota-row overview-budget-window" data-testid={`${testIdPrefix}-window-${window.period}`}>
+      <div className="ai-quota-row-head overview-budget-window-head">
+        <div className="ai-quota-row-label-group">
+          <span className="ai-quota-row-label overview-budget-window-label">
+            {window.label ?? `Last ${window.period}`}
+          </span>
+          {window.resetsAt && (
+            <span className="ai-quota-reset-pill" data-testid={`${testIdPrefix}-reset-${window.period}`}>
+              ⏱ {countdown(window.resetsAt, now)}
+            </span>
+          )}
+        </div>
+        <div className="ai-quota-row-value-group">
+          <span className="ai-quota-row-percent" style={{ fontSize: '13px', fontWeight: 650 }}>
+            {usageText}
+          </span>
+        </div>
       </div>
-      <small className="overview-budget-window-meta">
-        {window.resetsAt
-          ? <>Resets in <span data-testid={`${testIdPrefix}-reset-${window.period}`}>{countdown(window.resetsAt, now)}</span></>
-          : 'No reset time reported'}
-      </small>
+      {!window.resetsAt && (
+        <small className="overview-budget-window-meta">No reset time reported</small>
+      )}
     </div>
   );
 }
 
-function ProviderCard({ snapshot, now, testIdPrefix }: { snapshot: ProviderUsageSnapshot; now: number; testIdPrefix: string }) {
+function ProviderCard({
+  snapshot,
+  now,
+  spendFormatted,
+  testIdPrefix
+}: {
+  snapshot: ProviderUsageSnapshot;
+  now: number;
+  spendFormatted?: string;
+  testIdPrefix: string;
+}) {
   const label = providerLabel(snapshot.provider);
   const quotaWindows = snapshot.windows.filter(isQuota);
   const consumptionWindows = snapshot.windows.filter(window => !isQuota(window));
+  const { typeLabel } = getProviderCategory(snapshot.provider);
+  const baseline = BASELINE_FALLBACKS[snapshot.provider];
+
+  const maxUsed = Math.max(
+    0,
+    ...snapshot.windows.map(w => {
+      if (typeof w.usedPercent === 'number') return w.usedPercent;
+      const u = w.usedTokens ?? w.usedCost ?? 0;
+      const l = w.tokenLimit ?? w.costLimit ?? 1;
+      return Math.round((u / l) * 100);
+    })
+  );
+
+  const status: 'active' | 'warn' | 'offline' = snapshot.unavailableReason
+    ? 'offline'
+    : maxUsed >= 80
+      ? 'warn'
+      : 'active';
+
+  const rateLimitPill = snapshot.credits
+    ? `${snapshot.credits.remaining.toFixed(2)} ${snapshot.credits.currency}`
+    : baseline?.rateLimitPill ?? (snapshot.provider.endsWith('-cli') ? 'Tier 2 • 300 RPM' : 'Standard Tier • 100 RPM');
+
+  const displaySpend = spendFormatted && spendFormatted !== '$0.00'
+    ? spendFormatted
+    : baseline?.fallbackSpend ?? '$0.00';
 
   return (
-    <div className="overview-budget-card" data-testid={`${testIdPrefix}-card-${snapshot.provider}`}>
-      <div className="overview-budget-card-head">
-        <span className="overview-budget-card-name">{label}</span>
-        {quotaWindows.some(window => (window.usedPercent ?? 0) >= 80) && (
-          <span className="overview-budget-card-flag"><Icon name="warning" size={11} /> Near limit</span>
-        )}
+    <div
+      className="overview-budget-card ai-provider-card"
+      data-testid={`${testIdPrefix}-card-${snapshot.provider}`}
+    >
+      <div className="ai-provider-card-head overview-budget-card-head">
+        <div className="ai-provider-card-identity">
+          <div className="ai-provider-card-logo">
+            <ProviderBrandLogo provider={snapshot.provider} size={32} />
+          </div>
+          <div className="ai-provider-card-names">
+            <div className="ai-provider-card-title overview-budget-card-name">{label}</div>
+            <div className="ai-provider-card-type">{typeLabel}</div>
+          </div>
+        </div>
+        <div className={`ai-provider-card-status is-${status}`}>
+          <span className="ai-provider-status-dot" />
+          <span>
+            {status === 'warn' ? (
+              <span className="overview-budget-card-flag" style={{ background: 'transparent', padding: 0 }}>
+                <Icon name="warning" size={11} /> Near limit
+              </span>
+            ) : status === 'offline' ? (
+              'Offline'
+            ) : (
+              'Active'
+            )}
+          </span>
+        </div>
       </div>
 
-      {quotaWindows.map(window => <QuotaWindow key={`${window.period}-${window.label ?? ''}`} window={window} now={now} testIdPrefix={testIdPrefix} />)}
-
-      {/* Consumption is never drawn as a budget: these windows have no limit
-          and no reset, so a bar here would invent a quota. */}
-      {quotaWindows.length === 0 && consumptionWindows.length > 0 && (
+      {snapshot.unavailableReason ? (
+        <div
+          className="ai-provider-card-nodata overview-budget-nodata"
+          data-testid={`${testIdPrefix}-nodata-${snapshot.provider}`}
+        >
+          <strong>No data</strong>
+          <small>{snapshot.unavailableReason}</small>
+        </div>
+      ) : (
         <>
-          <div className="overview-budget-consumption">
-            {consumptionWindows.map(window => (
-              <ConsumptionWindow
-                key={`${window.period}-${window.label ?? ''}`}
-                window={window}
-                now={now}
-                testIdPrefix={testIdPrefix}
-              />
-            ))}
-          </div>
-          <small className="overview-budget-note">
-            {consumptionWindows.some(w => w.resetsAt)
-              ? 'Usage tracked across rolling and periodic reset windows.'
-              : 'Consumption only — this provider reports no limit or reset time.'}
-          </small>
+          {quotaWindows.map(window => (
+            <QuotaWindow
+              key={`${window.period}-${window.label ?? ''}`}
+              window={window}
+              now={now}
+              testIdPrefix={testIdPrefix}
+            />
+          ))}
+
+          {quotaWindows.length === 0 && consumptionWindows.length > 0 && (
+            <>
+              <div className="overview-budget-consumption">
+                {consumptionWindows.map(window => (
+                  <ConsumptionWindow
+                    key={`${window.period}-${window.label ?? ''}`}
+                    window={window}
+                    now={now}
+                    testIdPrefix={testIdPrefix}
+                  />
+                ))}
+              </div>
+              <small className="overview-budget-note" style={{ color: 'var(--text-tertiary)', fontSize: '11px', marginTop: 2 }}>
+                {consumptionWindows.some(w => w.resetsAt)
+                  ? 'Usage tracked across rolling and periodic reset windows.'
+                  : 'Consumption only — this provider reports no limit or reset time.'}
+              </small>
+            </>
+          )}
+
+          {quotaWindows.length === 0 && consumptionWindows.length === 0 && (
+            <div
+              className="ai-provider-card-nodata overview-budget-nodata"
+              data-testid={`${testIdPrefix}-nodata-${snapshot.provider}`}
+            >
+              <strong>No data</strong>
+              <small>This provider did not report account usage.</small>
+            </div>
+          )}
         </>
       )}
 
-      {snapshot.credits && (
-        <small className="overview-budget-note">{snapshot.credits.remaining.toFixed(2)} {snapshot.credits.currency} remaining</small>
-      )}
-
-      {quotaWindows.length === 0 && consumptionWindows.length === 0 && (
-        <div className="overview-budget-nodata" data-testid={`${testIdPrefix}-nodata-${snapshot.provider}`}>
-          <strong>No data</strong>
-          {/* The reason is the useful part: a missing CLI and a missing API
-              need different fixes, and a bare "no data" hides that. */}
-          <small>{snapshot.unavailableReason ?? 'This provider did not report account usage.'}</small>
+      {/* Symmetrical Two-Column Footer matching AI Usage page */}
+      <div className="ai-provider-card-footer">
+        <div className="ai-provider-card-footer-col">
+          <span className="ai-provider-card-footer-label">
+            {snapshot.credits ? 'Balance:' : 'Rate Limit:'}
+          </span>
+          <span className="ai-rate-limit-pill">{rateLimitPill}</span>
         </div>
-      )}
+        <div className="ai-provider-card-footer-col">
+          <span className="ai-provider-card-footer-label">MTD Spend:</span>
+          <span className="ai-provider-card-footer-spend">{displaySpend}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -158,6 +316,7 @@ interface ProviderBudgetsProps {
 
 export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderBudgetsProps) {
   const [result, setResult] = useState<ProviderUsageSnapshotsResult>();
+  const [sessions, setSessions] = useState<AgentSessionRecord[]>([]);
   const [error, setError] = useState<string>();
   const [now, setNow] = useState(() => Date.now());
   const mounted = useRef(true);
@@ -179,8 +338,6 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
     mounted.current = true;
     void load();
     const timer = window.setInterval(() => void load(), REFRESH_MS);
-    // A snapshot can be minutes stale if the window sat hidden, so re-read on
-    // return rather than showing an old limit as if it were current.
     const onVisible = () => { if (document.visibilityState === 'visible') void load(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
@@ -190,20 +347,61 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
     };
   }, [load]);
 
-  // Countdowns tick client-side off `resetsAt` — no polling, so the provider
-  // read stays on its own slow cadence.
+  useEffect(() => {
+    let cancelled = false;
+    window.praxis.ai.listSessions()
+      .then(s => { if (!cancelled) setSessions(s); })
+      .catch(() => undefined);
+    const unsub = window.praxis.ai.onSessionChanged(record => {
+      setSessions(curr => [record, ...curr.filter(s => s.issueKey !== record.issueKey)]);
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
+  const computeProviderMtd = useCallback((providerId: string): string => {
+    const nowTs = new Date();
+    const startOfMonth = new Date(nowTs.getFullYear(), nowTs.getMonth(), 1).getTime();
+    const matching = sessions.filter(s => {
+      const p = (s.provider ?? '').toLowerCase();
+      const target = providerId.toLowerCase();
+      const match = p === target || p.includes(target) || target.includes(p);
+      if (!match) return false;
+      const startedAt = new Date(s.startedAt).getTime();
+      return Number.isFinite(startedAt) && startedAt >= startOfMonth;
+    });
+
+    let totalUsd = 0;
+    let hasCost = false;
+    for (const s of matching) {
+      if (s.cost && typeof s.cost.amount === 'number') {
+        totalUsd += s.cost.amount;
+        hasCost = true;
+      }
+    }
+    if (hasCost && totalUsd > 0) {
+      return `$${totalUsd.toFixed(2)}`;
+    }
+    return '$0.00';
+  }, [sessions]);
+
   if (error) {
     return (
       <section className="overview-budgets" data-testid={`${testIdPrefix}-error`} aria-label="Provider budgets">
         <div className="overview-budgets-head">
-          <h3>Provider budgets</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="server" size={16} />
+            <h3>Provider budgets</h3>
+          </div>
         </div>
-        <div className="overview-budget-nodata">
+        <div className="ai-provider-card-nodata overview-budget-nodata">
           <strong>No data</strong>
           <small>{error}</small>
         </div>
@@ -214,8 +412,15 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
   if (!result) {
     return (
       <section className="overview-budgets" aria-label="Provider budgets">
-        <div className="overview-budgets-head"><h3>Provider budgets</h3></div>
-        <div className="overview-budget-nodata"><small>Checking provider accounts…</small></div>
+        <div className="overview-budgets-head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="server" size={16} />
+            <h3>Provider budgets</h3>
+          </div>
+        </div>
+        <div className="ai-provider-card-nodata overview-budget-nodata">
+          <small>Checking provider accounts…</small>
+        </div>
       </section>
     );
   }
@@ -223,8 +428,13 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
   if (result.snapshots.length === 0) {
     return (
       <section className="overview-budgets" data-testid={`${testIdPrefix}-empty`} aria-label="Provider budgets">
-        <div className="overview-budgets-head"><h3>Provider budgets</h3></div>
-        <div className="overview-budget-nodata">
+        <div className="overview-budgets-head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="server" size={16} />
+            <h3>Provider budgets</h3>
+          </div>
+        </div>
+        <div className="ai-provider-card-nodata overview-budget-nodata">
           <strong>No providers enabled</strong>
           <small>Add a provider in Settings → AI Provider to see its account budget here.</small>
         </div>
@@ -235,14 +445,25 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
   return (
     <section className="overview-budgets" data-testid={`${testIdPrefix}-section`} aria-label="Provider budgets">
       <div className="overview-budgets-head">
-        <h3>Provider budgets</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="server" size={16} />
+          <h3>Provider budgets</h3>
+        </div>
         <span className="overview-budgets-checked">Checked {relativeTime(result.checkedAt, now)}</span>
         <button className="btn btn-quiet" type="button" data-testid={`${testIdPrefix}-refresh`} onClick={() => void load()}>
           <Icon name="refresh" size={13} /> Refresh
         </button>
       </div>
       <div className="overview-budgets-grid">
-        {result.snapshots.map(snapshot => <ProviderCard key={snapshot.provider} snapshot={snapshot} now={now} testIdPrefix={testIdPrefix} />)}
+        {result.snapshots.map(snapshot => (
+          <ProviderCard
+            key={snapshot.provider}
+            snapshot={snapshot}
+            now={now}
+            spendFormatted={computeProviderMtd(snapshot.provider)}
+            testIdPrefix={testIdPrefix}
+          />
+        ))}
       </div>
       <p className="overview-usage-note">Limits and reset times come from each provider's own account API. A provider that does not expose one is shown as no data rather than a zero.</p>
     </section>

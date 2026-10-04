@@ -546,3 +546,38 @@ test('sessions.imagePreview reads a chunk from a local or attached image', async
     /not found in project p2/,
   );
 });
+
+test('desktop-wide phones can open and continue standalone conversations without a project', async () => {
+  const standalone: MobileSessionSnapshot = {
+    sessionId: 'chat-1', sessionKey: 'SESSION-abcdef12', title: 'Standalone chat', lifecycle: 'idle', mode: 'chat', archived: false,
+    startedAt: '2026-10-04T00:00:00.000Z', sequence: 0, messages: [], pendingPermissions: [], canContinue: true, canCancel: false,
+  };
+  const { deps, calls } = recorder({
+    describeDevice: async () => ({ projects: [], hostName: 'Mac', accessMode: 'local-only' }),
+    getSession: async id => id === standalone.sessionId ? standalone : undefined,
+    listSessions: async () => [standalone],
+  });
+  const target = { hostId: 'host-mac', sessionId: standalone.sessionId };
+  const reads = createMobileHostReads(deps);
+  assert.deepEqual(await reads['sessions.list'](read('sessions.list', { hostId: 'host-mac' })), [standalone]);
+  assert.deepEqual(await reads['sessions.get'](read('sessions.get', target)), standalone);
+  await createMobileHostExecutionHandlers(deps)['sessions.continue'](command('sessions.continue', target, { message: 'Hello' }));
+  assert.ok(calls.some(call => call[0] === 'continueSession' && call[1] === standalone.sessionId));
+});
+
+test('unscoped session requests refuse project-only grants, project sessions, and ticket or run sessions', async () => {
+  const { deps } = recorder();
+  const target = { hostId: 'host-mac', sessionId: 's1' };
+  await assert.rejects(createMobileHostReads(deps)['sessions.list'](read('sessions.list', { hostId: 'host-mac' })), /authorised project/);
+  await assert.rejects(createMobileHostReads(deps)['sessions.get'](read('sessions.get', target)), /authorised project/);
+  await assert.rejects(createMobileHostExecutionHandlers(deps)['sessions.continue'](command('sessions.continue', target, { message: 'Hello' })), /authorised project/);
+  const projectSession = await deps.getSession('s1');
+  assert.ok(projectSession);
+  for (const session of [projectSession, { ...projectSession, projectId: undefined }, { ...projectSession, projectId: undefined, sessionKey: 'SESSION-abcdef12', runId: 'run-1' }]) {
+    const wide = recorder({
+      describeDevice: async () => ({ projects: [], hostName: 'Mac', accessMode: 'local-only' }),
+      getSession: async () => session,
+    }).deps;
+    await assert.rejects(createMobileHostReads(wide)['sessions.get'](read('sessions.get', target)), /standalone conversations/);
+  }
+});

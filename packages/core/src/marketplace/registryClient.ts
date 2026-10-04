@@ -147,7 +147,7 @@ export function formatRegistryError(
   })();
   const suffix = detail ? ` — ${detail}` : '';
   if (status === 401 || status === 403) {
-    return `${context}: ${status} ${statusText}${suffix}. Check the marketplace GitHub token and that it has \`read:packages\`.`;
+    return `${context}: ${status} ${statusText}${suffix}. Check the marketplace GitHub token and that it has \`read:packages\` (GitHub Packages requires a token even for public packages).`;
   }
   if (status === 404) {
     return `${context}: not found (404)${suffix}.`;
@@ -207,6 +207,7 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
   private readonly registryBaseUrl: string;
   private readonly apiOrigin: string;
   private readonly registryOrigin: string;
+  private readonly token: string;
 
   public constructor(
     private readonly config: GitHubPackagesConfig,
@@ -217,6 +218,7 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
     this.registryBaseUrl = trimSlashes(config.registryBaseUrl ?? DEFAULT_REGISTRY_BASE_URL);
     this.apiOrigin = endpointOrigin(this.apiBaseUrl, 'API URL');
     this.registryOrigin = endpointOrigin(this.registryBaseUrl, 'registry URL');
+    this.token = config.token.trim();
   }
 
   public async listAddonPackages(): Promise<RegistryPackageRef[]> {
@@ -235,7 +237,7 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
       const response = await this.fetchImpl(url, {
         headers: {
           Accept: 'application/vnd.github+json',
-          Authorization: `Bearer ${this.config.token}`,
+          Authorization: `Bearer ${this.token}`,
           'X-GitHub-Api-Version': GITHUB_API_VERSION
         }
       });
@@ -297,7 +299,7 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
     const response = await this.fetchImpl(url, {
       headers: {
         Accept: 'application/json',
-        Authorization: `Bearer ${this.config.token}`
+        Authorization: `Bearer ${this.token}`
       }
     });
     const text = await response.text();
@@ -312,7 +314,7 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
   public async downloadTarball(tarballUrl: string): Promise<Uint8Array> {
     assertSameOrigin(tarballUrl, this.registryOrigin, 'an add-on tarball');
     const response = await this.fetchImpl(tarballUrl, {
-      headers: { Authorization: `Bearer ${this.config.token}` }
+      headers: { Authorization: `Bearer ${this.token}` }
     });
     if (!response.ok) {
       const text = await response.text().catch(() => '');

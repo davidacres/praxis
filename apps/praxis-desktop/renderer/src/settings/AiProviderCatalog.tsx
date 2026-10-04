@@ -9,6 +9,7 @@ import type {
 } from '@praxis/core';
 import { ChipSelect } from '../ui/ChipSelect';
 import { Icon, type IconName } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ai/ProviderBrandLogo';
 
 /**
  * Settings → AI Provider → Add provider (FX-BF-044): the catalog dialog, and
@@ -206,13 +207,27 @@ export function AddProviderDialog({
                       disabled={tile.disabled}
                       onClick={tile.onPick}
                     >
-                      <span className="add-provider-tile-icon" aria-hidden>
-                        <Icon name={tile.icon} size={14} />
-                      </span>
-                      <span className="add-provider-tile-text">
+                      <div className="add-provider-tile-head">
+                        <div className="add-provider-tile-logo">
+                          <ProviderBrandLogo provider={tile.key.replace('preset-', '')} size={30} />
+                        </div>
+                        <span className={`add-provider-tile-badge${tile.disabled ? ' is-added' : tile.stateTone === 'ok' ? ' is-ok' : ''}`}>
+                          {tile.disabled ? (
+                            'Added'
+                          ) : tile.stateTone === 'ok' ? (
+                            <>
+                              <span className="ai-provider-status-dot" />
+                              Detected
+                            </>
+                          ) : (
+                            tile.group === 'builtin-cli' ? 'CLI Agent' : tile.group === 'gateway' ? 'Gateway' : tile.group === 'local' ? 'Local' : 'Cloud API'
+                          )}
+                        </span>
+                      </div>
+                      <div className="add-provider-tile-text">
                         <span className="add-provider-tile-name">{tile.label}</span>
                         <span className={`add-provider-tile-state${tile.stateTone === 'ok' ? ' is-ok' : ''}`}>{tile.state}</span>
-                      </span>
+                      </div>
                     </button>
                   ))}
                 </div>

@@ -4,6 +4,7 @@ import { Icon } from '../ui/Icon';
 import { isTerminalAgentState } from '../ai/aiSessionState';
 import { isConversationSession } from '../ai/sessionNav';
 import { AiUsageDashboardPanel } from './AiUsageDashboardPanel';
+import { WorkspaceActivityHeatmap } from './WorkspaceActivityHeatmap';
 
 interface OverviewPageProps {
   projects: ProjectRecord[];
@@ -75,20 +76,19 @@ export function OverviewPage({ projects, boards, connections, sessions, connecti
         </section>
       </div>
 
-      <div className="overview-columns">
+      <div className="overview-columns overview-columns-activity">
         <section className="overview-panel overview-activity"><PanelHeading title="Recent activity" action={recentSessions.length ? 'Open sessions' : undefined} onAction={onOpenSessions} />
           {recentSessions.length === 0 ? <EmptyOverview icon="zap" text="Session activity will appear here as you work." /> : <div className="overview-activity-list">{recentSessions.map((session, index) => <div className="overview-activity-row" key={session.issueKey}><span className={`overview-activity-marker overview-status-${session.state}`} role="img" aria-label={`Status: ${stateLabel[session.state]}`} title={stateLabel[session.state]}><Icon name={index === 0 ? 'robot' : 'check-square'} size={12} /></span><span><strong>{session.title || session.issueKey}</strong><small>{new Date(session.startedAt).toLocaleString()}</small></span><button className="btn btn-quiet" type="button" onClick={onOpenSessions}>Open</button></div>)}</div>}
         </section>
 
-        <section className="overview-panel"><PanelHeading title="Workspace health" action={connections.length ? 'Connections' : undefined} onAction={onOpenConnections} />
-          {connections.length === 0 ? <EmptyOverview icon="plug" text="Connect a tracker to monitor workspace health." action="Connections" onAction={onOpenConnections} /> : <div className="overview-health-list">{connections.slice(0, 5).map(connection => { const check = connectionChecks[connection.id]; const status = check?.status === 'error' ? 'Unavailable' : check?.status === 'ok' ? 'Healthy' : 'Not checked'; const width = check?.status === 'error' ? 28 : check?.status === 'ok' ? 100 : 58; return <div className="overview-health-card" key={connection.id}><div className="overview-health-row"><span className={`overview-health-dot ${check?.status === 'error' ? 'error' : check?.status === 'ok' ? 'ok' : ''}`} /><span><strong>{connection.name}</strong><small>{connection.mode} · {status}</small></span><Icon name="chevron-right" size={14} /></div><div className="overview-health-bar"><i style={{ width: `${width}%` }} /></div></div>; })}</div>}
-          <div className="overview-runtime-widget"><span className="overview-runtime-icon"><Icon name="zap" size={15} /></span><span><strong>Agent runtime</strong><small>{runtime ? `${runtime.profiles} profiles · ${runtime.hosts} hosts · ${runtime.skills} skills` : 'Checking profiles, hosts and skills…'}</small></span><span className="overview-health-dot ok" /></div>
-        </section>
+        <WorkspaceActivityHeatmap
+          sessions={sessions}
+          connections={connections}
+          connectionChecks={connectionChecks}
+          runtime={runtime}
+          onOpenConnections={onOpenConnections}
+        />
       </div>
-
-      <section className="overview-panel overview-boards"><PanelHeading title="Boards" action={boards.length ? 'Open a board' : undefined} onAction={() => boards[0] && onOpenBoard(boards[0])} />
-{boards.length === 0 ? <EmptyOverview icon="columns" text="Boards from your connections will appear here." action="Connections" onAction={onOpenConnections} /> : <div className="overview-board-grid">{boards.slice(0, 6).map((board, index) => <button className={`overview-board-card board-tone-${index % 4}`} data-testid="board-nav-item" type="button" key={`${board.connectionId ?? 'demo'}:${board.id}`} onClick={() => onOpenBoard(board)}><span className="overview-board-art"><Icon name="columns" size={17} /></span><span><strong>{board.name}</strong><small>{board.connectionId ? connections.find(connection => connection.id === board.connectionId)?.name ?? 'Connection' : 'Demo board'}</small></span></button>)}</div>}
-      </section>
     </div>
   );
 }

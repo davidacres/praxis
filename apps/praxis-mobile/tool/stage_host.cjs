@@ -186,6 +186,15 @@ function session(input) {
   return record;
 }
 
+// A desktop-wide standalone conversation exercises the mobile Conversations group.
+session({
+  sessionId: 'sess-conversation', sessionKey: 'SESSION-abcdef123456', projectId: undefined,
+  title: 'Standalone conversation', lifecycle: 'completed',
+  startedAt: '2026-10-04T00:00:00.000Z', provider: 'anthropic', model: 'claude-sonnet-4-6',
+  messages: [message('user', 'A chat outside every project', '2026-10-04T00:00:00.000Z'),
+    message('assistant', 'This conversation belongs in Conversations.', '2026-10-04T00:00:01.000Z')],
+});
+
 const MARKDOWN_REPLY = [
   '## Pairing flow, tidied',
   '',
@@ -712,7 +721,7 @@ const deps = {
     const entry = [...paired.values()].find(candidate => candidate.deviceId === deviceId);
     return {
       label: entry?.label ?? 'Phone',
-      projects: [{ projectId: PROJECT_ID, name: PROJECT_NAME }],
+      projects: [],
       ...(entry?.pairedAt ? { pairedAt: entry.pairedAt } : {}),
       lastSeenAt: new Date().toISOString(),
       hostName: HOST_NAME,
@@ -723,7 +732,7 @@ const deps = {
   listProjects: async () => [{ projectId: PROJECT_ID, name: PROJECT_NAME, workflow: 'governed-delivery' }],
   getProject: async projectId => (projectId === PROJECT_ID ? { projectId, name: PROJECT_NAME, workflow: 'governed-delivery' } : undefined),
   listWork: async () => [],
-  listSessions: async () => [...sessions.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).map(summaryOf),
+  listSessions: async projectId => [...sessions.values()].filter(record => !projectId || record.projectId === projectId).sort((a, b) => b.startedAt.localeCompare(a.startedAt)).map(summaryOf),
   getSession: async sessionId => (sessions.has(sessionId) ? snapshotOf(sessions.get(sessionId)) : undefined),
   listWorkflows: async () => [
     { workflowId: 'governed-delivery', name: 'Governed delivery', trigger: 'manual' },
@@ -921,7 +930,7 @@ const app = {
 // ---------------------------------------------------------------- listener + pairing
 
 const deviceIdFor = publicKeyHex => `device:${crypto.createHash('sha256').update(Buffer.from(publicKeyHex, 'hex')).digest('hex').slice(0, 24)}`;
-const peerFor = entry => ({ deviceId: entry.deviceId, capabilities: ['view', 'execute', 'approve'], projectIds: [PROJECT_ID] });
+const peerFor = entry => ({ deviceId: entry.deviceId, capabilities: ['view', 'execute', 'approve'] });
 
 const server = new MobileLanServer({
   app,

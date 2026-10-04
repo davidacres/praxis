@@ -15,8 +15,15 @@ test('renders the workspace overview dashboard', async () => {
   await expect(page.getByText('Recent projects')).toBeVisible();
   await expect(page.getByText('Recent activity')).toBeVisible();
   await expect(page.getByText('Delivery worktrees')).toHaveCount(0);
+  await expect(page.locator('.overview-boards')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Workspace health' })).toBeVisible();
-  await page.screenshot({ path: 'output/playwright/overview-dashboard.png', fullPage: true });
+  await page.locator('[data-testid="overview-activity-heatmap"]').scrollIntoViewIfNeeded();
+  await page.locator('[data-testid="overview-activity-heatmap"]').screenshot({ path: 'output/playwright/overview-heatmap.png' });
+  await page.locator('[data-testid="titlebar-settings"]').click();
+  await page.locator('[data-testid="settings-nav-appearance-themes"]').click();
+  await page.locator('[data-testid="theme-card-tm-default-2"]').click();
+  await page.keyboard.press('Escape');
+  await page.locator('[data-testid="overview-activity-heatmap"]').screenshot({ path: 'output/playwright/overview-heatmap-dark.png' });
   await page.locator('[data-testid="titlebar-settings"]').click();
   await page.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await page.locator('[data-testid="theme-card-tm-default-1"]').click();
