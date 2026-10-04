@@ -16,7 +16,7 @@ const FAKE_ACP_AGENT = path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs');
  *   workflow definitions live in the separate project-level Workflows group.
  * - Opening a run puts the session doing the work in the centre and the
  *   pipeline, top to bottom, in the right pane.
- * - A stage session nests under the controller session that started its run.
+ * - A stage session records its controller and is opened through the run workspace.
  * - Deleting a run cancels it first if it is live, then removes the run and its
  *   stage sessions.
  *
@@ -176,7 +176,7 @@ async function launch(
 const runStatus = (page: Page, runId: string) =>
   page.evaluate(id => window.praxis.workflows.getRun(id).then(run => run?.status), runId);
 
-test('a controller session starts a run: the run is a tree node, its stage session nests under the controller and fills the centre', async () => {
+test('a controller session starts a project run and its stage session fills the run workspace', async () => {
   const { page, seeded } = await launch();
 
   // A controller chat session, then a run it controls.
@@ -213,17 +213,9 @@ test('a controller session starts a run: the run is a tree node, its stage sessi
 
   await page.reload();
 
-  // Sessions tree: the stage session is nested under its controller.
-  await openSession(page);
-  const childRow = page.locator(`[data-testid="session-list-row"][data-parent-session="${controller.key}"]`);
-  await expect(childRow).toHaveCount(1);
-  await expect(childRow).toHaveClass(/session-nav-row--child/);
-  // Collapsing the controller hides its child; expanding brings it back.
-  const toggle = page.getByTestId('session-children-toggle').first();
-  await toggle.click();
-  await expect(childRow).toHaveCount(0);
-  await toggle.click();
-  await expect(childRow).toHaveCount(1);
+  // Workflow stage sessions belong to the run, not the standalone Conversations tree.
+  await openSession(page, controller.key);
+  await expect(page.getByTestId('session-list-row')).toHaveCount(0);
 
   // Project tree: runs are direct children of Automations; saved definitions
   // have their own project-level Workflows group. Opening a run fills workspace.

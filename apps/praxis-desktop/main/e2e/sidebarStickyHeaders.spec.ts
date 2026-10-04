@@ -93,7 +93,7 @@ test('tree headers stick nested beneath their parents as the top sidebar panel s
   expect((await box(bugsGroup)).bottom).toBeLessThanOrEqual((await box(storyGroup)).top);
 
   // Scroll deep into the STORY group: every ancestor header should be stuck, stacked.
-  await scroll.evaluate(el => { el.scrollTop = el.scrollHeight - el.clientHeight - 200; });
+  await tree.getByTestId('project-document-nav-item').nth(25).evaluate(el => { el.scrollIntoView({ block: 'start' }); });
   await page.waitForTimeout(200);
   await page.locator('.sidebar').screenshot({ path: test.info().outputPath('sticky-deep.png') });
 

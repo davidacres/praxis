@@ -115,7 +115,7 @@ test('boards render on launch', async () => {
   await expect(window.locator('[data-testid="new-session-view"] h1')).toContainText('No board');
   await expect(window.locator('[data-testid="new-session-board-select"]')).toContainText('No board');
   await window.locator('[data-testid="nav-overview"]').click();
-  await expect(window.locator('.overview-board-card').first()).toBeVisible();
+  await expect(window.getByTestId('board-nav-item').first()).toBeVisible();
 });
 
 test('normal launch does not include built-in demo data', async () => {
@@ -124,8 +124,7 @@ test('normal launch does not include built-in demo data', async () => {
   window = app.window;
 
   await window.locator('[data-testid="nav-overview"]').click();
-  await expect(window.locator('.overview-board-card')).toHaveCount(0);
-  await expect(window.getByText('Boards from your connections will appear here.', { exact: true })).toBeVisible();
+  await expect(window.getByTestId('overview-page')).toBeVisible();
   await expect(window.locator('[data-testid="board-nav-item"]')).toHaveCount(0);
 });
 
@@ -134,7 +133,7 @@ test('selecting a board renders its columns and issue cards', async () => {
   // hid it: selecting a board is an explicit request for board context.
   await window.getByRole('button', { name: 'Toggle secondary sidebar' }).click();
   await window.locator('[data-testid="nav-overview"]').click();
-  await window.locator('.overview-board-card').first().click();
+  await window.getByTestId('board-nav-item').first().click();
   const issueCards = window.locator('[data-testid="issue-card"]');
   await expect(issueCards.first()).toBeVisible();
 
@@ -154,7 +153,7 @@ test('selecting a board renders its columns and issue cards', async () => {
 
 test('opening an issue card shows the issue detail panel', async () => {
   await window.locator('[data-testid="nav-overview"]').click();
-  await window.locator('.overview-board-card').first().click();
+  await window.getByTestId('board-nav-item').first().click();
   await window.locator('[data-testid="issue-card"]').first().click();
   // `exact` matters now: the frameless title bar also has a "Close window" button.
   await expect(window.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
@@ -163,7 +162,7 @@ test('opening an issue card shows the issue detail panel', async () => {
 
 test('adding a comment appears in the issue detail panel', async () => {
   await window.locator('[data-testid="nav-overview"]').click();
-  await window.locator('.overview-board-card').first().click();
+  await window.getByTestId('board-nav-item').first().click();
   await window.locator('[data-testid="issue-card"]').first().click();
 
   const commentBody = `e2e comment ${Date.now()}`;
@@ -175,7 +174,7 @@ test('adding a comment appears in the issue detail panel', async () => {
 
 test('closing the issue detail panel hides it', async () => {
   await window.locator('[data-testid="nav-overview"]').click();
-  await window.locator('.overview-board-card').first().click();
+  await window.getByTestId('board-nav-item').first().click();
   await window.locator('[data-testid="issue-card"]').first().click();
   await window.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(window.getByRole('button', { name: 'Close', exact: true })).not.toBeVisible();

@@ -151,7 +151,7 @@ test('the composer Autopilot mode starts a CLI session without a permission paus
   await win.locator('[data-testid="new-session-view"] textarea').fill('WITH_PERMISSION please');
   await win.locator('[data-testid="new-session-submit"]').click();
   await win.locator('[data-testid="sessions-view"]').waitFor();
-  await expect(win.getByTestId('session-nav-state')).toHaveAttribute('title', 'Completed', { timeout: 15000 });
+  await expect(win.getByTestId('session-nav-state')).toHaveClass(/lane--done/, { timeout: 15000 });
   await expect(win.locator('[data-testid="session-permission-card"]')).toHaveCount(0);
 });
 

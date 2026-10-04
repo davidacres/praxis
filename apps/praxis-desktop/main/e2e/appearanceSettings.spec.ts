@@ -44,7 +44,7 @@ test('opens Settings from the title bar as a dismissible popover dialog', async 
 test('theme gallery previews and persists the selected complete palette', async () => {
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(4);
+  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(5);
   await expect(window.locator('[data-testid="theme-card-praxis-light"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(window).toHaveScreenshot('theme-gallery.png');
 
