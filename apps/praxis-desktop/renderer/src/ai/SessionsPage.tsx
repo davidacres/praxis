@@ -2312,7 +2312,6 @@ export function SessionsPage({
                   sessions={sessions}
                   selectedKey={selected.issueKey}
                   onSelectSession={onSelectSession}
-                  onNewSession={onNewSession}
                 />
               ) : (
                 <>

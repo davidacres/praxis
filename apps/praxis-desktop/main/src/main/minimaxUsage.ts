@@ -117,21 +117,21 @@ function busiestEntry(entries: unknown[]): Record<string, unknown> {
  */
 export function parseMiniMaxRemains(provider: CustomProviderConfig['id'], body: unknown): ProviderUsageSnapshot {
   const fetchedAt = new Date().toISOString();
-  const unavailable = (reason: string): ProviderUsageSnapshot => ({ provider, fetchedAt, windows: [], unavailableReason: reason });
-  if (!body || typeof body !== 'object') return unavailable('MiniMax returned a payload Praxis could not read.');
+  const unavailable = (reason: string, code: 'not-configured' | 'fetch-failed'): ProviderUsageSnapshot => ({ provider, fetchedAt, windows: [], unavailableReason: reason, unavailableReasonCode: code });
+  if (!body || typeof body !== 'object') return unavailable('MiniMax returned a payload Praxis could not read.', 'fetch-failed');
 
   const record = body as Record<string, unknown>;
   const baseResp = record.base_resp as { status_code?: unknown; status_msg?: unknown } | undefined;
   const statusCode = numberAt(baseResp?.status_code);
   if (typeof statusCode === 'number' && statusCode !== 0) {
     const message = typeof baseResp?.status_msg === 'string' && baseResp.status_msg.trim() ? baseResp.status_msg.trim() : `status ${statusCode}`;
-    return unavailable(`MiniMax usage request failed: ${message}`);
+    return unavailable(`MiniMax usage request failed: ${message}`, 'fetch-failed');
   }
 
   const data = (record.data ?? record) as Record<string, unknown>;
   const entries = Array.isArray(data.model_remains) ? data.model_remains : [];
   if (entries.length === 0) {
-    return unavailable('MiniMax did not report any quota windows for this key. A pay-as-you-go key has no plan quota — only M Plan subscription keys do.');
+    return unavailable('MiniMax did not report any quota windows for this key. A pay-as-you-go key has no plan quota — only M Plan subscription keys do.', 'fetch-failed');
   }
 
   const entry = busiestEntry(entries);
@@ -163,21 +163,21 @@ export async function miniMaxUsageSnapshot(config: CustomProviderConfig): Promis
   // Same keychain entry the endpoint's own requests use — one key, one entry.
   const key = process.env.MINIMAX_API_KEY || await getSecretsStore().get(secretKeyForProvider(config.id));
   if (!key?.trim()) {
-    return { provider: config.id, fetchedAt, windows: [], unavailableReason: 'Add a MiniMax API key to this endpoint to view plan usage.' };
+    return { provider: config.id, fetchedAt, windows: [], unavailableReason: 'Add a MiniMax API key to this endpoint to view plan usage.', unavailableReasonCode: 'not-configured' };
   }
   try {
     const response = await fetch(remainsUrl(config), {
       headers: { Authorization: `Bearer ${key.trim()}`, 'Content-Type': 'application/json' }
     });
     if (response.status === 401 || response.status === 403) {
-      return { provider: config.id, fetchedAt, windows: [], unavailableReason: 'MiniMax rejected this key for account usage. Plan quota needs an M Plan subscription key (sk-cp-…), not a pay-as-you-go key (sk-api-…).' };
+      return { provider: config.id, fetchedAt, windows: [], unavailableReason: 'MiniMax rejected this key for account usage. Plan quota needs an M Plan subscription key (sk-cp-…), not a pay-as-you-go key (sk-api-…).', unavailableReasonCode: 'not-configured' };
     }
     if (!response.ok) {
-      return { provider: config.id, fetchedAt, windows: [], unavailableReason: `MiniMax usage request failed (${response.status}).` };
+      return { provider: config.id, fetchedAt, windows: [], unavailableReason: `MiniMax usage request failed (${response.status}).`, unavailableReasonCode: 'fetch-failed' };
     }
     return parseMiniMaxRemains(config.id, await response.json());
   } catch (error) {
-    return { provider: config.id, fetchedAt, windows: [], unavailableReason: error instanceof Error ? error.message : 'MiniMax account usage is unavailable.' };
+    return { provider: config.id, fetchedAt, windows: [], unavailableReason: error instanceof Error ? error.message : 'MiniMax account usage is unavailable.', unavailableReasonCode: 'fetch-failed' };
   }
 }
 

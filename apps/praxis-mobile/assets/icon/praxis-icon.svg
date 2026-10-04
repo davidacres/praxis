@@ -6,7 +6,7 @@
       <stop offset="100%" stop-color="#100e0b"/>
     </linearGradient>
 
-    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+    <linearGradient id="gloss" x1="0" y1="0" x2="0.25" y2="1">
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
       <stop offset="45%" stop-color="#ffffff" stop-opacity="0.04"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
@@ -17,22 +17,12 @@
       <stop offset="100%" stop-color="#ddd0b6"/>
     </linearGradient>
 
-    <radialGradient id="dot" cx="0.35" cy="0.3" r="0.8">
-      <stop offset="0%" stop-color="#ef6a3f"/>
-      <stop offset="55%" stop-color="#c6431f"/>
-      <stop offset="100%" stop-color="#9c3417"/>
-    </radialGradient>
-
     <clipPath id="panelClip">
       <rect x="0" y="0" width="1024" height="1024" rx="0" ry="0"/>
     </clipPath>
 
     <filter id="letterShadow" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000000" flood-opacity="0.5"/>
-    </filter>
-
-    <filter id="dotShadow" x="-60%" y="-60%" width="220%" height="220%">
-      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
     </filter>
 
     <filter id="innerShade" x="-20%" y="-20%" width="140%" height="140%">
@@ -51,29 +41,13 @@
   <rect x="0" y="0" width="1024" height="1024" rx="0" ry="0" fill="#000" opacity="0" filter="url(#innerShade)" clip-path="url(#panelClip)"/>
 
   <!-- glyph, drawn with drop shadow so it lifts off the panel -->
-  <g filter="url(#letterShadow)">
-    <path d="M 452 792
-             L 452 296
-             C 452 296 610 292 668 336
-             C 718 374 718 458 668 496
-             C 614 538 470 534 452 532"
+  <g filter="url(#letterShadow)" transform="translate(278 757) scale(1.55)">
+    <path d="M43.50 43.50Q31 43.50 20 36.50Q9 29.50 9 18.50Q9 13 11.50 5.25Q14-2.50 16-9Q32-58 46-100.50Q60-143 74-183Q88-223 103.75-263Q119.50-303 139-346.50Q120-343 105.25-336.25Q90.50-329.50 81.50-324.25Q72.50-319 69.50-319Q67.50-319 63.75-321.25Q60-323.50 57-326.75Q54-330 54-332.50Q67-338 84.75-344.50Q102.50-351 123-355.50Q143.50-360 164.50-360Q186.50-360 209.25-354Q232-348 251-335.75Q270-323.50 281.50-305.50Q293-287.50 293-263.50Q293-237.50 281.50-218.75Q270-200 251-187.25Q232-174.50 210-166.75Q188-159 166.25-154.75Q144.50-150.50 127.50-149.25Q110.50-148 102.50-148L97.50-148Q82.50-96.50 68.75-46.50Q55 3.50 43.50 43.50M99.50-156Q127-157.50 155.25-165Q183.50-172.50 207-186.75Q230.50-201 245-222.25Q259.50-243.50 259.50-272Q259.50-299 246.75-316Q234-333 213.25-341.25Q192.50-349.50 169-349.50Q150.50-313 133-262Q115.50-211 99.50-156"
           fill="none"
           stroke="url(#letter)"
-          stroke-width="132"
+          stroke-width="26"
           stroke-linecap="round"
           stroke-linejoin="round"/>
-  </g>
-
-  <!-- faint drafting baseline -->
-  <g stroke="#F0E7D8" stroke-width="3" opacity="0.3">
-    <line x1="382" y1="882" x2="762" y2="882"/>
-    <line x1="382" y1="864" x2="382" y2="900"/>
-    <line x1="762" y1="864" x2="762" y2="900"/>
-  </g>
-
-  <!-- vermillion accent: pen-nib pivot, raised with its own shadow + gloss -->
-  <g filter="url(#dotShadow)">
-    <circle cx="452" cy="296" r="40" fill="url(#dot)"/>
   </g>
 
   <!-- glass gloss sweep across the top of the panel -->

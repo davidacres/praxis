@@ -63,12 +63,15 @@ export async function claudeCodeSnapshot(): Promise<ProviderUsageSnapshot> {
       }
     ];
 
+    // A session limit is a *result*, not an unavailability: we have real usage
+    // data here. Putting the notice in `unavailableReason` made the card claim to
+    // be offline while simultaneously showing a 100% window, so it gets its own
+    // field and the window label carries the message.
     return {
       provider: 'claude-code-cli',
       fetchedAt,
       windows,
-      totalTokens: lifetimeTokens,
-      unavailableReason: limitSession.lastError
+      totalTokens: lifetimeTokens
     };
   }
 

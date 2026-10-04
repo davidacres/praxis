@@ -189,6 +189,9 @@ function ProjectSessionRow({
   ]));
   const agentDisplay = agentNames.join(' + ');
   const modelName = session.model || session.runtimeEpochs?.[session.runtimeEpochs.length - 1]?.model;
+  const provider = session.runtimeEpochs?.[session.runtimeEpochs.length - 1]?.provider ?? session.provider;
+  const runtimeLabel = [provider ? providerLabel(provider) : undefined, modelName].filter(Boolean).join(' · ') || 'Model not reported';
+  const ticketKey = kind === 'ticket' ? session.linkedIssueKey ?? (isSynthesizedKey(session.issueKey) ? undefined : session.issueKey) : undefined;
   const elapsed = formatElapsed(session.startedAt, session.completedAt);
   const tokens = formatTokens(session.tokenUsage);
 
@@ -246,7 +249,7 @@ function ProjectSessionRow({
   return (
     <div className="project-session-entry">
       <div
-        className={`tree-row session-nav-row${active ? ' active' : ''}`}
+        className={`tree-row session-nav-row session-nav-card${active ? ' active' : ''}`}
         data-testid="project-session-nav-item"
         title={title}
         role="button"
@@ -260,39 +263,44 @@ function ProjectSessionRow({
         }}
       >
         <span className="tree-icon" title={session.linkedIssueKey ? `Linked to ${session.linkedIssueKey}` : kind === 'ticket' ? 'Ticket session' : 'General chat session'}><Icon name={kind === 'ticket' ? 'ticket' : 'chats'} size={13} /></span>
-        {!editing && <span className={`session-state-mark ${agentStateLaneClass(session.state)}`} aria-hidden="true" />}
-        {editing ? (
-          <input
-            className="session-title-input"
-            data-testid="session-title-input"
-            aria-label={`Session title for ${title}`}
-            value={draft}
-            disabled={mutating}
-            autoFocus
-            onClick={event => event.stopPropagation()}
-            onChange={event => setDraft(event.target.value)}
-            onBlur={() => void commitRename()}
-            onKeyDown={event => {
-              event.stopPropagation();
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                event.currentTarget.blur();
-              } else if (event.key === 'Escape') {
-                event.preventDefault();
-                setEditing(false);
-              }
-            }}
-          />
-        ) : (
-          <span className="tree-label" data-testid="session-title">{session.linkedIssueKey ? <><span className="session-item-key">{session.linkedIssueKey}</span> {title}</> : title}</span>
-        )}
+        <span className="session-nav-card-main">
+          <span className="session-nav-card-title-row">
+            {editing ? (
+              <input
+                className="session-title-input"
+                data-testid="session-title-input"
+                aria-label={`Session title for ${title}`}
+                value={draft}
+                disabled={mutating}
+                autoFocus
+                onClick={event => event.stopPropagation()}
+                onChange={event => setDraft(event.target.value)}
+                onBlur={() => void commitRename()}
+                onKeyDown={event => {
+                  event.stopPropagation();
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    setEditing(false);
+                  }
+                }}
+              />
+            ) : (
+              <span className="tree-label" data-testid="session-title">{title}</span>
+            )}
+            <span className={`session-nav-card-status ${agentStateLaneClass(session.state)}`}>{agentStateLabel(session.state)}</span>
+          </span>
+          {!editing && <span className="session-nav-card-meta" data-testid="project-session-agent-summary" title={`${agentDisplay} · ${runtimeLabel} · ${elapsed ?? 'Time not available'} · ${tokens ?? 'Tokens not reported'}`}>
+            <span className="session-nav-card-runtime">{runtimeLabel}</span>
+            {ticketKey && <span>{ticketKey}</span>}
+            {elapsed && <span>{elapsed}</span>}
+            {tokens && <span>{tokens}</span>}
+          </span>}
+        </span>
         {!editing && (
           <>
-            <span
-              className="session-inline-telemetry"
-              data-testid="project-session-agent-summary"
-              title={`${agentDisplay}${modelName ? ` · ${modelName}` : ''} · ${elapsed ?? 'Time not available'} · ${tokens ?? 'Tokens not reported'}`}
-            >{agentDisplay}{modelName ? ` · ${modelName}` : ''} · {elapsed ?? '—'} · {tokens ?? '—'}</span>
             <span className="session-nav-actions">
               <button
                 className="icon-btn icon-btn-sm"
@@ -1758,10 +1766,17 @@ function SessionsNav({
       const sessionName = sessionTitle(session);
       const title = isConversationSession(session) && sessionName === 'New session' ? 'New chat' : sessionName;
       const draggable = isConversationSession(session);
+      const runtimeModel = session.model || session.runtimeEpochs?.[session.runtimeEpochs.length - 1]?.model;
+      const runtimeProvider = session.runtimeEpochs?.[session.runtimeEpochs.length - 1]?.provider ?? session.provider;
+      const runtimeLabel = [runtimeProvider ? providerLabel(runtimeProvider) : undefined, runtimeModel].filter(Boolean).join(' · ') || 'Model not reported';
+      const projectName = assignableProjects.find(project => project.id === session.projectId)?.name;
+      const elapsed = formatElapsed(session.startedAt, session.completedAt);
+      const tokens = formatTokens(session.tokenUsage);
+      const visibleSessionKey = session.linkedIssueKey ?? (isSynthesizedKey(session.issueKey) ? undefined : session.issueKey);
       return (
         <Fragment key={session.issueKey}>
         <div
-          className={`tree-row session-nav-row${depth > 0 ? ' session-nav-row--child' : ''}${active && activeSessionKey === session.issueKey ? ' active' : ''}`}
+          className={`tree-row session-nav-row session-nav-card${depth > 0 ? ' session-nav-row--child' : ''}${active && activeSessionKey === session.issueKey ? ' active' : ''}`}
           data-parent-session={session.parentSessionKey || undefined}
           data-testid="session-list-row"
           draggable={draggable}
@@ -1780,59 +1795,59 @@ function SessionsNav({
           <span className="tree-icon">
             <Icon name="robot" size={14} />
           </span>
-          {!editing && !isSynthesizedKey(session.issueKey) && !isWorkflowStageSession(session) && (
-            <span className="session-item-key">{session.issueKey}</span>
-          )}
-          {editing ? (
-            <input
-              className="session-title-input"
-              data-testid="session-title-input"
-              aria-label={`Session title for ${title}`}
-              value={draft}
-              disabled={mutating}
-              autoFocus
-              onClick={event => event.stopPropagation()}
-              onChange={event => setDraft(event.target.value)}
-              onBlur={() => void commitRename(session)}
-              onKeyDown={event => {
-                event.stopPropagation();
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  event.currentTarget.blur();
-                } else if (event.key === 'Escape') {
-                  event.preventDefault();
-                  setEditingKey(undefined);
-                }
-              }}
-            />
-          ) : (
-            <span className="tree-label" title={title} data-testid="session-title">
-              {session.linkedIssueKey ? <><span className="session-item-key">{session.linkedIssueKey}</span> {title}</> : title}
+          <span className="session-nav-card-main">
+            <span className="session-nav-card-title-row">
+              {editing ? (
+                <input
+                  className="session-title-input"
+                  data-testid="session-title-input"
+                  aria-label={`Session title for ${title}`}
+                  value={draft}
+                  disabled={mutating}
+                  autoFocus
+                  onClick={event => event.stopPropagation()}
+                  onChange={event => setDraft(event.target.value)}
+                  onBlur={() => void commitRename(session)}
+                  onKeyDown={event => {
+                    event.stopPropagation();
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    } else if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setEditingKey(undefined);
+                    }
+                  }}
+                />
+              ) : (
+                <span className="tree-label" title={title} data-testid="session-title">{title}</span>
+              )}
+              {kids.length > 0 && (
+                <button
+                  className="icon-btn icon-btn-sm session-nav-toggle"
+                  aria-label={`${childrenCollapsed ? 'Expand' : 'Collapse'} ${title}'s child sessions`}
+                  aria-expanded={!childrenCollapsed}
+                  data-testid="session-children-toggle"
+                  onClick={event => {
+                    event.stopPropagation();
+                    setCollapsedParents(current => ({ ...current, [session.issueKey]: !childrenCollapsed }));
+                  }}
+                >
+                  <Icon name={childrenCollapsed ? 'chevron-right' : 'chevron-down'} size={11} />
+                </button>
+              )}
+              {!editing && <span className={`session-nav-card-status ${agentStateLaneClass(session.state)}`} data-testid="session-nav-state">{agentStateLabel(session.state)}</span>}
             </span>
-          )}
-          {kids.length > 0 && (
-            <button
-              className="icon-btn icon-btn-sm session-nav-toggle"
-              aria-label={`${childrenCollapsed ? 'Expand' : 'Collapse'} ${title}'s child sessions`}
-              aria-expanded={!childrenCollapsed}
-              data-testid="session-children-toggle"
-              onClick={event => {
-                event.stopPropagation();
-                setCollapsedParents(current => ({ ...current, [session.issueKey]: !childrenCollapsed }));
-              }}
-            >
-              <Icon name={childrenCollapsed ? 'chevron-right' : 'chevron-down'} size={11} />
-            </button>
-          )}
+            {!editing && <span className="session-nav-card-meta" data-testid="session-nav-card-meta">
+              {!isWorkflowStageSession(session) && visibleSessionKey && <span>{visibleSessionKey}</span>}
+              <span className="session-nav-card-runtime">{runtimeLabel}</span>
+              {projectName && <span>{projectName}</span>}
+              {elapsed && <span>{elapsed}</span>}
+              {tokens && <span>{tokens}</span>}
+            </span>}
+          </span>
           {!editing && (
             <>
-              <span
-                className={agentStateLaneClass(session.state)}
-                aria-hidden="true"
-                data-testid="session-nav-state"
-              >
-                ●
-              </span>
               {childrenCollapsed && liveChildCount > 0 && (
                 <span className="session-nav-childcount" title={`${liveChildCount} child session${liveChildCount === 1 ? '' : 's'} still working`} data-testid="session-children-live">
                   {liveChildCount}

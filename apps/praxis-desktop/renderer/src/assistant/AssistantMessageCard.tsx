@@ -2,15 +2,9 @@ import type { AssistantMessage } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
 import { personaMeta } from './personaMeta';
-import { AssistantActionCard } from './AssistantActionCard';
 
 interface AssistantMessageCardProps {
   message: AssistantMessage;
-  /** Outcome line once the proposed action has been applied. */
-  applied?: string;
-  disabled: boolean;
-  onChoice: (prompt: string) => void;
-  onApply: () => void;
 }
 
 function formatTime(iso: string): string {
@@ -18,7 +12,7 @@ function formatTime(iso: string): string {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export function AssistantMessageCard({ message, applied, disabled, onChoice, onApply }: AssistantMessageCardProps) {
+export function AssistantMessageCard({ message }: AssistantMessageCardProps) {
   if (message.role === 'user') {
     return (
       <div className="assistant-message is-user" data-testid="assistant-message-user">
@@ -43,15 +37,18 @@ export function AssistantMessageCard({ message, applied, disabled, onChoice, onA
       </header>
       <div className="assistant-message-body"><Markdown text={message.text} /></div>
       {message.choices && message.choices.length > 0 && (
-        <div className="assistant-choices" role="group" aria-label="Suggested replies">
-          {message.choices.map(choice => (
-            <button key={choice.label} type="button" className="assistant-chip" disabled={disabled} onClick={() => onChoice(choice.prompt)}>
-              {choice.label}
-            </button>
-          ))}
+        <p className="assistant-message-suggestions" data-testid="assistant-message-suggestions">
+          Suggestions: {message.choices.map(choice => choice.label).join(' · ')}
+        </p>
+      )}
+      {action && (
+        <div className="assistant-action-card" data-testid="assistant-action-card">
+          <div className="assistant-action-summary">
+            <Icon name="sparkles" size={13} />
+            <span>Suggested action: {action.summary}</span>
+          </div>
         </div>
       )}
-      {action && <AssistantActionCard action={action} applied={applied} disabled={disabled} onApply={onApply} />}
     </article>
   );
 }

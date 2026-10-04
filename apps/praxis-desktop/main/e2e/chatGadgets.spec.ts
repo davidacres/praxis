@@ -58,9 +58,10 @@ async function sessionWithReply(
     toolCall?: { name: string; arguments: Record<string, unknown> };
     toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
     imageFile?: { fileName: string; contents: Buffer };
+    htmlFile?: { fileName: string; contents: string };
   } = {}
 ) {
-  const { imageFile, ...mockOptions } = options;
+  const { imageFile, htmlFile, ...mockOptions } = options;
   mock = await startMockGatewayServer({ mode: 'complete', reply, ...mockOptions });
   app = await launchTestApp(undefined, undefined, {
     ...NO_GATEWAY_ENV,
@@ -68,6 +69,7 @@ async function sessionWithReply(
     AI_GATEWAY_URL: mock.baseUrl
   });
   if (imageFile) fs.writeFileSync(path.join(app.userDataDir, imageFile.fileName), imageFile.contents);
+  if (htmlFile) fs.writeFileSync(path.join(app.userDataDir, htmlFile.fileName), htmlFile.contents);
   const win = app.window;
   // No `issueKey`: a free-form session, so nothing is looked up on a board.
   await win.evaluate(async () => {
@@ -255,6 +257,70 @@ test('image artifacts render as clickable chat previews', async () => {
   await expect(lightbox).toBeVisible();
   await win.keyboard.press('Escape');
   await expect(lightbox).toHaveCount(0);
+});
+
+test('HTML artifacts open in an isolated in-app preview', async () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../../.praxis/visualizations/session-list-card-mockup.html'), 'utf8');
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-html-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-html-preview',
+      payload: {
+        title: 'Session list card mockup',
+        artifacts: [{ name: 'session-list-card-mockup.html', path: 'session-list-card-mockup.html', mediaType: 'text/html' }]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'The interactive HTML mockup is attached.'),
+    { htmlFile: { fileName: 'session-list-card-mockup.html', contents: html } }
+  );
+
+  const appInstance = app!;
+  const previewReady = appInstance.electronApp.waitForEvent('window');
+  await win.locator('[data-testid="gadget-artifact-html-preview"]').click();
+  const preview = await previewReady;
+  await expect(preview.locator('[data-variant="Automation-like"] h2')).toHaveText('Sessions');
+  await expect(preview.getByRole('tab', { name: 'Compact rows' })).toHaveAttribute('aria-selected', 'true');
+  await expect(preview.locator('[data-variant="Expanded cards"]')).toBeHidden();
+  expect(await preview.evaluate(() => ({
+    hasPraxisBridge: 'praxis' in window,
+    hasNodeRequire: 'require' in window
+  }))).toEqual({ hasPraxisBridge: false, hasNodeRequire: false });
+
+  await preview.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-list-cards-in-app-preview.png') });
+  await preview.getByRole('tab', { name: 'Expanded cards' }).click();
+  await expect(preview.locator('[data-variant="Expanded cards"]')).toBeVisible();
+  await expect(preview.locator('[data-variant="Expanded cards"]')).toContainText('Updated 18 min ago');
+  const startingUrl = preview.url();
+  await preview.evaluate(() => {
+    const link = document.createElement('a');
+    link.id = 'external-navigation-probe';
+    link.href = 'https://example.invalid/';
+    link.textContent = 'External navigation probe';
+    document.body.append(link);
+  });
+  await preview.locator('#external-navigation-probe').click();
+  await expect(preview.locator('[data-variant="Expanded cards"]')).toBeVisible();
+  await preview.evaluate(() => { void fetch('https://example.invalid/probe').catch(() => {}); });
+  await expect.poll(() => preview.url()).toBe(startingUrl);
+  await expect(preview.locator('[data-variant="Expanded cards"]')).toBeVisible();
+  expect(await preview.evaluate(() => performance.getEntriesByType('resource').map(entry => entry.name)))
+    .not.toContain('https://example.invalid/probe');
+  const sessionId = await win.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.sessionId);
+  const traversalResult = await win.evaluate(async id => {
+    try {
+      await window.praxis.ai.openHtmlArtifactPreview(id!, '../outside.html', 'Outside workspace');
+      return 'unexpectedly opened';
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }, sessionId);
+  expect(traversalResult).toContain('outside the session workspace');
 });
 
 test('internal memory citations stay persisted but do not render in the transcript', async () => {

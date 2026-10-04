@@ -1872,7 +1872,6 @@ export function App() {
                 sessions={activeSessions}
                 newSessionActive
                 onSelectSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
-                onNewSession={() => undefined}
               />
             </div>
             {renderNewSession()}
@@ -1890,7 +1889,6 @@ export function App() {
                 sessions={activeSessions.filter(isConversationSession)}
                 newSessionActive
                 onSelectSession={sessionKey => navigate({ feature: 'conversations', sessionKey })}
-                onNewSession={() => undefined}
               />
             </div>
             {renderNewConversation()}

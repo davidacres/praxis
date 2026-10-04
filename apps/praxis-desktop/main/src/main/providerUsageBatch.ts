@@ -53,13 +53,23 @@ export async function readProviderSnapshots(
   return {
     checkedAt,
     snapshots: settled.map((outcome, index) => {
-      if (outcome.status === 'fulfilled') return outcome.value;
+      if (outcome.status === 'fulfilled') {
+        // An adapter that predates the code still has to reach the UI with one:
+        // a reason with no code is exactly the case the renderer used to label
+        // "Offline" for no stated reason.
+        const value = outcome.value;
+        if (value.unavailableReason && !value.unavailableReasonCode) {
+          return { ...value, unavailableReasonCode: 'fetch-failed' };
+        }
+        return value;
+      }
       const reason = outcome.reason;
       return {
         provider: providers[index],
         fetchedAt: checkedAt,
         windows: [],
-        unavailableReason: reason instanceof Error ? reason.message : 'This provider did not respond.'
+        unavailableReason: reason instanceof Error ? reason.message : 'This provider did not respond.',
+        unavailableReasonCode: 'fetch-failed'
       };
     })
   };

@@ -339,6 +339,19 @@ export function TitleBar({
           )}
         </div>
 
+        {onNewSession && (
+          <button
+            type="button"
+            className="new-pill new-pill-icon"
+            aria-label="New AI session"
+            title="New AI session"
+            data-testid="session-focus-new"
+            onClick={onNewSession}
+          >
+            <Icon name="robot" size={13} />
+          </button>
+        )}
+
         {onQuickSession && (
           <button
             className="new-pill new-pill-icon"

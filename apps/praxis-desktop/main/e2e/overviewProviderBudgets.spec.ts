@@ -95,3 +95,30 @@ test('no enabled providers explains how to add one', async () => {
 
   await expect(page.getByTestId('overview-budgets-empty')).toContainText('No providers enabled');
 });
+
+test('a provider that exposes no usage API is never badged Offline', async () => {
+  // The bug this pins: status was derived from "has an unavailableReason",
+  // so a provider that will never report usage was badged Offline.
+  app = await launchWithProviders(['anthropic']);
+  const page = app.window;
+  await page.getByTestId('nav-overview').click();
+
+  const card = page.getByTestId('overview-budgets-card-anthropic');
+  await expect(card).toBeVisible();
+  await expect(card).not.toContainText('Offline');
+  await expect(page.getByTestId('overview-budgets-status-anthropic')).toHaveText('No data');
+});
+
+test('a card shows no invented spend, rate limit or reset figures', async () => {
+  // These used to come from a hardcoded table and rendered identically to a
+  // real reading. A provider with no measurement must show nothing.
+  app = await launchWithProviders(['anthropic']);
+  const page = app.window;
+  await page.getByTestId('nav-overview').click();
+
+  const card = page.getByTestId('overview-budgets-card-anthropic');
+  await expect(card).not.toContainText('MTD Spend');
+  await expect(card).not.toContainText('RPM');
+  await expect(card).not.toContainText('Tier');
+  await expect(card).not.toContainText(/\$[\d.]+/);
+});

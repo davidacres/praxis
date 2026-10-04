@@ -75,7 +75,7 @@ function nextWeeklyResetIso(): string {
 async function openAiSnapshot(): Promise<ProviderUsageSnapshot> {
   const fetchedAt = new Date().toISOString();
   const key = process.env.OPENAI_ADMIN_KEY || await getSecretsStore().get(`${USAGE_SECRET_PREFIX}openai`);
-  if (!key) return { provider: 'openai', fetchedAt, windows: [], unavailableReason: 'Add an OpenAI Admin API key to view account usage.' };
+  if (!key) return { provider: 'openai', fetchedAt, windows: [], unavailableReason: 'Add an OpenAI Admin API key to view account usage.', unavailableReasonCode: 'not-configured' };
   const root = apiRoot('openai');
   const headers = { Authorization: `Bearer ${key}` };
   const periods: Array<'hour' | 'day' | 'week' | 'month'> = ['hour', 'day', 'week', 'month'];
@@ -118,7 +118,7 @@ async function openAiSnapshot(): Promise<ProviderUsageSnapshot> {
     }
     return { provider: 'openai', fetchedAt, windows };
   } catch (error) {
-    return { provider: 'openai', fetchedAt, windows: [], unavailableReason: error instanceof Error ? error.message : 'OpenAI usage is unavailable.' };
+    return { provider: 'openai', fetchedAt, windows: [], unavailableReason: error instanceof Error ? error.message : 'OpenAI usage is unavailable.', unavailableReasonCode: 'fetch-failed' };
   }
 }
 
@@ -148,7 +148,7 @@ async function providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnap
   if (adapter) return adapter();
   const custom = await customEndpointSnapshot(provider);
   if (custom) return custom;
-  return { provider, fetchedAt: new Date().toISOString(), windows: [], unavailableReason: 'This provider does not expose an account usage API to Praxis yet.' };
+  return { provider, fetchedAt: new Date().toISOString(), windows: [], unavailableReason: 'This provider does not expose an account usage API to Praxis yet.', unavailableReasonCode: 'not-supported' };
 }
 
 let dashboardMemo: { key: string; summary: UsageDashboardSummary } | undefined;

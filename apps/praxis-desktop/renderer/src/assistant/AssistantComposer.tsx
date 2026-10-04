@@ -1,38 +1,28 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '../ui/Icon';
+import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from '../ai/SessionComposerFrame';
+import { SessionComposerToolbar } from '../ai/SessionComposerToolbar';
+import { SessionComposerActivityOrbit } from '../ai/SessionComposerActivityOrbit';
 import { useAssistantMention } from './useAssistantMention';
-
-const MAX_LINES = 6;
 
 interface AssistantComposerProps {
   value: string;
   onChange: (value: string) => void;
   busy: boolean;
   onSend: () => void;
-  onTeamReview: () => void;
+  sendLabel: string;
   /** Bumped by the shell to pull focus into the box (on open). */
   focusSignal: number;
+  composerOptions: ReactNode;
+  headerOptions: ReactNode;
 }
 
-export function AssistantComposer({ value, onChange, busy, onSend, onTeamReview, focusSignal }: AssistantComposerProps) {
+export function AssistantComposer({ value, onChange, busy, onSend, sendLabel, focusSignal, composerOptions, headerOptions }: AssistantComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
   const mention = useAssistantMention(value, caret);
 
   useEffect(() => { ref.current?.focus(); }, [focusSignal]);
-
-  // Grow with the text up to MAX_LINES, then scroll.
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const style = getComputedStyle(el);
-    const lineHeight = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.3 || 18;
-    const chrome = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-    el.style.height = 'auto';
-    const max = lineHeight * MAX_LINES + chrome;
-    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
-    el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden';
-  }, [value]);
 
   const insert = (id: string) => {
     const next = mention.insert(id);
@@ -46,7 +36,9 @@ export function AssistantComposer({ value, onChange, busy, onSend, onTeamReview,
   };
 
   return (
-    <div className="assistant-composer composer">
+    <SessionComposerCard className={`assistant-composer${busy ? ' is-collapsed is-running' : ''}`} data-testid="assistant-composer">
+      {busy && <SessionComposerActivityOrbit testId="assistant-composer-activity-orbit" />}
+      {!busy && <SessionComposerHeader data-testid="assistant-mode-panel">{headerOptions}</SessionComposerHeader>}
       {mention.open && (
         <ul className="assistant-mention-menu" role="listbox" aria-label="Mention a team member" data-testid="assistant-mention-menu">
           {mention.matches.map((persona, index) => (
@@ -64,12 +56,11 @@ export function AssistantComposer({ value, onChange, busy, onSend, onTeamReview,
           ))}
         </ul>
       )}
-      <textarea
+      <SessionComposerInput
         ref={ref}
-        className="composer-input assistant-input"
         value={value}
-        rows={2}
-        placeholder="Ask the team… use @qa, @dev, @security"
+        collapsed={busy}
+        placeholder="Ask selected members… or @mention a member"
         aria-label="Message the virtual team"
         data-testid="assistant-input"
         disabled={busy}
@@ -89,15 +80,16 @@ export function AssistantComposer({ value, onChange, busy, onSend, onTeamReview,
           }
         }}
       />
-      <div className="composer-controls">
-        <button type="button" className="btn btn-sm assistant-team-review" disabled={busy} onClick={onTeamReview} data-testid="assistant-team-review">
-          <Icon name="sparkles" size={12} /> Team Review
-        </button>
+      <SessionComposerToolbar>
+        {busy ? <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid="assistant-composer-activity-chip"><Icon name="sparkles" size={13} /> The team is thinking…</span> : composerOptions}
         <span className="spacer" />
-        <button type="button" className="composer-send" aria-label="Send to the team" data-testid="assistant-send" disabled={!value.trim() || busy} onClick={onSend}>
-          <Icon name="arrow-up" size={13} />
-        </button>
-      </div>
-    </div>
+        {!busy && <span className="session-context-chip" data-testid="assistant-context-indicator" title="Context usage is not reported for Virtual Team chat" role="img" aria-label="Context usage unavailable">
+          <SessionContextRing percent={0} />
+        </span>}
+        {!busy && <button type="button" className="composer-send" aria-label={sendLabel} title={sendLabel} data-testid="assistant-send" disabled={!value.trim()} onClick={onSend}>
+          <Icon name="arrow-up" size={15} />
+        </button>}
+      </SessionComposerToolbar>
+    </SessionComposerCard>
   );
 }

@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, expandAllIssueStacks, launchTestApp, type TestApp } from './launchTestApp';
 import { startMockOpenAiCompatibleServer, type MockOpenAiCompatibleServer } from './mockOpenAiCompatibleServer';
+import { chooseOption } from './chipSelect';
 
 /**
  * FX-BF-050: the app-wide Virtual Team Assistant — summon with ⌘J, float or dock
@@ -30,9 +31,9 @@ test.afterEach(async () => {
   replyText = REPLY;
 });
 
-async function launch(): Promise<Page> {
+async function launch(responseDelayMs = 0, withToolFolder = false, toolCall?: { name: string; arguments: string }): Promise<Page> {
   replyText = REPLY;
-  mock = await startMockOpenAiCompatibleServer({ reply: () => replyText });
+  mock = await startMockOpenAiCompatibleServer({ reply: () => replyText, responseDelayMs, toolCall });
   plansDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-assistant-'));
   const featureDir = path.join(plansDir, 'features', 'feature-01-demo');
   fs.mkdirSync(featureDir, { recursive: true });
@@ -46,6 +47,7 @@ async function launch(): Promise<Page> {
   fs.appendFileSync(path.join(featureDir, 'task-01-01-fix-login-bug.md'), '\nExtra diff line for the team.\n');
   app = await launchTestApp({
     ai: {
+      ...(withToolFolder ? { workingDirectory: plansDir } : {}),
       activeProvider: 'custom:mock',
       customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }],
       providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } }
@@ -82,14 +84,14 @@ test('⌘J summons the floating assistant; pin docks it, keeping the conversatio
 
   await win.getByTestId('assistant-input').fill('hello team');
   await win.getByTestId('assistant-send').click();
-  await expect(win.getByTestId('assistant-message-lead')).toBeVisible();
+  await expect(win.getByTestId('assistant-message-dev')).toBeVisible();
 
   const before = (await win.getByTestId('main-content-pane').boundingBox())!.width;
   await win.getByTestId('assistant-pin').click();
   await expect(win.getByTestId('assistant-docked')).toBeVisible();
   await expect(win.getByTestId('assistant-floating')).toHaveCount(0);
   // Same transcript after the shell changed home.
-  await expect(win.getByTestId('assistant-message-lead')).toHaveCount(1);
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(1);
   await expect(win.getByTestId('assistant-message-user')).toHaveText('hello team');
   const after = (await win.getByTestId('main-content-pane').boundingBox())!.width;
   expect(after).toBeLessThan(before - 200);
@@ -100,7 +102,154 @@ test('⌘J summons the floating assistant; pin docks it, keeping the conversatio
   await expect.poll(async () => (await win.getByTestId('main-content-pane').boundingBox())!.width).toBeGreaterThan(before - 5);
 });
 
-test('an @mention routes to that persona, with choices and a coding-session handoff', async () => {
+test('floating assistant drags by its header and resizes from its corner', async () => {
+  const win = await launch();
+  await win.getByTestId('titlebar-assistant').click();
+  const panel = win.getByTestId('assistant-floating');
+  const initial = (await panel.boundingBox())!;
+  const header = (await win.getByTestId('assistant-drag-handle').boundingBox())!;
+  await win.mouse.move(header.x + 260, header.y + 16);
+  await win.mouse.down();
+  await win.mouse.move(header.x + 170, header.y - 90, { steps: 8 });
+  await win.mouse.up();
+  const moved = (await panel.boundingBox())!;
+  expect(moved.x).toBeLessThan(initial.x - 70);
+  expect(moved.y).toBeLessThan(initial.y - 70);
+  expect(moved.width).toBe(initial.width);
+
+  const handle = (await win.getByTestId('assistant-floating-resize').boundingBox())!;
+  await win.mouse.move(handle.x + 8, handle.y + 8);
+  await win.mouse.down();
+  await win.mouse.move(handle.x - 72, handle.y + 58, { steps: 8 });
+  await win.mouse.up();
+  const resized = (await panel.boundingBox())!;
+  expect(resized.width).toBeGreaterThan(moved.width + 60);
+  expect(resized.height).toBeGreaterThan(moved.height + 40);
+  await expect(win.getByTestId('assistant-provider')).toBeVisible();
+  await expect(win.getByTestId('assistant-send')).toBeVisible();
+  await win.getByTestId('assistant-member-qa').click();
+  await expect(win.getByTestId('assistant-member-qa')).toHaveAttribute('aria-pressed', 'true');
+  await panel.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-floating-resized.png') });
+});
+
+test('assistant composer selects provider, model, reasoning, and permission mode for the next turn', async () => {
+  const win = await launch();
+  await win.getByTestId('session-focus-new').click();
+  const sessionCard = win.getByTestId('new-session-view').locator('.session-follow-up-composer');
+  await expect(sessionCard).toBeVisible();
+  await win.getByTestId('new-session-view').locator('.session-follow-up-composer').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'standard-session-composer-reference.png') });
+  await win.getByTestId('titlebar-assistant').click();
+  const assistantCard = win.getByTestId('assistant-panel').locator('.assistant-composer');
+  await expect(assistantCard).toBeVisible();
+  await win.getByTestId('assistant-close').focus();
+  const cardStyles = async (selector: string) => win.locator(selector).evaluate(element => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, border: style.borderColor, radius: style.borderRadius };
+  });
+  await assistantCard.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-composer-comparison.png') });
+  const assistantStyle = await cardStyles('.assistant-composer');
+  const sessionStyle = await cardStyles('#root [data-testid="new-session-view"] .session-follow-up-composer');
+  expect(assistantStyle.background).toBe(sessionStyle.background);
+  expect(assistantStyle.radius).toBe(sessionStyle.radius);
+  await expect(win.getByTestId('assistant-context-indicator')).toHaveAttribute('aria-label', 'Context usage unavailable');
+  await expect(win.getByTestId('assistant-panel').getByTestId('session-usage-summary')).toContainText('Team chat usage unavailable');
+  await expect(win.getByTestId('assistant-provider')).toContainText('Mock');
+  await expect(win.getByTestId('assistant-model')).toContainText('mock-model');
+  await expect(win.getByTestId('assistant-reasoning')).toHaveAttribute('data-value', 'medium');
+  await expect(win.getByTestId('assistant-mode-chat')).toHaveAttribute('aria-pressed', 'true');
+  await expect(win.getByTestId('assistant-tool-mode')).toHaveAttribute('data-value', 'project-only');
+  await expect(win.getByTestId('assistant-working-directory')).toContainText('Attach folder');
+  await win.getByTestId('assistant-mode-analysis').click();
+  await expect(win.getByTestId('assistant-mode-analysis')).toHaveAttribute('aria-pressed', 'true');
+
+  const reasoning = win.locator('[data-testid="assistant-reasoning"] input');
+  await reasoning.focus();
+  await reasoning.press('End');
+  await expect(win.getByTestId('assistant-reasoning')).toHaveAttribute('data-value', 'high');
+
+  await win.getByTestId('assistant-permission-chip').click();
+  const permissionMenu = win.getByRole('listbox', { name: 'Permission mode' });
+  await expect(permissionMenu).toBeVisible();
+  await win.getByTestId('assistant-permission-option-auto').click();
+  await expect(win.getByTestId('assistant-permission-chip')).toContainText('Auto');
+  const toolbar = win.getByTestId('assistant-panel').locator('.assistant-composer .composer-controls');
+  await expect(toolbar.getByTestId('assistant-provider')).toBeVisible();
+  await expect(toolbar.getByTestId('assistant-model')).toBeVisible();
+  await expect(toolbar.getByTestId('assistant-send')).toBeVisible();
+  const floatingWidth = (await win.getByTestId('assistant-floating').boundingBox())!.width;
+  expect(floatingWidth).toBeGreaterThanOrEqual(520);
+  const chipRow = await win.getByTestId('assistant-composer-options').evaluate(element => {
+    const children = [...element.children] as HTMLElement[];
+    return children.map(child => ({ top: child.getBoundingClientRect().top, right: child.getBoundingClientRect().right }));
+  });
+  expect(Math.max(...chipRow.map(chip => chip.top)) - Math.min(...chipRow.map(chip => chip.top)), JSON.stringify(chipRow)).toBeLessThan(8);
+  expect(Math.max(...chipRow.map(chip => chip.right))).toBeLessThan((await win.getByTestId('assistant-send').boundingBox())!.x);
+  expect(Math.abs((await win.getByTestId('assistant-input').boundingBox())!.height - (await win.getByTestId('new-session-view').locator('textarea').boundingBox())!.height)).toBeLessThanOrEqual(2);
+
+  await win.getByTestId('assistant-input').fill('Use the selected runtime settings');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-message-dev')).toBeVisible();
+  const request = mock!.requests.filter(r => r.url.endsWith('/chat/completions')).at(-1)!;
+  const body = JSON.parse(request.body) as { model: string; messages: Array<{ content: string }> };
+  expect(body.model).toBe('mock-model');
+  expect(body.messages[0]?.content).toContain('Use high reasoning effort.');
+  expect(body.messages[0]?.content).toContain('Analyze the user request and available context.');
+  await win.getByTestId('assistant-panel').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-composer-runtime-controls.png') });
+  await win.getByTestId('assistant-pin').click();
+  await expect(win.getByTestId('assistant-docked')).toBeVisible();
+  expect((await win.getByTestId('assistant-docked').boundingBox())!.width).toBeGreaterThanOrEqual(500);
+  await win.getByTestId('assistant-docked').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-composer-wide-docked.png') });
+});
+
+test('assistant composer collapses and animates its border while the team replies', async () => {
+  const win = await launch(1800);
+  await win.getByTestId('titlebar-assistant').click();
+  const composer = win.getByTestId('assistant-composer');
+  const expandedHeight = (await composer.boundingBox())!.height;
+  await win.getByTestId('assistant-input').fill('Check the running state');
+  await win.getByTestId('assistant-send').click();
+  await expect(composer).toHaveClass(/is-collapsed/);
+  await expect(composer).toHaveClass(/is-running/);
+  await expect(win.getByTestId('assistant-composer-activity-orbit')).toBeVisible();
+  const capsule = win.getByTestId('assistant-composer-activity-orbit').locator('[data-activity-capsule="true"]');
+  const initialTransform = await capsule.getAttribute('transform');
+  await expect.poll(() => capsule.getAttribute('transform')).not.toBe(initialTransform);
+  await expect(win.getByTestId('assistant-composer-activity-chip')).toContainText('The team is thinking');
+  await expect(win.getByTestId('assistant-send')).toHaveCount(0);
+  await expect.poll(async () => (await composer.boundingBox())!.height).toBeLessThan(expandedHeight - 12);
+  await composer.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-composer-running.png') });
+  await expect(win.getByTestId('assistant-message-dev')).toBeVisible();
+  await expect(composer).not.toHaveClass(/is-collapsed/);
+  await expect(win.getByTestId('assistant-send')).toBeVisible();
+});
+
+test('assistant full tools uses the selected working folder through an agent session', async () => {
+  const win = await launch(0, false, { name: 'read_file', arguments: JSON.stringify({ path: 'features/feature-01-demo/task-01-01-fix-login-bug.md' }) });
+  await app!.electronApp.evaluate(({ ipcMain }, folder) => {
+    ipcMain.removeHandler('dialog:pickFolder');
+    ipcMain.handle('dialog:pickFolder', () => folder);
+  }, plansDir!);
+  await win.getByTestId('titlebar-assistant').click();
+  await expect(win.getByTestId('assistant-working-directory')).toContainText('Attach folder');
+  await chooseOption(win.getByTestId('assistant-tool-mode'), 'full');
+  await expect(win.getByTestId('assistant-tool-mode')).toHaveAttribute('data-value', 'full');
+  await expect(win.getByTestId('assistant-working-directory')).toContainText(path.basename(plansDir!));
+  await win.getByTestId('assistant-input').fill('Inspect the working folder and answer.');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-tool-permission')).toBeVisible({ timeout: 15000 });
+  await win.getByTestId('assistant-tool-permission').getByRole('button', { name: 'Allow' }).click();
+  await expect(win.getByTestId('assistant-message-dev')).toBeVisible({ timeout: 30000 });
+  const sessions = await win.evaluate(() => window.praxis.ai.listSessions());
+  const toolTurn = sessions.find(session => session.issueKey.startsWith('ASSISTANT-'));
+  expect(toolTurn).toBeDefined();
+  expect(toolTurn!.toolMode).toBe('full');
+  expect(toolTurn!.workingDirectory).toBe(plansDir);
+  expect(mock!.requests.some(request => request.url.endsWith('/chat/completions') && JSON.parse(request.body).tools?.length > 0)).toBe(true);
+  expect(mock!.requests.some(request => request.url.endsWith('/chat/completions') && request.body.includes('Users cannot log in.'))).toBe(true);
+  await win.getByTestId('assistant-panel').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-full-tools.png') });
+});
+
+test('an @mention routes to that persona and transcript suggestions are read-only', async () => {
   const win = await launch();
   await win.getByTestId('titlebar-assistant').click();
   const input = win.getByTestId('assistant-input');
@@ -113,28 +262,55 @@ test('an @mention routes to that persona, with choices and a coding-session hand
 
   await expect(win.getByTestId('assistant-message-qa')).toBeVisible();
   await expect(win.locator('.persona-badge--qa').first()).toBeVisible();
+  await expect(win.getByTestId('assistant-message-suggestions')).toHaveText('Suggestions: Go deeper');
+  await expect(win.getByTestId('assistant-action-card')).toContainText('Suggested action: Hand the plan to an agent');
+  await expect(win.getByTestId('assistant-message-qa').getByRole('button')).toHaveCount(0);
+  await expect(win.getByTestId('assistant-feed').getByRole('button')).toHaveCount(0);
+  await expect(win.getByTestId('assistant-member-dev')).toHaveAttribute('aria-pressed', 'true');
+  await expect(win.getByTestId('assistant-send')).toBeVisible();
   const chat = mock!.requests.filter(r => r.url.endsWith('/chat/completions')).at(-1)!;
   expect(chat.body).toContain('QA SPECIALIST');
-  await win.screenshot({ path: path.join(shots, 'assistant-floating.png') });
+  await win.getByTestId('assistant-panel').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-chat-no-message-buttons.png') });
 
-  await win.getByRole('button', { name: 'Go deeper' }).click();
+  await expect(win.getByTestId('assistant-message-qa').getByText('Open as Coding Session')).toHaveCount(0);
+  await win.getByTestId('assistant-input').fill('go deeper');
+  await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-message-user').last()).toHaveText('go deeper');
-  await expect(win.getByTestId('assistant-message-lead')).toBeVisible();
-
-  await win.getByRole('button', { name: 'Open as Coding Session' }).first().click();
-  await expect(win.getByTestId('new-session-view')).toBeVisible();
-  await expect(win.locator('textarea').filter({ hasText: 'Implement the plan' }).first()).toBeVisible();
+  await expect(win.getByTestId('assistant-message-dev')).toBeVisible();
 });
 
-test('a team review speaks dev, qa, security, then the lead', async () => {
+test('selected team members reply in order, then the selected lead synthesises', async () => {
   const win = await launch();
   await win.getByTestId('titlebar-assistant').click();
-  await win.getByTestId('assistant-team-review').click();
+  await expect(win.getByTestId('assistant-member-dev')).toHaveAttribute('aria-pressed', 'true');
+  await expect(win.getByTestId('assistant-member-qa')).toHaveAttribute('aria-pressed', 'false');
+  await win.getByTestId('assistant-member-qa').click();
+  await win.getByTestId('assistant-member-security').click();
+  await win.getByTestId('assistant-member-lead').click();
+  await expect(win.getByTestId('assistant-team-review')).toHaveCount(0);
+  await win.getByTestId('assistant-input').fill('Review this page as a team');
+  await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-message-lead')).toBeVisible({ timeout: 30000 });
   const order = await win.locator('[data-testid^="assistant-message-"]:not([data-testid="assistant-message-user"])').evaluateAll(
-    nodes => nodes.map(node => node.getAttribute('data-testid')!.replace('assistant-message-', ''))
+    nodes => nodes
+      .map(node => node.getAttribute('data-testid')!)
+      .filter(testId => testId !== 'assistant-message-suggestions')
+      .map(testId => testId.replace('assistant-message-', ''))
   );
   expect(order).toEqual(['dev', 'qa', 'security', 'lead']);
+  await win.getByTestId('assistant-panel').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-selectable-team.png') });
+});
+
+test('deselecting every seat sends a general chat to the Tech Lead', async () => {
+  const win = await launch();
+  await win.getByTestId('titlebar-assistant').click();
+  await win.getByTestId('assistant-member-dev').click();
+  await expect(win.getByTestId('assistant-member-dev')).toHaveAttribute('aria-pressed', 'false');
+  await win.getByTestId('assistant-input').fill('A general question');
+  await expect(win.getByTestId('assistant-send')).toHaveAttribute('aria-label', 'Send general chat');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-message-lead')).toBeVisible();
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
 });
 
 test('page context follows navigation, can be detached, and chats persist in the tree', async () => {
@@ -154,7 +330,7 @@ test('page context follows navigation, can be detached, and chats persist in the
   await win.getByTestId('assistant-context-pill').click();
   await win.getByTestId('assistant-input').fill('general question');
   await win.getByTestId('assistant-send').click();
-  await expect(win.getByTestId('assistant-message-lead')).toBeVisible();
+  await expect(win.getByTestId('assistant-message-dev')).toBeVisible();
   let body = mock!.requests.filter(r => r.url.endsWith('/chat/completions')).at(-1)!.body;
   expect(body).not.toContain('[Current Page Context: ');
 
@@ -162,7 +338,7 @@ test('page context follows navigation, can be detached, and chats persist in the
   await expect(win.getByTestId('assistant-context-pill')).not.toHaveClass(/is-detached/);
   await win.getByTestId('assistant-input').fill('review this ticket');
   await win.getByTestId('assistant-send').click();
-  await expect(win.getByTestId('assistant-message-lead')).toHaveCount(2);
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
   body = mock!.requests.filter(r => r.url.endsWith('/chat/completions')).at(-1)!.body;
   expect(body).toContain('[Current Page Context: Issue ');
   expect(body).toContain('Users cannot log in.');
@@ -175,16 +351,16 @@ test('page context follows navigation, can be detached, and chats persist in the
 
   // New chat clears the feed; opening the saved chat restores it.
   await win.getByTestId('assistant-new-chat').click();
-  await expect(win.getByTestId('assistant-message-lead')).toHaveCount(0);
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
   await row.locator('.team-chat-main').click();
-  await expect(win.getByTestId('assistant-message-lead')).toHaveCount(2);
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
 
   // Deleting it removes the record and resets the open transcript.
   await row.hover();
   await row.getByRole('button', { name: /Delete team chat/ }).click();
   await win.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(win.getByTestId('team-chat-row')).toHaveCount(0);
-  await expect(win.getByTestId('assistant-message-lead')).toHaveCount(0);
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
 });
 
 async function openIssue(win: Page): Promise<void> {
@@ -196,7 +372,7 @@ async function openIssue(win: Page): Promise<void> {
 
 const action = (value: unknown) => `Here is a proposal.\n\`\`\`praxis-assistant\n${JSON.stringify({ action: value })}\n\`\`\``;
 
-test('an update-ticket proposal can be previewed, then applied to the ticket', async () => {
+test('an update-ticket proposal is informational and has no transcript controls', async () => {
   const win = await launch();
   await win.getByTestId('titlebar-assistant').click();
   await win.getByTestId('assistant-pin').click();
@@ -205,18 +381,15 @@ test('an update-ticket proposal can be previewed, then applied to the ticket', a
   await win.getByTestId('assistant-input').fill('add acceptance criteria');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-action-card')).toBeVisible();
-
-  await win.getByTestId('assistant-action-preview').click();
-  await expect(win.getByTestId('assistant-action-preview-body')).toContainText('Acceptance criteria');
-  await win.getByTestId('assistant-action-apply').click();
-  await expect(win.getByTestId('assistant-action-card')).toContainText('Ticket description updated.');
+  await expect(win.getByTestId('assistant-message-dev').getByRole('button')).toHaveCount(0);
+  await expect(win.getByTestId('assistant-action-card')).toContainText('Suggested action: Add acceptance criteria');
 
   const key = /Issue (\S+)/.exec((await win.getByTestId('assistant-context-pill').textContent()) ?? '')![1];
   const description = await win.evaluate(async issueKey => (await window.praxis.issue.get(issueKey, 'team-board')).description, key);
-  expect(description).toContain('Login works');
+  expect(description).toBe('Users cannot log in.');
 });
 
-test('a create-subtask proposal creates a new task file under the ticket\'s feature', async () => {
+test('a create-subtask proposal does not create a task without a composer send', async () => {
   const win = await launch();
   await win.getByTestId('titlebar-assistant').click();
   await win.getByTestId('assistant-pin').click();
@@ -224,14 +397,13 @@ test('a create-subtask proposal creates a new task file under the ticket\'s feat
   replyText = action({ kind: 'create-subtask', label: 'Create Subtask', summary: 'Add a regression test task', title: 'Add login regression test', description: 'Cover the broken login path.' });
   await win.getByTestId('assistant-input').fill('make a test task');
   await win.getByTestId('assistant-send').click();
-  await win.getByTestId('assistant-action-apply').click();
-  await expect(win.getByTestId('assistant-action-card')).toContainText(/Created TEAM-\S+ under /);
+  await expect(win.getByTestId('assistant-action-card')).toContainText('Suggested action: Add a regression test task');
+  await expect(win.getByTestId('assistant-message-dev').getByRole('button')).toHaveCount(0);
   const featureDir = path.join(plansDir!, 'features', 'feature-01-demo');
-  await expect.poll(() => fs.readdirSync(featureDir).filter(name => name.startsWith('task-')).length).toBe(2);
-  expect(fs.readdirSync(featureDir).some(name => name.includes('add-login-regression-test'))).toBe(true);
+  expect(fs.readdirSync(featureDir).filter(name => name.startsWith('task-'))).toHaveLength(1);
 });
 
-test('an update-workflow proposal re-validates and lands on the designer canvas', async () => {
+test('an update-workflow proposal is informational and leaves the workflow unchanged', async () => {
   const win = await launch();
   const { projectId, workflow } = await win.evaluate(async () => {
     const project = (await window.praxis.projects.list())[0];
@@ -257,22 +429,17 @@ test('an update-workflow proposal re-validates and lands on the designer canvas'
   replyText = action({ kind: 'update-workflow', label: 'Apply Workflow Changes', summary: 'Rename the workflow', workflow: { ...workflow, name: 'Renamed by the team' } });
   await win.getByTestId('assistant-input').fill('rename it');
   await win.getByTestId('assistant-send').click();
-  await win.getByTestId('assistant-action-preview').click();
-  await expect(win.getByTestId('assistant-action-preview-body')).toContainText('Renamed by the team');
-  await win.getByTestId('assistant-action-apply').click();
-  await expect(win.getByTestId('assistant-action-card')).toContainText('Applied to the canvas');
-  await expect(win.getByTestId('assistant-context-pill')).toContainText('Workflow Renamed by the team');
-
-  // Saving the dirtied canvas persists it.
-  await win.locator('.wf-header-save').click();
-  await expect.poll(async () => win.evaluate(async id => (await window.praxis.workflows.get(id, 'assistant-wf'))?.name, projectId)).toBe('Renamed by the team');
+  await expect(win.getByTestId('assistant-action-card')).toContainText('Suggested action: Rename the workflow');
+  await expect(win.getByTestId('assistant-message-lead').getByRole('button')).toHaveCount(0);
+  await expect(win.getByTestId('assistant-context-pill')).toContainText('Workflow Original flow');
+  expect(await win.evaluate(async id => (await window.praxis.workflows.get(id, 'assistant-wf'))?.name, projectId)).toBe('Original flow');
 
   // A proposal for some other workflow is refused, not applied.
   replyText = action({ kind: 'update-workflow', label: 'Apply Workflow Changes', summary: 'Wrong one', workflow: { ...workflow, id: 'someone-else' } });
   await win.getByTestId('assistant-input').fill('change another');
   await win.getByTestId('assistant-send').click();
-  await win.getByTestId('assistant-action-apply').last().click();
-  await expect(win.getByRole('alert')).toContainText('only change the workflow open in this designer');
+  await expect(win.getByTestId('assistant-action-card').last()).toContainText('Suggested action: Wrong one');
+  await expect(win.getByRole('alert')).toHaveCount(0);
 });
 
 test('Git changes context carries the file list and the diff hunks', async () => {
@@ -286,7 +453,7 @@ test('Git changes context carries the file list and the diff hunks', async () =>
   await expect.poll(async () => {
     await win.getByTestId('assistant-input').fill('summarise');
     await win.getByTestId('assistant-send').click();
-    await expect(win.getByTestId('assistant-message-lead').last()).toBeVisible();
+    await expect(win.getByTestId('assistant-message-dev').last()).toBeVisible();
     return mock!.requests.filter(r => r.url.endsWith('/chat/completions')).at(-1)!.body.includes('Extra diff line for the team.');
   }, { timeout: 20000 }).toBe(true);
   const body = mock!.requests.filter(r => r.url.endsWith('/chat/completions')).at(-1)!.body;
@@ -330,7 +497,7 @@ test('a chat can be renamed, survives an app restart, and the docked width persi
   await expect(again.getByTestId('team-chat-row')).toContainText('Login review');
   await again.locator('.team-chat-main').click();
   await expect(again.getByTestId('assistant-message-user')).toHaveText('persist me');
-  await expect(again.getByTestId('assistant-message-lead')).toBeVisible();
+  await expect(again.getByTestId('assistant-message-dev')).toBeVisible();
 });
 
 test('the assistant IPC reports a missing provider as an error message, not a crash', async () => {
@@ -403,11 +570,29 @@ test('the assistant\'s controls show a focus ring and carry tooltips', async () 
     }
     await win.keyboard.press('Tab');
   }
-  expect(seen).toEqual(expect.arrayContaining(['assistant-new-chat', 'assistant-pin', 'assistant-close', 'assistant-action-preview', 'assistant-action-apply', 'assistant-input', 'assistant-team-review', 'assistant-send']));
+  expect(seen).toEqual(expect.arrayContaining(['assistant-new-chat', 'assistant-pin', 'assistant-close', 'assistant-input', 'assistant-send']));
   expect(unringed, `assistant controls with no visible focus: ${unringed.join(', ')}`).toEqual([]);
 
+  // The roster precedes the header actions, so walk back from Close to reach it
+  // with keyboard modality and prove the persona toggle gets a visible ring.
+  await win.getByTestId('assistant-close').focus();
+  await win.keyboard.press('Shift+Tab');
+  await win.keyboard.press('Shift+Tab');
+  await win.keyboard.press('Shift+Tab');
+  const memberFocus = await win.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    const style = el ? getComputedStyle(el) : undefined;
+    return {
+      name: el?.getAttribute('data-testid'),
+      painted: Boolean(style && style.outlineStyle !== 'none' && style.outlineWidth !== '0px')
+        || Boolean(el && getComputedStyle(el).boxShadow !== 'none')
+    };
+  });
+  expect(memberFocus.name).toBe('assistant-member-product');
+  expect(memberFocus.painted).toBe(true);
+
   // Every icon-only button has an accessible name that becomes its tooltip.
-  for (const id of ['assistant-new-chat', 'assistant-pin', 'assistant-close', 'assistant-send']) {
+  for (const id of ['assistant-member-lead', 'assistant-member-dev', 'assistant-member-qa', 'assistant-member-security', 'assistant-member-product', 'assistant-new-chat', 'assistant-pin', 'assistant-close', 'assistant-send']) {
     const button = win.getByTestId(id);
     await button.hover();
     expect((await button.getAttribute('aria-label'))?.length ?? 0).toBeGreaterThan(3);
@@ -422,7 +607,6 @@ test('the assistant stays readable on every theme and surface pack', async () =>
   await win.getByTestId('assistant-input').fill('@qa hello');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-action-card')).toBeVisible();
-  await win.getByTestId('assistant-action-preview').click();
 
   const themes = ['praxis-dark', 'praxis-light', 'github-dark', 'github-light', 'dracula-dark', 'nord-dark', 'solarized-light', 'catppuccin-latte', 'tokyo-night', 'xcode-light', 'humanist-light', 'tm-default-1'];
   const packs = ['flat', 'parchment', 'graphite', 'aurora-glass', 'noir'];
@@ -479,8 +663,8 @@ test('the assistant stays readable on every theme and surface pack', async () =>
           badge: sample('[data-testid="assistant-message-qa"] .persona-badge span'),
           name: sample('[data-testid="assistant-message-qa"] .assistant-message-head strong'),
           user: sample('[data-testid="assistant-message-user"] span'),
-          chip: sample('.assistant-suggestions .assistant-chip, .assistant-choices .assistant-chip'),
-          preview: sample('.assistant-action-preview pre')
+          suggestions: sample('.assistant-message-suggestions'),
+          proposal: sample('.assistant-action-summary span')
         };
       }, [theme, pack] as const);
       if (darkOnly.has(pack) && !/dark|mocha|night|dracula|nord|tm-default-1/.test(theme)) continue;

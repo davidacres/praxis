@@ -9,7 +9,6 @@ export interface SessionFocusTabsProps {
   selectedKey?: string;
   newSessionActive?: boolean;
   onSelectSession: (issueKey: string) => void;
-  onNewSession: () => void;
 }
 
 /**
@@ -22,8 +21,7 @@ export function SessionFocusTabs({
   sessions,
   selectedKey,
   newSessionActive = false,
-  onSelectSession,
-  onNewSession
+  onSelectSession
 }: SessionFocusTabsProps) {
   const activeTabRef = useRef<HTMLButtonElement | null>(null);
 
@@ -77,16 +75,6 @@ export function SessionFocusTabs({
           );
         })}
       </div>
-      <button
-        type="button"
-        className={`session-focus-tab-add${newSessionActive ? ' active' : ''}`}
-        data-testid="session-focus-new"
-        aria-label="New AI session"
-        title="New AI session"
-        onClick={onNewSession}
-      >
-        <Icon name="plus" size={13} />
-      </button>
     </div>
   );
 }

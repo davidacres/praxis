@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import * as fsp from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import { BrowserWindow, ipcMain } from 'electron';
+import { openRestrictedHtmlPreview } from './htmlArtifactPreview';
 import { broadcastToAllWindows } from './windowBroadcast';
 import {
   clearProviderApiKey,
@@ -221,6 +222,7 @@ const IMAGE_PREVIEW_TYPES: Record<string, string> = {
   '.avif': 'image/avif'
 };
 const MAX_IMAGE_PREVIEW_BYTES = 12 * 1024 * 1024;
+const MAX_HTML_PREVIEW_BYTES = 2 * 1024 * 1024;
 
 export function trackerToolExtension(
   service: IssueTrackerService | undefined,
@@ -754,6 +756,49 @@ export function registerAiIpc(): void {
         // and let the filename remain visible rather than surfacing an IPC
         // error for a preview-only enhancement.
         return undefined;
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'ai:openHtmlArtifactPreview',
+    async (event: Electron.IpcMainInvokeEvent, issueKey: string, filePath: string, title?: string) => {
+      const record = sessionManager.getAgentSession(issueKey) ??
+        [...sessionManager.getAllAgentSessions().values()].find(candidate => candidate.sessionId === issueKey);
+      const workingDirectory = record?.worktreePath?.trim() || record?.workingDirectory?.trim();
+      const input = typeof filePath === 'string' ? filePath.trim() : '';
+      if (!record || !workingDirectory || !input || nodePath.isAbsolute(input) || /^[a-z][a-z\d+.-]*:/i.test(input)) {
+        throw new Error('This HTML artifact is not available in the session workspace.');
+      }
+      if (!/\.html?$/i.test(input.split(/[?#]/, 1)[0] ?? '')) {
+        throw new Error('Only HTML artifacts can be previewed.');
+      }
+
+      let absolute: string;
+      try {
+        absolute = resolveSandboxedPath(workingDirectory, input);
+        const [realRoot, realFile] = await Promise.all([fsp.realpath(workingDirectory), fsp.realpath(absolute)]);
+        const relative = nodePath.relative(realRoot, realFile);
+        if (relative.startsWith('..') || nodePath.isAbsolute(relative)) {
+          throw new Error('HTML artifact resolves outside the session workspace.');
+        }
+        absolute = realFile;
+      } catch (error) {
+        if (error instanceof PathSandboxError) throw new Error('HTML artifact is outside the session workspace.');
+        throw new Error('HTML artifact could not be opened from the session workspace.');
+      }
+
+      try {
+        const stat = await fsp.stat(absolute);
+        if (!stat.isFile() || stat.size > MAX_HTML_PREVIEW_BYTES) {
+          throw new Error('HTML artifact must be a file no larger than 2 MB.');
+        }
+        const html = await fsp.readFile(absolute, 'utf8');
+        const parent = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined;
+        await openRestrictedHtmlPreview(html, typeof title === 'string' ? title : nodePath.basename(input), parent);
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('HTML artifact')) throw error;
+        throw new Error('HTML artifact could not be read.');
       }
     }
   );

@@ -79,7 +79,7 @@ export async function codexCliSnapshot(): Promise<ProviderUsageSnapshot> {
       requestCodex('account/usage/read', {}) as Promise<CodexTokenUsage>
     ]);
     const limits = response.rateLimits;
-    if (!limits) return { provider: 'codex-cli', fetchedAt, windows: [], unavailableReason: 'Codex did not return account limits.' };
+    if (!limits) return { provider: 'codex-cli', fetchedAt, windows: [], unavailableReason: 'Codex did not return account limits.', unavailableReasonCode: 'fetch-failed' };
     const windows = [
       mapWindow('hour', '5-hour window', limits.primary),
       mapWindow('week', 'Weekly window', limits.secondary)
@@ -93,6 +93,6 @@ export async function codexCliSnapshot(): Promise<ProviderUsageSnapshot> {
       credits: typeof availableResets === 'number' ? { remaining: availableResets, currency: 'reset credits' } : undefined
     };
   } catch (error) {
-    return { provider: 'codex-cli', fetchedAt, windows: [], unavailableReason: error instanceof Error ? error.message : 'Codex account usage is unavailable.' };
+    return { provider: 'codex-cli', fetchedAt, windows: [], unavailableReason: error instanceof Error ? error.message : 'Codex account usage is unavailable.', unavailableReasonCode: 'cli-unavailable' };
   }
 }
