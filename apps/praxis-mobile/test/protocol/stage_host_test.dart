@@ -44,6 +44,16 @@ void main() {
     expect(info['surfaceRevision'], 7);
     final sessions = await client.read(_read('sessions.list')) as List<dynamic>;
     expect(sessions, isNotEmpty);
+    final standaloneList = _read('sessions.list');
+    (standaloneList['target'] as Map<String, String>).remove('projectId');
+    final allSessions = await client.read(standaloneList) as List<dynamic>;
+    expect(allSessions.any((s) => (s as Map)['sessionId'] == 'sess-conversation'), isTrue);
+    final standaloneRead = _read('sessions.get', {'sessionId': 'sess-conversation'});
+    (standaloneRead['target'] as Map<String, String>).remove('projectId');
+    final conversation = await client.read(standaloneRead) as Map<String, dynamic>;
+    expect(conversation['projectId'], isNull);
+    expect(conversation['messages'], isNotEmpty);
+
     final diff = await client.read(_read('changes.get', {'sessionId': 'sess-pairing'}, {'path': 'package-lock.json'})) as Map<String, dynamic>;
     expect(diff['hunks'], isNotEmpty);
     final replay = await client.replay(info['latestSequence'] as int) as Map<String, dynamic>;

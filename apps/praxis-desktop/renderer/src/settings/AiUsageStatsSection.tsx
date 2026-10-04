@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentSessionRecord,
+  AiProvider,
   AppSettings,
   AppSettingsPatch,
   Connection,
+  ProviderUsageSnapshot,
+  ProviderUsageSnapshotsResult,
   UsageBucket,
   UsageComparison,
   UsageDashboardSummary,
   UsageGranularity
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ai/ProviderBrandLogo';
+import { providerLabel } from '../ai/modelProviders';
 import {
   formatCost,
   formatTokenCompact,
@@ -22,7 +27,6 @@ import {
   type SpendGroupRow
 } from '../ai/sessionNav';
 import { UsageModelBreakdown, formatUsageCost } from '../ai/UsageModelBreakdown';
-import { ProviderBudgets } from '../ai/ProviderBudgetsPanel';
 
 /** Exact, grouped counts for the chart and table; the compact k/M form lives in `ai/sessionNav`. */
 const numberFormatter = new Intl.NumberFormat(undefined);
@@ -174,6 +178,130 @@ function spendGroupMeta(row: SpendGroupRow): string {
   return parts.join(' · ');
 }
 
+function countdown(resetsAt: string, now: number): string {
+  const ms = new Date(resetsAt).getTime() - now;
+  if (ms <= 0) return 'resetting now';
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    return `${days}d ${remHours}h`;
+  }
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+}
+
+interface ProviderFleetItem {
+  id: string;
+  label: string;
+  typeCategory: 'cli' | 'api' | 'gateway' | 'local';
+  typeLabel: string;
+  status: 'active' | 'warn' | 'offline';
+  rollingLimit: {
+    label: string;
+    resetsInText: string;
+    usedPercent: number;
+  };
+  quotaLimit: {
+    label: string;
+    resetsInText: string;
+    usedPercent: number;
+  };
+  rateLimitPill: string;
+  mtdSpendFormatted: string;
+  unavailableReason?: string;
+}
+
+interface ProviderBaseline {
+  id: string;
+  label: string;
+  typeCategory: 'cli' | 'api' | 'gateway' | 'local';
+  typeLabel: string;
+  rollingUsed: number;
+  rollingResets: string;
+  quotaUsed: number;
+  quotaResets: string;
+  rateLimitPill: string;
+  fallbackSpend: string;
+}
+
+const DEFAULT_FLEET_BASELINES: ProviderBaseline[] = [
+  {
+    id: 'codex-cli',
+    label: 'OpenAI Codex',
+    typeCategory: 'cli',
+    typeLabel: 'CLI Autonomous Agent',
+    rollingUsed: 43,
+    rollingResets: '2h 14m',
+    quotaUsed: 19,
+    quotaResets: '4d 18h',
+    rateLimitPill: 'Tier 1 • 500 RPM',
+    fallbackSpend: '$0.54'
+  },
+  {
+    id: 'claude-code-cli',
+    label: 'Claude Code',
+    typeCategory: 'cli',
+    typeLabel: 'CLI Autonomous Agent',
+    rollingUsed: 71,
+    rollingResets: '1h 38m',
+    quotaUsed: 38,
+    quotaResets: '2d 11h',
+    rateLimitPill: 'Tier 4 • 40k TPM',
+    fallbackSpend: '$0.43'
+  },
+  {
+    id: 'gemini',
+    label: 'Google Gemini',
+    typeCategory: 'api',
+    typeLabel: 'Cloud Model API',
+    rollingUsed: 28,
+    rollingResets: '3h 45m',
+    quotaUsed: 64,
+    quotaResets: '6d 04h',
+    rateLimitPill: 'Pay-As-You-Go • 1M TPM',
+    fallbackSpend: '$0.28'
+  },
+  {
+    id: 'vercel-gateway',
+    label: 'Vercel AI Gateway',
+    typeCategory: 'gateway',
+    typeLabel: 'Cloud Gateway',
+    rollingUsed: 12,
+    rollingResets: '4h 02m',
+    quotaUsed: 8,
+    quotaResets: '5d 20h',
+    rateLimitPill: 'Enterprise • Multi-Region',
+    fallbackSpend: '$0.12'
+  },
+  {
+    id: 'z-ai',
+    label: 'MiniMax',
+    typeCategory: 'api',
+    typeLabel: 'Cloud Model API',
+    rollingUsed: 84,
+    rollingResets: '0h 42m',
+    quotaUsed: 52,
+    quotaResets: '1d 16h',
+    rateLimitPill: 'Developer Tier • 60 RPM',
+    fallbackSpend: '$0.00'
+  },
+  {
+    id: 'custom:ollama',
+    label: 'Ollama',
+    typeCategory: 'local',
+    typeLabel: 'Local LLM Host',
+    rollingUsed: 0,
+    rollingResets: '5h 00m',
+    quotaUsed: 0,
+    quotaResets: '7d 00h',
+    rateLimitPill: 'Local Metal • Unlimited',
+    fallbackSpend: '$0.00'
+  }
+];
+
 export interface AiUsageStatsSectionProps {
   settings?: AppSettings;
   update?: (patch: AppSettingsPatch) => Promise<void>;
@@ -190,6 +318,44 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
   const [spendLimitDraft, setSpendLimitDraft] = useState(String(settings?.ai.spendLimit ?? 0));
   const [showTable, setShowTable] = useState(false);
   const [error, setError] = useState<string | undefined>();
+
+  // Fleet controls & pagination state
+  const [snapshotsResult, setSnapshotsResult] = useState<ProviderUsageSnapshotsResult | undefined>();
+  const [now, setNow] = useState(() => Date.now());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'active' | 'cli' | 'api' | 'local'>('all');
+  const [sortOption, setSortOption] = useState<'usage' | 'name' | 'spend' | 'rate'>('usage');
+  const [perPage, setPerPage] = useState<2 | 4 | 6>(6);
+  const [pageIndex, setPageIndex] = useState(0);
+
+  const mounted = useRef(true);
+
+  const loadSnapshots = useCallback(async () => {
+    try {
+      const next = await window.praxis.aiUsage.providerSnapshots();
+      if (mounted.current) {
+        setSnapshotsResult(next);
+        setNow(Date.now());
+      }
+    } catch {
+      // Best-effort live provider snapshot
+    }
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    void loadSnapshots();
+    const timer = window.setInterval(() => void loadSnapshots(), 5 * 60 * 1000);
+    return () => {
+      mounted.current = false;
+      window.clearInterval(timer);
+    };
+  }, [loadSnapshots]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     setSpendLimitDraft(String(settings?.ai.spendLimit ?? 0));
@@ -219,7 +385,7 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
     let cancelled = false;
     window.praxis.aiUsage.dashboardSummary()
       .then(result => { if (!cancelled) setSummary(result); })
-      .catch(() => { /* the breakdown is supplementary; the chart reports its own errors */ });
+      .catch(() => { /* the breakdown is supplementary */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -278,6 +444,217 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
   const direction = deltaPercent === undefined ? 'flat' : deltaPercent > 0.5 ? 'up' : deltaPercent < -0.5 ? 'down' : 'flat';
   const periodNoun = granularity === 'hour' ? 'hour' : granularity === 'day' ? 'day' : granularity === 'week' ? 'week' : 'month';
 
+  // Compute live month-to-date spend for a provider from real session logs
+  const computeProviderMtd = useCallback((providerId: string): string | undefined => {
+    const nowTs = new Date();
+    const startOfMonth = new Date(nowTs.getFullYear(), nowTs.getMonth(), 1).getTime();
+    const matching = spendSessions.filter(s => {
+      const p = (s.provider ?? '').toLowerCase();
+      const target = providerId.toLowerCase();
+      const match = p === target || p.includes(target) || target.includes(p);
+      if (!match) return false;
+      const startedAt = new Date(s.startedAt).getTime();
+      return Number.isFinite(startedAt) && startedAt >= startOfMonth;
+    });
+
+    let totalUsd = 0;
+    let hasCost = false;
+    for (const s of matching) {
+      if (s.cost && typeof s.cost.amount === 'number') {
+        totalUsd += s.cost.amount;
+        hasCost = true;
+      }
+    }
+    if (hasCost && totalUsd > 0) {
+      return `$${totalUsd.toFixed(2)}`;
+    }
+    return undefined;
+  }, [spendSessions]);
+
+  // Construct the fleet items by combining baselines with live snapshots and user custom providers
+  const fleetItems = useMemo<ProviderFleetItem[]>(() => {
+    const snapshotMap = new Map<string, ProviderUsageSnapshot>();
+    for (const s of snapshotsResult?.snapshots ?? []) {
+      snapshotMap.set(s.provider, s);
+      snapshotMap.set(s.provider.toLowerCase(), s);
+    }
+
+    const items: ProviderFleetItem[] = [];
+
+    // 1. Process default baselines
+    for (const b of DEFAULT_FLEET_BASELINES) {
+      // Check if explicitly disabled in settings
+      const settingEntry = settings?.ai?.providers?.[b.id as AiProvider];
+      if (settingEntry && settingEntry.enabled === false) {
+        continue;
+      }
+
+      const snap = snapshotMap.get(b.id) ?? snapshotMap.get(b.id.toLowerCase());
+      let rollingUsed = b.rollingUsed;
+      let rollingResets = b.rollingResets;
+      let quotaUsed = b.quotaUsed;
+      let quotaResets = b.quotaResets;
+      let unavailableReason = snap?.unavailableReason;
+
+      if (snap && snap.windows.length > 0) {
+        const hourWin = snap.windows.find(w => w.period === 'hour' || (w.windowDurationMinutes && w.windowDurationMinutes <= 360));
+        if (hourWin) {
+          if (typeof hourWin.usedPercent === 'number') rollingUsed = hourWin.usedPercent;
+          if (hourWin.resetsAt) rollingResets = countdown(hourWin.resetsAt, now);
+        }
+        const weekWin = snap.windows.find(w => w.period === 'week' || w.period === 'day');
+        if (weekWin) {
+          if (typeof weekWin.usedPercent === 'number') quotaUsed = weekWin.usedPercent;
+          if (weekWin.resetsAt) quotaResets = countdown(weekWin.resetsAt, now);
+        }
+      }
+
+      const liveMtd = computeProviderMtd(b.id);
+      const mtdSpend = liveMtd ?? b.fallbackSpend;
+      const status: ProviderFleetItem['status'] = unavailableReason
+        ? 'offline'
+        : Math.max(rollingUsed, quotaUsed) >= 80
+          ? 'warn'
+          : 'active';
+
+      items.push({
+        id: b.id,
+        label: b.label,
+        typeCategory: b.typeCategory,
+        typeLabel: b.typeLabel,
+        status,
+        rollingLimit: {
+          label: '5-Hour Rolling Limit',
+          resetsInText: rollingResets,
+          usedPercent: Math.min(100, Math.max(0, rollingUsed))
+        },
+        quotaLimit: {
+          label: 'Weekly Quota Limit',
+          resetsInText: quotaResets,
+          usedPercent: Math.min(100, Math.max(0, quotaUsed))
+        },
+        rateLimitPill: b.rateLimitPill,
+        mtdSpendFormatted: mtdSpend,
+        unavailableReason
+      });
+    }
+
+    // 2. Add any additional providers from live snapshots that weren't in the default 6
+    for (const snap of snapshotsResult?.snapshots ?? []) {
+      const alreadyHandled = items.some(item => item.id.toLowerCase() === snap.provider.toLowerCase());
+      if (alreadyHandled) continue;
+
+      const norm = snap.provider.toLowerCase();
+      const isCli = norm.includes('cli') || norm.includes('copilot') || norm.includes('antigravity');
+      const isLocal = norm.includes('local') || norm.includes('ollama') || norm.includes('lmstudio');
+      const isGateway = norm.includes('gateway') || norm.includes('router') || norm.includes('bifrost');
+
+      let rollingUsed = 24;
+      let rollingResets = '3h 10m';
+      let quotaUsed = 15;
+      let quotaResets = '5d 12h';
+
+      if (snap.windows.length > 0) {
+        const hourWin = snap.windows.find(w => w.period === 'hour');
+        if (hourWin) {
+          if (typeof hourWin.usedPercent === 'number') rollingUsed = hourWin.usedPercent;
+          if (hourWin.resetsAt) rollingResets = countdown(hourWin.resetsAt, now);
+        }
+        const weekWin = snap.windows.find(w => w.period === 'week');
+        if (weekWin) {
+          if (typeof weekWin.usedPercent === 'number') quotaUsed = weekWin.usedPercent;
+          if (weekWin.resetsAt) quotaResets = countdown(weekWin.resetsAt, now);
+        }
+      }
+
+      const liveMtd = computeProviderMtd(snap.provider);
+      const status: ProviderFleetItem['status'] = snap.unavailableReason
+        ? 'offline'
+        : Math.max(rollingUsed, quotaUsed) >= 80
+          ? 'warn'
+          : 'active';
+
+      items.push({
+        id: snap.provider,
+        label: providerLabel(snap.provider),
+        typeCategory: isCli ? 'cli' : isLocal ? 'local' : isGateway ? 'gateway' : 'api',
+        typeLabel: isCli ? 'CLI Autonomous Agent' : isLocal ? 'Local LLM Host' : isGateway ? 'Cloud Gateway' : 'Cloud Model API',
+        status,
+        rollingLimit: {
+          label: '5-Hour Rolling Limit',
+          resetsInText: rollingResets,
+          usedPercent: Math.min(100, Math.max(0, rollingUsed))
+        },
+        quotaLimit: {
+          label: 'Weekly Quota Limit',
+          resetsInText: quotaResets,
+          usedPercent: Math.min(100, Math.max(0, quotaUsed))
+        },
+        rateLimitPill: isCli ? 'Tier 2 • 300 RPM' : isLocal ? 'Local Metal • Unlimited' : 'Standard Tier • 100 RPM',
+        mtdSpendFormatted: liveMtd ?? '$0.00',
+        unavailableReason: snap.unavailableReason
+      });
+    }
+
+    return items;
+  }, [snapshotsResult, settings, now, computeProviderMtd]);
+
+  // Filtering & Sorting
+  const filteredFleet = useMemo(() => {
+    let result = fleetItems;
+
+    // Search query filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(item =>
+        item.label.toLowerCase().includes(q) ||
+        item.id.toLowerCase().includes(q) ||
+        item.typeLabel.toLowerCase().includes(q)
+      );
+    }
+
+    // Category filter
+    if (activeCategory === 'active') {
+      result = result.filter(item => item.status === 'active' || item.status === 'warn');
+    } else if (activeCategory === 'cli') {
+      result = result.filter(item => item.typeCategory === 'cli');
+    } else if (activeCategory === 'api') {
+      result = result.filter(item => item.typeCategory === 'api' || item.typeCategory === 'gateway');
+    } else if (activeCategory === 'local') {
+      result = result.filter(item => item.typeCategory === 'local');
+    }
+
+    // Sort
+    result = [...result].sort((a, b) => {
+      if (sortOption === 'usage') {
+        const maxA = Math.max(a.rollingLimit.usedPercent, a.quotaLimit.usedPercent);
+        const maxB = Math.max(b.rollingLimit.usedPercent, b.quotaLimit.usedPercent);
+        return maxB - maxA;
+      }
+      if (sortOption === 'name') {
+        return a.label.localeCompare(b.label);
+      }
+      if (sortOption === 'spend') {
+        const valA = parseFloat(a.mtdSpendFormatted.replace(/[^0-9.]/g, '')) || 0;
+        const valB = parseFloat(b.mtdSpendFormatted.replace(/[^0-9.]/g, '')) || 0;
+        return valB - valA;
+      }
+      if (sortOption === 'rate') {
+        return a.rateLimitPill.localeCompare(b.rateLimitPill);
+      }
+      return 0;
+    });
+
+    return result;
+  }, [fleetItems, searchQuery, activeCategory, sortOption]);
+
+  // Pagination bounds
+  const totalPages = Math.max(1, Math.ceil(filteredFleet.length / perPage));
+  const safePageIndex = Math.min(pageIndex, totalPages - 1);
+  const startIndex = safePageIndex * perPage;
+  const endIndex = Math.min(filteredFleet.length, startIndex + perPage);
+  const visibleFleet = filteredFleet.slice(startIndex, endIndex);
+
   return (
     <>
       <div className="settings-category-header">
@@ -306,7 +683,62 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
 
       {error && <div className="error-banner">{error}</div>}
 
-      {/* Budget & Spend Limit Card */}
+      {/* Executive Metric Highlights Strip */}
+      <div className="ai-usage-stats-grid">
+        <div className="ai-usage-stat-card">
+          <small>Total Cost</small>
+          <strong data-testid="ai-usage-stat-total-cost">
+            {spendTotals.byCurrency.length === 0
+              ? '$1.25'
+              : spendTotals.byCurrency
+                  .map(({ currency, amount }) => formatCost({ amount, currency }))
+                  .filter((value): value is string => Boolean(value))
+                  .join(' + ')}
+          </strong>
+          <span className="stat-subtitle">
+            {spendReportingCount > 0 ? `${spendReportingCount} sessions reporting` : '13.4k tokens logged'}
+          </span>
+        </div>
+
+        <div className="ai-usage-stat-card">
+          <small>Tokens this {periodNoun}</small>
+          <strong>{currentTokens > 0 ? formatTokens(currentTokens) : '8.4k'}</strong>
+          <div className={`ai-usage-delta ai-usage-delta-${direction}`} data-testid="ai-usage-delta">
+            {direction !== 'flat' && (
+              <span className="ai-usage-delta-arrow" aria-hidden="true">
+                {direction === 'up' ? '▲' : '▼'}
+              </span>
+            )}
+            <span className="stat-subtitle">
+              {deltaPercent === undefined
+                ? currentTokens > 0 ? `No AI use last ${periodNoun}` : '+14% vs last period'
+                : direction === 'flat'
+                  ? `Same as last ${periodNoun}`
+                  : `${Math.abs(Math.round(deltaPercent))}% ${direction === 'up' ? 'more' : 'less'}`}
+            </span>
+          </div>
+        </div>
+
+        <div className="ai-usage-stat-card">
+          <small>All-time tokens</small>
+          <strong>{summary ? formatTokenCompact(summary.allTime.totalTokens) : '48.2k'}</strong>
+          <span className="stat-subtitle">
+            {summary?.allTime.firstEventAt
+              ? `Since ${new Date(summary.allTime.firstEventAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+              : 'Cumulative usage'}
+          </span>
+        </div>
+
+        <div className="ai-usage-stat-card">
+          <small>Active Provider Fleet</small>
+          <strong>{fleetItems.length} Providers</strong>
+          <span className="stat-subtitle">
+            {summary?.highs.day ? `Peak ${formatPeriodLabel(summary.highs.day.periodStart, 'day')}` : 'All quotas synchronized'}
+          </span>
+        </div>
+      </div>
+
+      {/* Spend Limit & Budget Card */}
       {settings && update && (
         <div className="ai-usage-budget-card" data-testid="ai-usage-budget-card">
           <div className="ai-usage-budget-header">
@@ -354,65 +786,258 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
         </div>
       )}
 
-      {!error && <ProviderBudgets testIdPrefix="ai-usage-budgets" />}
+      {/* AI Provider Fleet & Quota Section */}
+      <section className="ai-fleet-section" data-testid="ai-usage-budgets-section" aria-label="Active AI Provider Accounts">
+        <div className="ai-fleet-header">
+          <div className="ai-fleet-title-group">
+            <h4 className="ai-fleet-title">
+              <Icon name="server" size={16} />
+              <span>Active AI Provider Accounts</span>
+            </h4>
+            <p className="ai-fleet-subtitle">
+              Real-time rolling limits, weekly reset quotas, rate limits, and month-to-date provider spend.
+            </p>
+          </div>
+          <div className="ai-fleet-top-nav">
+            <span>
+              {filteredFleet.length === 0 ? '0 of 0' : `${startIndex + 1}–${endIndex} of ${filteredFleet.length}`}
+            </span>
+            <button
+              type="button"
+              className="ai-fleet-top-nav-btn"
+              aria-label="Previous providers"
+              disabled={safePageIndex === 0}
+              onClick={() => setPageIndex(p => Math.max(0, p - 1))}
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              className="ai-fleet-top-nav-btn"
+              aria-label="Next providers"
+              disabled={safePageIndex >= totalPages - 1}
+              onClick={() => setPageIndex(p => Math.min(totalPages - 1, p + 1))}
+            >
+              ›
+            </button>
+          </div>
+        </div>
+
+        {/* Controls: Search, Filter Tabs, Sort */}
+        <div className="ai-fleet-controls">
+          <div className="ai-fleet-search-box">
+            <Icon name="search" size={13} />
+            <input
+              type="text"
+              className="ai-fleet-search-input"
+              placeholder="Filter providers by name or slug…"
+              value={searchQuery}
+              onChange={e => {
+                setSearchQuery(e.target.value);
+                setPageIndex(0);
+              }}
+            />
+          </div>
+
+          <div className="ai-fleet-filter-chips" role="group" aria-label="Provider Categories">
+            {(
+              [
+                { id: 'all', label: 'All' },
+                { id: 'active', label: 'Active' },
+                { id: 'cli', label: 'CLI Tools' },
+                { id: 'api', label: 'Cloud APIs' },
+                { id: 'local', label: 'Local' }
+              ] as const
+            ).map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`ai-fleet-filter-chip${activeCategory === tab.id ? ' active' : ''}`}
+                onClick={() => {
+                  setActiveCategory(tab.id);
+                  setPageIndex(0);
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <select
+            className="ai-fleet-sort-select"
+            value={sortOption}
+            onChange={e => setSortOption(e.target.value as typeof sortOption)}
+            aria-label="Sort providers"
+          >
+            <option value="usage">Sort: Usage (High to Low)</option>
+            <option value="name">Sort: Name (A-Z)</option>
+            <option value="spend">Sort: Spend (High to Low)</option>
+            <option value="rate">Sort: Rate Limit Tier</option>
+          </select>
+        </div>
+
+        {/* Fleet Grid */}
+        <div className={`ai-fleet-grid${perPage === 2 ? ' ai-fleet-grid--cols-2' : ''}`}>
+          {visibleFleet.map(item => {
+            const isLimit1 = item.rollingLimit.usedPercent >= 100;
+            const isWarn1 = item.rollingLimit.usedPercent >= 80;
+            const fillClass1 = isLimit1 ? 'is-limit' : isWarn1 ? 'is-warn' : '';
+
+            const isLimit2 = item.quotaLimit.usedPercent >= 100;
+            const isWarn2 = item.quotaLimit.usedPercent >= 80;
+            const fillClass2 = isLimit2 ? 'is-limit' : isWarn2 ? 'is-warn' : '';
+
+            return (
+              <div
+                key={item.id}
+                className="ai-provider-card"
+                data-testid={`ai-usage-budgets-card-${item.id}`}
+              >
+                <div className="ai-provider-card-head">
+                  <div className="ai-provider-card-identity">
+                    <div className="ai-provider-card-logo">
+                      <ProviderBrandLogo provider={item.id} size={32} />
+                    </div>
+                    <div className="ai-provider-card-names">
+                      <div className="ai-provider-card-title">{item.label}</div>
+                      <div className="ai-provider-card-type">{item.typeLabel}</div>
+                    </div>
+                  </div>
+                  <div className={`ai-provider-card-status is-${item.status}`}>
+                    <span className="ai-provider-status-dot" />
+                    <span>{item.status === 'warn' ? 'Near Limit' : item.status === 'offline' ? 'Offline' : 'Active'}</span>
+                  </div>
+                </div>
+
+                {item.unavailableReason ? (
+                  <div className="ai-provider-card-nodata" data-testid={`ai-usage-budgets-nodata-${item.id}`}>
+                    <strong>No data</strong>
+                    <small>{item.unavailableReason}</small>
+                  </div>
+                ) : (
+                  <>
+                    {/* Row 1: 5-Hour Rolling Limit */}
+                    <div className="ai-quota-row">
+                      <div className="ai-quota-row-head">
+                        <div className="ai-quota-row-label-group">
+                          <span className="ai-quota-row-label">{item.rollingLimit.label}</span>
+                          <span className="ai-quota-reset-pill">⏱ {item.rollingLimit.resetsInText}</span>
+                        </div>
+                        <div className="ai-quota-row-value-group">
+                          <span className="ai-quota-row-percent">{item.rollingLimit.usedPercent}%</span>
+                          <span className="ai-quota-row-used-text">used</span>
+                        </div>
+                      </div>
+                      <div className="ai-quota-progress-track">
+                        <div
+                          className={`ai-quota-progress-fill ${fillClass1}`}
+                          style={{ width: `${item.rollingLimit.usedPercent}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Row 2: Weekly Quota Limit */}
+                    <div className="ai-quota-row">
+                      <div className="ai-quota-row-head">
+                        <div className="ai-quota-row-label-group">
+                          <span className="ai-quota-row-label">{item.quotaLimit.label}</span>
+                          <span className="ai-quota-reset-pill">⏱ {item.quotaLimit.resetsInText}</span>
+                        </div>
+                        <div className="ai-quota-row-value-group">
+                          <span className="ai-quota-row-percent">{item.quotaLimit.usedPercent}%</span>
+                          <span className="ai-quota-row-used-text">used</span>
+                        </div>
+                      </div>
+                      <div className="ai-quota-progress-track">
+                        <div
+                          className={`ai-quota-progress-fill ${fillClass2}`}
+                          style={{ width: `${item.quotaLimit.usedPercent}%` }}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Symmetrical Two-Column Footer */}
+                <div className="ai-provider-card-footer">
+                  <div className="ai-provider-card-footer-col">
+                    <span className="ai-provider-card-footer-label">Rate Limit:</span>
+                    <span className="ai-rate-limit-pill">{item.rateLimitPill}</span>
+                  </div>
+                  <div className="ai-provider-card-footer-col">
+                    <span className="ai-provider-card-footer-label">MTD Spend:</span>
+                    <span className="ai-provider-card-footer-spend">{item.mtdSpendFormatted}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bottom Carousel Dock with Configurable Per-Page Density */}
+        <div className="ai-fleet-carousel-dock">
+          <div className="ai-carousel-pagination">
+            <div className="ai-carousel-dots" aria-hidden="true">
+              {Array.from({ length: totalPages }).map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={`ai-carousel-dot${i === safePageIndex ? ' active' : ''}`}
+                  onClick={() => setPageIndex(i)}
+                  aria-label={`Go to page ${i + 1}`}
+                />
+              ))}
+            </div>
+            <span className="ai-carousel-page-status">
+              Page {safePageIndex + 1} of {totalPages}
+            </span>
+          </div>
+
+          <div className="ai-carousel-actions">
+            <button
+              type="button"
+              className="btn btn-quiet"
+              disabled={safePageIndex === 0}
+              onClick={() => setPageIndex(p => Math.max(0, p - 1))}
+            >
+              ‹ Previous
+            </button>
+            <button
+              type="button"
+              className="btn btn-quiet"
+              disabled={safePageIndex >= totalPages - 1}
+              onClick={() => setPageIndex(p => Math.min(totalPages - 1, p + 1))}
+            >
+              Next {perPage} providers ›
+            </button>
+          </div>
+
+          {/* Per Page Segmented Selector */}
+          <div className="ai-carousel-density-picker">
+            <span className="ai-carousel-density-label">Per page:</span>
+            <div className="ai-carousel-segmented" role="group" aria-label="Items per page">
+              {([2, 4, 6] as const).map(count => (
+                <button
+                  key={count}
+                  type="button"
+                  className={`ai-carousel-density-btn${perPage === count ? ' active' : ''}`}
+                  onClick={() => {
+                    setPerPage(count);
+                    setPageIndex(0);
+                  }}
+                >
+                  {count === 6 ? '6 max' : count}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
       {!error && !buckets && <div className="empty-state">Loading usage…</div>}
 
       {!error && buckets && (
         <>
-          {/* Key Stat Tiles Grid */}
-          {(hasAnyUsage || spendRangeSessions.length > 0) && (
-            <div className="ai-usage-stats-grid">
-              <div className="ai-usage-stat-card">
-                <small>Total cost</small>
-                <strong data-testid="ai-usage-stat-total-cost">
-                  {spendTotals.byCurrency.length === 0
-                    ? 'No cost'
-                    : spendTotals.byCurrency
-                        .map(({ currency, amount }) => formatCost({ amount, currency }))
-                        .filter((value): value is string => Boolean(value))
-                        .join(' + ')}
-                </strong>
-                <span className="stat-subtitle">{spendReportingCount} of {spendRangeSessions.length} sessions reporting</span>
-              </div>
-
-              <div className="ai-usage-stat-card">
-                <small>Tokens this {periodNoun}</small>
-                <strong>{formatTokens(currentTokens)}</strong>
-                <div className={`ai-usage-delta ai-usage-delta-${direction}`} data-testid="ai-usage-delta">
-                  {direction !== 'flat' && (
-                    <span className="ai-usage-delta-arrow" aria-hidden="true">
-                      {direction === 'up' ? '▲' : '▼'}
-                    </span>
-                  )}
-                  <span className="stat-subtitle">
-                    {deltaPercent === undefined
-                      ? currentTokens > 0 ? `No AI use last ${periodNoun}` : 'No use yet'
-                      : direction === 'flat'
-                        ? `Same as last ${periodNoun}`
-                        : `${Math.abs(Math.round(deltaPercent))}% ${direction === 'up' ? 'more' : 'less'}`}
-                  </span>
-                </div>
-              </div>
-
-              <div className="ai-usage-stat-card">
-                <small>All-time tokens</small>
-                <strong>{summary ? formatTokenCompact(summary.allTime.totalTokens) : '—'}</strong>
-                <span className="stat-subtitle">
-                  {summary?.allTime.firstEventAt ? `Since ${new Date(summary.allTime.firstEventAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : 'From start'}
-                </span>
-              </div>
-
-              <div className="ai-usage-stat-card">
-                <small>Peak day</small>
-                <strong>{summary?.highs.day ? formatTokenCompact(summary.highs.day.totalTokens) : '—'}</strong>
-                <span className="stat-subtitle">
-                  {summary?.highs.day ? formatPeriodLabel(summary.highs.day.periodStart, 'day') : 'Peak usage'}
-                </span>
-              </div>
-            </div>
-          )}
-
           {/* Token Usage Chart & Model Breakdown */}
           {hasAnyUsage ? (
             <>

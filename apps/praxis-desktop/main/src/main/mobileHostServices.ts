@@ -170,6 +170,21 @@ async function requireSessionInProject(deps: MobileHostServiceDeps, sessionId: s
   return session;
 }
 
+async function requireMobileSession(deps: MobileHostServiceDeps, request: MobileReadRequest | MobileCommand): Promise<MobileSessionSnapshot> {
+  const sessionId = requireTarget(request, 'sessionId');
+  const projectId = request.target.projectId?.trim();
+  if (projectId) return requireSessionInProject(deps, sessionId, projectId);
+  // An omitted project grants access only to standalone chats, and only to a
+  // desktop-wide device. Project-scoped devices retain the existing boundary.
+  const device = await deps.describeDevice(request.caller.deviceId);
+  if (device.projects.length) throw new Error('This operation requires an authorised project.');
+  const session = await deps.getSession(sessionId);
+  if (!session || session.projectId || session.runId || !/^SESSION-[0-9a-f]{6,}$/i.test(session.sessionKey)) {
+    throw new Error(`Session ${sessionId} was not found in standalone conversations.`);
+  }
+  return session;
+}
+
 async function requireRunInProject(deps: MobileHostServiceDeps, runId: string, projectId: string): Promise<unknown> {
   const run = await deps.getRun(runId);
   if (run === undefined || resourceProject(run) !== projectId) throw new Error(`Run ${runId} was not found in project ${projectId}.`);
@@ -306,7 +321,7 @@ export function createMobileHostReads(deps: MobileHostServiceDeps, commandOperat
       return deps.modelCatalog(provider, request.params?.refresh === true);
     },
     'sessions.usage': async (request: MobileReadRequest) => {
-      const snapshot = await requireSessionInProject(deps, requireTarget(request, 'sessionId'), requireTarget(request, 'projectId'));
+      const snapshot = await requireMobileSession(deps, request);
       const catalog = snapshot.provider ? await deps.providerCatalog(snapshot.projectId) : undefined;
       return mobileSessionUsage(snapshot, catalog?.providers.find(option => option.provider === snapshot.provider)?.label);
     },
@@ -328,10 +343,15 @@ export function createMobileHostReads(deps: MobileHostServiceDeps, commandOperat
       return { projects: await deps.listProjects() };
     },
     'work.list': async (request: MobileReadRequest) => deps.listWork(requireTarget(request, 'projectId')),
-    'sessions.list': async (request: MobileReadRequest) => deps.listSessions(request.target.projectId?.trim() || undefined),
+    'sessions.list': async (request: MobileReadRequest) => {
+      const projectId = request.target.projectId?.trim();
+      if (!projectId && (await deps.describeDevice(request.caller.deviceId)).projects.length) {
+        throw new Error('This operation requires an authorised project.');
+      }
+      return deps.listSessions(projectId || undefined);
+    },
     'sessions.get': async (request: MobileReadRequest) => {
-      const sessionId = requireTarget(request, 'sessionId');
-      return requireSessionInProject(deps, sessionId, requireTarget(request, 'projectId'));
+      return requireMobileSession(deps, request);
     },
     'workflows.list': async (request: MobileReadRequest) => deps.listWorkflows(requireTarget(request, 'projectId')),
     'workflowRuns.list': async (request: MobileReadRequest) => deps.listRuns(requireTarget(request, 'projectId')),
@@ -342,7 +362,7 @@ export function createMobileHostReads(deps: MobileHostServiceDeps, commandOperat
     'changes.get': async (request: MobileReadRequest) => {
       if (request.target.sessionId?.trim()) {
         const sessionId = request.target.sessionId.trim();
-        await requireSessionInProject(deps, sessionId, requireTarget(request, 'projectId'));
+        await requireMobileSession(deps, request);
         const path = request.params?.path?.trim();
         return path ? deps.sessionFileDiff(sessionId, path) : deps.sessionChanges(sessionId);
       }
@@ -353,7 +373,7 @@ export function createMobileHostReads(deps: MobileHostServiceDeps, commandOperat
     'attention.list': async (request: MobileReadRequest) => deps.listAttention(requireTarget(request, 'projectId')),
     'sessions.imagePreview': async (request: MobileReadRequest): Promise<MobileImagePreview> => {
       const sessionId = requireTarget(request, 'sessionId');
-      await requireSessionInProject(deps, sessionId, requireTarget(request, 'projectId'));
+      await requireMobileSession(deps, request);
       const params = request.params ?? {};
       const path = params.path?.trim();
       const hasAttachmentIndex = Number.isSafeInteger(params.eventIndex);
@@ -398,14 +418,14 @@ export function createMobileHostExecutionHandlers(deps: MobileHostServiceDeps): 
     },
     'sessions.continue': async (command: MobileCommand) => {
       const sessionId = requireTarget(command, 'sessionId');
-      await requireSessionInProject(deps, sessionId, requireTarget(command, 'projectId'));
+      await requireMobileSession(deps, command);
       const message = String(payloadField(command, 'message') ?? '').trim();
       if (!message) throw new Error('sessions.continue requires a non-empty payload.message.');
       return deps.continueSession(sessionId, message, mobileActorFor(command.caller));
     },
     'sessions.configure': async (command: MobileCommand) => {
       const sessionId = requireTarget(command, 'sessionId');
-      const session = await requireSessionInProject(deps, sessionId, requireTarget(command, 'projectId'));
+      const session = await requireMobileSession(deps, command);
       const change = await resolveMobileSessionChange(deps, session, {
         provider: payloadField(command, 'provider'),
         model: payloadField(command, 'model'),
@@ -416,7 +436,7 @@ export function createMobileHostExecutionHandlers(deps: MobileHostServiceDeps): 
     },
     'sessions.cancel': async (command: MobileCommand) => {
       const sessionId = requireTarget(command, 'sessionId');
-      await requireSessionInProject(deps, sessionId, requireTarget(command, 'projectId'));
+      await requireMobileSession(deps, command);
       return deps.cancelSession(sessionId, mobileActorFor(command.caller));
     },
     'workflowRuns.start': async (command: MobileCommand) => {
@@ -462,7 +482,7 @@ export function createMobileHostExecutionHandlers(deps: MobileHostServiceDeps): 
     },
     'gadgets.submit': async (command: MobileCommand) => {
       const sessionId = requireTarget(command, 'sessionId');
-      await requireSessionInProject(deps, sessionId, requireTarget(command, 'projectId'));
+      await requireMobileSession(deps, command);
       const payload = readGadgetSubmitPayload(command);
       const envelope = deps.findGadget(sessionId, payload.gadgetId);
       if (!envelope) throw new Error('This gadget is no longer available on the desktop.');

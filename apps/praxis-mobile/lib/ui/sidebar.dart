@@ -200,7 +200,7 @@ class _AppSidebarState extends State<AppSidebar> {
               if (conversations.isEmpty)
                 Padding(
                   padding: EdgeInsets.fromLTRB(t.s(8), 0, t.s(8), t.s(6)),
-                  child: Text('No conversations yet. Start one with New chat.', style: ts(context, 11, lineHeight: 16, color: p.textDim)),
+                  child: Text(store.access.value?.projects.isNotEmpty == true ? 'This phone has project-only access. Conversations require desktop-wide access in Desktop Settings → Mobile access.' : 'No conversations yet. Start one with New chat.', style: ts(context, 11, lineHeight: 16, color: p.textDim)),
                 )
               else
                 for (final item in conversations) workRow(item),

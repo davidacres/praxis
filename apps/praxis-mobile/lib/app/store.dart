@@ -228,6 +228,11 @@ const _attentionSafetyPoll = Duration(seconds: 60);
 const _attentionLegacyPoll = Duration(seconds: 5);
 const _updateDesktop = 'Update Praxis on the desktop to do this from the phone.';
 
+bool _visibleSession(SessionSnapshot session, String? projectId) =>
+    session.projectId != null
+        ? session.projectId == projectId
+        : session.runId == null && RegExp(r'^SESSION-[0-9a-f]{6,}$', caseSensitive: false).hasMatch(session.sessionKey);
+
 class AppStore extends ChangeNotifier {
   AppStore({required this.theme}) {
     _lifecycle = AppLifecycleListener(onResume: _onResume);
@@ -396,6 +401,7 @@ class AppStore extends ChangeNotifier {
   }
 
   void _applySnapshot(SessionSnapshot snapshot) {
+    if (!_visibleSession(snapshot, _projectId)) return;
     final existing = _snapshots[snapshot.sessionId];
     if (existing == null || existing.sequence <= snapshot.sequence) {
       _snapshots = {..._snapshots, snapshot.sessionId: snapshot};
@@ -489,6 +495,16 @@ class AppStore extends ChangeNotifier {
     }
     host = (hostId: config.hostId, hostName: info?.hostName ?? config.hostName?.trim() ?? config.address, online: true);
 
+    if (info?.readOperations.contains('access.get') ?? false) {
+      try {
+        access = Remote(RemoteStatus.ready, DeviceAccess(await connection.read(readRequest('access.get', hostTarget)) as Map<String, dynamic>));
+      } catch (error) {
+        access = Remote(RemoteStatus.error, null, Diagnostics.messageOf(error));
+      }
+    } else {
+      access = const Remote(RemoteStatus.unsupported, null, 'This desktop does not report the phone’s access grant. Update Praxis on the desktop.');
+    }
+
     ProjectSummary projectSummary;
     if (config.projectId != null) {
       projectSummary = ProjectSummary(
@@ -512,12 +528,12 @@ class AppStore extends ChangeNotifier {
     final sessions = (await _readList(
       connection,
       'sessions.list',
-      target,
-    )).whereType<Map<String, dynamic>>().map(SessionSnapshot.new).where((session) => !session.archived).toList();
+      access.value?.projects.isEmpty == true ? hostTarget : target,
+    )).whereType<Map<String, dynamic>>().map(SessionSnapshot.new).where((session) => !session.archived && _visibleSession(session, projectId)).toList();
     final loaded = await Future.wait(
       sessions.map(
         (session) async =>
-            SessionSnapshot(await connection.read(readRequest('sessions.get', {...target, 'sessionId': session.sessionId})) as Map<String, dynamic>),
+            SessionSnapshot(await connection.read(readRequest('sessions.get', {...hostTarget, if (session.projectId != null) 'projectId': session.projectId, 'sessionId': session.sessionId})) as Map<String, dynamic>),
       ),
     );
     // Sessions the desktop no longer lists drop out; a live event newer than the read is kept.
@@ -566,15 +582,7 @@ class AppStore extends ChangeNotifier {
         'This desktop does not share its AI providers with the phone. Update Praxis on the desktop to choose a provider and model here.',
       );
     }
-    if (info?.readOperations.contains('access.get') ?? false) {
-      try {
-        access = Remote(RemoteStatus.ready, DeviceAccess(await connection.read(readRequest('access.get', hostTarget)) as Map<String, dynamic>));
-      } catch (error) {
-        access = Remote(RemoteStatus.error, null, Diagnostics.messageOf(error));
-      }
-    } else {
-      access = const Remote(RemoteStatus.unsupported, null, 'This desktop does not report the phone’s access grant. Update Praxis on the desktop.');
-    }
+
 
     // The reads are current as of latestSequence: replay what came after.
     final latest = info?.latestSequence ?? 0;
@@ -820,12 +828,18 @@ class AppStore extends ChangeNotifier {
 
   // ---------------------------------------------------------------- actions
 
-  Map<String, Object?> _target([Map<String, String?> extra = const {}]) => {
-    'hostId': hostConfig?.hostId ?? host.hostId,
-    if (_projectId != null) 'projectId': _projectId,
-    for (final entry in extra.entries)
-      if (entry.value != null) entry.key: entry.value,
-  };
+  Map<String, Object?> _target([Map<String, String?> extra = const {}]) {
+    final session = _snapshots[extra['sessionId']];
+    // Existing sessions carry their own scope; a standalone conversation must
+    // not inherit the project currently selected for workflows and new sessions.
+    final projectId = session != null ? session.projectId : _projectId;
+    return {
+      'hostId': hostConfig?.hostId ?? host.hostId,
+      if (projectId != null) 'projectId': projectId,
+      for (final entry in extra.entries)
+        if (entry.value != null) entry.key: entry.value,
+    };
+  }
 
   NativeMobileConnection _requireConnection() {
     final connection = _live;

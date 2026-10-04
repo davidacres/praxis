@@ -54,7 +54,7 @@ case "$APP" in
     APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Runner.app"
     # Uses the team's existing Xcode-managed profile, so no Apple account needs to be signed in.
     BUNDLE_ID="com.acresweb.praxis.mobile.praxis"
-    APP_NAME="Praxis Flutter" ;;
+    APP_NAME="Praxis" ;;
   expo)
     MOBILE_DIR="$REPO_ROOT/apps/praxis-mobile"
     IOS_DIR="$MOBILE_DIR/ios"
