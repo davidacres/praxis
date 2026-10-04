@@ -242,7 +242,10 @@ export async function closeTestApp(app: TestApp): Promise<void> {
       const sessions = await window.praxis.ai.listSessions();
       await Promise.all(sessions.map(async session => {
         if (session.conversation?.state === 'running') await window.praxis.ai.stopConversation(session.issueKey);
-        if (!['completed', 'failed', 'aborted', 'idle'].includes(session.state)) await window.praxis.ai.abort(session.issueKey);
+        // ACP publishes a terminal state before its subprocess finishes shutting
+        // down. Abort also drains that remaining task without changing terminal
+        // records, so the native close guard cannot veto teardown in that gap.
+        if (session.state !== 'idle') await window.praxis.ai.abort(session.issueKey);
       }));
     });
   }
