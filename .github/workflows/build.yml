@@ -61,6 +61,9 @@ jobs:
       - name: Build mobile protocol declarations
         run: npm run build:mobile-protocol
 
+      - name: Build mobile relay declarations
+        run: npm run build:mobile-relay
+
       - name: Typecheck
         run: npm run check-types
 
