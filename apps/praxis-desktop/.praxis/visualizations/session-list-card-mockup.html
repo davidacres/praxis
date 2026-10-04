@@ -1,0 +1,301 @@
+<div id="session-list-card-mockup" class="viz-carousel" aria-label="Session list card designs">
+  <style>
+    #session-list-card-mockup {
+      color-scheme: light dark;
+      --px-window: light-dark(#f5f0e9, #211f1c);
+      --px-panel: light-dark(#faf7f2, #292622);
+      --px-card: light-dark(#fffdf9, #302c27);
+      --px-text: light-dark(#302b26, #eee7dd);
+      --px-muted: light-dark(#786f65, #b3a99d);
+      --px-line: light-dark(#ded4c8, #49423a);
+      --px-accent: light-dark(#b84b28, #ec8057);
+      --px-accent-soft: light-dark(#f5e1d8, #4a3027);
+      --px-green: light-dark(#347652, #79c598);
+      --px-green-soft: light-dark(#e3f0e6, #293d31);
+      --px-blue: light-dark(#496d91, #9dbce0);
+      --px-blue-soft: light-dark(#e7eef5, #2d3946);
+      display: block;
+      max-width: 690px;
+      margin-inline: auto;
+      color: var(--px-text);
+      font: 14px/1.4 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #session-list-card-mockup [data-variant] {
+      min-height: 470px;
+      padding: 18px;
+      border-radius: 12px;
+      background: var(--px-window);
+    }
+
+    #session-list-card-mockup .px-pane {
+      overflow: hidden;
+      border: 1px solid var(--px-line);
+      border-radius: 10px;
+      background: var(--px-panel);
+      box-shadow: 0 8px 24px color-mix(in srgb, var(--px-text) 10%, transparent);
+    }
+
+    #session-list-card-mockup .px-variants { display: flex; gap: 6px; margin: 0 0 10px; }
+    #session-list-card-mockup .px-variants button {
+      padding: 6px 10px;
+      border: 1px solid var(--px-line);
+      border-radius: 999px;
+      color: var(--px-muted);
+      background: var(--px-panel);
+      font: inherit;
+      cursor: pointer;
+    }
+    #session-list-card-mockup .px-variants button[aria-selected="true"] {
+      border-color: var(--px-accent);
+      color: var(--px-text);
+      background: var(--px-accent-soft);
+    }
+
+    #session-list-card-mockup .px-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 17px 18px 14px;
+      border-bottom: 1px solid var(--px-line);
+    }
+
+    #session-list-card-mockup .px-heading h2 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -.02em;
+    }
+
+    #session-list-card-mockup .px-count {
+      color: var(--px-muted);
+      font-size: 12px;
+    }
+
+    #session-list-card-mockup .px-list {
+      display: grid;
+      gap: 9px;
+      padding: 12px;
+    }
+
+    #session-list-card-mockup .px-session {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 11px;
+      padding: 12px;
+      border: 1px solid var(--px-line);
+      border-radius: 8px;
+      background: var(--px-card);
+    }
+
+    #session-list-card-mockup .px-session.selected {
+      border-color: color-mix(in srgb, var(--px-accent) 60%, var(--px-line));
+      box-shadow: inset 3px 0 var(--px-accent);
+    }
+
+    #session-list-card-mockup .px-icon {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border-radius: 8px;
+      color: var(--px-accent);
+      background: var(--px-accent-soft);
+      font-size: 15px;
+    }
+    #session-list-card-mockup .px-icon svg { width: 18px; height: 18px; }
+
+    #session-list-card-mockup .px-main { min-width: 0; }
+
+    #session-list-card-mockup .px-title-row,
+    #session-list-card-mockup .px-foot,
+    #session-list-card-mockup .px-meta {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+    }
+
+    #session-list-card-mockup .px-title {
+      overflow: hidden;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #session-list-card-mockup .px-meta {
+      margin-top: 4px;
+      color: var(--px-muted);
+      font-size: 12px;
+    }
+
+    #session-list-card-mockup .px-model {
+      color: var(--px-text);
+      font-weight: 500;
+    }
+
+    #session-list-card-mockup .px-dot { opacity: .6; }
+
+    #session-list-card-mockup .px-status {
+      align-self: start;
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: var(--px-green);
+      background: var(--px-green-soft);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    #session-list-card-mockup .px-status.complete {
+      color: var(--px-blue);
+      background: var(--px-blue-soft);
+    }
+
+    #session-list-card-mockup .px-card-list {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    #session-list-card-mockup .px-card-session {
+      padding: 13px 14px 11px;
+      border: 1px solid var(--px-line);
+      border-radius: 9px;
+      background: var(--px-card);
+    }
+
+    #session-list-card-mockup .px-card-session.selected {
+      border-color: color-mix(in srgb, var(--px-accent) 60%, var(--px-line));
+      box-shadow: inset 3px 0 var(--px-accent);
+    }
+
+    #session-list-card-mockup .px-card-session .px-title-row {
+      justify-content: space-between;
+      flex-wrap: nowrap;
+      gap: 10px;
+    }
+
+    #session-list-card-mockup .px-card-session .px-title {
+      font-size: 14px;
+    }
+
+    #session-list-card-mockup .px-card-session .px-model-row {
+      margin-top: 8px;
+      color: var(--px-muted);
+      font-size: 12px;
+    }
+
+    #session-list-card-mockup .px-card-session .px-foot {
+      justify-content: space-between;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--px-line);
+      color: var(--px-muted);
+      font-size: 11px;
+    }
+
+    @media (max-width: 480px) {
+      #session-list-card-mockup [data-variant] { min-height: 550px; padding: 8px; }
+      #session-list-card-mockup .px-session { grid-template-columns: 30px minmax(0, 1fr); gap: 8px; }
+      #session-list-card-mockup .px-icon { width: 28px; height: 28px; }
+      #session-list-card-mockup .px-status { grid-column: 2; justify-self: start; }
+    }
+  </style>
+
+  <div class="px-variants" role="tablist" aria-label="Card layout">
+    <button type="button" role="tab" aria-selected="true" aria-controls="variant-compact" data-show-variant="compact">Compact rows</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="variant-expanded" data-show-variant="expanded">Expanded cards</button>
+  </div>
+
+  <section id="variant-compact" data-variant="Automation-like" aria-label="Automation-like session cards">
+    <div class="px-pane">
+      <header class="px-heading">
+        <h2>Sessions</h2>
+        <span class="px-count">3 recent</span>
+      </header>
+      <div class="px-list">
+        <article class="px-session selected">
+          <span class="px-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="5" width="10" height="8" rx="2"/><path d="M8 2.5v2.3M5.5 8.5h.1M10.5 8.5h.1M5.5 11h5"/></svg></span>
+          <div class="px-main">
+            <div class="px-title-row"><span class="px-title">Improve onboarding flow</span></div>
+            <div class="px-meta"><span class="px-model">Claude Sonnet 4.6</span><span class="px-dot">·</span><span>Customer Portal</span><span class="px-dot">·</span><span>PRX-142</span></div>
+          </div>
+          <span class="px-status">Running</span>
+        </article>
+        <article class="px-session">
+          <span class="px-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="5" width="10" height="8" rx="2"/><path d="M8 2.5v2.3M5.5 8.5h.1M10.5 8.5h.1M5.5 11h5"/></svg></span>
+          <div class="px-main">
+            <div class="px-title-row"><span class="px-title">Review authentication changes</span></div>
+            <div class="px-meta"><span class="px-model">GPT-5.4</span><span class="px-dot">·</span><span>Praxis Desktop</span><span class="px-dot">·</span><span>PRX-138</span></div>
+          </div>
+          <span class="px-status complete">Completed</span>
+        </article>
+        <article class="px-session">
+          <span class="px-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="5" width="10" height="8" rx="2"/><path d="M8 2.5v2.3M5.5 8.5h.1M10.5 8.5h.1M5.5 11h5"/></svg></span>
+          <div class="px-main">
+            <div class="px-title-row"><span class="px-title">Explore a caching approach</span></div>
+            <div class="px-meta"><span class="px-model">Claude Sonnet 4.6</span><span class="px-dot">·</span><span>General session</span><span class="px-dot">·</span><span>12 min ago</span></div>
+          </div>
+          <span class="px-status complete">Completed</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="variant-expanded" data-variant="Expanded cards" aria-label="Expanded session cards" hidden>
+    <div class="px-pane">
+      <header class="px-heading">
+        <h2>Sessions</h2>
+        <span class="px-count">3 recent</span>
+      </header>
+      <div class="px-card-list">
+        <article class="px-card-session selected">
+          <div class="px-title-row">
+            <span class="px-title">Improve onboarding flow</span>
+            <span class="px-status">Running</span>
+          </div>
+          <div class="px-model-row">Claude Sonnet 4.6 <span class="px-dot">·</span> Anthropic</div>
+          <footer class="px-foot"><span>Customer Portal / PRX-142</span><span>Updated just now</span></footer>
+        </article>
+        <article class="px-card-session">
+          <div class="px-title-row">
+            <span class="px-title">Review authentication changes</span>
+            <span class="px-status complete">Completed</span>
+          </div>
+          <div class="px-model-row">GPT-5.4 <span class="px-dot">·</span> OpenAI</div>
+          <footer class="px-foot"><span>Praxis Desktop / PRX-138</span><span>Updated 18 min ago</span></footer>
+        </article>
+        <article class="px-card-session">
+          <div class="px-title-row">
+            <span class="px-title">Explore a caching approach</span>
+            <span class="px-status complete">Completed</span>
+          </div>
+          <div class="px-model-row">Claude Sonnet 4.6 <span class="px-dot">·</span> Anthropic</div>
+          <footer class="px-foot"><span>General session</span><span>Updated 12 min ago</span></footer>
+        </article>
+      </div>
+    </div>
+  </section>
+  <script>
+    (() => {
+      const root = document.getElementById('session-list-card-mockup');
+      if (!root) return;
+      const tabs = [...root.querySelectorAll('[data-show-variant]')];
+      const sections = [...root.querySelectorAll('[data-variant]')];
+      tabs.forEach(tab => tab.addEventListener('click', () => {
+        const selected = tab.dataset.showVariant;
+        tabs.forEach(item => {
+          const active = item === tab;
+          item.setAttribute('aria-selected', String(active));
+          item.tabIndex = active ? 0 : -1;
+        });
+        sections.forEach(section => {
+          section.hidden = (selected === 'compact') !== (section.id === 'variant-compact');
+        });
+      }));
+    })();
+  </script>
+</div>
