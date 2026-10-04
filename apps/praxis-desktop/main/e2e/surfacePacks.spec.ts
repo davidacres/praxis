@@ -236,6 +236,16 @@ test('solid cells scatter through a super-tile rather than repeating in step', a
   // With fill > 0 the hexagon repeat grows to 3×2 cells so the filled ones do
   // not land in the same spot in every tile.
   await openSurface();
+  // Hold persistence long enough to edit the next dial before its echo arrives.
+  await app.electronApp.evaluate((_electron, modulePath) => {
+    const require = process.getBuiltinModule('module')!.createRequire(modulePath);
+    const backend = require(modulePath).getSettingsBackend();
+    const write = backend.write.bind(backend);
+    backend.write = async (patch: unknown) => {
+      await new Promise(resolve => setTimeout(resolve, 400));
+      return write(patch);
+    };
+  }, require.resolve('../out/main/settingsBackendInstance'));
   await chooseOption(window.locator('[data-testid="motif-placement"]'), 'tile');
   const width = async () => Number((await window.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-size').trim()))
@@ -254,6 +264,10 @@ test('solid cells scatter through a super-tile rather than repeating in step', a
   const tile = await window.evaluate(() =>
     decodeURIComponent(getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-image')));
   expect(tile).toContain('fill-opacity="0.5"');
+  await expect.poll(() => window.evaluate(() => window.praxis.settings.get().then(
+    settings => settings.appearance.surface.motif)))
+    .toMatchObject({ placement: 'tile', fill: 0.51 });
+  await window.screenshot({ path: test.info().outputPath('motif-rapid-edits.png') });
 });
 
 test('the letterpress outline is opt-in and draws a second offset line', async () => {

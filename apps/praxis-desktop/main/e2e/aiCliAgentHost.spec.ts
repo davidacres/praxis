@@ -23,9 +23,26 @@ import { chooseOption } from './chipSelect';
 const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs');
 
 let app: TestApp | undefined;
+let replayTraceApp: TestApp | undefined;
 
 test.afterEach(async () => {
   if (app) {
+    if (test.info().status !== test.info().expectedStatus && !app.window.isClosed()) {
+      const diagnostics = await app.window.evaluate(async () => ({
+        sessions: await window.praxis.ai.listSessions(),
+        logs: await window.praxis.log.getRecent()
+      }));
+      await test.info().attach('acp-state-and-logs', {
+        body: JSON.stringify(diagnostics, null, 2), contentType: 'application/json'
+      });
+    }
+    if (replayTraceApp === app) {
+      const failed = test.info().status !== test.info().expectedStatus;
+      const tracePath = failed ? test.info().outputPath('acp-replay-trace.zip') : undefined;
+      await app.electronApp.context().tracing.stop({ path: tracePath });
+      if (tracePath) await test.info().attach('acp-replay-trace', { path: tracePath, contentType: 'application/zip' });
+      replayTraceApp = undefined;
+    }
     await closeTestApp(app);
     app = undefined;
   }
@@ -256,6 +273,8 @@ test('MCP servers the user added reach a CLI agent at session start', async () =
 
 test('ACP resume replay does not duplicate the previous answer into a follow-up', async () => {
   app = await launchTestApp(undefined, undefined, { FAKE_ACP_REPLAY_ON_RESUME: '1' });
+  await app.electronApp.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
+  replayTraceApp = app;
   const win = app.window;
   await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
 
@@ -263,6 +282,37 @@ test('ACP resume replay does not duplicate the previous answer into a follow-up'
   await expect.poll(async () => (await readSession(win, 'APP-212'))?.state, { timeout: 15000 }).toBe('completed');
 
   await openSession(win, 'APP-212');
+  // Keep launch-phase evidence for the CI-only stall without changing its timing or assertions.
+  await app.electronApp.evaluate((_electron, modulePaths) => {
+    const require = process.getBuiltinModule('module')!.createRequire(modulePaths.log);
+    const log = require(modulePaths.log).getLogBus();
+    const observe = (target: Record<string, any>, name: string) => {
+      const original = target[name].bind(target);
+      target[name] = async (...args: unknown[]) => {
+        const started = Date.now();
+        log.appendLine(`[e2e:ACP follow-up] ${name} started`);
+        try {
+          return await original(...args);
+        } finally {
+          log.appendLine(`[e2e:ACP follow-up] ${name} finished after ${Date.now() - started}ms`);
+        }
+      };
+    };
+    observe(require(modulePaths.launch), 'preparePersistedAgentLaunch');
+    observe(require(modulePaths.instructions), 'sessionInstructionsFor');
+    observe(require(modulePaths.browser), 'browserMcpServerForSession');
+    observe(require(modulePaths.tracker), 'trackerMcpServerForSession');
+    const host = require(modulePaths.host).getAcpAgentHost();
+    observe(host, 'continueTask');
+    observe(host, 'cleanupTask');
+  }, {
+    log: require.resolve('../out/main/logBusInstance'),
+    launch: require.resolve('../out/main/agentSessionLauncher'),
+    instructions: require.resolve('../out/main/nativeSourcesInstance'),
+    browser: require.resolve('../out/main/browserMcp'),
+    tracker: require.resolve('../out/main/trackerMcp'),
+    host: require.resolve('../out/main/aiInstance')
+  });
   await win.locator('[data-testid="session-follow-up-input"]').fill('DISTINCT_FOLLOW_UP answer only this question.');
   await win.locator('[data-testid="session-follow-up-send"]').click();
 

@@ -28,7 +28,9 @@ test('reset to defaults asks separately before clearing saved AI session data', 
   await expect(app.window.getByRole('dialog', { name: 'Reset settings to defaults?' })).toBeVisible();
   await app.window.getByRole('button', { name: 'Reset settings' }).click();
   await expect(app.window.getByRole('dialog', { name: 'Clear saved session data too?' })).toBeVisible();
+  const reloaded = app.window.waitForEvent('domcontentloaded');
   await app.window.getByRole('button', { name: 'Clear session data' }).click();
+  await reloaded;
   await expect.poll(() => fs.existsSync(path.join(app.userDataDir, 'ai-sessions.json'))).toBe(false);
   await expect.poll(() => fs.existsSync(path.join(app.userDataDir, 'ai-analysis.json'))).toBe(false);
 });
@@ -49,7 +51,9 @@ test('clears app-owned project, workspace, and board data without deleting share
   await openOverviewSettings();
   await app.window.getByTestId('clear-project-workspace-board-data').click();
   await expect(app.window.getByRole('dialog', { name: 'Clear project data?' })).toBeVisible();
+  const reloaded = app.window.waitForEvent('domcontentloaded');
   await app.window.getByRole('button', { name: 'Clear project data' }).click();
+  await reloaded;
 
   await expect.poll(() => userDataFiles.some(file => fs.existsSync(path.join(app.userDataDir, file)))).toBe(false);
   await expect.poll(() => fs.existsSync(path.join(app.userDataDir, 'projects'))).toBe(false);
