@@ -3969,20 +3969,32 @@ function MotifPanel({
   disabled?: boolean;
   /** The master gate. False greys the motion controls and says why. */
   animationsEnabled: boolean;
-  onChange: (motif: SurfaceMotifSettings | undefined) => void;
+  onChange: (motif: SurfaceMotifSettings | undefined) => Promise<void>;
 }) {
   const base = pack?.pattern;
+  // Keep edits composable until persistence echoes them back. A second dial
+  // must not rebuild its patch from props that still describe the first edit's
+  // predecessor, or it restores that predecessor's placement/colour/etc.
+  const [pending, setPending] = useState<{ value: SurfaceMotifSettings | undefined }>();
+  const currentMotif = pending ? pending.value : motif;
+  const change = (value: SurfaceMotifSettings | undefined) => {
+    const edit = { value };
+    setPending(edit);
+    void onChange(value)
+      .finally(() => setPending(current => current === edit ? undefined : current))
+      .catch(() => undefined); // useSettings presents persistence failures.
+  };
   const effective: SurfacePatternSpec = {
     id: 'none', scale: 62, opacity: 0.3, ink: 'accent',
     placement: 'tile', anchor: 'top-right', spread: DEFAULT_MOTIF_SPREAD, fade: DEFAULT_MOTIF_FADE,
     fill: 0, outline: 0, animation: 'none', animationSpeed: 1, animationRepeat: false,
     ...(base ?? {}),
-    ...(motif ?? {})
+    ...(currentMotif ?? {})
   };
   const set = (patch: Partial<SurfacePatternSpec>) =>
-    onChange({ ...effective, ...patch } as SurfaceMotifSettings);
+    change({ ...effective, ...patch } as SurfaceMotifSettings);
   const isCorner = effective.placement === 'corner';
-  const overridden = motif !== undefined;
+  const overridden = currentMotif !== undefined;
   const definition = findSurfacePattern(effective.id);
   const style = effective.animation ?? 'none';
   // Motion controls are dead while the master gate is off, the pattern is None,
@@ -4015,7 +4027,7 @@ function MotifPanel({
           </span>
         </div>
         {overridden && (
-          <button type="button" className="surface-motif-reset" data-testid="motif-reset" onClick={() => onChange(undefined)}>
+          <button type="button" className="surface-motif-reset" data-testid="motif-reset" onClick={() => change(undefined)}>
             Use surface default
           </button>
         )}
@@ -5120,10 +5132,10 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
           pack={activeSurfacePack}
           motif={surfaceOpts.motif}
           disabled={surfaceId === 'flat'}
-          onChange={next => {
+          onChange={async next => {
             const updated = { ...surfaceOpts, motif: next };
             applySurface(surfaceId, updated);
-            void update({ appearance: { surface: { motif: next } } });
+            await update({ appearance: { surface: { motif: next } } });
           }}
         />
         <div className="surface-dials">

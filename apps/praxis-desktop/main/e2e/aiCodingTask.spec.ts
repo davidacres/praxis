@@ -211,14 +211,27 @@ test('each turn records its reply once, and follow-ups carry the earlier answer'
   await openSession(win, 'Fix the sum() function');
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText('Ready for review');
 
+  // Model the asynchronous launch preparation between send and executing.
+  await app.electronApp.evaluate((_electron, modulePath) => {
+    const require = process.getBuiltinModule('module')!.createRequire(modulePath);
+    const host = require(modulePath).getAcpAgentHost();
+    const continueTask = host.continueTask.bind(host);
+    host.continueTask = async (...args: unknown[]) => {
+      await new Promise(resolve => setTimeout(resolve, 400));
+      return continueTask(...args);
+    };
+  }, require.resolve('../out/main/aiInstance'));
+
   // Two follow-ups: each adds exactly one reply. The retroactive flush this
   // replaced re-appended the previous answer, so the second follow-up used to
   // leave a duplicate behind.
   for (const [index, text] of ['Is that all?', 'Thanks.'].entries()) {
     await win.locator('[data-testid="session-follow-up-input"]').fill(text);
     await win.locator('[data-testid="session-follow-up-send"]').click();
+    // The previous turn remains completed during asynchronous launch preparation.
+    // Wait for this turn's persisted reply before accepting terminal state.
+    await expect.poll(messageEvents, { timeout: 20000 }).toHaveLength(index + 2);
     await expect.poll(stateOf, { timeout: 20000 }).toBe('completed');
-    expect(await messageEvents()).toHaveLength(index + 2);
   }
 });
 
