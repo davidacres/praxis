@@ -44,7 +44,7 @@ test('opens Settings from the title bar as a dismissible popover dialog', async 
 test('theme gallery previews and persists the selected complete palette', async () => {
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(4);
+  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(5);
   await expect(window.locator('[data-testid="theme-card-praxis-light"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(window).toHaveScreenshot('theme-gallery.png');
 
@@ -202,6 +202,21 @@ test('installs a marketplace theme and makes it available on reload', async () =
       }
     }, undefined, { PRAXIS_MARKETPLACE_TOKEN: 'e2e-token' });
     window = app.window;
+    // Hold installation open so visibility alone cannot masquerade as readiness.
+    await app.electronApp.evaluate((_electron, modulePath) => {
+      const require = process.getBuiltinModule('module')!.createRequire(modulePath);
+      const marketplace = require(modulePath);
+      const build = marketplace.buildMarketplaceService;
+      marketplace.buildMarketplaceService = async () => {
+        const service = await build();
+        const install = service.install.bind(service);
+        service.install = async (...args: unknown[]) => {
+          await new Promise(resolve => setTimeout(resolve, 600));
+          return install(...args);
+        };
+        return service;
+      };
+    }, require.resolve('../out/main/marketplaceInstance'));
 
     await window.locator('[data-testid="titlebar-settings"]').click();
     await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
@@ -211,7 +226,9 @@ test('installs a marketplace theme and makes it available on reload', async () =
     const card = marketplace.locator('[data-testid="theme-card-dracula-dark"]');
     await expect(card).toHaveAttribute('aria-label', /available in marketplace/);
     await card.click();
-    const galleryCard = window.locator('.theme-gallery-section [data-testid="theme-card-dracula-dark"]').first();
+    // The marketplace itself is a gallery section and remains visible while installing.
+    // Select the installed gallery card only after that separate card exists.
+    const galleryCard = window.locator('.theme-gallery-section:not(.theme-marketplace-section) [data-testid="theme-card-dracula-dark"]').first();
     await expect(galleryCard).toBeVisible();
     await galleryCard.click();
     await expect(window.locator('html')).toHaveAttribute('data-theme', 'dracula-dark');

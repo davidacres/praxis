@@ -30,6 +30,7 @@ export default defineConfig({
   // PRAXIS_E2E_WORKERS explicitly so its isolated Electron tests stay parallel.
   workers: configuredWorkers(),
   reporter: 'list',
+  use: { trace: 'retain-on-failure' },
   projects: [
     {
       name: 'functional',

@@ -330,8 +330,8 @@ test('composer selects a board and open ticket, names the session, and streams t
   await persistedRow.locator('[data-testid="session-delete-btn"]').click();
   const deleteDialog = win.getByRole('dialog');
   await expect(deleteDialog).toContainText('Delete this session?');
-  await expect(deleteDialog.getByTestId('app-dialog-tertiary')).toHaveText('Archive instead');
-  await deleteDialog.getByRole('button', { name: 'Delete session' }).click();
+  await expect(deleteDialog.getByTestId('app-dialog-tertiary')).toHaveText('Archive');
+  await deleteDialog.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(0);
   await expect(win.getByTestId('project-session-nav-item')).toHaveCount(0);
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-deleted.png') });
@@ -352,7 +352,7 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
 
   // Open a demo issue in the aux detail pane.
   await win.locator('[data-testid="nav-overview"]').click();
-  await win.locator('.overview-board-card', { hasText: 'Platform Overview' }).click();
+  await win.getByTestId('board-nav-item').filter({ hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
   await win.locator('[data-testid="issue-primary-ai-btn"]').click();
   const dialog = win.locator('[data-testid="issue-session-dialog"]');
@@ -400,7 +400,7 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
   // Reopening the ticket does not silently overwrite the stored session: the
   // setup identifies it and offers a direct route back to the existing console.
   await win.locator('[data-testid="nav-overview"]').click();
-  await win.locator('.overview-board-card', { hasText: 'Platform Overview' }).click();
+  await win.getByTestId('board-nav-item').filter({ hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
   const primaryAi = win.locator('[data-testid="issue-primary-ai-btn"]');
   await expect(primaryAi).toHaveAttribute('data-ai-mode', 'session');
@@ -408,7 +408,7 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
   await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
 
   await win.locator('[data-testid="nav-overview"]').click();
-  await win.locator('.overview-board-card', { hasText: 'Platform Overview' }).click();
+  await win.getByTestId('board-nav-item').filter({ hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
   await win.locator('[data-testid="issue-ai-restart-btn"]').click();
   await expect(win.locator('[data-testid="issue-session-existing-warning"]')).toContainText('aborted session');
@@ -708,7 +708,7 @@ test('the session composer model picker honours the curated enabled models', asy
   // it). The session's out-of-catalog model stays selectable as Current, so
   // curation can never strand an in-flight conversation.
   await expect.poll(() => optionIds(curated), { timeout: 15000 })
-    .toEqual(expect.arrayContaining(['default', 'current']));
+    .toEqual(['default', 'current']);
   const curatedIds = await optionIds(curated);
   expect(curatedIds).not.toContain('mock/third');
   await expect(curated.locator('[data-testid="session-model-option-default"]')).toContainText('mock/other');

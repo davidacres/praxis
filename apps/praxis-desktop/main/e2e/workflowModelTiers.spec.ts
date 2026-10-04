@@ -1,4 +1,3 @@
-import { openSession } from './sessionNavigation';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -14,7 +13,7 @@ import { chooseOption, chipOptionLabels } from './chipSelect';
  * - A stage names a tier; Settings maps each tier to a model per provider; the stage's session is
  *   launched on the mapped model (the in-process mock gateway records what it was asked for).
  * - "Suggest model tiers" asks the AI once for the whole workflow and only fills the draft.
- * - Two or more stage sessions of one run with no controller gather under one run header.
+ * - Stage sessions are reached through their project's automation run.
  */
 
 test.slow();
@@ -154,41 +153,26 @@ test('a stage runs on the model its tier maps to, and its report reaches the nex
   expect(secondPrompts.some(body => body.includes('Reports from earlier stages') && body.includes('the change is correct'))).toBe(true);
 });
 
-test('two stage sessions of one run with no controller gather under one run header', async () => {
+test('two stage sessions are reached through their project run rather than Conversations', async () => {
   const { page, projectId, workflowId } = await launch('Looks fine.');
   const run = await page.evaluate(
     async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Grouped'),
     { projectId, workflowId }
   );
-  await expect
-    .poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(r => r?.status), run.runId), { timeout: 60000 })
+  await expect.poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(r => r?.status), run.runId), { timeout: 60000 })
     .toBe('awaiting-approval');
-
-  await page.evaluate(
-    ids => localStorage.setItem(
-      `praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`,
-      JSON.stringify({ projectId: ids.projectId, feature: 'workflows' })
-    ),
-    { projectId }
-  );
   await page.reload();
-  await openSession(page);
-
-  const group = page.getByTestId('session-run-group');
-  await expect(group).toHaveCount(1);
-  await expect(group).toContainText('Tiered review');
-  const rows = page.getByTestId('session-list-row');
-  await expect(rows).toHaveCount(2);
-  await expect(rows.first()).toHaveClass(/session-nav-row--child/);
-
-  await page.screenshot({
-    path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'sessions-run-group.png'),
-    fullPage: true
-  });
-
-  await page.getByTestId('session-run-toggle').click();
-  await expect(rows).toHaveCount(0);
-  await expect(group).toBeVisible();
+  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Tiered review' });
+  await expect(runRow).toHaveCount(1);
+  await runRow.getByTestId('automation-run-open').click();
+  for (const node of ['first', 'second']) {
+    await page.getByTestId(`wf-vpipe-step-${node}`).click();
+    await expect(page.getByTestId('wf-run-session')).toContainText('Looks fine.');
+  }
+  await page.getByTestId('nav-conversations').click();
+  await expect(page.getByTestId('session-list-row')).toHaveCount(0);
+  const sessions = await page.evaluate(async id => (await window.praxis.ai.listSessions()).filter(s => s.workflowRunId === id), run.runId);
+  expect(sessions).toHaveLength(2);
 });
 
 test('Suggest model tiers fills only unset stages of the draft, and settings maps each tier', async () => {
@@ -291,63 +275,34 @@ test('a provider row maps tiers by picking its models, and the designer sets a s
   await expect(page.getByTestId('wf-node-escalate')).toHaveCount(0);
 });
 
-test('a run header in Sessions archives or deletes all of its stage sessions, and leaves the run itself alone', async () => {
+test('archiving a completed project run retains its sessions and deleting the run removes them', async () => {
   const { page, projectId, workflowId } = await launch('Looks fine.');
-  const stageSessions = (runId: string) =>
-    page.evaluate(async id => (await window.praxis.ai.listSessions()).filter(s => s.workflowRunId === id).map(s => ({ key: s.issueKey, archived: !!s.archived })), runId);
-  const startAndWait = async (label: string): Promise<string> => {
-    const run = await page.evaluate(
-      async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, ids.label),
-      { projectId, workflowId, label }
-    );
-    await expect
-      .poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(r => r?.status), run.runId), { timeout: 60000 })
-      .toBe('awaiting-approval');
-    return run.runId;
-  };
-  const openSessions = async () => {
-    await page.reload();
-    await expect(page.getByTestId('startup-splash')).toHaveCount(0, { timeout: 15000 });
-    await openSession(page);
-  };
-
-  // Archive: the header has the same buttons a session row has, and takes both stage sessions with it.
-  const archivedRun = await startAndWait('To archive');
-  expect((await stageSessions(archivedRun)).length).toBe(2);
-  await openSessions();
-  const group = page.getByTestId('session-run-group');
-  await expect(group).toHaveCount(1);
-  await expect(group.getByTestId('session-run-archive-btn')).toBeVisible();
-  await expect(group.getByTestId('session-run-delete-btn')).toBeVisible();
-  // Like a session row's, the header's buttons stay inside the row even with the sidebar this narrow.
-  const inside = await group.evaluate(row => {
-    const box = row.getBoundingClientRect();
-    return [...row.querySelectorAll('button')].every(button => button.getBoundingClientRect().right <= box.right + 0.5);
-  });
-  expect(inside).toBe(true);
-  await group.hover();
-  await group.getByTestId('session-run-archive-btn').click();
-  await expect.poll(async () => (await stageSessions(archivedRun)).every(s => s.archived)).toBe(true);
-  await expect(page.getByTestId('session-run-group')).toHaveCount(0);
-  await expect(page.getByTestId('session-list-row')).toHaveCount(0);
-
-  // Delete: asks first (naming the count), then removes every stage session — but not the run.
-  const deletedRun = await startAndWait('To delete');
-  await openSessions();
-  await expect(page.getByTestId('session-run-group')).toHaveCount(1);
-  await page.getByTestId('session-run-group').hover();
-  await page.getByTestId('session-run-delete-btn').click();
+  const run = await page.evaluate(
+    async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'To archive'),
+    { projectId, workflowId }
+  );
+  const stageSessions = () => page.evaluate(async id => (await window.praxis.ai.listSessions()).filter(s => s.workflowRunId === id), run.runId);
+  await expect.poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(r => r?.status), run.runId), { timeout: 60000 })
+    .toBe('awaiting-approval');
+  await page.evaluate(id => window.praxis.workflows.approveRun(id, 'e2e'), run.runId);
+  await expect.poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(r => r?.status), run.runId)).toBe('succeeded');
+  await page.reload();
+  const row = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Tiered review' });
+  await expect(row).toBeVisible();
+  await row.hover();
+  await row.getByTestId(`project-run-archive-${run.runId}`).click();
+  await expect(row).toHaveCount(0);
+  expect(await stageSessions()).toHaveLength(2);
+  await page.evaluate(id => window.praxis.workflows.archiveRun(id, false), run.runId);
+  await expect(row).toBeVisible();
+  await row.hover();
+  await row.getByTestId(`project-run-delete-${run.runId}`).click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('all 2 sessions');
-  await expect(dialog).toContainText('The run itself stays');
-  // Cancelling changes nothing.
   await dialog.getByRole('button', { name: 'Cancel' }).click();
-  expect((await stageSessions(deletedRun)).length).toBe(2);
-  await page.getByTestId('session-run-group').hover();
-  await page.getByTestId('session-run-delete-btn').click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete sessions' }).click();
-  await expect.poll(async () => (await stageSessions(deletedRun)).length).toBe(0);
-  await expect(page.getByTestId('session-run-group')).toHaveCount(0);
-  const runStillThere = await page.evaluate(id => window.praxis.workflows.getRun(id).then(r => r?.runId), deletedRun);
-  expect(runStillThere).toBe(deletedRun);
+  expect(await stageSessions()).toHaveLength(2);
+  await row.hover();
+  await row.getByTestId(`project-run-delete-${run.runId}`).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete run' }).click();
+  await expect(row).toHaveCount(0);
+  await expect.poll(stageSessions).toHaveLength(0);
 });

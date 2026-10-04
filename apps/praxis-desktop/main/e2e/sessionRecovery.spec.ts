@@ -8,7 +8,7 @@ let app: TestApp | undefined;
 let mock: MockGatewayServer | undefined;
 test.afterEach(async () => { if (app) await closeTestApp(app); app = undefined; if (mock) await mock.close(); mock = undefined; });
 
-async function seedInterrupted(keyAvailable = true, provider = 'vercel-gateway') {
+async function seedInterrupted(keyAvailable = true, provider = 'vercel-gateway', goalPrefix = '') {
   mock = await startMockGatewayServer({ mode: 'complete' });
   const env = { AI_GATEWAY_API_KEY: keyAvailable ? 'recovery-test-key' : undefined, AI_GATEWAY_URL: mock.baseUrl,
     VERCEL_OIDC_TOKEN: undefined, FROSTY_VERCEL_API_KEY: undefined };
@@ -21,7 +21,7 @@ async function seedInterrupted(keyAvailable = true, provider = 'vercel-gateway')
     return [issueKey, { issueKey, sessionId: issueKey, title: `Recovery ${name}`, provider,
       state: name === 'done' ? 'completed' : 'executing', startedAt: new Date().toISOString(),
       model: 'openai/gpt-4o-mini', workingDirectory: profile.userDataDir, toolMode: 'read-only', stepCount: 0,
-      taskDefinition: { kind: 'general', goal: `Recovery ${name}`, scope: '', definitionOfDone: '' }, events: [] }];
+      taskDefinition: { kind: 'general', goal: `${goalPrefix}Recovery ${name}`, scope: '', definitionOfDone: '' }, events: [] }];
   }));
   fs.writeFileSync(path.join(profile.userDataDir, 'ai-sessions.json'), JSON.stringify({ 'praxis.agentSessions': records }));
   app = await launchTestApp(undefined, profile, env, { openNewSession: false });
@@ -104,4 +104,29 @@ test('interrupted CLI sessions also wait for selection and resume through ACP', 
   await expect(dialog).toHaveCount(0);
   await expect.poll(async () => (await page.evaluate(() => window.praxis.ai.listSessions())).find(record => record.issueKey === 'SESSION-one')?.responseText).toContain('Hello from the fake ACP agent');
   expect(mock!.requests).toHaveLength(0);
+});
+
+
+test('teardown drains an ACP task even when the session list already reports completion', async () => {
+  const { page, dialog } = await seedInterrupted(false, 'claude-code-cli', 'HANG_UNTIL_CANCELLED ');
+  await dialog.getByRole('checkbox').first().check();
+  await dialog.getByRole('button', { name: 'Resume selected (1)' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(async () => (await page.evaluate(() => window.praxis.ai.listSessions()))
+    .find(record => record.issueKey === 'SESSION-one')?.responseText).toContain('Hello from the fake ACP agent');
+
+  const sessions = await page.evaluate(() => window.praxis.ai.listSessions());
+  expect(sessions.find(record => record.issueKey === 'SESSION-one')?.state).toBe('executing');
+  // Hold a real ACP subprocess open, but expose the terminal snapshot teardown
+  // can see while shutdown is still pending. The real abort IPC and native
+  // close guard remain in place: skipping this record would hang Electron.close.
+  await app!.electronApp.evaluate(({ ipcMain }, records) => {
+    ipcMain.removeHandler('ai:listSessions');
+    ipcMain.handle('ai:listSessions', () => records.map(record =>
+      record.issueKey === 'SESSION-one' ? { ...record, state: 'completed' } : record));
+  }, sessions);
+  const userDataDir = app!.userDataDir;
+  await closeTestApp(app!);
+  app = undefined;
+  expect(fs.existsSync(userDataDir)).toBe(false);
 });

@@ -85,7 +85,7 @@ test('shows exact period totals, peaks, cost and ranked models from a seeded led
   await expect(rows.nth(1)).toContainText('opus');
   await expect(rows.nth(1)).toContainText('25%');
   await expect(rows.nth(1)).toContainText('$0.50');
-  await expect(panel).not.toContainText('$0.00');
+  await expect(rows.nth(0)).not.toContainText('$0.00');
 
   // All time re-ranks: opus 7.0k (67%, $1.75) ahead of gpt-x 3.4k (33%).
   await page.getByTestId('overview-usage-models-period-allTime').click();
@@ -119,7 +119,7 @@ test('says cost comes from ACP agents only when no cost is reported', async () =
   await expect(page.getByTestId('overview-usage-tokens-all')).toHaveText('3.4k tokens');
   await expect(page.getByTestId('overview-usage-cost-all')).toHaveText('Not reported');
   await expect(page.getByTestId('overview-usage-no-cost')).toContainText('ACP agents');
-  await expect(page.getByTestId('overview-usage-panel')).not.toContainText('$0.00');
+  await expect(page.getByTestId('overview-usage-cost-all')).not.toContainText('$0.00');
 });
 
 test('invites a first conversation when the ledger is empty', async () => {

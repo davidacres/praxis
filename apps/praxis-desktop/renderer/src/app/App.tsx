@@ -1733,7 +1733,9 @@ export function App() {
     const targetSession = agentSessions.find(session => session.issueKey === sessionKey) ?? agentSessions[0];
     return (
       <SessionsPage
-        sessions={activeSessions.filter(session => !isConversationSession(session))}
+        // An explicit ticket route can refer to a legacy session without a project.
+        // Keep that selected record visible even when it falls outside this list's scope.
+        sessions={activeSessions.filter(session => session.issueKey === sessionKey || !isConversationSession(session))}
         selectedKey={sessionKey}
         workflowOptions={targetSession
           ? sessionWorkflowsByProject[
@@ -2238,7 +2240,7 @@ export function App() {
     && !(route.feature === 'git' && route.gitView === 'changes');
   const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
   const selectedAgentSession = route.feature === 'sessions'
-    ? agentSessions.find(session => session.issueKey === route.sessionKey && !isConversationSession(session))
+    ? agentSessions.find(session => session.issueKey === route.sessionKey)
       ?? agentSessions.find(session => !isConversationSession(session))
     : route.feature === 'conversations'
     ? agentSessions.find(session => session.issueKey === route.sessionKey && isConversationSession(session))

@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
@@ -12,6 +11,20 @@ test.afterEach(async () => {
 test('AI Usage & Provider Fleet Dashboard renders pixel-perfect with full functionality', async () => {
   app = await launchTestApp();
   const win = app.window;
+  // Account limits must not depend on a signed-in Codex installation on the runner.
+  await app.electronApp.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler('aiUsage:providerSnapshots');
+    ipcMain.handle('aiUsage:providerSnapshots', () => ({
+      checkedAt: new Date().toISOString(),
+      snapshots: [{
+        provider: 'codex-cli', fetchedAt: new Date().toISOString(),
+        windows: [
+          { period: 'rolling', usedPercent: 20 },
+          { period: 'week', usedPercent: 30 }
+        ]
+      }]
+    }));
+  });
 
   // Open Settings -> AI Usage
   await win.keyboard.press('ControlOrMeta+k');
@@ -47,8 +60,7 @@ test('AI Usage & Provider Fleet Dashboard renders pixel-perfect with full functi
   await expect(win.getByTestId('ai-usage-budgets-card-custom:ollama')).toBeVisible();
 
   // Take screenshot in Dark Theme
-  const outDir = path.join(__dirname, '..', '..', '..', '..', 'docs', 'published-artifacts', 'shots');
-  await win.screenshot({ path: path.join(outDir, 'ai-usage-fleet-dark.png'), fullPage: true });
+  await win.screenshot({ path: test.info().outputPath('ai-usage-fleet-dark.png'), fullPage: true });
 
   // 4. Test Search Filtering
   const searchInput = win.locator('.ai-fleet-search-input');
@@ -96,5 +108,5 @@ test('AI Usage & Provider Fleet Dashboard renders pixel-perfect with full functi
   });
   await win.waitForTimeout(200);
   await win.locator('.ai-fleet-carousel-dock').scrollIntoViewIfNeeded();
-  await win.screenshot({ path: path.join(outDir, 'ai-usage-fleet-light.png'), fullPage: false });
+  await win.screenshot({ path: test.info().outputPath('ai-usage-fleet-light.png'), fullPage: false });
 });

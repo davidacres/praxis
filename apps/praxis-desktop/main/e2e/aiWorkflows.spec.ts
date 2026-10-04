@@ -251,6 +251,7 @@ test('analysis uses the selected runtime and continues implementation in the sam
     'I confirm the analysis and implementation plan'
   );
   expect(mock.requests[1].body).toContain('I confirm the analysis and implementation plan');
+  await win.screenshot({ path: test.info().outputPath('analysis-session.png'), fullPage: true });
 });
 
 test('analysis for a project ticket starts in the project folder', async () => {
