@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="praxis-light" data-surface="parchment">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Praxis Chat Session Composer Redesign Proposals</title>
+  <style>
+    :root {
+      --ui-scale: 1;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+      /* Praxis Parchment (Default) */
+      --bg-canvas: #f5f2eb;
+      --bg-surface: #fbf9f4;
+      --bg-panel: #fffdf8;
+      --bg-input: #ffffff;
+      --bg-sunken: #ede8df;
+      --bg-hover: rgba(44, 38, 32, 0.05);
+      --bg-active: rgba(44, 38, 32, 0.09);
+      
+      --border: #dfd7cb;
+      --border-strong: #c8bdae;
+      --border-subtle: #eae4d9;
+      --accent: #c6431f; /* Praxis Terracotta */
+      --accent-soft: rgba(198, 67, 31, 0.1);
+      --accent-hover: #b03a19;
+      --accent-contrast: #ffffff;
+      --focus-ring: #c6431f;
+
+      --text: #2c2620;
+      --text-secondary: #74695e;
+      --text-tertiary: #9c9184;
+
+      --success: #467a5b;
+      --success-soft: rgba(70, 122, 91, 0.12);
+      --warning: #9b6b22;
+      --warning-soft: rgba(155, 107, 34, 0.12);
+      --danger: #b94a48;
+
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 10px;
+      --radius-xl: 14px;
+      --radius-pill: 9999px;
+
+      --shadow-sm: 0 1px 2px rgba(44, 38, 32, 0.05);
+      --shadow-md: 0 4px 12px rgba(44, 38, 32, 0.07), 0 1px 3px rgba(44, 38, 32, 0.04);
+      --shadow-lg: 0 8px 24px rgba(44, 38, 32, 0.1), 0 2px 6px rgba(44, 38, 32, 0.04);
+    }
+
+    [data-theme="praxis-dark"] {
+      --bg-canvas: #100e0b;
+      --bg-surface: #181512;
+      --bg-panel: #201c18;
+      --bg-input: #26221d;
+      --bg-sunken: #14110e;
+      --bg-hover: rgba(240, 231, 216, 0.06);
+      --bg-active: rgba(240, 231, 216, 0.1);
+
+      --border: #362e26;
+      --border-strong: #4a4035;
+      --border-subtle: #29231c;
+      --accent: #d8542f;
+      --accent-soft: rgba(216, 84, 47, 0.15);
+      --accent-hover: #e5623d;
+      --accent-contrast: #ffffff;
+      --focus-ring: #d8542f;
+
+      --text: #f0e7d8;
+      --text-secondary: #b5a999;
+      --text-tertiary: #84786a;
+
+      --success: #67a27d;
+      --success-soft: rgba(103, 162, 125, 0.15);
+      --warning: #d4a27f;
+      --warning-soft: rgba(212, 162, 127, 0.15);
+      --danger: #e2766d;
+
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.2);
+      --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-canvas);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 32px 24px;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Hexagon parchment pattern background like real Praxis */
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.28;
+      background-image: radial-gradient(var(--border-strong) 1px, transparent 1px);
+      background-size: 24px 24px;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    header.page-header {
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+    }
+
+    .title-group h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .title-group p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .praxis-badge {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+    }
+
+    .controls-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-toggle-group {
+      display: inline-flex;
+      background: var(--bg-sunken);
+      padding: 3px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+    }
+
+    .btn-toggle {
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 120ms ease;
+    }
+
+    .btn-toggle.active {
+      background: var(--bg-panel);
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-toggle:hover:not(.active) {
+      color: var(--text);
+    }
+
+    /* Comparison Section Layout */
+    .proposals-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 36px;
+      margin-top: 24px;
+    }
+
+    .proposal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 24px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .proposal-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .proposal-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .proposal-tagline {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .concept-tag {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+    }
+
+    .tag-studio { background: rgba(70, 122, 91, 0.15); color: var(--success); }
+    .tag-cockpit { background: rgba(198, 67, 31, 0.15); color: var(--accent); }
+
+    .state-switcher {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .state-btn {
+      font-size: 11px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      color: var(--text-secondary);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .state-btn.active {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+    }
+
+    /* Common Composer Styles */
+    .mock-chat-frame {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      position: relative;
+    }
+
+    .chat-transcript-hint {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-bottom: 14px;
+      padding: 0 4px;
+    }
+
+    .chat-transcript-hint .line {
+      flex: 1;
+      height: 1px;
+      background: var(--border-subtle);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       OPTION 1: THE UNIFIED STUDIO (Minimalist Fluid Dock)
+       ═══════════════════════════════════════════════════════════════ */
+    .composer-studio {
+      background: var(--bg-input);
+      border: 1.5px solid var(--border-strong);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-sm);
+      transition: all 180ms ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .composer-studio:focus-within,
+    .composer-studio.is-focused {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-md);
+    }
+
+    /* Integrated Micro-Ribbon Header */
+    .studio-top-ribbon {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px 6px 12px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 12px;
+    }
+
+    .studio-left-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pill-select {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--text);
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+
+    .pill-select:hover {
+      background: var(--bg-hover);
+    }
+
+    .pill-select svg {
+      opacity: 0.7;
+    }
+
+    .pill-select.mode-pill {
+      font-weight: 600;
+      color: var(--accent);
+      border-color: var(--accent-soft);
+      background: var(--accent-soft);
+    }
+
+    .studio-right-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .usage-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+      background: var(--bg-sunken);
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .mini-ring {
+      width: 12px;
+      height: 12px;
+      transform: rotate(-90deg);
+    }
+
+    .mini-ring circle {
+      fill: none;
+      stroke-width: 2.5;
+    }
+
+    .mini-ring .track {
+      stroke: var(--border-strong);
+    }
+
+    .mini-ring .fill {
+      stroke: var(--accent);
+      stroke-dasharray: 24, 100;
+    }
+
+    /* Studio Prompt Body */
+    .studio-body {
+      padding: 12px 14px 8px;
+    }
+
+    .studio-attachments-tray {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .attachment-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-sunken);
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      border-radius: var(--radius-md);
+      font-size: 11.5px;
+      color: var(--text);
+    }
+
+    .attachment-chip img {
+      width: 18px;
+      height: 18px;
+      border-radius: 2px;
+      object-fit: cover;
+    }
+
+    .attachment-chip .btn-remove {
+      background: transparent;
+      border: none;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+    }
+
+    .attachment-chip .btn-remove:hover {
+      color: var(--danger);
+    }
+
+    .studio-textarea {
+      width: 100%;
+      min-height: 52px;
+      background: transparent;
+      border: none;
+      font-family: inherit;
+      font-size: 14.5px;
+      line-height: 1.45;
+      color: var(--text);
+      resize: none;
+      outline: none;
+    }
+
+    .studio-textarea::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    /* Studio Bottom Toolbar */
+    .studio-bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--bg-input);
+    }
+
+    .studio-tools-cluster {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tool-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 28px;
+      padding: 0 9px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 120ms ease;
+    }
+
+    .tool-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    .tool-btn.active {
+      background: var(--bg-active);
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    .tool-btn .cost-tag {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      background: var(--bg-sunken);
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: var(--text-tertiary);
+    }
+
+    .studio-actions-cluster {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .send-btn-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-pill);
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 140ms cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 2px 6px rgba(198, 67, 31, 0.3);
+    }
+
+    .send-btn-circle:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(198, 67, 31, 0.4);
+    }
+
+    .send-btn-circle:active {
+      transform: translateY(0);
+    }
+
+    .shortcut-hint {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      font-family: var(--font-mono);
+    }
+
+    /* Studio In-Flight State */
+    .studio-inflight-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .inflight-active-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 14px;
+      background: var(--bg-sunken);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 0 12px var(--accent-soft);
+      animation: pulse-glow 3s infinite ease-in-out;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 8px var(--accent-soft); }
+      50% { box-shadow: 0 0 16px rgba(198, 67, 31, 0.25); }
+    }
+
+    .inflight-status-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12.5px;
+    }
+
+    .status-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--accent-soft);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .inflight-tag {
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .inflight-step-text {
+      color: var(--text);
+    }
+
+    .inflight-time {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    .btn-stop {
+      height: 24px;
+      padding: 0 8px;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      border: 1px solid var(--danger);
+      color: var(--danger);
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-stop:hover {
+      background: rgba(185, 74, 72, 0.1);
+    }
+
+    .inflight-queue-input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      padding: 6px 10px;
+    }
+
+    .inflight-queue-input-row input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      outline: none;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .inflight-queue-input-row .btn-queue {
+      height: 26px;
+      padding: 0 10px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-sunken);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .inflight-queue-input-row .btn-queue:hover {
+      background: var(--bg-hover);
+    }
+
+
+    /* ═══════════════════════════════════════════════════════════════
+       OPTION 2: THE DEV COCKPIT (Structured Pro-Dev Deck)
+       ═══════════════════════════════════════════════════════════════ */
+    .composer-cockpit {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+
+    .composer-cockpit:focus-within {
+      border-color: var(--focus-ring);
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+
+    /* Top Segmented Mode & Context Bar */
+    .cockpit-top-deck {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: var(--bg-sunken);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cockpit-segmented-modes {
+      display: flex;
+      background: var(--bg-panel);
+      padding: 2px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      gap: 2px;
+    }
+
+    .cockpit-mode-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border: none;
+      background: transparent;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 120ms ease;
+    }
+
+    .cockpit-mode-tab.active {
+      background: var(--accent);
+      color: #ffffff;
+      font-weight: 600;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .cockpit-mode-tab:hover:not(.active) {
+      color: var(--text);
+    }
+
+    .cockpit-context-badges {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cockpit-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .cockpit-badge:hover {
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    .cockpit-badge.governance-badge {
+      font-weight: 600;
+      color: var(--text);
+      background: var(--bg-surface);
+    }
+
+    /* Terminal & Attachment Card in Cockpit */
+    .cockpit-attachment-deck {
+      padding: 8px 12px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .terminal-output-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      overflow: hidden;
+    }
+
+    .terminal-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 8px;
+      background: var(--bg-sunken);
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+    }
+
+    .terminal-card-snippet {
+      padding: 6px 8px;
+      color: var(--text);
+      white-space: pre;
+      line-height: 1.4;
+      max-height: 48px;
+      overflow: hidden;
+      opacity: 0.85;
+    }
+
+    /* Main Cockpit Input Area */
+    .cockpit-input-deck {
+      padding: 10px 12px 6px;
+    }
+
+    .cockpit-textarea {
+      width: 100%;
+      min-height: 60px;
+      background: transparent;
+      border: none;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--text);
+      resize: none;
+      outline: none;
+    }
+
+    /* Cockpit Split Footer */
+    .cockpit-footer-deck {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--bg-sunken);
+      border-top: 1px solid var(--border);
+    }
+
+    .cockpit-dock-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .dock-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 26px;
+      padding: 0 8px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      font-size: 11.5px;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .dock-pill:hover {
+      border-color: var(--border-strong);
+    }
+
+    .context-bar-meter {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 26px;
+      padding: 0 8px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+    }
+
+    .progress-track {
+      width: 36px;
+      height: 5px;
+      background: var(--border);
+      border-radius: var(--radius-pill);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      width: 24%;
+      height: 100%;
+      background: var(--accent);
+    }
+
+    .cockpit-dock-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-send-rectangular {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 14px;
+      border-radius: var(--radius-sm);
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: background 120ms ease;
+    }
+
+    .btn-send-rectangular:hover {
+      background: var(--accent-hover);
+    }
+
+    .kbd-shortcut {
+      font-size: 10px;
+      opacity: 0.8;
+      font-family: var(--font-mono);
+      background: rgba(0, 0, 0, 0.18);
+      padding: 1px 4px;
+      border-radius: 2px;
+    }
+
+    /* Comparison Details Table */
+    .comparison-table-wrap {
+      margin-top: 36px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 24px;
+    }
+
+    .comparison-table-wrap h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+
+    table.spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    table.spec-table th, table.spec-table td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    table.spec-table th {
+      color: var(--text-secondary);
+      font-weight: 600;
+      background: var(--bg-sunken);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    table.spec-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .check-yes { color: var(--success); font-weight: 600; }
+    .highlight-pill {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: var(--bg-sunken);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="container">
+    <header class="page-header">
+      <div class="title-group">
+        <h1>
+          Chat Session Composer Redesign
+          <span class="praxis-badge">Interactive Spec</span>
+        </h1>
+        <p>Two alternative designs for the Praxis desktop chat composer with full state previews and ergonomics evaluation.</p>
+      </div>
+
+      <div class="controls-bar">
+        <div class="btn-toggle-group" id="themeSelector">
+          <button class="btn-toggle active" onclick="setTheme('praxis-light')">Parchment (Light)</button>
+          <button class="btn-toggle" onclick="setTheme('praxis-dark')">Praxis Dark</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="proposals-grid">
+
+      <!-- =======================================================
+           PROPOSAL 1: THE UNIFIED STUDIO
+           ======================================================= -->
+      <section class="proposal-card" id="cardStudio">
+        <div class="proposal-header">
+          <div>
+            <div class="proposal-title">
+              Option 1: The Unified Studio
+              <span class="concept-tag tag-studio">Minimalist Fluid Dock</span>
+            </div>
+            <div class="proposal-tagline">
+              Merges fragmented exterior rows (Usage bar, Permission pill) into a single cohesive, floating island. Natural prompt focus with inline micro-ribbons.
+            </div>
+          </div>
+          <div class="state-switcher">
+            <button class="state-btn active" onclick="setStudioState('resting')">Resting</button>
+            <button class="state-btn" onclick="setStudioState('attached')">With Context</button>
+            <button class="state-btn" onclick="setStudioState('inflight')">In-Flight (Running)</button>
+          </div>
+        </div>
+
+        <div class="mock-chat-frame">
+          <div class="chat-transcript-hint">
+            <span class="line"></span>
+            <span>Mock Transcript End · Today 19:14</span>
+            <span class="line"></span>
+          </div>
+
+          <!-- Studio Composer Container -->
+          <div class="composer-studio is-focused" id="studioComposer">
+            <!-- Resting & Attached State -->
+            <div id="studioNormalView">
+              <!-- Top Micro-Ribbon -->
+              <div class="studio-top-ribbon">
+                <div class="studio-left-meta">
+                  <div class="pill-select mode-pill" title="Switch agent conversation mode">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>Chat Mode</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                  </div>
+                  <div class="pill-select" title="Active directory scope">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    <span>praxis-desktop/renderer</span>
+                  </div>
+                  <div class="pill-select" title="Permissions: changes require your approval or run automatic">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span>Auto-approve</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                  </div>
+                </div>
+
+                <div class="studio-right-meta">
+                  <div class="usage-badge" title="Context occupancy & live session tokens">
+                    <svg class="mini-ring" viewBox="0 0 20 20">
+                      <circle class="track" cx="10" cy="10" r="7.5" />
+                      <circle class="fill" cx="10" cy="10" r="7.5" />
+                    </svg>
+                    <span>24% · 1.2k tok</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Prompt Area -->
+              <div class="studio-body">
+                <!-- Staged Attachments (shown in attached state) -->
+                <div class="studio-attachments-tray" id="studioAttachments" style="display: none;">
+                  <div class="attachment-chip">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l7.88-7.88"/></svg>
+                    <span>composer-diff.png</span>
+                    <button class="btn-remove" title="Remove attachment">✕</button>
+                  </div>
+                  <div class="attachment-chip">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                    <span>Terminal output (last 16 lines)</span>
+                    <button class="btn-remove" title="Remove terminal snippet">✕</button>
+                  </div>
+                </div>
+
+                <textarea class="studio-textarea" rows="2" placeholder="Ask anything, type @ for files/symbols, or / for commands..."></textarea>
+              </div>
+
+              <!-- Bottom Bar -->
+              <div class="studio-bottom-bar">
+                <div class="studio-tools-cluster">
+                  <button class="tool-btn" title="Model runtime and pricing">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/></svg>
+                    <strong>Claude 3.7 Sonnet</strong>
+                    <span class="cost-tag">$3 / $15</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
+
+                  <button class="tool-btn" title="Reasoning effort: Medium">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/></svg>
+                    <span>Reasoning: Med</span>
+                  </button>
+
+                  <button class="tool-btn" title="Tool capabilities mode">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                    <span>Full Tools</span>
+                  </button>
+                </div>
+
+                <div class="studio-actions-cluster">
+                  <button class="tool-btn" title="Attach file or screenshot">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l7.88-7.88"/></svg>
+                  </button>
+                  <span class="shortcut-hint">↵ Send</span>
+                  <button class="send-btn-circle" title="Send message (Enter)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- In-Flight View (Running state) -->
+            <div id="studioInflightView" style="display: none; padding: 10px;">
+              <div class="studio-inflight-container">
+                <div class="inflight-active-bar">
+                  <div class="inflight-status-left">
+                    <div class="status-spinner"></div>
+                    <span class="inflight-tag">Claude 3.7 Sonnet</span>
+                    <span class="inflight-step-text">Searching codebase for session composer references...</span>
+                    <span class="inflight-time">12s</span>
+                  </div>
+                  <button class="btn-stop" title="Abort agent execution">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    <span>Stop</span>
+                  </button>
+                </div>
+                <div class="inflight-queue-input-row">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-tertiary);"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  <input type="text" placeholder="Queue follow-up (sends automatically when turn finishes)..." />
+                  <button class="btn-queue">↵ Queue</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- =======================================================
+           PROPOSAL 2: THE DEV COCKPIT
+           ======================================================= -->
+      <section class="proposal-card" id="cardCockpit">
+        <div class="proposal-header">
+          <div>
+            <div class="proposal-title">
+              Option 2: The Dev Cockpit
+              <span class="concept-tag tag-cockpit">Structured Pro-Dev Deck</span>
+            </div>
+            <div class="proposal-tagline">
+              Dedicated high-density modular deck with explicit mode tabs, collapsible terminal cards, horizontal context meters, and governance telemetry.
+            </div>
+          </div>
+          <div class="state-switcher">
+            <button class="state-btn active" onclick="setCockpitState('resting')">Resting</button>
+            <button class="state-btn" onclick="setCockpitState('attached')">With Context</button>
+            <button class="state-btn" onclick="setCockpitState('inflight')">In-Flight (Running)</button>
+          </div>
+        </div>
+
+        <div class="mock-chat-frame">
+          <div class="chat-transcript-hint">
+            <span class="line"></span>
+            <span>Mock Transcript End · Today 19:14</span>
+            <span class="line"></span>
+          </div>
+
+          <!-- Cockpit Composer Container -->
+          <div class="composer-cockpit" id="cockpitComposer">
+            <div id="cockpitNormalView">
+              <!-- Top Deck: Segmented Mode Selector & Scope -->
+              <div class="cockpit-top-deck">
+                <div class="cockpit-segmented-modes">
+                  <button class="cockpit-mode-tab active">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>Chat</span>
+                  </button>
+                  <button class="cockpit-mode-tab">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <span>Plan & Analyze</span>
+                  </button>
+                  <button class="cockpit-mode-tab">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span>Code Review</span>
+                  </button>
+                </div>
+
+                <div class="cockpit-context-badges">
+                  <div class="cockpit-badge" title="Active working git worktree">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+                    <span>feat/composer-redesign</span>
+                  </div>
+                  <div class="cockpit-badge governance-badge" title="Permission Policy">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span>Ask on Write</span>
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Staged Attachments in Cockpit (shown in attached state) -->
+              <div class="cockpit-attachment-deck" id="cockpitAttachments" style="display: none;">
+                <div class="terminal-output-card">
+                  <div class="terminal-card-header">
+                    <span>>_ Terminal Output · zsh (Exit 0)</span>
+                    <button class="btn-remove" style="border:none; background:none; color:var(--text-tertiary); cursor:pointer;">✕ Remove</button>
+                  </div>
+                  <div class="terminal-card-snippet">npm run check-types
+> @praxis/desktop-renderer: check-types
+> tsc --noEmit && npm run check-core-imports
+✓ All 0 violations found. Types clean.</div>
+                </div>
+              </div>
+
+              <!-- Input Deck -->
+              <div class="cockpit-input-deck">
+                <textarea class="cockpit-textarea" rows="2" placeholder="Describe next task, instruction, or ask questions..."></textarea>
+              </div>
+
+              <!-- Bottom Deck: Compute Controls & Dispatch Action -->
+              <div class="cockpit-footer-deck">
+                <div class="cockpit-dock-left">
+                  <div class="dock-pill" title="AI Provider and Model Selector">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/></svg>
+                    <span>Claude Sonnet 4.6</span>
+                    <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-tertiary);">$3/M</span>
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                  </div>
+
+                  <div class="context-bar-meter" title="Session Context occupancy">
+                    <span>Context</span>
+                    <div class="progress-track">
+                      <div class="progress-fill"></div>
+                    </div>
+                    <span>48k / 200k</span>
+                  </div>
+
+                  <div class="dock-pill" title="Governed Workflow execution">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>Quick Change</span>
+                  </div>
+                </div>
+
+                <div class="cockpit-dock-right">
+                  <button class="dock-pill" title="Attach terminal or screenshot">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l7.88-7.88"/></svg>
+                  </button>
+                  <button class="dock-pill" title="Agent slash commands">
+                    <span style="font-family: var(--font-mono); font-weight: 700;">/</span>
+                    <span>Commands</span>
+                  </button>
+                  <button class="btn-send-rectangular">
+                    <span>Dispatch</span>
+                    <span class="kbd-shortcut">⌘↵</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- In-Flight View for Cockpit -->
+            <div id="cockpitInflightView" style="display: none; padding: 10px;">
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-sunken); padding: 8px 12px; border-radius: var(--radius-md); border-left: 3px solid var(--accent);">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="status-spinner"></div>
+                    <div>
+                      <div style="font-size: 12.5px; font-weight: 600;">Step 2 of 4 · Running unit tests</div>
+                      <div style="font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);">npx vitest run --passWithNoTests (00:18 elapsed)</div>
+                    </div>
+                  </div>
+                  <button class="btn-stop">✕ Abort</button>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" placeholder="Queue next command..." style="flex: 1; padding: 6px 10px; font-size: 12.5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-panel); color: var(--text);" />
+                  <button class="btn-send-rectangular" style="height: auto; padding: 6px 12px;">Queue</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Architectural Evaluation Table -->
+    <div class="comparison-table-wrap">
+      <h3>Design System & Functional Comparison</h3>
+      <table class="spec-table">
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>Current Implementation</th>
+            <th>Option 1: The Unified Studio</th>
+            <th>Option 2: The Dev Cockpit</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Visual Hierarchy</strong></td>
+            <td>4 vertical layers (Usage banner, Header bar, Input, Toolbar, Footer permission)</td>
+            <td><span class="check-yes">1 Unified Card</span> with micro-ribbon & compact dock</td>
+            <td><span class="check-yes">3 Structured Decks</span> (Top tabs, Input, Footer dock)</td>
+          </tr>
+          <tr>
+            <td><strong>Mode Switching</strong></td>
+            <td>Rigid 3-button pill taking top-left space permanently</td>
+            <td>Contextual Mode pill dropdown with inline <span class="highlight-pill">/</span> trigger</td>
+            <td>Dedicated tabbed segmented bar with active color fill</td>
+          </tr>
+          <tr>
+            <td><strong>Safety & Permissions</strong></td>
+            <td>Orphaned pill floating under the card</td>
+            <td>Integrated into top micro-ribbon alongside scope</td>
+            <td>High-visibility governance badge on top-right</td>
+          </tr>
+          <tr>
+            <td><strong>Context & Budget Meter</strong></td>
+            <td>Usage banner at top; context gauge ring at bottom-right</td>
+            <td>Unified <span class="highlight-pill">24% · 1.2k tok ◯</span> chip with ring popover</td>
+            <td>Horizontal linear progress meter <span class="highlight-pill">48k / 200k</span></td>
+          </tr>
+          <tr>
+            <td><strong>In-Flight Experience</strong></td>
+            <td>Collapses to 32px bar; requires clicking "Ask" to queue</td>
+            <td>Active turn capsule + immediate follow-up queue input</td>
+            <td>Step breakdown (<span class="highlight-pill">Step 2/4</span>) + instant queue drawer</td>
+          </tr>
+          <tr>
+            <td><strong>Primary Persona Fit</strong></td>
+            <td>Legacy multi-purpose console</td>
+            <td>Streamlined, AI-first conversational developer</td>
+            <td>Pro-dev orchestrating multi-step git & test workflows</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <script>
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      const buttons = document.querySelectorAll('#themeSelector .btn-toggle');
+      buttons.forEach(btn => {
+        if ((theme === 'praxis-light' && btn.innerText.includes('Parchment')) ||
+            (theme === 'praxis-dark' && btn.innerText.includes('Dark'))) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    function setStudioState(state) {
+      const card = document.getElementById('cardStudio');
+      const buttons = card.querySelectorAll('.state-btn');
+      buttons.forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+
+      const normalView = document.getElementById('studioNormalView');
+      const inflightView = document.getElementById('studioInflightView');
+      const attachments = document.getElementById('studioAttachments');
+
+      if (state === 'resting') {
+        normalView.style.display = 'block';
+        inflightView.style.display = 'none';
+        attachments.style.display = 'none';
+      } else if (state === 'attached') {
+        normalView.style.display = 'block';
+        inflightView.style.display = 'none';
+        attachments.style.display = 'flex';
+      } else if (state === 'inflight') {
+        normalView.style.display = 'none';
+        inflightView.style.display = 'block';
+      }
+    }
+
+    function setCockpitState(state) {
+      const card = document.getElementById('cardCockpit');
+      const buttons = card.querySelectorAll('.state-btn');
+      buttons.forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+
+      const normalView = document.getElementById('cockpitNormalView');
+      const inflightView = document.getElementById('cockpitInflightView');
+      const attachments = document.getElementById('cockpitAttachments');
+
+      if (state === 'resting') {
+        normalView.style.display = 'block';
+        inflightView.style.display = 'none';
+        attachments.style.display = 'none';
+      } else if (state === 'attached') {
+        normalView.style.display = 'block';
+        inflightView.style.display = 'none';
+        attachments.style.display = 'flex';
+      } else if (state === 'inflight') {
+        normalView.style.display = 'none';
+        inflightView.style.display = 'block';
+      }
+    }
+  </script>
+</body>
+</html>
