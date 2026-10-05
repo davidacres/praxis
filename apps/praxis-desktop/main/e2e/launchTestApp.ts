@@ -91,7 +91,7 @@ export async function launchTestApp(
   const freeMobilePort = reuse ? undefined : await findFreePort();
   if (!reuse || seedSettings) {
     const isolatedProviders = options?.discoverInstalledCli ? {} : Object.fromEntries(
-      ['claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli'].map(id => [id, { cliPath: path.join(userDataDir, 'missing-cli') }])
+      ['claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli', 'cursor-cli'].map(id => [id, { cliPath: path.join(userDataDir, 'missing-cli') }])
     );
     const seedAi = (seedSettings?.ai ?? {}) as Record<string, unknown>;
     seedSettings = {

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
 import { AcpAgentHost, acpTurnTelemetry, resolveAcpReasoningValue } from './acpAgentHost';
+import { pickPermissionOptionId } from './acpClient';
 
 /**
  * A workflow stage that hits a usage limit is retried on another AI under the same
@@ -227,4 +228,120 @@ test('Codex reports its last turn, which is used as given', () => {
   assert.equal(telemetry.modelId, 'gpt-6.1-sol');
   assert.equal(telemetry.tokenUsage?.inputTokens, 197);
   assert.equal(telemetry.tokenUsage?.totalTokens, 23_498);
+});
+
+test('pickPermissionOptionId matches hyphenated optionIds from Cursor ACP', () => {
+  const options = [
+    { optionId: 'allow-once', name: 'Allow Once', kind: 'allow_once' },
+    { optionId: 'allow-always', name: 'Always Allow', kind: 'allow_always' },
+    { optionId: 'reject-once', name: 'Reject', kind: 'reject_once' }
+  ];
+
+  assert.equal(pickPermissionOptionId('allow_once', options), 'allow-once');
+  assert.equal(pickPermissionOptionId('allow_always', options), 'allow-always');
+  assert.equal(pickPermissionOptionId('deny', options), 'reject-once');
+
+  // Even if kind is not normalized:
+  const rawCursorOptions = [
+    { optionId: 'allow-once', name: 'Allow', kind: 'other' },
+    { optionId: 'reject-once', name: 'Reject', kind: 'other' }
+  ];
+  assert.equal(pickPermissionOptionId('allow_once', rawCursorOptions), 'allow-once');
+  assert.equal(pickPermissionOptionId('deny', rawCursorOptions), 'reject-once');
+});
+
+test('handleCursorCreatePlan records plan, sets task list, and returns accepted', async () => {
+  let recordedPlan: string | undefined;
+  let recordedTasks: unknown[] = [];
+  const fakeSessionManager = {
+    setAgentPlan: (_key: string, plan: string) => { recordedPlan = plan; },
+    setAgentTaskList: (_key: string, tasks: unknown[]) => { recordedTasks = tasks; },
+    appendAgentEvents: () => {}
+  };
+  const agentHost = new AcpAgentHost(fakeSessionManager as never, { appendLine: () => {} });
+  const internals = agentHost as unknown as {
+    handleCursorCreatePlan: (key: string, req: unknown) => Promise<{ outcome: { outcome: string } }>;
+  };
+
+  const res = await internals.handleCursorCreatePlan('TICK-1', {
+    toolCallId: 'call_1',
+    name: 'Refactor layout',
+    overview: 'Clean up layout',
+    plan: '1. Step one\n2. Step two',
+    todos: [
+      { id: '1', content: 'Step one', status: 'completed' },
+      { id: '2', content: 'Step two', status: 'in_progress' }
+    ]
+  });
+
+  assert.equal(res.outcome.outcome, 'accepted');
+  assert.equal(recordedPlan, '1. Step one\n2. Step two');
+  assert.deepEqual(recordedTasks, [
+    { content: 'Step one', status: 'completed', priority: 'medium' },
+    { content: 'Step two', status: 'in_progress', priority: 'medium' }
+  ]);
+});
+
+test('handleCursorUpdateTodos replaces or merges tasks', () => {
+  let storedSession = { taskList: [{ content: 'Initial task', status: 'completed', priority: 'medium' }] };
+  const fakeSessionManager = {
+    getAgentSession: () => storedSession,
+    setAgentTaskList: (_key: string, tasks: unknown[]) => {
+      storedSession = { taskList: tasks as never };
+    }
+  };
+  const agentHost = new AcpAgentHost(fakeSessionManager as never, { appendLine: () => {} });
+  const internals = agentHost as unknown as {
+    handleCursorUpdateTodos: (key: string, req: unknown) => void;
+  };
+
+  // merge = false replaces
+  internals.handleCursorUpdateTodos('TICK-1', {
+    toolCallId: 'call_2',
+    merge: false,
+    todos: [{ id: '1', content: 'Fresh task', status: 'pending' }]
+  });
+  assert.deepEqual(storedSession.taskList, [{ content: 'Fresh task', status: 'pending', priority: 'medium' }]);
+
+  // merge = true updates existing and appends new
+  internals.handleCursorUpdateTodos('TICK-1', {
+    toolCallId: 'call_3',
+    merge: true,
+    todos: [
+      { id: '1', content: 'Fresh task', status: 'in_progress' },
+      { id: '2', content: 'Second task', status: 'pending' }
+    ]
+  });
+  assert.deepEqual(storedSession.taskList, [
+    { content: 'Fresh task', status: 'in_progress', priority: 'medium' },
+    { content: 'Second task', status: 'pending', priority: 'medium' }
+  ]);
+});
+
+test('handleCursorAskQuestion auto-answers when unattended/auto-approve, skips otherwise', async () => {
+  const agentHost = new AcpAgentHost({} as never, { appendLine: () => {} });
+  const internals = agentHost as unknown as {
+    activeTasks: Map<string, unknown>;
+    handleCursorAskQuestion: (key: string, req: unknown) => Promise<{ outcome: unknown }>;
+  };
+
+  const req = {
+    toolCallId: 'call_q',
+    questions: [
+      { id: 'q1', prompt: 'Which framework?', options: [{ id: 'opt1', label: 'React' }, { id: 'opt2', label: 'Vue' }] }
+    ]
+  };
+
+  // Without autoApprove, skips
+  internals.activeTasks.set('TICK-1', { allowPermissionsForTask: false });
+  const skipped = await internals.handleCursorAskQuestion('TICK-1', req);
+  assert.deepEqual(skipped.outcome, { outcome: 'skipped', reason: 'Unattended turn' });
+
+  // With autoApprove, answers first option
+  internals.activeTasks.set('TICK-1', { allowPermissionsForTask: true });
+  const answered = await internals.handleCursorAskQuestion('TICK-1', req);
+  assert.deepEqual(answered.outcome, {
+    outcome: 'answered',
+    answers: [{ questionId: 'q1', selectedOptionIds: ['opt1'] }]
+  });
 });

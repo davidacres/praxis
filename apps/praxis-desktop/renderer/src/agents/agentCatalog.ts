@@ -150,7 +150,8 @@ const RUNTIME_LABELS: Record<string, string> = {
   'claude-code-cli': 'Claude Code',
   'codex-cli': 'Codex',
   'copilot-cli': 'GitHub Copilot',
-  'antigravity-cli': 'Antigravity'
+  'antigravity-cli': 'Antigravity',
+  'cursor-cli': 'Cursor'
 };
 
 /** "Claude Code · project" */

@@ -90,6 +90,16 @@ export const PROVIDER_DESCRIPTORS: Record<BuiltInAiProvider, ProviderDescriptor>
     hostKind: 'acp',
     label: 'Antigravity',
     defaultCommand: 'antigravity-acp'
+  },
+  'cursor-cli': {
+    id: 'cursor-cli',
+    kind: 'cli-agent',
+    hostKind: 'acp',
+    label: 'Cursor (local)',
+    // `agent acp` starts the Cursor CLI as a standard ACP server over stdio.
+    // Confirmed in Cursor documentation (https://cursor.com/docs/cli/acp).
+    defaultCommand: 'agent',
+    defaultArgs: ['acp']
   }
 };
 

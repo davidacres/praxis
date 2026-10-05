@@ -100,7 +100,8 @@ const RECOMMENDATION_CANDIDATE_PROVIDERS: readonly AiProvider[] = [
   'claude-code-cli',
   'codex-cli',
   'copilot-cli',
-  'antigravity-cli'
+  'antigravity-cli',
+  'cursor-cli'
 ];
 
 export interface RecommendationProviderChoice {

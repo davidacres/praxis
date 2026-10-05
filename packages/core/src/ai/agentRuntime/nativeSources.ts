@@ -150,7 +150,7 @@ const LAYOUTS: Record<NativeEcosystem, EcosystemLayout> = {
   },
   cursor: {
     instructions: {
-      project: [{ file: '.cursorrules', readBy: NONE }, { dir: '.cursor/rules', suffix: '.mdc', readBy: NONE }],
+      project: [{ file: '.cursorrules', readBy: ['cursor-cli'] }, { dir: '.cursor/rules', suffix: '.mdc', readBy: ['cursor-cli'] }],
       user: []
     },
     agents: { suffix: '.md', readBy: NONE },

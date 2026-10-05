@@ -2145,6 +2145,16 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     defaultCommand: 'agy',
     notInstalledHint: 'Not found on PATH — install the ACP package or set the executable path below.',
     installPackage: 'agy'
+  },
+  {
+    id: 'cursor-cli',
+    kind: 'cli-agent',
+    label: 'Cursor (local)',
+    keyLabel: '',
+    urlPlaceholder: '',
+    modelPlaceholder: '',
+    defaultCommand: 'agent',
+    notInstalledHint: 'Not found on PATH — install the Cursor CLI (agent) or set the executable path below.'
   }
 ];
 

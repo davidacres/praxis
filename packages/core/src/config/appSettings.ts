@@ -249,7 +249,8 @@ const KNOWN_AI_PROVIDERS: readonly BuiltInAiProvider[] = [
   'claude-code-cli',
   'codex-cli',
   'copilot-cli',
-  'antigravity-cli'
+  'antigravity-cli',
+  'cursor-cli'
 ];
 
 export interface PreviewSettings {

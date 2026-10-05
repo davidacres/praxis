@@ -146,6 +146,8 @@ test('instructions are given only to runtimes that do not read them, once, AGENT
   assert.deepEqual(names('codex-cli'), ['CLAUDE.md', 'GEMINI.md', '.github/copilot-instructions.md', '.cursor/rules/style.mdc']);
   // Copilot reads AGENTS.md and its own instructions.
   assert.deepEqual(names('copilot-cli'), ['CLAUDE.md', 'GEMINI.md', '.cursor/rules/style.mdc']);
+  // Cursor reads .cursorrules and .cursor/rules/*.mdc.
+  assert.deepEqual(names('cursor-cli'), ['AGENTS.md', 'GEMINI.md', '.github/copilot-instructions.md']);
   // An API provider reads nothing: AGENTS.md, and CLAUDE.md is a duplicate of it.
   const api = buildSessionInstructions(instructions, 'anthropic', { projectApproved: true });
   assert.deepEqual(api.included.map(file => file.displayPath), ['AGENTS.md', 'GEMINI.md', '.github/copilot-instructions.md', '.cursor/rules/style.mdc']);

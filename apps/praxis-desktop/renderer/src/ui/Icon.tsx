@@ -101,7 +101,8 @@ export type IconName =
   | 'provider-openai'
   | 'provider-claude'
   | 'provider-codex'
-  | 'provider-antigravity';
+  | 'provider-antigravity'
+  | 'provider-cursor';
 
 const PATHS: Record<IconName, string | string[]> = {
   'sidebar-left': [
@@ -224,7 +225,8 @@ const PATHS: Record<IconName, string | string[]> = {
   'provider-openai': 'M13.2 8 10.6 3.5 5.4 3.5 2.8 8 5.4 12.5 10.6 12.5z',
   'provider-claude': 'M8 2.6V13.4M12.68 5.3 3.32 10.7M12.68 10.7 3.32 5.3',
   'provider-codex': 'M6.2 4.4 2.8 8l3.4 3.6M9.8 4.4 13.2 8l-3.4 3.6',
-  'provider-antigravity': ['M8 12.5V4.5M5.2 7.3 8 4.3l2.8 3', 'M4.5 13.4h7']
+  'provider-antigravity': ['M8 12.5V4.5M5.2 7.3 8 4.3l2.8 3', 'M4.5 13.4h7'],
+  'provider-cursor': ['M8 2.5 13 5.5v5L8 13.5 3 10.5v-5z', 'M8 8V2.5', 'M8 8l5 2.5', 'M8 8l-5 2.5']
 };
 
 /** Glyphs drawn as solid shapes rather than outlines. */

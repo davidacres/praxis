@@ -156,7 +156,25 @@ export function ProviderBrandLogo({ provider, size = 32, className = '' }: Provi
     );
   }
 
-  // 9. Groq
+  // 9. Cursor CLI
+  if (norm === 'cursor-cli' || norm.includes('cursor')) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        fill="currentColor"
+        className={className}
+        style={{ color: 'var(--tone-cursor, #06b6d4)' }}
+        aria-label="Cursor"
+        role="img"
+      >
+        <path d="M12 2.5l8 4.6-8 4.6-8-4.6zM3.5 8.5l8 4.6v8.4l-8-4.6zM20.5 8.5v8.4l-8 4.6v-8.4z" />
+      </svg>
+    );
+  }
+
+  // 10. Groq
   if (norm.includes('groq')) {
     return (
       <svg
