@@ -104,6 +104,8 @@ export function EasyModeSidebar({
               projects={projects}
               runsByProjectId={runsByProjectId}
               activeWorkflowRunId={activeWorkflowRunId}
+              allSessions={allSessions}
+              onSelectSession={onSelectSession}
               onSelectWorkflowRun={onSelectWorkflowRun}
               onNewWorkflowRun={onNewWorkflowRun}
               onRerunWorkflowRun={onRerunWorkflowRun}

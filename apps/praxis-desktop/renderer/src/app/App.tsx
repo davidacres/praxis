@@ -1167,10 +1167,11 @@ export function App() {
     ?? (workspaceProjects.length > 0 ? workspaceProjects[0] : undefined);
 
   // In EasyMode, scope sessions and automations to the active folder/project.
-  // When no project is associated with the workspace yet, fall back to activeSessions.
+  // Exclude internal automation stage sessions so SESSIONS only lists user-initiated sessions.
   const easyModeSessions = useMemo(() => {
-    if (!easyModeProject) return activeSessions;
-    return activeSessions.filter(session => isSessionForProject(session, easyModeProject, agentSessions));
+    const standalone = activeSessions.filter(session => !session.workflowRunId);
+    if (!easyModeProject) return standalone;
+    return standalone.filter(session => isSessionForProject(session, easyModeProject, agentSessions));
   }, [easyModeProject, activeSessions, agentSessions]);
 
   // The sessions view selects its newest session when no explicit selection was

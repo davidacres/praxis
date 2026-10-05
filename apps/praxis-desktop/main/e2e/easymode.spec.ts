@@ -619,3 +619,267 @@ test('opening a folder in EasyMode scopes sessions to that folder and excludes u
   }
 });
 
+test('automation stage sessions appear nested under automation and are excluded from sessions list', async () => {
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-automation-stages-test-'));
+  const settingsPath = path.join(userDataDir, 'test-settings.json');
+
+  const now = new Date().toISOString();
+  const seededSessions: Record<string, unknown> = {
+    'SESSION-USER-CHAT': {
+      issueKey: 'SESSION-USER-CHAT',
+      sessionId: 'sess-user',
+      title: 'Database Schema Design',
+      state: 'idle',
+      startedAt: now,
+      model: 'claude-3-5-sonnet',
+      taskDefinition: { goal: 'Design user and auth schema.' },
+      events: []
+    },
+    'WF-run-999-stage-audit': {
+      issueKey: 'WF-run-999-stage-audit',
+      sessionId: 'sess-audit',
+      title: 'Security Audit Stage',
+      workflowRunId: 'run-999',
+      workflowNodeId: 'node-audit',
+      state: 'completed',
+      startedAt: now,
+      completedAt: now,
+      model: 'claude-3-5-sonnet',
+      taskDefinition: { goal: 'Run security scanner.' },
+      events: []
+    }
+  };
+
+  fs.writeFileSync(
+    path.join(userDataDir, 'ai-sessions.json'),
+    JSON.stringify({ 'praxis.agentSessions': seededSessions }, null, 2)
+  );
+
+  app = await launchTestApp(
+    { preview: { enableEasyMode: true } },
+    { userDataDir, settingsPath },
+    undefined,
+    { openNewSession: false }
+  );
+  const win = app.window;
+
+  // Create a project so runsByProjectId queries listRuns
+  const projectId = await win.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'Deployment Project',
+        key: 'DEPL',
+        type: 'product',
+        purpose: '',
+        brief: {},
+        startingPoint: 'app-storage',
+        workflowStages: [
+          { id: 'todo', name: 'Todo' },
+          { id: 'done', name: 'Done' }
+        ],
+        starterTickets: [{ summary: 'Initial setup', description: '', issueType: 'Task', status: 'Todo' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+    await window.praxis.ai.assignSessionToProject('SESSION-USER-CHAT', project.id);
+    await window.praxis.ai.assignSessionToProject('WF-run-999-stage-audit', project.id);
+    return project.id;
+  });
+
+  // Mock listRuns on ipcMain to return our test workflow run
+  await app.electronApp.evaluate(({ ipcMain }, projId) => {
+    ipcMain.removeHandler('workflows:listRuns');
+    ipcMain.handle('workflows:listRuns', () => [
+      {
+        runId: 'run-999',
+        projectId: projId,
+        workflowName: 'Deployment & Audit Pipeline',
+        status: 'completed',
+        explanation: 'Auditing security and compiling artifacts',
+        stages: [
+          {
+            nodeId: 'node-audit',
+            name: 'Security Audit',
+            type: 'agent',
+            lane: 'done',
+            attempts: 1,
+            sessionKey: 'WF-run-999-stage-audit',
+            chosenModel: 'claude-3-5-sonnet'
+          },
+          {
+            nodeId: 'node-build',
+            name: 'Compile & Package',
+            type: 'agent',
+            lane: 'running',
+            attempts: 1,
+            sessionKey: 'WF-run-999-stage-build',
+            chosenModel: 'claude-3-5-sonnet'
+          }
+        ],
+        startedAt: new Date().toISOString()
+      }
+    ]);
+    ipcMain.removeHandler('workflows:cancelRun');
+    ipcMain.handle('workflows:cancelRun', () => undefined);
+  }, projectId);
+
+  // Reload page to re-trigger workspace and run loading
+  await win.reload();
+  await expect(win.locator('[data-testid="easymode-sidebar"]')).toBeVisible();
+
+  // 1. Verify user chat session is present in SESSIONS
+  await expect(win.locator('[data-testid="easymode-session-card-SESSION-USER-CHAT"]')).toBeVisible();
+
+  // 2. Verify internal automation stage session is NOT in SESSIONS
+  await expect(win.locator('[data-testid="easymode-session-card-WF-run-999-stage-audit"]')).toHaveCount(0);
+
+  // 3. Verify automation card is present in AUTOMATIONS
+  const automationCard = win.locator('[data-testid="easymode-run-run-999"]');
+  await expect(automationCard).toBeVisible();
+
+  // Expand automation stages
+  const expandBtn = automationCard.locator('[data-testid="easymode-run-expand-run-999"]');
+  await expect(expandBtn).toBeVisible();
+  await expandBtn.click();
+
+  // 4. Verify internal stage session is nested under automation card
+  const stageSessionRow = automationCard.locator('[data-testid="easymode-stage-node-audit"]');
+  await expect(stageSessionRow).toBeVisible();
+  await expect(stageSessionRow).toContainText('Security Audit');
+  await expect(stageSessionRow).toContainText('Completed');
+
+  // Take screenshot showing clean nesting and separation
+  await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-automation-nested-stages.png') });
+});
+
+test('classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree', async () => {
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-classic-stages-test-'));
+  const settingsPath = path.join(userDataDir, 'test-settings.json');
+
+  const now = new Date().toISOString();
+  const seededSessions: Record<string, unknown> = {
+    'SESSION-CLASSIC-USER': {
+      issueKey: 'SESSION-CLASSIC-USER',
+      sessionId: 'sess-classic-user',
+      title: 'API Authentication Spec',
+      state: 'idle',
+      startedAt: now,
+      model: 'claude-3-5-sonnet',
+      taskDefinition: { goal: 'Design OAuth endpoints.' },
+      events: []
+    },
+    'WF-run-classic-stage-lint': {
+      issueKey: 'WF-run-classic-stage-lint',
+      sessionId: 'sess-classic-lint',
+      title: 'Lint Codebase Stage',
+      workflowRunId: 'run-888',
+      workflowNodeId: 'node-lint',
+      state: 'completed',
+      startedAt: now,
+      completedAt: now,
+      model: 'claude-3-5-sonnet',
+      taskDefinition: { goal: 'Run ESLint across packages.' },
+      events: []
+    }
+  };
+
+  fs.writeFileSync(
+    path.join(userDataDir, 'ai-sessions.json'),
+    JSON.stringify({ 'praxis.agentSessions': seededSessions }, null, 2)
+  );
+
+  app = await launchTestApp(
+    { preview: { enableEasyMode: false } },
+    { userDataDir, settingsPath },
+    undefined,
+    { openNewSession: false }
+  );
+  const win = app.window;
+
+  // Create project and assign sessions
+  const projectId = await win.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'Backend API Project',
+        key: 'BACK',
+        type: 'product',
+        purpose: '',
+        brief: {},
+        startingPoint: 'app-storage',
+        workflowStages: [
+          { id: 'todo', name: 'Todo' },
+          { id: 'done', name: 'Done' }
+        ],
+        starterTickets: [{ summary: 'Backend setup', description: '', issueType: 'Task', status: 'Todo' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+    await window.praxis.ai.assignSessionToProject('SESSION-CLASSIC-USER', project.id);
+    await window.praxis.ai.assignSessionToProject('WF-run-classic-stage-lint', project.id);
+    return project.id;
+  });
+
+  // Mock listRuns on ipcMain
+  await app.electronApp.evaluate(({ ipcMain }, projId) => {
+    ipcMain.removeHandler('workflows:listRuns');
+    ipcMain.handle('workflows:listRuns', () => [
+      {
+        runId: 'run-888',
+        projectId: projId,
+        workflowName: 'Nightly CI Pipeline',
+        status: 'completed',
+        explanation: 'Nightly verification run',
+        stages: [
+          {
+            nodeId: 'node-lint',
+            name: 'Lint Codebase',
+            type: 'agent',
+            lane: 'done',
+            attempts: 1,
+            sessionKey: 'WF-run-classic-stage-lint',
+            chosenModel: 'claude-3-5-sonnet'
+          }
+        ],
+        startedAt: new Date().toISOString()
+      }
+    ]);
+    ipcMain.removeHandler('workflows:cancelRun');
+    ipcMain.handle('workflows:cancelRun', () => undefined);
+  }, projectId);
+
+  await win.reload();
+
+  // 1. Verify standard Classic sidebar is visible
+  const standardSidebar = win.locator('.sidebar');
+  await expect(standardSidebar).toBeVisible();
+
+  // 2. Standalone user session appears in the project's sessions tree
+  const userSessionNode = win.locator('.session-nav-row', { hasText: 'API Authentication Spec' });
+  await expect(userSessionNode).toBeVisible();
+
+  // 3. Stage session does NOT appear as a standalone session in the sessions tree
+  const stageSessionStandalone = win.locator('.session-nav-row', { hasText: 'Lint Codebase Stage' });
+  await expect(stageSessionStandalone).toHaveCount(0);
+
+  // 4. In Automations, Nightly CI Pipeline run is visible
+  const runRow = win.locator('[data-testid="project-workflow-run-row"]', { hasText: 'Nightly CI Pipeline' });
+  await expect(runRow).toBeVisible();
+
+  // Expand run stages by clicking the automation run
+  const runOpenBtn = runRow.locator('[data-testid="automation-run-open"]');
+  await expect(runOpenBtn).toBeVisible();
+  await runOpenBtn.click();
+
+  // 5. Nested stage session is visible under the automation run
+  const stageRow = runRow.locator('.automation-run-stage-row', { hasText: 'Lint Codebase' });
+  await expect(stageRow).toBeVisible();
+
+  // Take screenshot of classic mode nested stages
+  await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/classic-automation-nested-stages.png') });
+});
+
+
