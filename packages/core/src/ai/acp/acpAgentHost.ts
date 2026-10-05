@@ -20,14 +20,24 @@ import { createUnifiedDiff } from '../tools/unifiedDiff';
 import type { AiSessionManager } from '../aiSessionManager';
 import type { ModelOptions } from '../providers/modelCatalog';
 import type { PermissionDecision } from '../tools';
-import { AcpClientWrapper, type AcpPermissionRequest } from './acpClient';
+import {
+  AcpClientWrapper,
+  type AcpPermissionRequest,
+  type CursorAskQuestionRequest,
+  type CursorAskQuestionResponse,
+  type CursorCreatePlanRequest,
+  type CursorCreatePlanResponse,
+  type CursorGenerateImageNotification,
+  type CursorTaskNotification,
+  type CursorUpdateTodosNotification
+} from './acpClient';
 import { isProviderLimitError, isLimitNoticeReply, extractProviderLimitMessage } from '../providerLimitError';
 import { probeCliProvider, type ProviderCapabilityManifest } from '../providers/providerPreflight';
 import type { ReasoningEffort } from '../providers/reasoningSupport';
 
 /**
  * Phase-2 peer of `VercelAgentService` for `kind: 'cli-agent'` providers —
- * hosts an ACP-compatible CLI agent (Claude Code, Codex) as a subprocess
+ * hosts an ACP-compatible CLI agent (Claude Code, Codex, Cursor) as a subprocess
  * instead of driving `agentLoop.ts`'s chat-completions loop directly. Reuses
  * the same `AiSessionManager` state machine (session records, events,
  * `awaiting_approval` permission state) so the renderer needs no new UI —
@@ -40,10 +50,12 @@ export interface AcpAgentLogger {
 }
 
 export interface AcpAgentStartOptions {
-  /** Executable to spawn — e.g. `claude-agent-acp`, `codex-acp`. */
+  /** Executable to spawn — e.g. `claude-agent-acp`, `codex-acp`, `agent`. */
   command: string;
   args?: string[];
   env?: Record<string, string>;
+  /** Explicit authentication method ID (e.g. `cursor_login`). */
+  authMethod?: string;
   workingDirectory?: string;
   /** Model id to select via `session/set_config_option` before prompting; omit to use the agent's own default. */
   model?: string;
@@ -429,6 +441,7 @@ export class AcpAgentHost {
       command: options.command,
       args: options.args,
       env: options.env,
+      authMethod: options.authMethod,
       workingDirectory: options.workingDirectory?.trim() || process.cwd(),
       requestPermission: () => Promise.resolve('deny'),
       onSessionUpdate: () => {},
@@ -463,6 +476,7 @@ export class AcpAgentHost {
       command: options.command,
       args: options.args,
       env: options.env,
+      authMethod: options.authMethod,
       workingDirectory: options.workingDirectory?.trim() || process.cwd(),
       requestPermission: async () => 'deny',
       onSessionUpdate: update => {
@@ -472,6 +486,8 @@ export class AcpAgentHost {
         content += update.content.text;
         options.onUpdate?.(content);
       },
+      onCursorCreatePlan: async () => ({ outcome: { outcome: 'accepted' as const } }),
+      onCursorAskQuestion: async () => ({ outcome: { outcome: 'skipped' as const, reason: 'Unattended turn' } }),
       logSink: this.logger
     });
     const cancel = () => void client.cancel();
@@ -553,6 +569,81 @@ export class AcpAgentHost {
       issueKey,
       evt('tool_complete', `${ok ? 'Tool' : 'Tool failed'}: ${toolName}`, content, { toolName }),
       1
+    );
+  }
+
+  private handleCursorCreatePlan(issueKey: string, request: CursorCreatePlanRequest): Promise<CursorCreatePlanResponse> {
+    this.sessionManager.setAgentPlan(issueKey, request.plan, { persist: true });
+    this.sessionManager.setAgentTaskList(
+      issueKey,
+      request.todos.map(t => ({
+        content: t.content,
+        status: (t.status === 'cancelled' ? 'completed' : t.status) as 'pending' | 'in_progress' | 'completed',
+        priority: 'medium'
+      }))
+    );
+    this.appendEvent(issueKey, evt('plan', request.overview || request.name || 'Plan created'));
+    return Promise.resolve({ outcome: { outcome: 'accepted' as const } });
+  }
+
+  private handleCursorUpdateTodos(issueKey: string, request: CursorUpdateTodosNotification): void {
+    const mapped = request.todos.map(t => ({
+      content: t.content,
+      status: (t.status === 'cancelled' ? 'completed' : t.status) as 'pending' | 'in_progress' | 'completed',
+      priority: 'medium' as const
+    }));
+    if (!request.merge) {
+      this.sessionManager.setAgentTaskList(issueKey, mapped);
+    } else {
+      const current = this.sessionManager.getAgentSession(issueKey)?.taskList ?? [];
+      const merged = [...current];
+      for (const item of mapped) {
+        const idx = merged.findIndex(m => m.content === item.content);
+        if (idx >= 0) {
+          merged[idx] = item;
+        } else {
+          merged.push(item);
+        }
+      }
+      this.sessionManager.setAgentTaskList(issueKey, merged);
+    }
+  }
+
+  private handleCursorAskQuestion(issueKey: string, request: CursorAskQuestionRequest): Promise<CursorAskQuestionResponse> {
+    const task = this.activeTasks.get(issueKey);
+    if (task?.allowPermissionsForTask) {
+      return Promise.resolve({
+        outcome: {
+          outcome: 'answered' as const,
+          answers: request.questions.map(q => ({
+            questionId: q.id,
+            selectedOptionIds: q.options[0]?.id ? [q.options[0].id] : []
+          }))
+        }
+      });
+    }
+    return Promise.resolve({ outcome: { outcome: 'skipped' as const, reason: 'Unattended turn' } });
+  }
+
+  private handleCursorTask(issueKey: string, request: CursorTaskNotification): void {
+    this.appendEvent(
+      issueKey,
+      evt('tool_complete', `Subagent task: ${request.description}`, request.prompt, {
+        callId: request.toolCallId,
+        toolName: 'subagent',
+        kind: 'shell'
+      })
+    );
+  }
+
+  private handleCursorGenerateImage(issueKey: string, request: CursorGenerateImageNotification): void {
+    this.appendEvent(
+      issueKey,
+      evt('tool_complete', `Generated image: ${request.description}`, request.filePath, {
+        callId: request.toolCallId,
+        toolName: 'generate_image',
+        kind: 'write'
+      })
     );
   }
 
@@ -740,6 +831,7 @@ export class AcpAgentHost {
       command: options.command,
       args: options.args,
       env: options.env,
+      authMethod: options.authMethod,
       workingDirectory: workingDirectory || process.cwd(),
       toolMode,
       mcpServers: options.mcpServers,
@@ -751,6 +843,11 @@ export class AcpAgentHost {
         }
         this.handleSessionUpdate(issue.key, update, active);
       },
+      onCursorCreatePlan: req => this.handleCursorCreatePlan(issue.key, req),
+      onCursorUpdateTodos: req => this.handleCursorUpdateTodos(issue.key, req),
+      onCursorAskQuestion: req => this.handleCursorAskQuestion(issue.key, req),
+      onCursorTask: req => this.handleCursorTask(issue.key, req),
+      onCursorGenerateImage: req => this.handleCursorGenerateImage(issue.key, req),
       logSink: this.logger
     });
 
@@ -972,6 +1069,7 @@ export class AcpAgentHost {
       command: options.command,
       args: options.args,
       env: options.env,
+      authMethod: options.authMethod,
       workingDirectory: workingDirectory || process.cwd(),
       toolMode,
       mcpServers: options.mcpServers,
@@ -981,6 +1079,11 @@ export class AcpAgentHost {
         const active = this.activeTasks.get(issueKey);
         if (active && !active.ending) this.handleSessionUpdate(issueKey, update, active);
       },
+      onCursorCreatePlan: req => this.handleCursorCreatePlan(issueKey, req),
+      onCursorUpdateTodos: req => this.handleCursorUpdateTodos(issueKey, req),
+      onCursorAskQuestion: req => this.handleCursorAskQuestion(issueKey, req),
+      onCursorTask: req => this.handleCursorTask(issueKey, req),
+      onCursorGenerateImage: req => this.handleCursorGenerateImage(issueKey, req),
       logSink: this.logger
     });
     const task: ActiveAcpTask = {

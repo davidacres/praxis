@@ -13,7 +13,7 @@ test.afterEach(async () => {
   app = undefined;
 });
 
-const BUILT_IN = ['openai', 'anthropic', 'gemini', 'z-ai', 'claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli'];
+const BUILT_IN = ['openai', 'anthropic', 'gemini', 'z-ai', 'claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli', 'cursor-cli'];
 
 /**
  * Launches with the named providers enabled and every other built-in turned off,

@@ -29,7 +29,8 @@ async function outOfBudgetSession(): Promise<TestApp['window']> {
           // Only Codex is offered, so a real CLI on this machine is never picked.
           'claude-code-cli': { enabled: false },
           'copilot-cli': { enabled: false },
-          'antigravity-cli': { enabled: false }
+          'antigravity-cli': { enabled: false },
+          'cursor-cli': { enabled: false }
         }
       }
     },

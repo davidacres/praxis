@@ -40,11 +40,92 @@ export interface AcpPermissionRequest {
   options: Array<{ optionId: string; name: string; kind: string }>;
 }
 
+export interface CursorAskQuestionRequest {
+  toolCallId: string;
+  title?: string;
+  questions: Array<{
+    id: string;
+    prompt: string;
+    options: Array<{ id: string; label: string }>;
+    allowMultiple?: boolean;
+  }>;
+}
+
+export interface CursorAskQuestionResponse {
+  outcome:
+    | {
+        outcome: 'answered';
+        answers: Array<{
+          questionId: string;
+          selectedOptionIds: string[];
+        }>;
+      }
+    | { outcome: 'skipped'; reason?: string }
+    | { outcome: 'cancelled' };
+}
+
+export interface CursorCreatePlanRequest {
+  toolCallId: string;
+  name?: string;
+  overview?: string;
+  plan: string;
+  todos: Array<{
+    id: string;
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  }>;
+  isProject?: boolean;
+  phases?: Array<{
+    name: string;
+    todos: Array<{
+      id: string;
+      content: string;
+      status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+    }>;
+  }>;
+}
+
+export interface CursorCreatePlanResponse {
+  outcome:
+    | { outcome: 'accepted'; planUri?: string }
+    | { outcome: 'rejected'; reason?: string }
+    | { outcome: 'cancelled' };
+}
+
+export interface CursorUpdateTodosNotification {
+  toolCallId: string;
+  todos: Array<{
+    id: string;
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  }>;
+  merge: boolean;
+}
+
+export interface CursorTaskNotification {
+  toolCallId: string;
+  description: string;
+  prompt: string;
+  subagentType?: unknown;
+  model?: string;
+  agentId?: string;
+  durationMs?: number;
+}
+
+export interface CursorGenerateImageNotification {
+  toolCallId: string;
+  description: string;
+  filePath?: string;
+  referenceImagePaths?: string[];
+}
+
 export interface AcpClientOptions {
-  /** Executable to spawn (e.g. `claude-agent-acp`, `codex-acp`), resolved on PATH or an absolute path. */
+  /** Executable to spawn (e.g. `claude-agent-acp`, `codex-acp`, `agent`), resolved on PATH or an absolute path. */
   command: string;
   args?: string[];
   env?: Record<string, string>;
+  /** Explicit authentication method ID (e.g. `cursor_login`). Defaults to first non-terminal method advertised by the agent. */
+  authMethod?: string;
   /** Session cwd and the fs sandbox root for `fs/read_text_file`/`fs/write_text_file`. */
   workingDirectory: string;
   toolMode?: AgentToolMode;
@@ -61,11 +142,16 @@ export interface AcpClientOptions {
   >;
   requestPermission: (request: AcpPermissionRequest) => Promise<PermissionDecision>;
   onSessionUpdate: (update: acp.SessionUpdate) => void;
+  onCursorAskQuestion?: (request: CursorAskQuestionRequest) => Promise<CursorAskQuestionResponse>;
+  onCursorCreatePlan?: (request: CursorCreatePlanRequest) => Promise<CursorCreatePlanResponse>;
+  onCursorUpdateTodos?: (notification: CursorUpdateTodosNotification) => void;
+  onCursorTask?: (notification: CursorTaskNotification) => void;
+  onCursorGenerateImage?: (notification: CursorGenerateImageNotification) => void;
   logSink?: LogSink;
 }
 
 /** Maps our 3-way local permission decision onto whichever ACP option the agent actually offered. */
-function pickPermissionOptionId(
+export function pickPermissionOptionId(
   decision: PermissionDecision,
   options: ReadonlyArray<{ optionId: string; kind: string }>
 ): string | undefined {
@@ -76,7 +162,9 @@ function pickPermissionOptionId(
         ? ['allow_always', 'allow_once']
         : ['reject_once', 'reject_always'];
   for (const kind of preferredKinds) {
-    const match = options.find(o => o.kind === kind);
+    const match = options.find(
+      o => o.kind === kind || o.optionId === kind || o.optionId === kind.replace('_', '-')
+    );
     if (match) {
       return match.optionId;
     }
@@ -251,6 +339,32 @@ export class AcpClientWrapper {
       }
     });
 
+    app.onRequest('cursor/ask_question', (p: unknown) => p as CursorAskQuestionRequest, async ctx => {
+      if (this.options.onCursorAskQuestion) {
+        return this.options.onCursorAskQuestion(ctx.params);
+      }
+      return { outcome: { outcome: 'skipped', reason: 'Unattended turn' } };
+    });
+
+    app.onRequest('cursor/create_plan', (p: unknown) => p as CursorCreatePlanRequest, async ctx => {
+      if (this.options.onCursorCreatePlan) {
+        return this.options.onCursorCreatePlan(ctx.params);
+      }
+      return { outcome: { outcome: 'accepted' } };
+    });
+
+    app.onNotification('cursor/update_todos', (p: unknown) => p as CursorUpdateTodosNotification, ctx => {
+      this.options.onCursorUpdateTodos?.(ctx.params);
+    });
+
+    app.onNotification('cursor/task', (p: unknown) => p as CursorTaskNotification, ctx => {
+      this.options.onCursorTask?.(ctx.params);
+    });
+
+    app.onNotification('cursor/generate_image', (p: unknown) => p as CursorGenerateImageNotification, ctx => {
+      this.options.onCursorGenerateImage?.(ctx.params);
+    });
+
     this.connection = app.connect(stream);
 
     this.initializeResponse = await this.connection.agent.request(acpModule.AGENT_METHODS.initialize, {
@@ -263,6 +377,22 @@ export class AcpClientWrapper {
       },
       clientInfo: { name: 'praxis', version: '0.0.0' }
     });
+
+    const authMethod =
+      this.options.authMethod ||
+      this.initializeResponse.authMethods?.find(m => !('type' in m) || (m as { type?: string }).type !== 'terminal')?.id;
+    if (authMethod) {
+      try {
+        await this.connection.agent.request(acpModule.AGENT_METHODS.authenticate, {
+          methodId: authMethod
+        });
+      } catch (err) {
+        this.options.logSink?.appendLine(
+          `[acp] authentication with ${authMethod} failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+        throw err;
+      }
+    }
   }
 
   /** Provider-owned session id, available after session creation or successful native resume. */

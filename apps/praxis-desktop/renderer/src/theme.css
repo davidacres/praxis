@@ -67,6 +67,7 @@
   --tone-claude: #f97316;
   --tone-codex: #3fb950;
   --tone-antigravity: #ec4899;
+  --tone-cursor: #06b6d4;
 
   /* Project identity colors (`ProjectRecord.color`, one of `PROJECT_COLOR_NAMES`
      in core). Constant across themes like the tones above — a project's own
@@ -2968,6 +2969,10 @@ textarea {
 
 .session-chat-message.session-chat-provider-antigravity-cli {
   border-left-color: color-mix(in srgb, var(--tone-antigravity) 70%, var(--border));
+}
+
+.session-chat-message.session-chat-provider-cursor-cli {
+  border-left-color: color-mix(in srgb, var(--tone-cursor) 70%, var(--border));
 }
 
 /* Provider picker dropdown. Rendered via a portal into `document.body`
@@ -8054,6 +8059,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-focus-tab-provider-claude-code-cli svg { color: var(--tone-claude); }
 .session-focus-tab-provider-codex-cli svg { color: var(--tone-codex); }
 .session-focus-tab-provider-antigravity-cli svg { color: var(--tone-antigravity); }
+.session-focus-tab-provider-cursor-cli svg { color: var(--tone-cursor); }
 
 .sessions-focus-new-layout {
   display: flex;
@@ -8556,6 +8562,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-activity-icon-claude-code-cli { color: var(--tone-claude); }
 .session-activity-icon-codex-cli { color: var(--tone-codex); }
 .session-activity-icon-antigravity-cli { color: var(--tone-antigravity); }
+.session-activity-icon-cursor-cli { color: var(--tone-cursor); }
 
 @media (prefers-reduced-motion: reduce) {
   .session-activity-dot,

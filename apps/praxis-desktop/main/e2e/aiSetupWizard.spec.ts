@@ -36,7 +36,7 @@ const NOTHING_CONFIGURED = {
 /** CLI agents resolve through the developer's login shell, so pin each to a path that cannot exist. */
 const missing = (name: string) => ({ cliPath: `/nonexistent/${name}` });
 const seed = (anthropicBaseUrl: string) => ({
-  ai: { providers: { 'claude-code-cli': missing('claude'), 'codex-cli': missing('codex'), 'copilot-cli': missing('copilot'), 'antigravity-cli': missing('agy'), anthropic: { baseUrl: anthropicBaseUrl } } }
+  ai: { providers: { 'claude-code-cli': missing('claude'), 'codex-cli': missing('codex'), 'copilot-cli': missing('copilot'), 'antigravity-cli': missing('agy'), 'cursor-cli': missing('agent'), anthropic: { baseUrl: anthropicBaseUrl } } }
 });
 
 test('an unconfigured profile must connect one provider before reaching the app', async () => {
