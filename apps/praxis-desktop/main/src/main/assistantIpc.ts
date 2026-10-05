@@ -16,9 +16,12 @@ import {
   type AgentTaskDefinition,
   type AiProvider,
   type ReasoningEffort,
+  type WireImageAttachment,
   type IssueDetails
 } from '@praxis/core';
 import { JsonKeyValueStore } from './adapters/jsonKeyValueStore';
+import { assistantCapabilityNote } from './assistantCapability';
+import { sanitizeImages } from './aiIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { broadcastToAllWindows } from './windowBroadcast';
@@ -50,7 +53,7 @@ function stripReviewHeading(reply: string): string {
   return reply.replace(/^## AI Review by [^\n]*\n+/, '');
 }
 
-type AssistantRuntimeOptions = { provider?: AiProvider; model?: string; reasoningEffort?: ReasoningEffort; permissionMode?: AgentPermissionMode; mode?: 'chat' | 'analysis' | 'review'; toolMode?: AgentToolMode; workingDirectory?: string; toolSessionPrefix?: string };
+type AssistantRuntimeOptions = { provider?: AiProvider; model?: string; reasoningEffort?: ReasoningEffort; permissionMode?: AgentPermissionMode; mode?: 'chat' | 'analysis' | 'review'; toolMode?: AgentToolMode; workingDirectory?: string; toolSessionPrefix?: string; images?: WireImageAttachment[] };
 
 const MODE_INSTRUCTIONS = {
   chat: 'Answer the user conversationally.',
@@ -72,7 +75,7 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
   const taskDefinition: AgentTaskDefinition = {
     kind: mode === 'chat' ? 'general' : mode,
     sessionMode: mode,
-    goal: `${systemPrompt}\n\n${MODE_INSTRUCTIONS[mode]}\n\n${userPrompt}`,
+    goal: `${systemPrompt}\n\n${MODE_INSTRUCTIONS[mode]}\n\n${assistantCapabilityNote({ toolMode, mode, workingDirectory })}\n\n${userPrompt}`,
     scope: `Work only in the selected folder: ${workingDirectory}`,
     definitionOfDone: 'Respond to the Virtual Team chat with the result.'
   };
@@ -94,6 +97,7 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
       model: runtime.model?.trim() || undefined,
       workingDirectory,
       toolMode,
+      ...(runtime.images?.length ? { images: runtime.images } : {}),
       permissionMode: runtime.permissionMode ?? 'manual',
       reasoningEffort: runtime.reasoningEffort,
       ...((runtime.permissionMode === 'bypass' || runtime.permissionMode === 'autopilot') ? { autoApprovePermissions: true } : {})
@@ -122,7 +126,7 @@ function completionFor(runtime: AssistantRuntimeOptions): AssistantCompletion {
       permissionMode: runtime.permissionMode,
       // Virtual Team chat never executes tools. The permission chip is retained
       // for composer consistency but does not grant tool access in this chat.
-      systemPrompt: `${systemPrompt}\n\n${MODE_INSTRUCTIONS[runtime.mode ?? 'chat']}\n\nPermission mode selected in the composer: ${runtime.permissionMode ?? 'manual'}. This Virtual Team chat is read-only and cannot execute tools.`,
+      systemPrompt: `${systemPrompt}\n\n${MODE_INSTRUCTIONS[runtime.mode ?? 'chat']}\n\nPermission mode selected in the composer: ${runtime.permissionMode ?? 'manual'}. This Virtual Team chat is read-only and cannot execute tools.\n\n${assistantCapabilityNote({ toolMode: 'project-only', mode: runtime.mode ?? 'chat' })}`,
       userPrompt,
       allowMutations
     });
@@ -134,8 +138,8 @@ export function registerAssistantIpc(): void {
   const changed = () => broadcastToAllWindows('assistant:chatsChanged');
 
   ipcMain.handle('assistant:turn', (_event, rawRequest: AssistantTurnRequest & AssistantRuntimeOptions) => {
-    const { provider, model, reasoningEffort, permissionMode, mode, toolMode, workingDirectory, toolSessionPrefix, ...request } = rawRequest;
-    return runAssistantTurn(request, completionFor({ provider, model, reasoningEffort, permissionMode, mode, toolMode, workingDirectory, toolSessionPrefix }));
+    const { provider, model, reasoningEffort, permissionMode, mode, toolMode, workingDirectory, toolSessionPrefix, images, ...request } = rawRequest;
+    return runAssistantTurn(request, completionFor({ provider, model, reasoningEffort, permissionMode, mode, toolMode, workingDirectory, toolSessionPrefix, images: sanitizeImages(images) }));
   });
   ipcMain.handle('assistant:teamReview', (_event, request: AssistantTeamReviewRequest) => runTeamReview(request, completionFor({})));
 

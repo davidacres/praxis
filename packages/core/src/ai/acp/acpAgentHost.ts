@@ -818,7 +818,7 @@ export class AcpAgentHost {
         );
       }
       task.agentModel = options.model ? undefined : await currentAcpModel(client);
-      const response = await client.prompt(combinedPrompt);
+      const response = await client.prompt(combinedPrompt, options.images);
       if (client.sessionId) {
         this.sessionManager.updateAgentRuntime(issue.key, { runtimeSessionId: client.sessionId });
       }

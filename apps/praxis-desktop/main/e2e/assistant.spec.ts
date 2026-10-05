@@ -158,7 +158,7 @@ test('assistant composer selects provider, model, reasoning, and permission mode
   await expect(win.getByTestId('assistant-reasoning')).toHaveAttribute('data-value', 'medium');
   await expect(win.getByTestId('assistant-mode-chat')).toHaveAttribute('aria-pressed', 'true');
   await expect(win.getByTestId('assistant-tool-mode')).toHaveAttribute('data-value', 'project-only');
-  await expect(win.getByTestId('assistant-working-directory')).toContainText('Attach folder');
+  await expect(win.getByTestId('assistant-working-directory')).toBeVisible(); // inherits the default folder, like the standard composer
   await win.getByTestId('assistant-mode-analysis').click();
   await expect(win.getByTestId('assistant-mode-analysis')).toHaveAttribute('aria-pressed', 'true');
 
@@ -192,8 +192,10 @@ test('assistant composer selects provider, model, reasoning, and permission mode
   const request = mock!.requests.filter(r => r.url.endsWith('/chat/completions')).at(-1)!;
   const body = JSON.parse(request.body) as { model: string; messages: Array<{ content: string }> };
   expect(body.model).toBe('mock-model');
-  expect(body.messages[0]?.content).toContain('Use high reasoning effort.');
-  expect(body.messages[0]?.content).toContain('Analyze the user request and available context.');
+  // Analysis mode with the inherited folder runs as a read-only agent turn: the mode text rides in the task goal.
+  expect(request.body).toContain('Analyze the user request and available context.');
+  expect(request.body).toContain('READ-ONLY tools');
+  expect(request.body).toMatch(/reasoning_effort"?:\s*"high"|Use high reasoning effort\./);
   await win.getByTestId('assistant-panel').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-composer-runtime-controls.png') });
   await win.getByTestId('assistant-pin').click();
   await expect(win.getByTestId('assistant-docked')).toBeVisible();
@@ -223,6 +225,36 @@ test('assistant composer collapses and animates its border while the team replie
   await expect(win.getByTestId('assistant-send')).toBeVisible();
 });
 
+test('an image can be dropped or pasted into the assistant composer and is sent with the turn', async () => {
+  const win = await launch();
+  await win.getByTestId('titlebar-assistant').click();
+  const pngBytes = Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4z8DAAMQACf4B/4PiLjgAAAAASUVORK5CYII=', 'base64'));
+  await win.evaluate(bytes => {
+    const composer = document.querySelector('[data-testid="assistant-composer"]') as HTMLElement;
+    const file = (name: string) => new File([new Uint8Array(bytes)], name, { type: 'image/png' });
+    const dropped = new DataTransfer();
+    dropped.items.add(file('dropped.png'));
+    composer.dispatchEvent(new DragEvent('dragover', { dataTransfer: dropped, bubbles: true, cancelable: true }));
+    composer.dispatchEvent(new DragEvent('drop', { dataTransfer: dropped, bubbles: true, cancelable: true }));
+    const pasted = new DataTransfer();
+    pasted.items.add(file('pasted.png'));
+    (document.querySelector('[data-testid="assistant-input"]') as HTMLTextAreaElement).dispatchEvent(new ClipboardEvent('paste', { clipboardData: pasted, bubbles: true, cancelable: true }));
+  }, pngBytes);
+  const chips = win.getByTestId('assistant-image-chip');
+  await expect(chips).toHaveCount(2);
+  await win.getByTestId('assistant-composer').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-composer-images.png') });
+  await chips.first().getByRole('button', { name: 'Remove image 1' }).click();
+  await expect(chips).toHaveCount(1);
+
+  await win.getByTestId('assistant-input').fill('What is in this image?');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-message-dev')).toBeVisible({ timeout: 30000 });
+  await expect(win.getByTestId('assistant-image-attachments')).toHaveCount(0);
+  const imageRequest = mock!.requests.find(request => request.url.endsWith('/chat/completions') && request.body.includes('image_url'));
+  expect(imageRequest).toBeDefined();
+  expect(imageRequest!.body).toContain('data:image/png;base64,');
+});
+
 test('assistant full tools uses the selected working folder through an agent session', async () => {
   const win = await launch(0, false, { name: 'read_file', arguments: JSON.stringify({ path: 'features/feature-01-demo/task-01-01-fix-login-bug.md' }) });
   await app!.electronApp.evaluate(({ ipcMain }, folder) => {
@@ -230,7 +262,8 @@ test('assistant full tools uses the selected working folder through an agent ses
     ipcMain.handle('dialog:pickFolder', () => folder);
   }, plansDir!);
   await win.getByTestId('titlebar-assistant').click();
-  await expect(win.getByTestId('assistant-working-directory')).toContainText('Attach folder');
+  await win.getByTestId('assistant-working-directory').click();
+  await expect(win.getByTestId('assistant-working-directory')).toContainText(path.basename(plansDir!));
   await chooseOption(win.getByTestId('assistant-tool-mode'), 'full');
   await expect(win.getByTestId('assistant-tool-mode')).toHaveAttribute('data-value', 'full');
   await expect(win.getByTestId('assistant-working-directory')).toContainText(path.basename(plansDir!));
@@ -243,6 +276,8 @@ test('assistant full tools uses the selected working folder through an agent ses
   const toolTurn = sessions.find(session => session.issueKey.startsWith('ASSISTANT-'));
   expect(toolTurn).toBeDefined();
   expect(toolTurn!.toolMode).toBe('full');
+  // Full tools overrides the personas' "advise only" rule so the persona acts or asks whether to proceed.
+  expect(mock!.requests.some(request => request.url.endsWith('/chat/completions') && request.body.includes('you HAVE working tools'))).toBe(true);
   expect(toolTurn!.workingDirectory).toBe(plansDir);
   expect(mock!.requests.some(request => request.url.endsWith('/chat/completions') && JSON.parse(request.body).tools?.length > 0)).toBe(true);
   expect(mock!.requests.some(request => request.url.endsWith('/chat/completions') && request.body.includes('Users cannot log in.'))).toBe(true);
@@ -261,6 +296,8 @@ test('an @mention routes to that persona and transcript suggestions are read-onl
   await input.press('Enter');
 
   await expect(win.getByTestId('assistant-message-qa')).toBeVisible();
+  // With no tools the persona is told it cannot apply changes and must ask whether to proceed, not leave a dead-end proposal.
+  expect(mock!.requests.some(request => request.url.endsWith('/chat/completions') && request.body.includes('cannot apply changes from this chat'))).toBe(true);
   await expect(win.locator('.persona-badge--qa').first()).toBeVisible();
   await expect(win.getByTestId('assistant-message-suggestions')).toHaveText('Suggestions: Go deeper');
   await expect(win.getByTestId('assistant-action-card')).toContainText('Suggested action: Hand the plan to an agent');
@@ -691,7 +728,7 @@ test('the assistant stays readable on every theme and surface pack', async () =>
   }
 });
 
-test('the composer grows with its text up to six lines, then scrolls', async () => {
+test('the composer grows with its text up to the shared cap, then scrolls', async () => {
   const win = await launch();
   await win.getByTestId('titlebar-assistant').click();
   const input = win.getByTestId('assistant-input');
@@ -706,7 +743,7 @@ test('the composer grows with its text up to six lines, then scrolls', async () 
     return { height: el.getBoundingClientRect().height, line, scrolls: el.scrollHeight > el.clientHeight };
   });
   expect(metrics.height).toBeGreaterThan(three);
-  expect(metrics.height).toBeLessThanOrEqual(metrics.line * 6 + 40); // six lines plus the box's padding
+  expect(metrics.height).toBeLessThanOrEqual(200 + 1); // the shared session composer input's max-height
   expect(metrics.scrolls).toBe(true);
   await input.fill('');
   expect((await input.boundingBox())!.height).toBeLessThanOrEqual(initial + 1);

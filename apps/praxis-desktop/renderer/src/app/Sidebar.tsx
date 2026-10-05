@@ -937,6 +937,8 @@ export function Sidebar({
                     };
                     const childCount = (defaultBoard ? 1 : 0) + linkedBoards.length;
                     const projectBoardsCollapsed = collapsed[`project:${project.id}:boards`] ?? false;
+                    // The board is hidden until the project's header button reveals it.
+                    const projectBoardsVisible = collapsed[`project:${project.id}:boards-visible`] ?? false;
                     const projectWorkflowsCollapsed = collapsed[`project:${project.id}:workflows`] ?? false;
                     const projectWorkflowList = projectWorkflows[project.id] ?? [];
                     const projectRuns = runsByProjectId[project.id] ?? [];
@@ -1020,6 +1022,20 @@ export function Sidebar({
                           >
                             <Icon name="server" size={13} />
                           </button>
+                          {childCount > 0 && <button
+                            type="button"
+                            className="project-header-action"
+                            data-testid="project-boards-toggle"
+                            title={`${projectBoardsVisible ? 'Hide' : 'Show'} board · ${project.name}`}
+                            aria-label={`${projectBoardsVisible ? 'Hide' : 'Show'} board for ${project.name}`}
+                            aria-pressed={projectBoardsVisible}
+                            onClick={e => {
+                              e.stopPropagation();
+                              setCollapsed(current => ({ ...current, [`project:${project.id}:boards-visible`]: !projectBoardsVisible }));
+                            }}
+                          >
+                            <Icon name="columns" size={13} />
+                          </button>}
                           <button
                             type="button"
                             className="project-header-action"
@@ -1050,7 +1066,7 @@ export function Sidebar({
                         </div>
                       </div>
                       <div className="project-tree-children">
-                        {childCount > 0 && <>
+                        {childCount > 0 && projectBoardsVisible && <>
                         <button className="sidebar-subsection-toggle" aria-expanded={!projectBoardsCollapsed} onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:boards`]: !projectBoardsCollapsed }))}>
                           <span className={`tree-section-icon${projectBoardsCollapsed ? '' : ' open'}`}><Icon name="columns" size={13} /></span><span>Boards</span><span className="tree-meta">{childCount}</span>
                         </button>

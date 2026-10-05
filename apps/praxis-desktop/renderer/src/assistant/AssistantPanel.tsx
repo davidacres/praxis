@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AgentPermissionMode, AgentToolMode, AiProvider, AiProviderStatus, ModelOptions, ReasoningEffort } from '@praxis/core';
+import type { WireImageAttachment, AgentPermissionMode, AgentToolMode, AiProvider, AiProviderStatus, ModelOptions, ReasoningEffort } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
 import { ReasoningEffortSlider } from '../ai/ReasoningEffortSlider';
@@ -94,15 +94,17 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
     }
     return undefined;
   };
-  const send = (text: string) => {
+  const send = (text: string, images: WireImageAttachment[] = []) => {
+    // Images need an agent turn, so a chat that would otherwise be tool-less runs read-only.
     const effectiveToolMode = mode === 'chat' ? toolMode : 'read-only';
-    if (effectiveToolMode !== 'project-only' && !workingDirectory) {
-      setToolError('Choose a working folder before using assistant tools.');
+    const turnToolMode = images.length > 0 && effectiveToolMode === 'project-only' ? 'read-only' : effectiveToolMode;
+    if (turnToolMode !== 'project-only' && !workingDirectory) {
+      setToolError(images.length > 0 ? 'Choose a working folder before sending images.' : 'Choose a working folder before using assistant tools.');
       return;
     }
     setToolError(undefined);
     a.setDraft('');
-    void a.send(text, a.teamMembers, { provider, model: model || undefined, reasoningEffort, permissionMode, mode, toolMode: effectiveToolMode, workingDirectory: workingDirectory || undefined });
+    void a.send(text, a.teamMembers, { provider, model: model || undefined, reasoningEffort, permissionMode, mode, toolMode: turnToolMode, workingDirectory: workingDirectory || undefined, ...(images.length ? { images } : {}) });
   };
   const sendLabel = a.teamMembers.length === 0
     ? 'Send general chat'
@@ -209,7 +211,7 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
         busy={a.busy}
         focusSignal={focusSignal}
         sendLabel={sendLabel}
-        onSend={() => send(a.draft)}
+        onSend={images => send(a.draft, images)}
         headerOptions={(
           <>
             <div className="session-mode-toggle" role="group" aria-label="Assistant mode">

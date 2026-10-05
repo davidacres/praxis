@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { AgentPermissionMode, AgentSessionRecord, AgentToolMode, AssistantMessage, AssistantProposedAction, AssistantRole, AiProvider, PageAssistantContext, ReasoningEffort } from '@praxis/core';
+import type { WireImageAttachment, AgentPermissionMode, AgentSessionRecord, AgentToolMode, AssistantMessage, AssistantProposedAction, AssistantRole, AiProvider, PageAssistantContext, ReasoningEffort } from '@praxis/core';
 
 export interface AssistantRuntimeOptions {
   provider?: AiProvider;
@@ -9,6 +9,8 @@ export interface AssistantRuntimeOptions {
   mode?: 'chat' | 'analysis' | 'review';
   toolMode?: AgentToolMode;
   workingDirectory?: string;
+  /** Pasted or dropped images; the text-only chat path cannot carry them, so they ride an agent tool turn. */
+  images?: WireImageAttachment[];
 }
 
 /** A page's own handler for an action the assistant proposed on it. Returns a short outcome line. */

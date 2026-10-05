@@ -98,7 +98,7 @@ import {
  * mime type, capped in count and total decoded size so a runaway composer
  * cannot stall the turn or the persisted transcript.
  */
-function sanitizeImages(images: unknown): WireImageAttachment[] {
+export function sanitizeImages(images: unknown): WireImageAttachment[] {
   if (!Array.isArray(images)) return [];
   const allowedMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
   const sanitized: WireImageAttachment[] = [];

@@ -30,7 +30,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
-import { launchTestApp, closeTestApp, dismissSplash, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, dismissSplash, showProjectBoard, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
 let window: Page;
@@ -202,6 +202,7 @@ test('a project created from a folder of existing plans shows them on its board'
   await window.reload();
   await dismissSplash(window);
   await expect(window.getByTestId('project-tree').filter({ hasText: 'Praxis From Folder' })).toBeVisible();
+  await showProjectBoard(window.getByTestId('project-tree').filter({ hasText: 'Praxis From Folder' }));
   await window.getByTestId('project-default-board-nav-item').first().click();
   await expect(window.getByTestId('issue-card').first()).toBeVisible();
 });
