@@ -1677,11 +1677,6 @@ export function App() {
       {...(composerProject
         ? { scopeLabel: composerProject.name, defaultToolMode: composerProject.defaultAiToolMode }
         : {})}
-      connectionCount={connections.length}
-      onOpenConnections={() => {
-        refreshConnections();
-        navigate({ feature: 'connections' });
-      }}
       projectCount={workspaceProjects.length}
       {...(composerProject
         ? { onNewWorkflow: () => setNewWorkflowForProject(composerProject.id) }
@@ -1719,11 +1714,6 @@ export function App() {
         });
         await window.praxis.ai.renameSession(record.issueKey, title);
         navigate({ feature: 'conversations', sessionKey: record.issueKey });
-      }}
-      connectionCount={connections.length}
-      onOpenConnections={() => {
-        refreshConnections();
-        navigate({ feature: 'connections' });
       }}
     />
   );

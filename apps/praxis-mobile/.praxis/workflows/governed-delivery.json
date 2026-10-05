@@ -1,0 +1,394 @@
+{
+  "schemaVersion": 1,
+  "id": "governed-delivery",
+  "name": "Governed delivery",
+  "description": "Plan, implement, then converge review, QA, and security before a human approves.",
+  "scope": "project",
+  "version": 1,
+  "entryNodeId": "plan",
+  "createdAt": "2026-10-05T11:14:22.995Z",
+  "updatedAt": "2026-10-05T11:14:22.995Z",
+  "nodes": [
+    {
+      "type": "agent-task",
+      "id": "plan",
+      "name": "Plan",
+      "x": 0,
+      "y": 160,
+      "inputs": [],
+      "agent": {
+        "agentId": "praxis-planner",
+        "profileId": "praxis-planner",
+        "hostId": "praxis-planner",
+        "scope": "global",
+        "toolMode": "read-only"
+      },
+      "instructions": "Produce an implementation plan for the assigned task.",
+      "outputs": [
+        {
+          "id": "plan-doc",
+          "kind": "plan",
+          "required": true,
+          "description": "The implementation plan."
+        }
+      ],
+      "mutatesWorktree": false,
+      "modelTier": "fast"
+    },
+    {
+      "type": "agent-task",
+      "id": "implement",
+      "name": "Implement",
+      "x": 240,
+      "y": 160,
+      "inputs": [
+        "plan-doc"
+      ],
+      "agent": {
+        "agentId": "praxis-implementer",
+        "profileId": "praxis-implementer",
+        "hostId": "praxis-implementer",
+        "scope": "global",
+        "toolMode": "full",
+        "skillNames": [
+          "verification-report",
+          "visual-verification"
+        ]
+      },
+      "instructions": "Implement the plan. Run automated tests to verify your changes, fix any broken or outdated tests, commit the clean change, and report the ref.",
+      "outputs": [
+        {
+          "id": "change-diff",
+          "kind": "diff",
+          "required": true,
+          "description": "The implemented change."
+        }
+      ],
+      "mutatesWorktree": true,
+      "maxAttempts": 2,
+      "modelTier": "strong"
+    },
+    {
+      "type": "agent-task",
+      "id": "test-contracts",
+      "name": "Praxis Test contracts",
+      "x": 360,
+      "y": 160,
+      "inputs": [
+        "change-diff"
+      ],
+      "agent": {
+        "agentId": "praxis-test-author",
+        "profileId": "praxis-test-author",
+        "hostId": "praxis-test-author",
+        "scope": "global",
+        "toolMode": "full",
+        "skillNames": [
+          "praxis-test-contracts"
+        ]
+      },
+      "instructions": "Inventory the automated QA tests, author or update the structured English Praxis Test catalog, and run its deterministic validator. Ensure automated tests pass and report the exact test count, coverage links, and any stale or ambiguous contracts.",
+      "outputs": [
+        {
+          "id": "test-contracts",
+          "kind": "report",
+          "required": true,
+          "description": "The validated Praxis Test catalog and coverage report."
+        }
+      ],
+      "mutatesWorktree": true,
+      "maxAttempts": 2,
+      "modelTier": "strong"
+    },
+    {
+      "type": "agent-task",
+      "id": "review",
+      "name": "Review",
+      "x": 600,
+      "y": 0,
+      "inputs": [
+        "change-diff",
+        "test-contracts"
+      ],
+      "agent": {
+        "agentId": "praxis-reviewer",
+        "profileId": "praxis-reviewer",
+        "hostId": "praxis-reviewer",
+        "scope": "global",
+        "toolMode": "read-only"
+      },
+      "instructions": "Review the implementation snapshot for correctness and quality using the change-diff input artifact and read-only file access. Do not run shell commands.",
+      "outputs": [
+        {
+          "id": "review-report",
+          "kind": "report",
+          "required": true
+        }
+      ],
+      "mutatesWorktree": false,
+      "satisfiesGate": "review",
+      "modelTier": "standard"
+    },
+    {
+      "type": "check",
+      "id": "install",
+      "name": "Install dependencies",
+      "x": 600,
+      "y": 240,
+      "inputs": [
+        "change-diff"
+      ],
+      "command": "npm",
+      "args": [
+        "ci",
+        "--registry=https://registry.npmjs.org/"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "timeoutMs": 600000,
+      "maxAttempts": 2,
+      "outputs": [
+        {
+          "id": "install-log",
+          "kind": "log",
+          "required": true
+        }
+      ]
+    },
+    {
+      "type": "check",
+      "id": "build",
+      "name": "Build",
+      "x": 840,
+      "y": 240,
+      "inputs": [
+        "change-diff"
+      ],
+      "command": "npm",
+      "args": [
+        "run",
+        "build",
+        "--if-present"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "timeoutMs": 900000,
+      "outputs": [
+        {
+          "id": "build-log",
+          "kind": "log",
+          "required": false
+        }
+      ]
+    },
+    {
+      "type": "agent-task",
+      "id": "qa-repair-agent",
+      "name": "Repair QA failures",
+      "x": 1080,
+      "y": 400,
+      "inputs": [
+        "change-diff",
+        "qa-results"
+      ],
+      "agent": {
+        "agentId": "praxis-implementer",
+        "profileId": "praxis-implementer",
+        "hostId": "praxis-implementer",
+        "scope": "global",
+        "toolMode": "full",
+        "skillNames": [
+          "verification-report"
+        ]
+      },
+      "instructions": "Inspect the failed QA evidence, diagnose the smallest safe fix, implement it in the worktree, and commit the repair. Do not weaken, remove, or bypass tests.",
+      "outputs": [
+        {
+          "id": "qa-repair-diff",
+          "kind": "diff",
+          "required": true
+        }
+      ],
+      "mutatesWorktree": true,
+      "maxAttempts": 1,
+      "modelTier": "strong"
+    },
+    {
+      "type": "check",
+      "id": "qa",
+      "name": "QA",
+      "x": 1080,
+      "y": 240,
+      "inputs": [
+        "change-diff",
+        "test-contracts",
+        "install-log"
+      ],
+      "command": "npm",
+      "args": [
+        "test"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "outputs": [
+        {
+          "id": "qa-results",
+          "kind": "test-results",
+          "required": true
+        }
+      ],
+      "satisfiesGate": "qa",
+      "maxAttempts": 2,
+      "failureRecovery": {
+        "repairNodeId": "qa-repair-agent",
+        "maxAttempts": 2
+      }
+    },
+    {
+      "type": "check",
+      "id": "security",
+      "name": "Security scan",
+      "x": 600,
+      "y": 400,
+      "inputs": [
+        "change-diff"
+      ],
+      "command": "npm",
+      "args": [
+        "audit",
+        "--audit-level=high",
+        "--registry=https://registry.npmjs.org/"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "outputs": [
+        {
+          "id": "security-report",
+          "kind": "report",
+          "required": true
+        }
+      ],
+      "satisfiesGate": "security"
+    },
+    {
+      "type": "join",
+      "id": "gates",
+      "name": "Gates",
+      "x": 1200,
+      "y": 160,
+      "inputs": [],
+      "mode": "all"
+    },
+    {
+      "type": "approval",
+      "id": "approve",
+      "name": "Approve",
+      "x": 1440,
+      "y": 160,
+      "inputs": [
+        "review-report",
+        "test-contracts",
+        "qa-results",
+        "security-report"
+      ],
+      "prompt": "Review, QA, and security have passed. Approve this change for delivery?",
+      "requiredGates": [
+        "review",
+        "qa",
+        "security"
+      ],
+      "allowBypass": false
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-plan-impl",
+      "from": "plan",
+      "to": "implement",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-tests",
+      "from": "implement",
+      "to": "test-contracts",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-tests-review",
+      "from": "test-contracts",
+      "to": "review",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-tests-install",
+      "from": "test-contracts",
+      "to": "install",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-install-build",
+      "from": "install",
+      "to": "build",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-build-qa",
+      "from": "build",
+      "to": "qa",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-qa-repair",
+      "from": "qa",
+      "to": "qa-repair-agent",
+      "on": "failure",
+      "required": false
+    },
+    {
+      "id": "e-tests-sec",
+      "from": "test-contracts",
+      "to": "security",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-review-gates",
+      "from": "review",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-qa-gates",
+      "from": "qa",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-sec-gates",
+      "from": "security",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-gates-approve",
+      "from": "gates",
+      "to": "approve",
+      "on": "success",
+      "required": true
+    }
+  ],
+  "projectId": "project-1789239305854-dg8yni"
+}

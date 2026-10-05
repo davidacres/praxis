@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
+import * as path from 'node:path';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
 let app: TestApp;
@@ -126,6 +127,26 @@ test('normal launch does not include built-in demo data', async () => {
   await window.locator('[data-testid="nav-overview"]').click();
   await expect(window.getByTestId('overview-page')).toBeVisible();
   await expect(window.locator('[data-testid="board-nav-item"]')).toHaveCount(0);
+});
+
+// Proven against the original connectionCount === 0 notice: the first absence assertion fails.
+test('a folder conversation without trackers does not claim to use demo boards', async () => {
+  await closeTestApp(app);
+  app = await launchTestApp(undefined, undefined, undefined, { demoMode: false });
+  window = app.window;
+
+  expect(await window.evaluate(() => window.praxis.connection.list())).toEqual([]);
+  // The isolated launcher supplies a real temporary working folder.
+  await expect(window.getByTestId('new-session-working-directory')).toContainText(path.basename(app.userDataDir));
+  await expect(window.getByText('No tracker connected', { exact: true })).toHaveCount(0);
+
+  await window.getByTestId('conversations-new-btn').click();
+  await expect(window.getByTestId('new-session-view').getByRole('heading', { name: 'New conversation', exact: true })).toBeVisible();
+  await expect(window.getByTestId('new-session-working-directory')).toContainText(path.basename(app.userDataDir));
+  await expect(window.getByText('No tracker connected', { exact: true })).toHaveCount(0);
+  await expect(window.getByText(/You're working against the built-in demo boards/)).toHaveCount(0);
+  await window.getByTestId('new-session-view').locator('textarea').fill('Help me understand this folder.');
+  await window.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/folder-conversation.png') });
 });
 
 test('selecting a board renders its columns and issue cards', async () => {

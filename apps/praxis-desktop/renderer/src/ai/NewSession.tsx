@@ -24,6 +24,7 @@ import {
   providerLabel,
   supportsReasoningEffort
 } from './modelProviders';
+import { ModelConfigurationDialog } from './ModelConfigurationDialog';
 import { ReasoningEffortSlider } from './ReasoningEffortSlider';
 import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionComposerToolbar } from './SessionComposerToolbar';
@@ -98,13 +99,6 @@ export interface NewSessionProps {
   initialGoal?: string;
   /** Seeds the tool-mode toggle — e.g. the scoped project's configured default. */
   defaultToolMode?: AgentToolMode;
-  /**
-   * Number of configured tracker connections. Zero means every board on screen
-   * comes from the built-in demo backend, which is worth saying out loud before
-   * someone starts a session against throwaway data.
-   */
-  connectionCount: number;
-  onOpenConnections: () => void;
   projectCount?: number;
   onNewProject?: () => void;
   /** When scoped to a project, offer a shortcut to create a workflow instead of the new-project callout. */
@@ -147,8 +141,6 @@ export function NewSession({
   boards,
   sessions = [],
   onSubmit,
-  connectionCount,
-  onOpenConnections,
   projectCount = 0,
   onNewProject,
   onNewWorkflow,
@@ -179,7 +171,6 @@ export function NewSession({
   const ticketChipRef = useRef<HTMLButtonElement | null>(null);
   const boardMenuRef = useRef<HTMLDivElement | null>(null);
   const ticketMenuRef = useRef<HTMLDivElement | null>(null);
-  const [dismissed, setDismissed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [uncommittedFiles, setUncommittedFiles] = useState<UncommittedBaseError | undefined>();
@@ -199,13 +190,13 @@ export function NewSession({
   const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
   const workflowOptionsForPicker = workflowOptions ?? [];
   const [modelFilter, setModelFilter] = useState('');
+  const [configuringModels, setConfiguringModels] = useState<AiProvider>();
   const [modelMenuPos, setModelMenuPos] = useState<{ top: number; left: number } | undefined>();
   const modelChipRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const [workflowMenuPos, setWorkflowMenuPos] = useState<{ bottom: number; left: number } | undefined>();
   const workflowChipRef = useRef<HTMLButtonElement | null>(null);
   const workflowMenuRef = useRef<HTMLDivElement | null>(null);
-  const noticeVisible = connectionCount === 0 && !dismissed;
   const selectableBoards = boards.filter(board => board.availability !== 'missing');
   const selectedBoard = selectableBoards.find(board => board.id === selectedBoardId);
   const enabledModelKey = selectedProvider
@@ -594,6 +585,10 @@ export function NewSession({
 
   return (
     <div className="session-view" data-testid="new-session-view">
+      {configuringModels && <ModelConfigurationDialog
+        providerId={configuringModels}
+        onClose={() => { setConfiguringModels(undefined); modelChipRef.current?.focus(); }}
+      />}
       <div className="session-inner">
         {agentContext && (
           <div className="session-agent-context" role="note" data-testid="new-session-agent-context">
@@ -834,31 +829,6 @@ export function NewSession({
             </div>
           )}
 
-          {noticeVisible && (
-            <div className="composer-notice" role="status">
-              <span className="composer-notice-icon">
-                <Icon name="info" size={15} />
-              </span>
-              <div className="composer-notice-body">
-                <div className="composer-notice-title">No tracker connected</div>
-                <div className="composer-notice-text">
-                  You're working against the built-in demo boards. Add a Jira, GitLab, or Live
-                  Folder connection to run sessions on real issues.{' '}
-                  <button className="notice-link" onClick={onOpenConnections}>
-                    Open Connections
-                  </button>
-                </div>
-              </div>
-              <button
-                className="icon-btn icon-btn-sm"
-                aria-label="Dismiss notice"
-                onClick={() => setDismissed(true)}
-              >
-                <Icon name="close" size={13} />
-              </button>
-            </div>
-          )}
-
           <SessionComposerHeader data-testid="new-session-mode-panel">
             <div className="session-mode-toggle" role="group" aria-label="Session mode">
               {(['chat', 'analysis', 'review'] as SessionMode[]).map(option => (
@@ -1017,6 +987,20 @@ export function NewSession({
                       data-testid="new-session-model-filter"
                       autoFocus
                     />
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn-sm"
+                      aria-label="Configure models"
+                      title="Configure models"
+                      data-testid="new-session-model-settings"
+                      disabled={!selectedProvider}
+                      onClick={() => {
+                        setModelMenuPos(undefined);
+                        setConfiguringModels(selectedProvider);
+                      }}
+                    >
+                      <Icon name="gear" size={13} />
+                    </button>
                     <button
                       type="button"
                       className="icon-btn icon-btn-sm"

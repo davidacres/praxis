@@ -14,6 +14,8 @@ const REASONING_EFFORT_OPTIONS: Array<{ value: ReasoningEffort; label: string }>
 type TierName = 'fast' | 'standard' | 'strong';
 
 export interface ModelManagerPanelProps {
+  /** Compact model chips for configuration opened from a composer. */
+  chipLayout?: boolean;
   providerId: AiProvider;
   providerLabel: string;
   /** Undefined means "no curation — every fetched model is offered" (the default). */
@@ -34,6 +36,7 @@ export interface ModelManagerPanelProps {
  * this reflects exactly what a session would see, unfiltered.
  */
 export function ModelManagerPanel({
+  chipLayout = false,
   providerId,
   providerLabel,
   enabledModelIds,
@@ -140,7 +143,7 @@ export function ModelManagerPanel({
   const enabledCount = localEnabledIds === undefined ? totalCount : localEnabledIds.length;
 
   return (
-    <div className="conn-form" data-testid="model-manager-panel">
+    <div className={`conn-form${chipLayout ? ' model-manager-chips' : ''}`} data-testid="model-manager-panel">
       <header className="view-header">
         <span className="view-title">{providerLabel} — Models</span>
         <span className="spacer" />
@@ -151,7 +154,7 @@ export function ModelManagerPanel({
           disabled={loading || !catalog}
           onClick={() => setEnabledIds(undefined)}
         >
-          Select all
+          {chipLayout ? 'Enable all' : 'Select all'}
         </button>
         <button
           type="button"
@@ -160,7 +163,7 @@ export function ModelManagerPanel({
           disabled={loading || !catalog}
           onClick={() => setEnabledIds([])}
         >
-          Select none
+          {chipLayout ? 'Disable all' : 'Select none'}
         </button>
         <button
           type="button"
@@ -173,7 +176,7 @@ export function ModelManagerPanel({
           <Icon name="refresh" size={13} />
         </button>
         <button type="button" className="btn" data-testid="model-manager-back" onClick={onBack}>
-          Back
+          {chipLayout ? 'Done' : 'Back'}
         </button>
       </header>
       <div className="conn-form-body">
@@ -183,8 +186,9 @@ export function ModelManagerPanel({
           </div>
         )}
         <p className="placeholder-text">
-          Only checked models are offered in the composer's per-session Model picker. Leave everything
-          checked (the default) to offer the whole catalog as-is.
+          {chipLayout
+            ? 'Choose the models offered in this provider’s model picker. Changes save automatically.'
+            : "Only checked models are offered in the composer's per-session Model picker. Leave everything checked (the default) to offer the whole catalog as-is."}
           {catalog && (
             <>
               {' '}
@@ -202,13 +206,29 @@ export function ModelManagerPanel({
           value={filter}
           onChange={event => setFilter(event.target.value)}
           data-testid="model-manager-filter"
+          autoFocus={chipLayout}
           style={{ marginBottom: 8 }}
         />
         {loading && <p className="placeholder-text">Loading catalog…</p>}
         {!loading && catalog && (
           <div className="model-manager-list" data-testid="model-manager-list">
             {filteredOptions.length === 0 && <p className="placeholder-text">No matching models.</p>}
-            {filteredOptions.map(option => (
+            {filteredOptions.map(option => chipLayout ? (
+              <button
+                type="button"
+                key={option.value}
+                className="composer-chip model-manager-model-chip"
+                role="switch"
+                aria-checked={isEnabled(option.value)}
+                aria-label={option.name}
+                title={option.value}
+                data-testid={`model-manager-toggle-${option.value}`}
+                onClick={() => toggle(option.value)}
+              >
+                <Icon name={isEnabled(option.value) ? 'check' : 'plus'} size={13} />
+                <span>{option.name}</span>
+              </button>
+            ) : (
               <label className="model-manager-row" key={option.value} data-testid="model-manager-row">
                 <input
                   type="checkbox"

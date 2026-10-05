@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { ModelConfigurationDialog } from './ModelConfigurationDialog';
+import { useSettings } from '../settings/useSettings';
 import type {
   AgentConversationMode,
   AgentSessionRecord,
@@ -309,6 +311,9 @@ function fetchCuratedModels(provider: AiProvider, forceRefresh: boolean): Promis
 }
 
 export function SessionTransitionDialogs({ session, open, position, onClose, onAddProvider }: TransitionDialogsProps) {
+  const { settings } = useSettings();
+  const enabledModelKey = JSON.stringify(curatedModelIds(settings, session.provider) ?? null);
+  const [configuringModels, setConfiguringModels] = useState<AiProvider>();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [options, setOptions] = useState<ModelOptions>();
   const [defaultModel, setDefaultModel] = useState<string>();
@@ -320,6 +325,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
   const [error, setError] = useState<string>();
 
   useEffect(() => {
+    setConfiguringModels(undefined);
     if (!open) return;
     setPendingProvider(undefined);
     setModelFilter('');
@@ -355,7 +361,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
     return () => {
       cancelled = true;
     };
-  }, [open, session.provider]);
+  }, [open, session.provider, enabledModelKey]);
 
   useEffect(() => {
     if (open !== 'handover') return;
@@ -377,7 +383,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || configuringModels) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element;
       if (menuRef.current?.contains(target)) return;
@@ -393,8 +399,12 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [onClose, open]);
+  }, [onClose, open, configuringModels]);
 
+  if (configuringModels) return <ModelConfigurationDialog
+    providerId={configuringModels}
+    onClose={() => setConfiguringModels(undefined)}
+  />;
   if (!open || !position) return null;
 
   const changeModel = async (model: string) => {
@@ -698,6 +708,17 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
               data-testid="session-model-filter"
               autoFocus
             />
+            <button
+              type="button"
+              className="model-menu-refresh"
+              aria-label="Configure models"
+              title="Configure models"
+              data-testid="session-model-settings"
+              disabled={!session.provider || busy}
+              onClick={() => setConfiguringModels(session.provider)}
+            >
+              <Icon name="gear" size={14} />
+            </button>
             <button
               type="button"
               className="model-menu-refresh"
