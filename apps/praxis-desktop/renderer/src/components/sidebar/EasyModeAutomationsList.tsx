@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import type { ProjectRecord, WorkflowRunSummary } from '@praxis/core';
+import React, { useState, useMemo } from 'react';
+import type { AgentSessionRecord, ProjectRecord, WorkflowRunSummary } from '@praxis/core';
 import { formatStarted } from '../../ai/sessionNav';
 import { Icon } from '../../ui/Icon';
 
@@ -7,7 +7,9 @@ export interface EasyModeAutomationsListProps {
   projects: ProjectRecord[];
   runsByProjectId: Record<string, WorkflowRunSummary[]>;
   activeWorkflowRunId?: string;
+  allSessions?: AgentSessionRecord[];
   onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
+  onSelectSession?: (issueKey: string) => void;
   onNewWorkflowRun?: () => void;
   onRerunWorkflowRun?: (project: ProjectRecord, run: WorkflowRunSummary) => void;
 }
@@ -43,14 +45,39 @@ function resolveRunStatusLabel(status: WorkflowRunSummary['status']): string {
   }
 }
 
+function stageLaneLabel(lane: WorkflowRunSummary['stages'][number]['lane']): string {
+  switch (lane) {
+    case 'idle': return 'Pending';
+    case 'ready': return 'Ready';
+    case 'running': return 'Running';
+    case 'awaiting': return 'Needs review';
+    case 'done': return 'Completed';
+    case 'failed': return 'Failed';
+    case 'skipped': return 'Skipped';
+    case 'paused': return 'Paused';
+    default: return lane;
+  }
+}
+
 export function EasyModeAutomationsList({
   projects,
   runsByProjectId,
   activeWorkflowRunId,
+  allSessions,
   onSelectWorkflowRun,
+  onSelectSession,
   onNewWorkflowRun,
   onRerunWorkflowRun
 }: EasyModeAutomationsListProps) {
+  const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (runId: string, currentlyExpanded: boolean) => {
+    setExpandedRuns(prev => ({
+      ...prev,
+      [runId]: !currentlyExpanded
+    }));
+  };
+
   // Aggregate runs from all projects, sorted newest first
   const allRuns = useMemo(() => {
     const list: Array<{ project: ProjectRecord; run: WorkflowRunSummary }> = [];
@@ -105,70 +132,125 @@ export function EasyModeAutomationsList({
 
         const activeStage = run.stages?.find(s => s.lane === 'running' || s.lane === 'awaiting');
         const showStageBadge = run.status === 'running' || run.status === 'awaiting-approval';
+        const hasStages = Array.isArray(run.stages) && run.stages.length > 0;
+        const isExpanded = expandedRuns[run.runId] ?? (run.status === 'running' || run.status === 'awaiting-approval' || isSelected);
 
         return (
           <div
             key={run.runId}
-            className={`easymode-automation-row ${isSelected ? 'is-selected' : ''}`}
+            className={`easymode-automation-card ${isSelected ? 'is-selected' : ''}`}
             data-testid={`easymode-run-${run.runId}`}
-            onClick={() => onSelectWorkflowRun(project, run.runId)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelectWorkflowRun(project, run.runId);
-              }
-            }}
           >
-            <span
-              className={`easymode-status ${statusClass}`}
-              aria-label={`Status: ${statusLabel}`}
-              title={statusLabel}
-            />
-            <div className="easymode-automation-row__details">
-              <div className="easymode-automation-row__head-row">
-                <span className="easymode-automation-row__title" title={run.workflowName}>
-                  {run.workflowName}
-                </span>
-                {showStageBadge && (
-                  <span
-                    className="easymode-stage-badge"
-                    data-testid={`easymode-stage-badge-${run.runId}`}
-                    title={`Current stage: ${activeStage?.name || run.status}`}
-                  >
-                    {activeStage?.name || (run.status === 'awaiting-approval' ? 'Approval' : 'In progress')}
+            <div
+              className={`easymode-automation-row ${isSelected ? 'is-selected' : ''}`}
+              onClick={() => onSelectWorkflowRun(project, run.runId)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelectWorkflowRun(project, run.runId);
+                }
+              }}
+            >
+              <span
+                className={`easymode-status ${statusClass}`}
+                aria-label={`Status: ${statusLabel}`}
+                title={statusLabel}
+              />
+              <div className="easymode-automation-row__details">
+                <div className="easymode-automation-row__head-row">
+                  <span className="easymode-automation-row__title" title={run.workflowName}>
+                    {run.workflowName}
                   </span>
-                )}
+                  {showStageBadge && (
+                    <span
+                      className="easymode-stage-badge"
+                      data-testid={`easymode-stage-badge-${run.runId}`}
+                      title={`Current stage: ${activeStage?.name || run.status}`}
+                    >
+                      {activeStage?.name || (run.status === 'awaiting-approval' ? 'Approval' : 'In progress')}
+                    </span>
+                  )}
+                </div>
+                <span className="easymode-automation-row__project" title={project.name}>
+                  {project.name}
+                </span>
               </div>
-              <span className="easymode-automation-row__project" title={project.name}>
-                {project.name}
-              </span>
+              {timeFormatted && (
+                <span className="easymode-automation-row__time">
+                  {timeFormatted}
+                </span>
+              )}
+              {hasStages && (
+                <button
+                  type="button"
+                  className="easymode-automation-expand-btn"
+                  aria-label={isExpanded ? 'Hide stages' : 'Show stages'}
+                  title={isExpanded ? 'Hide stages' : 'Show stages'}
+                  data-testid={`easymode-run-expand-${run.runId}`}
+                  onClick={e => {
+                    e.stopPropagation();
+                    toggleExpand(run.runId, isExpanded);
+                  }}
+                >
+                  <Icon name={isExpanded ? 'chevron-down' : 'chevron-right'} size={11} />
+                </button>
+              )}
+              <div className="easymode-automation-row__actions">
+                <button
+                  type="button"
+                  className="easymode-automation-action-btn"
+                  title={run.status === 'running' ? 'View active run' : 'Rerun automation'}
+                  aria-label={run.status === 'running' ? 'View active run' : 'Rerun automation'}
+                  data-testid={`easymode-run-action-${run.runId}`}
+                  onClick={e => {
+                    e.stopPropagation();
+                    if (onRerunWorkflowRun) {
+                      onRerunWorkflowRun(project, run);
+                    } else {
+                      onSelectWorkflowRun(project, run.runId);
+                    }
+                  }}
+                >
+                  <Icon name={run.status === 'running' ? 'focus' : 'play'} size={11} />
+                </button>
+              </div>
             </div>
-            {timeFormatted && (
-              <span className="easymode-automation-row__time">
-                {timeFormatted}
-              </span>
+
+            {/* Nested Stage Sessions under the Automation */}
+            {hasStages && isExpanded && (
+              <div className="easymode-automation-stages" data-testid={`easymode-stages-${run.runId}`}>
+                {run.stages.map(stage => {
+                  const isStageLive = stage.lane === 'running' || stage.lane === 'awaiting';
+                  return (
+                    <div
+                      key={stage.nodeId}
+                      className={`easymode-stage-session-row${isStageLive ? ' is-live' : ''}`}
+                      data-testid={`easymode-stage-${stage.nodeId}`}
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (stage.sessionKey && onSelectSession) {
+                          onSelectSession(stage.sessionKey);
+                        } else {
+                          onSelectWorkflowRun(project, run.runId);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      title={`Stage: ${stage.name} (${stageLaneLabel(stage.lane)})`}
+                    >
+                      <span className={`easymode-stage-dot easymode-stage-dot--${stage.lane}`} />
+                      <span className="easymode-stage-name">{stage.name}</span>
+                      {stage.chosenModel && (
+                        <span className="easymode-stage-model">{stage.chosenModel}</span>
+                      )}
+                      <span className="easymode-stage-status">{stageLaneLabel(stage.lane)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             )}
-            <div className="easymode-automation-row__actions">
-              <button
-                type="button"
-                className="easymode-automation-action-btn"
-                title={run.status === 'running' ? 'View active run' : 'Rerun automation'}
-                aria-label={run.status === 'running' ? 'View active run' : 'Rerun automation'}
-                data-testid={`easymode-run-action-${run.runId}`}
-                onClick={e => {
-                  e.stopPropagation();
-                  if (onRerunWorkflowRun) {
-                    onRerunWorkflowRun(project, run);
-                  } else {
-                    onSelectWorkflowRun(project, run.runId);
-                  }
-                }}
-              >
-                <Icon name={run.status === 'running' ? 'focus' : 'play'} size={11} />
-              </button>
-            </div>
           </div>
         );
       })}

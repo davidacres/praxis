@@ -12193,6 +12193,14 @@ button.session-chat-attachment {
 .automation-run-detail-actions { display: flex; align-items: center; gap: 12px; }
 .automation-run-detail-actions button { padding: 0; border: 0; color: var(--accent); background: transparent; font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; }
 .automation-run-detail-actions button:hover { text-decoration: underline; }
+.automation-run-stages-list { display: flex; flex-direction: column; gap: 1px; padding: 4px 8px 8px calc(var(--tree-indent-3) - 2px); }
+.automation-run-stage-row { display: flex; align-items: center; gap: 7px; min-height: 24px; padding: 2px 6px; border-radius: var(--radius-xs, 3px); font-size: 11px; color: var(--text-secondary); cursor: pointer; transition: background 120ms ease, color 120ms ease; }
+.automation-run-stage-row:hover { background: var(--bg-hover); color: var(--text); }
+.automation-run-stage-row.is-selected { background: var(--bg-active); color: var(--text); font-weight: 550; }
+.automation-run-stage-row .automation-step-mark { flex-shrink: 0; }
+.automation-stage-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.automation-stage-model { font-size: 9px; color: var(--text-tertiary); padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--text-tertiary) 14%, transparent); }
+.automation-stage-status { font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 @keyframes automation-current-pulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
 .project-session-empty { display: flex; min-height: 30px; align-items: center; gap: 6px; padding: 0 10px 0 var(--tree-indent-2); color: var(--text-tertiary); font-size: var(--text-xs); }
 .project-session-empty-action { display: inline-flex; width: 22px; height: 22px; align-items: center; justify-content: center; margin-left: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-tertiary); background: transparent; cursor: pointer; }
@@ -17398,6 +17406,124 @@ button.session-chat-attachment {
 .easymode-automation-action-btn:hover {
   background: var(--bg-hover, rgba(255, 255, 255, 0.1));
   color: var(--accent);
+}
+
+.easymode-automation-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-sm, 6px);
+  margin-bottom: 4px;
+  overflow: hidden;
+  transition: background-color 0.12s ease;
+}
+
+.easymode-automation-card.is-selected {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.easymode-automation-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: var(--radius-xs, 3px);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  pointer-events: auto;
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+
+.easymode-automation-expand-btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.1));
+  color: var(--text);
+}
+
+.easymode-automation-stages {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 8px 6px 20px;
+  background: color-mix(in srgb, var(--bg-sunken, #000) 40%, transparent);
+  border-radius: 0 0 var(--radius-sm, 6px) var(--radius-sm, 6px);
+}
+
+.easymode-stage-session-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  padding: 3px 6px;
+  border-radius: var(--radius-xs, 4px);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.easymode-stage-session-row:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text);
+}
+
+.easymode-stage-session-row.is-live {
+  color: var(--text);
+}
+
+.easymode-stage-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-tertiary);
+}
+
+.easymode-stage-dot--running {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: easymodePulse 1.8s infinite ease-in-out;
+}
+
+.easymode-stage-dot--done {
+  background: var(--tone-success, #23c552);
+}
+
+.easymode-stage-dot--failed {
+  background: var(--tone-danger, #f43f5e);
+}
+
+.easymode-stage-dot--awaiting,
+.easymode-stage-dot--paused {
+  background: var(--tone-warn, #eab308);
+}
+
+.easymode-stage-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.easymode-stage-model {
+  font-size: 9px;
+  color: var(--text-tertiary);
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text-tertiary) 14%, transparent);
+}
+
+.easymode-stage-status {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── EasyMode Center Canvas ─────────────────────────────────────────── */

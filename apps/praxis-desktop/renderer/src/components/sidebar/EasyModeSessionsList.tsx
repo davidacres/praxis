@@ -28,9 +28,10 @@ export function EasyModeSessionsList({
 }: EasyModeSessionsListProps) {
   const [filterQuery, setFilterQuery] = useState('');
 
-  // Only display root sessions at top level; subagents appear inside their parent session's card
+  // Only display user root sessions at top level; subagents appear inside their parent session's card,
+  // and automation stage sessions appear under their respective automation.
   const rootSessions = useMemo(() => {
-    return sessions.filter(s => !s.parentSessionKey);
+    return sessions.filter(s => !s.parentSessionKey && !s.workflowRunId);
   }, [sessions]);
 
   const filteredSessions = useMemo(() => {

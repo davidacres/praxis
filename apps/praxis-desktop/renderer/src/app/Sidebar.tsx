@@ -543,6 +543,7 @@ function AutomationRunRow({
   sessions,
   active,
   onSelectWorkflowRun,
+  onSelectSession,
   onCancelWorkflowRun,
   onDeleteWorkflowRun,
   onArchiveWorkflowRun
@@ -552,6 +553,7 @@ function AutomationRunRow({
   sessions: AgentSessionRecord[];
   active: boolean;
   onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
+  onSelectSession?: (issueKey: string) => void;
   onCancelWorkflowRun: (runId: string) => void | Promise<void>;
   onDeleteWorkflowRun: (project: ProjectRecord, run: WorkflowRunSummary) => void;
   onArchiveWorkflowRun?: (runId: string, archived: boolean) => Promise<void>;
@@ -676,6 +678,38 @@ function AutomationRunRow({
                 <button type="button" data-testid="automation-inline-open-run" onClick={() => onSelectWorkflowRun(project, run.runId)}>Open full run</button>
               </div>
             </div>
+            {run.stages && run.stages.length > 0 && (
+              <div className="automation-run-stages-list" data-testid={`project-run-stages-${run.runId}`}>
+                {run.stages.map(stage => {
+                  const isStageSelected = stage.nodeId === selectedStageId;
+                  return (
+                    <div
+                      key={stage.nodeId}
+                      className={`automation-run-stage-row tree-row${isStageSelected ? ' is-selected' : ''}`}
+                      data-testid={`automation-stage-row-${stage.nodeId}`}
+                      onClick={() => {
+                        setSelectedStageId(stage.nodeId);
+                        if (stage.sessionKey && onSelectSession) {
+                          onSelectSession(stage.sessionKey);
+                        } else {
+                          onSelectWorkflowRun(project, run.runId);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      title={`Stage: ${stage.name} (${stageLaneLabel(stage.lane)})`}
+                    >
+                      <span className={`automation-step-mark automation-step-mark--${stage.lane}`} aria-hidden>
+                        <Icon name={stageLaneIcon(stage.lane)} size={11} />
+                      </span>
+                      <span className="automation-stage-name">{stage.name}</span>
+                      {stage.chosenModel && <span className="automation-stage-model">{stage.chosenModel}</span>}
+                      <span className="automation-stage-status">{stageLaneLabel(stage.lane)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1362,6 +1396,7 @@ export function Sidebar({
                             sessions={sessions}
                             active={activeFeature === 'workflows' && activeWorkflowRunId === run.runId}
                             onSelectWorkflowRun={onSelectWorkflowRun}
+                            onSelectSession={onSelectSession}
                             onCancelWorkflowRun={onCancelWorkflowRun}
                             onDeleteWorkflowRun={onDeleteWorkflowRun}
                             onArchiveWorkflowRun={onArchiveWorkflowRun}
@@ -1738,7 +1773,7 @@ function SessionsNav({
       const parent = session.parentSessionKey;
       if (parent && parent !== session.issueKey && known.has(parent)) {
         children.set(parent, [...(children.get(parent) ?? []), session]);
-      } else {
+      } else if (!session.workflowRunId) {
         top.push(session);
       }
     }
