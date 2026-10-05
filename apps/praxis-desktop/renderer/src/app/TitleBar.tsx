@@ -37,6 +37,9 @@ export interface TitleBarProps {
   mode?: SidebarMode;
   onToggleMode?: () => void;
   onModeChange?: (mode: SidebarMode) => void;
+  easyMode?: boolean;
+  onToggleEasyMode?: () => void;
+  onOpenFolder?: () => void;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
   auxVisible: boolean;
@@ -86,6 +89,9 @@ export function TitleBar({
   mode = 'classic',
   onToggleMode,
   onModeChange,
+  easyMode = false,
+  onToggleEasyMode,
+  onOpenFolder,
   sidebarVisible,
   onToggleSidebar,
   auxVisible,
@@ -291,6 +297,11 @@ export function TitleBar({
                   <Icon name="archive" size={13} /><span>Save to file</span>
                 </button>
               )}
+              {onOpenFolder && (
+                <button role="menuitem" data-testid="workspace-menu-open-folder" onClick={() => { onOpenFolder(); setWorkspaceMenuOpen(false); }}>
+                  <Icon name="folder" size={13} /><span>Open folder</span>
+                </button>
+              )}
               {onOpenWorkspace && (
                 <button role="menuitem" onClick={() => { onOpenWorkspace(); setWorkspaceMenuOpen(false); }}>
                   <Icon name="folder-open" size={13} /><span>Open workspace file</span>
@@ -365,19 +376,23 @@ export function TitleBar({
         )}
 
         <button
-          className="icon-btn icon-btn-sm"
-          aria-label={mode === 'classic' ? 'Switch to Work mode' : 'Switch to Classic mode'}
-          title={mode === 'classic' ? 'Classic mode (click to switch to Work mode)' : 'Work mode (click to switch to Classic mode)'}
+          className={`icon-btn icon-btn-sm${easyMode ? ' active' : ''}`}
+          aria-label={easyMode ? 'Switch to Classic mode (⌘⇧E / Ctrl+Shift+E)' : 'Switch to EasyMode (⌘⇧E / Ctrl+Shift+E)'}
+          title={easyMode ? 'EasyMode (⌘⇧E / Ctrl+Shift+E to switch to Classic mode)' : 'Classic mode (⌘⇧E / Ctrl+Shift+E to switch to EasyMode)'}
+          aria-pressed={easyMode}
+          data-toggle="easymode"
           onClick={() => {
-            if (onToggleMode) {
+            if (onToggleEasyMode) {
+              onToggleEasyMode();
+            } else if (onToggleMode) {
               onToggleMode();
             } else if (onModeChange) {
               onModeChange(mode === 'classic' ? 'work' : 'classic');
             }
           }}
-          data-testid={mode === 'classic' ? 'mode-work' : 'mode-classic'}
+          data-testid={easyMode ? 'mode-classic' : 'mode-easymode'}
         >
-          <Icon name={mode === 'classic' ? 'columns' : 'robot'} size={14} />
+          <Icon name={easyMode ? 'sparkles' : 'columns'} size={14} />
         </button>
       </div>
 

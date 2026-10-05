@@ -50,6 +50,7 @@ import { NewProjectWizard } from '../projects/NewProjectWizard';
 import { AddProjectDialog, type AddProjectChoice } from '../projects/AddProjectDialog';
 import { ProjectHome } from '../projects/ProjectHome';
 import { ProjectWorkspace } from '../projects/ProjectWorkspace';
+import { EasyModeCanvas } from '../projects/EasyModeCanvas';
 import { OverviewPage } from './OverviewPage';
 import { WorkspaceDialog } from './WorkspaceDialog';
 import { GettingStarted } from './GettingStarted';
@@ -878,8 +879,8 @@ export function App() {
     return project;
   }, []);
 
-  const openExistingFolder = useCallback(async () => {
-    const folder = await window.praxis.dialog.pickFolder('Open existing project folder');
+  const openExistingFolder = useCallback(async (preselectedFolder?: string) => {
+    const folder = preselectedFolder ?? await window.praxis.dialog.pickFolder('Open existing project folder');
     if (!folder) return false;
     const workspace = await window.praxis.workspaces.openFolder(folder);
     if (!workspace) throw new Error('Praxis could not open that folder.');
@@ -903,8 +904,9 @@ export function App() {
     refreshBoards();
     refreshConnections();
     navigate({ projectId: project.id });
+    void updateSettings({ preview: { enableEasyMode: true } });
     return true;
-  }, [createFileOnlyProjectInWorkspace, navigate, refreshBoards, refreshConnections, touchWorkspace]);
+  }, [createFileOnlyProjectInWorkspace, navigate, refreshBoards, refreshConnections, touchWorkspace, updateSettings]);
 
   // "Skip for now" means "get out of my way", not "leave me stranded". Without
   // an active workspace the shell cannot create or import a project at all —
@@ -1318,10 +1320,14 @@ export function App() {
         event.preventDefault();
         toggleAssistant();
       }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'e') {
+        event.preventDefault();
+        void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } });
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [aiSetupNeeded, navigate, openQuickSession, toggleAssistant]);
+  }, [aiSetupNeeded, navigate, openQuickSession, toggleAssistant, settings?.preview?.enableEasyMode, updateSettings]);
 
   const featureCounts = useMemo<Partial<Record<FeatureId, number>>>(
     () => ({
@@ -1417,6 +1423,9 @@ export function App() {
     entries.push({ id: 'action:new-conversation', label: 'New conversation', group: 'Go to', icon: 'chats', keywords: 'chat talk brainstorm ask', run: () => navigate({ newConversation: true }) });
     entries.push({ id: 'action:quick-session', label: 'Quick session', group: 'Go to', icon: 'zap', keywords: 'quick change workflow fast immediate', run: openQuickSession });
     entries.push({ id: 'action:add-project', label: 'Add project', group: 'Go to', icon: 'plus', keywords: 'new existing folder import', run: () => requestAddProject() });
+    entries.push({ id: 'action:open-folder', label: 'Open folder', group: 'Go to', icon: 'folder', keywords: 'open folder directory existing project easy mode', run: () => void openExistingFolder() });
+    entries.push({ id: 'action:toggle-easymode', label: 'Toggle EasyMode', hint: '⌘⇧E', group: 'Go to', icon: 'sparkles', keywords: 'toggle easy mode simple sidebar shortcut', run: () => void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } }) });
+    entries.push({ id: 'action:toggle-work-mode', label: 'Toggle work mode', group: 'Go to', icon: 'columns', keywords: 'work mode boards classic', run: () => setMode(m => m === 'classic' ? 'work' : 'classic') });
     if (inSession) {
       entries.push({ id: 'action:toggle-focus-mode', label: 'Toggle focus mode', group: 'Go to', icon: 'layout-focus', keywords: 'zen hide panels sidebars focus', run: toggleFocusMode });
     }
@@ -1471,7 +1480,7 @@ export function App() {
       entries.push({ id: `settings:${id}`, label, hint: 'Settings', group: 'Settings', icon: 'gear', run: () => setSettingsDialogCategory(id) });
     });
     return entries;
-  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestAddProject, toggleFocusMode, inSession, toggleAssistant]);
+  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestAddProject, openExistingFolder, updateSettings, settings?.preview?.enableEasyMode, toggleFocusMode, inSession, toggleAssistant]);
 
   /** Four stops over controls the shell already renders — see Walkthrough. */
   const walkthroughStops = useMemo<WalkthroughStop[]>(() => [
@@ -1971,6 +1980,28 @@ export function App() {
         />
       );
     }
+    const activeProject = selectedProject ?? (workspaceProjects.length > 0 ? workspaceProjects[0] : undefined);
+    if (settings?.preview.enableEasyMode && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments' && (!route.feature || route.feature === 'overview')) {
+      return (
+        <EasyModeCanvas
+          project={activeProject}
+          sessions={agentSessions}
+          settings={settings}
+          updateSettings={updateSettings}
+          onStartSession={goal => navigate({ newSession: true, ...(activeProject ? { projectId: activeProject.id } : {}), ...(goal ? { newSessionGoal: goal } : {}) })}
+          onSelectSession={sessionKey => {
+            const session = agentSessions.find(candidate => candidate.issueKey === sessionKey);
+            navigate(session && isConversationSession(session)
+              ? { feature: 'conversations', sessionKey }
+              : { feature: 'sessions', sessionKey });
+          }}
+          onOpenFolder={openExistingFolder}
+          onOpenGit={activeProject?.workspaceFolder ? () => navigate({ projectId: activeProject.id, feature: 'git' }) : undefined}
+          onOpenAutomations={activeProject ? () => navigate({ projectId: activeProject.id, feature: 'workflows' }) : undefined}
+          onOpenSessions={() => navigate({ feature: 'sessions' })}
+        />
+      );
+    }
     if (selectedProject && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments') {
       return <ProjectWorkspace project={selectedProject} sessions={agentSessions} onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })} onStartTour={startWalkthrough} />;
     }
@@ -2274,6 +2305,9 @@ export function App() {
         mode={mode}
         onToggleMode={() => setMode(m => m === 'classic' ? 'work' : 'classic')}
         onModeChange={setMode}
+        easyMode={Boolean(settings?.preview?.enableEasyMode)}
+        onToggleEasyMode={() => void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } })}
+        onOpenFolder={openExistingFolder}
         onOpenWhatsNew={() => setWhatsNewOpen(true)}
         settingsOpen={settingsDialogCategory !== undefined}
         onOpenSettings={() => setSettingsDialogCategory(current => current ? undefined : 'overview')}
@@ -2408,6 +2442,15 @@ export function App() {
                     const project = selectedProject ?? workspaceProjects[0];
                     if (project) {
                       setStartRunDialog({ projectId: project.id });
+                    }
+                  }}
+                  onAbortSession={async issueKey => {
+                    await window.praxis.ai.abort(issueKey).catch(() => undefined);
+                  }}
+                  onDeleteSession={async issueKey => {
+                    await window.praxis.ai.deleteSession(issueKey).catch(() => undefined);
+                    if ((route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey === issueKey) {
+                      navigate({ feature: route.feature });
                     }
                   }}
                 />
