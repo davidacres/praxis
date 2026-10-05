@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 To Do
+**Status:** ✅ Complete
 **Created:** 2026-09-25T00:00:00.000Z
 **Type:** Bug
 **Priority:** Medium
@@ -163,3 +163,18 @@ makes it appear.
 
 
 ## Comments
+
+
+**PRX-B00-1** — 2026-10-05T18:57:33.125Z
+Root cause + fix.
+1) packages/core/src/folder/folderWatch.ts: chokidar 3 was started with `persistent: false`, which on macOS delivers NO events (reproduced standalone), so the watcher never fired. Now `persistent: true`; shutdown is already handled by FolderService.dispose().
+2) folderService.ts: watcher events for paths the app itself had just written (incl. the load-time template upgrade) were dropped for 2s, so an external edit/delete in that window was lost permanently (stale card). Now the reload is deferred past the window instead of discarded.
+3) Added FolderService.onDidReloadFromDisk -> main broadcasts `board:changed` (serviceRegistry.ts) -> preload board.onChanged (+ ipcContracts.ts) -> BoardView.tsx re-queries, so no reselect/search is needed.
+Tests: new FolderService test (boardConfigFile.test.ts) covers external edit, rename, delete. Core suite 1389/1389 pass; renderer check-types + main tsc clean; e2e folder.spec + folderMulti.spec 5/5 pass. Not run: full e2e suite, and no live visual check of the board refresh in the running app. Follow-up: roots discovered after initial load still aren't watched (pre-existing documented limitation).
+
+**PRX-B00-1** — 2026-10-05T19:04:09.321Z
+**Workflow run succeeded: Quick change — [P2] Folder-backed board does not refresh after external file changes**
+
+Status: Succeeded · Duration: 13m 23s
+
+- ✅ Implement: succeeded

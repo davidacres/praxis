@@ -140,7 +140,7 @@ export function EasyModeCanvas({
         <div className="easymode-canvas__title-area">
           <div className="easymode-canvas__badge-group">
             <span className="easymode-badge easymode-badge--accent">
-              <Icon name="sparkles" size={12} /> EasyMode
+              <Icon name="feather" size={12} /> EasyMode
             </span>
             {project?.type && (
               <span className="easymode-badge easymode-badge--subtle">

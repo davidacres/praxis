@@ -308,3 +308,54 @@ test('a freeform status resolves onto a declared workflow through its categories
     await service.dispose();
   });
 });
+
+test('FolderService: a loaded board follows external add, edit, rename and delete', async () => {
+  await withTempDir(async dir => {
+    const features = path.join(dir, 'features', 'alpha');
+    await fs.mkdir(features, { recursive: true });
+    const write = (name: string, title: string): Promise<void> =>
+      fs.writeFile(
+        path.join(features, name),
+        `---\nid: FX-BF-001\ntype: Feature\nstatus: To Do\n---\n\n# ${title}\n`,
+        'utf8'
+      );
+    await write('feature.md', 'Original title');
+
+    const service = new FolderService(stubConfig(dir));
+    const titles = async (): Promise<string[]> =>
+      (await service.getIssues({ projectKeys: [], statuses: [], issueTypes: [], searchText: '' } as never, 0, 50)).issues.map(issue => issue.summary).sort();
+    const waitFor = async (expected: string[]): Promise<void> => {
+      const deadline = Date.now() + 8000;
+      let last: string[] = [];
+      while (Date.now() < deadline) {
+        last = await titles();
+        if (JSON.stringify(last) === JSON.stringify(expected)) {
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      assert.deepEqual(last, expected);
+    };
+
+    try {
+      assert.deepEqual(await titles(), ['Original title']);
+      // Let the watcher finish its initial scan and the 2s self-write
+      // suppression from the load-time template upgrade lapse, so the edits
+      // below are genuinely external.
+      await new Promise(resolve => setTimeout(resolve, 2500));
+
+      await write('feature.md', 'Edited title');
+      await waitFor(['Edited title']);
+
+      await fs.rename(path.join(features, 'feature.md'), path.join(features, 'feature-renamed.md'));
+      await fs.writeFile(path.join(features, 'feature.md'), '---\nid: FX-BF-001\ntype: Feature\n---\n\n# Edited title\n');
+      await waitFor(['Edited title']);
+
+      await fs.rm(path.join(features, 'feature.md'));
+      await fs.rm(path.join(features, 'feature-renamed.md'));
+      await waitFor([]);
+    } finally {
+      await service.dispose();
+    }
+  });
+});

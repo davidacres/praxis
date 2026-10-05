@@ -75,7 +75,12 @@ const praxis: PraxisIpc = {
   board: {
     list: (filters: BoardFilters, connectionId?: string) =>
       ipcRenderer.invoke('board:list', filters, connectionId),
-    get: (board: Board) => ipcRenderer.invoke('board:get', board)
+    get: (board: Board) => ipcRenderer.invoke('board:get', board),
+    onChanged: (listener: (connectionId: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, connectionId: string) => listener(connectionId);
+      ipcRenderer.on('board:changed', handler);
+      return () => ipcRenderer.off('board:changed', handler);
+    }
   },
   issue: {
     list: (filters: IssueFilters, startAt: number, pageSize: number, connectionId?: string) =>

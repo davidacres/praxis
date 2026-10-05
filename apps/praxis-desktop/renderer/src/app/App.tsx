@@ -1435,7 +1435,7 @@ export function App() {
     entries.push({ id: 'action:quick-session', label: 'Quick session', group: 'Go to', icon: 'zap', keywords: 'quick change workflow fast immediate', run: openQuickSession });
     entries.push({ id: 'action:add-project', label: 'Add project', group: 'Go to', icon: 'plus', keywords: 'new existing folder import', run: () => requestAddProject() });
     entries.push({ id: 'action:open-folder', label: 'Open folder', group: 'Go to', icon: 'folder', keywords: 'open folder directory existing project easy mode', run: () => void openExistingFolder() });
-    entries.push({ id: 'action:toggle-easymode', label: 'Toggle EasyMode', hint: '⌘⇧E', group: 'Go to', icon: 'sparkles', keywords: 'toggle easy mode simple sidebar shortcut', run: () => void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } }) });
+    entries.push({ id: 'action:toggle-easymode', label: 'Toggle EasyMode', hint: '⌘⇧E', group: 'Go to', icon: 'feather', keywords: 'toggle easy mode advance mode simple sidebar shortcut', run: () => void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } }) });
     entries.push({ id: 'action:toggle-work-mode', label: 'Toggle work mode', group: 'Go to', icon: 'columns', keywords: 'work mode boards classic', run: () => setMode(m => m === 'classic' ? 'work' : 'classic') });
     if (inSession) {
       entries.push({ id: 'action:toggle-focus-mode', label: 'Toggle focus mode', group: 'Go to', icon: 'layout-focus', keywords: 'zen hide panels sidebars focus', run: toggleFocusMode });

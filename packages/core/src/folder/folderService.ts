@@ -249,6 +249,9 @@ export interface ExternalCommentEvent {
   body: string;
 }
 
+/** How long a path we wrote ourselves is treated as our own write by the watcher. */
+const SELF_WRITE_WINDOW_MS = 2000;
+
 export class FolderService implements IssueTrackerService {
   public readonly mode: BackendMode = 'folder';
 
@@ -283,6 +286,10 @@ export class FolderService implements IssueTrackerService {
 
   private readonly _onDidReceiveExternalComment = new Emitter<ExternalCommentEvent>();
   public readonly onDidReceiveExternalComment: Event<ExternalCommentEvent> = this._onDidReceiveExternalComment.event;
+
+  private readonly _onDidReloadFromDisk = new Emitter<void>();
+  /** Fired after a watcher-driven reload replaced the in-memory board model. */
+  public readonly onDidReloadFromDisk: Event<void> = this._onDidReloadFromDisk.event;
 
   public constructor(private readonly configStore: FolderConfigProvider) {}
 
@@ -385,6 +392,7 @@ export class FolderService implements IssueTrackerService {
     const closing = this.watchers.map(watcher => watcher.close());
     this.watchers = [];
     this._onDidReceiveExternalComment.dispose();
+    this._onDidReloadFromDisk.dispose();
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
@@ -1423,17 +1431,18 @@ export class FolderService implements IssueTrackerService {
     }
 
     const handleChangeFor = (_rootPath: string) => (absolutePath: string) => {
-      // Skip if we just wrote this file
-      if (this.recentWrites.has(absolutePath)) {
-        return;
-      }
+      // A path we just wrote is our own echo, so don't reload straight away —
+      // but never drop the event: an external edit or delete landing inside the
+      // self-write window would otherwise be lost for good and leave a stale
+      // card. Reload once the window has lapsed instead.
+      const delayMs = this.recentWrites.has(absolutePath) ? SELF_WRITE_WINDOW_MS + 500 : 500;
       // Debounce rapid changes
       if (this.debounceTimer) {
         clearTimeout(this.debounceTimer);
       }
       this.debounceTimer = setTimeout(() => {
         void this.reloadFromDisk();
-      }, 500);
+      }, delayMs);
     };
 
     // One watcher per plans root. Roots discovered later (by a reload) are not
@@ -1447,6 +1456,7 @@ export class FolderService implements IssueTrackerService {
   private async reloadFromDisk(): Promise<void> {
     try {
       await this.loadFromDisk();
+      this._onDidReloadFromDisk.fire();
       await this.detectNewExternalComments();
     } catch {
       // Silently ignore reload errors — folder may be temporarily invalid

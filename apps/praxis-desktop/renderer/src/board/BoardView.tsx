@@ -418,6 +418,18 @@ export function BoardView({
     [pagedStatuses]
   );
 
+  // Bumped when the connection's files changed on disk, to re-run the fetch.
+  const [diskRevision, setDiskRevision] = useState(0);
+  useEffect(
+    () =>
+      window.praxis.board.onChanged(changedConnectionId => {
+        if (changedConnectionId === connectionId) {
+          setDiskRevision(revision => revision + 1);
+        }
+      }),
+    [connectionId]
+  );
+
   // First-page (re)fetch. Also keyed on `details` identity: App refreshes it
   // after transitions/edits, which is exactly when the cards need re-querying.
   useEffect(() => {
@@ -475,7 +487,7 @@ export function BoardView({
     return () => {
       cancelled = true;
     };
-  }, [scopedFilters, connectionId, details, pageStatuses]);
+  }, [scopedFilters, connectionId, details, pageStatuses, diskRevision]);
 
   // Filter-bar option sources. Metadata backends ignore the active status/type
   // selection when reporting options (demo clears them internally), so the

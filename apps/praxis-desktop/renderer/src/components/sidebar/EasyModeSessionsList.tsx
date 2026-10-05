@@ -47,7 +47,7 @@ export function EasyModeSessionsList({
     return (
       <div className="easymode-empty-card" data-testid="easymode-sessions-empty-card">
         <div className="easymode-empty-card__icon">
-          <Icon name="sparkles" size={20} />
+          <Icon name="feather" size={20} />
         </div>
         <div className="easymode-empty-card__content">
           <span className="easymode-empty-card__title">No active sessions</span>

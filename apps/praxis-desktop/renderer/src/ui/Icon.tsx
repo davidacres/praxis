@@ -91,6 +91,8 @@ export type IconName =
   | 'check'
   | 'sparkles'
   | 'pin'
+  | 'layers'
+  | 'feather'
   // AI provider identity — original glyphs in this set's own idiom, not
   // reproductions of each company's actual trademarked logo. Distinguishes
   // providers by shape, not just the `--tone-*` color they're paired with
@@ -210,6 +212,15 @@ const PATHS: Record<IconName, string | string[]> = {
   check: 'M3.2 8.4 6.6 11.8 12.8 4.4',
   pin: ['M9.8 2.2l4 4-1.6.8-1.7 1.7.3 2.7-1 1-2.8-2.8L3.5 13.3l-.8-.8 3.6-3.6L3.5 6.1l1-1 2.7.3L9 3.7z'],
   sparkles: ['M8 2.4l1.4 3.4 3.4 1.4-3.4 1.4L8 12l-1.4-3.4-3.4-1.4 3.4-1.4z', 'M12.4 10.4l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z'],
+  layers: [
+    'M8 1.8L1.8 5 8 8.2l6.2-3.2z',
+    'M1.8 8.5L8 11.7l6.2-3.2',
+    'M1.8 12L8 15.2l6.2-3.2'
+  ],
+  feather: [
+    'M13.8 2.2a5.2 5.2 0 0 0-7.4 0L2.8 5.8c-.3 3.5 1.8 6.8 5 7.8l.9-.9c-.6-1.5-.7-2.6-.4-3.5l3.2-3.2c.8-.8 1.4-1.7 2.3-3.8z',
+    'M2.5 13.5l5.2-5.2'
+  ],
   'provider-openai': 'M13.2 8 10.6 3.5 5.4 3.5 2.8 8 5.4 12.5 10.6 12.5z',
   'provider-claude': 'M8 2.6V13.4M12.68 5.3 3.32 10.7M12.68 10.7 3.32 5.3',
   'provider-codex': 'M6.2 4.4 2.8 8l3.4 3.6M9.8 4.4 13.2 8l-3.4 3.6',
