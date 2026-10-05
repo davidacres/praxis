@@ -16,6 +16,12 @@ status: Backlog
 
 One phone can retain named, independently trusted Praxis desktops, switch safely between them, and later observe their work together. Deliver local multi-desktop use first; concurrency and notifications must not delay it.
 
+## Scope guard
+
+This is a **Praxis mobile client** feature. Here, a "desktop connection" means an authenticated pairing from the Flutter phone app to a Praxis desktop host. Implementation belongs primarily under `apps/praxis-mobile` and may touch the desktop mobile-access host or shared mobile protocol only when that phone-to-host contract requires it.
+
+It is explicitly unrelated to desktop workspace board/backend connections. Do not change `WorkspaceRecord.connectionIds`, `connectionStore`, `serviceRegistry.ts`, `ConnectionForm`, Jira/GitLab/GitHub/folder/demo backends, workspace-file serialization, or board/project isolation for this feature. If an implementation plan names those areas as its main scope, stop and report that the plan targets the wrong subsystem before changing code.
+
 ## Scope and current baseline
 
 The active workspace contains Flutter implementation under lib/, despite its praxis-mobile path. Implement here; consult the Expo reference for existing wording/behaviour where available. Today connection.dart stores one HostConfiguration and one cached appearance; ConnectScreen loads it automatically; AppStore owns one connection. No protocol change is assumed for basic multiple pairings: verify independent desktop authorisation with two real hosts.
@@ -116,3 +122,24 @@ Canonical plan owner is this mobile workspace. Link companion desktop/relay stor
 ## Comments
 
 
+
+
+**PXMOB-F108** — 2026-10-05T13:15:59.215Z
+Kickoff blocked before implementation. tracker_list_transitions exposes only lf-0-done (Backlog → Done); the required tracker_transition_ticket(target In Progress) returned 'Transition In Progress not valid for PXMOB-F108'. The canonical feature explicitly documents Backlog/Done board statuses. No files changed and no completion transition attempted.
+
+Initial inspection confirms this mobile workspace contains Flutter. connection.dart persists a single HostConfiguration and appearance; AppStore owns one active connection. Canonical scope is FX-BE-161–169 / TASK-420–439, including first release, later concurrent observation, combined attention/activity, and notifications. FX-BE-086 gates notification delivery; existing pairing/discovery/foundation/continuation/approval dependencies still require qualification evidence. No duplicate relay or notification stories or external issues will be created.
+
+Intended implementation order after lifecycle resolution: (1) finish tracing storage, store lifecycle, connect/sidebar/settings/composer call sites and all child acceptance contracts; (2) registry/identity and recoverable migration in lib/app/connection.dart plus focused storage tests; (3) guarded switching in lib/app/store.dart and two-host race tests; (4) picker/add/rename/repair/forget UI and host-scoped drafts/preferences in relevant lib/screens and lib/ui files; (5) first-release automated, visual, real-host and physical-device qualification; (6) dependency-gated concurrent contexts, aggregate views, and notification routing; (7) update related canonical tickets/comments only for verified acceptance. Exact new-file inventory will be finalized after complete analysis and before code changes.
+
+Stopping on the failed mandatory kickoff step per the execution contract. Required unblock: permit this task to proceed while Backlog on the two-state board, or provide an In Progress workflow transition. No builds/tests/visual verification performed because implementation has not begun.
+
+**PXMOB-F108** — 2026-10-05T13:19:47.803Z
+User follow-up 'continue' authorizes proceeding with implementation while this Backlog/Done board retains Backlog status. The rejected In Progress transition will not be retried or bypassed. Continuing analysis of all child acceptance criteria, storage/store/UI call sites, dependency gates and verification tooling before code changes.
+
+**PXMOB-F108** — 2026-10-05T13:21:51.191Z
+Analysis complete. Runtime is Flutter; single-host persistence call sites are limited to connection.dart, AppStore and ConnectScreen. AppStore also has unguarded bootstrap/poll/resume/model/usage/command continuations and biometric waits; all must be generation-bound. WorkDetail currently owns volatile text and keys widgets by bare object IDs. Phone identity/display mode stay global; host configuration, appearance and drafts will be entry-scoped.
+
+Implementation plan: add desktop_registry.dart and host_configuration.dart with injectable secure-storage repository, strict independently validated entries, read-back-verified legacy migration and serialized CRUD; adapt connection.dart persistence. Update store.dart and confirm_identity.dart for explicit selection and connection-generation guards. Add desktops_screen.dart and wire main.dart/sidebar.dart/connect_screen.dart for picker, additive pairing, repair, named forget and local nicknames. Update work_screen.dart for host-scoped draft restore and widget identity. Add focused test/app registry and lifecycle tests plus test/ui picker tests. Record schema/cleanup and evidence in docs/development.md/STATUS.md. Run flutter analyze/test and first-release host/device qualification before progressing to FX-BE-167/168; FX-BE-169 also requires existing FX-BE-086. No desktop/relay duplication or external tracker publishing.
+
+**PXMOB-F108** — 2026-10-05T13:44:44.754Z
+First-release implementation is now wired: secure saved-desktop registry/migration, explicit picker and names, additive pairing with changed-key confirmation, scoped forget/project/theme/draft state, guarded transport/bootstrap/refresh/command/biometric continuations, and host-aware screen keys. 19 focused storage/store tests pass. Verification found a widget test async setup stall and a real-protocol conversation assertion failure after successful pairing of two independently keyed hosts; both are under targeted investigation. Simulator Release build was rejected by Flutter as unsupported; debug simulator build is running, with native Release qualification separate. No story/feature completion claimed; concurrency remains gated by first-release evidence and notifications by FX-BE-086.

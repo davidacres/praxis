@@ -2,6 +2,8 @@
 
 Local navigation mirror; not a second board item or published tracker issue.
 
+**Mobile scope:** Phone state keyed by paired Praxis desktop-host identity. Desktop workspace board/backend connection membership is out of scope.
+
 | Field | Value |
 | --- | --- |
 | Canonical plan | [Story](../../../../../plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-165-desktop-scoped-drafts-and-preferences/story.md) |

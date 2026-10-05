@@ -136,3 +136,11 @@ Move this folder intact when authorised: README, main, renderer, docs, board.pra
 ## Local-first priority (2026-09-09)
 
 GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mobile continuation, workflow execution, decisions and a usable local release before cloud integration. No local completion gate requires these services or Azure. Keep internet features unavailable until the real integration is verified; use fixtures only for development. FX-BF-030 is deferred, including optional notifications moved to FX-BE-086. See the mobile master plan for the revised order.
+
+
+## Flutter multiple desktops — 2026-10-05
+
+The current mobile workspace contains Flutter. The prior Expo sections above
+are historical. See [multiple desktop connections](multiple-desktop-connections.md)
+for the secure registry/migration contract, host-scoped drafts, picker behavior,
+commands/results and the unresolved Android/physical-device qualification gates.

@@ -24,6 +24,8 @@ First release qualification and visual evidence enables the next delivery stage 
 
 test/protocol; test/app; test/ui; tool/stage_host.cjs; STATUS.md; docs/development.md. Two isolated hosts with distinct identities and temp write paths.
 
+**Scope guard:** Qualification must prove one mobile app can retain and switch between two real Praxis desktop hosts. Board/backend connection isolation is not evidence for this story and must not be implemented as a substitute.
+
 ## Acceptance criteria
 
 - Automated suite proves migration, two-host isolation, additive pairing, rename, forget, startup, reconnect, revocation, changed host key and races during streaming/approval. Both existing single-host flows and new multi-host flows remain green.
@@ -55,5 +57,4 @@ All listed tasks and acceptance criteria are complete. Link automated results an
 
 
 ## Comments
-
 

@@ -2,6 +2,8 @@
 
 All canonical items satisfy rule 1 (H1 title), rule 2 (explicit type/canonical filename), rule 3 (unique ID), rule 4 (declared Backlog stage), rule 5 (Dependencies section), and rule 6 (canonical feature/story/task layout). Parser verification checks these claims. Mirrors and indexes are navigation documents outside the board source; they intentionally have no item type/ID frontmatter.
 
+**Scope guard:** Every item in this inventory concerns the Flutter mobile app retaining or using paired Praxis desktop hosts. Desktop workspace board/backend connections are explicitly outside FX-BF-108.
+
 | File | ID | Type | Status | H1 | Rules |
 | --- | --- | --- | --- | --- | --- |
 | [docs/plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-161-saved-desktop-registry/tasks/task-420.md](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-161-saved-desktop-registry/tasks/task-420.md) | TASK-420 | Task | Backlog | TASK-420: Define registry and identity contracts | 1–6 |

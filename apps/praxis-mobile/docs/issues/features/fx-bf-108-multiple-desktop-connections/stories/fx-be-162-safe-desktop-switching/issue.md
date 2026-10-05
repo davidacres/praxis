@@ -2,6 +2,8 @@
 
 Local navigation mirror; not a second board item or published tracker issue.
 
+**Mobile scope:** Switching the Flutter phone app between paired Praxis desktop hosts. Desktop workspace board/backend connections are out of scope.
+
 | Field | Value |
 | --- | --- |
 | Canonical plan | [Story](../../../../../plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-162-safe-desktop-switching/story.md) |

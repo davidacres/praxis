@@ -2,6 +2,8 @@
 
 Local navigation mirror; not a second board item or published tracker issue.
 
+**Mobile scope:** A phone UI for selecting and naming paired Praxis desktop hosts. The desktop board connection manager is out of scope.
+
 | Field | Value |
 | --- | --- |
 | Canonical plan | [Story](../../../../../plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-163-desktop-picker-and-names/story.md) |

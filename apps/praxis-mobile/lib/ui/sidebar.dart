@@ -12,7 +12,7 @@ import 'wordmark.dart';
 
 enum _SettingsPage { server, permissions, app }
 
-const _routes = [('attention', '!', 'Attention'), ('activity', '⌁', 'Activity')];
+const _routes = [('desktops', '⌁', 'Desktops'), ('attention', '!', 'Attention'), ('activity', '⌁', 'Activity')];
 const _settings = [
   (_SettingsPage.server, '⌁', 'Desktop connection', 'Connection and host details'),
   (_SettingsPage.permissions, '◇', 'Permissions', 'What the desktop allows this phone'),
@@ -194,7 +194,14 @@ class _AppSidebarState extends State<AppSidebar> {
                   label: route.$3,
                   active: store.primaryRoute == route.$1 && store.openWorkId == null && store.openRunId == null,
                   badge: route.$1 == 'attention' && unresolved > 0 ? '$unresolved' : null,
-                  onTap: () => navigate(route.$1),
+                  onTap: () {
+                    if (route.$1 == 'desktops') {
+                      store.showDesktops();
+                      widget.onClose();
+                    } else {
+                      navigate(route.$1);
+                    }
+                  },
                 ),
               _SectionHeading(label: 'CONVERSATIONS', trailing: Padding(padding: const EdgeInsets.only(top: 8, right: 8), child: _count(context, conversations.length))),
               if (conversations.isEmpty)
@@ -644,7 +651,7 @@ class _SettingsDetail extends StatelessWidget {
                     children: [
                       Text(
                         [
-                          store.host.hostName,
+                          store.desktopLabel,
                           config?.hostName,
                           config?.address,
                         ].firstWhere((value) => value != null && value.isNotEmpty, orElse: () => 'Desktop')!,

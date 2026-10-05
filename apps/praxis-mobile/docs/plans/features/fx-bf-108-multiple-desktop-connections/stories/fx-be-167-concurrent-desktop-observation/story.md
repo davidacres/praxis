@@ -24,6 +24,8 @@ Concurrent desktop observation and lifecycle enables the next delivery stage wit
 
 lib/app/store.dart split into per-host contexts; lib/app/connection.dart; lifecycle/polling supervisor. Foreground concurrent observation; explicit foreground target for actions.
 
+**Scope guard:** Each host context is a mobile-to-Praxis-desktop connection. Desktop workspace board/backend connections and board aggregation are out of scope; stop if a generated plan redirects work there.
+
 ## Acceptance criteria
 
 - Allow several saved desktops to be observed while one is selected for interaction. Each context owns its transport, event cursor, retry budget, access grant, cache and commands. One host failing never clears others.
@@ -54,5 +56,4 @@ All listed tasks and acceptance criteria are complete. Link automated results an
 
 
 ## Comments
-
 

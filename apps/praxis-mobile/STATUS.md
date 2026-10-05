@@ -124,3 +124,29 @@ npm run mobile:deploy            # physical iPhone, Release
 
 The stage desktop's control port (`http://127.0.0.1:43191`) takes `/theme/light`,
 `/theme/dark`, `/reply`, `/permission` and `/fail-next`.
+
+
+## FX-BF-108 — first-release implementation, 2026-10-05
+
+The workspace now retains multiple named, independently pinned desktops with
+one active connection. Desktops is available from navigation and connection
+failures. Pairing is additive, changed keys require explicit replacement,
+forgetting is local and scoped, and project/theme/composer state belongs to its
+saved desktop. Late replies and biometric prompts cannot cross a switch.
+
+`flutter analyze --no-pub` is clean and `flutter test --no-pub` passes **96 tests**
+(no skips), including migration failures, colliding IDs, stale replies, approval
+isolation, picker journeys and two real encrypted-protocol stage hosts using
+one phone identity. The existing stage fixture was run from temporary copied
+state; all new integration-test hosts use system temporary directories.
+
+Unsigned iOS Release and iOS simulator debug builds compile. Android Release
+fails before compilation with **deleted Android v1 embedding** in the existing
+incomplete Android foundation. No Android/native project files were changed.
+
+Simulator evidence uses iPhone 15 Pro / iOS 17.2 and temporary stage desktops;
+it is not physical-device or two actual desktop application evidence. Required
+physical iOS/Android QR/LAN/resume and release qualification remains open, as do
+attachment-draft handling and the complete visual/interruption matrix. See
+[implementation contract and evidence](docs/multiple-desktop-connections.md).
+FX-BF-108 remains Backlog; FX-BE-167–169 stay behind their delivery gates.

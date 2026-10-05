@@ -9,6 +9,7 @@ import 'package:local_auth/local_auth.dart';
 /// How long one successful check covers further approvals.
 const _grace = Duration(seconds: 60);
 DateTime _confirmedUntil = DateTime.fromMillisecondsSinceEpoch(0);
+int _identityGeneration = 0;
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -35,6 +36,7 @@ Future<bool> _askPlainConfirmation(String reason) async {
 }
 
 Future<bool> confirmIdentity(String reason) async {
+  final generation = _identityGeneration;
   if (DateTime.now().isBefore(_confirmedUntil)) return true;
   final auth = LocalAuthentication();
   var secured = false;
@@ -43,9 +45,13 @@ Future<bool> confirmIdentity(String reason) async {
   } catch (_) {
     secured = false;
   }
-  if (!secured) return _askPlainConfirmation(reason);
+  if (!secured) {
+    final ok = await _askPlainConfirmation(reason);
+    return generation == _identityGeneration && ok;
+  }
   try {
     final ok = await auth.authenticate(localizedReason: reason);
+    if (generation != _identityGeneration) return false;
     if (ok) _confirmedUntil = DateTime.now().add(_grace);
     return ok;
   } catch (_) {
@@ -54,4 +60,7 @@ Future<bool> confirmIdentity(String reason) async {
 }
 
 /// Forgets a recent check — on disconnect, so a new pairing never inherits it.
-void forgetIdentityCheck() => _confirmedUntil = DateTime.fromMillisecondsSinceEpoch(0);
+void forgetIdentityCheck() {
+  _identityGeneration++;
+  _confirmedUntil = DateTime.fromMillisecondsSinceEpoch(0);
+}

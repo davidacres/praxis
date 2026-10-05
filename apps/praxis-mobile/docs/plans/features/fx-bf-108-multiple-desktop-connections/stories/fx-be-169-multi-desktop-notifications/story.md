@@ -24,6 +24,8 @@ Host-scoped notifications and deep links enables the next delivery stage without
 
 Platform notification adapters and deep-link routing; existing FX-BE-086 owns delivery infrastructure. Companion desktop/relay plans only if independent new deliverables are identified.
 
+**Scope guard:** Notification host identity is the paired Praxis desktop host selected by the mobile app. Desktop workspace board/backend connection IDs are unrelated and must not be used as this identity.
+
 ## Acceptance criteria
 
 - Opt in globally and per desktop, with permission denial and mute controls. Notification IDs, deduplication, click targets and cancellation include host identity; lock-screen previews avoid sensitive content by default.
@@ -55,5 +57,4 @@ All listed tasks and acceptance criteria are complete. Link automated results an
 
 
 ## Comments
-
 

@@ -2,6 +2,8 @@
 
 Local mirrors only; canonical board source is docs/plans. No external issues created.
 
+**Scope guard:** This feature is owned by the Flutter mobile client and concerns one phone retaining and switching among multiple paired Praxis desktop hosts. It does not concern Jira/GitHub/GitLab/folder/demo board connections or desktop workspace `connectionIds`.
+
 | Story | Issue mirror | Canonical plan |
 | --- | --- | --- |
 | FX-BE-161 | [Local mirror](stories/fx-be-161-saved-desktop-registry/issue.md) | [Story](../../../plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-161-saved-desktop-registry/story.md) |

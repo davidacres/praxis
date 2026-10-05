@@ -24,6 +24,8 @@ Desktop picker and connection naming enables the next delivery stage without los
 
 lib/screens: new Desktops screen; lib/ui/sidebar.dart; lib/main.dart. Reuse Pressable, ts() and existing theme/control primitives.
 
+**Scope guard:** This story builds a mobile picker for paired Praxis desktop hosts. It is not the desktop app's Jira/GitHub/GitLab/folder/demo connection manager; stop if a generated plan redirects work to board connections.
+
 ## Acceptance criteria
 
 - Picker is reachable from sidebar, offline/reconnecting screens and startup when no desktop is selected. Empty state offers Add desktop; rows show nickname or reported name, current selection and known connection state.
@@ -54,5 +56,4 @@ All listed tasks and acceptance criteria are complete. Link automated results an
 
 
 ## Comments
-
 

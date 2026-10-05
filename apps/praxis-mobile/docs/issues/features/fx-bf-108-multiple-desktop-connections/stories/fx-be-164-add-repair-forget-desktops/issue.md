@@ -2,6 +2,8 @@
 
 Local navigation mirror; not a second board item or published tracker issue.
 
+**Mobile scope:** Add, repair, and forget phone-to-Praxis-desktop pairings. Desktop workspace board/backend connections are out of scope.
+
 | Field | Value |
 | --- | --- |
 | Canonical plan | [Story](../../../../../plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-164-add-repair-forget-desktops/story.md) |
