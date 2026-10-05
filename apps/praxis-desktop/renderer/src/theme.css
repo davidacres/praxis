@@ -16823,8 +16823,8 @@ button.session-chat-attachment {
   white-space: nowrap;
 }
 
-.uncommitted-base-notice { align-items: flex-start; }
-.uncommitted-base-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.uncommitted-base-notice { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2); }
+.uncommitted-base-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: 6px; min-width: 0; }
 .uncommitted-base-body p { margin: 0; }
 .uncommitted-base-body ul { margin: 0; padding-left: 18px; }
 .uncommitted-base-body code { overflow-wrap: anywhere; }

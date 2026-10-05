@@ -34,6 +34,12 @@ import { fetchModelOptions, hasModelCatalog, providerIconName, providerLabel } f
 import { isProviderUsableForSessions } from '../ai/providerAvailability';
 import { ChipSelect } from '../ui/ChipSelect';
 import { useRegisterPageAssistantContext } from '../assistant/AssistantProvider';
+import {
+  assertRunBaseOrThrow,
+  UncommittedBaseError,
+  UncommittedBaseNotice,
+  type UncommittedChoice
+} from '../workflows/UncommittedBaseNotice';
 
 /** Centre-pane AI tooling views the detail panel can hand off to. */
 export type IssueAiView = 'review' | 'lpr';
@@ -83,7 +89,7 @@ interface StartAiSessionDialogProps {
   assignedWorkflow?: AgentWorkflowReference;
   onClose: () => void;
   onViewExisting?: () => void;
-  onStart: (task: AgentTaskDefinition, governedWorkflowId?: string) => Promise<void>;
+  onStart: (task: AgentTaskDefinition, governedWorkflowId?: string, uncommittedChanges?: UncommittedChoice) => Promise<void>;
 }
 
 function StartAiSessionDialog({
@@ -118,6 +124,7 @@ function StartAiSessionDialog({
   const [workflowPackId, setWorkflowPackId] = useState(initialWorkflow?.id ?? '');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | undefined>();
+  const [uncommittedFiles, setUncommittedFiles] = useState<UncommittedBaseError | undefined>();
   const configuredProviders = providerStatuses.filter(isProviderUsableForSessions);
   const selectedStatus = providerStatuses.find(status => status.provider === selectedProvider);
   const workflowPackOptions = initialWorkflow && !workflows.some(workflow => workflow.id === initialWorkflow.id)
@@ -125,7 +132,7 @@ function StartAiSessionDialog({
     : workflows;
   const selectedGovernedWorkflow = governedWorkflows.find(option => option.id === governedWorkflowId);
 
-  const submit = async () => {
+  const submit = async (uncommittedChanges?: UncommittedChoice) => {
     if (!goal.trim() || !scope.trim() || !definitionOfDone.trim() || !selectedProvider) {
       return;
     }
@@ -135,6 +142,7 @@ function StartAiSessionDialog({
     }
     setStarting(true);
     setStartError(undefined);
+    setUncommittedFiles(undefined);
     try {
       const workflowPack = workflowPackOptions.find(option => option.id === workflowPackId);
       await onStart(
@@ -145,10 +153,16 @@ function StartAiSessionDialog({
           definitionOfDone: definitionOfDone.trim(),
           ...(workflowPack ? { workflow: workflowPack } : {})
         },
-        governedWorkflowId || undefined
+        governedWorkflowId || undefined,
+        uncommittedChanges
       );
     } catch (error) {
+      if (error instanceof UncommittedBaseError) {
+        setUncommittedFiles(error);
+        return;
+      }
       setStartError(error instanceof Error ? error.message : String(error));
+    } finally {
       setStarting(false);
     }
   };
@@ -178,6 +192,16 @@ function StartAiSessionDialog({
                 </button>
               )}
             </div>
+          )}
+          {uncommittedFiles && (
+            <UncommittedBaseNotice
+              files={uncommittedFiles.files}
+              projectId={uncommittedFiles.projectId}
+              busy={starting}
+              onChoose={choice => void submit(choice)}
+              onCommitted={() => void submit()}
+              onDismiss={() => setUncommittedFiles(undefined)}
+            />
           )}
           {startError && <div className="error-banner" data-testid="issue-session-error">{startError}</div>}
 
@@ -252,7 +276,11 @@ function StartAiSessionDialog({
                 data-testid="issue-session-workflow"
                 value={governedWorkflowId}
                 disabled={starting}
-                onChange={setGovernedWorkflowId}
+                onChange={value => {
+                  setGovernedWorkflowId(value);
+                  setUncommittedFiles(undefined);
+                  setStartError(undefined);
+                }}
                 options={[
                   { value: '', label: 'No governed workflow — ordinary session' },
                   ...governedWorkflows.map(workflow => ({
@@ -1071,7 +1099,13 @@ export function IssueDetail({
     setShowSessionSetup(true);
   };
 
-  const startAiSession = async (task: AgentTaskDefinition, chosenWorkflowId?: string) => {
+  const startAiSession = async (task: AgentTaskDefinition, chosenWorkflowId?: string, uncommittedChanges?: UncommittedChoice) => {
+    if (chosenWorkflowId) {
+      if (!effectiveProjectId) {
+        throw new Error('A project is required to run a governed workflow.');
+      }
+      await assertRunBaseOrThrow(effectiveProjectId, uncommittedChanges);
+    }
     const record = await window.praxis.ai.delegate({
       issueKey,
       connectionId,
@@ -1081,20 +1115,28 @@ export function IssueDetail({
       model: selectedRuntimeModel || undefined
     });
     if (chosenWorkflowId) {
-      if (!effectiveProjectId) {
-        await window.praxis.ai.deleteSession(record.issueKey);
-        throw new Error('A project is required to run a governed workflow.');
-      }
       try {
         await window.praxis.workflows.startRun(
-          effectiveProjectId,
+          effectiveProjectId!,
           chosenWorkflowId,
           issue?.summary || task.goal,
           { issueKey, connectionId },
-          { sessionKey: record.issueKey, sessionId: record.sessionId }
+          { sessionKey: record.issueKey, sessionId: record.sessionId },
+          undefined,
+          {
+            aiProvider: selectedProvider,
+            aiModel: selectedRuntimeModel || undefined,
+            ...(uncommittedChanges ? { uncommittedChanges } : {})
+          }
         );
       } catch (error) {
         await window.praxis.ai.deleteSession(record.issueKey).catch(() => undefined);
+        if (effectiveProjectId) {
+          const { blockingFiles } = await window.praxis.workflows.checkRunBase(effectiveProjectId).catch(() => ({ blockingFiles: [] }));
+          if (blockingFiles.length > 0) {
+            throw new UncommittedBaseError(blockingFiles, effectiveProjectId);
+          }
+        }
         throw error;
       }
     }
