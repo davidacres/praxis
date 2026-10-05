@@ -50,6 +50,8 @@ export interface AgentTaskLaunchInput {
   model?: string;
   workingDirectory?: string;
   toolMode: AgentToolMode;
+  /** Images attached to the session's first user turn. */
+  images?: WireImageAttachment[];
   /** Allow the agent's own tool-permission requests without asking (still bounded by `toolMode`). */
   autoApprovePermissions?: boolean;
   permissionMode?: AgentPermissionMode;
@@ -217,6 +219,7 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
       toolMode: input.toolMode,
       permissionMode: input.permissionMode,
       ...(input.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
+      ...(input.images?.length ? { images: input.images } : {}),
       ...(input.mcpServers ? { mcpServers: input.mcpServers } : {})
     });
     recordRuntimeLaunch(input.issue.key, prepared, 'acp');
@@ -240,6 +243,7 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
     permissionMode: input.permissionMode,
     reasoningEffort: input.reasoningEffort,
     ...(input.autoApprovePermissions ? { autoApprovePermissions: true } : {}),
+    ...(input.images?.length ? { images: input.images } : {}),
     ...(input.toolExtension ? { toolExtension: input.toolExtension } : {})
   });
   recordRuntimeLaunch(input.issue.key, prepared, 'gateway');

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, showProjectBoard, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
 import { startMockGitLabApi, type MockGitLabServer } from './mockGitLabApi';
 import { chipOptionValues, chooseOption } from './chipSelect';
@@ -281,6 +281,7 @@ test('analysis for a project ticket starts in the project folder', async () => {
   }, workspaceFolder);
 
   await win.reload();
+  await showProjectBoard(win.getByTestId('project-tree').filter({ hasText: project.name }));
   await win.getByTestId('project-default-board-nav-item').filter({ hasText: project.name }).click();
   await win.getByTestId('issue-card').filter({ hasText: 'Start from the project folder' }).click();
   await win.getByTestId('issue-primary-ai-btn').click();

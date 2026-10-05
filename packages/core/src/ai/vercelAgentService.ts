@@ -89,6 +89,8 @@ export interface VercelAgentLogger {
 }
 
 export interface VercelAgentStartOptions {
+  /** Images attached to the session's first user turn. */
+  images?: WireImageAttachment[];
   apiKey?: string;
   gatewayUrl?: string;
   workingDirectory?: string;
@@ -639,6 +641,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     task.loopPromise = this.runLoopForIssue(issue.key, {
       systemPrompt,
       userPrompt,
+      userImages: options.images,
       gateway,
       provider,
       model,

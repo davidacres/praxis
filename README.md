@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="apps/praxis-desktop/main/build/icon.png" alt="Praxis" width="64" valign="middle" /> Praxis
+  <img src="docs/assets/praxis-icon.png" alt="Praxis" width="64" valign="middle" /> Praxis
 </h1>
 
 <p align="center">
@@ -141,50 +141,12 @@ Works with the CLI agents you already use — sessions run against your own sign
 ### Desktop — macOS, Windows, Linux
 
 - **[Download the latest release](https://github.com/davidacres/praxis/releases/latest)** — `.dmg` (macOS), `-setup.exe` (Windows), `.AppImage` / `.deb` (Linux)
-- Or build from source — see [Development](#development).
 
 ### Mobile Companion — iOS, Android
 
-Pair with your desktop app (Settings → Mobile access → *Create pairing code*) to follow sessions and approve agent requests from your phone. The app lives in [`apps/praxis-mobile`](apps/praxis-mobile/README.md).
+Pair with your desktop app (Settings → Mobile access → *Create pairing code*) to follow sessions and approve agent requests from your phone.
 
 ---
-
-## Repository layout
-
-An npm workspaces monorepo — the app in `apps/`, shared code in `packages/`:
-
-```
-apps/
-└── praxis-desktop/
-    ├── main/         Electron main + preload, e2e suite, packaging
-    └── renderer/     React/Vite SPA — the app's UI
-
-packages/
-└── core/             shared types, stores, backend adapters, folder/plans
-                      parser, AI gateway
-```
-
-```
-   ┌──────────────────────┐
-   │ packages/core        │   types, stores, parsers, AI/MCP plumbing
-   │ @praxis/core         │
-   └──────────▲───────────┘
-              │ shared by
-   ┌──────────┴───────────┐
-   │ praxis-desktop/      │
-   │ renderer (React SPA) │
-   └──────────┬───────────┘
-              │ vite build + copy-renderer
-              ▼
-   ┌──────────────────────┐  electron-builder  ┌────────────────────┐
-   │ praxis-desktop/main  │ ─────────────────► │ branded installers │
-   │ (Electron host)      │                    │ .dmg / setup.exe   │
-   └──────────────────────┘                    └────────────────────┘
-```
-
-`@praxis/core` is imported by `main` directly and by `renderer` for types. Run
-`npm install` once at the repo root; the workspaces share a hoisted
-`node_modules/`.
 
 ## Workspace / project / connection model
 
@@ -205,13 +167,10 @@ always created inside the open workspace; the first project becomes its default.
 
 ## Git workspace
 
-Praxis includes a native Git Graph and diff workspace backed by the installed Git
-executable. The Electron main process owns repository discovery and Git commands;
-the sandboxed renderer receives typed commit, file, hunk, line, history, blame,
-and conflict records through preload IPC. It supports working/staged/commit/ref
-comparisons, Inline/Split/Hunk views, file/hunk/selected-line staging, confirmed
-discard, branch and commit actions, stash workflows, and three-way conflict
-resolution.
+Praxis includes a native Git Graph and diff workspace backed by your Git
+repository. It supports working/staged/commit/ref comparisons, Inline/Split/Hunk
+views, file/hunk/selected-line staging, confirmed discard, branch and commit
+actions, stash workflows, and three-way conflict resolution.
 
 ## Backend modes
 
@@ -223,117 +182,12 @@ resolution.
 | GitLab | `gitlab` | Connection and delivery/MR workflows; the issue/board model does not match Jira parity. |
 | GitHub | `github` | Configuration surface only; no full board/issue backend yet. |
 
-## Development
+## Automatic updates
 
-```bash
-npm install
-npm run build            # core -> renderer -> copy-renderer -> desktop
-npm run build:core       # just the shared core (must precede the rest)
-npm run build:renderer
-
-npm run check-types      # every workspace
-
-npm test                 # core + desktop
-npm run test:core        # node:test
-npm run test:desktop     # Playwright e2e (loads the pre-built renderer)
-npm run test:desktop:git # gitService unit tests
-```
-
-The e2e suite loads the pre-built renderer from
-`apps/praxis-desktop/main/renderer/`. A renderer change is invisible to e2e until
-you rebuild **and** run `npm run desktop:copy-renderer`.
-
-The "hand a ticket to an agent" flow has its own coverage. `aiCodingTask.spec.ts`
-drives it end to end with a scripted ACP agent fixture — no model, part of the
-normal suite. `aiLiveAgent.live.spec.ts` drives a real CLI agent against a real
-model; it spends money, is excluded from every ordinary run, and needs an explicit
-opt-in:
-
-```bash
-cd apps/praxis-desktop/main
-PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent
-```
-
-Cross-provider handover (two signed-in CLIs, spends twice) is the same project:
-
-```bash
-cd apps/praxis-desktop/main
-PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent e2e/aiLiveHandover.live.spec.ts
-```
-
-### Run the app
-
-```bash
-npm run app:demo:mac         # macOS, with demo fixture data
-./scripts/run-app.sh --demo  # equivalent shell flag
-```
-
-Normal launches start without sample data.
-
-### Build installers
-
-```bash
-# macOS
-npm run app:build:mac        # compile app + prepare renderer (no electron-builder)
-npm run app:installer:mac    # electron-builder -> apps/praxis-desktop/main/dist/ (*.dmg)
-
-# Linux
-npm run app:build:linux      # compile app + prepare renderer (no electron-builder)
-npm run app:installer:linux  # electron-builder -> apps/praxis-desktop/main/dist/ (*.AppImage, *.deb)
-# Or use the script directly:
-./scripts/build-installer.sh --target linux      # AppImage + deb
-./scripts/build-installer.sh --target appimage   # AppImage only
-./scripts/build-installer.sh --target deb        # deb only
-
-# Windows (PowerShell)
-npm run app:build:win
-npm run app:installer:win    # electron-builder -> apps/praxis-desktop/main/dist/ (*-setup.exe)
-```
-
-The macOS DMG, Linux packages, and Windows assisted installer share the app's warm charcoal, parchment, and terracotta visual language.
-
-### Signing and updates
-
-A packaged build updates itself from the GitHub Releases of the repo named in
-the `publish` config (`src/main/autoUpdate.ts`). It checks 30 seconds after
-launch and every 4 hours, downloads a newer release in the background, and
-installs it on the next quit — or straight away from the title bar's **Restart
-to update** button. **Settings → Workspace → Updates** shows the state and has a
-manual check. Releases must be public (the updater reads them anonymously), must
-not be drafts, and need the `latest*.yml` and `.blockmap` files that
-`scripts/publish-desktop-release.sh` uploads.
-
-In development `update:check` reports `unsupported` with the reason rather than
-failing quietly; `PRAXIS_DISABLE_UPDATES=1` does the same in a packaged build.
-macOS only installs updates into a Developer ID signed build (Squirrel.Mac
-refuses anything else); an unsigned Mac build still finds updates and links to
-the release page instead.
-
-Publishing is driven entirely by environment variables, so an unsigned local
-build behaves exactly as it always did — electron-builder skips signing and
-notarization when the credentials are absent:
-
-| Variable | For |
-| --- | --- |
-| `GH_TOKEN` | uploading the release |
-| `CSC_LINK` / `CSC_KEY_PASSWORD` | the Developer ID certificate (macOS) or code-signing cert (Windows) |
-| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | notarization |
-
-```bash
-npm run dist:mac:publish --workspace=@praxis/desktop-main
-npm run dist:win:publish --workspace=@praxis/desktop-main
-```
-
-The update feed is explicitly pinned to `davidacres/praxis` in the desktop
-package's electron-builder configuration. Release builds include the updater
-manifests and blockmaps; macOS builds also include the ZIP consumed by
-Squirrel.Mac alongside the user-facing DMG.
-
-**macOS updates require a signed build.** Squirrel.Mac refuses unsigned
-bundles, so an unsigned build can find an update but not install one — it
-reports `available` with `canInstall: false` rather than pretending to apply
-it. `build/entitlements.mac.plist` carries the hardened-runtime entitlements
-Electron, node-pty, and the CLI agent subprocesses need.
+Packaged desktop builds check for updates automatically on launch and in the
+background. When an update is ready, Praxis installs it on next launch or
+immediately via the **Restart to update** button in the title bar. Update
+preferences and manual checks are available under **Settings → Workspace → Updates**.
 
 ## Known limitations
 

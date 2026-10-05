@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp, showProjectBoard, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
 
@@ -70,6 +70,7 @@ test('opening an existing folder creates a portable workspace and file-only proj
     await expect(win.getByTestId('planning-source-detected-plans')).toBeVisible();
     await win.getByTestId('project-planning-source-dialog').screenshot({ path: 'output/playwright/planning-source-detected.png' });
     await win.getByTestId('planning-source-detected-plans').click();
+    await showProjectBoard(win);
     await expect(win.getByTestId('project-default-board-nav-item')).toBeVisible();
     const plannedProject = await win.evaluate(async projectId => window.praxis.projects.get(projectId), state.project!.id);
     expect(plannedProject?.planningMode).toBe('board');
@@ -182,6 +183,7 @@ test('workspace Add Project opens a folder without a board and adds planning lat
     await win.getByTestId('project-planning-source-dialog').scrollIntoViewIfNeeded();
     await win.getByTestId('project-planning-source-dialog').screenshot({ path: 'output/playwright/planning-source-options.png' });
     await win.getByTestId('planning-source-local-board').click();
+    await showProjectBoard(win);
     await expect(win.getByTestId('project-default-board-nav-item')).toBeVisible();
     await win.screenshot({ path: 'output/playwright/quick-start-with-board.png', fullPage: true });
     const boardState = await win.evaluate(async () => {

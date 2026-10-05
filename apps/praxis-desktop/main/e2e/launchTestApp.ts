@@ -252,3 +252,10 @@ export async function closeTestApp(app: TestApp): Promise<void> {
   await app.electronApp.close();
   fs.rmSync(app.userDataDir, { recursive: true, force: true });
 }
+
+/** Projects hide their board in the sidebar until the header toggle reveals it; reveals it (once) for the given scope. */
+export async function showProjectBoard(scope: Pick<Page, 'getByTestId'> | { getByTestId: Page['getByTestId'] }): Promise<void> {
+  const toggle = scope.getByTestId('project-boards-toggle').first();
+  await toggle.waitFor({ state: 'visible' });
+  if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
+}

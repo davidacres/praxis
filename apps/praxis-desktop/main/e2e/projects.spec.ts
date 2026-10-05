@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp, showProjectBoard, type TestApp } from './launchTestApp';
 import { ProjectStore, WorkspaceStore, defaultProjectTickets, defaultProjectWorkflow, localToolDefinitionsForMode, type KeyValueStore, type ProjectType } from '@praxis/core';
 import { ProjectManager } from '../src/main/projectManager';
 
@@ -124,6 +124,17 @@ test('creates a folderless Product project through advanced setup, then adds its
   ]);
   await page.getByTestId('project-add-board').click();
   await page.getByTestId('planning-source-local-board').click();
+  // The board stays hidden until the project's header toggle reveals it, and the toggle hides it again.
+  await expect(projectTree.getByTestId('project-default-board-nav-item')).toHaveCount(0);
+  await expect(projectTree.getByTestId('project-boards-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await projectTree.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'project-board-hidden.png') });
+  await projectTree.getByTestId('project-boards-toggle').click();
+  await expect(projectTree.getByTestId('project-boards-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Customer Portal Board');
+  await projectTree.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'project-board-shown.png') });
+  await projectTree.getByTestId('project-boards-toggle').click();
+  await expect(projectTree.getByTestId('project-default-board-nav-item')).toHaveCount(0);
+  await showProjectBoard(projectTree);
   await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Customer Portal Board');
   const workflowPanel = page.getByTestId('project-workflow');
   await expect(workflowPanel).toBeVisible();
@@ -171,6 +182,7 @@ test('creates a folderless Product project through advanced setup, then adds its
   expect(projectThemeStyles.panelBackground).toMatch(/rgba?\(0, 0, 0, 0\)/);
   expect(projectThemeStyles.panelBorderWidth).toBe('0px');
 
+  await showProjectBoard(projectTree);
   await projectTree.getByTestId('project-default-board-nav-item').click();
   await expect(page.getByTestId('issue-card')).toHaveCount(0);
   await page.getByTestId('mode-work').click();
@@ -301,6 +313,7 @@ test('uses a folder connection for an existing-folder project with plans', async
     expect(result.details?.issues[0].summary).toBe('Imported planning work');
     await app.window.reload();
     const projectTree = app.window.getByTestId('project-tree').filter({ hasText: 'Imported Plans' });
+    await showProjectBoard(projectTree);
     await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Imported Plans');
     await expect(app.window.locator('.sidebar').getByTestId('board-nav-item').filter({ hasText: 'Imported Plans' })).toHaveCount(0);
     await projectTree.getByTestId('project-default-board-nav-item').click();
@@ -574,7 +587,8 @@ test('shows a connected board only beneath its owning Praxis project', async () 
     await expect(app.window.getByTestId('nav-board')).toHaveCount(0);
     await expect(app.window.locator('.external-board-tree').getByTestId('board-nav-item').filter({ hasText: 'Delivery Workspace' })).toHaveCount(0);
     const projectTree = app.window.getByTestId('project-tree').filter({ hasText: 'Delivery Workspace' });
-    const linkedBoard = projectTree.getByTestId('project-linked-board-nav-item');
+    await showProjectBoard(projectTree);
+  const linkedBoard = projectTree.getByTestId('project-linked-board-nav-item');
     await expect(linkedBoard).toContainText('Linked Delivery');
     await expect(linkedBoard).toContainText('Linked');
     await linkedBoard.click();
@@ -632,6 +646,7 @@ test('unlinks a board that was cross-linked from another project\'s own connecti
   await app.window.reload();
 
   const projectTree = app.window.getByTestId('project-tree').filter({ hasText: result.firstName });
+  await showProjectBoard(projectTree);
   const linkedBoard = projectTree.getByTestId('project-linked-board-nav-item');
   await expect(linkedBoard).toContainText('Linked');
   await linkedBoard.getByTestId('board-unlink-btn').click();
