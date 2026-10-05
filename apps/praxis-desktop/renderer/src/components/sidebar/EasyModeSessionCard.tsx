@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { AgentSessionRecord, AgentTaskState } from '@praxis/core';
-import { Icon, type IconName } from '../../ui/Icon';
-import { sessionTitle, extractSubagents, formatStarted, type SubagentItem } from '../../ai/sessionNav';
+import { Icon } from '../../ui/Icon';
+import { sessionTitle, extractSubagents, formatStarted } from '../../ai/sessionNav';
 
 export interface EasyModeSessionCardProps {
   session: AgentSessionRecord;
@@ -10,6 +10,8 @@ export interface EasyModeSessionCardProps {
   activeAgentId?: string;
   onSelectSession: (issueKey: string) => void;
   onSelectAgent?: (sessionKey: string, agentId: string) => void;
+  onAbortSession?: (sessionKey: string) => void;
+  onDeleteSession?: (sessionKey: string) => void;
 }
 
 function resolveAgentStatusClass(state: AgentTaskState): string {
@@ -38,10 +40,19 @@ export function EasyModeSessionCard({
   isSelected,
   activeAgentId,
   onSelectSession,
-  onSelectAgent
+  onSelectAgent,
+  onAbortSession,
+  onDeleteSession
 }: EasyModeSessionCardProps) {
+  const [isBusy, setIsBusy] = useState(false);
   const title = sessionTitle(session);
   const timeFormatted = session.startedAt ? formatStarted(session.startedAt) : '';
+
+  const isRunning = session.state === 'executing' || session.state === 'planning' || session.state === 'awaiting_approval' || session.state === 'awaiting_input';
+  const latestEvent = session.events && session.events.length > 0 ? session.events[session.events.length - 1] : undefined;
+  const tickerText = isRunning
+    ? (latestEvent?.summary || (session.state === 'planning' ? 'Planning next steps…' : 'Agent working…'))
+    : null;
 
   // Extract subagents using sessionNav helper
   const subagents = React.useMemo(() => {
@@ -73,7 +84,7 @@ export function EasyModeSessionCard({
     return items;
   }, [subagents, session, title]);
 
-  const handleCardClick = (e: React.MouseEvent) => {
+  const handleCardClick = () => {
     onSelectSession(session.issueKey);
   };
 
@@ -82,6 +93,40 @@ export function EasyModeSessionCard({
     onSelectSession(session.issueKey);
     if (onSelectAgent) {
       onSelectAgent(session.issueKey, agentId);
+    }
+  };
+
+  const handleAbort = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isBusy) return;
+    setIsBusy(true);
+    try {
+      if (onAbortSession) {
+        onAbortSession(session.issueKey);
+      } else if (window.praxis?.ai?.abort) {
+        await window.praxis.ai.abort(session.issueKey);
+      }
+    } catch {
+      // ignore abort error
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isBusy) return;
+    setIsBusy(true);
+    try {
+      if (onDeleteSession) {
+        onDeleteSession(session.issueKey);
+      } else if (window.praxis?.ai?.deleteSession) {
+        await window.praxis.ai.deleteSession(session.issueKey);
+      }
+    } catch {
+      // ignore delete error
+    } finally {
+      setIsBusy(false);
     }
   };
 
@@ -109,7 +154,40 @@ export function EasyModeSessionCard({
             {timeFormatted}
           </span>
         )}
+        <div className="easymode-card-actions">
+          {isRunning && (
+            <button
+              type="button"
+              className="easymode-card-action-btn easymode-card-action-btn--abort"
+              title="Stop running agent"
+              aria-label="Stop running agent"
+              data-testid={`easymode-session-abort-${session.issueKey}`}
+              onClick={handleAbort}
+              disabled={isBusy}
+            >
+              <Icon name="close" size={11} />
+            </button>
+          )}
+          <button
+            type="button"
+            className="easymode-card-action-btn easymode-card-action-btn--delete"
+            title="Delete session"
+            aria-label="Delete session"
+            data-testid={`easymode-session-delete-${session.issueKey}`}
+            onClick={handleDelete}
+            disabled={isBusy}
+          >
+            <Icon name="trash" size={11} />
+          </button>
+        </div>
       </div>
+
+      {tickerText && (
+        <div className="easymode-session-card__ticker" title={tickerText}>
+          <span className="easymode-ticker-dot" />
+          <span className="easymode-ticker-text">{tickerText}</span>
+        </div>
+      )}
 
       {/* Agents / Subagents list owned by this session */}
       <div className="easymode-subagents-list" data-testid={`easymode-subagents-${session.issueKey}`}>

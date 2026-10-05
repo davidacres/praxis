@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { AgentSessionRecord, WorkflowRunSummary, ProjectRecord } from '@praxis/core';
 import { SectionHeader } from './SectionHeader';
 import { EasyModeSessionsList } from './EasyModeSessionsList';
@@ -12,11 +12,14 @@ export interface EasyModeSidebarProps {
   onSelectSession: (issueKey: string) => void;
   onSelectAgent?: (sessionKey: string, agentId: string) => void;
   onNewSession: () => void;
+  onAbortSession?: (sessionKey: string) => void;
+  onDeleteSession?: (sessionKey: string) => void;
   projects: ProjectRecord[];
   runsByProjectId: Record<string, WorkflowRunSummary[]>;
   activeWorkflowRunId?: string;
   onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
   onNewWorkflowRun: () => void;
+  onRerunWorkflowRun?: (project: ProjectRecord, run: WorkflowRunSummary) => void;
   renderSessionsContent?: () => React.ReactNode;
   renderAutomationsContent?: () => React.ReactNode;
 }
@@ -33,16 +36,19 @@ export function EasyModeSidebar({
   onSelectSession,
   onSelectAgent,
   onNewSession,
+  onAbortSession,
+  onDeleteSession,
   projects,
   runsByProjectId,
   activeWorkflowRunId,
   onSelectWorkflowRun,
   onNewWorkflowRun,
+  onRerunWorkflowRun,
   renderSessionsContent,
   renderAutomationsContent
 }: EasyModeSidebarProps) {
   // Aggregate total active/recent workflow runs across all projects
-  const allRuns = React.useMemo(() => {
+  const allRuns = useMemo(() => {
     const list: Array<{ project: ProjectRecord; run: WorkflowRunSummary }> = [];
     for (const project of projects) {
       const runs = runsByProjectId[project.id] ?? [];
@@ -75,6 +81,9 @@ export function EasyModeSidebar({
               activeAgentId={activeAgentId}
               onSelectSession={onSelectSession}
               onSelectAgent={onSelectAgent}
+              onNewSession={onNewSession}
+              onAbortSession={onAbortSession}
+              onDeleteSession={onDeleteSession}
             />
           )}
         </div>
@@ -96,6 +105,8 @@ export function EasyModeSidebar({
               runsByProjectId={runsByProjectId}
               activeWorkflowRunId={activeWorkflowRunId}
               onSelectWorkflowRun={onSelectWorkflowRun}
+              onNewWorkflowRun={onNewWorkflowRun}
+              onRerunWorkflowRun={onRerunWorkflowRun}
             />
           )}
         </div>

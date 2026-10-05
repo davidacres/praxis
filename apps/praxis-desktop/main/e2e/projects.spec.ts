@@ -8,6 +8,15 @@ import { ProjectManager } from '../src/main/projectManager';
 
 let app: TestApp;
 
+async function toggleWorkMode(page: any) {
+  await page.keyboard.press('ControlOrMeta+k');
+  const palette = page.getByRole('dialog', { name: 'Go to' });
+  await expect(palette).toBeVisible();
+  await palette.getByRole('textbox').fill('toggle work mode');
+  await palette.getByRole('option', { name: /Toggle work mode/ }).click();
+  await expect(palette).toBeHidden();
+}
+
 test.beforeEach(async () => { app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false }); });
 test.afterEach(async () => { await closeTestApp(app); });
 
@@ -185,7 +194,7 @@ test('creates a folderless Product project through advanced setup, then adds its
   await showProjectBoard(projectTree);
   await projectTree.getByTestId('project-default-board-nav-item').click();
   await expect(page.getByTestId('issue-card')).toHaveCount(0);
-  await page.getByTestId('mode-work').click();
+  await toggleWorkMode(page);
   const workProject = page.getByTestId('work-project').filter({ hasText: 'Customer Portal' });
   await expect(workProject).toContainText('1 board');
   await expect(workProject.getByTestId('work-card')).toContainText('Customer Portal Board');
@@ -594,7 +603,7 @@ test('shows a connected board only beneath its owning Praxis project', async () 
     await linkedBoard.click();
     await expect(app.window.getByTestId('issue-card')).toContainText('Linked delivery');
 
-    await app.window.getByTestId('mode-work').click();
+    await toggleWorkMode(app.window);
     const workProject = app.window.getByTestId('work-project').filter({ hasText: 'Delivery Workspace' });
     await expect(workProject).toContainText('2 boards');
     await expect(workProject.getByTestId('work-card')).toHaveCount(2);
@@ -603,7 +612,7 @@ test('shows a connected board only beneath its owning Praxis project', async () 
     // Unlinking from the sidebar must remove only this project's link, not
     // the shared folder connection itself — the same "Linked delivery source"
     // connection could be linked into another project too.
-    await app.window.getByTestId('mode-classic').click();
+    await toggleWorkMode(app.window);
     await linkedBoard.getByTestId('board-unlink-btn').click();
     await expect(projectTree.getByTestId('project-linked-board-nav-item')).toHaveCount(0);
     const stillConnected = await app.window.evaluate(async () =>
