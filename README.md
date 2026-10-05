@@ -138,7 +138,13 @@ Works with the CLI agents you already use — sessions run against your own sign
 
 ## Install
 
-### Desktop — macOS, Windows, Linux
+### Quick Install (macOS & Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/davidacres/praxis/main/scripts/install.sh | bash
+```
+
+### Desktop Downloads — macOS, Windows, Linux
 
 - **[Download the latest release](https://github.com/davidacres/praxis/releases/latest)** — `.dmg` (macOS), `-setup.exe` (Windows), `.AppImage` / `.deb` (Linux)
 
