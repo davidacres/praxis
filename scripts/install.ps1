@@ -49,9 +49,16 @@ if (-not $Version) {
     # Check redirect URL of latest release to avoid API rate limits
     $req = [System.Net.HttpWebRequest]::Create("https://github.com/$repo/releases/latest")
     $req.AllowAutoRedirect = $false
-    $resp = $req.GetResponse()
-    $location = $resp.GetResponseHeader("Location")
-    $resp.Close()
+    try {
+      $resp = $req.GetResponse()
+      $location = $resp.GetResponseHeader("Location")
+      $resp.Close()
+    } catch [System.Net.WebException] {
+      if ($_.Exception.Response) {
+        $location = $_.Exception.Response.GetResponseHeader("Location")
+        $_.Exception.Response.Close()
+      }
+    }
     if ($location -match 'tag/(v?[\d\.]+)') {
       $Version = $Matches[1]
     }
@@ -115,10 +122,14 @@ try {
 }
 
 if ($Launch) {
-  $installedApp = Join-Path $env:LOCALAPPDATA "Programs\Praxis\Praxis.exe"
-  if (Test-Path $installedApp) {
+  $programFilesApp = Join-Path $env:ProgramFiles "Praxis\Praxis.exe"
+  $localAppDataApp = Join-Path $env:LOCALAPPDATA "Programs\Praxis\Praxis.exe"
+  if (Test-Path $programFilesApp) {
     Write-Host "==> Launching Praxis..." -ForegroundColor Cyan
-    Start-Process -FilePath $installedApp
+    Start-Process -FilePath $programFilesApp
+  } elseif (Test-Path $localAppDataApp) {
+    Write-Host "==> Launching Praxis..." -ForegroundColor Cyan
+    Start-Process -FilePath $localAppDataApp
   } else {
     Start-Process -FilePath "Praxis" -ErrorAction SilentlyContinue
   }
