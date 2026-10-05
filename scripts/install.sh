@@ -99,7 +99,9 @@ esac
 # Handle Windows early
 if [ "$PLATFORM" = "windows" ]; then
   log_info "Detected Windows ($ARCH_FAMILY)"
-  printf "\nFor Windows, download and run the installer directly:\n"
+  printf "\nFor Windows, run in PowerShell:\n"
+  printf "  ${BOLD}irm https://raw.githubusercontent.com/%s/main/scripts/install.ps1 | iex${RESET}\n\n" "$REPO"
+  printf "Or download the installer directly:\n"
   printf "  ${BOLD}https://github.com/%s/releases/latest${RESET}\n\n" "$REPO"
   exit 0
 fi

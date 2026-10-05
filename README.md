@@ -138,10 +138,16 @@ Works with the CLI agents you already use — sessions run against your own sign
 
 ## Install
 
-### Quick Install (macOS & Linux)
+### Quick Install
 
+**macOS & Linux:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/davidacres/praxis/main/scripts/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/davidacres/praxis/main/scripts/install.ps1 | iex
 ```
 
 ### Desktop Downloads — macOS, Windows, Linux
