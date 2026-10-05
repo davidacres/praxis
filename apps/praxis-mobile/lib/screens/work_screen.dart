@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -25,11 +27,11 @@ class WorkScreen extends StatelessWidget {
     final store = context.watch<AppStore>();
     final runId = store.openRunId;
     if (runId != null && store.workflowRuns.any((run) => run.runId == runId)) {
-      return RunDetail(key: ValueKey('run:$runId'), runId: runId, onOpenSidebar: onOpenSidebar);
+      return RunDetail(key: ValueKey('${store.contextKey}:run:$runId'), runId: runId, onOpenSidebar: onOpenSidebar);
     }
     final open = store.work.where((item) => item.workId == store.openWorkId).firstOrNull;
     if (open == null) return _EmptySession(onOpenSidebar: onOpenSidebar);
-    return WorkDetail(key: ValueKey('work:${open.workId}'), workId: open.workId, onOpenSidebar: onOpenSidebar);
+    return WorkDetail(key: ValueKey('${store.contextKey}:work:${open.workId}'), workId: open.workId, onOpenSidebar: onOpenSidebar);
   }
 }
 
@@ -75,6 +77,8 @@ class _EmptySession extends StatelessWidget {
   }
 }
 
+String storeLabel(BuildContext context) => context.watch<AppStore>().desktopLabel;
+
 class SessionHeader extends StatelessWidget {
   const SessionHeader({super.key, required this.title, required this.onOpenSidebar});
   final String title;
@@ -98,8 +102,8 @@ class SessionHeader extends StatelessWidget {
             child: Semantics(
               header: true,
               child: Text(
-                title,
-                maxLines: 1,
+                '$title · ${storeLabel(context)}',
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: ts(context, 14, weight: FontWeight.w700),
               ),
@@ -220,6 +224,40 @@ class WorkDetail extends StatefulWidget {
 
 class _WorkDetailState extends State<WorkDetail> {
   final _draft = TextEditingController();
+  AppStore? _draftStore;
+  String? _draftEntry;
+  int? _draftGeneration;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final store = context.read<AppStore>();
+    if (_draftStore == null) {
+      _draftStore = store;
+      _draftEntry = store.selectedDesktop?.entryId;
+      _draftGeneration = store.generation;
+      _draft.text = store.composerDraft(widget.workId)?.text ?? '';
+      _draft.addListener(_saveDraft);
+    }
+  }
+
+  Timer? _draftTimer;
+
+  /// Each save is a keychain write, so typing is saved once it pauses.
+  void _saveDraft() {
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 500), _flushDraft);
+  }
+
+  void _flushDraft() {
+    _draftTimer = null;
+    final store = _draftStore;
+    final entry = _draftEntry;
+    if (store == null || entry == null || store.generation != _draftGeneration) return;
+    final item = store.work.where((item) => item.workId == widget.workId).firstOrNull;
+    store.saveComposerDraft(entry, widget.workId, _draft.text, item: item);
+  }
+
   String? _composerError;
   String? _previousStatus;
   int? _loadedRunSequence;
@@ -227,6 +265,11 @@ class _WorkDetailState extends State<WorkDetail> {
 
   @override
   void dispose() {
+    _draft.removeListener(_saveDraft);
+    if (_draftTimer?.isActive ?? false) {
+      _draftTimer!.cancel();
+      _flushDraft();
+    }
     _draft.dispose();
     super.dispose();
   }
@@ -237,7 +280,7 @@ class _WorkDetailState extends State<WorkDetail> {
     setState(() => _composerError = null);
     _draft.clear();
     store.sendFollowUp(item, text).catchError((Object error) {
-      if (!mounted) return;
+      if (!mounted || store.generation != _draftGeneration) return;
       _draft.text = text;
       setState(() => _composerError = Diagnostics.messageOf(error));
     });
@@ -247,12 +290,14 @@ class _WorkDetailState extends State<WorkDetail> {
   void _effects(AppStore store, WorkItem item, SelectionInfo info) {
     final providerId = info.providerId;
     if (providerId != null && !store.models.containsKey(providerId) && store.connection == ShellConnection.ready && (item.draft || info.canConfigure)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => store.loadModels(providerId));
+      WidgetsBinding.instance.addPostFrameCallback((_) => mounted && store.generation == _draftGeneration ? store.loadModels(providerId) : null);
     }
     if (!item.draft && _previousStatus == 'active' && item.status != 'active') {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => store.refreshUsage(item.sessionId).catchError((Object error) => Diagnostics.instance.record('Refreshing usage', error)),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && store.generation == _draftGeneration) {
+          store.refreshUsage(item.sessionId).catchError((Object error) => Diagnostics.instance.record('Refreshing usage', error));
+        }
+      });
     }
     _previousStatus = item.status;
     final runId = item.runId;
@@ -261,9 +306,11 @@ class _WorkDetailState extends State<WorkDetail> {
       if (_loadedRunSequence != sequence || _loadedRunDetail != store.detail || !store.runs.containsKey(runId)) {
         _loadedRunSequence = sequence;
         _loadedRunDetail = store.detail;
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => store.loadRun(runId).catchError((Object error) => Diagnostics.instance.record('Loading workflow progress', error)),
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && store.generation == _draftGeneration) {
+            store.loadRun(runId).catchError((Object error) => Diagnostics.instance.record('Loading workflow progress', error));
+          }
+        });
       }
     }
   }
@@ -291,7 +338,7 @@ class _WorkDetailState extends State<WorkDetail> {
     final entries = <_Entry>[...messages.map(_MessageEntry.new), ...itemFollowUps.map(_FollowUpEntry.new)];
     final permissions = store.openAttention.where((entry) => entry.kind == 'permission' && entry.sessionId == item.sessionId).toList()
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    final sending = item.status == 'active' ||itemFollowUps.any((message) => message.state == FollowUpState.pending);
+    final sending = item.status == 'active' || itemFollowUps.any((message) => message.state == FollowUpState.pending);
 
     Widget body;
     if (store.detail == 'chat') {

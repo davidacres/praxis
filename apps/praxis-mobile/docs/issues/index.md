@@ -11,6 +11,8 @@ These are navigational mirrors of the [canonical plan map](../PLAN_MAP.md). Use 
 
 ## Multiple desktop connections
 
+Mobile-only meaning: one Flutter phone app retains and switches among multiple paired Praxis desktop hosts. These tickets do not cover desktop workspace board/backend connections.
+
 | Story | Priority | Local issue mirror |
 | --- | --- | --- |
 | FX-BE-161: Saved desktop registry and migration | High | [Issue](features/fx-bf-108-multiple-desktop-connections/stories/fx-be-161-saved-desktop-registry/issue.md) |

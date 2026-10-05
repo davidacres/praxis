@@ -24,6 +24,8 @@ Saved desktop registry and migration enables the next delivery stage without los
 
 lib/app/connection.dart; new injectable registry repository and storage tests. Keep the phone identity global; registry metadata, routes and pinned host keys remain in secure storage.
 
+**Scope guard:** This story changes the Flutter phone app's saved Praxis desktop-host pairings. Desktop workspace board/backend connections and their `connectionStore`/`serviceRegistry.ts` paths are out of scope; stop if a generated plan redirects work there.
+
 ## Acceptance criteria
 
 - Versioned registry entries have a stable local entry ID, host ID, pinned public key, reported name, optional nickname, LAN/relay routes, selected project, cached appearance and last-used time. Active entry ID is separate.
@@ -53,5 +55,4 @@ All listed tasks and acceptance criteria are complete. Link automated results an
 
 
 ## Comments
-
 

@@ -16,6 +16,7 @@ import '../protocol/session_mirror.dart';
 import '../protocol/wire.dart';
 import 'confirm_identity.dart';
 import 'connection.dart';
+import 'desktop_registry.dart';
 import 'diagnostics.dart';
 import 'theme.dart';
 
@@ -213,6 +214,53 @@ String commandId(String prefix) {
   return '$prefix:${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}:$random';
 }
 
+/// The desktop authenticated under the pinned key but reports another host ID.
+class _HostIdMismatch extends StateError {
+  _HostIdMismatch() : super('The authenticated desktop has a different host ID. Scan its pairing invitation again.');
+}
+
+/// The captured transport refuses both new operations and late replies once
+/// replaced. This also covers each individual read in a multi-read bootstrap.
+class _GuardedConnection extends NativeMobileConnection {
+  _GuardedConnection(super.config, this.delegate, this.current, this.disposed);
+  final NativeMobileConnection delegate;
+  final NativeMobileConnection? Function() current;
+  final bool Function() disposed;
+  void check() {
+    if (disposed() || !identical(current(), this)) throw StateError('The desktop selection changed.');
+  }
+
+  Future<Object?> guard(Future<Object?> Function() operation) async {
+    check();
+    final result = await operation();
+    check();
+    return result;
+  }
+
+  @override
+  Future<void> connect() async {
+    await guard(() async {
+      await delegate.connect();
+      return null;
+    });
+  }
+
+  @override
+  Future<Object?> read(Map<String, Object?> request) => guard(() => delegate.read(request));
+  @override
+  Future<Object?> command(Map<String, Object?> command) => guard(() => delegate.command(command));
+  @override
+  Future<Object?> replay(int afterSequence) => guard(() => delegate.replay(afterSequence));
+  @override
+  void Function() subscribe(void Function(Map<String, dynamic>) listener) => delegate.subscribe(listener);
+  @override
+  void Function() subscribeStatus(void Function(MobileConnectionStatus) listener) => delegate.subscribeStatus(listener);
+  @override
+  void Function() subscribeClose(void Function(MobileConnectionError) listener) => delegate.subscribeClose(listener);
+  @override
+  void close() => delegate.close();
+}
+
 Map<String, Object?> readRequest(String operation, Map<String, Object?> target, [Map<String, Object?>? params]) => {
   'protocolVersion': 1,
   'requestId': commandId(operation),
@@ -228,23 +276,144 @@ const _attentionSafetyPoll = Duration(seconds: 60);
 const _attentionLegacyPoll = Duration(seconds: 5);
 const _updateDesktop = 'Update Praxis on the desktop to do this from the phone.';
 
-bool _visibleSession(SessionSnapshot session, String? projectId) =>
-    session.projectId != null
-        ? session.projectId == projectId
-        : session.runId == null && RegExp(r'^SESSION-[0-9a-f]{6,}$', caseSensitive: false).hasMatch(session.sessionKey);
+bool _visibleSession(SessionSnapshot session, String? projectId) => session.projectId != null
+    ? session.projectId == projectId
+    : session.runId == null && RegExp(r'^SESSION-[0-9a-f]{6,}$', caseSensitive: false).hasMatch(session.sessionKey);
 
 class AppStore extends ChangeNotifier {
-  AppStore({required this.theme}) {
+  AppStore({
+    required this.theme,
+    DesktopRepository? repository,
+    NativeMobileConnection Function(HostConfiguration)? connectionFactory,
+    Future<bool> Function(String)? identityCheck,
+    bool initialize = true,
+  }) : repository = repository ?? desktopRepository,
+       _connectionFactory = connectionFactory ?? NativeMobileConnection.new,
+       _identityCheck = identityCheck ?? confirmIdentity {
     _lifecycle = AppLifecycleListener(onResume: _onResume);
-    loadDesktopAppearance()
-        .then((stored) {
-          if (stored != null && theme.appearance == null) theme.applyAppearance(stored);
-        })
-        .catchError((Object error) => Diagnostics.instance.record('Loading the saved desktop theme', error));
+    if (initialize) startup = _initialize();
   }
 
   final ThemeController theme;
+  final DesktopRepository repository;
+  final NativeMobileConnection Function(HostConfiguration) _connectionFactory;
+  final Future<bool> Function(String) _identityCheck;
   late final AppLifecycleListener _lifecycle;
+  Future<void> startup = Future.value();
+  DesktopRegistry desktops = DesktopRegistry();
+  String? registryError;
+  bool registryLoaded = false;
+  bool desktopsVisible = true;
+  bool pairingFormVisible = false;
+  int _generation = 0;
+  int get generation => _generation;
+  SavedDesktop? get selectedDesktop {
+    final active = desktops.active;
+    final config = hostConfig;
+    return active != null && config != null && active.sameIdentity(config) ? active : null;
+  }
+
+  String get desktopLabel => selectedDesktop?.name ?? hostConfig?.hostName ?? hostConfig?.address ?? 'Desktop';
+  String get contextKey => '${selectedDesktop?.entryId ?? 'candidate'}:$_generation';
+
+  Future<void> _initialize() async {
+    final generation = _generation;
+    try {
+      final loaded = await repository.load();
+      if (_disposed || generation != _generation) return;
+      desktops = loaded;
+      registryLoaded = true;
+      registryError = null;
+      final active = loaded.active;
+      if (active != null) {
+        theme.applyAppearance(active.appearance);
+        desktopsVisible = false;
+        await connect(active.configuration);
+      }
+    } catch (error) {
+      if (_disposed || generation != _generation) return;
+      registryError = Diagnostics.messageOf(error);
+      registryLoaded = true;
+    }
+    _changed();
+  }
+
+  Future<void> reloadDesktops() async {
+    final generation = _generation;
+    try {
+      final loaded = await repository.load();
+      if (_disposed || generation != _generation) return;
+      desktops = loaded;
+      registryLoaded = true;
+      registryError = null;
+    } catch (error) {
+      if (_disposed || generation != _generation) return;
+      registryError = Diagnostics.messageOf(error);
+    }
+    _changed();
+  }
+
+  void showDesktops() {
+    desktopsVisible = true;
+    pairingFormVisible = false;
+    _changed();
+  }
+
+  void addDesktop() {
+    disconnect();
+    hostConfig = null;
+    desktopsVisible = false;
+    pairingFormVisible = true;
+    theme.applyAppearance(null);
+    _changed();
+  }
+
+  Future<void> selectDesktop(String id) async {
+    disconnect();
+    final generation = _generation;
+    try {
+      final selected = await repository.select(id);
+      if (_disposed || generation != _generation) return;
+      desktops = selected;
+      registryError = null;
+      desktopsVisible = false;
+      pairingFormVisible = false;
+      theme.applyAppearance(selected.active?.appearance);
+      await connect(selected.active!.configuration);
+    } catch (error) {
+      if (_disposed || generation != _generation) return;
+      registryError = Diagnostics.messageOf(error);
+      showDesktops();
+    }
+  }
+
+  Future<void> renameDesktop(String id, String? nickname) async {
+    final generation = _generation;
+    final renamed = await repository.rename(id, nickname);
+    if (_disposed || generation != _generation) return;
+    desktops = renamed;
+    _changed();
+  }
+
+  Future<void> forgetDesktop(String id) async {
+    final active = selectedDesktop?.entryId == id;
+    if (active) disconnect();
+    final generation = _generation;
+    final forgotten = await repository.forget(id);
+    if (_disposed || generation != _generation) return;
+    desktops = forgotten;
+    _composerDrafts.removeWhere((key, _) => key.startsWith('$id:'));
+    if (active) {
+      hostConfig = null;
+      theme.applyAppearance(null);
+    }
+    showDesktops();
+  }
+
+  bool _current(NativeMobileConnection connection) => !_disposed && identical(_live, connection);
+  void _ensureCurrent(NativeMobileConnection connection) {
+    if (!_current(connection)) throw StateError('The desktop selection changed. Open the item again on its desktop.');
+  }
 
   // ---------------------------------------------------------------- state
 
@@ -256,6 +425,8 @@ class AppStore extends ChangeNotifier {
   HostInfo? hostInfo;
   HostConfiguration? hostConfig;
   ({String projectId, String name}) project = (projectId: '', name: '');
+  List<ProjectSummary> availableProjects = [];
+  String? projectNotice;
   List<WorkItem> work = const [];
   Map<String, SessionSnapshot> _snapshots = {};
   final Map<String, SessionUsage> _usageReads = {};
@@ -395,8 +566,20 @@ class AppStore extends ChangeNotifier {
 
   void _wearAppearance(Object? value) {
     final appearance = readMobileAppearance(value);
-    if (appearance != null && theme.applyAppearance(appearance)) {
-      saveDesktopAppearance(appearance).catchError((Object error) => Diagnostics.instance.record('Saving the desktop theme', error));
+    if (appearance != null) {
+      theme.applyAppearance(appearance);
+      final id = selectedDesktop?.entryId;
+      final connection = _live;
+      if (id != null && connection != null) {
+        repository
+            .cacheAppearance(id, appearance, isCurrent: () => _current(connection))
+            .then((registry) {
+              if (_current(connection)) desktops = registry;
+            })
+            .catchError((Object error) {
+              if (_current(connection)) Diagnostics.instance.record('Saving the desktop theme', error);
+            });
+      }
     }
   }
 
@@ -455,7 +638,9 @@ class AppStore extends ChangeNotifier {
     _clearReconnectTimer();
     final delay = reconnectDelay(_reconnectAttempt);
     _reconnectAttempt += 1;
+    final generation = _generation;
     _reconnectTimer = Timer(delay, () {
+      if (_disposed || generation != _generation) return;
       final config = hostConfig;
       if (config != null && _connection == ShellConnection.reconnecting) _openConnection(config, reconnect: true);
     });
@@ -482,9 +667,13 @@ class AppStore extends ChangeNotifier {
     try {
       info = HostInfo(await connection.read(readRequest('host.info', hostTarget)) as Map<String, dynamic>);
     } catch (_) {
+      _ensureCurrent(connection);
       info = null; // A desktop from before revision 2: no catalog, usage or access reads.
     }
     final epochChanged = hostInfo?.hostEpoch != info?.hostEpoch;
+    if (info != null && info.hostId != config.hostId) {
+      throw _HostIdMismatch();
+    }
     hostInfo = info;
     _wearAppearance(info?.appearance);
     if (epochChanged) {
@@ -499,31 +688,57 @@ class AppStore extends ChangeNotifier {
       try {
         access = Remote(RemoteStatus.ready, DeviceAccess(await connection.read(readRequest('access.get', hostTarget)) as Map<String, dynamic>));
       } catch (error) {
+        _ensureCurrent(connection);
         access = Remote(RemoteStatus.error, null, Diagnostics.messageOf(error));
       }
     } else {
       access = const Remote(RemoteStatus.unsupported, null, 'This desktop does not report the phone’s access grant. Update Praxis on the desktop.');
     }
 
-    ProjectSummary projectSummary;
-    if (config.projectId != null) {
-      projectSummary = ProjectSummary(
-        await connection.read(readRequest('projects.snapshot', {...hostTarget, 'projectId': config.projectId})) as Map<String, dynamic>,
-      );
-    } else {
-      final available = await connection.read(readRequest('projects.snapshot', hostTarget)) as Map<String, dynamic>;
-      final projects = (available['projects'] as List? ?? const []).whereType<Map<String, dynamic>>().toList();
-      if (projects.isEmpty) {
-        throw StateError('This phone has not been granted access to a project. Change its grant in Settings → Mobile access on the desktop.');
-      }
-      projectSummary = ProjectSummary(projects.first);
+    final available = await connection.read(readRequest('projects.snapshot', hostTarget)) as Map<String, dynamic>;
+    final projects = (available['projects'] as List? ?? const []).whereType<Map<String, dynamic>>().map(ProjectSummary.new).toList();
+    if (projects.isEmpty) {
+      throw StateError('This phone has not been granted access to a project. Change its grant in Settings → Mobile access on the desktop.');
     }
+    availableProjects = projects;
+    final remembered = projects.where((project) => project.projectId == config.projectId).firstOrNull;
+    projectNotice = config.projectId != null && remembered == null
+        ? 'The saved project is no longer available on this desktop. Select a permitted project.'
+        : null;
+    final projectSummary = remembered ?? projects.first;
     final projectId = projectSummary.projectId;
     final target = {...hostTarget, 'projectId': projectId};
     _projectId = projectId;
     project = (projectId: projectId, name: projectSummary.name);
-    final saved = config.withProject(projectId);
-    await saveHostConfiguration(saved);
+    final saved = HostConfiguration.fromJson({
+      ...config.withProject(projectId).withoutInvitation().toJson(),
+      if (info?.hostName.isNotEmpty == true) 'hostName': info!.hostName,
+    });
+    _ensureCurrent(connection);
+    // Persist only after authentication; every write is bound to this transport.
+    final registry = await repository.saveAuthenticated(saved, replaceKey: config.pairingTokenId != null, isCurrent: () => _current(connection));
+    _ensureCurrent(connection);
+    desktops = registry;
+    _wearAppearance(info?.appearance);
+    final entry = registry.active;
+    if (entry != null) {
+      for (final draft in entry.drafts.entries) {
+        if (draft.value.newChat && !work.any((item) => item.workId == draft.key) && draft.value.projectId == projectId) {
+          work = [
+            ...work,
+            WorkItem(
+              workId: draft.key,
+              title: 'New chat',
+              status: 'idle',
+              sessionId: draft.key,
+              draft: true,
+              projectId: projectId,
+              selection: SessionSelection(provider: draft.value.provider, model: draft.value.model, mode: draft.value.mode),
+            ),
+          ];
+        }
+      }
+    }
 
     final sessions = (await _readList(
       connection,
@@ -532,8 +747,12 @@ class AppStore extends ChangeNotifier {
     )).whereType<Map<String, dynamic>>().map(SessionSnapshot.new).where((session) => !session.archived && _visibleSession(session, projectId)).toList();
     final loaded = await Future.wait(
       sessions.map(
-        (session) async =>
-            SessionSnapshot(await connection.read(readRequest('sessions.get', {...hostTarget, if (session.projectId != null) 'projectId': session.projectId, 'sessionId': session.sessionId})) as Map<String, dynamic>),
+        (session) async => SessionSnapshot(
+          await connection.read(
+                readRequest('sessions.get', {...hostTarget, if (session.projectId != null) 'projectId': session.projectId, 'sessionId': session.sessionId}),
+              )
+              as Map<String, dynamic>,
+        ),
       ),
     );
     // Sessions the desktop no longer lists drop out; a live event newer than the read is kept.
@@ -573,6 +792,7 @@ class AppStore extends ChangeNotifier {
       try {
         providers = Remote(RemoteStatus.ready, ProviderCatalog(await connection.read(readRequest('providers.list', target)) as Map<String, dynamic>));
       } catch (error) {
+        _ensureCurrent(connection);
         providers = Remote(RemoteStatus.error, null, Diagnostics.messageOf(error));
       }
     } else {
@@ -582,7 +802,6 @@ class AppStore extends ChangeNotifier {
         'This desktop does not share its AI providers with the phone. Update Praxis on the desktop to choose a provider and model here.',
       );
     }
-
 
     // The reads are current as of latestSequence: replay what came after.
     final latest = info?.latestSequence ?? 0;
@@ -608,10 +827,10 @@ class AppStore extends ChangeNotifier {
   Future<void> _openConnection(HostConfiguration config, {required bool reconnect}) async {
     _clearReconnectTimer();
     _closeConnection();
-    final connection = NativeMobileConnection(config);
+    final connection = _GuardedConnection(config, _connectionFactory(config), () => _live, () => _disposed);
     _live = connection;
     hostConfig = config;
-    bool current() => identical(_live, connection);
+    bool current() => _current(connection);
     if (!reconnect) {
       connectionIssue = null;
       _setPhase(ShellConnection.connecting);
@@ -638,6 +857,7 @@ class AppStore extends ChangeNotifier {
         if (current()) _handleConnectionLoss(error);
       }),
     ];
+    String? newlySaved;
     try {
       await connection.connect();
       if (!current()) return;
@@ -646,16 +866,36 @@ class AppStore extends ChangeNotifier {
         effective = config.withoutInvitation();
         hostConfig = effective;
       }
+      // A spent invitation must be kept even if the reads below fail; a known desktop is saved once, by the bootstrap.
+      final known = desktops.entries.any((entry) => entry.sameIdentity(effective));
+      if (config.pairingTokenId != null || !known) {
+        final registry = await repository.saveAuthenticated(effective, replaceKey: config.pairingTokenId != null, isCurrent: current);
+        if (!current()) return;
+        desktops = registry;
+        newlySaved = !known ? registry.active?.entryId : null;
+      }
       final saved = await _bootstrap(connection, effective);
       if (!current()) return;
       hostConfig = saved;
       _reconnectAttempt = 0;
       connectionIssue = null;
       pairing = null;
+      if (projectNotice != null) desktopsVisible = true;
       _setPhase(ShellConnection.ready);
     } catch (error) {
       if (!current()) return;
       _closeConnection();
+      if (error is _HostIdMismatch && newlySaved != null) {
+        // Do not leave a desktop that failed verification saved and selected for the next launch.
+        final generation = _generation;
+        try {
+          final forgotten = await repository.forget(newlySaved);
+          if (generation == _generation) desktops = forgotten;
+        } catch (forgetError) {
+          Diagnostics.instance.record('Removing an unverified desktop', forgetError);
+        }
+        if (_disposed || generation != _generation) return;
+      }
       if (reconnect) {
         _handleConnectionLoss(error);
         return;
@@ -678,11 +918,14 @@ class AppStore extends ChangeNotifier {
       connection
           .read(readRequest('attention.list', {'hostId': hostId, 'projectId': projectId}))
           .then((items) {
+            if (!_current(connection)) return;
             _polledAttention = (items is List ? items : const <Object?>[]).whereType<Map<String, dynamic>>().map(AttentionItem.fromJson).toList();
             Diagnostics.instance.refreshSucceeded();
             _changed();
           })
-          .catchError((Object error) => Diagnostics.instance.refreshFailed('Refreshing attention', error));
+          .catchError((Object error) {
+            if (_current(connection)) Diagnostics.instance.refreshFailed('Refreshing attention', error);
+          });
     });
   }
 
@@ -700,11 +943,13 @@ class AppStore extends ChangeNotifier {
     connection
         .read(readRequest('host.info', {'hostId': config.hostId}))
         .then((value) {
+          if (!_current(connection)) return null;
           final info = HostInfo(value as Map<String, dynamic>);
           if (info.hostEpoch != hostInfo?.hostEpoch) return _openConnection(config, reconnect: true);
           return connection.replay(_cursor.sequence).then((_) {});
         })
         .catchError((Object error) {
+          if (!_current(connection)) return;
           Diagnostics.instance.record('Checking the desktop after returning to the app', error);
           _setPhase(ShellConnection.reconnecting);
           _reconnectAttempt = 0;
@@ -716,6 +961,8 @@ class AppStore extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _generation++;
+    forgetIdentityCheck();
     _lifecycle.dispose();
     _clearReconnectTimer();
     _attentionTimer?.cancel();
@@ -726,6 +973,10 @@ class AppStore extends ChangeNotifier {
   // ---------------------------------------------------------------- connect / navigation
 
   Future<void> connect(HostConfiguration config) {
+    disconnect();
+    desktopsVisible = false;
+    pairingFormVisible = false;
+    theme.applyAppearance(desktops.entries.where((e) => e.sameIdentity(config)).firstOrNull?.appearance);
     autoConnectEnabled = true;
     return _openConnection(config, reconnect: false);
   }
@@ -739,16 +990,17 @@ class AppStore extends ChangeNotifier {
   }
 
   void cancelConnect() {
-    _clearReconnectTimer();
-    _closeConnection();
+    disconnect();
     autoConnectEnabled = false;
     pairing = null;
     _setPhase(ShellConnection.offline);
   }
 
-  void disconnect({bool forget = false}) {
+  void disconnect() {
+    _generation++;
     _clearReconnectTimer();
     _closeConnection();
+    _attentionTimer?.cancel();
     forgetIdentityCheck();
     autoConnectEnabled = false;
     _projectId = null;
@@ -759,6 +1011,8 @@ class AppStore extends ChangeNotifier {
     host = (hostId: '', hostName: '', online: false);
     hostInfo = null;
     project = (projectId: '', name: '');
+    availableProjects = [];
+    projectNotice = null;
     work = const [];
     _snapshots = {};
     _usageReads.clear();
@@ -776,12 +1030,82 @@ class AppStore extends ChangeNotifier {
     openWorkId = null;
     connectionIssue = null;
     pairing = null;
-    if (forget) {
-      hostConfig = null;
-      forgetHostConfiguration();
-      theme.applyAppearance(null);
-    }
     _setPhase(ShellConnection.offline);
+  }
+
+  Future<void> selectProject(String id) async {
+    final config = hostConfig;
+    if (config == null || !availableProjects.any((p) => p.projectId == id)) {
+      throw StateError('That project is not available on this desktop.');
+    }
+    await connect(config.withProject(id));
+  }
+
+  final Map<String, DesktopDraft> _composerDrafts = {};
+  DesktopDraft? composerDraft(String workId) {
+    final id = selectedDesktop?.entryId;
+    return _composerDrafts['$id:$workId'] ?? selectedDesktop?.drafts[workId];
+  }
+
+  void _removeComposerDraft(String entryId, String workId) {
+    _composerDrafts.remove('$entryId:$workId');
+    final entries = desktops.entries
+        .map(
+          (entry) => entry.entryId == entryId
+              ? SavedDesktop(
+                  entryId: entry.entryId,
+                  configuration: entry.configuration,
+                  nickname: entry.nickname,
+                  appearance: entry.appearance,
+                  lastUsedAt: entry.lastUsedAt,
+                  drafts: {...entry.drafts}..remove(workId),
+                )
+              : entry,
+        )
+        .toList();
+    desktops = DesktopRegistry(entries: entries, activeEntryId: desktops.activeEntryId);
+    repository.saveDraft(entryId, workId, null).catchError((Object error) {
+      Diagnostics.instance.record('Removing an unsent draft', error);
+      return desktops;
+    });
+  }
+
+  void saveComposerDraft(String entryId, String workId, String text, {WorkItem? item}) {
+    final previous = _composerDrafts['$entryId:$workId'] ?? desktops.find(entryId)?.drafts[workId];
+    if (text.trim().isEmpty) {
+      // Nothing unsent: drop any stored draft instead of keeping an empty placeholder.
+      if (previous != null) _removeComposerDraft(entryId, workId);
+      return;
+    }
+    final draft = DesktopDraft(
+      text: text,
+      updatedAt: isoNow(),
+      newChat: item?.draft ?? previous?.newChat ?? false,
+      projectId: item?.projectId ?? previous?.projectId ?? _projectId,
+      provider: item?.selection?.provider ?? previous?.provider,
+      model: item?.selection?.model ?? previous?.model,
+      mode: item?.selection?.mode ?? previous?.mode ?? 'chat',
+    );
+    _composerDrafts['$entryId:$workId'] = draft;
+    final entries = desktops.entries
+        .map(
+          (entry) => entry.entryId == entryId
+              ? SavedDesktop(
+                  entryId: entry.entryId,
+                  configuration: entry.configuration,
+                  nickname: entry.nickname,
+                  appearance: entry.appearance,
+                  lastUsedAt: entry.lastUsedAt,
+                  drafts: {...entry.drafts, workId: draft},
+                )
+              : entry,
+        )
+        .toList();
+    desktops = DesktopRegistry(entries: entries, activeEntryId: desktops.activeEntryId);
+    repository.saveDraft(entryId, workId, draft).catchError((Object error) {
+      Diagnostics.instance.record('Saving an unsent draft', error);
+      return desktops;
+    });
   }
 
   void setRoute(String primary) {
@@ -814,7 +1138,10 @@ class AppStore extends ChangeNotifier {
   void startNewChat() {
     openRunId = null;
     final id = 'draft-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
-    work = [WorkItem(workId: id, title: 'New chat', status: 'idle', sessionId: id, draft: true, selection: defaultSessionSelection), ...work];
+    work = [
+      WorkItem(workId: id, title: 'New chat', status: 'idle', sessionId: id, draft: true, projectId: _projectId, selection: defaultSessionSelection),
+      ...work,
+    ];
     openWorkId = id;
     primaryRoute = 'work';
     detail = 'chat';
@@ -823,6 +1150,9 @@ class AppStore extends ChangeNotifier {
 
   void updateDraftSelection(String workId, SessionSelection Function(SessionSelection current) patch) {
     work = work.map((item) => item.workId == workId && item.draft ? item.withSelection(patch(item.selection ?? defaultSessionSelection)) : item).toList();
+    final item = work.where((item) => item.workId == workId).firstOrNull;
+    final entry = selectedDesktop;
+    if (item != null && entry != null) saveComposerDraft(entry.entryId, workId, entry.drafts[workId]?.text ?? '', item: item);
     _changed();
   }
 
@@ -866,8 +1196,9 @@ class AppStore extends ChangeNotifier {
   Future<void> _sendCommand(String messageId) async {
     final entry = _commands[messageId];
     if (entry == null) return;
+    final connection = _requireConnection();
     try {
-      final value = await _requireConnection().command(entry.command);
+      final value = await connection.command(entry.command);
       if (value is! Map<String, dynamic>) {
         throw StateError('The desktop did not return the session for this message. Refresh and send it again.');
       }
@@ -875,13 +1206,26 @@ class AppStore extends ChangeNotifier {
       _commands.remove(messageId);
       _applySnapshot(snapshot);
       openWorkId = snapshot.sessionKey;
-      if (entry.draft) work = work.where((item) => !item.draft || item.workId != entry.workId).toList();
+      if (entry.draft) {
+        work = work.where((item) => !item.draft || item.workId != entry.workId).toList();
+        final desktop = selectedDesktop;
+        if (desktop != null) {
+          _composerDrafts.remove('${desktop.entryId}:${entry.workId}');
+          repository.saveDraft(desktop.entryId, entry.workId, null).catchError((Object error) {
+            Diagnostics.instance.record('Removing a sent draft', error);
+            return desktops;
+          });
+        }
+      }
       followUps = followUps.where((message) => message.messageId != messageId).toList();
       _changed();
     } catch (error) {
+      if (!_current(connection)) return;
       // The desktop refused it, so it did not run: a retry must be a new command, or the
       // desktop replays the refused one's empty outcome instead of trying again.
-      if (error is MobileRequestError) _commands[messageId] = (command: {...entry.command, 'commandId': commandId('message'), 'issuedAt': isoNow()}, workId: entry.workId, draft: entry.draft);
+      if (error is MobileRequestError) {
+        _commands[messageId] = (command: {...entry.command, 'commandId': commandId('message'), 'issuedAt': isoNow()}, workId: entry.workId, draft: entry.draft);
+      }
       followUps = followUps
           .map((message) => message.messageId == messageId ? message.copyWith(FollowUpState.failed, Diagnostics.messageOf(error)) : message)
           .toList();
@@ -919,6 +1263,7 @@ class AppStore extends ChangeNotifier {
     try {
       providers = Remote(RemoteStatus.ready, ProviderCatalog(await connection.read(readRequest('providers.list', _target())) as Map<String, dynamic>));
     } catch (error) {
+      _ensureCurrent(connection);
       providers = Remote(RemoteStatus.error, providers.value, Diagnostics.messageOf(error));
     }
     _changed();
@@ -933,6 +1278,7 @@ class AppStore extends ChangeNotifier {
       final value = await connection.read(readRequest('models.list', _target(), {'provider': provider, if (refresh) 'refresh': true}));
       models[provider] = Remote(RemoteStatus.ready, ModelCatalog(value as Map<String, dynamic>));
     } catch (error) {
+      _ensureCurrent(connection);
       models[provider] = Remote(RemoteStatus.error, null, Diagnostics.messageOf(error));
     }
     _changed();
@@ -996,7 +1342,9 @@ class AppStore extends ChangeNotifier {
 
   /// Allowing asks the person to prove it is them first; false when they cancel.
   Future<bool> respondToPermission(String requestId, String decision) async {
-    if (decision != 'deny' && !await confirmIdentity('Allow the agent to do this on your desktop')) return false;
+    final connection = _requireConnection();
+    if (decision != 'deny' && !await _identityCheck('Allow the agent to do this on $desktopLabel')) return false;
+    _ensureCurrent(connection);
     await _command('permissions.respond', 'permission', {'requestId': requestId}, {'decision': decision});
     _markResolved('permission:$requestId');
     return true;
@@ -1007,17 +1355,19 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<bool> approve(String runId) async {
-    if (!await confirmIdentity('Approve this workflow run')) return false;
+    final connection = _requireConnection();
+    if (!await _identityCheck('Approve this workflow run on $desktopLabel')) return false;
+    _ensureCurrent(connection);
     await _command('workflowGates.approve', 'approve', {'runId': runId}, const {});
     _markResolved('approval:$runId');
     return true;
   }
 
   Future<bool> approveAll([String? currentRunId]) async {
-    if (!await confirmIdentity('Approve all workflow runs')) return false;
-    final toApprove = <String>{
-      if (currentRunId != null) currentRunId,
-    };
+    final connection = _requireConnection();
+    if (!await _identityCheck('Approve all workflow runs on $desktopLabel')) return false;
+    _ensureCurrent(connection);
+    final toApprove = <String>{if (currentRunId != null) currentRunId};
     for (final run in workflowRuns) {
       if (run.status == 'awaiting-approval' && run.canApprove) {
         toApprove.add(run.runId);
@@ -1030,17 +1380,22 @@ class AppStore extends ChangeNotifier {
     }
     for (final runId in toApprove) {
       try {
+        _ensureCurrent(connection);
         await _command('workflowGates.approve', 'approve', {'runId': runId}, const {});
         _markResolved('approval:$runId');
-      } catch (_) {}
+      } catch (_) {
+        _ensureCurrent(connection);
+      }
     }
     return true;
   }
 
   Future<bool> reject(String runId, String reason) async {
+    final connection = _requireConnection();
     if (!_offers('workflowGates.reject')) throw StateError(_updateDesktop);
     if (reason.trim().isEmpty) throw StateError('Say why you are rejecting — the reason is recorded on the run.');
-    if (!await confirmIdentity('Reject this workflow run')) return false;
+    if (!await _identityCheck('Reject this workflow run on $desktopLabel')) return false;
+    _ensureCurrent(connection);
     await _command('workflowGates.reject', 'reject', {'runId': runId}, {'reason': reason.trim()});
     _markResolved('approval:$runId');
     return true;
@@ -1055,10 +1410,14 @@ class AppStore extends ChangeNotifier {
 
   /// Answers a gadget; approving or changing answers ask the person to prove it is them first.
   Future<void> answerGadget(String sessionId, GadgetEnvelope gadget, GadgetActionDescriptor action, Map<String, Object?> value) async {
+    final connection = _requireConnection();
     if (!_offers('gadgets.submit')) throw StateError(_updateDesktop);
-    if (answerNeedsIdentity(action) && !await confirmIdentity(action.label)) throw StateError('Not sent — the phone could not confirm it was you.');
+    if (answerNeedsIdentity(action) && !await _identityCheck('${action.label} on $desktopLabel')) {
+      throw StateError('Not sent — the phone could not confirm it was you.');
+    }
+    _ensureCurrent(connection);
     final result =
-        await _requireConnection().command({
+        await connection.command({
               'protocolVersion': 1,
               'commandId': commandId('gadget'),
               'issuedAt': isoNow(),
@@ -1100,26 +1459,38 @@ class AppStore extends ChangeNotifier {
       Diagnostics.instance.record('Loading a chat image', StateError('The connected desktop does not support image previews. Update Praxis on the desktop.'));
       return null;
     }
+    final connection = _requireConnection();
+    final target = _target({'sessionId': sessionId});
     try {
       final encoded = StringBuffer();
       var offset = 0;
       String? mimeType;
       int? totalLength;
       while (true) {
-        final result = await _requireConnection().read(readRequest('sessions.imagePreview', _target({'sessionId': sessionId}), {...source, 'offset': offset})) as Map<String, dynamic>;
+        final result = await connection.read(readRequest('sessions.imagePreview', target, {...source, 'offset': offset})) as Map<String, dynamic>;
         final legacyDataUrl = result['dataUrl'];
         if (offset == 0 && legacyDataUrl is String) return legacyDataUrl;
         final chunkType = result['mimeType'];
         final chunk = result['dataBase64'];
         final nextOffset = result['nextOffset'];
         final chunkLength = result['totalLength'];
-        if (chunkType is! String || chunk is! String || nextOffset is! int || chunkLength is! int || !RegExp(r'^image/(?:png|jpeg|webp|gif|bmp|avif)$').hasMatch(chunkType)) {
+        if (chunkType is! String ||
+            chunk is! String ||
+            nextOffset is! int ||
+            chunkLength is! int ||
+            !RegExp(r'^image/(?:png|jpeg|webp|gif|bmp|avif)$').hasMatch(chunkType)) {
           Diagnostics.instance.record('Loading a chat image', StateError('The desktop returned no image data.'));
           return null;
         }
         mimeType ??= chunkType;
         totalLength ??= chunkLength;
-        if (mimeType != chunkType || totalLength != chunkLength || nextOffset != offset + chunk.length || nextOffset <= offset || nextOffset > totalLength || nextOffset % 4 != 0 || totalLength > 16 * 1024 * 1024) {
+        if (mimeType != chunkType ||
+            totalLength != chunkLength ||
+            nextOffset != offset + chunk.length ||
+            nextOffset <= offset ||
+            nextOffset > totalLength ||
+            nextOffset % 4 != 0 ||
+            totalLength > 16 * 1024 * 1024) {
           Diagnostics.instance.record('Loading a chat image', StateError('The desktop returned an invalid image chunk.'));
           return null;
         }
@@ -1128,6 +1499,7 @@ class AppStore extends ChangeNotifier {
         offset = nextOffset;
       }
     } catch (error) {
+      if (!_current(connection)) return null;
       Diagnostics.instance.record('Loading a chat image', error);
       return null;
     }

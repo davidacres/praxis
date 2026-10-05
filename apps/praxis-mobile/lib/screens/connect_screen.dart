@@ -36,14 +36,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
   @override
   void initState() {
     super.initState();
-    final store = context.read<AppStore>();
-    if (store.autoConnectEnabled) {
-      loadHostConfiguration().then((config) {
-        if (!mounted || config == null) return;
-        _applySaved(config);
-        store.connect(config);
-      });
-    }
+    _advancedOpen = context.read<AppStore>().pairingFormVisible;
     listenForHosts((host) {
       if (!mounted) return;
       setState(() => _discovered = [host, ..._discovered.where((item) => item.hostId != host.hostId)].take(5).toList());
@@ -64,16 +57,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
     }
     super.dispose();
   }
-
-  void _applySaved(HostConfiguration config) => setState(() {
-    _address.text = config.address;
-    _port.text = '${config.port}';
-    _hostId.text = config.hostId;
-    _hostName = config.hostName ?? '';
-    _projectId.text = config.projectId ?? '';
-    _invitation = InvitationDetails(hostPublicKeyHex: config.hostPublicKeyHex);
-    _invitationText.text = config.hostPublicKeyHex;
-  });
 
   void _importConnectionDetails(String value) {
     setState(() {
@@ -100,21 +83,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
     });
   }
 
-  /// Forgets the paired desktop and everything the form remembered about it.
-  void _forgetDesktop() {
-    context.read<AppStore>().disconnect(forget: true);
-    setState(() {
-      _address.clear();
-      _port.text = '43100';
-      _hostId.clear();
-      _hostName = '';
-      _projectId.clear();
-      _invitation = null;
-      _invitationText.clear();
-      _formError = null;
-    });
-  }
-
   Future<void> _openScanner() async {
     final data = await Navigator.of(context).push<String>(MaterialPageRoute(fullscreenDialog: true, builder: (_) => const PairingScanner()));
     if (data != null && mounted) {
@@ -123,7 +91,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
     }
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     setState(() => _formError = null);
     final port = int.tryParse(_port.text.trim());
     String? error;
@@ -143,7 +111,30 @@ class _ConnectScreenState extends State<ConnectScreen> {
       setState(() => _formError = error);
       return;
     }
-    context.read<AppStore>().connect(
+    final store = context.read<AppStore>();
+    final previous = store.desktops.entries.where((entry) => entry.configuration.hostId == _hostId.text.trim()).firstOrNull;
+    if (previous != null && previous.configuration.hostPublicKeyHex.toLowerCase() != invitation!.hostPublicKeyHex!.toLowerCase()) {
+      if (invitation.tokenId == null) {
+        setState(() => _formError = 'This desktop’s key changed. Scan a new pairing invitation and confirm the replacement.');
+        return;
+      }
+      final generation = store.generation;
+      final confirmed = await showPraxisSheet<bool>(
+        context,
+        builder: (context) => ScreenScroll(
+          children: [
+            const H1('Replace desktop trust?'),
+            Body(
+              '${previous.name} has a different host key. Continue only if you created this invitation on that desktop. Its cached data will be cleared.',
+            ),
+            PraxisButton(label: 'Confirm new pairing', onPressed: () => Navigator.pop(context, true)),
+            PraxisButton(label: 'Cancel', ghost: true, onPressed: () => Navigator.pop(context, false)),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true || generation != store.generation) return;
+    }
+    store.connect(
       HostConfiguration(
         address: _address.text.trim(),
         port: port!,
@@ -202,6 +193,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                           align: TextAlign.center,
                         ),
                         const SizedBox(height: 12),
+                        if (store.hostConfig != null) Body('Desktop: ${store.desktopLabel}', dim: true, align: TextAlign.center),
                         if (pairingPending)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -262,7 +254,9 @@ class _ConnectScreenState extends State<ConnectScreen> {
                             },
                           ),
                           const SizedBox(height: 12),
-                          PraxisButton(label: 'Add connection', ghost: true, onPressed: () => setState(() => _advancedOpen = true)),
+                          PraxisButton(label: 'Add desktop', ghost: true, onPressed: () => setState(() => _advancedOpen = true)),
+                          const SizedBox(height: 12),
+                          PraxisButton(label: 'Switch desktop', ghost: true, onPressed: store.showDesktops),
                         ],
                       ],
                     ),
@@ -420,8 +414,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 child: Text(_formError!, style: ts(context, 12, scaled: false, lineHeight: 17, color: p.danger)),
               ),
             const Body('The phone’s identity key stays in this device’s secure storage.', dim: true),
-            if (store.hostConfig != null && issue?.action == IssueAction.rescan)
-              PraxisButton(label: 'Forget this desktop', ghost: true, onPressed: _forgetDesktop),
+            PraxisButton(label: 'Desktops', ghost: true, onPressed: store.showDesktops),
             PraxisButton(
               label: connecting || pairingPending
                   ? 'Connecting…'

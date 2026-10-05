@@ -100,6 +100,8 @@ from helper predicates, loopback fixtures, static screenshots, or Expo Go alone.
 
 Priority and stage policy, dependencies, agent recommendations and validation are defined in the feature. All new items are Backlog.
 
+**Scope guard:** "Desktop connection" means a Flutter mobile-to-Praxis-desktop host pairing. This feature is unrelated to desktop workspace board/backend connections, `WorkspaceRecord.connectionIds`, `connectionStore`, `serviceRegistry.ts`, or `ConnectionForm`.
+
 | Ref | Type | Name | Priority | Delivery | Depends on |
 | --- | --- | --- | --- | --- | --- |
 | [FX-BF-108](plans/features/fx-bf-108-multiple-desktop-connections/feature.md) | Feature | Multiple desktop connections | High | All stages | FX-BE-076, FX-BE-077, FX-BE-080, FX-BE-081, FX-BE-083 |

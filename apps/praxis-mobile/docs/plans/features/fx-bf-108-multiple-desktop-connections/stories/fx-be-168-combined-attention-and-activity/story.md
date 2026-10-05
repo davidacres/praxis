@@ -24,6 +24,8 @@ Combined attention and activity across desktops enables the next delivery stage 
 
 lib/core/attention.dart; lib/screens/attention_screen.dart; lib/screens/activity_screen.dart; action routing and navigation.
 
+**Scope guard:** "Across desktops" means the mobile client combines activity received from multiple paired Praxis desktop hosts. It does not combine Jira/GitHub/GitLab/folder/demo boards or change workspace connection membership.
+
 ## Acceptance criteria
 
 - Offer Selected desktop and All desktops filters. Every combined item carries an immutable host identity and visible desktop label; use composite host/item keys and deterministic ordering.
@@ -53,5 +55,4 @@ All listed tasks and acceptance criteria are complete. Link automated results an
 
 
 ## Comments
-
 

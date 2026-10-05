@@ -10,6 +10,7 @@ import 'app/theme.dart';
 import 'screens/activity_screen.dart';
 import 'screens/attention_screen.dart';
 import 'screens/connect_screen.dart';
+import 'screens/desktops_screen.dart';
 import 'screens/work_screen.dart';
 import 'ui/error_card.dart';
 import 'ui/kit.dart';
@@ -116,8 +117,10 @@ class _RootState extends State<_Root> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _close());
     }
     final Widget body;
-    if (!store.showsWork) {
-      body = const ConnectScreen();
+    if (store.desktopsVisible) {
+      body = const DesktopsScreen();
+    } else if (!store.showsWork) {
+      body = ConnectScreen(key: ValueKey(store.contextKey));
     } else {
       body = Column(
         children: [
@@ -125,9 +128,9 @@ class _RootState extends State<_Root> {
           const PermissionBanner(),
           Expanded(
             child: switch (store.primaryRoute) {
-              'attention' => AttentionScreen(onOpenSidebar: _open),
-              'activity' => ActivityScreen(onOpenSidebar: _open),
-              _ => WorkScreen(onOpenSidebar: _open),
+              'attention' => AttentionScreen(key: ValueKey(store.contextKey), onOpenSidebar: _open),
+              'activity' => ActivityScreen(key: ValueKey(store.contextKey), onOpenSidebar: _open),
+              _ => WorkScreen(key: ValueKey(store.contextKey), onOpenSidebar: _open),
             },
           ),
         ],
@@ -138,7 +141,7 @@ class _RootState extends State<_Root> {
       body: Stack(
         children: [
           Positioned.fill(child: SafeArea(child: body)),
-          if (store.showsWork)
+          if (store.showsWork && !store.desktopsVisible)
             Positioned.fill(
               child: AppSidebar(visible: _sidebarOpen, onClose: _close),
             ),

@@ -24,6 +24,8 @@ Safe desktop switching and reconnection enables the next delivery stage without 
 
 lib/app/store.dart; lib/app/confirm_identity.dart; connection lifecycle tests. One active connection in the first release.
 
+**Scope guard:** This story changes the Flutter phone app's active Praxis desktop host and reconnect lifecycle. Desktop workspace board/backend connections and their `connectionStore`/`serviceRegistry.ts` paths are out of scope; stop if a generated plan redirects work there.
+
 ## Acceptance criteria
 
 - Switch cancels reconnect/poll timers, unsubscribes and closes the old transport, resets host-scoped stores, cursors, command ledgers and biometric approval context, and bootstraps the selected desktop.
@@ -53,5 +55,4 @@ All listed tasks and acceptance criteria are complete. Link automated results an
 
 
 ## Comments
-
 

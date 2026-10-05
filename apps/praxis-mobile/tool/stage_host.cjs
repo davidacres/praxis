@@ -39,12 +39,12 @@ const arg = (name, fallback) => {
 };
 const PORT = Number(arg('port', '43110'));
 const CONTROL_PORT = Number(arg('control', '43191'));
-const HOST_ID = 'stage-host';
-const HOST_NAME = 'Praxis stage desktop';
+const HOST_ID = arg('host-id', 'stage-host');
+const HOST_NAME = arg('name', 'Praxis stage desktop');
 const PROJECT_ID = 'praxis';
 const PROJECT_NAME = 'Praxis';
 const INVITATION_TOKEN = 'stage-invitation-01';
-const STATE_DIR = path.join(__dirname, '.stage-host');
+const STATE_DIR = arg('state-dir', path.join(__dirname, '.stage-host'));
 fs.mkdirSync(STATE_DIR, { recursive: true });
 
 const toHex = bytes => Buffer.from(bytes).toString('hex');

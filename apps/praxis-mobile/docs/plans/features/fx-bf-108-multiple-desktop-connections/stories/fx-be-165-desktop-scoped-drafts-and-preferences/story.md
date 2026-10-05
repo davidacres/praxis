@@ -24,6 +24,8 @@ Desktop-scoped drafts projects and appearance enables the next delivery stage wi
 
 lib/app/store.dart; lib/app/theme.dart; lib/screens/session_composer.dart; lib/screens/work_screen.dart; storage repository.
 
+**Scope guard:** "Desktop-scoped" means mobile state keyed by the paired Praxis desktop host identity. It does not mean scoping Jira/GitHub/GitLab/folder/demo connections to desktop workspaces; stop if a generated plan redirects work there.
+
 ## Acceptance criteria
 
 - Unsent text and attachment references belong to a desktop plus conversation/draft context. Switching restores the correct draft; never uploads attachments or sends a pending follow-up to another host. Document expiry/cleanup and unavailable attachment handling.
@@ -53,5 +55,4 @@ All listed tasks and acceptance criteria are complete. Link automated results an
 
 
 ## Comments
-
 

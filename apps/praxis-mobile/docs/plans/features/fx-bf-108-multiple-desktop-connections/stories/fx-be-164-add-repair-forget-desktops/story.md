@@ -24,6 +24,8 @@ Add repair and forget desktop pairings enables the next delivery stage without l
 
 lib/screens/connect_screen.dart; lib/app/discovery.dart; lib/core/invitation.dart; lib/app/connection.dart. Reuse existing protocol and desktop confirmation.
 
+**Scope guard:** Add, repair, and forget operate on phone-to-Praxis-desktop pairings. They do not add, edit, or remove desktop workspace board/backend connections; stop if a generated plan redirects work there.
+
 ## Acceptance criteria
 
 - Add desktop uses current QR/import/manual flows without replacing saved pairings. Pairing drafts stay separate until authenticated success; failed/cancelled/expired pairing leaves saved entries intact.
@@ -54,5 +56,4 @@ All listed tasks and acceptance criteria are complete. Link automated results an
 
 
 ## Comments
-
 

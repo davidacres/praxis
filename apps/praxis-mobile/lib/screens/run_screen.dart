@@ -49,9 +49,12 @@ class _RunDetailState extends State<RunDetail> {
     // A stage session the phone has not seen yet (it started while the list was loading).
     if (sessionId != null && session == null && store.connection == ShellConnection.ready && _requested != sessionId) {
       _requested = sessionId;
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => store.loadSession(sessionId).catchError((Object error) => Diagnostics.instance.record('Loading a stage conversation', error)),
-      );
+      final generation = store.generation;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && generation == store.generation) {
+          store.loadSession(sessionId).catchError((Object error) => Diagnostics.instance.record('Loading a stage conversation', error));
+        }
+      });
     }
 
     final t = context.t;

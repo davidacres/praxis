@@ -2,6 +2,8 @@
 
 Local navigation mirror; not a second board item or published tracker issue.
 
+**Mobile scope:** Route notifications to the correct paired Praxis desktop host. Desktop board/backend connection IDs are out of scope.
+
 | Field | Value |
 | --- | --- |
 | Canonical plan | [Story](../../../../../plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-169-multi-desktop-notifications/story.md) |

@@ -1,92 +1,16 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../core/palette.dart';
+import 'desktop_registry.dart';
+import 'host_configuration.dart';
+export 'host_configuration.dart';
 import '../protocol/client.dart';
 import '../protocol/noise.dart';
 import '../protocol/wire.dart';
 
-/// The paired desktop, as the phone remembers it. Port of `app/mobileConnection.ts`.
-class HostConfiguration {
-  const HostConfiguration({
-    required this.hostId,
-    this.hostName,
-    required this.address,
-    required this.port,
-    required this.hostPublicKeyHex,
-    this.projectId,
-    this.pairingTokenId,
-    this.pairingExpiresAt,
-    this.relayUrl,
-    this.relayChannel,
-  });
-
-  factory HostConfiguration.fromJson(Map<String, dynamic> json) => HostConfiguration(
-    hostId: json['hostId'] as String,
-    hostName: json['hostName'] as String?,
-    address: json['address'] as String,
-    port: (json['port'] as num).toInt(),
-    hostPublicKeyHex: json['hostPublicKeyHex'] as String,
-    projectId: json['projectId'] as String?,
-    pairingTokenId: json['pairingTokenId'] as String?,
-    pairingExpiresAt: json['pairingExpiresAt'] as String?,
-    relayUrl: json['relayUrl'] as String?,
-    relayChannel: json['relayChannel'] as String?,
-  );
-
-  final String hostId;
-  final String? hostName;
-  final String address;
-  final int port;
-  final String hostPublicKeyHex;
-  final String? projectId;
-
-  /// Present only until the desktop has confirmed this phone; invitations are single-use.
-  final String? pairingTokenId;
-  final String? pairingExpiresAt;
-
-  /// Off-LAN route from the invitation (FX-BE-079); absent when the desktop offered none.
-  final String? relayUrl;
-  final String? relayChannel;
-
-  bool get hasRelay => relayUrl != null && relayChannel != null;
-
-  Map<String, dynamic> toJson() => {
-    'hostId': hostId,
-    if (hostName != null) 'hostName': hostName,
-    'address': address,
-    'port': port,
-    'hostPublicKeyHex': hostPublicKeyHex,
-    if (projectId != null) 'projectId': projectId,
-    if (pairingTokenId != null) 'pairingTokenId': pairingTokenId,
-    if (pairingExpiresAt != null) 'pairingExpiresAt': pairingExpiresAt,
-    if (relayUrl != null) 'relayUrl': relayUrl,
-    if (relayChannel != null) 'relayChannel': relayChannel,
-  };
-
-  HostConfiguration withProject(String? projectId) => HostConfiguration(
-    hostId: hostId,
-    hostName: hostName,
-    address: address,
-    port: port,
-    hostPublicKeyHex: hostPublicKeyHex,
-    projectId: projectId,
-    pairingTokenId: pairingTokenId,
-    pairingExpiresAt: pairingExpiresAt,
-    relayUrl: relayUrl,
-    relayChannel: relayChannel,
-  );
-
-  /// Confirmed: the invitation is spent, so it is not kept or re-presented.
-  HostConfiguration withoutInvitation() =>
-      HostConfiguration(hostId: hostId, hostName: hostName, address: address, port: port, hostPublicKeyHex: hostPublicKeyHex, projectId: projectId, relayUrl: relayUrl, relayChannel: relayChannel);
-}
-
 const _deviceKey = 'praxis.mobile.devicePrivateKey.v1';
-const _hostConfigurationKey = 'praxis.mobile.hostConfiguration.v1';
-const _appearanceKey = 'praxis.mobile.desktopAppearance.v1';
 const _displayModeKey = 'praxis.mobile.displayMode.v1';
 
 const _storage = FlutterSecureStorage(iOptions: IOSOptions(accessibility: KeychainAccessibility.unlocked_this_device));
@@ -103,11 +27,20 @@ String bytesToHex(List<int> bytes) => bytes.map((byte) => byte.toRadixString(16)
 
 NoiseKeyPair? _identity;
 
-Future<NoiseKeyPair> deviceIdentity() async {
+Future<NoiseKeyPair>? _identityLoading;
+
+Future<NoiseKeyPair> deviceIdentity() {
   final cached = _identity;
-  if (cached != null) return cached;
+  if (cached != null) return Future.value(cached);
+  return _identityLoading ??= _loadDeviceIdentity().whenComplete(() => _identityLoading = null);
+}
+
+Future<NoiseKeyPair> _loadDeviceIdentity() async {
   final stored = await _storage.read(key: _deviceKey);
-  if (stored != null && _hex64.hasMatch(stored)) return _identity = NoiseKeyPair.generate(hexToBytes(stored));
+  if (stored != null) {
+    if (!_hex64.hasMatch(stored)) throw StateError('The phone’s saved identity is damaged. It was retained for recovery.');
+    return _identity = NoiseKeyPair.generate(hexToBytes(stored));
+  }
   final identity = NoiseKeyPair.generate();
   await _storage.write(key: _deviceKey, value: bytesToHex(identity.privateKey));
   return _identity = identity;
@@ -116,34 +49,34 @@ Future<NoiseKeyPair> deviceIdentity() async {
 /// Hex prefix of this phone's public key — the desktop lists a pending phone as `Phone <prefix>`.
 Future<String> deviceKeyPrefix() async => bytesToHex((await deviceIdentity()).publicKey).substring(0, 6);
 
-Future<HostConfiguration?> loadHostConfiguration() async {
-  final stored = await _storage.read(key: _hostConfigurationKey);
-  if (stored == null) return null;
-  try {
-    return HostConfiguration.fromJson(jsonDecode(stored) as Map<String, dynamic>);
-  } catch (_) {
-    return null;
-  }
+class SecureDesktopStorage implements DesktopStorage {
+  @override
+  Future<String?> read(String key) => _storage.read(key: key);
+  @override
+  Future<void> write(String key, String value) => _storage.write(key: key, value: value);
+  @override
+  Future<void> delete(String key) => _storage.delete(key: key);
 }
 
-Future<void> saveHostConfiguration(HostConfiguration value) => _storage.write(key: _hostConfigurationKey, value: jsonEncode(value.toJson()));
+final desktopRepository = DesktopRepository(SecureDesktopStorage());
+
+// Compatibility entry points for the single active transport. New callers
+// select an explicit registry entry; forgetting never removes other desktops.
+Future<HostConfiguration?> loadHostConfiguration() async => (await desktopRepository.load()).active?.configuration;
+Future<void> saveHostConfiguration(HostConfiguration value) async {
+  await desktopRepository.saveAuthenticated(value);
+}
 
 Future<void> forgetHostConfiguration() async {
-  await _storage.delete(key: _hostConfigurationKey);
-  await _storage.delete(key: _appearanceKey);
+  final id = (await desktopRepository.load()).activeEntryId;
+  if (id != null) await desktopRepository.forget(id);
 }
 
-/// The paired desktop's last theme, so the phone opens wearing it before it reconnects.
-Future<Appearance?> loadDesktopAppearance() async {
-  try {
-    final stored = await _storage.read(key: _appearanceKey);
-    return stored == null ? null : readMobileAppearance(jsonDecode(stored));
-  } catch (_) {
-    return null;
-  }
+Future<Appearance?> loadDesktopAppearance() async => (await desktopRepository.load()).active?.appearance;
+Future<void> saveDesktopAppearance(Appearance value) async {
+  final id = (await desktopRepository.load()).activeEntryId;
+  if (id != null) await desktopRepository.cacheAppearance(id, value);
 }
-
-Future<void> saveDesktopAppearance(Appearance value) => _storage.write(key: _appearanceKey, value: jsonEncode(value.raw));
 
 Future<String?> loadDisplayMode() async {
   try {
@@ -162,6 +95,7 @@ class NativeMobileConnection {
 
   final HostConfiguration config;
   MobileSecureClient? _client;
+  bool _closed = false;
   final List<void Function(Map<String, dynamic>)> _listeners = [];
   final List<void Function(MobileConnectionStatus)> _statusListeners = [];
   final List<void Function(MobileConnectionError)> _closeListeners = [];
@@ -174,12 +108,14 @@ class NativeMobileConnection {
   /// could not be reached. Any other failure (revoked, wrong key, access refused) is final: falling back
   /// would only hide the real reason.
   Future<void> connect() async {
+    if (_closed) throw StateError('This desktop connection was cancelled.');
     if (_client != null) throw StateError('This connection was already opened; create a new one to reconnect.');
     if (!config.hasRelay) return _open(relay: false);
     _tryingLan = true;
     try {
       await _open(relay: false, connectTimeout: const Duration(seconds: 4));
     } on MobileConnectionError catch (error) {
+      if (_closed) rethrow;
       if (error.code != 'unreachable' && error.code != 'timed-out') rethrow;
       _client = null;
       _tryingLan = false;
@@ -190,10 +126,12 @@ class NativeMobileConnection {
   }
 
   Future<void> _open({required bool relay, Duration? connectTimeout}) async {
+    final identity = await deviceIdentity();
+    if (_closed) throw StateError('This desktop connection was cancelled.');
     final client = _client = MobileSecureClient(
       host: config.address,
       port: config.port,
-      staticKeyPair: await deviceIdentity(),
+      staticKeyPair: identity,
       remoteStaticPublicKey: hexToBytes(config.hostPublicKeyHex),
       pairingTokenId: config.pairingTokenId,
       relayUrl: relay ? config.relayUrl : null,
@@ -244,5 +182,8 @@ class NativeMobileConnection {
     return () => _closeListeners.remove(listener);
   }
 
-  void close() => _client?.close();
+  void close() {
+    _closed = true;
+    _client?.close();
+  }
 }

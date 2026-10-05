@@ -2,6 +2,8 @@
 
 Local navigation mirror; not a second board item or published tracker issue.
 
+**Mobile scope:** Prove one phone can retain and switch between two real Praxis desktop hosts. Board/backend connection isolation is not acceptance evidence.
+
 | Field | Value |
 | --- | --- |
 | Canonical plan | [Story](../../../../../plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-166-first-release-qualification/story.md) |
