@@ -41,7 +41,7 @@ import { backendModeMeta } from '../board/boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from '../board/boardTransitionMatch';
 import { isTerminalAgentState } from '../ai/aiSessionState';
-import { extractSubagents, isConversationSession, sessionTitle } from '../ai/sessionNav';
+import { extractSubagents, isConversationSession, isSessionForProject, sessionTitle } from '../ai/sessionNav';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { StartupSplash } from './StartupSplash';
 import { CommandPalette, type CommandEntry } from './CommandPalette';
@@ -599,22 +599,6 @@ export function App() {
   // only through the inspector's Sessions browser tab.
   const activeSessions = agentSessions.filter(session => !session.archived);
 
-  // The sessions view selects its newest session when no explicit selection was
-  // routed to it. Make that implicit selection durable too, so a restart opens
-  // the same conversation rather than merely the sessions list.
-  useEffect(() => {
-    if (!startupResolved || route.feature !== 'sessions' || route.sessionKey || !activeSessions[0]) return;
-    setNav(current => {
-      const currentRoute = current.entries[current.index];
-      if (currentRoute.feature !== 'sessions' || currentRoute.sessionKey) return current;
-      const entries = [...current.entries];
-      entries[current.index] = { ...currentRoute, sessionKey: activeSessions[0].issueKey };
-      return { ...current, entries };
-    });
-    // `agentSessions` drives the dep list (activeSessions is a fresh array per
-    // render); the body reads the filtered [0] so an archived newest session
-    // is skipped rather than silently re-opened.
-  }, [agentSessions, route.feature, route.sessionKey, startupResolved]);
 
   useEffect(() => {
     if (!settingsDialogCategory) {
@@ -1178,6 +1162,33 @@ export function App() {
   const composerProject = selectedProject
     ?? workspaceProjects.find(project => project.id === activeWorkspace?.defaultProjectId)
     ?? (workspaceProjects.length === 1 ? workspaceProjects[0] : undefined);
+  const easyModeProject = selectedProject
+    ?? workspaceProjects.find(project => project.id === activeWorkspace?.defaultProjectId)
+    ?? (workspaceProjects.length > 0 ? workspaceProjects[0] : undefined);
+
+  // In EasyMode, scope sessions and automations to the active folder/project.
+  // When no project is associated with the workspace yet, fall back to activeSessions.
+  const easyModeSessions = useMemo(() => {
+    if (!easyModeProject) return activeSessions;
+    return activeSessions.filter(session => isSessionForProject(session, easyModeProject, agentSessions));
+  }, [easyModeProject, activeSessions, agentSessions]);
+
+  // The sessions view selects its newest session when no explicit selection was
+  // routed to it. Make that implicit selection durable too, so a restart opens
+  // the same conversation rather than merely the sessions list. In EasyMode,
+  // scope this auto-selection to the active folder/project's sessions so an
+  // unrelated conversation does not pop open on folder open or sessions navigation.
+  useEffect(() => {
+    const list = settings?.preview.enableEasyMode ? easyModeSessions : activeSessions;
+    if (!startupResolved || route.feature !== 'sessions' || route.sessionKey || !list[0]) return;
+    setNav(current => {
+      const currentRoute = current.entries[current.index];
+      if (currentRoute.feature !== 'sessions' || currentRoute.sessionKey) return current;
+      const entries = [...current.entries];
+      entries[current.index] = { ...currentRoute, sessionKey: list[0].issueKey };
+      return { ...current, entries };
+    });
+  }, [agentSessions, easyModeSessions, route.feature, route.sessionKey, settings?.preview.enableEasyMode, startupResolved]);
   /** The workflow a quick session starts under: the project's quick-change
    *  template (already instantiated or not), only when it is actually ready. */
   const quickSessionWorkflowId = composerProject
@@ -1980,7 +1991,7 @@ export function App() {
         />
       );
     }
-    const activeProject = selectedProject ?? (workspaceProjects.length > 0 ? workspaceProjects[0] : undefined);
+    const activeProject = easyModeProject;
     if (settings?.preview.enableEasyMode && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments' && (!route.feature || route.feature === 'overview')) {
       return (
         <EasyModeCanvas
@@ -1991,14 +2002,15 @@ export function App() {
           onStartSession={goal => navigate({ newSession: true, ...(activeProject ? { projectId: activeProject.id } : {}), ...(goal ? { newSessionGoal: goal } : {}) })}
           onSelectSession={sessionKey => {
             const session = agentSessions.find(candidate => candidate.issueKey === sessionKey);
+            const sessionProjectId = session?.projectId ?? activeProject?.id;
             navigate(session && isConversationSession(session)
-              ? { feature: 'conversations', sessionKey }
-              : { feature: 'sessions', sessionKey });
+              ? { feature: 'conversations', sessionKey, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) }
+              : { feature: 'sessions', sessionKey, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) });
           }}
           onOpenFolder={openExistingFolder}
           onOpenGit={activeProject?.workspaceFolder ? () => navigate({ projectId: activeProject.id, feature: 'git' }) : undefined}
           onOpenAutomations={activeProject ? () => navigate({ projectId: activeProject.id, feature: 'workflows' }) : undefined}
-          onOpenSessions={() => navigate({ feature: 'sessions' })}
+          onOpenSessions={() => navigate({ feature: 'sessions', ...(activeProject ? { projectId: activeProject.id } : {}) })}
         />
       );
     }
@@ -2420,26 +2432,29 @@ export function App() {
                 />
               ) : settings?.preview.enableEasyMode ? (
                 <EasyModeSidebar
-                  sessions={activeSessions}
+                  sessions={easyModeSessions}
                   allSessions={agentSessions}
                   activeSessionKey={(route.feature === 'sessions' || route.feature === 'conversations') ? route.sessionKey : undefined}
                   activeAgentId={route.view === 'agent-details' ? (route.subagentId || route.sessionKey) : undefined}
                   onSelectSession={issueKey => {
                     const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
+                    const sessionProjectId = session?.projectId ?? easyModeProject?.id;
                     navigate(session && isConversationSession(session)
-                      ? { feature: 'conversations', sessionKey: issueKey }
-                      : { feature: 'sessions', sessionKey: issueKey });
+                      ? { feature: 'conversations', sessionKey: issueKey, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) }
+                      : { feature: 'sessions', sessionKey: issueKey, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) });
                   }}
                   onSelectAgent={(sessionKey, agentId) => {
-                    navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: agentId });
+                    const session = agentSessions.find(candidate => candidate.issueKey === sessionKey);
+                    const sessionProjectId = session?.projectId ?? easyModeProject?.id;
+                    navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: agentId, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) });
                   }}
-                  onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
-                  projects={workspaceProjects}
+                  onNewSession={() => navigate({ newSession: true, ...(easyModeProject ? { projectId: easyModeProject.id } : {}) })}
+                  projects={easyModeProject ? [easyModeProject] : workspaceProjects}
                   runsByProjectId={runsByProjectId}
                   activeWorkflowRunId={route.feature === 'workflows' && route.workflowView === 'runs' ? route.workflowRunId : undefined}
                   onSelectWorkflowRun={(project, runId) => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: runId })}
                   onNewWorkflowRun={() => {
-                    const project = selectedProject ?? workspaceProjects[0];
+                    const project = easyModeProject ?? selectedProject ?? workspaceProjects[0];
                     if (project) {
                       setStartRunDialog({ projectId: project.id });
                     }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { AgentSessionRecord, ProjectRecord, GitStatusSnapshot, AppSettings, AppSettingsPatch } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { sessionTitle, formatStarted } from '../ai/sessionNav';
+import { sessionTitle, formatStarted, isSessionForProject } from '../ai/sessionNav';
 import { isTerminalAgentState, agentStateLabel } from '../ai/aiSessionState';
 import { applyThemePreference } from '../settings/themes';
 
@@ -91,11 +91,7 @@ export function EasyModeCanvas({
   // Project-relevant sessions
   const projectSessions = useMemo(() => {
     if (!project) return sessions;
-    const keys = new Set(project.workItems.map(item => item.key));
-    return sessions.filter(s =>
-      keys.has(s.issueKey) ||
-      Boolean(project.workspaceFolder && s.workingDirectory === project.workspaceFolder)
-    );
+    return sessions.filter(s => isSessionForProject(s, project, sessions));
   }, [project, sessions]);
 
   const activeSessions = useMemo(() => {
