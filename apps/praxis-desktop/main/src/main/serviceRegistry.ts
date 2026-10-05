@@ -16,6 +16,7 @@ import { DesktopJiraConfigProvider } from './adapters/desktopJiraConfigProvider'
 import { DesktopGitLabConfigProvider } from './adapters/desktopGitLabConfigProvider';
 import { DesktopGitHubConfigProvider } from './adapters/desktopGitHubConfigProvider';
 import { getProjectStore } from './projectStoreInstance';
+import { broadcastToAllWindows } from './windowBroadcast';
 
 const folderServices = new Map<string, FolderService>();
 const jiraServices = new Map<string, JiraService>();
@@ -266,6 +267,9 @@ export async function getServiceForConnection(
         return cached;
       }
       const service = new FolderService(new ElectronFolderConfigProvider(connection));
+      // Tell open boards when files changed on disk, so they re-query without
+      // a reselect or relaunch.
+      service.onDidReloadFromDisk(() => broadcastToAllWindows('board:changed', connectionId));
       folderServices.set(connectionId, service);
       return service;
     }

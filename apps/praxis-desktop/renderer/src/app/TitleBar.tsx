@@ -377,8 +377,8 @@ export function TitleBar({
 
         <button
           className={`icon-btn icon-btn-sm${easyMode ? ' active' : ''}`}
-          aria-label={easyMode ? 'Switch to Classic mode (⌘⇧E / Ctrl+Shift+E)' : 'Switch to EasyMode (⌘⇧E / Ctrl+Shift+E)'}
-          title={easyMode ? 'EasyMode (⌘⇧E / Ctrl+Shift+E to switch to Classic mode)' : 'Classic mode (⌘⇧E / Ctrl+Shift+E to switch to EasyMode)'}
+          aria-label={easyMode ? 'Switch to Advance mode (⌘⇧E / Ctrl+Shift+E)' : 'Switch to EasyMode (⌘⇧E / Ctrl+Shift+E)'}
+          title={easyMode ? 'EasyMode (⌘⇧E / Ctrl+Shift+E to switch to Advance mode)' : 'Advance mode (⌘⇧E / Ctrl+Shift+E to switch to EasyMode)'}
           aria-pressed={easyMode}
           data-toggle="easymode"
           onClick={() => {
@@ -392,7 +392,7 @@ export function TitleBar({
           }}
           data-testid={easyMode ? 'mode-classic' : 'mode-easymode'}
         >
-          <Icon name={easyMode ? 'sparkles' : 'columns'} size={14} />
+          <Icon name={easyMode ? 'feather' : 'layers'} size={14} />
         </button>
       </div>
 

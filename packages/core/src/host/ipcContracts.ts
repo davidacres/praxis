@@ -141,6 +141,12 @@ export interface BoardIpc {
    */
   list(filters: BoardFilters, connectionId?: string): Promise<Board[]>;
   get(board: Board): Promise<BoardDetails>;
+  /**
+   * A folder-backed board's files changed on disk (Git, an editor, an agent)
+   * and the main process reloaded them. Re-query to show the new state.
+   * `connectionId` names the connection that changed.
+   */
+  onChanged(listener: (connectionId: string) => void): () => void;
 }
 
 export interface IssueIpc {

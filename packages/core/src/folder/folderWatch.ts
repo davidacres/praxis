@@ -21,10 +21,11 @@ export type FolderWatch = (
 const nodeFolderWatch: FolderWatch = (rootPath, onChange) => {
   const watcher = chokidar.watch('**/*.md', {
     cwd: rootPath,
-    // A live Electron window keeps the event loop active, so this watcher
-    // does not need to keep a process alive by itself. In particular, macOS
-    // FSEvents shutdown can otherwise outlive graceful Electron teardown.
-    persistent: false,
+    // Must stay persistent: chokidar 3 on macOS delivers no events at all with
+    // `persistent: false`, so the board never saw external changes. Shutdown is
+    // handled by `FolderService.dispose()` closing the watcher, not by letting
+    // it go unreferenced.
+    persistent: true,
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
   });

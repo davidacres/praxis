@@ -285,10 +285,10 @@ test('toggling EasyMode via titlebar button switches between standard sidebar an
   await toggleBtn.click();
   await expect(win.locator('[data-testid="easymode-sidebar"]')).toBeVisible();
 
-  // Button now indicates classic switch and has active styling
+  // Button now indicates advance switch and has active styling
   const classicBtn = win.locator('[data-testid="mode-classic"]');
   await expect(classicBtn).toBeVisible();
-  await expect(classicBtn).toHaveAttribute('aria-label', /Switch to Classic mode/);
+  await expect(classicBtn).toHaveAttribute('aria-label', /Switch to (Advance|Classic) mode/);
   await expect(classicBtn).toHaveClass(/active/);
   await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-titlebar-active.png') });
 
