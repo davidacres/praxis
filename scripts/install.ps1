@@ -77,6 +77,7 @@ $versionNum = $tag.TrimStart("v")
 Write-Host "  ✓ Selected version: $tag" -ForegroundColor Green
 
 $assetName = "Praxis-$versionNum-setup.exe"
+$downloadUrl = "https://github.com/$repo/releases/download/$tag/$assetName"
 $tempDir = if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
 $tempPath = Join-Path $tempDir $assetName
 
@@ -92,6 +93,11 @@ try {
 }
 
 Write-Host "==> Running Praxis installer..." -ForegroundColor Cyan
+if ($PSVersionTable.Platform -and $PSVersionTable.Platform -ne 'Win32NT' -and -not $IsWindows) {
+  Write-Warning "Detected non-Windows environment. Downloaded Windows installer to: $tempPath"
+  return
+}
+
 $installerArgs = @()
 if ($Silent) {
   $installerArgs += "/S"
