@@ -28,6 +28,25 @@ created); the app's own board never showed them, while an already-listed
 older item (`FX-BF-044`) continued to render correctly. Only a full quit and
 relaunch made the new items appear.
 
+**Expected behaviour**
+
+A folder-backed board picks up external additions, edits, deletions and
+renames automatically, within seconds of the file changing — no relaunch,
+no reselect.
+
+**Acceptance criteria**
+
+- [ ] A new file written to the plans folder appears on the board within
+  seconds, while the app is running.
+- [ ] An externally edited file shows its updated content on the board
+  within seconds.
+- [ ] A file deleted outside the app has its card removed from the board
+  within seconds (no stale card).
+- [ ] A file renamed outside the app updates in place without a duplicate
+  card for the old name.
+- [ ] Reselecting the board or searching it is not required for any of the
+  above.
+
 ## Investigation state
 
 - **Confirmed — long-lived per-connection cache.**

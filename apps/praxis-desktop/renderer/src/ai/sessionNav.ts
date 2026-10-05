@@ -1,4 +1,4 @@
-import type { AgentEventSummary, AgentSessionRecord, AiProvider, Connection } from '@praxis/core';
+import type { AgentEventSummary, AgentSessionRecord, AiProvider, Connection, ProjectRecord } from '@praxis/core';
 import { isTerminalAgentState } from './aiSessionState';
 import { providerLabel } from './modelProviders';
 
@@ -1004,5 +1004,76 @@ export function extractSubagents(session: AgentSessionRecord, allSessions?: Agen
   }
 
   return items;
+}
+
+/**
+ * Normalizes a filesystem path for comparisons:
+ * strips trailing slashes, converts backslashes to forward slashes,
+ * and on case-insensitive platforms (macOS/Windows) lowercases.
+ */
+export function normalizeFolderPath(fsPath?: string): string | undefined {
+  if (!fsPath) return undefined;
+  const trimmed = fsPath.trim().replace(/[\\/]+$/, '').replace(/\\/g, '/');
+  return trimmed ? trimmed.toLowerCase() : undefined;
+}
+
+/**
+ * Checks whether a folder path equals or is inside a parent folder path.
+ */
+export function isPathInsideOrEqual(childPath?: string, parentPath?: string): boolean {
+  const normChild = normalizeFolderPath(childPath);
+  const normParent = normalizeFolderPath(parentPath);
+  if (!normChild || !normParent) return false;
+  return normChild === normParent || normChild.startsWith(normParent + '/');
+}
+
+/**
+ * Determines whether an agent session belongs to a project (or folder).
+ */
+export function isSessionForProject(
+  session: AgentSessionRecord,
+  project: Pick<ProjectRecord, 'id' | 'key' | 'workspaceFolder'> & { workItems?: Array<{ key: string }> },
+  allSessions?: AgentSessionRecord[],
+  visited = new Set<string>()
+): boolean {
+  if (visited.has(session.issueKey)) return false;
+  visited.add(session.issueKey);
+
+  // 1. Direct project ID association
+  if (session.projectId === project.id) return true;
+
+  // 2. Direct connection to project (e.g. "project:<id>")
+  if (session.connectionId === `project:${project.id}`) return true;
+
+  // 3. Folder match: workingDirectory or worktreePath equals or is inside project.workspaceFolder
+  if (project.workspaceFolder) {
+    if (isPathInsideOrEqual(session.workingDirectory, project.workspaceFolder)) return true;
+    if (isPathInsideOrEqual(session.worktreePath, project.workspaceFolder)) return true;
+  }
+
+  // 4. Ticket match in project's workItems
+  if (project.workItems && project.workItems.length > 0) {
+    if (project.workItems.some(item => item.key === session.issueKey || (session.linkedIssueKey && item.key === session.linkedIssueKey))) {
+      return true;
+    }
+  }
+
+  // 5. Issue key match by project key prefix (e.g. "PROJ-123", "review~PROJ-123")
+  if (project.key) {
+    const keyPrefix = `${project.key.toUpperCase()}-`;
+    if (session.linkedIssueKey && session.linkedIssueKey.toUpperCase().startsWith(keyPrefix)) return true;
+    if (session.issueKey.toUpperCase().startsWith(keyPrefix)) return true;
+    if (session.issueKey.toUpperCase().startsWith(`REVIEW~${keyPrefix}`)) return true;
+  }
+
+  // 6. Parent session inheritance: if session has a parent, check if parent belongs to this project
+  if (session.parentSessionKey && allSessions) {
+    const parent = allSessions.find(s => s.issueKey === session.parentSessionKey);
+    if (parent && parent !== session) {
+      return isSessionForProject(parent, project, allSessions, visited);
+    }
+  }
+
+  return false;
 }
 

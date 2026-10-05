@@ -527,3 +527,95 @@ test('EasyMode session card displays live ticker, hover actions, and automations
   await expect(completedCard.locator('[data-testid="easymode-session-abort-SESSION-COMPLETED"]')).toHaveCount(0);
 });
 
+test('opening a folder in EasyMode scopes sessions to that folder and excludes unrelated sessions', async () => {
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-easymode-scope-test-'));
+  const targetFolder = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-target-folder-'));
+  const unrelatedFolder = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-unrelated-folder-'));
+  const settingsPath = path.join(userDataDir, 'test-settings.json');
+
+  const now = new Date().toISOString();
+  const seededSessions: Record<string, unknown> = {
+    'SESSION-FOLDER': {
+      issueKey: 'SESSION-FOLDER',
+      sessionId: 'sess-folder',
+      title: 'Target Folder Session',
+      workingDirectory: targetFolder,
+      state: 'completed',
+      startedAt: now,
+      completedAt: now,
+      model: 'claude-3-5-sonnet',
+      taskDefinition: { goal: 'Work in target folder.' },
+      tokenUsage: { totalTokens: 400 },
+      events: []
+    },
+    'SESSION-UNRELATED': {
+      issueKey: 'SESSION-UNRELATED',
+      sessionId: 'sess-unrelated',
+      title: 'Unrelated Folder Session',
+      workingDirectory: unrelatedFolder,
+      state: 'completed',
+      startedAt: now,
+      completedAt: now,
+      model: 'gpt-4o',
+      taskDefinition: { goal: 'Work in unrelated folder.' },
+      tokenUsage: { totalTokens: 300 },
+      events: []
+    },
+    'SESSION-STANDALONE': {
+      issueKey: 'SESSION-STANDALONE',
+      sessionId: 'sess-standalone',
+      title: 'Global Standalone Chat',
+      state: 'completed',
+      startedAt: now,
+      completedAt: now,
+      model: 'gpt-4o',
+      taskDefinition: { goal: 'Global chat.' },
+      tokenUsage: { totalTokens: 200 },
+      events: []
+    }
+  };
+
+  fs.writeFileSync(
+    path.join(userDataDir, 'ai-sessions.json'),
+    JSON.stringify({ 'praxis.agentSessions': seededSessions }, null, 2)
+  );
+
+  try {
+    app = await launchTestApp(
+      { preview: { enableEasyMode: false } },
+      { userDataDir, settingsPath },
+      undefined,
+      { workspace: false }
+    );
+    const win = app.window;
+
+    // Mock dialog:pickFolder to select our target folder
+    await app.electronApp.evaluate(({ ipcMain }, folder) => {
+      ipcMain.removeHandler('dialog:pickFolder');
+      ipcMain.handle('dialog:pickFolder', () => folder);
+    }, targetFolder);
+
+    // Click "Open Folder"
+    await win.getByRole('button', { name: 'Open Folder' }).click();
+
+    // Verify EasyMode sidebar is visible
+    const sidebar = win.locator('[data-testid="easymode-sidebar"]');
+    await expect(sidebar).toBeVisible();
+
+    // Verify only the target folder's session is present
+    await expect(win.locator('[data-testid="easymode-session-card-SESSION-FOLDER"]')).toBeVisible();
+    await expect(win.locator('[data-testid="easymode-session-card-SESSION-UNRELATED"]')).toHaveCount(0);
+    await expect(win.locator('[data-testid="easymode-session-card-SESSION-STANDALONE"]')).toHaveCount(0);
+
+    // Verify recent sessions on canvas only contains SESSION-FOLDER
+    await expect(win.locator('[data-testid="easymode-recent-session-SESSION-FOLDER"]')).toBeVisible();
+    await expect(win.locator('[data-testid="easymode-recent-session-SESSION-UNRELATED"]')).toHaveCount(0);
+
+    // Capture visual verification screenshot
+    await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-scoped-sessions.png') });
+  } finally {
+    fs.rmSync(targetFolder, { recursive: true, force: true });
+    fs.rmSync(unrelatedFolder, { recursive: true, force: true });
+  }
+});
+
