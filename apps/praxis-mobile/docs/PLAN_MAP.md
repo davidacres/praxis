@@ -95,3 +95,40 @@ from helper predicates, loopback fixtures, static screenshots, or Expo Go alone.
 | [TASK-389](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-account-free-relay-and-remote-pairing/tasks/task-389-extend-qr-pairing-with-relay-route-and-host-channel.md) | Task | Extend QR pairing with a relay route and host channel | In Progress | TASK-216, TASK-207 |
 | [TASK-390](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-account-free-relay-and-remote-pairing/tasks/task-390-add-desktop-outbound-relay-listener.md) | Task | Add the desktop outbound relay listener | In Progress | TASK-217, TASK-389 |
 | [TASK-391](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-account-free-relay-and-remote-pairing/tasks/task-391-add-flutter-relay-transport-and-route-selection.md) | Task | Add the Flutter relay transport and route selection | In Progress | TASK-217, TASK-389 |
+
+## Multiple desktop connections (2026-10-05)
+
+Priority and stage policy, dependencies, agent recommendations and validation are defined in the feature. All new items are Backlog.
+
+| Ref | Type | Name | Priority | Delivery | Depends on |
+| --- | --- | --- | --- | --- | --- |
+| [FX-BF-108](plans/features/fx-bf-108-multiple-desktop-connections/feature.md) | Feature | Multiple desktop connections | High | All stages | FX-BE-076, FX-BE-077, FX-BE-080, FX-BE-081, FX-BE-083 |
+| [FX-BE-161](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-161-saved-desktop-registry/story.md) | Story | Saved desktop registry and migration | High | First release | None |
+| [TASK-420](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-161-saved-desktop-registry/tasks/task-420.md) | Task | Define registry and identity contracts | High | First release | None |
+| [TASK-421](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-161-saved-desktop-registry/tasks/task-421.md) | Task | Implement recoverable secure-storage migration | High | First release | TASK-420 |
+| [FX-BE-162](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-162-safe-desktop-switching/story.md) | Story | Safe desktop switching and reconnection | High | First release | FX-BE-161 |
+| [TASK-422](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-162-safe-desktop-switching/tasks/task-422.md) | Task | Implement guarded connection transitions | High | First release | FX-BE-161 |
+| [TASK-423](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-162-safe-desktop-switching/tasks/task-423.md) | Task | Verify startup reconnect and stale-response isolation | High | First release | TASK-422 |
+| [FX-BE-163](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-163-desktop-picker-and-names/story.md) | Story | Desktop picker and connection naming | High | First release | FX-BE-161, FX-BE-162 |
+| [TASK-424](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-163-desktop-picker-and-names/tasks/task-424.md) | Task | Build picker and naming controls | High | First release | FX-BE-161 |
+| [TASK-425](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-163-desktop-picker-and-names/tasks/task-425.md) | Task | Integrate picker and visually verify layouts | High | First release | TASK-424, FX-BE-162 |
+| [FX-BE-164](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-164-add-repair-forget-desktops/story.md) | Story | Add repair and forget desktop pairings | High | First release | FX-BE-161, FX-BE-162, FX-BE-163 |
+| [TASK-426](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-164-add-repair-forget-desktops/tasks/task-426.md) | Task | Make pairing additive and identity-aware | High | First release | FX-BE-161, FX-BE-162 |
+| [TASK-427](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-164-add-repair-forget-desktops/tasks/task-427.md) | Task | Add scoped repair and forget flows | High | First release | TASK-426, FX-BE-163 |
+| [FX-BE-165](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-165-desktop-scoped-drafts-and-preferences/story.md) | Story | Desktop-scoped drafts projects and appearance | High | First release | FX-BE-161, FX-BE-162 |
+| [TASK-428](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-165-desktop-scoped-drafts-and-preferences/tasks/task-428.md) | Task | Implement host-scoped preference and draft storage | High | First release | FX-BE-161 |
+| [TASK-429](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-165-desktop-scoped-drafts-and-preferences/tasks/task-429.md) | Task | Restore scoped state and verify pending actions | High | First release | TASK-428, FX-BE-162 |
+| [FX-BE-166](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-166-first-release-qualification/story.md) | Story | First release qualification and visual evidence | High | First release | FX-BE-162, FX-BE-163, FX-BE-164, FX-BE-165 |
+| [TASK-430](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-166-first-release-qualification/tasks/task-430.md) | Task | Build two-host adversarial integration harness | High | First release | FX-BE-161, FX-BE-162 |
+| [TASK-431](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-166-first-release-qualification/tasks/task-431.md) | Task | Capture end-to-end visual and device evidence | High | First release | TASK-430, FX-BE-163, FX-BE-164, FX-BE-165 |
+| [TASK-432](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-166-first-release-qualification/tasks/task-432.md) | Task | Qualify release builds and document behaviour | High | First release | TASK-431 |
+| [FX-BE-167](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-167-concurrent-desktop-observation/story.md) | Story | Concurrent desktop observation and lifecycle | Medium | Later stage 2 | FX-BE-166 |
+| [TASK-433](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-167-concurrent-desktop-observation/tasks/task-433.md) | Task | Design per-host contexts and resource budgets | Medium | Later stage 2 | FX-BE-166 |
+| [TASK-434](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-167-concurrent-desktop-observation/tasks/task-434.md) | Task | Implement and qualify concurrent observation | Medium | Later stage 2 | TASK-433 |
+| [FX-BE-168](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-168-combined-attention-and-activity/story.md) | Story | Combined attention and activity across desktops | Medium | Later stage 2 | FX-BE-167 |
+| [TASK-435](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-168-combined-attention-and-activity/tasks/task-435.md) | Task | Implement aggregate projections and host routing | Medium | Later stage 2 | FX-BE-167 |
+| [TASK-436](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-168-combined-attention-and-activity/tasks/task-436.md) | Task | Verify aggregate actions and visual layouts | Medium | Later stage 2 | TASK-435 |
+| [FX-BE-169](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-169-multi-desktop-notifications/story.md) | Story | Host-scoped notifications and deep links | Low | Later stage 3 | FX-BE-168, FX-BE-086 |
+| [TASK-437](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-169-multi-desktop-notifications/tasks/task-437.md) | Task | Specify notification ownership and deep-link contract | Low | Later stage 3 | FX-BE-168, FX-BE-086 |
+| [TASK-438](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-169-multi-desktop-notifications/tasks/task-438.md) | Task | Implement per-host preferences and safe click routing | Low | Later stage 3 | TASK-437 |
+| [TASK-439](plans/features/fx-bf-108-multiple-desktop-connections/stories/fx-be-169-multi-desktop-notifications/tasks/task-439.md) | Task | Qualify notifications and final feature closure | Low | Later stage 3 | TASK-438 |
