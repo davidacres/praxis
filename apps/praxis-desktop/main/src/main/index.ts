@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { app, BrowserWindow, ipcMain, Menu, nativeImage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage } from 'electron';
 import { attachRendererNavigationGuard } from './rendererNavigationGuard';
 import { closeAllDetachedChats, registerDetachedChatIpc } from './detachedChatWindow';
 import { registerBoardIpc } from './boardIpc';
@@ -140,6 +140,25 @@ function migrateLegacyUserData(): void {
  * first instance's OAuth manager instead of opening another window. The lock
  * is per userData dir, so parallel e2e instances don't collide.
  */
+process.on('uncaughtException', error => {
+  const message = `Uncaught exception in main process: ${error instanceof Error ? error.stack || error.message : String(error)}`;
+  console.error(message);
+  try {
+    getLogBus().appendLine(`[error] ${message}`);
+  } catch {}
+  try {
+    dialog.showErrorBox('Praxis Error', message);
+  } catch {}
+});
+
+process.on('unhandledRejection', reason => {
+  const message = `Unhandled rejection in main process: ${reason instanceof Error ? reason.stack || reason.message : String(reason)}`;
+  console.error(message);
+  try {
+    getLogBus().appendLine(`[error] ${message}`);
+  } catch {}
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -147,6 +166,15 @@ if (!app.requestSingleInstanceLock()) {
     const url = argv.find(arg => arg.startsWith(`${OAUTH_SCHEME}:`));
     if (url) {
       getDesktopMcpOAuthManager().handleProtocolUrl(url);
+    }
+    const allWindows = BrowserWindow.getAllWindows();
+    const mainWindow = allWindows[0];
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    } else {
+      createMainWindow();
     }
   });
 }
@@ -227,21 +255,48 @@ function createMainWindow(): void {
     win.webContents.setZoomFactor(getInitialZoomFactor());
   });
 
-  win.once('ready-to-show', () => win.show());
+  const showWindow = () => {
+    if (!win.isDestroyed() && !win.isVisible()) {
+      win.show();
+    }
+  };
+
+  win.once('ready-to-show', showWindow);
+  win.webContents.once('did-finish-load', showWindow);
+  const showFallbackTimer = setTimeout(showWindow, 1500);
+  win.once('show', () => clearTimeout(showFallbackTimer));
+
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    const message = `Failed to load ${validatedURL}: [${errorCode}] ${errorDescription}`;
+    console.error(message);
+    try {
+      getLogBus().appendLine(`[renderer] ${message}`);
+    } catch {}
+    showWindow();
+  });
+
   // A floating chat window with no main window behind it has no way back into
   // the app (the dock's "activate" only recreates one when no window is open
   // at all) — closing the main window takes any floating conversations with
   // it. Nothing is lost: a conversation is just a session, still reachable
   // from the next main window's Conversations list.
-  win.on('closed', () => closeAllDetachedChats());
+  win.on('closed', () => {
+    clearTimeout(showFallbackTimer);
+    closeAllDetachedChats();
+  });
 
   const devServerUrl = process.env.PRAXIS_DEV_SERVER_URL;
   attachRendererNavigationGuard(win, devServerUrl);
-  if (devServerUrl) {
-    void win.loadURL(devServerUrl);
-  } else {
-    void win.loadFile(path.join(__dirname, '../../renderer/index.html'));
-  }
+  const loadTarget = devServerUrl || path.join(__dirname, '../../renderer/index.html');
+  const loadPromise = devServerUrl ? win.loadURL(devServerUrl) : win.loadFile(loadTarget);
+  loadPromise.catch(error => {
+    const message = `Window failed to load ${loadTarget}: ${error instanceof Error ? error.stack || error.message : String(error)}`;
+    console.error(message);
+    try {
+      getLogBus().appendLine(`[renderer] ${message}`);
+    } catch {}
+    showWindow();
+  });
 }
 
 // The settings backend is initialised (and one-time migrated) before any IPC
@@ -354,6 +409,13 @@ void app.whenReady().then(async () => {
       createMainWindow();
     }
   });
+}).catch(error => {
+  const message = `Fatal error during app startup: ${error instanceof Error ? error.stack || error.message : String(error)}`;
+  console.error(message);
+  try {
+    dialog.showErrorBox('Praxis Startup Error', message);
+  } catch {}
+  app.quit();
 });
 
 app.on('window-all-closed', () => {
