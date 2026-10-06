@@ -17,12 +17,16 @@ async function drag(source: Locator, target: Locator, edge = false) {
 test('chat and project session groups reorder, rename inline, and persist', async () => {
   test.setTimeout(90000);
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  await app.electronApp.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.setSize(1664, 1200);
+  });
   const projectId = await app.window.evaluate(async () => {
     const workspace = (await window.praxis.workspaces.list())[0];
     const project = await window.praxis.projects.create({ name: 'Grouped sessions', key: 'GRP', type: 'product', purpose: '', brief: {},
       startingPoint: 'app-storage', planningMode: 'files', workflowStages: [{ id: 'todo', name: 'To do', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }], starterTickets: [], defaultAiToolMode: 'read-only' }, workspace.id);
     return project.id;
   });
+  await app.window.evaluate(() => localStorage.setItem('tm-pane-sidebar-praxis', '550'));
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
   await app.electronApp.close();
   const now = new Date().toISOString();
@@ -34,6 +38,7 @@ test('chat and project session groups reorder, rename inline, and persist', asyn
   })));
   fs.writeFileSync(path.join(profile.userDataDir, 'ai-sessions.json'), JSON.stringify({ 'praxis.agentSessions': records }));
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
+  await app.electronApp.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setSize(1664, 1200); });
   let page = app.window;
   await page.getByTestId('nav-conversations').click();
   // Fault injection proves the reorder guard fails when native dragging is disabled.
@@ -73,6 +78,7 @@ test('chat and project session groups reorder, rename inline, and persist', asyn
   }
   await app.electronApp.close();
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
+  await app.electronApp.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setSize(1664, 1200); });
   page = app.window;
   await expect(page.getByTestId('session-custom-group')).toHaveCount(3);
   await expect(page.getByTestId('session-custom-group').filter({ hasText: 'chat research' })).toBeVisible();

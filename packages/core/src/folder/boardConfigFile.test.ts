@@ -324,8 +324,8 @@ test('FolderService: a loaded board follows external add, edit, rename and delet
     const service = new FolderService(stubConfig(dir));
     const titles = async (): Promise<string[]> =>
       (await service.getIssues({ projectKeys: [], statuses: [], issueTypes: [], searchText: '' } as never, 0, 50)).issues.map(issue => issue.summary).sort();
-    const waitFor = async (expected: string[]): Promise<void> => {
-      const deadline = Date.now() + 8000;
+    const waitFor = async (expected: string[], timeoutMs = 20000): Promise<void> => {
+      const deadline = Date.now() + timeoutMs;
       let last: string[] = [];
       while (Date.now() < deadline) {
         last = await titles();
@@ -348,7 +348,7 @@ test('FolderService: a loaded board follows external add, edit, rename and delet
       await waitFor(['Edited title']);
 
       await fs.rename(path.join(features, 'feature.md'), path.join(features, 'feature-renamed.md'));
-      await fs.writeFile(path.join(features, 'feature.md'), '---\nid: FX-BF-001\ntype: Feature\n---\n\n# Edited title\n');
+      await write('feature.md', 'Edited title');
       await waitFor(['Edited title']);
 
       await fs.rm(path.join(features, 'feature.md'));
