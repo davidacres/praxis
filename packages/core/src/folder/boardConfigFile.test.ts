@@ -348,10 +348,9 @@ test('FolderService: a loaded board follows external add, edit, rename and delet
       await waitFor(['Edited title']);
 
       await fs.rename(path.join(features, 'feature.md'), path.join(features, 'feature-renamed.md'));
-      await write('feature.md', 'Edited title');
-      await waitFor(['Edited title']);
+      await write('feature-renamed.md', 'Renamed title');
+      await waitFor(['Renamed title']);
 
-      await fs.rm(path.join(features, 'feature.md'));
       await fs.rm(path.join(features, 'feature-renamed.md'));
       await waitFor([]);
     } finally {

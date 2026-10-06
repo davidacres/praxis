@@ -442,12 +442,18 @@ test('selecting an agent task and pressing Delete key removes it', async () => {
 
 test('a stage can run on its own AI and model, chosen from the AIs that are set up', async () => {
   const page = app.window;
+  await app.electronApp.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler('ai:listProviderStatuses');
+    ipcMain.handle('ai:listProviderStatuses', () => [
+      { provider: 'codex-cli', configured: true, enabled: true, capabilities: { tools: true } }
+    ]);
+  });
   // Only Codex (the fake ACP agent) is set up; the other local AIs are off, so the list is predictable.
   await page.evaluate(async cliPath => {
     await window.praxis.settings.set({
       ai: {
         providers: {
-          'codex-cli': { cliPath },
+          'codex-cli': { cliPath, enabled: true },
           'claude-code-cli': { enabled: false },
           'copilot-cli': { enabled: false },
           'antigravity-cli': { enabled: false },

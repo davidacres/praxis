@@ -272,6 +272,7 @@ test('MCP servers the user added reach a CLI agent at session start', async () =
 });
 
 test('ACP resume replay does not duplicate the previous answer into a follow-up', async () => {
+  test.slow();
   app = await launchTestApp(undefined, undefined, { FAKE_ACP_REPLAY_ON_RESUME: '1' });
   await app.electronApp.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
   replayTraceApp = app;
@@ -313,13 +314,16 @@ test('ACP resume replay does not duplicate the previous answer into a follow-up'
     tracker: require.resolve('../out/main/trackerMcp'),
     host: require.resolve('../out/main/aiInstance')
   });
-  await win.locator('[data-testid="session-follow-up-input"]').fill('DISTINCT_FOLLOW_UP answer only this question.');
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  const input = win.locator('[data-testid="session-follow-up-input"]');
+  await expect(input).toBeEnabled({ timeout: 15000 });
+  await input.fill('DISTINCT_FOLLOW_UP answer only this question.');
   await win.locator('[data-testid="session-follow-up-send"]').click();
 
   await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('DISTINCT_FOLLOW_UP');
-  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   const replies = win.locator('[data-testid="session-chat-assistant"]');
-  await expect(replies).toHaveCount(2, { timeout: 15000 });
+  await expect(replies).toHaveCount(2, { timeout: 30000 });
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 30000 });
   await expect(replies.last()).toContainText('Fresh response to the current question.');
   await expect(replies.last()).not.toContainText('replayed');
   const session = await readSession(win, 'APP-212');

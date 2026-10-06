@@ -9,6 +9,8 @@ test.afterEach(async () => { if (app) await closeTestApp(app); app = undefined; 
 
 // Real HTML drag events, including target geometry: centre groups, edges reorder.
 async function drag(source: Locator, target: Locator, edge = false) {
+  await source.scrollIntoViewIfNeeded();
+  await target.scrollIntoViewIfNeeded();
   const box = await target.boundingBox();
   if (!box) throw new Error('Missing drop target');
   await source.dragTo(target, { targetPosition: { x: box.width / 2, y: edge ? 2 : box.height / 2 } });
