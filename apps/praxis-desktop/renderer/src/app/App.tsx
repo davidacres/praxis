@@ -2033,7 +2033,6 @@ export function App() {
       return (
         <OverviewPage
           projects={workspaceProjects}
-          boards={workspaceBoards}
           connections={connections}
           sessions={agentSessions}
           connectionChecks={connectionChecks}
@@ -2042,11 +2041,9 @@ export function App() {
           onNewConversation={() => navigate({ newConversation: true })}
           onOpenProjects={() => navigate({})}
           onOpenSessions={() => navigate({ feature: 'sessions' })}
-          onOpenConversations={sessionKey => navigate({ feature: 'conversations', ...(sessionKey ? { sessionKey } : {}) })}
           onOpenConnections={() => { refreshConnections(); navigate({ feature: 'connections' }); }}
           onOpenAiUsage={() => setSettingsDialogCategory('ai-usage')}
           onOpenBoard={board => openBoard(board.id)}
-          onOpenProject={project => navigate({ projectId: project.id })}
         />
       );
     }

@@ -5142,9 +5142,6 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .overview-stat em { color: var(--text-tertiary); font-size: var(--text-xs); font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .overview-columns { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .9fr); gap: 16px; margin-bottom: 16px; }
 .overview-columns-activity { grid-template-columns: minmax(0, 1fr) minmax(320px, 1.35fr); }
-/* Active AI sessions + Recent conversations + Recent projects (FX-BE-142) — three panels
-   instead of the base row's two, so none of them is folded into another. */
-.overview-columns-3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(260px, .85fr); }
 .overview-panel { min-width: 0; padding: 17px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-secondary); }
 .overview-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .overview-panel-heading h2 { margin: 0; font-size: 14px; }
