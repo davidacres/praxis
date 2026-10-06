@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp, showProjectBoard, type TestApp } from './launchTestApp';
 
 /**
  * The project tree in the sidebar: rows at the same depth line up (same icon column, same label column),
@@ -74,6 +74,7 @@ test('rows at the same depth of the project tree share an icon column and a labe
 
   // Depth 2 (--tree-indent-2): a board, a workflow and Policies. Workflows and
   // Automations are project-level peer sections beside Sessions.
+  await showProjectBoard(page);
   const depth2 = {
     board: await measure('.project-board-row', '.tree-icon'),
     workflow: await measure('.project-workflow-row', '.tree-icon'),

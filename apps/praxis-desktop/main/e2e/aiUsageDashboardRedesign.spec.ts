@@ -16,13 +16,50 @@ test('AI Usage & Provider Fleet Dashboard renders pixel-perfect with full functi
     ipcMain.removeHandler('aiUsage:providerSnapshots');
     ipcMain.handle('aiUsage:providerSnapshots', () => ({
       checkedAt: new Date().toISOString(),
-      snapshots: [{
-        provider: 'codex-cli', fetchedAt: new Date().toISOString(),
-        windows: [
-          { period: 'rolling', usedPercent: 20 },
-          { period: 'week', usedPercent: 30 }
-        ]
-      }]
+      snapshots: [
+        {
+          provider: 'codex-cli', fetchedAt: new Date().toISOString(),
+          windows: [
+            { period: 'rolling', usedPercent: 20 },
+            { period: 'week', usedPercent: 30 }
+          ]
+        },
+        {
+          provider: 'claude-code-cli', fetchedAt: new Date().toISOString(),
+          windows: [
+            { period: 'rolling', usedPercent: 15 },
+            { period: 'week', usedPercent: 25 }
+          ]
+        },
+        {
+          provider: 'gemini', fetchedAt: new Date().toISOString(),
+          windows: [
+            { period: 'rolling', usedPercent: 10 },
+            { period: 'week', usedPercent: 20 }
+          ]
+        },
+        {
+          provider: 'vercel-gateway', fetchedAt: new Date().toISOString(),
+          windows: [
+            { period: 'rolling', usedPercent: 5 },
+            { period: 'week', usedPercent: 15 }
+          ]
+        },
+        {
+          provider: 'z-ai', fetchedAt: new Date().toISOString(),
+          windows: [
+            { period: 'rolling', usedPercent: 40 },
+            { period: 'week', usedPercent: 50 }
+          ]
+        },
+        {
+          provider: 'custom:ollama', fetchedAt: new Date().toISOString(),
+          windows: [
+            { period: 'rolling', usedPercent: 0 },
+            { period: 'week', usedPercent: 0 }
+          ]
+        }
+      ]
     }));
   });
 

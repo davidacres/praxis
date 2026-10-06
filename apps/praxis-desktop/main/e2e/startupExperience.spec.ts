@@ -51,6 +51,14 @@ test('opening an existing folder creates a portable workspace and file-only proj
     await expect(win.getByRole('button', { name: /Open Folder/ })).toBeVisible();
     await win.screenshot({ path: 'output/playwright/getting-started-open-folder.png', fullPage: true });
     await win.getByRole('button', { name: /Open Folder/ }).click();
+
+    // If opening the folder enabled EasyMode, switch to Classic/Advance mode to test the classic board flow
+    const modeBtn = win.locator('[data-testid="mode-classic"]');
+    await modeBtn.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
+    if (await modeBtn.isVisible()) {
+      await modeBtn.click();
+    }
+
     await expect(win.getByTestId('project-home')).toContainText('praxis-open-folder-');
     await expect(win.getByText('File structure', { exact: true })).toBeVisible();
     await win.screenshot({ path: 'output/playwright/open-existing-folder.png', fullPage: true });

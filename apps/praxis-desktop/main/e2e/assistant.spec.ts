@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { closeTestApp, expandAllIssueStacks, launchTestApp, type TestApp } from './launchTestApp';
+import { closeTestApp, expandAllIssueStacks, launchTestApp, showProjectBoard, type TestApp } from './launchTestApp';
 import { startMockOpenAiCompatibleServer, type MockOpenAiCompatibleServer } from './mockOpenAiCompatibleServer';
 import { chooseOption } from './chipSelect';
 
@@ -355,6 +355,7 @@ test('page context follows navigation, can be detached, and chats persist in the
   await win.getByTestId('titlebar-assistant').click();
   await win.getByTestId('assistant-pin').click();
 
+  await showProjectBoard(win);
   await win.locator('.project-board-row').first().click();
   await expandAllIssueStacks(win);
   await expect(win.getByTestId('assistant-context-pill')).toContainText('Board');
@@ -401,6 +402,7 @@ test('page context follows navigation, can be detached, and chats persist in the
 });
 
 async function openIssue(win: Page): Promise<void> {
+  await showProjectBoard(win);
   await win.locator('.project-board-row').first().click();
   await expandAllIssueStacks(win);
   await win.locator('[data-testid="issue-card"]', { hasText: 'Fix login bug' }).click();
