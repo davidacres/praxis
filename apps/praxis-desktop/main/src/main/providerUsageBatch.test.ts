@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { AiSettings, ProviderUsageSnapshot } from '@praxis/core';
-import { enabledUsageProviders, readProviderSnapshots } from './providerUsageBatch';
+import { enabledUsageProviders, readProviderSnapshots, snapshotHasUsage, sortByUsageAvailability } from './providerUsageBatch';
 
 function snapshot(provider: string, unavailableReason?: string): ProviderUsageSnapshot {
   return {
@@ -108,4 +108,33 @@ test('an adapter that returns a reason but no code still reaches the UI with a c
   const { snapshots } = await readProviderSnapshots(['anthropic'], async provider => snapshot(provider, 'no usage API'));
   assert.equal(snapshots[0].unavailableReasonCode, 'fetch-failed');
   assert.equal(snapshots[0].unavailableReason, 'no usage API');
+});
+
+
+test('snapshots with account usage are listed before no-data cards', async () => {
+  // openai has windows, anthropic is not-configured, codex-cli rejects: the
+  // one card with data must lead even though it was requested last.
+  const { snapshots } = await readProviderSnapshots(['anthropic', 'codex-cli', 'openai'], async provider => {
+    if (provider === 'codex-cli') throw new Error('Codex CLI not found on PATH');
+    if (provider === 'anthropic') return snapshot(provider, 'Add an Anthropic key');
+    return { ...snapshot(provider), windows: [{ period: 'week' as const, usedPercent: 40 }] };
+  });
+  assert.deepEqual(snapshots.map(s => s.provider), ['openai', 'anthropic', 'codex-cli']);
+});
+
+test('the input order is preserved within each group', () => {
+  const noData = (provider: string) => snapshot(provider, 'no usage API');
+  const withData = (provider: string) => ({ ...snapshot(provider), windows: [{ period: 'week' as const, usedPercent: 40 }] });
+  assert.deepEqual(
+    sortByUsageAvailability([withData('openai'), noData('gemini'), withData('anthropic'), noData('ollama')]).map(s => s.provider),
+    ['openai', 'anthropic', 'gemini', 'ollama']
+  );
+});
+
+test('a successful read with zero windows counts as no data', () => {
+  const empty = snapshot('openai');
+  const withData = { ...snapshot('anthropic'), windows: [{ period: 'week' as const, usedPercent: 40 }] };
+  assert.equal(snapshotHasUsage(empty), false);
+  assert.equal(snapshotHasUsage(withData), true);
+  assert.deepEqual(sortByUsageAvailability([empty, withData]).map(s => s.provider), ['anthropic', 'openai']);
 });

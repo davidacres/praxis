@@ -11,8 +11,10 @@ test('renders the workspace overview dashboard', async () => {
   await page.getByTestId('nav-overview').click();
   await expect(page.getByTestId('overview-page')).toBeVisible();
   await expect(page.getByText('Workspace overview')).toBeVisible();
-  await expect(page.getByText('Active AI sessions')).toBeVisible();
-  await expect(page.getByText('Recent projects')).toBeVisible();
+  await expect(page.getByText('Active AI sessions')).toHaveCount(0);
+  await expect(page.getByText('Recent conversations')).toHaveCount(0);
+  await expect(page.getByText('Recent projects')).toHaveCount(0);
+  await expect(page.getByTestId('overview-page').locator('.overview-stat')).toHaveCount(0);
   await expect(page.getByText('Recent activity')).toBeVisible();
   await expect(page.getByText('Delivery worktrees')).toHaveCount(0);
   await expect(page.locator('.overview-boards')).toHaveCount(0);

@@ -53,6 +53,11 @@ function isQuota(window: ProviderUsageWindow): boolean {
   return typeof used === 'number' && typeof limit === 'number' && limit > 0;
 }
 
+/** Mirrors snapshotHasUsage from the main process, plus the ledger MTD spend the batch cannot see. */
+function cardHasData({ snapshot, mtdUsd }: { snapshot: ProviderUsageSnapshot; mtdUsd: number }): boolean {
+  return (!snapshot.unavailableReason && snapshot.windows.length > 0) || mtdUsd > 0;
+}
+
 function getProviderCategory(providerId: string): { typeCategory: 'cli' | 'api' | 'gateway' | 'local'; typeLabel: string } {
   if (providerId.endsWith('-cli')) {
     return { typeCategory: 'cli', typeLabel: 'CLI Autonomous Agent' };
@@ -357,7 +362,7 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
     return () => window.clearInterval(timer);
   }, []);
 
-  const computeProviderMtd = useCallback((providerId: string): string => {
+  const computeProviderMtdUsd = useCallback((providerId: string): number => {
     const nowTs = new Date();
     const startOfMonth = new Date(nowTs.getFullYear(), nowTs.getMonth(), 1).getTime();
     const matching = sessions.filter(s => {
@@ -377,11 +382,22 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
         hasCost = true;
       }
     }
-    if (hasCost && totalUsd > 0) {
-      return `$${totalUsd.toFixed(2)}`;
-    }
-    return '$0.00';
+    return hasCost && totalUsd > 0 ? totalUsd : 0;
   }, [sessions]);
+
+  // The main process already leads with providers that reported account usage
+  // (sortByUsageAvailability in providerUsageBatch.ts), but it cannot see this
+  // workspace's session ledger. This pass additionally promotes cards with
+  // measured MTD spend, so a provider that exposes no account API but is in
+  // active use does not sink below the "No data" cards. Stable sort: ties keep
+  // the order the batch delivered.
+  const orderedCards = useMemo(() => {
+    const cards = [...(result?.snapshots ?? [])].map(snapshot => ({
+      snapshot,
+      mtdUsd: computeProviderMtdUsd(snapshot.provider)
+    }));
+    return cards.sort((a, b) => Number(cardHasData(b)) - Number(cardHasData(a)));
+  }, [result, computeProviderMtdUsd]);
 
   if (error) {
     return (
@@ -446,12 +462,12 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
         </button>
       </div>
       <div className="overview-budgets-grid">
-        {result.snapshots.map(snapshot => (
+        {orderedCards.map(({ snapshot, mtdUsd }) => (
           <ProviderCard
             key={snapshot.provider}
             snapshot={snapshot}
             now={now}
-            spendFormatted={computeProviderMtd(snapshot.provider)}
+            spendFormatted={mtdUsd > 0 ? `$${mtdUsd.toFixed(2)}` : undefined}
             testIdPrefix={testIdPrefix}
           />
         ))}
