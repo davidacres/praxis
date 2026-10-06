@@ -20,8 +20,36 @@
 <h3 align="center"><a href="https://github.com/davidacres/praxis/releases/latest"><ins>Download Praxis</ins></a></h3>
 
 <p align="center">
-  <img src="docs/assets/readme/readme-hero.jpg" alt="Praxis desktop app showing a board, with the Praxis mobile companion app in the corner" width="960" />
+  <em>Click any screenshot to open the full high-resolution image in a new tab without navigating away from the page.</em>
 </p>
+
+### 🗂️ Classic Mode &nbsp;·&nbsp; Full Engineering Workspace
+
+The full-power workspace for managing multi-board projects, tracking sprint columns, inspecting git graphs, running subagents, and orchestrating delivery pipelines.
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/classic-mode-dark.png" target="_blank" rel="noopener noreferrer">
+    <img src="docs/assets/readme/classic-mode-dark.png" alt="Praxis in Classic Mode (Dark Theme) — Full Kanban planning board with tickets and sidebar navigation" width="960" />
+  </a>
+  <br/>
+  <em>Classic Mode: Full Kanban board with sprint columns, ticket metadata, and sidebar navigation. (Click to open full size)</em>
+</p>
+
+<br/>
+
+### 🪶 Easy Mode &nbsp;·&nbsp; Focused Agent & Automation Canvas
+
+A distraction-free, single-pane focus mode for rapid agent interactions. Perfect for opening a repository folder, asking questions, launching targeted changes with quick chips, and tracking automated pipelines.
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/easymode-dark.png" target="_blank" rel="noopener noreferrer">
+    <img src="docs/assets/readme/easymode-dark.png" alt="Praxis in Easy Mode (Dark Theme) — Streamlined canvas with quick starter chips and nested automations" width="960" />
+  </a>
+  <br/>
+  <em>Easy Mode: Streamlined single-pane canvas with starter chips, folder-scoped sessions, and nested pipeline stages. (Click to open full size)</em>
+</p>
+
+<br/>
 
 ## Features
 
@@ -29,15 +57,13 @@
 <tr>
 <td width="50%" valign="middle">
 
-### Mobile Companion
+### Easy Mode &amp; Quick Flow
 
-Follow live sessions from your phone, read activity, and approve or deny the agent's permission requests from anywhere on your network — end-to-end encrypted, no cloud relay.
-
-[Docs →](docs/published-artifacts/praxis-on-your-phone.html)
+Toggle between Classic and Easy Mode with one click in the titlebar or via <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>. Opening any folder immediately defaults to Easy Mode with quick-action prompts, scoped session histories, and nested stage automations.
 
 </td>
 <td width="50%">
-  <a href="docs/published-artifacts/praxis-on-your-phone.html"><img src="docs/assets/readme/mobile-companion.jpg" alt="Praxis desktop with the mobile companion app" width="100%" /></a>
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/easymode-dark.png" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/easymode-dark.png" alt="Praxis Easy Mode with prompt hero and automations" width="100%" /></a>
 </td>
 </tr>
 <tr>
@@ -51,7 +77,7 @@ One board over Jira, GitLab, GitHub, a folder of markdown plans, or app storage.
 
 </td>
 <td width="50%">
-  <a href="docs/published-artifacts/project-details-and-board-surface.html"><img src="docs/assets/readme/boards.jpg" alt="Praxis board with details panel" width="100%" /></a>
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/classic-mode-dark.png" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/classic-mode-dark.png" alt="Praxis board with details panel" width="100%" /></a>
 </td>
 </tr>
 <tr>
@@ -65,7 +91,19 @@ Turn a ticket into a session. The agent plans the work, asks before it uses a to
 
 </td>
 <td width="50%">
-  <a href="docs/published-artifacts/handing-a-ticket-to-an-agent.html"><img src="docs/assets/readme/agent-sessions.jpg" alt="An AI session with summary and handover brief" width="100%" /></a>
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/agent-session-dark.png" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/agent-session-dark.png" alt="An AI session with summary and handover brief" width="100%" /></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Workspace Overview &amp; Provider Budgets
+
+Monitor real-time AI spending, token consumption, and rate limits across all connected providers — Claude Code, OpenAI Codex, GitHub Copilot, Google Antigravity, and Cursor.
+
+</td>
+<td width="50%">
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/overview-dark.png" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/overview-dark.png" alt="Overview dashboard showing provider budgets and usage" width="100%" /></a>
 </td>
 </tr>
 <tr>
@@ -79,7 +117,21 @@ Every session records the files it touched. Read the diff beside the conversatio
 
 </td>
 <td width="50%">
-  <a href="docs/published-artifacts/handing-a-ticket-to-an-agent.html"><img src="docs/assets/readme/review-diffs.jpg" alt="Session changes with a diff and commit button" width="100%" /></a>
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/review-diffs.jpg" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/review-diffs.jpg" alt="Session changes with a diff and commit button" width="100%" /></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Mobile Companion
+
+Follow live sessions from your phone, read activity, and approve or deny the agent's permission requests from anywhere on your network — end-to-end encrypted, no cloud relay.
+
+[Docs →](docs/published-artifacts/praxis-on-your-phone.html)
+
+</td>
+<td width="50%">
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/mobile-companion.jpg" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/mobile-companion.jpg" alt="Praxis desktop with the mobile companion app" width="100%" /></a>
 </td>
 </tr>
 <tr>
@@ -93,7 +145,7 @@ Looks, surface patterns and sidebar styles — Noir, Blueprint, Graphite, Parchm
 
 </td>
 <td width="50%">
-  <a href="docs/published-artifacts/praxis-surface-packs.html"><img src="docs/assets/readme/themes.jpg" alt="Praxis in four different looks" width="100%" /></a>
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/themes.jpg" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/themes.jpg" alt="Praxis in four different looks" width="100%" /></a>
 </td>
 </tr>
 <tr>
@@ -107,7 +159,7 @@ Built-in Planner, Implementer, Reviewer, Security Analyst and Test Author agents
 
 </td>
 <td width="50%">
-  <a href="docs/published-artifacts/praxis-interface-system.html"><img src="docs/assets/readme/agent-runtime.jpg" alt="Agent runtime settings" width="100%" /></a>
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/agent-runtime.jpg" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/agent-runtime.jpg" alt="Agent runtime settings" width="100%" /></a>
 </td>
 </tr>
 </table>
