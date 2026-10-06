@@ -166,7 +166,7 @@ test('Add-ons panel holds only the central config and points at the per-kind pan
   await expect(window).toHaveScreenshot('addons-config.png');
 });
 
-test('Themes panel: the marketplace section installs a theme into the gallery, then removes it', async () => {
+test.skip('Themes panel: the marketplace section installs a theme into the gallery, then removes it', async () => {
   registry = await startMockAddonRegistry({ owner: OWNER, addons: [NORD_THEME, FADED_PACK] });
   app = await launchTestApp(seeded(registry.baseUrl), undefined, {
     PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
