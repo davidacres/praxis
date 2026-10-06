@@ -20,7 +20,7 @@ test('chat and project session groups reorder, rename inline, and persist', asyn
   test.setTimeout(90000);
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   await app.electronApp.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.setSize(1664, 1200);
+    BrowserWindow.getAllWindows()[0]?.setSize(1280, 800);
   });
   const projectId = await app.window.evaluate(async () => {
     const workspace = (await window.praxis.workspaces.list())[0];
@@ -40,7 +40,7 @@ test('chat and project session groups reorder, rename inline, and persist', asyn
   })));
   fs.writeFileSync(path.join(profile.userDataDir, 'ai-sessions.json'), JSON.stringify({ 'praxis.agentSessions': records }));
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
-  await app.electronApp.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setSize(1664, 1200); });
+  await app.electronApp.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setSize(1280, 800); });
   let page = app.window;
   await page.getByTestId('nav-conversations').click();
   // Fault injection proves the reorder guard fails when native dragging is disabled.
@@ -48,9 +48,13 @@ test('chat and project session groups reorder, rename inline, and persist', asyn
     await page.evaluate(() => document.addEventListener('dragstart', event => event.preventDefault(), true));
   }
   for (const kind of ['chat', 'general', 'ticket']) {
+    if (kind === 'general') {
+      await page.getByTestId('toggle-features').click();
+    }
     const scope = kind === 'chat' ? 'nav-conversations' : `project:${projectId}:${kind}`;
     const list = page.locator(`[data-testid="session-organizer"][data-scope="${scope}"]`);
     await expect(list).toHaveAttribute('data-scope', scope);
+    await list.scrollIntoViewIfNeeded();
     const row = (index: number) => list.locator(`[data-session-order-id="${sessionKey(kind, index)}"]`);
     await drag(row(3), row(1), true);
     await expect(list.locator(':scope > .session-organizer-item').first()).toHaveAttribute('data-session-order-id', sessionKey(kind, 3));
@@ -78,9 +82,10 @@ test('chat and project session groups reorder, rename inline, and persist', asyn
     await expect(row(1)).toHaveCount(0);
     await group.getByRole('button', { name: `Expand group ${kind} research` }).click();
   }
+  await page.getByTestId('toggle-features').click();
   await app.electronApp.close();
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
-  await app.electronApp.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setSize(1664, 1200); });
+  await app.electronApp.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setSize(1280, 800); });
   page = app.window;
   await expect(page.getByTestId('session-custom-group')).toHaveCount(3);
   await expect(page.getByTestId('session-custom-group').filter({ hasText: 'chat research' })).toBeVisible();
