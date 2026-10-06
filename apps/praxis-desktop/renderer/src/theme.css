@@ -422,6 +422,57 @@ textarea {
   max-width: 220px;
 }
 
+/* EasyMode's project picker lives inside the centre pill, left of the context
+   label, separated by a dash — clicking it opens the project list. */
+.titlebar-context-project {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  max-width: 45%;
+  min-width: 0;
+  margin-left: calc(var(--space-2) * -1);
+}
+
+.titlebar-context-project-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.titlebar-context-project-button:hover,
+.titlebar-context-project-button[aria-expanded='true'] {
+  background: var(--bg-hover);
+}
+
+.titlebar-context-project-button > svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.titlebar-context-project-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-context-project-menu {
+  left: auto;
+  right: 0;
+}
+
 .titlebar-spacer {
   flex: 1;
 }

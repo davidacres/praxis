@@ -2320,6 +2320,9 @@ export function App() {
         onModeChange={setMode}
         easyMode={Boolean(settings?.preview?.enableEasyMode)}
         onToggleEasyMode={() => void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } })}
+        projects={settings?.preview?.enableEasyMode ? workspaceProjects : undefined}
+        activeProjectId={easyModeProject?.id}
+        onSelectProject={projectId => navigate({ projectId })}
         onOpenFolder={openExistingFolder}
         onOpenWhatsNew={() => setWhatsNewOpen(true)}
         settingsOpen={settingsDialogCategory !== undefined}
