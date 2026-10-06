@@ -35,10 +35,12 @@ const UNBROKEN = 'x'.repeat(240);
 async function expectButtonsInside(container: Locator, what: string): Promise<void> {
   const result = await container.evaluate(el => {
     const box = el.getBoundingClientRect();
-    return [...el.querySelectorAll('button')].map(button => {
-      const b = button.getBoundingClientRect();
-      return { name: button.getAttribute('data-testid') ?? button.getAttribute('aria-label') ?? button.textContent?.trim() ?? '', right: b.right, width: b.width, containerRight: box.right };
-    });
+    return [...el.querySelectorAll('button')]
+      .filter(button => !button.closest('details:not([open])'))
+      .map(button => {
+        const b = button.getBoundingClientRect();
+        return { name: button.getAttribute('data-testid') ?? button.getAttribute('aria-label') ?? button.textContent?.trim() ?? '', right: b.right, width: b.width, containerRight: box.right };
+      });
   });
   expect(result.length, `${what} has buttons`).toBeGreaterThan(0);
   for (const button of result) {
@@ -113,6 +115,7 @@ test('long workflow, run and session names leave their action buttons reachable 
   await runRow.getByTestId('automation-run-open').click();
   const runPanel = page.getByTestId('wf-run-panel');
   await expect(runPanel).toBeVisible();
+  await expect(runPanel.getByRole('button').first()).toBeVisible();
   await expectButtonsInside(runPanel, 'run panel');
   await page.getByTestId('project-workflow-runs-nav-item').click();
   const card = page.locator('.wf-run-card').first();
