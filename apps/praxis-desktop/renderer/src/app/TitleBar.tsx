@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AiProvider, WorkspaceRecord, UpdateStatus } from '@praxis/core';
+import type { AiProvider, ProjectRecord, WorkspaceRecord, UpdateStatus } from '@praxis/core';
 import type { SidebarMode } from './Sidebar';
 import { Icon, type IconName } from '../ui/Icon';
 import { PraxisWordmark } from './StartupSplash';
@@ -39,6 +39,10 @@ export interface TitleBarProps {
   onModeChange?: (mode: SidebarMode) => void;
   easyMode?: boolean;
   onToggleEasyMode?: () => void;
+  /** EasyMode's project selector: the workspace's projects and the one on screen. */
+  projects?: ProjectRecord[];
+  activeProjectId?: string;
+  onSelectProject?: (projectId: string) => void;
   onOpenFolder?: () => void;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
@@ -91,6 +95,9 @@ export function TitleBar({
   onModeChange,
   easyMode = false,
   onToggleEasyMode,
+  projects,
+  activeProjectId,
+  onSelectProject,
   onOpenFolder,
   sidebarVisible,
   onToggleSidebar,
@@ -126,10 +133,12 @@ export function TitleBar({
   const [zoomFactor, setZoomFactor] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement | null>(null);
   const contextButtonRef = useRef<HTMLButtonElement | null>(null);
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
+  const projectMenuRef = useRef<HTMLDivElement | null>(null);
   const newMenuRef = useRef<HTMLDivElement | null>(null);
   // macOS renders the native traffic lights on top of the page (see
   // `trafficLightPosition` in the main process) rather than in the DOM, so
@@ -138,10 +147,11 @@ export function TitleBar({
   const isMac = navigator.platform.toLowerCase().includes('mac');
 
   const activeWorkspace = workspaces?.find(w => w.id === activeWorkspaceId);
+  const activeProject = projects?.find(project => project.id === activeProjectId);
   const newProjectEnabled = Boolean(activeWorkspaceId);
 
   useEffect(() => {
-    if (!workspaceMenuOpen && !newMenuOpen) return;
+    if (!workspaceMenuOpen && !newMenuOpen && !projectMenuOpen) return;
     const onDocumentPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (workspaceMenuOpen && !workspaceMenuRef.current?.contains(target)) {
@@ -150,11 +160,15 @@ export function TitleBar({
       if (newMenuOpen && !newMenuRef.current?.contains(target)) {
         setNewMenuOpen(false);
       }
+      if (projectMenuOpen && !projectMenuRef.current?.contains(target)) {
+        setProjectMenuOpen(false);
+      }
     };
     const onDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setWorkspaceMenuOpen(false);
         setNewMenuOpen(false);
+        setProjectMenuOpen(false);
       }
     };
     document.addEventListener('pointerdown', onDocumentPointerDown);
@@ -163,7 +177,7 @@ export function TitleBar({
       document.removeEventListener('pointerdown', onDocumentPointerDown);
       document.removeEventListener('keydown', onDocumentKeyDown);
     };
-  }, [workspaceMenuOpen, newMenuOpen]);
+  }, [workspaceMenuOpen, newMenuOpen, projectMenuOpen]);
 
   useEffect(() => {
     void window.praxis.window.isMaximized().then(setMaximized);
@@ -246,6 +260,42 @@ export function TitleBar({
   const resetZoom = () => {
     void window.praxis.window.setZoomFactor(1).then(setZoomFactor);
   };
+
+  // EasyMode: the project picker sits inside the centre pill, left of the
+  // context label. It only renders against the plain (non-filter) pill, so the
+  // filter variant never ends up nesting a button inside a button.
+  const projectSegment = easyMode && projects && projects.length > 0 ? (
+    <div className="titlebar-context-project" ref={projectMenuRef}>
+      <button
+        type="button"
+        className="titlebar-context-project-button"
+        aria-label="Select project"
+        aria-haspopup="menu"
+        aria-expanded={projectMenuOpen}
+        data-testid="titlebar-project-select"
+        onClick={() => setProjectMenuOpen(open => !open)}
+      >
+        <Icon name={(activeProject?.icon as IconName) ?? 'folder-open'} size={13} />
+        <span className="titlebar-context-project-name">{activeProject?.name ?? 'All projects'}</span>
+        <Icon name={projectMenuOpen ? 'chevron-up' : 'chevron-down'} size={11} />
+      </button>
+      {projectMenuOpen && (
+        <div className="workspace-menu titlebar-context-project-menu" role="menu">
+          {projects.map(project => (
+            <button
+              key={project.id}
+              role="menuitem"
+              className={`workspace-menu-select${project.id === activeProjectId ? ' active' : ''}`}
+              onClick={() => { onSelectProject?.(project.id); setProjectMenuOpen(false); }}
+            >
+              <Icon name={(project.icon as IconName) ?? 'folder-open'} size={13} /><span>{project.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <span className="titlebar-context-sep" aria-hidden="true">&ndash;</span>
+    </div>
+  ) : null;
 
   return (
     <header ref={headerRef} className={`titlebar${isMac ? ' titlebar-mac' : ''}${locked ? ' titlebar-locked' : ''}`} data-locked={locked || undefined}>
@@ -460,10 +510,11 @@ export function TitleBar({
           </div>
         ) : (
           <div
-            className="titlebar-context"
+            className={`titlebar-context${projectSegment ? ' titlebar-context-with-project' : ''}`}
             data-testid="titlebar-context"
             title={contextLabel}
           >
+            {projectSegment}
             <Icon name={contextIcon ?? 'ticket'} size={13} />
             <span className="titlebar-context-label">{contextLabel}</span>
           </div>
