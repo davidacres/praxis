@@ -1460,10 +1460,30 @@ export function App() {
       entries.push({ id: `board:${board.connectionId ?? 'demo'}:${board.id}`, label: board.name, hint: 'Board', group: 'Boards', icon: 'columns', run: () => openBoard(board.id) });
     });
     agentSessions.filter(session => !isConversationSession(session)).forEach(session => {
-      entries.push({ id: `session:${session.issueKey}`, label: sessionTitle(session), keywords: session.issueKey, hint: session.issueKey, group: 'Sessions', icon: 'robot', run: () => navigate({ feature: 'sessions', sessionKey: session.issueKey }) });
+      entries.push({
+        id: `session:${session.issueKey}`,
+        label: sessionTitle(session),
+        keywords: session.issueKey,
+        hint: session.issueKey,
+        group: 'Sessions',
+        icon: 'robot',
+        run: () => navigate(settings?.preview?.enableEasyMode
+          ? { feature: 'sessions', sessionKey: session.issueKey, view: 'agent-details', subagentId: session.issueKey }
+          : { feature: 'sessions', sessionKey: session.issueKey })
+      });
     });
     agentSessions.filter(isConversationSession).forEach(session => {
-      entries.push({ id: `conversation:${session.issueKey}`, label: sessionTitle(session), keywords: session.issueKey, hint: 'Conversation', group: 'Conversations', icon: 'chats', run: () => navigate({ feature: 'conversations', sessionKey: session.issueKey }) });
+      entries.push({
+        id: `conversation:${session.issueKey}`,
+        label: sessionTitle(session),
+        keywords: session.issueKey,
+        hint: 'Conversation',
+        group: 'Conversations',
+        icon: 'chats',
+        run: () => navigate(settings?.preview?.enableEasyMode
+          ? { feature: 'sessions', sessionKey: session.issueKey, view: 'agent-details', subagentId: session.issueKey }
+          : { feature: 'conversations', sessionKey: session.issueKey })
+      });
     });
     (agentSnapshot?.profiles ?? []).filter(profile => !isHostShimProfile(profile)).forEach(profile => {
       entries.push({ id: `profile:${profile.profile.id}`, label: profile.profile.name, hint: 'Agent profile', group: 'Agent Hub', icon: 'robot', run: () => navigate({ feature: 'agents', agentProfileId: profile.profile.id }) });
@@ -2004,18 +2024,65 @@ export function App() {
           onSelectSession={sessionKey => {
             const session = agentSessions.find(candidate => candidate.issueKey === sessionKey);
             const sessionProjectId = session?.projectId ?? activeProject?.id;
-            navigate(session && isConversationSession(session)
-              ? { feature: 'conversations', sessionKey, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) }
-              : { feature: 'sessions', sessionKey, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) });
+            navigate({
+              feature: 'sessions',
+              sessionKey,
+              view: 'agent-details',
+              subagentId: sessionKey,
+              ...(sessionProjectId ? { projectId: sessionProjectId } : {})
+            });
           }}
           onOpenFolder={openExistingFolder}
           onOpenGit={activeProject?.workspaceFolder ? () => navigate({ projectId: activeProject.id, feature: 'git' }) : undefined}
           onOpenAutomations={activeProject ? () => navigate({ projectId: activeProject.id, feature: 'workflows' }) : undefined}
-          onOpenSessions={() => navigate({ feature: 'sessions', ...(activeProject ? { projectId: activeProject.id } : {}) })}
+          onOpenSessions={() => {
+            const first = easyModeSessions[0] ?? agentSessions[0];
+            if (first) {
+              navigate({
+                feature: 'sessions',
+                sessionKey: first.issueKey,
+                view: 'agent-details',
+                subagentId: first.issueKey,
+                ...(activeProject ? { projectId: activeProject.id } : {})
+              });
+            } else {
+              navigate({ feature: 'sessions', ...(activeProject ? { projectId: activeProject.id } : {}) });
+            }
+          }}
         />
       );
     }
-    if (selectedProject && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments') {
+    if (route.view === 'agent-details' || (settings?.preview.enableEasyMode && route.feature === 'sessions' && route.sessionKey && !route.view)) {
+      return (
+        <AgentDetailsPage
+          sessionKey={route.sessionKey}
+          agentId={route.subagentId}
+          sessions={agentSessions}
+          onClose={() => {
+            if (settings?.preview.enableEasyMode) {
+              navigate({
+                projectId: easyModeProject?.id,
+                feature: 'overview',
+                view: undefined,
+                subagentId: undefined,
+                sessionKey: undefined
+              });
+            } else {
+              navigate({ ...route, view: undefined, subagentId: undefined });
+            }
+          }}
+          onSelectSession={sessionKey => {
+            if (settings?.preview.enableEasyMode) {
+              navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: sessionKey });
+            } else {
+              navigate({ feature: 'sessions', sessionKey });
+            }
+          }}
+          onSelectAgent={(sessionKey, subId) => navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: subId })}
+        />
+      );
+    }
+    if (selectedProject && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments' && route.feature !== 'sessions' && route.feature !== 'conversations' && route.feature !== 'connections' && route.feature !== 'overview') {
       return <ProjectWorkspace project={selectedProject} sessions={agentSessions} onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })} onStartTour={startWalkthrough} />;
     }
     if (route.feature === 'connections') {
@@ -2044,18 +2111,6 @@ export function App() {
           onOpenConnections={() => { refreshConnections(); navigate({ feature: 'connections' }); }}
           onOpenAiUsage={() => setSettingsDialogCategory('ai-usage')}
           onOpenBoard={board => openBoard(board.id)}
-        />
-      );
-    }
-    if (route.view === 'agent-details') {
-      return (
-        <AgentDetailsPage
-          sessionKey={route.sessionKey}
-          agentId={route.subagentId}
-          sessions={agentSessions}
-          onClose={() => navigate({ ...route, view: undefined, subagentId: undefined })}
-          onSelectSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
-          onSelectAgent={(sessionKey, subId) => navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: subId })}
         />
       );
     }
@@ -2440,9 +2495,13 @@ export function App() {
                   onSelectSession={issueKey => {
                     const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
                     const sessionProjectId = session?.projectId ?? easyModeProject?.id;
-                    navigate(session && isConversationSession(session)
-                      ? { feature: 'conversations', sessionKey: issueKey, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) }
-                      : { feature: 'sessions', sessionKey: issueKey, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) });
+                    navigate({
+                      feature: 'sessions',
+                      sessionKey: issueKey,
+                      view: 'agent-details',
+                      subagentId: issueKey,
+                      ...(sessionProjectId ? { projectId: sessionProjectId } : {})
+                    });
                   }}
                   onSelectAgent={(sessionKey, agentId) => {
                     const session = agentSessions.find(candidate => candidate.issueKey === sessionKey);
@@ -2463,10 +2522,19 @@ export function App() {
                   onAbortSession={async issueKey => {
                     await window.praxis.ai.abort(issueKey).catch(() => undefined);
                   }}
+                  onRenameSession={async (issueKey, title) => {
+                    await window.praxis.ai.renameSession(issueKey, title);
+                  }}
+                  onArchiveSession={async (issueKey, archived) => {
+                    await window.praxis.ai.archiveSession(issueKey, archived);
+                    if (archived && (route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey === issueKey) {
+                      navigate(settings?.preview?.enableEasyMode ? { feature: 'overview' } : { feature: route.feature });
+                    }
+                  }}
                   onDeleteSession={async issueKey => {
                     await window.praxis.ai.deleteSession(issueKey).catch(() => undefined);
                     if ((route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey === issueKey) {
-                      navigate({ feature: route.feature });
+                      navigate(settings?.preview?.enableEasyMode ? { feature: 'overview' } : { feature: route.feature });
                     }
                   }}
                 />

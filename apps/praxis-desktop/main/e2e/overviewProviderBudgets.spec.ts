@@ -64,7 +64,9 @@ test('every enabled provider gets its own card, whatever each one reports', asyn
   const page = app.window;
   await page.getByTestId('nav-overview').click();
 
-  await expect(page.getByTestId('overview-budgets-section')).toBeVisible();
+  // The section renders once the slowest provider answers, and Codex and Claude
+  // Code each spawn their own CLI (Claude's `/usage` takes a few seconds cold).
+  await expect(page.getByTestId('overview-budgets-section')).toBeVisible({ timeout: 20_000 });
   for (const id of ['anthropic', 'gemini', 'codex-cli', 'claude-code-cli']) {
     await expect(page.getByTestId(`overview-budgets-card-${id}`)).toBeVisible();
   }

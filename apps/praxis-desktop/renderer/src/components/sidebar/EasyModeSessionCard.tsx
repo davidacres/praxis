@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { AgentSessionRecord, AgentTaskState } from '@praxis/core';
 import { Icon } from '../../ui/Icon';
+import { useDialogs } from '../../ui/dialogs';
 import { sessionTitle, extractSubagents, formatStarted } from '../../ai/sessionNav';
 
 export interface EasyModeSessionCardProps {
@@ -12,6 +13,8 @@ export interface EasyModeSessionCardProps {
   onSelectAgent?: (sessionKey: string, agentId: string) => void;
   onAbortSession?: (sessionKey: string) => void;
   onDeleteSession?: (sessionKey: string) => void;
+  onRenameSession?: (sessionKey: string, title: string) => Promise<void>;
+  onArchiveSession?: (sessionKey: string, archived: boolean) => Promise<void>;
 }
 
 function resolveAgentStatusClass(state: AgentTaskState): string {
@@ -42,10 +45,15 @@ export function EasyModeSessionCard({
   onSelectSession,
   onSelectAgent,
   onAbortSession,
-  onDeleteSession
+  onDeleteSession,
+  onRenameSession,
+  onArchiveSession
 }: EasyModeSessionCardProps) {
   const [isBusy, setIsBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const { confirmChoice } = useDialogs();
   const title = sessionTitle(session);
+  const [draft, setDraft] = useState(title);
   const timeFormatted = session.startedAt ? formatStarted(session.startedAt) : '';
 
   const isRunning = session.state === 'executing' || session.state === 'planning' || session.state === 'awaiting_approval' || session.state === 'awaiting_input';
@@ -90,9 +98,10 @@ export function EasyModeSessionCard({
 
   const handleAgentClick = (agentId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    onSelectSession(session.issueKey);
     if (onSelectAgent) {
       onSelectAgent(session.issueKey, agentId);
+    } else {
+      onSelectSession(session.issueKey);
     }
   };
 
@@ -113,9 +122,60 @@ export function EasyModeSessionCard({
     }
   };
 
+  const commitRename = async () => {
+    const next = draft.trim();
+    setEditing(false);
+    if (!next || next === title) return;
+    setIsBusy(true);
+    try {
+      if (onRenameSession) {
+        await onRenameSession(session.issueKey, next);
+      } else if (window.praxis?.ai?.renameSession) {
+        await window.praxis.ai.renameSession(session.issueKey, next);
+      }
+    } catch {
+      // ignore rename error
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const archive = async () => {
+    setIsBusy(true);
+    try {
+      if (onArchiveSession) {
+        await onArchiveSession(session.issueKey, true);
+      } else if (window.praxis?.ai?.archiveSession) {
+        await window.praxis.ai.archiveSession(session.issueKey, true);
+      }
+    } catch {
+      // ignore archive error
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleArchive = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isBusy) return;
+    await archive();
+  };
+
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isBusy) return;
+    const choice = await confirmChoice({
+      title: 'Delete this session?',
+      message: 'This can’t be undone.',
+      confirmLabel: 'Delete',
+      tertiaryLabel: 'Archive',
+      danger: true
+    });
+    if (choice === 'cancel') return;
+    if (choice === 'tertiary') {
+      await archive();
+      return;
+    }
     setIsBusy(true);
     try {
       if (onDeleteSession) {
@@ -146,9 +206,33 @@ export function EasyModeSessionCard({
     >
       <div className="easymode-session-card__head">
         <Icon name="robot" size={14} />
-        <span className="easymode-session-card__title" title={title}>
-          {title}
-        </span>
+        {editing ? (
+          <input
+            className="session-title-input"
+            data-testid={`easymode-session-title-input-${session.issueKey}`}
+            aria-label={`Session title for ${title}`}
+            value={draft}
+            disabled={isBusy}
+            autoFocus
+            onClick={e => e.stopPropagation()}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => void commitRename()}
+            onKeyDown={e => {
+              e.stopPropagation();
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.currentTarget.blur();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setEditing(false);
+              }
+            }}
+          />
+        ) : (
+          <span className="easymode-session-card__title" title={title}>
+            {title}
+          </span>
+        )}
         {timeFormatted && (
           <span className="easymode-session-card__time">
             {timeFormatted}
@@ -168,6 +252,32 @@ export function EasyModeSessionCard({
               <Icon name="close" size={11} />
             </button>
           )}
+          <button
+            type="button"
+            className="easymode-card-action-btn"
+            title="Rename session"
+            aria-label="Rename session"
+            data-testid={`easymode-session-rename-${session.issueKey}`}
+            onClick={e => {
+              e.stopPropagation();
+              setDraft(title);
+              setEditing(true);
+            }}
+            disabled={isBusy}
+          >
+            <Icon name="pencil" size={11} />
+          </button>
+          <button
+            type="button"
+            className="easymode-card-action-btn"
+            title="Archive session"
+            aria-label="Archive session"
+            data-testid={`easymode-session-archive-${session.issueKey}`}
+            onClick={handleArchive}
+            disabled={isBusy}
+          >
+            <Icon name="archive" size={11} />
+          </button>
           <button
             type="button"
             className="easymode-card-action-btn easymode-card-action-btn--delete"

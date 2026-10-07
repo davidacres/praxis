@@ -236,6 +236,8 @@ test('EasyMode sidebar renders Sessions and Automations with + buttons and handl
   await expect(win.locator('[data-testid="agent-details-title"]')).toContainText('Live Worker Subagent');
   await expect(win.locator('[data-testid="agent-details-status"]')).toContainText('Executing');
   await expect(win.locator('[data-testid="agent-details-stop-btn"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-chat-live-turn"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-activity-status"]')).toBeVisible();
 
   // 6. Navigate to primary agent using the subagents bar
   const primaryNavBtn = win.locator('[data-testid="subagent-nav-primary"]');
@@ -246,22 +248,23 @@ test('EasyMode sidebar renders Sessions and Automations with + buttons and handl
   await expect(win.locator('[data-testid="agent-details-role-badge"]')).toContainText('Primary Agent');
   await expect(win.locator('[data-testid="agent-details-status"]')).toContainText('Completed');
 
-  // Check activity timeline has prompt, thought, and tool execution card
+  // Check activity timeline in conversation mode: prompt is visible, tools and thoughts are filtered out
   await expect(win.locator('[data-testid="agent-timeline-prompt"]')).toBeVisible();
-  await expect(win.locator('[data-testid="agent-timeline-thought"]')).toBeVisible();
-  await expect(win.locator('[data-testid="tool-execution-card"]').first()).toBeVisible();
+  await expect(win.locator('[data-testid="agent-timeline-thought"]')).not.toBeVisible();
+  await expect(win.locator('[data-testid="tool-execution-card"]')).not.toBeVisible();
 
-  // Check tool execution details
-  const toolCard = win.locator('[data-testid="tool-execution-card"]').last();
-  await expect(toolCard.locator('.tool-execution-card__name')).toContainText('write_to_file');
+  // Activity & Tools lives in the right sidebar, not as a tab in the chat
+  await expect(win.locator('[data-testid="agent-details-tab-activity"]')).toHaveCount(0);
 
   // 7. Click back button to exit agent details
   await win.locator('[data-testid="agent-details-back-btn"]').click();
   await expect(agentDetailsPage).not.toBeVisible();
 
-  // 8. Session container selection highlight (rounded corners, 20% white background)
-  await sessionCard.click();
+  // 8. Session container selection highlight (rounded corners, 20% white background) and opens details in center
+  await sessionCard.locator('.easymode-session-card__head').click();
   await expect(sessionCard).toHaveClass(/is-selected/);
+  await expect(agentDetailsPage).toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-title"]')).toContainText('Auth Refactor Feature');
 
   // 9. Click + on Sessions opens New Session composer
   await win.locator('[data-testid="section-header-add-sessions"]').click();
@@ -520,7 +523,12 @@ test('EasyMode session card displays live ticker, hover actions, and automations
   await expect(runningCard.locator('[data-testid="easymode-session-abort-SESSION-RUNNING"]')).toBeVisible();
   await expect(runningCard.locator('[data-testid="easymode-session-delete-SESSION-RUNNING"]')).toBeVisible();
 
-  // Completed card should only have delete button
+  // Every card offers rename, archive and delete (parity with classic mode)
+  for (const action of ['rename', 'archive', 'delete']) {
+    await expect(runningCard.locator(`[data-testid="easymode-session-${action}-SESSION-RUNNING"]`)).toBeVisible();
+  }
+
+  // Completed card has no stop button
   const completedCard = win.locator('[data-testid="easymode-session-card-SESSION-COMPLETED"]');
   await expect(completedCard).toBeVisible();
   await expect(completedCard.locator('[data-testid="easymode-session-delete-SESSION-COMPLETED"]')).toBeVisible();
@@ -610,6 +618,11 @@ test('opening a folder in EasyMode scopes sessions to that folder and excludes u
     // Verify recent sessions on canvas only contains SESSION-FOLDER
     await expect(win.locator('[data-testid="easymode-recent-session-SESSION-FOLDER"]')).toBeVisible();
     await expect(win.locator('[data-testid="easymode-recent-session-SESSION-UNRELATED"]')).toHaveCount(0);
+
+    // Clicking recent session opens details in the center
+    await win.locator('[data-testid="easymode-recent-session-SESSION-FOLDER"]').click();
+    await expect(win.locator('[data-testid="agent-details-page"]')).toBeVisible();
+    await expect(win.locator('[data-testid="agent-details-title"]')).toContainText('Target Folder Session');
 
     // Capture visual verification screenshot
     await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-scoped-sessions.png') });
@@ -881,5 +894,132 @@ test('classic mode: automation stage sessions appear nested under automation run
   // Take screenshot of classic mode nested stages
   await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/classic-automation-nested-stages.png') });
 });
+
+test('in EasyMode selecting a session opens details in the center', async () => {
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-easymode-select-details-'));
+  const settingsPath = path.join(userDataDir, 'test-settings.json');
+
+  const now = new Date().toISOString();
+  const seededSessions: Record<string, unknown> = {
+    'SESSION-FOCUS-1': {
+      issueKey: 'SESSION-FOCUS-1',
+      sessionId: 'sess-focus-1',
+      title: 'Performance Optimization Session',
+      state: 'completed',
+      startedAt: now,
+      completedAt: now,
+      model: 'claude-3-5-sonnet',
+      taskDefinition: { goal: 'Optimize database queries.' },
+      tokenUsage: { totalTokens: 1500 },
+      purpose: {
+        issueKey: 'PERF-42',
+        title: 'Optimize database queries',
+        goal: 'Optimize database queries and add table indexes.',
+        scope: 'Database layer and schema definitions',
+        definitionOfDone: 'All queries benchmark under 10ms'
+      },
+      handoverBrief: {
+        progress: 'Indexed database foreign keys and optimized table joins.',
+        changes: 'Added migration index to user_id.',
+        touchedFiles: ['src/db/schema.ts', 'src/db/migrate.ts'],
+        nextSteps: 'Run benchmark suite against production volume.'
+      },
+      events: [
+        {
+          timestamp: now,
+          type: 'message',
+          summary: 'Indexed foreign key columns for fast lookups.',
+          detail: 'Created index on `user_id` and benchmarked response times down to 4ms.\n\n- [x] Create database index on user_id\n- [ ] Run benchmark regression suite'
+        }
+      ]
+    }
+  };
+
+  fs.writeFileSync(
+    path.join(userDataDir, 'ai-sessions.json'),
+    JSON.stringify({ 'praxis.agentSessions': seededSessions }, null, 2)
+  );
+
+  app = await launchTestApp(
+    { preview: { enableEasyMode: true } },
+    { userDataDir, settingsPath }
+  );
+  const win = app.window;
+
+  // 1. EasyMode sidebar is visible with session
+  await expect(win.locator('[data-testid="easymode-sidebar"]')).toBeVisible();
+  const sessionCard = win.locator('[data-testid="easymode-session-card-SESSION-FOCUS-1"]');
+  await expect(sessionCard).toBeVisible();
+
+  // 2. Click the session in the sidebar
+  await sessionCard.locator('.easymode-session-card__head').click();
+
+  // 3. Details open in the center with Ticket Card, Tabs, and Composer
+  const agentDetailsPage = win.locator('[data-testid="agent-details-page"]');
+  await expect(agentDetailsPage).toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-session-link"]')).toContainText('Sessions');
+  await expect(win.locator('[data-testid="agent-details-title"]')).toContainText('Performance Optimization Session');
+  await expect(win.locator('[data-testid="agent-details-role-badge"]')).not.toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-status"]')).toContainText('Completed');
+
+  // Verify Ticket Details Card
+  await expect(win.locator('[data-testid="session-ticket-card"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-ticket-key"]')).toContainText('PERF-42');
+  await expect(win.locator('[data-testid="session-ticket-goal"]')).toContainText('Optimize database queries');
+  await expect(win.locator('[data-testid="session-ticket-outcome"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-ticket-progress"]')).toContainText('Indexed database foreign keys');
+  await expect(win.locator('[data-testid="session-ticket-files"]')).toContainText('schema.ts');
+
+  // Verify Conversation content (no tab bar)
+  await expect(win.locator('[data-testid="agent-details-tab-conversation"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="agent-timeline-message"]')).toBeVisible();
+
+  // Verify Task Checklist Progress inside Assistant message (Feature 4)
+  await expect(win.locator('[data-testid="session-chat-tasks-progress"]')).toBeVisible();
+  await expect(win.locator('.session-chat-tasks-count')).toContainText('50%');
+
+  // Verify Quote and Branch buttons (Feature 5)
+  await expect(win.locator('[data-testid="session-chat-quote-btn"]').first()).toBeVisible();
+  await expect(win.locator('[data-testid="session-chat-branch-btn"]').first()).toBeVisible();
+
+  // Test Quote action inserts blockquote into composer input
+  await win.locator('[data-testid="session-chat-quote-btn"]').first().click();
+  const composerInput = win.locator('[data-testid="session-follow-up-input"]');
+  await expect(composerInput).toHaveValue(/> Optimize database queries/);
+
+  // Verify standard session composer
+  await expect(win.locator('[data-testid="agent-details-composer-dock"]')).toBeVisible();
+  await expect(win.locator('.session-chat-composer')).toBeVisible();
+  await expect(win.locator('[data-testid="session-follow-up-input"]')).toBeVisible();
+
+  // The thread follows the latest message: the last one sits inside the
+  // scroll body's visible area rather than below the fold under the ticket card.
+  const lastMessageFits = await win.evaluate(() => {
+    const body = document.querySelector('[data-testid="agent-details-body"]');
+    const messages = document.querySelectorAll('[data-testid="agent-timeline-message"]');
+    const last = messages[messages.length - 1];
+    if (!body || !last) return false;
+    return last.getBoundingClientRect().bottom <= body.getBoundingClientRect().bottom + 1;
+  });
+  expect(lastMessageFits).toBe(true);
+
+  // Take screenshot for visual inspection
+  await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-session-ticket-details.png') });
+
+  // 4. Close details to return to canvas
+  await win.locator('[data-testid="agent-details-back-btn"]').click();
+  await expect(agentDetailsPage).not.toBeVisible();
+  await expect(win.locator('[data-testid="easymode-canvas"]')).toBeVisible();
+
+  // 5. Click the session from Recent Sessions on canvas
+  const recentItem = win.locator('[data-testid="easymode-recent-session-SESSION-FOCUS-1"]');
+  await expect(recentItem).toBeVisible();
+  await recentItem.click();
+
+  // 6. Details reopen in the center
+  await expect(agentDetailsPage).toBeVisible();
+  await expect(win.locator('[data-testid="session-ticket-card"]')).toBeVisible();
+});
+
 
 
