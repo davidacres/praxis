@@ -18863,14 +18863,16 @@ button.session-chat-attachment {
 .team-chat-row:hover .team-chat-delete, .team-chat-delete:focus-visible { opacity: 1; }
 
 /* Composer usage panel: shared provider quota bars + collapsed-strip meter */
-.session-usage-meter { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.session-usage-meters { margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-3); }
+.session-usage-meter-label { color: var(--text-tertiary); }
+.session-usage-meter { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .session-usage-meter-track { width: 54px; height: 5px; border-radius: 3px; background: var(--bg-sunken); overflow: hidden; }
 .session-usage-meter-fill { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
 .session-usage-meter.is-warn { color: var(--warning); }
 .session-usage-meter.is-warn .session-usage-meter-fill { background: var(--warning); }
 .session-usage-meter.is-limit { color: var(--danger); }
 .session-usage-meter.is-limit .session-usage-meter-fill { background: var(--danger); }
-.session-usage-meter + .session-usage-hide-btn { margin-left: var(--space-2); }
+.session-usage-meters + .session-usage-hide-btn { margin-left: var(--space-2); }
 .session-usage-provider-card { padding: var(--space-3); border-top: 1px solid var(--border); background: var(--bg-elevated); }
 .session-usage-provider-card .overview-budget-card { margin: 0; }
 .session-usage-models-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; cursor: pointer; justify-self: start; }

@@ -323,6 +323,8 @@ export function AgentDetailsPage({
           key={targetSession.issueKey}
           session={targetSession}
           sessions={sessions}
+          // Workflows belong to automations in easy mode, so the session composer has no workflow chip.
+          options={{ showWorkflowControl: false }}
         />
       </div>
     </div>

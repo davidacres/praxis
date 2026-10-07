@@ -927,9 +927,18 @@ test('in EasyMode selecting a session opens details in the center', async () => 
       events: [
         {
           timestamp: now,
+          type: 'user_input_completed',
+          summary: 'You',
+          detail: 'Please index the slow foreign keys first.'
+        },
+        {
+          timestamp: now,
           type: 'message',
           summary: 'Indexed foreign key columns for fast lookups.',
-          detail: 'Created index on `user_id` and benchmarked response times down to 4ms.\n\n- [x] Create database index on user_id\n- [ ] Run benchmark regression suite'
+          detail: 'Created index on `user_id` and benchmarked response times down to 4ms.\n\n- [x] Create database index on user_id\n- [ ] Run benchmark regression suite',
+          durationMs: 4200,
+          tokenUsage: { inputTokens: 1000, outputTokens: 512, totalTokens: 1512 },
+          cost: { amount: 0.0123, currency: 'USD' }
         }
       ]
     }
@@ -974,6 +983,22 @@ test('in EasyMode selecting a session opens details in the center', async () => 
   await expect(win.locator('[data-testid="agent-details-tab-conversation"]')).toHaveCount(0);
   await expect(win.locator('[data-testid="agent-timeline-message"]')).toBeVisible();
 
+  // The user's own message shows what they typed, not the speaker label stored in `summary`
+  const userPrompt = win.locator('[data-testid="agent-timeline-prompt"]').first();
+  await expect(userPrompt).toContainText('Please index the slow foreign keys first.');
+  await expect(userPrompt.locator('[data-testid="session-chat-markdown"]')).not.toHaveText('You');
+
+  // Workflows belong to automations in easy mode: the session composer has no workflow chip
+  await expect(win.locator('[data-testid="agent-details-composer-dock"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-workflow-chips"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-workflow-add"]')).toHaveCount(0);
+
+  // Each reply carries its turn's duration, tokens and cost, like the classic chat
+  const telemetry = win.locator('[data-testid="agent-timeline-message"]').first().locator('[data-testid="session-chat-telemetry"]');
+  await expect(telemetry).toContainText('1,512 tok');
+  await expect(telemetry).toContainText('$0.01');
+  await expect(telemetry).toContainText('4.2s');
+
   // Verify Task Checklist Progress inside Assistant message (Feature 4)
   await expect(win.locator('[data-testid="session-chat-tasks-progress"]')).toBeVisible();
   await expect(win.locator('.session-chat-tasks-count')).toContainText('50%');
@@ -985,7 +1010,7 @@ test('in EasyMode selecting a session opens details in the center', async () => 
   // Test Quote action inserts blockquote into composer input
   await win.locator('[data-testid="session-chat-quote-btn"]').first().click();
   const composerInput = win.locator('[data-testid="session-follow-up-input"]');
-  await expect(composerInput).toHaveValue(/> Optimize database queries/);
+  await expect(composerInput).toHaveValue(/> Please index the slow foreign keys first\./);
 
   // Verify standard session composer
   await expect(win.locator('[data-testid="agent-details-composer-dock"]')).toBeVisible();
