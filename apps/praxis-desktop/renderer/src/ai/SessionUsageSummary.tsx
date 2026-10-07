@@ -93,8 +93,6 @@ export function SessionUsageSummary({
   const sessionTokens = session?.tokenUsage?.totalTokens;
   const isLimit = Boolean(session?.providerLimitReached || sessionLimitNotice(session));
   const quotaWindows = provider?.windows.filter(isQuota) ?? [];
-  const worstQuotaPercent = quotaWindows.length > 0 ? Math.max(0, Math.min(100, Math.max(...quotaWindows.map(windowPercent)))) : undefined;
-  const nearProviderLimit = worstQuotaPercent !== undefined && worstQuotaPercent >= 80;
   const formatWindow = (bucket: UsageBucket | undefined) => bucket ? `${Math.round(bucket.totalTokens).toLocaleString()} tokens` : '—';
   const spendRatio = spendLimit > 0 ? localCost / spendLimit : undefined;
 
@@ -127,16 +125,26 @@ export function SessionUsageSummary({
         </span>
         {isLimit ? (
           <span className="session-usage-warning is-limit">Provider limit reached</span>
-        ) : worstQuotaPercent !== undefined && (
-          <span
-            className={`session-usage-meter${worstQuotaPercent >= 100 ? ' is-limit' : nearProviderLimit ? ' is-warn' : ''}`}
-            title={nearProviderLimit ? 'Approaching provider limit' : 'Provider quota used'}
-            data-testid="session-usage-meter"
-          >
-            <span className="session-usage-meter-percent">{worstQuotaPercent}%</span>
-            <span className="session-usage-meter-track" aria-hidden="true">
-              <span className="session-usage-meter-fill" style={{ width: `${worstQuotaPercent}%` }} />
-            </span>
+        ) : quotaWindows.length > 0 && (
+          <span className="session-usage-meters" data-testid="session-usage-meters">
+            {quotaWindows.map(window => {
+              const percent = Math.max(0, Math.min(100, windowPercent(window)));
+              const label = window.period === 'hour' ? '5h' : window.period === 'week' ? 'Week' : window.label ?? window.period;
+              return (
+                <span
+                  key={`${window.period}-${window.label ?? ''}`}
+                  className={`session-usage-meter${percent >= 100 ? ' is-limit' : percent >= 80 ? ' is-warn' : ''}`}
+                  title={`${window.label ?? label}: ${percent}% used`}
+                  data-testid={`session-usage-meter-${window.period}`}
+                >
+                  <span className="session-usage-meter-label">{label}</span>
+                  <span className="session-usage-meter-percent">{percent}%</span>
+                  <span className="session-usage-meter-track" aria-hidden="true">
+                    <span className="session-usage-meter-fill" style={{ width: `${percent}%` }} />
+                  </span>
+                </span>
+              );
+            })}
           </span>
         )}
         {onHide && (

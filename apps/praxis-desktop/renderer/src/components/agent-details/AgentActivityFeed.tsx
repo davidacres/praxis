@@ -4,10 +4,10 @@ import { Icon } from '../../ui/Icon';
 import { Markdown } from '../../ui/Markdown';
 import { useDialogs } from '../../ui/dialogs';
 import { agentEventIcon, agentEventToneClass, isTerminalAgentState } from '../../ai/aiSessionState';
-import { isLatestEditToPath, liveActivity } from '../../ai/sessionNav';
+import { formatCost, isLatestEditToPath, liveActivity } from '../../ai/sessionNav';
 import { providerIconName, providerLabel } from '../../ai/modelProviders';
 import { ToolExecutionCard } from './ToolExecutionCard';
-import { LiveTurnActivityIndicator } from '../../ai/LiveTurnActivityIndicator';
+import { LiveTurnActivityIndicator, formatElapsedDuration } from '../../ai/LiveTurnActivityIndicator';
 import { GadgetBlockList } from '../../ai/gadgets';
 import { useSessionGadgets } from '../../ai/gadgets/useSessionGadgets';
 import { gadgetMessageKey, visibleMessageText } from '../../ai/gadgets/messageText';
@@ -40,7 +40,7 @@ type TimelineItem =
   | { type: 'tool'; item: PairedToolItem; timestamp: string }
   | { type: 'event'; event: AgentEventSummary; timestamp: string }
   | { type: 'prompt'; text: string; timestamp: string }
-  | { type: 'message'; text: string; timestamp: string; modelId?: string }
+  | { type: 'message'; text: string; timestamp: string; modelId?: string; durationMs?: number; tokenUsage?: AgentEventSummary['tokenUsage']; cost?: AgentEventSummary['cost'] }
   | { type: 'reasoning'; text: string; timestamp: string };
 
 function formatTime(iso?: string): string {
@@ -267,7 +267,8 @@ export function AgentActivityFeed({
       if (event.type === 'user_input_completed') {
         items.push({
           type: 'prompt',
-          text: event.summary || event.detail || '',
+          // `summary` is the speaker label ("You"); the typed text is in `detail`, as in the classic chat.
+          text: event.detail || event.summary || '',
           timestamp: event.timestamp
         });
         continue;
@@ -288,6 +289,9 @@ export function AgentActivityFeed({
             type: 'message',
             text,
             modelId: event.modelId,
+            durationMs: event.durationMs,
+            tokenUsage: event.tokenUsage,
+            cost: event.cost,
             timestamp: event.timestamp
           });
         }
@@ -506,6 +510,32 @@ export function AgentActivityFeed({
                         results={gadgetResults}
                         onSubmit={(gadgetId, actionId, value) => void submitGadgetAction(gadgetId, actionId, value)}
                       />
+                    </div>
+                  )}
+
+                  {/* Per-turn telemetry, the same chips the classic chat shows under a reply. */}
+                  {(item.durationMs !== undefined || item.tokenUsage || (item.cost && item.cost.amount > 0)) && (
+                    <div className="session-chat-telemetry-bar" data-testid="session-chat-telemetry">
+                      {item.durationMs !== undefined && (
+                        <span className="session-telemetry-chip" title={`Turn duration: ${(item.durationMs / 1000).toFixed(1)}s`}>
+                          <Icon name="zap" size={11} />
+                          <span>{formatElapsedDuration(item.durationMs)}</span>
+                        </span>
+                      )}
+                      {item.tokenUsage && (
+                        <span
+                          className="session-telemetry-chip"
+                          title={`Input: ${(item.tokenUsage.inputTokens ?? 0).toLocaleString()} tokens${item.tokenUsage.cachedInputTokens ? ` (${item.tokenUsage.cachedInputTokens.toLocaleString()} cached)` : ''} · Output: ${(item.tokenUsage.outputTokens ?? 0).toLocaleString()} tokens${item.tokenUsage.reasoningTokens ? ` (${item.tokenUsage.reasoningTokens.toLocaleString()} reasoning)` : ''}`}
+                        >
+                          <Icon name="sparkles" size={11} />
+                          <span>{(item.tokenUsage.totalTokens ?? ((item.tokenUsage.inputTokens ?? 0) + (item.tokenUsage.outputTokens ?? 0))).toLocaleString()} tok</span>
+                        </span>
+                      )}
+                      {item.cost && item.cost.amount > 0 && (
+                        <span className="session-telemetry-chip" title="Estimated turn cost">
+                          <span>{formatCost(item.cost) ?? `${item.cost.amount.toFixed(4)} ${item.cost.currency}`}</span>
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

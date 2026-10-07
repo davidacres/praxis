@@ -61,8 +61,13 @@ test('composer usage panel draws provider quota windows as bars with a collapsed
 
   const draft = page.getByTestId('new-session-view');
   const summary = draft.getByTestId('session-usage-summary');
-  await expect(summary.getByTestId('session-usage-meter')).toContainText('82%');
-  await expect(summary.getByTestId('session-usage-meter')).toHaveClass(/is-warn/);
+  // The collapsed strip shows every quota window, not just the worst one.
+  await expect(summary.getByTestId('session-usage-meter-hour')).toContainText('5h');
+  await expect(summary.getByTestId('session-usage-meter-hour')).toContainText('82%');
+  await expect(summary.getByTestId('session-usage-meter-hour')).toHaveClass(/is-warn/);
+  await expect(summary.getByTestId('session-usage-meter-week')).toContainText('Week');
+  await expect(summary.getByTestId('session-usage-meter-week')).toContainText('41%');
+  await expect(summary.getByTestId('session-usage-meter-week')).not.toHaveClass(/is-warn/);
 
   await summary.locator('summary').click();
   const quotas = draft.getByTestId('session-usage-provider-card');
