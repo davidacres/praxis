@@ -13,6 +13,8 @@ export interface EasyModeSessionsListProps {
   onNewSession?: () => void;
   onAbortSession?: (sessionKey: string) => void;
   onDeleteSession?: (sessionKey: string) => void;
+  onRenameSession?: (sessionKey: string, title: string) => Promise<void>;
+  onArchiveSession?: (sessionKey: string, archived: boolean) => Promise<void>;
 }
 
 export function EasyModeSessionsList({
@@ -24,7 +26,9 @@ export function EasyModeSessionsList({
   onSelectAgent,
   onNewSession,
   onAbortSession,
-  onDeleteSession
+  onDeleteSession,
+  onRenameSession,
+  onArchiveSession
 }: EasyModeSessionsListProps) {
   const [filterQuery, setFilterQuery] = useState('');
 
@@ -108,6 +112,8 @@ export function EasyModeSessionsList({
           onSelectAgent={onSelectAgent}
           onAbortSession={onAbortSession}
           onDeleteSession={onDeleteSession}
+          onRenameSession={onRenameSession}
+          onArchiveSession={onArchiveSession}
         />
       ))}
 

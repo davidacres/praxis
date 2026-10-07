@@ -3,6 +3,7 @@ import type { AgentSessionRecord, AiProvider, UsageBucket, ProviderUsageSnapshot
 import { Icon } from '../ui/Icon';
 import { providerLabel } from './modelProviders';
 import { formatCost, sessionLimitNotice } from './sessionNav';
+import { ProviderCard, isQuota, windowPercent } from './ProviderUsageWindows';
 
 export function SessionUsageSummary({
   session,
@@ -28,6 +29,8 @@ export function SessionUsageSummary({
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const [windows, setWindows] = useState<Record<string, UsageBucket | undefined>>({});
   const [provider, setProvider] = useState<ProviderUsageSnapshot | undefined>();
+  const [now, setNow] = useState(() => Date.now());
+  const [modelsOpen, setModelsOpen] = useState(false);
 
   const closeDetails = useCallback(() => {
     if (!open || detailsClosing) return;
@@ -72,6 +75,7 @@ export function SessionUsageSummary({
       if (cancelled) return;
       setWindows({ hour: hour[0], day: day[0], week: week[0], month: month[0] });
       setProvider(snapshot);
+      setNow(Date.now());
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [selectedProvider, session?.sessionId, session?.tokenUsage?.totalTokens, session?.cost?.amount]);
@@ -88,12 +92,9 @@ export function SessionUsageSummary({
   const localCurrency = sessions.find(item => item.cost?.currency)?.cost?.currency;
   const sessionTokens = session?.tokenUsage?.totalTokens;
   const isLimit = Boolean(session?.providerLimitReached || sessionLimitNotice(session));
-  const providerWarning = provider?.windows.find(window => {
-    if (typeof window.usedPercent === 'number') return window.usedPercent >= 80;
-    const used = window.usedTokens ?? window.usedCost;
-    const limit = window.tokenLimit ?? window.costLimit;
-    return typeof used === 'number' && typeof limit === 'number' && limit > 0 && used / limit >= 0.8;
-  }) || (isLimit ? { period: 'hour' as const, label: 'Limit reached', usedPercent: 100 } : undefined);
+  const quotaWindows = provider?.windows.filter(isQuota) ?? [];
+  const worstQuotaPercent = quotaWindows.length > 0 ? Math.max(0, Math.min(100, Math.max(...quotaWindows.map(windowPercent)))) : undefined;
+  const nearProviderLimit = worstQuotaPercent !== undefined && worstQuotaPercent >= 80;
   const formatWindow = (bucket: UsageBucket | undefined) => bucket ? `${Math.round(bucket.totalTokens).toLocaleString()} tokens` : '—';
   const spendRatio = spendLimit > 0 ? localCost / spendLimit : undefined;
 
@@ -124,9 +125,18 @@ export function SessionUsageSummary({
           {sessionTokens ? `${Math.round(sessionTokens).toLocaleString()} tokens` : session ? 'No token data' : activityLabel ?? 'Not started'}
           {session?.cost ? ` · ${formatCost(session?.cost)}` : ''}
         </span>
-        {providerWarning && (
-          <span className={`session-usage-warning${isLimit || providerWarning.usedPercent === 100 ? ' is-limit' : ''}`}>
-            {isLimit || providerWarning.usedPercent === 100 ? (providerWarning.label && providerWarning.label !== 'Limit reached' ? providerWarning.label : 'Provider limit reached') : 'Approaching provider limit'}
+        {isLimit ? (
+          <span className="session-usage-warning is-limit">Provider limit reached</span>
+        ) : worstQuotaPercent !== undefined && (
+          <span
+            className={`session-usage-meter${worstQuotaPercent >= 100 ? ' is-limit' : nearProviderLimit ? ' is-warn' : ''}`}
+            title={nearProviderLimit ? 'Approaching provider limit' : 'Provider quota used'}
+            data-testid="session-usage-meter"
+          >
+            <span className="session-usage-meter-percent">{worstQuotaPercent}%</span>
+            <span className="session-usage-meter-track" aria-hidden="true">
+              <span className="session-usage-meter-fill" style={{ width: `${worstQuotaPercent}%` }} />
+            </span>
           </span>
         )}
         {onHide && (
@@ -148,6 +158,16 @@ export function SessionUsageSummary({
       </summary>
       {(open || detailsClosing) && (
         <div className={`session-usage-details-content${detailsClosing ? ' is-closing' : ''}`}>
+          {provider ? (
+            <div className="session-usage-provider-card" data-testid="session-usage-provider-card">
+              <ProviderCard snapshot={provider} now={now} testIdPrefix="session-usage" />
+            </div>
+          ) : (
+            <div className="session-usage-provider">
+              <span className="session-usage-label">{selectedProvider ? `${providerLabel(selectedProvider)} account` : 'Provider account'}</span>
+              <span>Credits and account limits are not exposed by this provider.</span>
+            </div>
+          )}
           <div className="session-usage-grid">
             <div className="session-usage-card">
               <span className="session-usage-label">This session</span>
@@ -171,30 +191,26 @@ export function SessionUsageSummary({
               {spendRatio >= 1 ? 'Your Praxis spend limit has been exceeded.' : 'You are approaching your Praxis spend limit.'}
             </div>
           )}
-          <div className="session-usage-models">
-            <span className="session-usage-label">By model</span>
+          <div className="session-usage-models" data-testid="session-usage-models">
+            <button
+              type="button"
+              className="session-usage-models-toggle session-usage-label"
+              aria-expanded={modelsOpen}
+              data-testid="session-usage-models-toggle"
+              onClick={() => setModelsOpen(value => !value)}
+            >
+              <Icon name={modelsOpen ? 'chevron-down' : 'chevron-right'} size={11} />
+              By model
+            </button>
+            {modelsOpen && <>
             {[...modelTotals.entries()].sort((a, b) => b[1].tokens - a[1].tokens).slice(0, 6).map(([model, row]) => (
               <div className="session-usage-model-row" key={model}>
                 <span>{model}</span>
                 <span>{row.tokens ? `${Math.round(row.tokens).toLocaleString()} tokens` : '—'}{row.costs.length > 0 ? ` · ${row.costs.map(cost => formatCost(cost)).join(', ')}` : ''}</span>
               </div>
             ))}
+            </>}
           </div>
-          <div className="session-usage-provider">
-            <span className="session-usage-label">{selectedProvider ? `${providerLabel(selectedProvider)} account` : 'Provider account'}</span>
-            {provider?.totalTokens ? <span>{Math.round(provider.totalTokens).toLocaleString()} cumulative tokens</span> : provider?.credits ? <span>{provider.credits.remaining.toFixed(2)} {provider.credits.currency} remaining</span> : <span>{provider?.unavailableReason ?? 'Credits and account limits are not exposed by this provider.'}</span>}
-          </div>
-          {provider && provider.windows.length > 0 && (
-            <div className="session-usage-provider-windows">
-              {provider.windows.map(window => (
-                <div className="session-usage-card" key={`${window.period}-${window.label ?? ''}`}>
-                  <span className="session-usage-label">{window.label ?? `Provider ${window.period}`}</span>
-                  <strong>{typeof window.usedPercent === 'number' ? `${window.usedPercent}% used` : 'Usage reported'}</strong>
-                  <small>{window.resetsAt ? `Resets ${new Date(window.resetsAt).toLocaleString()}` : 'Reset time unavailable'}</small>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </details>

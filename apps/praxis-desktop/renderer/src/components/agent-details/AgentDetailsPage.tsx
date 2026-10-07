@@ -1,18 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AgentSessionRecord } from '@praxis/core';
 import { Icon } from '../../ui/Icon';
 import { agentStateLabel, isTerminalAgentState } from '../../ai/aiSessionState';
 import {
   extractSubagents,
-  formatCost,
   formatElapsed,
-  formatSubagentTokens,
-  sessionLabel,
   sessionTitle,
   type SubagentItem
 } from '../../ai/sessionNav';
 import { providerLabel } from '../../ai/modelProviders';
 import { AgentActivityFeed } from './AgentActivityFeed';
+import { SessionTicketCard } from './SessionTicketCard';
+import { SessionComposer } from '../../ai/SessionComposer';
 
 export interface AgentDetailsPageProps {
   sessionKey?: string;
@@ -32,6 +31,8 @@ export function AgentDetailsPage({
   onSelectAgent
 }: AgentDetailsPageProps) {
   const [stopping, setStopping] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const followRef = useRef(true);
 
   // 1. Locate parent session
   const parentSession = useMemo(() => {
@@ -71,6 +72,43 @@ export function AgentDetailsPage({
     return allSubagents.find(s => s.id === agentId || s.sessionKey === agentId);
   }, [isPrimary, agentId, allSubagents]);
 
+  // Follow the conversation like the classic chat: stick to the latest message
+  // until the user scrolls up, and resume once they return near the bottom.
+  const followTarget = childSession || parentSession;
+  const followKey = `${followTarget?.issueKey ?? ''}:${agentId ?? ''}`;
+  useLayoutEffect(() => {
+    const node = bodyRef.current;
+    if (!node) return;
+    followRef.current = true;
+    const onScroll = () => {
+      followRef.current = node.scrollHeight - node.clientHeight - node.scrollTop <= 64;
+    };
+    node.addEventListener('scroll', onScroll, { passive: true });
+    // Markdown, gadgets, the ticket card and the composer dock below all settle
+    // after React commits, so keep following while any of those heights change.
+    const resizeObserver = new ResizeObserver(() => {
+      if (followRef.current) node.scrollTop = node.scrollHeight;
+    });
+    resizeObserver.observe(node);
+    Array.from(node.children).forEach(child => resizeObserver.observe(child));
+    return () => {
+      node.removeEventListener('scroll', onScroll);
+      resizeObserver.disconnect();
+    };
+  }, [followKey, parentSession]);
+
+  const eventCount = followTarget?.events?.length ?? 0;
+  useLayoutEffect(() => {
+    if (!followRef.current) return;
+    const scrollToLatest = () => {
+      const node = bodyRef.current;
+      if (node && followRef.current) node.scrollTop = node.scrollHeight;
+    };
+    scrollToLatest();
+    const frame = window.requestAnimationFrame(scrollToLatest);
+    return () => window.cancelAnimationFrame(frame);
+  }, [followKey, eventCount, followTarget?.reasoningText]);
+
   if (!parentSession) {
     return (
       <div className="agent-details-page is-empty" data-testid="agent-details-empty">
@@ -94,7 +132,11 @@ export function AgentDetailsPage({
       : matchedSubagent?.title || 'Subagent';
 
   const agentRole = isPrimary
-    ? 'Primary Agent'
+    ? parentSession.workflowNodeId
+      ? `Stage: ${parentSession.workflowNodeId}`
+      : parentSession.workflowRole
+        ? `Role: ${parentSession.workflowRole}`
+        : 'Primary Agent'
     : childSession?.workflowNodeId
       ? `Stage: ${childSession.workflowNodeId}`
       : childSession?.workflowRole
@@ -112,18 +154,6 @@ export function AgentDetailsPage({
     : childSession
       ? childSession.model || (childSession.provider ? providerLabel(childSession.provider) : 'Default model')
       : matchedSubagent?.model || 'Default model';
-
-  const tokenUsage = isPrimary
-    ? parentSession.tokenUsage
-    : childSession
-      ? childSession.tokenUsage
-      : matchedSubagent?.tokenUsage;
-
-  const cost = isPrimary
-    ? parentSession.cost
-    : childSession
-      ? childSession.cost
-      : matchedSubagent?.cost;
 
   const startedAt = isPrimary
     ? parentSession.startedAt
@@ -178,10 +208,10 @@ export function AgentDetailsPage({
               type="button"
               className="agent-details-breadcrumb-session"
               data-testid="agent-details-session-link"
-              onClick={() => onSelectSession(parentSession.issueKey)}
-              title={`View Session ${parentSession.issueKey}`}
+              onClick={isPrimary ? onClose : () => onSelectSession(parentSession.issueKey)}
+              title={isPrimary ? 'Back to Sessions' : `View Session ${parentSession.issueKey}`}
             >
-              {sessionLabel(parentSession)}
+              {isPrimary ? 'Sessions' : parentSession.issueKey}
             </button>
             <span className="agent-details-breadcrumb-sep" aria-hidden="true">/</span>
             <span className="agent-details-breadcrumb-current" data-testid="agent-details-title">
@@ -189,12 +219,14 @@ export function AgentDetailsPage({
             </span>
           </nav>
 
-          <span
-            className={`chip agent-details-role-badge ${isPrimary ? 'chip-accent' : 'chip-muted'}`}
-            data-testid="agent-details-role-badge"
-          >
-            {agentRole}
-          </span>
+          {(allSubagents.length > 0 || !isPrimary || Boolean(parentSession.workflowRole)) && (
+            <span
+              className={`chip agent-details-role-badge ${isPrimary ? 'chip-accent' : 'chip-muted'}`}
+              data-testid="agent-details-role-badge"
+            >
+              {agentRole}
+            </span>
+          )}
         </div>
 
         <div className="agent-details-header__right">
@@ -219,18 +251,6 @@ export function AgentDetailsPage({
             <span className="chip chip-muted agent-details-metric" data-testid="agent-details-model">
               <Icon name="robot" size={12} />
               <span>{model}</span>
-            </span>
-          )}
-
-          {tokenUsage && (
-            <span className="chip chip-muted agent-details-metric" data-testid="agent-details-tokens">
-              <span>{formatSubagentTokens(tokenUsage)}</span>
-            </span>
-          )}
-
-          {cost !== undefined && cost.amount > 0 && (
-            <span className="chip chip-muted agent-details-metric" data-testid="agent-details-cost">
-              <span>{formatCost(cost)}</span>
             </span>
           )}
 
@@ -282,11 +302,27 @@ export function AgentDetailsPage({
         </div>
       )}
 
-      {/* Main Activity Content */}
-      <div className="agent-details-body" data-testid="agent-details-body">
+      {/* Main Content Area */}
+      <div className="agent-details-body" data-testid="agent-details-body" ref={bodyRef}>
+        {/* Ticket Details Card */}
+        <SessionTicketCard session={targetSession} />
+
+        {/* Feed Content */}
         <AgentActivityFeed
           session={targetSession}
           subagentId={isPrimary ? undefined : (agentId || undefined)}
+          viewMode="conversation"
+          onSelectSession={onSelectSession}
+          isExecuting={isExecuting}
+        />
+      </div>
+
+      {/* Standard Session Composer */}
+      <div className="agent-details-composer-dock" data-testid="agent-details-composer-dock">
+        <SessionComposer
+          key={targetSession.issueKey}
+          session={targetSession}
+          sessions={sessions}
         />
       </div>
     </div>

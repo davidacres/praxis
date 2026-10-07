@@ -14,6 +14,8 @@ export interface EasyModeSidebarProps {
   onNewSession: () => void;
   onAbortSession?: (sessionKey: string) => void;
   onDeleteSession?: (sessionKey: string) => void;
+  onRenameSession?: (sessionKey: string, title: string) => Promise<void>;
+  onArchiveSession?: (sessionKey: string, archived: boolean) => Promise<void>;
   projects: ProjectRecord[];
   runsByProjectId: Record<string, WorkflowRunSummary[]>;
   activeWorkflowRunId?: string;
@@ -38,6 +40,8 @@ export function EasyModeSidebar({
   onNewSession,
   onAbortSession,
   onDeleteSession,
+  onRenameSession,
+  onArchiveSession,
   projects,
   runsByProjectId,
   activeWorkflowRunId,
@@ -84,6 +88,8 @@ export function EasyModeSidebar({
               onNewSession={onNewSession}
               onAbortSession={onAbortSession}
               onDeleteSession={onDeleteSession}
+              onRenameSession={onRenameSession}
+              onArchiveSession={onArchiveSession}
             />
           )}
         </div>
