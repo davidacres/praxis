@@ -80,7 +80,11 @@ Verification at completion:
 - The workflow specs and the folder/edit/new-issue gate specs all pass after the final changes.
 - The designer, connection inspector, loop history, needs-decision notice and start dialog were inspected in light and dark.
 
-Not verified: the first close condition was proven with scripted stage outcomes through the real orchestrator and the manual run seam, not with a live AI. A real run of Governed delivery against a deliberately buggy ticket is still the honest end-to-end test of whether real reviewers and implementers converge.
+Live run (the first close condition), `governedDeliveryLoop.live.spec.ts` with Claude Code on a small repository whose ticket is a paging fix and whose `src/pager.js` carries an untested `eval()`:
+
+- First attempt: the run converged with no loop. The reviewer reported the `eval` code-injection risk but rated it **low** because it predated the change and the plan made it a non-goal. The review instruction was changed to rate severity by impact regardless of who introduced it.
+- Second attempt: the first review rated the `eval` **high** (3 findings at high or above), the run looped back to Implement (iteration 1 of 2) with the findings, the second pass fixed the paging and replaced `eval` with strict integer parsing plus tests, QA/security/build re-ran, the second review left only low findings, and the run was approved and succeeded (5.3 min). The delivered `pager.js` on the run's branch no longer uses `eval`.
+- Independence was reported honestly as **not independent**: only one AI and model were set up in that profile, so Review ran on the same model as Implement.
 
 ## Description
 
