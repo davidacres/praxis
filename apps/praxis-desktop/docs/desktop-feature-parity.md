@@ -98,6 +98,11 @@ and Electron integration. Last audited: 2026-09-15.
 | Agent's own operating mode (ACP Session Modes) | ✓ | Composer mode chip, live while the task is active — distinct from Praxis's own chat/analysis/review toggle (FX-BE-038) |
 | Agent's own slash commands (ACP `available_commands_update`) | ✓ | Composer commands chip inserts `/name ` into the draft (FX-BE-038) |
 | Workflow run started from a ticket, outcome written back | ✓ | Run monitor's Start form takes an optional ticket; a settled run posts a comment back to it (FX-BE-040) |
+| Workflow fix loops and findings routing | ✓ | Connections can route on a stage's findings; a back-edge is a bounded loop that reopens its target with the findings; a spent budget waits for a person (accept / one more pass / stop). Governed delivery loops review and security findings back to Implement (FX-BF-108) |
+| Independent reviewers and skeptic stages | ✓ | `independentOf` runs a stage on a different AI or model from its author and says when it could not; a skeptic stage refutes findings before they gate or loop (FX-BF-108) |
+| For each (map) workflow stages | ✓ | Fan an agent out over a run-time list of findings or plan items, each writing item in its own worktree, merged back in order (FX-BF-108) |
+| Improve until target template | ✓ | Goal, target or rubric, and iteration count at start; keep-best loop with patience; tests guarded against weakening; ends on the best pass (FX-BF-108) |
+| Run parameters and worst-case cost at start | ✓ | Start dialog asks for a workflow's parameters and shows the worst-case agent sessions, with a confirm above a configurable threshold (FX-BF-108) |
 
 ## Developer workflow
 
