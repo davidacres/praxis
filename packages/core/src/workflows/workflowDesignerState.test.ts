@@ -14,7 +14,8 @@ import {
   removeOutput,
   setEntryNode,
   updateEdge,
-  updateNode
+  updateNode,
+  wouldCloseCycle
 } from './workflowDesignerState';
 import { governedDeliveryTemplate } from './workflowTemplates';
 import { validateWorkflow } from './workflowValidation';
@@ -279,4 +280,45 @@ test('a clean template reports valid with no bucketed issues', () => {
   const feedback = designerFeedback(governedDeliveryTemplate());
   assert.equal(feedback.valid, true);
   assert.deepEqual(feedback.errors, []);
+});
+
+// ── Loops, findings routing and map nodes (FX-BE-167 / TASK-434) ────────────
+
+test('connecting back into a stage\'s past is detected, and a loop edge carries its budget and predicate', () => {
+  let definition = emptyWorkflowDefinition({ id: 'loops', name: 'Loops', scope: 'global', at: '2026-10-08T00:00:00.000Z' });
+  const implement = definition.nodes[0];
+  const review = newNode('agent-task', { x: 200, y: 0 });
+  definition = addNode(definition, review);
+  definition = connectNodes(definition, { from: implement.id, to: review.id });
+  assert.equal(wouldCloseCycle(definition, review.id, implement.id), true);
+  assert.equal(wouldCloseCycle(definition, implement.id, review.id), false);
+
+  definition = connectNodes(definition, { from: review.id, to: implement.id, on: 'findings', when: { severity: 'high' }, loop: { maxIterations: 2 } });
+  const back = definition.edges.find(edge => edge.from === review.id)!;
+  assert.deepEqual([back.on, back.when, back.loop], ['findings', { severity: 'high' }, { maxIterations: 2 }]);
+  // Once a loop edge exists, it no longer counts as a cycle for the next edge drawn.
+  assert.equal(wouldCloseCycle(definition, review.id, implement.id), true);
+
+  // Editing: a predicate is cleared when the edge stops routing on findings; undefined clears a field.
+  definition = updateEdge(definition, back.id, { on: 'failure' });
+  assert.equal(definition.edges.find(edge => edge.id === back.id)!.when, undefined);
+  definition = updateEdge(definition, back.id, { loop: undefined });
+  assert.equal('loop' in definition.edges.find(edge => edge.id === back.id)!, false);
+});
+
+test('a map node is created with bounded defaults, duplicates with fresh outputs, and its edge issues are bucketed by edge', () => {
+  let definition = emptyWorkflowDefinition({ id: 'map', name: 'Map', scope: 'global', at: '2026-10-08T00:00:00.000Z' });
+  const map = newNode('map', { x: 200, y: 0 });
+  assert.equal(map.type, 'map');
+  assert.ok(map.type === 'map' && map.concurrency >= 1 && map.maxItems >= 1);
+  definition = addNode(definition, map);
+  definition = addOutput(definition, map.id, { id: 'fixes', kind: 'diff', required: true });
+  definition = duplicateNode(definition, map.id);
+  const copy = definition.nodes[definition.nodes.length - 1];
+  assert.ok(copy.type === 'map' && copy.outputs[0].id !== 'fixes');
+
+  definition = connectNodes(definition, { from: definition.nodes[0].id, to: map.id });
+  definition = updateEdge(definition, definition.edges[0].id, { loop: { maxIterations: 0 } });
+  const feedback = designerFeedback(definition);
+  assert.ok(feedback.byEdge[definition.edges[0].id]?.some(issue => /budget of 1 to 10/.test(issue.message)));
 });

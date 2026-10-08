@@ -15,7 +15,8 @@ export const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: Ic
   { type: 'check', label: 'Check', icon: 'shield', description: 'Verification, test, or security gate' },
   { type: 'approval', label: 'Approval', icon: 'check-square', description: 'Manual human sign-off gate' },
   { type: 'deployment', label: 'Deployment', icon: 'rocket', description: 'Deployment or release step' },
-  { type: 'join', label: 'Join', icon: 'split-horizontal', description: 'Parallel branches synchronizer' }
+  { type: 'join', label: 'Join', icon: 'split-horizontal', description: 'Parallel branches synchronizer' },
+  { type: 'map', label: 'For each', icon: 'layers', description: 'Runs an agent once per finding or plan item, in parallel' }
 ];
 
 /**
@@ -50,6 +51,8 @@ export interface WorkflowCanvasProps {
   selectedNodeId: string | undefined;
   selectedEdgeId?: string | undefined;
   issuesByNode: Record<string, number>;
+  /** Validation issue counts per connection, so a bad loop budget is marked on the edge itself. */
+  issuesByEdge?: Record<string, number>;
   presentations?: Record<string, WorkflowNodePresentation>;
   agents?: DiscoveredAgentProfile[];
   skills?: DiscoveredSkill[];
@@ -68,6 +71,7 @@ export function WorkflowCanvas({
   selectedNodeId,
   selectedEdgeId: controlledSelectedEdgeId,
   issuesByNode,
+  issuesByEdge = {},
   presentations = {},
   agents = [],
   skills = [],
@@ -408,17 +412,42 @@ export function WorkflowCanvas({
     const source = boxes[edge.from];
     const target = boxes[edge.to];
     if (!source || !target) return null;
+    const fromNode = definition.nodes.find(n => n.id === edge.from);
+    const toNode = definition.nodes.find(n => n.id === edge.to);
+    const badge = edge.loop
+      ? `↺ up to ${edge.loop.maxIterations}×${edge.on === 'findings' ? ' on findings' : edge.on === 'failure' ? ' on failure' : ''}`
+      : edge.on === 'findings'
+        ? 'on findings'
+        : undefined;
+    if (edge.loop) {
+      // A way back is drawn under both stages: out of the source's bottom, round, and up
+      // into the target's — never on top of the forward path it returns along.
+      const from = anchorPoint(source, 'bottom');
+      const to = anchorPoint(target, 'bottom');
+      const dip = Math.max(from.y, to.y) + 56;
+      return {
+        id: edge.id,
+        d: `M ${from.x} ${from.y} C ${from.x} ${dip}, ${to.x} ${dip}, ${to.x} ${to.y}`,
+        midX: (from.x + to.x) / 2,
+        midY: dip - 14,
+        dead: false,
+        loop: true,
+        badge,
+        fromName: fromNode?.name ?? edge.from,
+        toName: toNode?.name ?? edge.to
+      };
+    }
     const dirs = resolveConnectorDirections(source, target);
     const from = anchorPoint(source, dirs.sourceDirection);
     const to = anchorPoint(target, dirs.targetDirection);
-    const fromNode = definition.nodes.find(n => n.id === edge.from);
-    const toNode = definition.nodes.find(n => n.id === edge.to);
     return {
       id: edge.id,
       d: buildConnectorCurvePath(from.x, from.y, to.x, to.y, dirs.sourceDirection, dirs.targetDirection),
       midX: (from.x + to.x) / 2,
       midY: (from.y + to.y) / 2,
       dead: edge.on === 'failure',
+      loop: false,
+      badge,
       fromName: fromNode?.name ?? edge.from,
       toName: toNode?.name ?? edge.to
     };
@@ -521,7 +550,7 @@ export function WorkflowCanvas({
               return (
                 <g
                   key={edge!.id}
-                  className={`wf-canvas-edge-group${isSelected ? ' is-selected' : ''}${isHovered ? ' is-hovered' : ''}`}
+                  className={`wf-canvas-edge-group${isSelected ? ' is-selected' : ''}${isHovered ? ' is-hovered' : ''}${edge!.loop ? ' is-loop' : ''}`}
                   data-testid={`wf-canvas-edge-${edge!.id}`}
                 >
                   <path
@@ -533,7 +562,7 @@ export function WorkflowCanvas({
                     markerEnd={marker}
                     className="wf-canvas-edge-line"
                     data-testid={`wf-canvas-edge-line-${edge!.id}`}
-                    aria-label={`Connection from ${edge!.fromName} to ${edge!.toName}`}
+                    aria-label={`${edge!.loop ? 'Loop' : 'Connection'} from ${edge!.fromName} to ${edge!.toName}`}
                     style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
                     onPointerEnter={() => setHoveredEdgeId(edge!.id)}
                     onPointerLeave={() => setHoveredEdgeId(current => (current === edge!.id ? undefined : current))}
@@ -566,6 +595,32 @@ export function WorkflowCanvas({
               <path d={linkPreview} fill="none" stroke="var(--accent)" strokeWidth={1.5} strokeDasharray="4 3" markerEnd="url(#wf-arrowhead-selected)" />
             )}
           </svg>
+
+          {/* What a findings or loop connection does, and whether it has a problem, on the edge itself. */}
+          {edgePaths.filter(Boolean).map(edge => {
+            const issues = issuesByEdge[edge!.id] ?? 0;
+            if (!edge!.badge && issues === 0) return null;
+            if (selectedEdgeId === edge!.id || hoveredEdgeId === edge!.id) return null;
+            // The label is also the easiest thing to click on a curve, so it selects its connection.
+            return (
+              <button
+                type="button"
+                key={`badge-${edge!.id}`}
+                className={`wf-edge-badge${edge!.loop ? ' is-loop' : ''}${issues > 0 ? ' has-issue' : ''}`}
+                style={{ left: edge!.midX, top: edge!.midY }}
+                data-testid={`wf-edge-badge-${edge!.id}`}
+                aria-label={`${edge!.loop ? 'Loop' : 'Connection'} from ${edge!.fromName} to ${edge!.toName}: ${edge!.badge ?? `${issues} issue${issues === 1 ? '' : 's'}`}`}
+                onPointerDown={event => event.stopPropagation()}
+                onClick={event => {
+                  event.stopPropagation();
+                  setSelectedEdgeId(edge!.id);
+                }}
+              >
+                {issues > 0 && <Icon name="warning" size={10} />}
+                {edge!.badge ?? `${issues} issue${issues === 1 ? '' : 's'}`}
+              </button>
+            );
+          })}
 
           {/* Edge delete action button overlay */}
           {edgePaths.filter(Boolean).map(edge => {

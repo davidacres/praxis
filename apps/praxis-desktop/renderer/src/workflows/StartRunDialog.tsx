@@ -6,7 +6,10 @@ import type {
   IssueFilters,
   ModelOptions,
   ProjectRecord,
+  RunEstimate,
+  RunParameterIssue,
   WorkflowPlanInput,
+  WorkflowRunParameter,
   WorkflowRunSummary
 } from '@praxis/core';
 import { isIssueDone } from '../board/boardMeta';
@@ -76,6 +79,10 @@ export function StartRunDialog({
   const [modelOptions, setModelOptions] = useState<ModelOptions | undefined>();
   const [selectedModel, setSelectedModel] = useState('');
   const [modelsLoading, setModelsLoading] = useState(false);
+  // What the chosen workflow asks for, and what it could cost at worst (FX-BE-166 / FX-BE-167).
+  const [prepared, setPrepared] = useState<{ parameters: WorkflowRunParameter[]; requiresMeasurableGoal: boolean; estimate: RunEstimate; issues: RunParameterIssue[] }>();
+  const [parameterDrafts, setParameterDrafts] = useState<Record<string, string>>({});
+  const [confirmLarge, setConfirmLarge] = useState(false);
 
   // Load provider statuses and default to active provider
   useEffect(() => {
@@ -218,8 +225,72 @@ export function StartRunDialog({
     };
   }, [project.id, project.linkedBoards, connections]);
 
+  // A parameter's value as the run receives it: numbers as numbers, blanks left out.
+  const parameterValues = (): Record<string, string | number> => {
+    const values: Record<string, string | number> = {};
+    for (const parameter of prepared?.parameters ?? []) {
+      const draft = (parameterDrafts[parameter.id] ?? '').trim();
+      if (!draft) continue;
+      values[parameter.id] = parameter.kind === 'text' ? draft : Number(draft);
+    }
+    return values;
+  };
+
+  // Re-reads the workflow's parameters and worst case whenever the workflow or a value changes.
+  const parameterKey = JSON.stringify(parameterDrafts);
+  useEffect(() => {
+    if (!startWorkflowId) {
+      setPrepared(undefined);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void window.praxis.workflows
+        .prepareRun(project.id, startWorkflowId, parameterValues())
+        .then(result => {
+          if (!cancelled) setPrepared(result);
+        })
+        .catch(() => {
+          if (!cancelled) setPrepared(undefined);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // parameterValues reads parameterDrafts, which parameterKey stands for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id, startWorkflowId, parameterKey]);
+
+  useEffect(() => {
+    setParameterDrafts({});
+    setConfirmLarge(false);
+  }, [startWorkflowId]);
+
+  // Seed defaults once the parameters are known, without overwriting what was typed.
+  useEffect(() => {
+    if (!prepared) return;
+    setParameterDrafts(current => {
+      const next = { ...current };
+      let changed = false;
+      for (const parameter of prepared.parameters) {
+        if (next[parameter.id] === undefined && parameter.default !== undefined) {
+          next[parameter.id] = String(parameter.default);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [prepared]);
+
+  const needsConfirm = prepared?.estimate.needsConfirm === true;
+
   const submit = async (uncommittedChanges?: UncommittedChoice) => {
     if (!startWorkflowId || !taskTitle.trim() || busy) return;
+    if (needsConfirm && !confirmLarge) {
+      setError(`This run could start up to ${prepared?.estimate.worstCaseAgentLaunches} agent sessions. Confirm that below to start it.`);
+      return;
+    }
     const issueKey = extractIssueKey(issueKeyDraft);
     const matchedIssue = issueKey ? issueOptions.find(option => option.key === issueKey) : undefined;
     setBusy(true);
@@ -243,7 +314,8 @@ export function StartRunDialog({
           providerLimitPolicy,
           aiProvider: selectedProvider,
           aiModel: selectedModel.trim() || undefined,
-          ...(uncommittedChanges ? { uncommittedChanges } : {})
+          ...(uncommittedChanges ? { uncommittedChanges } : {}),
+          ...(prepared?.parameters.length ? { parameters: parameterValues() } : {})
         }
       );
       onStarted(run);
@@ -364,6 +436,55 @@ export function StartRunDialog({
           )}
             </div>
           </section>
+          {prepared && prepared.parameters.length > 0 && (
+            <section className="wf-runstart-section" data-testid="wf-runstart-parameters">
+              <div className="wf-runstart-section-head">
+                <h4>What to aim for</h4>
+                <p>
+                  {prepared.requiresMeasurableGoal
+                    ? 'Give a target or a rubric — without one the run cannot tell an improvement from churn.'
+                    : 'This workflow asks for these when it starts.'}
+                </p>
+              </div>
+              <div className="wf-runstart-parameters">
+                {prepared.parameters.map(parameter => {
+                  const issue = (parameterDrafts[parameter.id] ?? '').trim()
+                    ? prepared.issues.find(candidate => candidate.parameterId === parameter.id)
+                    : undefined;
+                  const label = `${parameter.label}${parameter.required ? '' : ' (optional)'}`;
+                  return (
+                    <label key={parameter.id} className={`wf-runstart-parameter${parameter.kind === 'text' ? ' is-text' : ''}`}>
+                      <span title={parameter.description}>{label}</span>
+                      {parameter.kind === 'text' ? (
+                        <textarea
+                          rows={2}
+                          aria-label={parameter.label}
+                          data-testid={`wf-runstart-param-${parameter.id}`}
+                          value={parameterDrafts[parameter.id] ?? ''}
+                          placeholder={parameter.description}
+                          onChange={event => setParameterDrafts(current => ({ ...current, [parameter.id]: event.target.value }))}
+                        />
+                      ) : (
+                        <input
+                          type="number"
+                          aria-label={parameter.label}
+                          data-testid={`wf-runstart-param-${parameter.id}`}
+                          value={parameterDrafts[parameter.id] ?? ''}
+                          min={parameter.min}
+                          max={parameter.max}
+                          step={parameter.kind === 'integer' ? 1 : 'any'}
+                          onChange={event => setParameterDrafts(current => ({ ...current, [parameter.id]: event.target.value }))}
+                        />
+                      )}
+                      {parameter.kind !== 'text' && parameter.description && <span className="wf-runstart-parameter-hint">{parameter.description}</span>}
+                      {issue && <span className="wf-runstart-parameter-issue" role="alert">{issue.message}</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+          {prepared && <RunEstimatePanel estimate={prepared.estimate} confirmed={confirmLarge} onConfirm={setConfirmLarge} />}
           {availableProviderOptions.length > 0 && (
             <section className="wf-runstart-section">
               <div className="wf-runstart-section-head">
@@ -511,12 +632,66 @@ export function StartRunDialog({
             <button type="button" className="btn" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={!startWorkflowId || !taskTitle.trim() || busy}>
+            <button type="submit" className="btn btn-primary" disabled={!startWorkflowId || !taskTitle.trim() || busy || (needsConfirm && !confirmLarge)}>
               {busy ? 'Starting…' : 'Start'}
             </button>
           </div>
         </form>
       </div>
     </div>
+  );
+}
+
+function formatTokens(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}k`;
+  return String(Math.round(value));
+}
+
+/**
+ * The run's ceiling before it starts: agent sessions on the first pass and at worst
+ * (every loop spent, every retry used, every map item run). Tokens and spend appear only
+ * when this machine has measured enough earlier stage sessions — otherwise it says so.
+ */
+function RunEstimatePanel({
+  estimate,
+  confirmed,
+  onConfirm
+}: {
+  estimate: RunEstimate;
+  confirmed: boolean;
+  onConfirm: (value: boolean) => void;
+}) {
+  const loops = estimate.loops.length;
+  return (
+    <section className="wf-runstart-section wf-runstart-estimate" data-testid="wf-runstart-estimate">
+      <div className="wf-runstart-section-head">
+        <h4>Cost at worst</h4>
+        <p>An estimate of the ceiling, not of what this run will use.</p>
+      </div>
+      <p data-testid="wf-runstart-estimate-launches">
+        {estimate.firstPassAgentLaunches} agent session{estimate.firstPassAgentLaunches === 1 ? '' : 's'} on the first pass · up to{' '}
+        <strong>{estimate.worstCaseAgentLaunches}</strong> at worst
+        {loops > 0 ? ' (every loop spent, every retry used)' : ' (every retry used)'}, plus up to {estimate.worstCaseCheckLaunches} check
+        {estimate.worstCaseCheckLaunches === 1 ? '' : 's'}.
+      </p>
+      {estimate.tokens ? (
+        <p data-testid="wf-runstart-estimate-tokens">
+          About {formatTokens(estimate.tokens.low)}–{formatTokens(estimate.tokens.high)} tokens
+          {estimate.spend ? ` · ${estimate.spend.currency} ${estimate.spend.low.toFixed(2)}–${estimate.spend.high.toFixed(2)}` : ''}, from{' '}
+          {estimate.basedOnSessions} earlier stage sessions on this machine.
+        </p>
+      ) : (
+        <p className="rail-sub" data-testid="wf-runstart-estimate-tokens">
+          Tokens and spend: not estimable yet — too few earlier workflow stage sessions have reported usage here.
+        </p>
+      )}
+      {estimate.needsConfirm && (
+        <label className="form-check" data-testid="wf-runstart-confirm-large">
+          <input type="checkbox" checked={confirmed} onChange={event => onConfirm(event.target.checked)} />
+          I understand this run could start up to {estimate.worstCaseAgentLaunches} agent sessions
+        </label>
+      )}
+    </section>
   );
 }

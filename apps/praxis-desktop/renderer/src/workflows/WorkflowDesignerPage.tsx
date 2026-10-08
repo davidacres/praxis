@@ -6,8 +6,11 @@ import type {
   AiProvider,
   AgentWorkflowReference,
   ProjectRecord,
+  CheckFindingSeverity,
   WorkflowDefinition,
+  WorkflowEdge,
   WorkflowEdgeOutcome,
+  WorkflowFindingsPredicate,
   WorkflowGateKind,
   WorkflowNode,
   WorkflowNodeType,
@@ -31,6 +34,8 @@ import {
   setEntryNode,
   updateEdge,
   updateNode,
+  mapOutputsFor,
+  MAX_LOOP_ITERATIONS,
   type BucketedFeedback
 } from './workflowEdits';
 import { isProviderUsable, isProviderUsableForSessions } from '../ai/providerAvailability';
@@ -48,8 +53,17 @@ const GATES: WorkflowGateKind[] = ['review', 'qa', 'security'];
 const OUTCOMES: Array<{ value: WorkflowEdgeOutcome; label: string; description: string }> = [
   { value: 'success', label: 'On success', description: 'Follow this connection when the stage passes' },
   { value: 'failure', label: 'On failure', description: 'Follow this connection when the stage fails' },
-  { value: 'always', label: 'Always', description: 'Follow this connection whatever the outcome' }
+  { value: 'always', label: 'Always', description: 'Follow this connection whatever the outcome' },
+  { value: 'findings', label: 'On findings', description: 'Follow this connection when the stage reports findings that match' }
 ];
+const SEVERITY_OPTIONS: Array<{ value: CheckFindingSeverity; label: string }> = [
+  { value: 'critical', label: 'Critical' },
+  { value: 'high', label: 'High or above' },
+  { value: 'medium', label: 'Medium or above' },
+  { value: 'low', label: 'Low or above' },
+  { value: 'info', label: 'Any severity' }
+];
+const METRIC_OPERATORS = ['<', '<=', '>', '>=', '=='] as const;
 
 function nodeKind(type: WorkflowNodeType) {
   return NODE_KINDS.find(kind => kind.type === type) ?? NODE_KINDS[0];
@@ -433,6 +447,7 @@ export function WorkflowDesignerPage({
         <EdgeInspector
           definition={definition}
           edgeId={selectedEdge.id}
+          issues={feedback?.byEdge[selectedEdge.id] ?? []}
           onChange={mutate}
           onSelectEdge={selectEdge}
           onSelectNode={selectStage}
@@ -532,6 +547,9 @@ export function WorkflowDesignerPage({
             selectedEdgeId={selectedEdgeId}
             issuesByNode={Object.fromEntries(
               Object.entries(feedback?.byNode ?? {}).map(([id, list]) => [id, list.length])
+            )}
+            issuesByEdge={Object.fromEntries(
+              Object.entries(feedback?.byEdge ?? {}).map(([id, list]) => [id, list.length])
             )}
             presentations={presentations}
             agents={profiles}
@@ -743,8 +761,13 @@ function NodeInspector({
       </Field>
 
       {node.type === 'agent-task' && (
-        <AgentStageFields workflowId={definition.id} node={node} catalog={catalog} policy={policy} recommendationAvailable={recommendationAvailable} set={set} />
+        <>
+          <AgentStageFields workflowId={definition.id} node={node} catalog={catalog} policy={policy} recommendationAvailable={recommendationAvailable} set={set} />
+          <VerificationFields definition={definition} node={node} set={set} />
+        </>
       )}
+
+      {node.type === 'map' && <MapStageFields definition={definition} node={node} catalog={catalog} set={set} />}
 
       {node.type === 'check' && (
         <>
@@ -1499,12 +1522,14 @@ function SkillPickerDialog({
 function EdgeInspector({
   definition,
   edgeId,
+  issues,
   onChange,
   onSelectEdge,
   onSelectNode
 }: {
   definition: WorkflowDefinition;
   edgeId: string;
+  issues: Array<{ path: string; message: string }>;
   onChange: (next: WorkflowDefinition) => void;
   onSelectEdge: (edgeId: string | undefined) => void;
   onSelectNode: (nodeId: string | undefined) => void;
@@ -1538,6 +1563,13 @@ function EdgeInspector({
           </button>
         </div>
       </div>
+      {issues.length > 0 && (
+        <ul className="issues wf-inspector-issues" data-testid="wf-edge-issues">
+          {issues.map((issue, index) => (
+            <li key={index}>{issue.message}</li>
+          ))}
+        </ul>
+      )}
       <div className="wf-edge-ends">
         <button type="button" className="composer-chip" onClick={() => onSelectNode(edge.from)} title={`Open ${fromName}`}>
           {from && <Icon name={nodeKind(from.type).icon} size={12} />}
@@ -1566,7 +1598,411 @@ function EdgeInspector({
         />
         Required — the run waits on this branch
       </label>
+      {edge.on === 'findings' && (
+        <FindingsPredicateFields
+          definition={definition}
+          predicate={edge.when ?? {}}
+          sourceName={fromName}
+          onChange={when => onChange(updateEdge(definition, edge.id, { when }))}
+        />
+      )}
+      <LoopFields edge={edge} toName={toName} onChange={loop => onChange(updateEdge(definition, edge.id, { loop }))} />
     </div>
+  );
+}
+
+/** Whole numbers in a bounded range, typed or stepped; anything else leaves the value alone. */
+function NumberInput({
+  ariaLabel,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  testId
+}: {
+  ariaLabel: string;
+  value: number | undefined;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange: (value: number | undefined) => void;
+  testId?: string;
+}) {
+  return (
+    <input
+      type="number"
+      className="wf-number-input"
+      aria-label={ariaLabel}
+      data-testid={testId}
+      value={value ?? ''}
+      min={min}
+      max={max}
+      step={step}
+      onChange={event => {
+        if (event.target.value === '') return onChange(undefined);
+        const parsed = Number(event.target.value);
+        if (Number.isFinite(parsed)) onChange(parsed);
+      }}
+    />
+  );
+}
+
+/** Which findings a findings connection routes on — any clause that holds sends the run this way. */
+function FindingsPredicateFields({
+  definition,
+  predicate,
+  sourceName,
+  onChange
+}: {
+  definition: WorkflowDefinition;
+  predicate: WorkflowFindingsPredicate;
+  sourceName: string;
+  onChange: (next: WorkflowFindingsPredicate) => void;
+}) {
+  const numericParameters = (definition.parameters ?? []).filter(parameter => parameter.kind !== 'text' && !parameter.bindsLoopEdge);
+  const metric = predicate.metric;
+  return (
+    <InspectorSection title="When">
+      <p className="hint">Taken when {sourceName} reports findings that match any of these.</p>
+      <Field label="Severity">
+        <ChipSelect
+          ariaLabel="Finding severity"
+          data-testid="wf-edge-severity"
+          value={predicate.severity ?? 'high'}
+          options={SEVERITY_OPTIONS}
+          onChange={severity => onChange({ ...predicate, severity: severity as CheckFindingSeverity })}
+        />
+      </Field>
+      <Field label="At least">
+        <NumberInput
+          ariaLabel="Minimum number of findings"
+          testId="wf-edge-min-count"
+          value={predicate.minCount ?? 1}
+          min={1}
+          onChange={minCount => onChange({ ...predicate, minCount: minCount && minCount >= 1 ? Math.floor(minCount) : undefined })}
+        />
+      </Field>
+      <Field label="Categories" stacked hint="Comma separated, e.g. security, bug. Empty counts every category.">
+        <input
+          aria-label="Finding categories"
+          value={(predicate.categories ?? []).join(', ')}
+          placeholder="any"
+          onChange={event => {
+            const categories = event.target.value.split(',').map(item => item.trim()).filter(Boolean);
+            const { categories: _drop, ...rest } = predicate;
+            onChange(categories.length ? { ...rest, categories } : rest);
+          }}
+        />
+      </Field>
+      <label className="form-check">
+        <input
+          type="checkbox"
+          data-testid="wf-edge-metric-toggle"
+          checked={!!metric}
+          onChange={event => {
+            const { metric: _drop, ...rest } = predicate;
+            onChange(event.target.checked ? { ...rest, metric: { metric: 'score', operator: '<', value: 90 } } : rest);
+          }}
+        />
+        Or when a measurement misses its mark
+      </label>
+      {metric && (
+        <div className="wf-edge-metric-row">
+          <input
+            aria-label="Metric name"
+            value={metric.metric}
+            onChange={event => onChange({ ...predicate, metric: { ...metric, metric: event.target.value } })}
+          />
+          <ChipSelect
+            ariaLabel="Metric comparison"
+            value={metric.operator}
+            options={METRIC_OPERATORS.map(operator => ({ value: operator, label: operator }))}
+            onChange={operator => onChange({ ...predicate, metric: { ...metric, operator: operator as (typeof METRIC_OPERATORS)[number] } })}
+          />
+          <NumberInput
+            ariaLabel="Metric value"
+            value={metric.value}
+            step={0.1}
+            onChange={value => onChange({ ...predicate, metric: { ...metric, value: value ?? 0 } })}
+          />
+          {numericParameters.length > 0 && (
+            <ChipSelect
+              ariaLabel="Take the value from a run parameter"
+              value={metric.valueFromParameter ?? ''}
+              options={[{ value: '', label: 'Fixed value' }, ...numericParameters.map(parameter => ({ value: parameter.id, label: `From “${parameter.label}”` }))]}
+              onChange={id => {
+                const { valueFromParameter: _drop, ...rest } = metric;
+                onChange({ ...predicate, metric: id ? { ...rest, valueFromParameter: id } : rest });
+              }}
+            />
+          )}
+        </div>
+      )}
+    </InspectorSection>
+  );
+}
+
+/** A connection that goes back: its iteration budget, and whether the loop keeps its best pass. */
+function LoopFields({
+  edge,
+  toName,
+  onChange
+}: {
+  edge: WorkflowEdge;
+  toName: string;
+  onChange: (loop: WorkflowEdge['loop']) => void;
+}) {
+  const loop = edge.loop;
+  const keepBest = loop?.keepBest;
+  return (
+    <InspectorSection title="Loop back">
+      <label className="form-check">
+        <input
+          type="checkbox"
+          data-testid="wf-edge-loop-toggle"
+          checked={!!loop}
+          onChange={event => onChange(event.target.checked ? { maxIterations: 2 } : undefined)}
+        />
+        Go back to {toName} and run everything after it again
+      </label>
+      {loop && (
+        <>
+          <Field label="At most" labelTitle={`How many times the run may go back before a person decides. Up to ${MAX_LOOP_ITERATIONS}.`}>
+            <span className="wf-inline-unit">
+              <NumberInput
+                ariaLabel="Loop iterations"
+                testId="wf-edge-loop-iterations"
+                value={loop.maxIterations}
+                min={1}
+                max={MAX_LOOP_ITERATIONS}
+                onChange={value => onChange({ ...loop, maxIterations: Math.floor(value ?? 0) })}
+              />
+              <span className="hint">times</span>
+            </span>
+          </Field>
+          <p className="hint">When the budget runs out a person decides: accept the result, allow more passes, or stop the run.</p>
+          <label className="form-check">
+            <input
+              type="checkbox"
+              data-testid="wf-edge-keep-best"
+              checked={!!keepBest}
+              onChange={event => {
+                const { keepBest: _drop, ...rest } = loop;
+                onChange(event.target.checked ? { ...rest, keepBest: { metric: 'score', higherIsBetter: true, patience: 2 } } : rest);
+              }}
+            />
+            Keep the best pass, not the latest
+          </label>
+          {keepBest && (
+            <div className="wf-edge-metric-row">
+              <input
+                aria-label="Keep-best metric"
+                value={keepBest.metric}
+                onChange={event => onChange({ ...loop, keepBest: { ...keepBest, metric: event.target.value } })}
+              />
+              <ChipSelect
+                ariaLabel="Better means"
+                value={keepBest.higherIsBetter ? 'higher' : 'lower'}
+                options={[{ value: 'higher', label: 'Higher is better' }, { value: 'lower', label: 'Lower is better' }]}
+                onChange={value => onChange({ ...loop, keepBest: { ...keepBest, higherIsBetter: value === 'higher' } })}
+              />
+              <NumberInput
+                ariaLabel="Stop after this many passes without improvement"
+                value={keepBest.patience}
+                min={1}
+                onChange={patience => {
+                  const { patience: _drop, ...rest } = keepBest;
+                  onChange({ ...loop, keepBest: patience && patience >= 1 ? { ...rest, patience: Math.floor(patience) } : rest });
+                }}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </InspectorSection>
+  );
+}
+
+/** Stages upstream of `nodeId` along non-loop connections. */
+function upstreamOf(definition: WorkflowDefinition, nodeId: string): Set<string> {
+  const inbound = new Map<string, string[]>();
+  for (const edge of definition.edges) {
+    if (edge.loop) continue;
+    inbound.set(edge.to, [...(inbound.get(edge.to) ?? []), edge.from]);
+  }
+  const seen = new Set<string>();
+  const queue = [...(inbound.get(nodeId) ?? [])];
+  while (queue.length > 0) {
+    const id = queue.shift() as string;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    queue.push(...(inbound.get(id) ?? []));
+  }
+  return seen;
+}
+
+/**
+ * How an agent stage keeps others honest: which earlier stage it judges independently,
+ * whose findings it tries to refute, and whether it is held to the tests that judge it.
+ */
+function VerificationFields({
+  definition,
+  node,
+  set
+}: {
+  definition: WorkflowDefinition;
+  node: Extract<WorkflowNode, { type: 'agent-task' }>;
+  set: (patch: Partial<WorkflowNode>) => void;
+}) {
+  const upstream = upstreamOf(definition, node.id);
+  const agentStages = definition.nodes.filter(candidate => upstream.has(candidate.id) && (candidate.type === 'agent-task' || candidate.type === 'map'));
+  const findingsStages = definition.nodes.filter(
+    candidate => upstream.has(candidate.id) && 'outputs' in candidate && candidate.outputs.some(output => output.kind === 'findings')
+  );
+  return (
+    <InspectorSection title="Independence">
+      <Field label="Judges" labelTitle="Run on a different AI or model from this stage, so it is not marking its own work">
+        <ChipSelect
+          ariaLabel="Independent of"
+          data-testid="wf-node-independent-of"
+          value={node.independentOf ?? ''}
+          options={[{ value: '', label: 'No one in particular' }, ...agentStages.map(stage => ({ value: stage.id, label: stage.name }))]}
+          onChange={id => set({ independentOf: id || undefined } as Partial<WorkflowNode>)}
+        />
+      </Field>
+      <Field label="Challenges" labelTitle="Try to refute this stage's findings; refuted ones stop counting toward gates and loops">
+        <ChipSelect
+          ariaLabel="Refutes the findings of"
+          data-testid="wf-node-refutes"
+          value={node.refutes ?? ''}
+          options={[{ value: '', label: 'Nothing' }, ...findingsStages.map(stage => ({ value: stage.id, label: stage.name }))]}
+          onChange={id => set({ refutes: id || undefined } as Partial<WorkflowNode>)}
+        />
+      </Field>
+      {node.mutatesWorktree && (
+        <>
+          <label className="form-check">
+            <input
+              type="checkbox"
+              data-testid="wf-node-guard-tests"
+              checked={!!node.guardTests}
+              onChange={event => set({ guardTests: event.target.checked ? {} : undefined } as Partial<WorkflowNode>)}
+            />
+            Hold to its tests — undo an attempt that deletes, skips or loosens them
+          </label>
+          {node.guardTests && (
+            <label className="form-check wf-indented-check">
+              <input
+                type="checkbox"
+                checked={node.guardTests.testsInScope === true}
+                onChange={event => set({ guardTests: { ...node.guardTests, testsInScope: event.target.checked || undefined } } as Partial<WorkflowNode>)}
+              />
+              Writing tests is part of its job (edits allowed, weakening still is not)
+            </label>
+          )}
+        </>
+      )}
+    </InspectorSection>
+  );
+}
+
+/** A "for each" stage: what it fans out over, the agent each item runs, and how wide it may go. */
+function MapStageFields({
+  definition,
+  node,
+  catalog,
+  set
+}: {
+  definition: WorkflowDefinition;
+  node: Extract<WorkflowNode, { type: 'map' }>;
+  catalog: AgentRuntimeSnapshot | undefined;
+  set: (patch: Partial<WorkflowNode>) => void;
+}) {
+  const upstream = upstreamOf(definition, node.id);
+  const lists = definition.nodes
+    .filter(candidate => upstream.has(candidate.id) && 'outputs' in candidate)
+    .flatMap(candidate =>
+      (candidate as { outputs: Array<{ id: string; kind: string; publishTo?: string }> }).outputs
+        .filter(output => output.kind === 'findings' || (output.kind === 'plan' && output.publishTo === 'board'))
+        .map(output => ({ value: output.id, label: `${candidate.name}: ${output.kind === 'findings' ? 'each finding' : 'each plan item'}`, kind: output.kind }))
+    );
+  const profiles = (catalog?.profiles ?? []).filter(profile => !isHostShimProfile(profile));
+  const agentId = node.agent.profileId || node.agent.agentId;
+  return (
+    <>
+      <InspectorSection title="For each">
+        <Field label="Item">
+          <ChipSelect
+            ariaLabel="Fan out over"
+            data-testid="wf-map-over"
+            value={node.over}
+            placeholder={lists.length ? 'Choose a list' : 'Connect a stage with findings first'}
+            options={lists.map(({ value, label }) => ({ value, label }))}
+            onChange={over => {
+              const list = lists.find(candidate => candidate.value === over);
+              set({
+                over,
+                itemSource: list?.kind === 'plan' ? 'plan-items' : 'findings',
+                inputs: [...new Set([...node.inputs, over])]
+              } as Partial<WorkflowNode>);
+            }}
+          />
+        </Field>
+        <Field label="Agent">
+          {profiles.length > 0 ? (
+            <ChipSelect
+              ariaLabel="Agent for each item"
+              value={agentId}
+              placeholder="Choose a profile"
+              icon="robot"
+              options={profiles.map(profile => ({ value: profile.profile.id, label: profile.profile.name }))}
+              onChange={id => set({ agent: { ...node.agent, agentId: id, profileId: id, hostId: id } } as Partial<WorkflowNode>)}
+            />
+          ) : (
+            <input aria-label="Agent for each item" value={agentId} placeholder="e.g. praxis-implementer" onChange={event => set({ agent: { ...node.agent, agentId: event.target.value, profileId: event.target.value, hostId: event.target.value } } as Partial<WorkflowNode>)} />
+          )}
+        </Field>
+        <Field label="Instructions" stacked hint="Each item's session also gets its one item.">
+          <textarea rows={3} value={node.instructions} onChange={event => set({ instructions: event.target.value } as Partial<WorkflowNode>)} />
+        </Field>
+        <label className="form-check">
+          <input
+            type="checkbox"
+            checked={node.mutatesWorktree}
+            onChange={event => {
+              const mutates = event.target.checked;
+              set({
+                mutatesWorktree: mutates,
+                agent: { ...node.agent, toolMode: mutates ? 'full' : 'read-only' },
+                outputs: mapOutputsFor(node.id, mutates)
+              } as Partial<WorkflowNode>);
+            }}
+          />
+          Each item writes code (in its own checkout, merged back in order)
+        </label>
+      </InspectorSection>
+      <InspectorSection title="Limits">
+        <Field label="At once">
+          <NumberInput ariaLabel="Items at once" testId="wf-map-concurrency" value={node.concurrency} min={1} max={8} onChange={value => set({ concurrency: Math.floor(value ?? 1) } as Partial<WorkflowNode>)} />
+        </Field>
+        <Field label="At most" labelTitle="Items past this are deferred, never dropped: the stage stops and a retry runs them">
+          <NumberInput ariaLabel="Most items" testId="wf-map-max-items" value={node.maxItems} min={1} max={50} onChange={value => set({ maxItems: Math.floor(value ?? 1) } as Partial<WorkflowNode>)} />
+        </Field>
+        <Field label="If an item fails">
+          <ChipSelect
+            ariaLabel="If an item fails"
+            value={node.onItemFailure}
+            options={[
+              { value: 'collect', label: 'Finish the rest', description: 'Run every item, then report which failed' },
+              { value: 'failFast', label: 'Stop at once', description: 'Stop the other items as soon as one fails' }
+            ]}
+            onChange={value => set({ onItemFailure: value as 'collect' | 'failFast' } as Partial<WorkflowNode>)}
+          />
+        </Field>
+        <GateSelect value={node.satisfiesGate} onChange={gate => set({ satisfiesGate: gate } as Partial<WorkflowNode>)} />
+      </InspectorSection>
+    </>
   );
 }
 

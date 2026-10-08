@@ -13347,6 +13347,8 @@ button.session-chat-attachment {
 .wf-field .form-field-label { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .wf-field .form-field-label-row { flex: 0 1 auto; min-width: 0; justify-content: flex-start; gap: 4px; }
 .wf-field.is-stacked .form-field-label { flex-direction: column; align-items: stretch; gap: 3px; }
+/* `.form-field` is a row; a stacked field's hint belongs under its control, not squeezed beside it. */
+.wf-field.is-stacked { flex-direction: column; gap: 3px; }
 .wf-field.is-stacked .form-field-label-row { justify-content: space-between; }
 .wf-field .form-field-label-text { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-tertiary); font-size: var(--text-md); white-space: nowrap; }
 .wf-field .form-field-label-text svg, .wf-field .form-field-warn svg { width: calc(12px * var(--ui-scale)); height: calc(12px * var(--ui-scale)); }
@@ -13452,6 +13454,38 @@ button.session-chat-attachment {
 .wf-edge-ends .composer-chip { min-width: 0; flex: 0 1 auto; height: var(--field-chip-height); border: 1px solid var(--border); font-size: var(--text-md); color: var(--text); }
 .wf-edge-ends svg { width: var(--field-chip-icon); height: var(--field-chip-icon); }
 .wf-edge-ends .composer-chip span { overflow: hidden; text-overflow: ellipsis; }
+
+/* Findings routing and loop budgets (FX-BE-167): small numeric fields sized from the chip tokens. */
+.wf-number-input { width: calc(64px * var(--ui-scale)); height: var(--field-chip-height); padding: 0 var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-sunken); color: var(--text); font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+.wf-inline-unit { display: inline-flex; align-items: center; gap: var(--space-1); }
+.wf-inline-unit .hint { font-size: var(--text-md); }
+.wf-edge-metric-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.wf-edge-metric-row > input:not([type='number']) { flex: 1 1 calc(90px * var(--ui-scale)); min-width: 0; }
+.wf-indented-check { padding-left: calc(20px * var(--ui-scale)); }
+
+/* A loop edge on the canvas: drawn below the stages it joins, so a way back never reads as a way forward. */
+.wf-canvas-edge-group.is-loop .wf-canvas-edge-line { stroke-dasharray: 6 4; }
+.wf-edge-badge {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated, var(--bg));
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.wf-edge-badge:hover { border-color: var(--accent); }
+.wf-edge-badge.is-loop { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.wf-edge-badge.has-issue { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.wf-edge-badge svg { width: calc(10px * var(--ui-scale)); height: calc(10px * var(--ui-scale)); }
 
 /* Canvas — reuses .designer-canvas for the dot-grid surface. */
 .wf-canvas { position: relative; display: flex; flex-direction: column; min-height: 0; flex: 1; }
@@ -13855,6 +13889,31 @@ button.session-chat-attachment {
 .session-limit-action-menu .composer-provider-option { overflow-wrap: anywhere; white-space: normal; }
 /* A stage's AI ran out: switch (label + select + button), retry, stop — wrapping on a narrow rail. */
 .wf-run-limit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* Start-run parameters and the worst-case estimate (FX-BE-166 / FX-BE-167). */
+.wf-runstart-parameters { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(180px * var(--ui-scale)), 1fr)); gap: var(--space-2) var(--space-3); }
+.wf-runstart-parameter { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: var(--text-md); color: var(--text-secondary); }
+.wf-runstart-parameter.is-text { grid-column: 1 / -1; }
+.wf-runstart-parameter textarea { resize: vertical; }
+.wf-runstart-parameter-issue { color: var(--danger); font-size: var(--text-xs); }
+.wf-runstart-parameter-hint { color: var(--text-tertiary); font-size: var(--text-xs); }
+.wf-runstart-estimate p { margin: 0; font-size: var(--text-md); color: var(--text-secondary); }
+.wf-runstart-estimate p strong { color: var(--text); }
+/* Loops in the run view (FX-BE-167). */
+.wf-loop-findings { margin: 0; padding-left: var(--space-4); display: flex; flex-direction: column; gap: 2px; color: var(--text-secondary); }
+.wf-loop-findings code { font-size: var(--text-xs); color: var(--text-tertiary); }
+.wf-loops { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border); }
+.wf-loops > h3 { margin: 0; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); }
+.wf-loop { display: flex; flex-direction: column; gap: var(--space-1); }
+.wf-loop > p { margin: 0; }
+.wf-loop-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin: 0; font-size: var(--text-md); }
+.wf-loop-head svg { color: var(--accent); }
+.wf-loop-history { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); color: var(--text-secondary); }
+.wf-loop-history li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); }
+.wf-loop-history li > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-loop-pass { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.wf-loop-score { position: relative; display: inline-flex; align-items: center; justify-content: flex-end; min-width: calc(56px * var(--ui-scale)); font-variant-numeric: tabular-nums; }
+.wf-loop-bar { position: absolute; left: 0; top: 50%; height: 4px; transform: translateY(-50%); border-radius: 2px; background: color-mix(in srgb, var(--accent) 35%, transparent); max-width: calc(100% - 22px); }
+.wf-vpipe-pass { color: var(--accent); }
 .wf-run-limit-switch { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
 .wf-run-limit-switch .input { min-width: 140px; }
 

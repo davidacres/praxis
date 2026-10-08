@@ -48,6 +48,8 @@ export interface StageRow {
   /** 'running' | 'ready' | 'blocked' | 'skipped' | 'done' — for the monitor's dot. */
   lane: 'idle' | 'ready' | 'running' | 'done' | 'failed' | 'skipped' | 'awaiting' | 'paused';
   attempts: number;
+  /** Attempts in the stage's current revision — what `maxAttempts` bounds once a loop has reopened it. */
+  attemptsThisRevision?: number;
   maxAttempts?: number;
   sessionId?: string;
   /** The session store key for this stage, so the monitor can link to it. */
@@ -340,6 +342,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
       outcome: state?.outcome ?? 'pending',
       lane: laneFor(run, node.id, ready, awaiting),
       attempts: state?.attempts.length ?? 0,
+      attemptsThisRevision: Math.max(0, (state?.attempts.length ?? 0) - (state?.revisionBase ?? 0)),
       ...(attemptBudget(node) !== undefined ? { maxAttempts: attemptBudget(node) } : {}),
       ...(lastAttempt?.sessionId
         ? { sessionId: lastAttempt.sessionId, sessionKey: stageSessionKey(run.runId, node.id) }

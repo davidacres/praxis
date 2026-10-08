@@ -456,8 +456,8 @@ function AutomationRunSheet({
   const completed = run.stages.filter(stage => stage.lane === 'done' || stage.lane === 'skipped').length;
   const progress = run.stages.length > 0 ? Math.round((completed / run.stages.length) * 100) : 0;
   const live = run.status === 'running' || run.status === 'awaiting-approval';
-  const statusLabel = run.paused ? 'Paused' : RUN_STATUS_LABEL[run.status];
-  const statusTone = run.paused ? 'lane--awaiting' : RUN_STATUS_TONE[run.status];
+  const statusLabel = run.needsDecision ? 'Needs a decision' : run.paused ? 'Paused' : RUN_STATUS_LABEL[run.status];
+  const statusTone = run.needsDecision || run.paused ? 'lane--awaiting' : RUN_STATUS_TONE[run.status];
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -567,9 +567,9 @@ function AutomationRunRow({
   const [renameError, setRenameError] = useState<string>();
   const cancelRenameRef = useRef(false);
   const live = run.status === 'running' || run.status === 'awaiting-approval';
-  const runState = run.paused ? 'paused' : run.status;
-  const statusLabel = run.paused ? 'Paused' : RUN_STATUS_LABEL[run.status];
-  const statusTone = run.paused ? 'lane--awaiting' : RUN_STATUS_TONE[run.status];
+  const runState = run.needsDecision ? 'needs-decision' : run.paused ? 'paused' : run.status;
+  const statusLabel = run.needsDecision ? 'Needs a decision' : run.paused ? 'Paused' : RUN_STATUS_LABEL[run.status];
+  const statusTone = run.needsDecision || run.paused ? 'lane--awaiting' : RUN_STATUS_TONE[run.status];
   const railItems = automationRailItems(run);
   const completed = run.stages.filter(stage => stage.lane === 'done' || stage.lane === 'skipped').length;
   const fallbackStage = run.stages[activeAutomationStageIndex(run)];

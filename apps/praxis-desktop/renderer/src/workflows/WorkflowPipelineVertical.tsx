@@ -69,7 +69,8 @@ function phaseLabel(stage: Pick<Stage, 'type' | 'outcome' | 'phase'>): string | 
 export function pipelineLevels(summary: Pick<WorkflowRunSummary, 'stages' | 'graph'>): Stage[][] {
   const ids = summary.stages.map(stage => stage.nodeId);
   const level: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
-  const forward = summary.graph.edges.filter(edge => edge.on !== 'failure');
+  // Loop edges go back by definition; following one would push a loop's whole body down a level per pass.
+  const forward = summary.graph.edges.filter(edge => edge.on !== 'failure' && !edge.loop);
   for (let pass = 0; pass < ids.length; pass += 1) {
     let changed = false;
     for (const edge of forward) {
@@ -85,7 +86,7 @@ export function pipelineLevels(summary: Pick<WorkflowRunSummary, 'stages' | 'gra
   // stage) has no forward parent; place it just below whatever routes to it.
   const hasForwardParent = new Set(forward.map(edge => edge.to));
   for (const edge of summary.graph.edges) {
-    if (edge.on === 'failure' && !hasForwardParent.has(edge.to) && edge.to !== summary.graph.entryNodeId) {
+    if (edge.on === 'failure' && !edge.loop && !hasForwardParent.has(edge.to) && edge.to !== summary.graph.entryNodeId) {
       level[edge.to] = Math.max(level[edge.to], (level[edge.from] ?? 0) + 1);
     }
   }
@@ -149,7 +150,12 @@ export function WorkflowPipelineVertical({ summary, selectedNodeId, activeNodeId
                         <span className="wf-vpipe-sub">
                           {stage.type}
                           {stage.gate ? ` · ${stage.gate} gate` : ''} · {phase ?? pausedLabel(stage) ?? LANE_LABEL[stage.lane]}
-                          {stage.maxAttempts && stage.attempts > 0 ? ` (${stage.attempts}/${stage.maxAttempts})` : ''}
+                          {stage.maxAttempts && (stage.attemptsThisRevision ?? stage.attempts) > 0 ? ` (${stage.attemptsThisRevision ?? stage.attempts}/${stage.maxAttempts})` : ''}
+                          {stage.loopIteration && stage.loopIteration.iteration > 1 ? (
+                            <span className="wf-vpipe-pass" data-testid={`wf-vpipe-pass-${stage.nodeId}`}>
+                              {' '}· pass {stage.loopIteration.iteration} of {stage.loopIteration.budget}
+                            </span>
+                          ) : null}
                         </span>
                       </span>
                       <span className="wf-vpipe-type" aria-hidden>

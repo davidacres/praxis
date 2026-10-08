@@ -27,8 +27,8 @@ import {
 
 /** Fewer measured stage sessions than this and a token range would be a guess. */
 export const MIN_STAGE_SAMPLES = 3;
-/** Above this many worst-case agent launches, starting a run asks for a confirm. */
-export const DEFAULT_LAUNCH_CONFIRM_THRESHOLD = 25;
+/** Above this many worst-case agent launches, starting a run asks for a confirm (`delivery.runConfirmAgentSessions`). */
+export const DEFAULT_LAUNCH_CONFIRM_THRESHOLD = 40;
 
 /** Token (and, where reported, cost) range of one agent stage session, from the usage log. */
 export interface StageUsageSample {

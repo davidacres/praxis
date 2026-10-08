@@ -67,6 +67,11 @@ export interface DeliverySettings {
   publishCommand: string;
   /** Artifact path or glob the delivery agent must identify after publishing. */
   artifactPattern: string;
+  /**
+   * Starting a workflow run whose worst case exceeds this many agent sessions (every loop
+   * spent, every retry used) asks for an explicit confirm first (FX-BE-167).
+   */
+  runConfirmAgentSessions: number;
 }
 
 export interface McpServerSettings {
@@ -600,7 +605,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     autoMergeSubTasks: true,
     enabled: false,
     publishCommand: '',
-    artifactPattern: ''
+    artifactPattern: '',
+    runConfirmAgentSessions: 40
   },
   mcpServer: {
     workspaceServerName: '',
@@ -1208,7 +1214,8 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         autoMergeSubTasks: readBoolean(raw.delivery.autoMergeSubTasks, DEFAULT_APP_SETTINGS.delivery.autoMergeSubTasks),
         enabled: readBoolean(raw.delivery.enabled, DEFAULT_APP_SETTINGS.delivery.enabled),
         publishCommand: readString(raw.delivery.publishCommand, DEFAULT_APP_SETTINGS.delivery.publishCommand),
-        artifactPattern: readString(raw.delivery.artifactPattern, DEFAULT_APP_SETTINGS.delivery.artifactPattern)
+        artifactPattern: readString(raw.delivery.artifactPattern, DEFAULT_APP_SETTINGS.delivery.artifactPattern),
+        runConfirmAgentSessions: clampNumber(raw.delivery.runConfirmAgentSessions, 1, 1000, DEFAULT_APP_SETTINGS.delivery.runConfirmAgentSessions)
       }
     : { ...DEFAULT_APP_SETTINGS.delivery };
 

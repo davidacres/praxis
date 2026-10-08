@@ -32,6 +32,7 @@ import {
   summarizeWorkflowRun,
   validateWorkflow,
   resolveRunParameters,
+  type CheckFindings,
   estimateWorkflowRun,
   stageUsageSample,
   preflightWorkflow,
@@ -357,6 +358,7 @@ export async function prepareWorkflowRun(projectId: string, workflowId: string, 
   const estimate = estimateWorkflowRun(definition, {
     parameters: values,
     usage: stageUsageSample(getAiUsageLog().list()),
+    threshold: settings.delivery.runConfirmAgentSessions,
     providerFor: node => (node.type === 'agent-task' || node.type === 'map' ? node.agent.providerId?.trim() || active || undefined : undefined),
     tierModel: (provider, tier) => (provider && tier ? settings.ai.modelTiers?.[provider]?.[tier]?.trim() || undefined : undefined)
   });
@@ -932,7 +934,7 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       runId: string,
       nodeId: string,
       outcome: 'succeeded' | 'failed',
-      detail?: { error?: string; snapshotRef?: string }
+      detail?: { error?: string; snapshotRef?: string; findings?: CheckFindings }
     ): Promise<WorkflowRunSummary> => {
       return withRun(runId, run => {
         const at = new Date().toISOString();
@@ -953,7 +955,13 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
           at,
           ...(outcome === 'succeeded'
             ? { artifacts, ...(detail?.snapshotRef ? { snapshotRef: detail.snapshotRef } : {}) }
-            : { error: detail?.error ?? 'Stage failed.' })
+            : { error: detail?.error ?? 'Stage failed.' }),
+          // A person marking a findings stage done attests a clean result: no findings, unless they give some.
+          ...(detail?.findings && Array.isArray(detail.findings.findings)
+            ? { findings: detail.findings }
+            : outcome === 'succeeded' && node && 'outputs' in node && node.outputs.some(contract => contract.kind === 'findings')
+              ? { findings: { findings: [], metrics: {} } }
+              : {})
         } as never);
         return advanceJoins(next, at);
       }).then(async summary => {

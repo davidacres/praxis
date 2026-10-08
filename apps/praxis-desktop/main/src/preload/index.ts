@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
+  CheckFindings,
   AgentSessionRecord,
   AgentPermissionMode,
   AgentToolMode,
@@ -442,7 +443,7 @@ const praxis: PraxisIpc = {
       runId: string,
       nodeId: string,
       outcome: 'succeeded' | 'failed',
-      detail?: { error?: string; snapshotRef?: string }
+      detail?: { error?: string; snapshotRef?: string; findings?: CheckFindings }
     ) => ipcRenderer.invoke('workflows:advanceStage', runId, nodeId, outcome, detail),
     approveRun: (runId: string, actor: string, note?: string, nodeId?: string) =>
       ipcRenderer.invoke('workflows:approveRun', runId, actor, note, nodeId),

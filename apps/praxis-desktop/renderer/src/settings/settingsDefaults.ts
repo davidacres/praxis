@@ -120,7 +120,8 @@ export const DEFAULT_APP_SETTINGS = {
   },
   delivery: {
     defaultBaseBranch: '',
-    autoMergeSubTasks: true
+    autoMergeSubTasks: true,
+    runConfirmAgentSessions: 40
   },
   mcpServer: {
     workspaceServerName: '',

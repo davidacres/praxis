@@ -65,9 +65,17 @@ export function newNode(type: WorkflowNodeType, at: { x: number; y: number }): W
         concurrency: 3,
         maxItems: 20,
         onItemFailure: 'collect',
-        outputs: []
+        // What a map hands on follows what it does: findings while it only reads (see `mapOutputsFor`).
+        outputs: mapOutputsFor(base.id, false)
       };
   }
+}
+
+/** A map node's output: its merged change when its items write code, else their findings. */
+export function mapOutputsFor(nodeId: string, mutates: boolean): WorkflowArtifactContract[] {
+  return mutates
+    ? [{ id: `${nodeId}-changes`, kind: 'diff', required: true, description: 'Every item\'s change, merged.' }]
+    : [{ id: `${nodeId}-findings`, kind: 'findings', required: true, description: 'Every item\'s findings, deduplicated.' }];
 }
 
 function touch(definition: WorkflowDefinition, nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowDefinition {
@@ -203,6 +211,40 @@ export function duplicateNode(definition: WorkflowDefinition, nodeId: string): W
   return touch(definition, [...definition.nodes, copy], definition.edges);
 }
 
+/** The budget a back-edge gets when it is drawn: enough to fix and re-check twice. */
+export const DEFAULT_LOOP_ITERATIONS = 2;
+/** Mirrors core's `WORKFLOW_MAX_LOOP_ITERATIONS` (the renderer may import only types from core). */
+export const MAX_LOOP_ITERATIONS = 10;
+
+/**
+ * Whether an edge from `from` to `to` would point back into `from`'s own past —
+ * i.e. close a cycle through the run's DAG (loop edges excluded). Mirrors core's
+ * `wouldCloseCycle`.
+ */
+export function wouldCloseCycle(definition: WorkflowDefinition, from: string, to: string): boolean {
+  if (from === to) return true;
+  const outbound = new Map<string, string[]>();
+  for (const edge of definition.edges) {
+    if (edge.loop) continue;
+    outbound.set(edge.from, [...(outbound.get(edge.from) ?? []), edge.to]);
+  }
+  const seen = new Set<string>();
+  const queue = [to];
+  while (queue.length > 0) {
+    const id = queue.shift() as string;
+    if (id === from) return true;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    queue.push(...(outbound.get(id) ?? []));
+  }
+  return false;
+}
+
+/**
+ * Adds an edge. One drawn back into its source's own past becomes a bounded loop
+ * edge (`DEFAULT_LOOP_ITERATIONS`) — the only kind of cycle a workflow may have —
+ * so drawing "go back and fix it" just works, and its budget is there to edit.
+ */
 export function connectNodes(
   definition: WorkflowDefinition,
   input: { from: string; to: string; on?: WorkflowEdgeOutcome; required?: boolean }
@@ -212,7 +254,15 @@ export function connectNodes(
   if (definition.edges.some(edge => edge.from === input.from && edge.to === input.to && edge.on === on)) return definition;
   if (!definition.nodes.some(n => n.id === input.from) || !definition.nodes.some(n => n.id === input.to)) return definition;
 
-  const edge: WorkflowEdge = { id: freshId('edge'), from: input.from, to: input.to, on, required: input.required ?? true };
+  const loop = wouldCloseCycle(definition, input.from, input.to);
+  const edge: WorkflowEdge = {
+    id: freshId('edge'),
+    from: input.from,
+    to: input.to,
+    on,
+    required: input.required ?? true,
+    ...(loop ? { loop: { maxIterations: DEFAULT_LOOP_ITERATIONS } } : {})
+  };
   return touch(definition, definition.nodes, [...definition.edges, edge]);
 }
 
@@ -223,12 +273,21 @@ export function disconnect(definition: WorkflowDefinition, edgeId: string): Work
 export function updateEdge(
   definition: WorkflowDefinition,
   edgeId: string,
-  patch: Partial<Pick<WorkflowEdge, 'on' | 'required'>>
+  patch: Partial<Pick<WorkflowEdge, 'on' | 'required' | 'when' | 'loop'>>
 ): WorkflowDefinition {
   return touch(
     definition,
     definition.nodes,
-    definition.edges.map(edge => (edge.id === edgeId ? { ...edge, ...patch } : edge))
+    definition.edges.map(edge => {
+      if (edge.id !== edgeId) return edge;
+      const next: WorkflowEdge = { ...edge, ...patch };
+      // `undefined` clears a field rather than leaving an own-property behind in the saved JSON.
+      if ('when' in patch && patch.when === undefined) delete next.when;
+      if ('loop' in patch && patch.loop === undefined) delete next.loop;
+      // A predicate means nothing on an edge that does not route on findings.
+      if (next.on !== 'findings') delete next.when;
+      return next;
+    })
   );
 }
 
@@ -240,10 +299,13 @@ export function setEntryNode(definition: WorkflowDefinition, nodeId: string): Wo
 // ── Feedback bucketing ───────────────────────────────────────────────────
 
 const NODE_PATH = /^nodes\[(\d+)\]/;
+const EDGE_PATH = /^edges\[(\d+)\]/;
 
 export interface BucketedFeedback {
   valid: boolean;
   byNode: Record<string, Array<{ path: string; message: string }>>;
+  /** Issues on one connection, keyed by edge id — also kept in the graph-level bucket. */
+  byEdge: Record<string, Array<{ path: string; message: string }>>;
   errors: Array<{ path: string; message: string }>;
   warnings: Array<{ path: string; message: string }>;
 }
@@ -254,12 +316,16 @@ export function bucketFeedback(
   result: { valid: boolean; errors: Array<{ path: string; message: string }>; warnings: Array<{ path: string; message: string }> }
 ): BucketedFeedback {
   const byNode: Record<string, Array<{ path: string; message: string }>> = {};
+  const byEdge: Record<string, Array<{ path: string; message: string }>> = {};
   for (const issue of [...result.errors, ...result.warnings]) {
+    const edgeMatch = EDGE_PATH.exec(issue.path);
+    const edgeId = edgeMatch ? definition.edges[Number(edgeMatch[1])]?.id : undefined;
+    if (edgeId) byEdge[edgeId] = [...(byEdge[edgeId] ?? []), issue];
     const match = NODE_PATH.exec(issue.path);
     const key = match ? definition.nodes[Number(match[1])]?.id ?? '' : '';
     byNode[key] = [...(byNode[key] ?? []), issue];
   }
-  return { valid: result.valid, byNode, errors: result.errors, warnings: result.warnings };
+  return { valid: result.valid, byNode, byEdge, errors: result.errors, warnings: result.warnings };
 }
 
 export type ValidationCategoryKind = 'connections' | 'flow' | 'configuration' | 'gates' | 'policy';

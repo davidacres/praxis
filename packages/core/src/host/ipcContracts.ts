@@ -67,7 +67,7 @@ import type { PublishManifest } from '../projects/publishManifest';
 import type { DeploymentHealthResult } from '../deployments/directDeploymentOrchestrator';
 import type { RunEstimate } from '../workflows/workflowEstimate';
 import type { RunParameterIssue } from '../workflows/workflowValidation';
-import type { WorkflowRunParameter } from '../workflows/workflowTypes';
+import type { CheckFindings, WorkflowRunParameter } from '../workflows/workflowTypes';
 import type { WorkflowEvidenceSourceRef } from '../workflows/workflowEvidence';
 import type { ReconciledService } from '../projects/runReconciliation';
 import type { RunLogLine, RunServiceStatus } from '../projects/runServiceManager';
@@ -1376,7 +1376,8 @@ export interface WorkflowsIpc {
     runId: string,
     nodeId: string,
     outcome: 'succeeded' | 'failed',
-    detail?: { error?: string; snapshotRef?: string }
+    /** `findings` records structured findings, for a stage whose outcome routes or gates on them. */
+    detail?: { error?: string; snapshotRef?: string; findings?: CheckFindings }
   ): Promise<WorkflowRunSummary>;
   /**
    * Grants approval at the run's approval stage; refuses while a required

@@ -1,3 +1,4 @@
+import { LoopDecisionNotice, RunLoopsSection } from './RunLoops';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { AiProvider, WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
@@ -443,10 +444,10 @@ export function WorkflowRunPage({
                   </p>
                 )}
                 <div className="wf-board-status" role="status" aria-live="polite">
-                  <span className={`lane ${run.paused ? 'lane--awaiting' : STATUS_TONE[run.status]}`}>●</span>
+                  <span className={`lane ${run.paused || run.needsDecision ? 'lane--awaiting' : STATUS_TONE[run.status]}`}>●</span>
                   <div>
                     <strong>
-                      {run.paused ? 'paused' : run.status.replace('-', ' ')}
+                      {run.needsDecision ? 'needs a decision' : run.paused ? 'paused' : run.status.replace('-', ' ')}
                       {run.archived && <span className="tree-badge">Archived</span>}
                       {run.issueKey && (
                         <span className="wf-board-issue-key" data-testid="wf-board-issue-key">
@@ -498,6 +499,13 @@ export function WorkflowRunPage({
                         onStop={() => void act(() => window.praxis.workflows.stopForProviderLimit(run.runId, stage.nodeId))}
                       />
                     ))}
+
+                <LoopDecisionNotice
+                  run={run}
+                  onDecide={(edgeId, decision, reason, extra) =>
+                    act(() => window.praxis.workflows.decideLoop(run.runId, edgeId, 'desktop-user', decision, reason, extra))
+                  }
+                />
 
                 <p
                   className="wf-run-mode rail-sub"
@@ -628,13 +636,15 @@ export function WorkflowRunPage({
                   onRetryNode={nodeId => void act(() => window.praxis.workflows.retryStage(run.runId, nodeId))}
                 />
 
+                <RunLoopsSection run={run} />
+
                 {stage && (
                   <div className="wf-stagecard" data-testid="wf-stagecard">
                     <h2>{stage.name}</h2>
                     <p className="rail-sub">
                       {stage.type}
                       {stage.gate ? ` · ${stage.gate} gate` : ''} · {deploymentPhaseLabel(stage) ?? (stage.pause ? 'paused' : stage.outcome)}
-                      {stage.maxAttempts && stage.attempts > 0 ? ` (${stage.attempts}/${stage.maxAttempts})` : ''}
+                      {stage.maxAttempts && (stage.attemptsThisRevision ?? stage.attempts) > 0 ? ` (${stage.attemptsThisRevision ?? stage.attempts}/${stage.maxAttempts})` : ''}
                       {stage.provider || stage.chosenProvider ? (
                         <span data-testid="wf-stage-ai"> · on {aiName(stage.provider ?? stage.chosenProvider!)}{stage.chosenModel ? ` (${stage.chosenModel})` : ''}</span>
                       ) : null}

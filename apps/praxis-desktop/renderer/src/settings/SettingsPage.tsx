@@ -3439,6 +3439,18 @@ function DeliverySection({
         />
       </FieldRow>
       <FieldRow
+        label="Confirm large workflow runs"
+        description="A run that could start more than this many agent sessions at worst — every loop spent, every retry used — asks before it starts."
+      >
+        <DebouncedNumberField
+          ariaLabel="Confirm runs above this many agent sessions"
+          value={settings.delivery.runConfirmAgentSessions}
+          min={1}
+          max={1000}
+          onCommit={value => update({ delivery: { runConfirmAgentSessions: value } })}
+        />
+      </FieldRow>
+      <FieldRow
         label="Default base branch"
         description="Used when a ticket does not specify one. Empty means the agent will ask."
       >
