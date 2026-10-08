@@ -18,7 +18,7 @@
  */
 
 import { providerDisplayName } from '../ai/providers/registry';
-import { dagEdges, describeFindingsPredicate, edgeStateFor, pendingLoop, type EdgeState } from './workflowEdges';
+import { awaitingSkeptic, dagEdges, describeFindingsPredicate, edgeStateFor, pendingLoop, type EdgeState } from './workflowEdges';
 import {
   isApprovalNode,
   isJoinNode,
@@ -253,6 +253,8 @@ function evaluate(run: WorkflowRun, node: WorkflowNode): Verdict {
 }
 
 function edgeState(run: WorkflowRun, edge: WorkflowEdge): EdgeState {
+  // A findings edge waits for any skeptic of its source to deliver its verdicts.
+  if (edge.on === 'findings' && isTerminalOutcome(run.nodes[edge.from]?.outcome ?? 'pending') && awaitingSkeptic(run, edge.from)) return 'waiting';
   const sourceNode = run.definition.nodes.find(node => node.id === edge.from);
   const recovery =
     sourceNode?.type === 'check' && sourceNode.failureRecovery?.repairNodeId === edge.to

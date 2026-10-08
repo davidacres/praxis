@@ -9,10 +9,11 @@ import {
   BUNDLED_AGENT_DEFINITIONS
 } from './bundledAgents';
 import { discoverAgents } from './discovery';
+import { parseReviewFindings } from '../aiReviewService';
 
 test('TASK-247: getBundledAgentManifests returns trusted global agents', () => {
   const bundled = getBundledAgentManifests();
-  assert.strictEqual(bundled.length, 6);
+  assert.strictEqual(bundled.length, 7);
 
   const ids = bundled.map(a => a.manifest.id).sort();
   assert.deepStrictEqual(ids, [
@@ -21,6 +22,7 @@ test('TASK-247: getBundledAgentManifests returns trusted global agents', () => {
     'praxis-planner',
     'praxis-reviewer',
     'praxis-security-analyst',
+    'praxis-skeptic',
     'praxis-test-author'
   ]);
 
@@ -127,4 +129,14 @@ test('TASK-247: mirrorBundledAgents writes manifests and is idempotent', async (
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
+});
+
+test('FX-BE-164: the skeptic\'s verdicts parse onto the findings they judge, keeping their fingerprints', () => {
+  const review = parseReviewFindings('```json\n{"findings":[{"file":"src/a.ts","line":3,"message":"Null deref","severity":"high","category":"bug"}]}\n```');
+  const skeptic = parseReviewFindings('Checked.\n```json\n{"findings":[{"file":"src/a.ts","line":3,"message":"Null deref","severity":"high","category":"bug","verdict":"refuted","verdictReason":"Guarded on line 2."}]}\n```');
+  assert.equal(skeptic.findings.findings[0].fingerprint, review.findings.findings[0].fingerprint);
+  assert.equal(skeptic.findings.findings[0].verdict, 'refuted');
+  assert.equal(skeptic.findings.findings[0].verdictReason, 'Guarded on line 2.');
+  assert.equal(review.findings.findings[0].verdict, undefined);
+  assert.match(BUNDLED_AGENT_DEFINITIONS['praxis-skeptic'].brief, /Copy file, line, ruleId and message exactly/);
 });

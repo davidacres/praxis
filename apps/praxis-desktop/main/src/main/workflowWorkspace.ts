@@ -7,7 +7,7 @@ import {
 import { commitPathsGit, getCurrentBranch, getGitStatus } from './gitService';
 import { getProjectStore } from './projectStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
-import { preserveUncommittedWork, runWorktreeKey } from './runWork';
+import { preserveUncommittedWork, restoreWorktreeTo, runWorktreeKey } from './runWork';
 
 /**
  * Per-run git worktree (FX-BE-024 / TASK-113).
@@ -143,6 +143,23 @@ export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
         folder,
         { worktreePath: run.worktreePath, branchName: worktreeKeyFor(run) },
         { keepBranch: true }
+      );
+    },
+
+    async restore(run: WorkflowRun, ref: string): Promise<void> {
+      if (!run.worktreePath) throw new Error('The run has no worktree to restore.');
+      const restore = run.pendingRestore;
+      const restored = await restoreWorktreeTo(
+        run.worktreePath,
+        ref,
+        restore
+          ? `Restore iteration ${restore.iteration} (best so far): ${restore.reason}`
+          : `Restore ${ref.slice(0, 7)} (best so far)`
+      );
+      logger.appendLine(
+        restored
+          ? `Run ${run.runId}: restored the worktree to ${ref.slice(0, 7)} (keep-best).`
+          : `Run ${run.runId}: the worktree already matched ${ref.slice(0, 7)}; nothing to restore.`
       );
     }
   };

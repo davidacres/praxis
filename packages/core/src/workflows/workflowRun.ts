@@ -38,7 +38,7 @@ import {
 } from './workflowTypes';
 import type { AiProvider } from '../types';
 import { findSnapshot } from './workflowStageSession';
-import { SEVERITY_RANK, countableFindings, dagEdges, describeFindingsPredicate, loopBudget, loopStatuses, pendingLoop } from './workflowEdges';
+import { SEVERITY_RANK, countableFindings, dagEdges, describeFindingsPredicate, loopBudget, pendingLoop } from './workflowEdges';
 import { providerDisplayName } from '../ai/providers/registry';
 
 /**
@@ -132,6 +132,16 @@ export interface WorkflowNodeAttempt {
   pause?: WorkflowPauseReason;
   /** The AI that ran this attempt (a provider id), for agent stages. */
   provider?: string;
+  /** The model it ran on, when one was chosen rather than the provider's default. */
+  model?: string;
+  /** For an `independentOf` stage: whether it ran apart from the stage it judges, and why. */
+  independence?: StageIndependence;
+}
+
+/** Whether an `independentOf` stage's attempt ran on a different AI or model from its author (FX-BE-164). */
+export interface StageIndependence {
+  independent: boolean;
+  reason: string;
 }
 
 export interface WorkflowNodeState {
@@ -329,6 +339,8 @@ export type WorkflowRunCommand =
       findings?: CheckFindings;
       /** The AI that ran the attempt. */
       provider?: string;
+      model?: string;
+      independence?: StageIndependence;
     }
   | {
       kind: 'node-failed';
@@ -341,6 +353,8 @@ export type WorkflowRunCommand =
       pause?: WorkflowPauseReason;
       /** The AI that ran the attempt. */
       provider?: string;
+      model?: string;
+      independence?: StageIndependence;
     }
   /**
    * Moves a stage to another AI after the one it used ran out; a paused stage is
@@ -470,7 +484,9 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
         snapshotRef: command.snapshotRef,
         assessedSnapshotRef: command.assessedSnapshotRef,
         findings: command.findings,
-        provider: command.provider
+        provider: command.provider,
+        model: command.model,
+        independence: command.independence
       });
     case 'node-failed':
       return settleNode(run, command.nodeId, 'failed', command.at, {
@@ -478,7 +494,9 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
         exitCode: command.exitCode,
         findings: command.findings,
         pause: command.pause,
-        provider: command.provider
+        provider: command.provider,
+        model: command.model,
+        independence: command.independence
       });
     case 'stage-provider-switched':
       return switchStageProvider(run, command.nodeId, command.at, command.provider, command.model, command.automatic === true);
@@ -629,6 +647,8 @@ function settleNode(
     artifacts?: Extract<WorkflowRunCommand, { kind: 'node-succeeded' }>['artifacts'];
     findings?: CheckFindings;
     provider?: string;
+    model?: string;
+    independence?: StageIndependence;
   }
 ): WorkflowRun {
   const state = run.nodes[nodeId];
@@ -676,7 +696,9 @@ function settleNode(
     ...(detail.exitCode !== undefined ? { exitCode: detail.exitCode } : {}),
     ...(error ? { error } : {}),
     ...(effective === 'failed' && detail.pause ? { pause: detail.pause } : {}),
-    ...(detail.provider ? { provider: detail.provider } : {})
+    ...(detail.provider ? { provider: detail.provider } : {}),
+    ...(detail.model ? { model: detail.model } : {}),
+    ...(detail.independence ? { independence: detail.independence } : {})
   };
 
   let next = withNode(run, {
@@ -696,13 +718,18 @@ function settleNode(
     attempt: attempts.length,
     message:
       effective === 'succeeded'
-        ? `${label(run, nodeId)} succeeded.`
+        ? `${label(run, nodeId)} succeeded.${detail.independence && !detail.independence.independent ? ` ${detail.independence.reason}` : ''}`
         : detail.pause === 'provider-limit'
           ? `${label(run, nodeId)} paused: ${detail.provider ? providerDisplayName(detail.provider) : 'the AI provider'} ran out of credits or hit its usage limit. Switch to another AI, or restore them and retry — this did not use an attempt.`
           : detail.pause === 'environment'
             ? `${label(run, nodeId)} paused: it could not run in this environment (${firstLine(error ?? 'no detail')}). Fix that, then retry — this did not use an attempt.`
             : `${label(run, nodeId)} failed: ${error ?? 'no reason given'}`
   });
+
+  // A skeptic's verdicts land on the findings it judged (FX-BE-164).
+  if (effective === 'succeeded' && node && isAgentTaskNode(node) && node.refutes && detail.findings) {
+    next = applySkepticVerdicts(next, node.refutes, detail.findings, at, label(run, nodeId));
+  }
 
   for (const artifact of artifacts) {
     next = append(next, {
@@ -716,6 +743,39 @@ function settleNode(
   }
 
   return settleRunIfDone(next, at);
+}
+
+/**
+ * Marks the judged stage's findings with a skeptic's verdicts, matched by fingerprint. A
+ * skeptic may lower a severity, never raise one; a finding it did not return is untouched
+ * (and so still counts). The judged stage's own record of what it found is otherwise kept.
+ */
+function applySkepticVerdicts(run: WorkflowRun, targetId: string, verdicts: CheckFindings, at: string, skepticName: string): WorkflowRun {
+  const target = run.nodes[targetId];
+  if (!target?.findings) return run;
+  const byFingerprint = new Map(verdicts.findings.filter(finding => finding.verdict).map(finding => [finding.fingerprint, finding]));
+  let refuted = 0;
+  let confirmed = 0;
+  const findings = target.findings.findings.map(finding => {
+    const verdict = byFingerprint.get(finding.fingerprint);
+    if (!verdict?.verdict) return finding;
+    if (verdict.verdict === 'refuted') refuted += 1;
+    else confirmed += 1;
+    const lowered = (SEVERITY_RANK[verdict.severity] ?? 0) < (SEVERITY_RANK[finding.severity] ?? 0) ? verdict.severity : finding.severity;
+    return {
+      ...finding,
+      severity: lowered,
+      verdict: verdict.verdict,
+      ...(verdict.verdictReason ? { verdictReason: verdict.verdictReason } : {})
+    };
+  });
+  if (refuted + confirmed === 0) return run;
+  return append(withNode(run, { ...target, findings: { ...target.findings, findings } }), {
+    at,
+    kind: 'node-progress',
+    nodeId: targetId,
+    message: `${skepticName} checked ${label(run, targetId)}'s findings: ${confirmed} confirmed, ${refuted} refuted.`
+  });
 }
 
 function skipNode(run: WorkflowRun, nodeId: string, at: string, reason: string): WorkflowRun {
@@ -1183,9 +1243,6 @@ function normalizeLoopState(raw: Record<string, unknown>): Pick<WorkflowRun, 'pa
   }
   return out;
 }
-
-/** Every loop's status, re-exported for callers that already import the run module. */
-export { loopStatuses };
 
 // ── Derivation ───────────────────────────────────────────────────────────
 

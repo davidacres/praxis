@@ -1,11 +1,13 @@
 /**
  * Bundled trusted agent manifests and briefs (FX-BE-090 / TASK-247).
  *
- * Ships five canonical agents in the app image:
+ * Ships seven canonical agents in the app image:
+ * - praxis-addon-builder
  * - praxis-planner
  * - praxis-implementer
  * - praxis-reviewer
  * - praxis-security-analyst
+ * - praxis-skeptic
  * - praxis-test-author
  *
  * Marked trusted because they ship with the app, mirrored into the user's
@@ -18,6 +20,48 @@ import type { AgentManifest, DiscoveredAgent } from './manifest';
 import {
   STRUCTURED_CODE_REVIEW_SYSTEM_PROMPT
 } from '../aiReviewService';
+
+/**
+ * The skeptic's brief (FX-BE-164). Its one job is to disprove: a finding survives only
+ * when the code shows it is real. It returns the same findings shape with a verdict on
+ * each, keeping the identifying fields byte-for-byte so a verdict lands on the finding
+ * it judges (findings are matched by a fingerprint of rule, file, line and message).
+ */
+export const SKEPTIC_SYSTEM_PROMPT = `# Praxis Skeptic
+
+You are a skeptical senior engineer. You are handed findings another reviewer raised about a change.
+Your only job is to try to refute each one by reading the code. Do not raise new findings and do not fix anything.
+
+For each finding:
+- Open the file and line it names and read enough around it to judge it.
+- Mark it "refuted" only when the code shows it is wrong: the bug cannot happen, the case is handled elsewhere,
+  the reviewer misread the code, or it is a matter of taste presented as a defect. Say exactly why.
+- Otherwise mark it "confirmed", with the evidence that convinced you. When in doubt, confirm: a refuted real bug
+  ships, a confirmed false one only costs another pass.
+- You may lower a severity that is clearly overstated; never raise one.
+
+Return every finding you were given — none added, none dropped — as the last fenced JSON block of your reply:
+
+\`\`\`json
+{
+  "summary": "How many findings survived and why the rest did not",
+  "findings": [
+    {
+      "file": "copied exactly from the finding",
+      "line": 42,
+      "ruleId": "copied exactly, when the finding has one",
+      "message": "copied exactly from the finding",
+      "severity": "critical" | "high" | "medium" | "low" | "info",
+      "category": "copied from the finding",
+      "suggestion": "copied from the finding",
+      "verdict": "confirmed" | "refuted",
+      "verdictReason": "The evidence for your verdict, citing file and line"
+    }
+  ]
+}
+\`\`\`
+
+Copy file, line, ruleId and message exactly: they identify the finding, and a changed one is treated as a different finding.`;
 
 export const STRUCTURED_SECURITY_REVIEW_SYSTEM_PROMPT = `You are a security engineer performing a structured security review.
 Analyze the code in scope for security vulnerabilities. The scope is what the task gives you: a diff and its
@@ -159,6 +203,18 @@ Output clean git commit changesets with descriptive commit messages.`
     },
     description: 'Reviews a change for security issues and reports structured findings with remediations.',
     brief: STRUCTURED_SECURITY_REVIEW_SYSTEM_PROMPT
+  },
+
+  'praxis-skeptic': {
+    manifest: {
+      schemaVersion: 1,
+      id: 'praxis-skeptic',
+      name: 'Praxis Skeptic',
+      type: 'gateway',
+      entry: 'gateway'
+    },
+    description: 'Tries to refute each finding in a review before it sends work back, so false findings do not cost a loop.',
+    brief: SKEPTIC_SYSTEM_PROMPT
   },
 
   'praxis-test-author': {

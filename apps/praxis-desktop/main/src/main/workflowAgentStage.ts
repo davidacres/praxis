@@ -21,6 +21,9 @@ import {
   projectConnectionId,
   nodeOutputs,
   stageProvider,
+  chooseIndependentStage,
+  formatIterationContext,
+  formatRunParameters,
   type FinishedStageSession,
   type AiProvider,
   type IssueDetails,
@@ -42,6 +45,7 @@ import { getProjectStore } from './projectStoreInstance';
 import { getServiceForConnection } from './serviceRegistry';
 import { workflowLogSink } from './workflowLogSink';
 import { launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
+import { usableProviders } from './providerFallback';
 
 /**
  * Agent stages as real, attributed sessions (FX-BE-025 / TASK-114, TASK-115).
@@ -157,8 +161,12 @@ export async function runWorkflowAgentStage(
   const settings = getSettingsBackend().read();
   // The stage's AI: one it was switched to in this run, its own choice, the run's, or the selected AI.
   const runProvider = workflowRun.aiProvider || settings.ai.activeProvider;
-  const provider = stageProvider(workflowRun, node.id, runProvider) as AiProvider;
+  let provider = stageProvider(workflowRun, node.id, runProvider) as AiProvider;
   const taskDefinition = buildStageTaskDefinition(stageContext);
+
+  // What the person who started the run asked for (goal, target …), as plain prose.
+  const parameters = formatRunParameters(workflowRun);
+  if (parameters) taskDefinition.goal += `\n\n${parameters}`;
 
   // Hand the stage what earlier stages concluded, so it does not start cold and re-derive it. A report
   // artifact has no file; its text is the producing stage session's final response.
@@ -203,6 +211,11 @@ export async function runWorkflowAgentStage(
   );
   if (logs) taskDefinition.scope += `\n\n${logs}`;
 
+  // Running again — a later loop iteration, or a retry after a failed attempt: hand the stage
+  // the findings that sent it round and why its last attempt failed, so it does not repeat itself.
+  const iteration = formatIterationContext(workflowRun, node.id);
+  if (iteration) taskDefinition.scope += `\n\n${iteration}`;
+
   // Attempts that judged the stage and failed. The one launching now is not among them, and one
   // that stopped without a verdict (provider limit, environment) never spent the stage.
   const failedAttempts = (workflowRun.nodes[node.id]?.attempts ?? []).filter(
@@ -213,7 +226,7 @@ export async function runWorkflowAgentStage(
   const switched = Boolean(workflowRun.stageProviders?.[node.id]);
   const ownProvider = node.agent.providerId?.trim();
   const switchedModel = workflowRun.stageModels?.[node.id];
-  const modelChoice = switchedModel
+  let modelChoice: { model?: string; reason: string } = switchedModel
     ? { model: switchedModel, reason: 'explicitly chosen for this stage' }
     : chooseStageModel({
         node: !switched && (!ownProvider || ownProvider === provider) ? node : { ...node, model: undefined },
@@ -222,6 +235,32 @@ export async function runWorkflowAgentStage(
         runModel: provider === runProvider ? workflowRun.aiModel : undefined,
         attemptsSpent: failedAttempts
       });
+
+  // A reviewer marks someone else's work: on another AI, or another model, when one is set up.
+  let independence: { independent: boolean; reason: string } | undefined;
+  if (node.independentOf) {
+    const authorNode = workflowRun.definition.nodes.find(candidate => candidate.id === node.independentOf);
+    const authorAttempt = [...(workflowRun.nodes[node.independentOf]?.attempts ?? [])]
+      .reverse()
+      .find(attempt => attempt.provider && !attempt.pause);
+    const choice = chooseIndependentStage({
+      provider,
+      ...(modelChoice.model ? { model: modelChoice.model } : {}),
+      author: {
+        name: authorNode?.name ?? node.independentOf,
+        ...(authorAttempt?.provider ? { provider: authorAttempt.provider } : {}),
+        ...(authorAttempt?.model ? { model: authorAttempt.model } : {})
+      },
+      chosenByPerson: switched || Boolean(switchedModel),
+      usableProviders: await usableProviders([provider]),
+      tiers: settings.ai.modelTiers,
+      ...(node.modelTier ? { tier: node.modelTier } : {})
+    });
+    provider = choice.provider as AiProvider;
+    modelChoice = { ...(choice.model ? { model: choice.model } : {}), reason: choice.reason };
+    independence = { independent: choice.independent, reason: choice.reason };
+    workflowLogSink.appendLine(`[workflow ${workflowRun.runId}] ${node.name}: ${choice.reason}`);
+  }
 
   // A synthetic issue: the session store is issue-keyed, and a stage is not a
   // ticket, so it carries the run/node key instead.
@@ -271,6 +310,8 @@ export async function runWorkflowAgentStage(
       status: 'failed',
       error: errorMessage,
       provider,
+      ...(modelChoice.model ? { model: modelChoice.model } : {}),
+      ...(independence ? { independence } : {}),
       ...(isLimit ? { pause: 'provider-limit' as const } : {})
     };
   }
@@ -310,7 +351,12 @@ export async function runWorkflowAgentStage(
     ...finished,
     ...(snapshotRef ? { snapshotRef } : {})
   });
-  return { ...(await publishPlanOutputs(node, workflowRun, outcome, finished.responseText)), provider };
+  return {
+    ...(await publishPlanOutputs(node, workflowRun, outcome, finished.responseText)),
+    provider,
+    ...(modelChoice.model ? { model: modelChoice.model } : {}),
+    ...(independence ? { independence } : {})
+  };
 }
 
 /**

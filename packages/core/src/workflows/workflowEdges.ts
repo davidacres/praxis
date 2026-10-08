@@ -25,6 +25,7 @@ import {
   type WorkflowEdge,
   type WorkflowFindingsPredicate
 } from './workflowTypes';
+import { filterUnwaivedFindings, type FindingWaiver } from './waiverRegister';
 // Type-only: `workflowRun` calls into this module, so a value import back would be a cycle.
 import type { WorkflowNodeState, WorkflowRun } from './workflowRun';
 
@@ -108,6 +109,18 @@ export function describeFindingsPredicate(predicate: WorkflowFindingsPredicate |
   return parts.join(', or ');
 }
 
+/**
+ * Whether a skeptic of `nodeId` (`refutes`) has yet to deliver its verdicts. Until it
+ * has, the stage's findings are not final, so nothing routes on them.
+ */
+export function awaitingSkeptic(run: Pick<WorkflowRun, 'definition' | 'nodes'>, nodeId: string): boolean {
+  return run.definition.nodes.some(node => {
+    if (node.type !== 'agent-task' || node.refutes !== nodeId || node.enabled === false) return false;
+    const state = run.nodes[node.id];
+    return !!state && (state.outcome === 'pending' || state.outcome === 'ready' || state.outcome === 'running');
+  });
+}
+
 /** How an inbound edge stands given its source node's recorded outcome. */
 export type EdgeState = 'satisfied' | 'dead' | 'waiting';
 
@@ -161,6 +174,11 @@ export interface LoopStatus {
   exhausted: boolean;
 }
 
+/** Waivers declared on the workflow's approval stages. */
+export function definitionWaivers(definition: Pick<WorkflowDefinition, 'nodes'>): FindingWaiver[] {
+  return definition.nodes.flatMap(node => (node.type === 'approval' ? node.waivers ?? [] : []));
+}
+
 /** Times a loop edge has been taken in this run. */
 export function loopIterationsTaken(run: Pick<WorkflowRun, 'loopHistory'>, edgeId: string): number {
   return (run.loopHistory ?? []).filter(entry => entry.edgeId === edgeId).length;
@@ -186,11 +204,16 @@ export function loopBudget(run: Pick<WorkflowRun, 'definition' | 'parameters' | 
 
 /** Every loop edge's status, in definition order. */
 export function loopStatuses(run: Pick<WorkflowRun, 'definition' | 'nodes' | 'parameters' | 'loopDecisions' | 'loopHistory'>): LoopStatus[] {
+  const waivers = definitionWaivers(run.definition);
   return loopEdges(run.definition).map(edge => {
-    const source = run.nodes[edge.from];
+    const recorded = run.nodes[edge.from];
+    // A finding someone waived is a decision already made: it must not send the loop round.
+    const source = recorded?.findings && waivers.length > 0
+      ? { ...recorded, findings: { ...recorded.findings, findings: filterUnwaivedFindings(recorded.findings.findings, waivers).activeFindings } }
+      : recorded;
     const iterationsTaken = loopIterationsTaken(run, edge.id);
     const budget = loopBudget(run, edge);
-    const satisfied = edgeStateFor(edge, source) === 'satisfied';
+    const satisfied = edgeStateFor(edge, source) === 'satisfied' && !(edge.on === 'findings' && awaitingSkeptic(run, edge.from));
     // A person accepting this exact result ("approve anyway") stops it firing again;
     // the next result the source produces is judged afresh.
     const accepted = !!source && (run.loopDecisions ?? []).some(

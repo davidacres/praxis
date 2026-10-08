@@ -121,6 +121,31 @@ export async function preserveUncommittedWork(worktreePath: string, message: str
   return true;
 }
 
+/**
+ * Puts a run's worktree back to an earlier commit's content as a **new** commit on top
+ * (keep-best loops, FX-BE-166). Nothing is rewritten: the iteration being undone stays in the
+ * branch's history, inspectable, and anything left uncommitted is kept as its own commit first.
+ *
+ * Returns whether a restore commit was made (false when the tree already matched `ref`).
+ */
+export async function restoreWorktreeTo(worktreePath: string, ref: string, message: string): Promise<boolean> {
+  if (!/^[0-9a-f]{7,40}$/i.test(ref)) throw new Error(`Refusing to restore to "${ref}": not a commit id.`);
+  await preserveUncommittedWork(worktreePath, 'WIP: changes left uncommitted before restoring the best iteration');
+  await git(worktreePath, ['cat-file', '-e', `${ref}^{commit}`]);
+  // `--staged --worktree` also removes files the restored commit did not have.
+  await git(worktreePath, ['restore', `--source=${ref}`, '--staged', '--worktree', '--', ':/']);
+  const status = (await git(worktreePath, ['status', '--porcelain'])).trim();
+  if (!status) return false;
+  await git(worktreePath, ['add', '-A']);
+  await git(worktreePath, [
+    '-c', 'user.name=Praxis',
+    '-c', 'user.email=praxis@localhost',
+    '-c', 'commit.gpgsign=false',
+    'commit', '--no-verify', '-m', message
+  ]);
+  return true;
+}
+
 export interface DeleteRunWorkResult {
   branchDeleted?: string;
   worktreeRemoved: boolean;

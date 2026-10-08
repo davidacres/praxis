@@ -1412,6 +1412,10 @@ export function parseReviewFindings(content: string): {
     const category = typeof item.category === 'string' && item.category.trim() ? item.category.trim() : 'quality';
     const suggestion = typeof item.suggestion === 'string' && item.suggestion.trim() ? item.suggestion.trim() : undefined;
 
+    // A skeptic stage's judgement of the finding (FX-BE-164); anything else is no verdict.
+    const verdict = item.verdict === 'confirmed' || item.verdict === 'refuted' ? item.verdict : undefined;
+    const verdictReason = typeof item.verdictReason === 'string' && item.verdictReason.trim() ? item.verdictReason.trim() : undefined;
+
     const fingerprint = computeFindingFingerprint({ ruleId, file, line, message });
     return {
       fingerprint,
@@ -1421,7 +1425,9 @@ export function parseReviewFindings(content: string): {
       severity,
       category,
       message,
-      suggestion
+      suggestion,
+      ...(verdict ? { verdict } : {}),
+      ...(verdictReason ? { verdictReason } : {})
     };
   });
 

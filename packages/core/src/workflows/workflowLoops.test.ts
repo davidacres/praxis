@@ -502,3 +502,124 @@ test('property: any always-firing loop graph stops within its budget', async () 
     assert.equal(r.nodes.implement.attempts.length, budget + 1);
   }
 });
+
+// ── Iteration brief (FX-BE-163 / TASK-426) ───────────────────────────────
+
+import { formatIterationContext, formatRunParameters } from './workflowIterationBrief';
+
+test('a first, clean pass gets no iteration section: the brief is unchanged', () => {
+  const r = run(start(), 'plan', 'succeeded');
+  assert.equal(formatIterationContext(r, 'implement'), undefined);
+});
+
+test('a retry is told why its last attempt failed', () => {
+  let r = run(start(), 'plan', 'succeeded');
+  r = run(r, 'implement', 'failed');
+  r = applyWorkflowRunCommand(r, { kind: 'node-retry', nodeId: 'implement', at: now() });
+  const brief = formatIterationContext(r, 'implement');
+  assert.ok(brief);
+  assert.match(brief, /Previous attempt at this stage failed \(1\)/);
+  assert.match(brief, /failed with: boom/);
+});
+
+test('a loop pass is handed the findings that sent it round, with repeats called out and history listed', () => {
+  const second: CheckFindings = {
+    findings: [
+      HIGH.findings[0],
+      { fingerprint: 'fp-2', severity: 'critical', category: 'security', message: 'SQL built by string concatenation', file: 'src/db.ts', line: 4, suggestion: 'Use a parameterised query.' },
+      { fingerprint: 'fp-3', severity: 'high', category: 'bug', message: 'Refuted thing', verdict: 'refuted' }
+    ],
+    metrics: { issuesFound: 3 }
+  };
+  let r = run(start(loopDefinition({ loop: { maxIterations: 3 } })), 'plan', 'succeeded');
+  r = run(r, 'implement', 'succeeded', { snapshotRef: 'sha-1' });
+  r = run(r, 'review', 'succeeded', { findings: HIGH });
+  r = applyWorkflowRunCommand(r, { kind: 'loop-taken', edgeId: 'e-fix', at: now() });
+  r = run(r, 'implement', 'succeeded', { snapshotRef: 'sha-2' });
+  r = run(r, 'review', 'succeeded', { findings: second });
+  r = applyWorkflowRunCommand(r, { kind: 'loop-taken', edgeId: 'e-fix', at: now() });
+
+  const brief = formatIterationContext(r, 'implement');
+  assert.ok(brief);
+  assert.match(brief, /### Iteration 3 of 4: Review sent this work back to Implement/);
+  // Most severe first, with the suggestion carried through.
+  assert.ok(brief.indexOf('SQL built by string concatenation') < brief.indexOf('Off by one in the pager'));
+  assert.match(brief, /Suggested fix: Use a parameterised query\./);
+  assert.match(brief, /Off by one in the pager \(src\/pager\.ts:12\) — raised again \(first seen in iteration 1\)/);
+  assert.doesNotMatch(brief, /Refuted thing/);
+  assert.match(brief, /What happened so far:\n- Iteration 1: Review reported 1 finding \(1 high\)\.\n- Iteration 2: Review reported 2 findings \(1 critical, 1 high\)\./);
+  assert.match(brief, /Say in your reply how each finding above was addressed/);
+
+  // The reviewer, inside the same loop, also knows which pass this is.
+  assert.match(formatIterationContext(r, 'review') ?? '', /Iteration 3 of 4/);
+  // A stage outside the loop is untouched.
+  assert.equal(formatIterationContext(r, 'plan'), undefined);
+});
+
+test('findings a person waived are named as such and do not send the loop round', () => {
+  const definition = loopDefinition();
+  (definition.nodes[3] as { waivers?: unknown }).waivers = [
+    { fingerprint: 'fp-1', reason: 'Known; ticket filed', actor: 'dave', createdAt: '2026-10-01T00:00:00.000Z', expiresAt: '2099-01-01T00:00:00.000Z' }
+  ];
+  let r = run(run(start(definition), 'plan', 'succeeded'), 'implement', 'succeeded', { snapshotRef: 'sha-1' });
+  r = run(r, 'review', 'succeeded', { findings: HIGH });
+  assert.equal(pendingLoop(r), undefined, 'the only high finding is waived');
+});
+
+test('run parameters reach the brief as plain prose; a loop-budget parameter does not', () => {
+  const definition: WorkflowDefinition = {
+    ...loopDefinition(),
+    parameters: [
+      { id: 'goal', label: 'Goal', kind: 'text' },
+      { id: 'iterations', label: 'Iterations', kind: 'integer', bindsLoopEdge: 'e-fix' }
+    ]
+  };
+  const r = createWorkflowRun({ runId: 'run-p', projectId: 'p1', definition, at: now(), parameters: { goal: 'Cut p95 latency; `rm -rf` is not a command here', iterations: 3 } });
+  assert.equal(formatRunParameters(r), 'What the person who started this run asked for:\n- Goal: Cut p95 latency; `rm -rf` is not a command here');
+});
+
+// ── Skeptic (FX-BE-164 / TASK-428) ───────────────────────────────────────
+
+import { withSkepticReview } from './workflowTemplates';
+
+test('a skeptic fragment validates, waits before the loop fires, and its refutation stops the loop and frees the gate', () => {
+  const base = loopDefinition();
+  (base.nodes[3] as { gateThresholds?: unknown }).gateThresholds = { review: [{ type: 'severity', severityLevel: 'high', maxCount: 0 }] };
+  const definition = withSkepticReview(base, 'review');
+  assert.deepEqual(validateWorkflow(normalizeWorkflow(definition)).errors, []);
+  assert.deepEqual(normalizeWorkflow(JSON.parse(JSON.stringify(definition))), JSON.parse(JSON.stringify(definition)));
+
+  let r = run(run(start(definition), 'plan', 'succeeded'), 'implement', 'succeeded', { snapshotRef: 'sha-1' });
+  r = run(r, 'review', 'succeeded', { findings: HIGH });
+  assert.equal(pendingLoop(r), undefined, 'the loop waits for the skeptic');
+  assert.deepEqual(scheduleWorkflowRun(r).ready, ['review-skeptic']);
+
+  r = run(r, 'review-skeptic', 'succeeded', {
+    findings: { findings: [{ ...HIGH.findings[0], verdict: 'refuted', verdictReason: 'Pages are 0-based by contract.' }], metrics: {} }
+  });
+  assert.equal(r.nodes.review.findings?.findings[0].verdict, 'refuted');
+  assert.equal(pendingLoop(r), undefined, 'a refuted finding does not send the loop round');
+  assert.equal(evaluateGates(r, 'approve')[0].state, 'passed');
+  assert.ok(r.events.some(event => /checked Review's findings: 0 confirmed, 1 refuted/.test(event.message)));
+});
+
+test('a confirmed finding still loops after the skeptic, and a skeptic cannot raise a severity', () => {
+  const definition = withSkepticReview(loopDefinition(), 'review');
+  let r = run(run(start(definition), 'plan', 'succeeded'), 'implement', 'succeeded', { snapshotRef: 'sha-1' });
+  r = run(r, 'review', 'succeeded', { findings: HIGH });
+  r = run(r, 'review-skeptic', 'succeeded', { findings: { findings: [{ ...HIGH.findings[0], severity: 'critical', verdict: 'confirmed' }], metrics: {} } });
+  assert.equal(r.nodes.review.findings?.findings[0].severity, 'high');
+  assert.equal(pendingLoop(r)?.kind, 'take');
+});
+
+test('a skeptic must judge an upstream stage with findings, deliver findings, and only read', () => {
+  const definition = withSkepticReview(loopDefinition(), 'review');
+  const skeptic = definition.nodes.find(node => node.id === 'review-skeptic') as { refutes?: string; mutatesWorktree: boolean; outputs: unknown[] };
+  skeptic.refutes = 'plan';
+  skeptic.mutatesWorktree = true;
+  skeptic.outputs = [];
+  const messages = validateWorkflow(normalizeWorkflow(definition)).errors.map(error => error.message).join('\n');
+  assert.match(messages, /"Plan" declares no findings output/);
+  assert.match(messages, /delivers its verdicts as a findings output/);
+  assert.match(messages, /A skeptic only reads/);
+});

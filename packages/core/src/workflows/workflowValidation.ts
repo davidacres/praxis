@@ -235,6 +235,7 @@ function normalizeNode(value: unknown): WorkflowNode {
       if (isModelTier(raw.modelTier)) node.modelTier = raw.modelTier;
       if (raw.escalateOnRetry === false) node.escalateOnRetry = false;
       if (isText(raw.independentOf)) node.independentOf = raw.independentOf.trim();
+      if (isText(raw.refutes)) node.refutes = raw.refutes.trim();
       return node;
     }
     case 'map': {
@@ -790,6 +791,23 @@ function validateEntryAndShape(
     });
     return; // Reachability on a cyclic graph reports noise, not signal.
   }
+
+  // A skeptic judges an earlier stage's findings, delivers its own, and only reads.
+  definition.nodes.forEach((node, index) => {
+    if (!isAgentTaskNode(node) || !node.refutes) return;
+    const target = nodesById.get(node.refutes);
+    const at = `nodes[${index}].refutes`;
+    if (!target) errors.push({ path: at, message: `refutes names an unknown stage: ${node.refutes}` });
+    else if (!nodeOutputs(target).some(output => output.kind === 'findings')) {
+      errors.push({ path: at, message: `"${target.name}" declares no findings output, so there is nothing to refute.` });
+    } else if (!ancestorsOf(definition, node.id).has(target.id)) {
+      errors.push({ path: at, message: `"${node.name}" can only refute a stage that runs before it; "${target.name}" does not.` });
+    }
+    if (!nodeOutputs(node).some(output => output.kind === 'findings')) {
+      errors.push({ path: at, message: 'A skeptic delivers its verdicts as a findings output; declare one.' });
+    }
+    if (node.mutatesWorktree) errors.push({ path: `nodes[${index}].mutatesWorktree`, message: 'A skeptic only reads; it cannot mutate the worktree.' });
+  });
 
   // An independent stage judges an earlier one, so it must run after it.
   definition.nodes.forEach((node, index) => {

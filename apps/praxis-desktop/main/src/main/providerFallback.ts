@@ -31,5 +31,17 @@ export async function nextUsableProvider(exclude: readonly string[], preferred: 
 export function fallbackProviderForStage(run: WorkflowRun, nodeId: string): Promise<AiProvider | undefined> {
   const active = getSettingsBackend().read().ai.activeProvider;
   const current = stageProvider(run, nodeId, run.aiProvider || active);
-  return nextUsableProvider([current, ...exhaustedProviders(run)], run.aiProvider ? [run.aiProvider] : []);
+  return nextUsableProvider([current, ...exhaustedProviders(run), ...authorProviders(run, nodeId)], run.aiProvider ? [run.aiProvider] : []);
+}
+
+/**
+ * For an independent reviewer (`independentOf`), the AI the stage it judges ran on: an
+ * automatic switch never lands it there, or it would be marking its own work.
+ */
+function authorProviders(run: WorkflowRun, nodeId: string): string[] {
+  const node = run.definition.nodes.find(candidate => candidate.id === nodeId);
+  if (!node || node.type !== 'agent-task' || !node.independentOf) return [];
+  const attempts = run.nodes[node.independentOf]?.attempts ?? [];
+  const latest = [...attempts].reverse().find(attempt => attempt.provider && !attempt.pause);
+  return latest?.provider ? [latest.provider] : [];
 }

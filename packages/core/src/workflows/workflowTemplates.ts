@@ -305,6 +305,47 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
   };
 }
 
+/**
+ * Adds a skeptic after a review stage (FX-BE-164): a read-only `praxis-skeptic`, run
+ * independently of the reviewer, that tries to refute each finding before anything routes
+ * on them. Its verdicts are applied to the review's findings, so a refuted finding neither
+ * holds the review gate nor sends a fix loop round.
+ *
+ * Use it where a false finding is expensive — in front of a loop back to implementation —
+ * not on a deterministic check's output, which has no opinion to argue with. The skeptic's
+ * branch is advisory: if it fails, the review's findings simply stand.
+ */
+export function withSkepticReview(definition: WorkflowDefinition, reviewNodeId: string): WorkflowDefinition {
+  const review = definition.nodes.find(node => node.id === reviewNodeId);
+  if (!review || !isAgentTaskNode(review)) throw new Error(`"${reviewNodeId}" is not an agent stage.`);
+  const findings = review.outputs.find(output => output.kind === 'findings');
+  if (!findings) throw new Error(`"${review.name}" declares no findings output for a skeptic to check.`);
+  const id = `${reviewNodeId}-skeptic`;
+  if (definition.nodes.some(node => node.id === id)) return definition;
+  return {
+    ...definition,
+    nodes: [
+      ...definition.nodes,
+      {
+        type: 'agent-task',
+        id,
+        name: `Challenge ${review.name.toLowerCase()} findings`,
+        x: review.x + 120,
+        y: review.y - 80,
+        inputs: [findings.id],
+        agent: { agentId: 'praxis-skeptic', profileId: 'praxis-skeptic', hostId: 'praxis-skeptic', scope: 'global', toolMode: 'read-only' },
+        instructions: `Try to refute each finding in "${findings.id}" by reading the code. Return every finding with a verdict.`,
+        outputs: [{ id: `${findings.id}-verdicts`, kind: 'findings', required: true, description: 'The same findings, each confirmed or refuted.' }],
+        mutatesWorktree: false,
+        refutes: reviewNodeId,
+        independentOf: reviewNodeId,
+        modelTier: 'standard'
+      }
+    ],
+    edges: [...definition.edges, { id: `e-${reviewNodeId}-skeptic`, from: reviewNodeId, to: id, on: 'success', required: false }]
+  };
+}
+
 /** A minimal starting point: implement then approve, no gates. */
 export function quickChangeTemplate(): WorkflowDefinition {
   return {

@@ -63,6 +63,10 @@ export interface StageRow {
   findings?: CheckFindings;
   /** The AI that ran the latest attempt (a provider id). */
   provider?: string;
+  /** The model the latest attempt ran on, when one was chosen. */
+  model?: string;
+  /** For an independent reviewer: whether its latest attempt ran apart from the stage it judges. */
+  independence?: { independent: boolean; reason: string };
   /** The AI this stage is set to use: one it was switched to in this run, else its own choice. Absent means the run's. */
   chosenProvider?: string;
   /** The model this stage is set to use: one it was switched to in this run, else its own choice. */
@@ -338,6 +342,8 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
       ...(state?.phase ? { phase: state.phase } : {}),
       ...(state?.findings ? { findings: state.findings } : {}),
       ...(lastAttempt?.provider ? { provider: lastAttempt.provider } : {}),
+      ...(lastAttempt?.model ? { model: lastAttempt.model } : {}),
+      ...(lastAttempt?.independence ? { independence: lastAttempt.independence } : {}),
       ...(chosenProviderOf(run, node) ? { chosenProvider: chosenProviderOf(run, node) } : {}),
       ...(chosenModelOf(run, node) ? { chosenModel: chosenModelOf(run, node) } : {}),
       ...(command ? { command } : {}),

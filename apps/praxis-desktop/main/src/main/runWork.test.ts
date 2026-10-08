@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { deleteRunWork, findRunBranch, inspectRunWork, preserveUncommittedWork, repositoryRoot, runWorktreeKey } from './runWork';
+import { deleteRunWork, findRunBranch, inspectRunWork, preserveUncommittedWork, repositoryRoot, restoreWorktreeTo, runWorktreeKey } from './runWork';
 
 const RUN_ID = '83ce6324-a9fe-4dbb-bd3d-de576d47e3b2';
 
@@ -108,4 +108,34 @@ test('a branch that is checked out in the main working tree is never deleted', a
     await assert.rejects(deleteRunWork(f.repo, RUN_ID), /checked out in the main working tree/);
     assert.equal(await findRunBranch(f.repo, RUN_ID), f.branch);
   } finally { f.cleanup(); }
+});
+
+test('restoring the best iteration adds a commit with that content and keeps the undone one in history', async () => {
+  const f = fixture(1);
+  try {
+    const best = git(f.worktree, 'rev-parse', 'HEAD').trim();
+    // A worse iteration: edits one file, adds another.
+    fs.writeFileSync(path.join(f.worktree, 'file1.txt'), 'worse\n');
+    fs.writeFileSync(path.join(f.worktree, 'extra.txt'), 'added later\n');
+    git(f.worktree, 'add', '.');
+    git(f.worktree, '-c', 'user.name=T', '-c', 'user.email=t@example.com', 'commit', '-m', 'worse iteration');
+    const worse = git(f.worktree, 'rev-parse', 'HEAD').trim();
+    // And something left uncommitted by a stage.
+    fs.writeFileSync(path.join(f.worktree, 'scratch.txt'), 'left behind\n');
+
+    assert.equal(await restoreWorktreeTo(f.worktree, best, 'Restore iteration 1'), true);
+
+    assert.equal(fs.readFileSync(path.join(f.worktree, 'file1.txt'), 'utf8'), 'change 1\n');
+    assert.equal(fs.existsSync(path.join(f.worktree, 'extra.txt')), false, 'a file the best iteration did not have is gone');
+    assert.equal(git(f.worktree, 'diff', '--stat', best, 'HEAD').trim(), '', 'the tree now matches the best iteration exactly');
+    const log = git(f.worktree, 'log', '--format=%s', '-4').trim().split('\n');
+    assert.deepEqual(log.slice(0, 3), ['Restore iteration 1', 'WIP: changes left uncommitted before restoring the best iteration', 'worse iteration']);
+    assert.ok(git(f.worktree, 'branch', '--contains', worse).includes(f.branch), 'nothing was rewritten');
+
+    // Already matching: nothing to do.
+    assert.equal(await restoreWorktreeTo(f.worktree, best, 'Restore again'), false);
+    assert.rejects(() => restoreWorktreeTo(f.worktree, 'HEAD~1; rm -rf /', 'nope'), /not a commit id/);
+  } finally {
+    f.cleanup();
+  }
 });

@@ -65,6 +65,10 @@ export interface StageOutcome {
   pause?: WorkflowPauseReason;
   /** The AI that ran an agent stage's attempt. */
   provider?: string;
+  /** The model it ran on, when one was chosen. */
+  model?: string;
+  /** For an `independentOf` stage: whether it ran apart from its author. */
+  independence?: { independent: boolean; reason: string };
 }
 
 export interface StageDispatchContext {
@@ -440,7 +444,9 @@ export class WorkflowOrchestrator {
                   ...(result.outcome.snapshotRef ? { snapshotRef: result.outcome.snapshotRef } : {}),
                   ...(result.outcome.assessedSnapshotRef ? { assessedSnapshotRef: result.outcome.assessedSnapshotRef } : {}),
                   ...(result.outcome.findings ? { findings: result.outcome.findings } : {}),
-                  ...(result.outcome.provider ? { provider: result.outcome.provider } : {})
+                  ...(result.outcome.provider ? { provider: result.outcome.provider } : {}),
+                  ...(result.outcome.model ? { model: result.outcome.model } : {}),
+                  ...(result.outcome.independence ? { independence: result.outcome.independence } : {})
                 })
               : applyWorkflowRunCommand(run, {
                   kind: 'node-failed',
@@ -450,7 +456,9 @@ export class WorkflowOrchestrator {
                   ...(result.outcome.exitCode !== undefined ? { exitCode: result.outcome.exitCode } : {}),
                   ...(result.outcome.findings ? { findings: result.outcome.findings } : {}),
                   ...(result.outcome.pause ? { pause: result.outcome.pause } : {}),
-                  ...(result.outcome.provider ? { provider: result.outcome.provider } : {})
+                  ...(result.outcome.provider ? { provider: result.outcome.provider } : {}),
+                  ...(result.outcome.model ? { model: result.outcome.model } : {}),
+                  ...(result.outcome.independence ? { independence: result.outcome.independence } : {})
                 });
         if (next !== run) {
           const recoverySource = next.definition.nodes.find(candidate =>
@@ -530,6 +538,10 @@ export class WorkflowOrchestrator {
       if (provider) {
         return this.persist(applyWorkflowRunCommand(run, { kind: 'stage-provider-switched', nodeId, at: this.now, provider, automatic: true }));
       }
+      // An independent reviewer whose only way forward is the author's own AI waits for a
+      // person rather than quietly becoming the author's second opinion of itself.
+      const node = run.definition.nodes.find(candidate => candidate.id === nodeId);
+      if (node && isAgentTaskNode(node) && node.independentOf) return run;
       return this.persist(applyWorkflowRunCommand(run, { kind: 'provider-limit-stop', nodeId, at: this.now, detail: 'no other AI is set up to switch to' }));
     }
     return this.persist(applyWorkflowRunCommand(run, { kind: 'provider-limit-stop', nodeId, at: this.now }));

@@ -242,6 +242,13 @@ export interface WorkflowAgentTaskNode extends WorkflowNodeBase {
    * different model, else it runs and the run records that it was not independent.
    */
   independentOf?: string;
+  /**
+   * Makes this a skeptic of another stage's findings (FX-BE-164). When it succeeds, its
+   * per-finding verdicts are applied to that stage's findings, matched by fingerprint, so
+   * a refuted finding stops counting toward gates and findings edges. Until it has run,
+   * a loop or findings edge from the judged stage waits for it.
+   */
+  refutes?: string;
 }
 
 /**

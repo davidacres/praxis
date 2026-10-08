@@ -114,6 +114,8 @@ export * from './workspaces/workspacePaths';
 export * from './workflows/workflowTypes';
 export * from './workflows/workflowValidation';
 export * from './workflows/workflowRun';
+export * from './workflows/workflowEdges';
+export * from './workflows/workflowIterationBrief';
 export * from './workflows/stageModel';
 export * from './ai/workflowModelRecommendation';
 export * from './workflows/workflowScheduler';

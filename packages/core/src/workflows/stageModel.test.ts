@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseStageModel, defaultTierForStage, escalateTier } from './stageModel';
+import { chooseIndependentStage, chooseStageModel, defaultTierForStage, escalateTier } from './stageModel';
 
 const tiers = { gw: { fast: 'small', standard: 'mid', strong: 'big' } };
 
@@ -44,4 +44,45 @@ test('default tiers follow what the stage does', () => {
   assert.equal(defaultTierForStage({ name: 'Implement', mutatesWorktree: true }), 'strong');
   assert.equal(defaultTierForStage({ name: 'Review', mutatesWorktree: false, satisfiesGate: 'review' }), 'standard');
   assert.equal(defaultTierForStage({ name: 'Summary', mutatesWorktree: false }), 'fast');
+});
+
+// ── Independent verification (FX-BE-164 / TASK-427) ─────────────────────────
+
+test('chooseIndependentStage: a different provider is independent as it stands', () => {
+  const choice = chooseIndependentStage({ provider: 'openai', author: { name: 'Implement', provider: 'claude' }, chosenByPerson: false, usableProviders: ['openai', 'claude'] });
+  assert.equal(choice.provider, 'openai');
+  assert.equal(choice.independent, true);
+});
+
+test('chooseIndependentStage: on the author\'s provider, it moves to another set-up provider with that provider\'s tier model', () => {
+  const choice = chooseIndependentStage({
+    provider: 'claude', model: 'claude-x', author: { name: 'Implement', provider: 'claude', model: 'claude-x' }, chosenByPerson: false,
+    usableProviders: ['claude', 'openai'], tiers: { openai: { standard: 'gpt-y' } }, tier: 'standard'
+  });
+  assert.deepEqual([choice.provider, choice.model, choice.independent], ['openai', 'gpt-y', true]);
+  assert.match(choice.reason, /Moved to openai/);
+});
+
+test('chooseIndependentStage: with one provider, a different mapped model is used', () => {
+  const choice = chooseIndependentStage({
+    provider: 'claude', model: 'claude-strong', author: { name: 'Implement', provider: 'claude', model: 'claude-strong' }, chosenByPerson: false,
+    usableProviders: ['claude'], tiers: { claude: { strong: 'claude-strong', standard: 'claude-standard' } }
+  });
+  assert.deepEqual([choice.provider, choice.model, choice.independent], ['claude', 'claude-standard', true]);
+});
+
+test('chooseIndependentStage: with one provider and one model it says it is not independent', () => {
+  const choice = chooseIndependentStage({ provider: 'claude', author: { name: 'Implement', provider: 'claude' }, chosenByPerson: false, usableProviders: ['claude'] });
+  assert.equal(choice.independent, false);
+  assert.match(choice.reason, /^Not independent/);
+});
+
+test('chooseIndependentStage: a person\'s choice is respected and reported honestly', () => {
+  const choice = chooseIndependentStage({ provider: 'claude', author: { name: 'Implement', provider: 'claude' }, chosenByPerson: true, usableProviders: ['claude', 'openai'] });
+  assert.deepEqual([choice.provider, choice.independent], ['claude', false]);
+});
+
+test('chooseIndependentStage: an author that has not run is nothing to be independent of', () => {
+  const choice = chooseIndependentStage({ provider: 'claude', author: { name: 'Implement' }, chosenByPerson: false, usableProviders: ['claude', 'openai'] });
+  assert.deepEqual([choice.provider, choice.independent], ['claude', true]);
 });

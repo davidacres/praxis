@@ -79,3 +79,88 @@ export function defaultTierForStage(node: Pick<WorkflowAgentTaskNode, 'mutatesWo
   if (node.satisfiesGate) return 'standard';
   return 'fast';
 }
+
+/** How an `independentOf` stage ends up running relative to the stage it judges (FX-BE-164). */
+export interface IndependenceChoice {
+  provider: string;
+  /** Undefined means the provider's default model. */
+  model?: string;
+  /** Whether the stage runs on a different provider or a different model from the author. */
+  independent: boolean;
+  /** Why, in a sentence, for the session record and the run timeline. */
+  reason: string;
+}
+
+/**
+ * Picks where an `independentOf` stage runs so it does not mark its own work:
+ * another configured provider when there is one, else another model of the same
+ * provider from the tier map, else the same model — reported as not independent,
+ * never silently passed off as a second opinion.
+ *
+ * A provider a person chose for the stage during the run is respected; the result
+ * then only reports whether it happens to be independent.
+ */
+export function chooseIndependentStage(input: {
+  /** What the stage would run on by the ordinary rules (`stageProvider` / `chooseStageModel`). */
+  provider: string;
+  model?: string;
+  /** The judged stage's latest attempt. Undefined when it has not run. */
+  author?: { provider?: string; model?: string; name: string };
+  /** A person switched this stage's provider or model in this run. */
+  chosenByPerson: boolean;
+  /** Providers that are set up and enabled, in preference order. */
+  usableProviders: readonly string[];
+  tiers?: ModelTierMap;
+  /** The stage's tier, used to pick a model on another provider. */
+  tier?: WorkflowModelTier;
+}): IndependenceChoice {
+  const { provider, model, author } = input;
+  if (!author?.provider) {
+    return { provider, ...(model ? { model } : {}), independent: true, reason: `${author?.name ?? 'The stage it judges'} has not run, so there is nothing to be independent of yet.` };
+  }
+  const sameModel = (candidate?: string): boolean => (candidate ?? '') === (author.model ?? '');
+
+  if (input.chosenByPerson) {
+    const independent = provider !== author.provider || !sameModel(model);
+    return {
+      provider,
+      ...(model ? { model } : {}),
+      independent,
+      reason: independent
+        ? `Runs on the AI chosen for it in this run, which differs from ${author.name}'s.`
+        : `Not independent: the AI chosen for it in this run is the one ${author.name} used.`
+    };
+  }
+
+  if (provider !== author.provider) {
+    return { provider, ...(model ? { model } : {}), independent: true, reason: `Runs on ${provider}; ${author.name} ran on ${author.provider}.` };
+  }
+
+  const other = input.usableProviders.find(candidate => candidate !== author.provider);
+  if (other) {
+    const mapped = input.tier ? input.tiers?.[other]?.[input.tier]?.trim() : undefined;
+    return {
+      provider: other,
+      ...(mapped ? { model: mapped } : {}),
+      independent: true,
+      reason: `Moved to ${other} so it does not mark work ${author.name} produced on ${author.provider}.`
+    };
+  }
+
+  if (!sameModel(model)) {
+    return { provider, ...(model ? { model } : {}), independent: true, reason: `Same AI as ${author.name}, but a different model (${model ?? 'the default'}).` };
+  }
+  const alternatives = WORKFLOW_MODEL_TIERS.slice()
+    .reverse()
+    .map(tier => input.tiers?.[provider]?.[tier]?.trim())
+    .filter((candidate): candidate is string => !!candidate && !sameModel(candidate));
+  if (alternatives[0]) {
+    return { provider, model: alternatives[0], independent: true, reason: `Only ${provider} is set up, so it uses a different model (${alternatives[0]}) from ${author.name}.` };
+  }
+  return {
+    provider,
+    ...(model ? { model } : {}),
+    independent: false,
+    reason: `Not independent: only one model is available, so this is the same AI and model that ${author.name} used. Set up another AI or map a second model tier for a second opinion.`
+  };
+}
