@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-08T00:00:00.000Z
 **Type:** Story
 **Priority:** High
 id: FX-BE-161
 type: Story
-status: Backlog
+status: Done
 created: 2026-10-08
 priority: High
 featureId: 108
@@ -29,6 +29,12 @@ The default delivery template stops waving changes through. A review that report
 - The Security scan's `npm audit` output is parsed through a `checkResultAdapters` adapter so the `security` gate also evaluates findings, not only the exit code. If no adapter exists for `npm audit --json`, one is added with a fixture of real output.
 - Existing runs of the old template still load; a run started before the change keeps its stored definition.
 - A unit test round-trips the changed template through `normalizeWorkflow`; an e2e (or core) test shows a seeded high-severity review finding holding the gate.
+
+## Delivered
+
+Review delivers a required `review-findings` output judged against `plan-doc`, runs `independentOf: implement`, and Approve holds on any `high`+ review or security finding (`gateThresholds`). The security scan runs `npm audit --json` through the `npm-audit` adapter, which now reads the report out of output interleaved with npm warnings and treats npm's own `{ "error": … }` as a parse error; the check runner lets an environment failure win over that parse error, so an audit against a registry with no audit endpoint still pauses rather than fails.
+
+Verified by `workflowTemplates.test.ts` (template shape, thresholds, loops, validation), `checkResultAdapters.test.ts` (mixed output, clean report, npm error JSON), `workflowCheckRunner.test.ts` (a fake `npm` exercising the real classifier: a high advisory fails with findings; a 404 audit endpoint pauses), and `workflowRun.spec.ts` / `workflowLoops.spec.ts` end to end.
 
 ## Dependencies
 

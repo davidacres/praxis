@@ -193,3 +193,55 @@ run is `workflows:deleteRun`), and archived sessions are restored one by one fro
   `adapter`/`reportPath`/`observe` were missing, which stripped every Full SDLC security threshold and
   SARIF parse. Add any new node field there; `workflowPlanPublishing.test.ts` round-trips the shipped
   templates to catch this.
+
+## Loops, findings routing, map stages and run parameters (FX-BF-108)
+
+A workflow can now go back: route on what a stage *found*, loop to an earlier stage a
+bounded number of times, fan a stage out over a run-time list, and ask for a goal when
+it starts. The rules below each fail silently if broken.
+
+- **Loop edges are not part of the DAG.** An edge with `loop: { maxIterations }` is the one
+  sanctioned cycle. Every walk that follows edges — readiness, `findSnapshot`, ancestry,
+  reachability, `downstreamNodeIds`, the pipeline's levels, the estimator — must use
+  `dagEdges(definition)` (core `workflowEdges.ts`). Walking `definition.edges` directly makes
+  "downstream of Implement" the whole loop, hands a stage the snapshot of work that runs after
+  it, and pushes a loop's body down a level per pass. The validator still rejects any other
+  cycle, and a loop edge must point back to a stage upstream of its source.
+- **A loop is taken only when nothing in the run is running.** `pendingLoop` decides; while one
+  is pending the scheduler starts nothing, skips nothing and `settleRunIfDone` does not settle —
+  so a failing stage with a failure loop edge keeps the run open instead of failing it. The
+  orchestrator applies `loop-taken` (which calls `reworkWorkflowRun` from the edge's target) once
+  the band has settled. A spent budget is a **derived** needs-decision state, not a stored one:
+  `loop-decided` records accept (reason required, covers that source attempt only), grant (never
+  past `WORKFLOW_MAX_LOOP_ITERATIONS`) or stop. Iteration counts derive from `loopHistory`.
+- **Attempt budgets are per revision.** A loop sets `revisionBase` on every reopened stage and
+  `attemptsSpent` counts from there; `reworkWorkflowRun` preserves it. The stage row's
+  `attemptsThisRevision` is what the pipeline shows next to `maxAttempts`.
+- **Keep-best never rewrites history.** A worse pass sets `pendingRestore`; the orchestrator calls
+  `WorkflowWorkspaceProvider.restore`, which commits the best iteration's content on top
+  (`restoreWorktreeTo`, `git restore --source=<ref> --staged --worktree`) before anything else runs.
+- **Findings edges and gates read the same arithmetic** (`countAtOrAbove`, `compareMetric` in
+  `workflowEdges.ts`). Refuted findings (`verdict: 'refuted'`, set by a `refutes` skeptic stage
+  by fingerprint) and waived ones never count; a findings edge waits for a pending skeptic.
+- **What a stage is told when it runs again** is `formatIterationContext` (core): the findings that
+  sent it round, repeats called out, waived ones named, its last failure. A first clean pass gets
+  nothing, so its brief is byte-identical to before.
+- **Map items get their own branches, named `wfitem-<run8>-<node>-<n>`** — deliberately *not* under
+  the run's `WF-<run8>` prefix, or `findRunBranch` could return an item's branch as the run's. The git
+  half is `main/mapWorktrees.ts` (Electron-free, tested on a real repo); merges go back in item order
+  and a conflict is backed out and named, never left half-merged.
+- **Run parameters are prose, never commands.** `resolveRunParameters` checks and coerces them at
+  start; they reach briefs through `formatRunParameters` only. An integer parameter can set a loop's
+  budget (`bindsLoopEdge`) and a loop's metric target can come from one (`valueFromParameter`).
+- **The manual seam attests a clean result.** "Mark done" (`advanceStage`) on a stage that declares
+  findings records an empty findings list unless findings are passed — that is how the e2e suite and
+  a person both drive Governed delivery, whose review and security now deliver findings.
+- **`toHaveScreenshot` here is a weak guard.** `maxDiffPixelRatio: 0.02` with `threshold: 0.2` let the
+  Governed delivery designer baseline keep "matching" after its stages moved and two loop edges were
+  added, because cards and dashed lines on this palette sit inside the colour tolerance. When a change
+  moves the canvas, delete the baseline and regenerate it, then open it — `--update-snapshots` alone
+  does not rewrite a file that still "matches".
+
+Specs: `workflowLoops.spec.ts` (designer round-trip, a looping run to a recorded decision, the start
+dialog's parameters and estimate, dark mode). Core: `workflowLoops.test.ts`, `workflowImprove.test.ts`,
+`workflowMap.test.ts`, `workflowEstimate.test.ts`.

@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-08T00:00:00.000Z
 **Type:** Story
 **Priority:** High
 id: FX-BE-163
 type: Story
-status: Backlog
+status: Done
 created: 2026-10-08
 priority: High
 featureId: 108
@@ -30,6 +30,12 @@ A stage that runs again is told what went wrong and what was already tried, so a
 - `QA repair` receives the failing check's log (already inlined) and the review findings that are still open, not only the diff.
 - An attempt that paused (provider limit / environment) contributes nothing to the history, matching `attemptsSpent`.
 - Memory is derived from the run record, not stored separately, so it cannot drift and survives recovery.
+
+## Delivered
+
+`formatIterationContext` (`workflowIterationBrief.ts`) hands a re-entered stage the findings that sent it round (most severe first, repeats called out, waived ones named), its metrics, a line per earlier iteration, the reason its last attempt failed, and — for a QA repair stage — the findings other stages still report. A first clean pass gets nothing, so its brief is unchanged. Wired into `runWorkflowAgentStage`.
+
+Verified by `workflowLoops.test.ts` (retry reason present, loop brief contents, stages outside the loop untouched, waived findings).
 
 ## Dependencies
 

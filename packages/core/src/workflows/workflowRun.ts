@@ -1063,10 +1063,15 @@ function takeLoop(run: WorkflowRun, edgeId: string, at: string): WorkflowRun {
     const state = next.nodes[nodeId];
     if (state) next = withNode(next, { ...state, revisionBase: state.attempts.length });
   }
+  // A new revision gets a fresh automatic-repair budget for every check it reopened.
+  const recoveryAttempts = Object.fromEntries(
+    Object.entries(next.recoveryAttempts ?? {}).filter(([checkId]) => !rework.requeued.includes(checkId))
+  );
   next = {
     ...next,
     loopHistory: [...(run.loopHistory ?? []), entry],
-    ...(restore ? { pendingRestore: restore } : {})
+    ...(restore ? { pendingRestore: restore } : {}),
+    ...(next.recoveryAttempts ? { recoveryAttempts } : {})
   };
   const budget = pending.status.budget;
   const why =

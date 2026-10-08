@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-08T00:00:00.000Z
 **Type:** Task
 **Priority:** High
 id: TASK-426
 slug: iteration-brief-and-retry-memory
 title: Iteration brief: triggering findings, prior outcome and history
-status: Backlog
+status: Done
 created: 2026-10-08
 owner: Electron desktop app
 featureId: 108

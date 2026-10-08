@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-08T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 id: FX-BE-165
 type: Story
-status: Backlog
+status: Done
 created: 2026-10-08
 priority: Medium
 featureId: 108
@@ -31,6 +31,12 @@ New `map` node kind (types, validation, scheduler, orchestrator, designer), `wor
 - Concurrency is bounded by the node cap and a global app cap so a large fan-out cannot exhaust the machine or provider limits; provider-limit pauses apply per item and never spend an item's attempt.
 - Cancellation stops every in-flight child and releases its worktree, keeping branches and preserving uncommitted work as `removeDeliveryWorktree` already does.
 - Existing runs and templates are untouched; a workflow with no map node is unaffected.
+
+## Delivered
+
+`WorkflowMapNode` (`over`, `itemSource`, `concurrency` ≤ 8, `maxItems` ≤ 50, `onItemFailure`); `workflowMap.ts` derives items, plans the next attempt (items past the cap deferred and recorded; a retry runs only what has not succeeded), writes each item's brief and folds results. `workflowMapRunner.ts` runs items under a per-node and a global cap, each writing item in its own worktree on a `wfitem-…` branch (`mapWorktrees.ts`), merged back in item order with conflicts backed out and named; an item stopped by a provider limit pauses the map.
+
+Verified by `workflowMap.test.ts` (validation, items, cap and retry, aggregation, orchestrator dispatch, provider-limit pause) and `mapWorktrees.test.ts` (a real repository: three items, one conflicting).
 
 ## Dependencies
 

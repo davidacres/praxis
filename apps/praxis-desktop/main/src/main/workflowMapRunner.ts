@@ -118,11 +118,12 @@ export async function runWorkflowMap(node: WorkflowMapNode, dispatch: StageDispa
         outcome: outcome.status === 'succeeded' ? 'succeeded' : dispatch.signal?.aborted ? 'cancelled' : 'failed',
         sessionKey,
         ...(outcome.error ? { error: outcome.error } : {}),
+        ...(outcome.pause ? { pause: outcome.pause } : {}),
         ...(outcome.findings ? { findings: outcome.findings } : {}),
         ...(outcome.snapshotRef && branch ? { snapshotRef: outcome.snapshotRef } : {}),
         ...(branch ? { branch } : {})
       };
-      if (outcome.status !== 'succeeded' && node.onItemFailure === 'failFast') {
+      if (outcome.status !== 'succeeded' && !outcome.pause && node.onItemFailure === 'failFast') {
         stopRequested = true;
         for (const other of active) if (other !== sessionKey && hasActiveTask(other)) await abortActiveTask(other);
       }

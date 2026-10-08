@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-08T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 id: FX-BE-167
 type: Story
-status: Backlog
+status: Done
 created: 2026-10-08
 priority: Medium
 featureId: 108
@@ -30,6 +30,12 @@ Authors can draw, understand and bound a loop in the designer, watchers can see 
 - The start-run dialog shows a projected worst case before launch: maximum stage launches (sum of loop budgets and map caps), the models and tiers they will use, and, where per-model usage data exists, a token/spend range, labelled as an estimate. A run whose worst case exceeds a configurable threshold needs an explicit confirm.
 - Estimates never present invented figures: where there is no data the dialog says "not estimable", consistent with the provider budget panel's rule.
 - E2E specs cover creating a loop in the designer, saving and reloading it (proving fields are not dropped), watching a looping run, and the needs-decision path. Snapshots are updated deliberately with the actual images read, and screenshots of the designer and run view are inspected in light and dark.
+
+## Delivered
+
+Designer: loop edges drawn under the stages with a budget badge (also a click target), an edge drawn back into its source's past becomes a bounded loop, the connection inspector edits the findings predicate and the loop budget/keep-best, validation issues shown on the connection, and agent stages set independence, refutes and the test guard; **For each** stages from the palette. Run view: the pass a stage is on, each loop's history and scores, a needs-decision notice, the sidebar row's needs-decision state. Start dialog: the workflow's parameters and the worst-case estimate (`workflowEstimate.ts`), tokens/spend only from measured stage sessions, and a confirm above `delivery.runConfirmAgentSessions` (Settings › Delivery, default 40).
+
+Verified by `workflowLoops.spec.ts` (designer save/reload round-trip — proven to fail when `normalizeWorkflow` drops `loop` — a looping run to a recorded decision, start-dialog parameters and estimate, dark mode), `workflowEstimate.test.ts`, `workflowDesignerState.test.ts`, and screenshots of the designer, inspector, decision, loop history and start dialog inspected in light and dark. Baselines updated after inspection: `workflow-run-panel` (adds the Loops section) and `workflow-designer-open` (new layout and loop edges).
 
 ## Dependencies
 

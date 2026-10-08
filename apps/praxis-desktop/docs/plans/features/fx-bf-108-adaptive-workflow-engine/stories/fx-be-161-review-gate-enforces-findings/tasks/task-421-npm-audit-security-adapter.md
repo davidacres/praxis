@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-08T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-421
 slug: npm-audit-security-adapter
 title: Parse npm audit output into security gate findings
-status: Backlog
+status: Done
 created: 2026-10-08
 owner: Electron desktop app
 featureId: 108

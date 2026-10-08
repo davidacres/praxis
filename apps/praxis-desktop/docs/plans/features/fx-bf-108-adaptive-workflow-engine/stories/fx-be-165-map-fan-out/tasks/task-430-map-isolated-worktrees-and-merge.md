@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-08T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-430
 slug: map-isolated-worktrees-and-merge
 title: Per-item worktrees and deterministic merge-back
-status: Backlog
+status: Done
 created: 2026-10-08
 owner: Electron desktop app
 featureId: 108

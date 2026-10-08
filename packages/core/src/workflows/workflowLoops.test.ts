@@ -550,8 +550,11 @@ test('a loop pass is handed the findings that sent it round, with repeats called
   assert.match(brief, /What happened so far:\n- Iteration 1: Review reported 1 finding \(1 high\)\.\n- Iteration 2: Review reported 2 findings \(1 critical, 1 high\)\./);
   assert.match(brief, /Say in your reply how each finding above was addressed/);
 
-  // The reviewer, inside the same loop, also knows which pass this is.
-  assert.match(formatIterationContext(r, 'review') ?? '', /Iteration 3 of 4/);
+  // The reviewer, inside the same loop, knows which pass this is — and is asked to check, not fix.
+  const reviewBrief = formatIterationContext(r, 'review') ?? '';
+  assert.match(reviewBrief, /Iteration 3 of 4/);
+  assert.match(reviewBrief, /check whether each is now fixed/);
+  assert.doesNotMatch(reviewBrief, /Fix these first/);
   // A stage outside the loop is untouched.
   assert.equal(formatIterationContext(r, 'plan'), undefined);
 });

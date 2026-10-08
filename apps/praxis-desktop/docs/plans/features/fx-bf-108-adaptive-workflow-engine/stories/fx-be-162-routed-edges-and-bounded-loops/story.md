@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-08T00:00:00.000Z
 **Type:** Story
 **Priority:** High
 id: FX-BE-162
 type: Story
-status: Backlog
+status: Done
 created: 2026-10-08
 priority: High
 featureId: 108
@@ -35,6 +35,12 @@ Core engine: `workflowTypes.ts`, `workflowValidation.ts` (`findCycle`, `normaliz
 - A workflow with no findings edges and no loop edges validates, schedules and runs byte-identically; the 13-test folder/edit/new-issue gate and existing workflow specs keep their counts.
 - `normalizeWorkflow` and `normalizeWorkflowRun` copy every new field; a round-trip test over the shipped templates plus a new looping fixture proves nothing is dropped.
 - Property-style tests: any run with loop edges terminates in at most the sum of budgets; the scheduler never dispatches a stage twice; a crash between persist and launch recovers to the same state.
+
+## Delivered
+
+`WorkflowEdge.on: 'findings'` with a `when` predicate (severity, count, categories, metric — any clause holds) and `loop: { maxIterations, keepBest? }`, in `workflowTypes.ts`; shared arithmetic and loop detection in `workflowEdges.ts` (`dagEdges`, `pendingLoop`, `loopStatuses`); `loop-taken` / `loop-decided` / `loop-restored` commands, `loopHistory`, `loopDecisions`, `revisionBase` in `workflowRun.ts`; the scheduler holds and the orchestrator takes a loop only once nothing is running. Validation accepts a cycle only through a budgeted loop edge that points back upstream. `workflows:decideLoop` IPC records accept (reason required), grant (capped at 10) or stop.
+
+Verified by `workflowLoops.test.ts` (validation, round-trips, routing, hold-then-take, per-revision budgets, needs-decision with each action, failure loops, keep-best, disk round-trip, orchestrator convergence, a property test over budgets 1–4) and `workflowLoops.spec.ts` (a looping run to a recorded decision).
 
 ## Dependencies
 

@@ -142,3 +142,14 @@ test('the orchestrator dispatches a map node to its host and records the items',
   assert.equal(r.status, 'succeeded');
   assert.deepEqual(scheduleWorkflowRun(r).ready, []);
 });
+
+test('an item that stopped on a provider limit pauses the map rather than failing it', () => {
+  const node = definition().nodes[1] as WorkflowMapNode;
+  const outcome = aggregateMapOutcome(node, [
+    { key: 'a', label: 'A', outcome: 'succeeded' },
+    { key: 'b', label: 'B', outcome: 'failed', pause: 'provider-limit', error: 'Out of credits' }
+  ], { deferred: 0 });
+  assert.equal(outcome.status, 'failed');
+  assert.equal(outcome.pause, 'provider-limit');
+  assert.match(outcome.error ?? '', /1 item could not run .*Out of credits.*finished items are kept/);
+});

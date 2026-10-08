@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-08T00:00:00.000Z
 **Type:** Feature
 **Priority:** High
 id: FX-BF-108
 type: Feature
-status: Backlog
+status: Done
 created: 2026-10-08
 priority: High
 ---
@@ -67,6 +67,21 @@ Related: FX-BF-035 (multi-AI session orchestration), FX-BF-034 (SDLC quality and
 - Existing workflows and the e2e gate counts are unchanged.
 - Planning complete does not mean implementation complete.
 
+## Delivered (2026-10-08)
+
+All seven stories and seventeen tasks are implemented. Each story's own "Delivered" section names the code and the tests behind it.
+
+Verification at completion:
+
+- `npm run test:core`: 1,456 passed, 0 failed (1,393 before this feature).
+- `npm run check-types`: clean across every workspace.
+- Desktop unit tests: `test:workflows` 38 passed, `test:git` 50 passed, including real-repository tests for keep-best restore and map-item merges.
+- `npm run test:desktop` (functional project): 503 passed, 2 failed, 3 skipped. `aiCliAgentHost` "ACP resume replay" is the documented flake and passed alone. The `marketplace` Agent Runtime snapshot was 10px narrower because the new bundled skeptic agent makes the panel scroll; its content was identical, and it was re-baselined after inspection.
+- The workflow specs and the folder/edit/new-issue gate specs all pass after the final changes.
+- The designer, connection inspector, loop history, needs-decision notice and start dialog were inspected in light and dark.
+
+Not verified: the first close condition was proven with scripted stage outcomes through the real orchestrator and the manual run seam, not with a live AI. A real run of Governed delivery against a deliberately buggy ticket is still the honest end-to-end test of whether real reviewers and implementers converge.
+
 ## Description
 
 Make the workflow designer powerful enough to describe workflows that route results, loop back to re-code or re-test, and iterate toward a goal, with bounded and auditable behaviour.
@@ -75,12 +90,12 @@ Make the workflow designer powerful enough to describe workflows that route resu
 
 | Ref | Type | Name | Status |
 | --- | --- | --- | --- |
-| FX-BE-161 | Story | Governed delivery's review gate enforces its findings | Backlog |
-| FX-BE-162 | Story | Findings-routed edges and bounded loop edges | Backlog |
-| FX-BE-163 | Story | Loop context and retry memory | Backlog |
-| FX-BE-164 | Story | Independent verification and skeptic stages | Backlog |
-| FX-BE-165 | Story | Map node: parallel fan-out with isolated worktrees | Backlog |
-| FX-BE-166 | Story | Improve-until-target template, run parameters and keep-best | Backlog |
-| FX-BE-167 | Story | Designer, run view and cost visibility for loops | Backlog |
+| FX-BE-161 | Story | Governed delivery's review gate enforces its findings | Done |
+| FX-BE-162 | Story | Findings-routed edges and bounded loop edges | Done |
+| FX-BE-163 | Story | Loop context and retry memory | Done |
+| FX-BE-164 | Story | Independent verification and skeptic stages | Done |
+| FX-BE-165 | Story | Map node: parallel fan-out with isolated worktrees | Done |
+| FX-BE-166 | Story | Improve-until-target template, run parameters and keep-best | Done |
+| FX-BE-167 | Story | Designer, run view and cost visibility for loops | Done |
 
 ## Comments

@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-08T00:00:00.000Z
 **Type:** Story
 **Priority:** High
 id: FX-BE-164
 type: Story
-status: Backlog
+status: Done
 created: 2026-10-08
 priority: High
 featureId: 108
@@ -29,6 +29,12 @@ The agent that grades the work is not the agent that wrote it, and false finding
 - The independence decision is shown in the stage's session record and run timeline, with the reason.
 - Switching provider mid-run (provider limit) never silently breaks independence; if it would, the run pauses for a decision rather than continuing as the author's own reviewer.
 - The Governed delivery template uses `independentOf: implement` for Review and the security reviewer.
+
+## Delivered
+
+`independentOf` resolved by `chooseIndependentStage` (`stageModel.ts`): another set-up AI, else another mapped model, else recorded as not independent; the attempt records its model and independence; provider fallback never lands an independent stage on its author's AI, and under the `switch` policy it waits for a person rather than doing so. A bundled `praxis-skeptic` agent and the `withSkepticReview` fragment; a stage with `refutes` applies its verdicts to the judged findings by fingerprint (it may lower, never raise, a severity), and findings edges and loops wait for it.
+
+Verified by `stageModel.test.ts` (each resolution branch), `bundledAgents.test.ts` (verdicts keep fingerprints), and `workflowLoops.test.ts` (skeptic fragment validates, waits, refutation frees the gate and stops the loop).
 
 ## Dependencies
 

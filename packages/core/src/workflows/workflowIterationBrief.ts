@@ -16,7 +16,7 @@
 import { countableFindings, definitionWaivers, loopStatuses, SEVERITY_RANK } from './workflowEdges';
 import { filterUnwaivedFindings } from './waiverRegister';
 import { downstreamNodeIds, type WorkflowLoopIteration, type WorkflowRun } from './workflowRun';
-import type { CheckFinding } from './workflowTypes';
+import { nodeMutatesWorktree, type CheckFinding } from './workflowTypes';
 
 /** Enough for a full set of findings with suggestions; small enough not to become the prompt. */
 export const ITERATION_BRIEF_MAX_CHARS = 8000;
@@ -78,6 +78,9 @@ function firstLine(text: string): string {
 export function formatIterationContext(run: WorkflowRun, nodeId: string, maxChars = ITERATION_BRIEF_MAX_CHARS): string | undefined {
   const sections: string[] = [];
   const state = run.nodes[nodeId];
+  const stageNode = run.definition.nodes.find(candidate => candidate.id === nodeId);
+  // A stage that changes code is asked to fix; one that only reads is asked to check the fix.
+  const fixes = !!stageNode && nodeMutatesWorktree(stageNode);
   const waivers = definitionWaivers(run.definition);
 
   for (const status of loopsContaining(run, nodeId)) {
@@ -100,7 +103,7 @@ export function formatIterationContext(run: WorkflowRun, nodeId: string, maxChar
     const { activeFindings, waivedFindings } = filterUnwaivedFindings([...unique.values()].sort(bySeverity), waivers);
     if (activeFindings.length > 0) {
       lines.push(
-        `Fix these first — they are why this pass exists${latest.findingCount > latest.findings.length ? ` (${latest.findingCount} in all; the most severe are listed)` : ''}:`,
+        `${fixes ? 'Fix these first — they are why this pass exists' : 'The last pass reported these; check whether each is now fixed'}${latest.findingCount > latest.findings.length ? ` (${latest.findingCount} in all; the most severe are listed)` : ''}:`,
         ...activeFindings.slice(0, FINDINGS_LISTED).map(finding => findingLine(finding, firstSeen.get(finding.fingerprint))),
         ...(activeFindings.length > FINDINGS_LISTED ? [`- …and ${activeFindings.length - FINDINGS_LISTED} more of lower severity.`] : [])
       );
@@ -120,7 +123,7 @@ export function formatIterationContext(run: WorkflowRun, nodeId: string, maxChar
     if (latest.restoredTo) {
       lines.push(`The last pass scored worse than the best, so the code was put back to the best iteration (${latest.restoredTo.slice(0, 7)}). Take a different approach from the one that was undone.`);
     }
-    lines.push('Say in your reply how each finding above was addressed, or why it was not.');
+    lines.push(fixes ? 'Say in your reply how each finding above was addressed, or why it was not.' : 'Say for each finding above whether it is fixed, and report it again if it is not.');
     sections.push(lines.join('\n'));
   }
 

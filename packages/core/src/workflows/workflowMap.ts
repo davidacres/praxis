@@ -48,6 +48,8 @@ export interface WorkflowMapItemState {
   findings?: CheckFindings;
   /** The item's branch, for a mutating item, kept after its worktree is released. */
   branch?: string;
+  /** The item stopped without a verdict (its AI ran out, or its tooling could not run). */
+  pause?: 'provider-limit' | 'environment';
 }
 
 /** The items a map node fans out over, in a stable order (most severe finding first). */
@@ -114,6 +116,18 @@ export function aggregateMapOutcome(
   items: readonly WorkflowMapItemState[],
   options: { mergedSnapshotRef?: string; deferred: number }
 ): StageOutcome {
+  // An item that stopped without a verdict pauses the whole stage, like any stage would: a retry
+  // runs only the items that have not succeeded, so none of them spends an attempt on it.
+  const paused = items.find(item => item.pause);
+  if (paused) {
+    const stopped = items.filter(item => item.pause).length;
+    return {
+      status: 'failed',
+      pause: paused.pause,
+      error: `${stopped} item${stopped === 1 ? '' : 's'} could not run (${paused.pause === 'provider-limit' ? "the AI provider's limit was reached" : 'the tooling could not run'}): ${paused.error ?? paused.label}. Retry to run ${stopped === 1 ? 'it' : 'them'}; finished items are kept.`,
+      mapItems: [...items]
+    };
+  }
   const failed = items.filter(item => item.outcome === 'failed' || item.outcome === 'cancelled');
   const succeeded = items.filter(item => item.outcome === 'succeeded');
 
