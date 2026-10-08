@@ -77,7 +77,7 @@ test('composer usage panel draws provider quota windows as bars with a collapsed
   await expect(quotas.getByTestId('session-usage-percent-hour')).toHaveText('82%');
   await expect(quotas.getByTestId('session-usage-reset-hour')).toContainText('⏱');
   await expect(quotas.getByRole('progressbar')).toHaveCount(2);
-  await expect(draft.getByTestId('session-usage-models-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(draft.getByTestId('session-usage-models')).toHaveCount(0);
 
   const shot = path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'composer-usage-quota.png');
   fs.mkdirSync(path.dirname(shot), { recursive: true });

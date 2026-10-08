@@ -84,6 +84,9 @@ Live run (the first close condition), `governedDeliveryLoop.live.spec.ts` with C
 
 - First attempt: the run converged with no loop. The reviewer reported the `eval` code-injection risk but rated it **low** because it predated the change and the plan made it a non-goal. The review instruction was changed to rate severity by impact regardless of who introduced it.
 - Second attempt (and a third, re-run on the final code with the spec asserting the `eval` was reported, passed in 6.3 min with the first review rating it **critical**): the first review rated the `eval` **high** (3 findings at high or above), the run looped back to Implement (iteration 1 of 2) with the findings, the second pass fixed the paging and replaced `eval` with strict integer parsing plus tests, QA/security/build re-ran, the second review left only low findings, and the run was approved and succeeded (5.3 min). The delivered `pager.js` on the run's branch no longer uses `eval`.
+- **Improve until target**, live (`improveAndMap.live.spec.ts`, goal + rubric, target 98, 2 iterations): pass 1 scored 75, the loop went round, pass 2 scored 98 and the loop stopped with the target met; the score history was recorded, the run ended on its best (latest) pass, was approved and succeeded, and the delivered suite passes. A first attempt was undone by the test guard because the improver *added* tests to the existing test file; the guard now flags only changed or removed lines in existing tests.
+- **Map fan-out**, live (same spec): the review found 3 bugs, the map ran 3 items on their own branches (`wfitem-…-fix-1..3`), all 3 merged back into the run branch, tests passed, the run was approved and succeeded, and the delivered suite passes (1.1 min).
+- `aiCliAgentHost.spec.ts` run 5 times in a row: 70 passed, 0 failed.
 - Independence was reported honestly as **not independent**: only one AI and model were set up in that profile, so Review ran on the same model as Implement.
 
 ## Description

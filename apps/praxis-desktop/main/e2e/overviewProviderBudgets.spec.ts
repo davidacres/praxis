@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
@@ -34,11 +36,17 @@ test('a provider with no usage API is shown as no data, with the reason', async 
 
   const section = page.getByTestId('overview-budgets-section');
   await expect(section).toBeVisible();
-  await expect(page.getByTestId('overview-budgets-card-anthropic')).toBeVisible();
+  const card = page.getByTestId('overview-budgets-card-anthropic');
+  await expect(card).toBeVisible();
+  await expect(card).toHaveClass(/is-compact/);
   await expect(page.getByTestId('overview-budgets-nodata-anthropic')).toContainText('No data');
   // The reason is the useful part: a bare "no data" hides whether the fix is a
   // missing CLI, a missing API, or a rejected key.
   await expect(page.getByTestId('overview-budgets-nodata-anthropic')).toContainText('does not expose an account usage API');
+
+  const shot = path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'compact-provider-budget-card.png');
+  fs.mkdirSync(path.dirname(shot), { recursive: true });
+  await card.screenshot({ path: shot });
 });
 
 test('a disabled provider gets no card', async () => {
