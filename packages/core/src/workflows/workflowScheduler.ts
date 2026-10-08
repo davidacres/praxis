@@ -76,7 +76,7 @@ export function scheduleWorkflowRun(run: WorkflowRun): WorkflowSchedule {
   if (loop) {
     const from = run.definition.nodes.find(node => node.id === loop.status.edge.from)?.name ?? loop.status.edge.from;
     const to = run.definition.nodes.find(node => node.id === loop.status.edge.to)?.name ?? loop.status.edge.to;
-    const why = loop.status.edge.on === 'findings' ? ` (${describeFindingsPredicate(loop.status.edge.when)})` : '';
+    const why = loop.status.edge.on === 'findings' ? ` (${describeFindingsPredicate(loop.status.edge.when, run.parameters)})` : '';
     return {
       ready: [],
       autoAdvance: [],
@@ -260,7 +260,7 @@ function edgeState(run: WorkflowRun, edge: WorkflowEdge): EdgeState {
     sourceNode?.type === 'check' && sourceNode.failureRecovery?.repairNodeId === edge.to
       ? { exhausted: (run.recoveryAttempts?.[sourceNode.id] ?? 0) >= sourceNode.failureRecovery.maxAttempts }
       : undefined;
-  return edgeStateFor(edge, run.nodes[edge.from], recovery);
+  return edgeStateFor(edge, run.nodes[edge.from], recovery, run.parameters);
 }
 
 /**

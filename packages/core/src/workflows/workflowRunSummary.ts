@@ -120,6 +120,12 @@ export interface LoopSummary {
   /** The source's open findings now (countable, most severe first), for a decision. */
   openFindings?: LoopHistoryRow['topFindings'];
   decisions: Array<{ at: string; actor: string; decision: 'accept' | 'grant' | 'stop'; reason?: string; extraIterations?: number }>;
+  /**
+   * Why a loop that ran is no longer going round: its condition cleared (`condition-met` —
+   * a target reached, the findings fixed), it stopped improving (`no-improvement`), or a
+   * person accepted the result after the budget ran out (`accepted`). Absent while it fires.
+   */
+  stoppedBecause?: 'condition-met' | 'no-improvement' | 'accepted';
 }
 
 export interface BranchGroup {
@@ -234,7 +240,7 @@ export function summarizeLoops(run: WorkflowRun): LoopSummary[] {
       toNodeId: edge.to,
       toName: name(edge.to),
       on: edge.on,
-      condition: edge.on === 'findings' ? describeFindingsPredicate(edge.when) : edge.on === 'failure' ? 'the stage fails' : edge.on === 'always' ? 'every time' : 'the stage succeeds',
+      condition: edge.on === 'findings' ? describeFindingsPredicate(edge.when, run.parameters) : edge.on === 'failure' ? 'the stage fails' : edge.on === 'always' ? 'every time' : 'the stage succeeds',
       iterationsTaken: status.iterationsTaken,
       budget: status.budget,
       firing: status.fires && !status.exhausted,
@@ -260,6 +266,15 @@ export function summarizeLoops(run: WorkflowRun): LoopSummary[] {
           }
         : {}),
       ...(needsDecision && source?.findings ? { openFindings: topFindings(source.findings.findings) } : {}),
+      ...(status.fires || !source || !['succeeded', 'failed'].includes(source.outcome)
+        ? {}
+        : {
+            stoppedBecause: status.outOfPatience
+              ? ('no-improvement' as const)
+              : (run.loopDecisions ?? []).some(decision => decision.edgeId === edge.id && decision.decision === 'accept' && decision.sourceAttempt === source.attempts.length)
+                ? ('accepted' as const)
+                : ('condition-met' as const)
+          }),
       decisions: (run.loopDecisions ?? [])
         .filter(decision => decision.edgeId === edge.id)
         .map(decision => ({
@@ -461,7 +476,15 @@ export function branchGroups(run: WorkflowRun): BranchGroup[] {
 }
 
 function explainRun(run: WorkflowRun, status: WorkflowRun['status'], blocked: string | undefined): string {
-  if (status === 'succeeded') return 'The run completed: every required stage passed and approval was granted.';
+  if (status === 'succeeded') {
+    // A loop that ended without meeting its condition did not reach its goal, whatever the run did after.
+    const short = summarizeLoops(run).find(loop => loop.stoppedBecause === 'accepted' || loop.stoppedBecause === 'no-improvement');
+    if (short) {
+      const best = short.keepBest?.bestScore !== undefined ? ` The best ${short.keepBest.metric} was ${short.keepBest.bestScore} (iteration ${short.keepBest.bestIteration}).` : '';
+      return `The run completed, but the target was not reached: ${short.fromName} still matched "${short.condition}" when it stopped${short.stoppedBecause === 'no-improvement' ? ' improving' : ''}.${best}`;
+    }
+    return 'The run completed: every required stage passed and approval was granted.';
+  }
   if (status === 'cancelled') return `The run was cancelled${run.endedReason ? `: ${run.endedReason}` : '.'}`;
   if (status === 'failed') return `The run failed${run.endedReason ? `: ${run.endedReason}` : '.'}`;
 

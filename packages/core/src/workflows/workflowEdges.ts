@@ -77,8 +77,21 @@ export function compareMetric(
   }
 }
 
+/** The value a predicate's metric clause compares against: a run parameter's, when it names one that was given. */
+export function predicateMetricValue(
+  metric: NonNullable<WorkflowFindingsPredicate['metric']>,
+  parameters?: Record<string, string | number>
+): number {
+  const fromParameter = metric.valueFromParameter ? parameters?.[metric.valueFromParameter] : undefined;
+  return typeof fromParameter === 'number' && Number.isFinite(fromParameter) ? fromParameter : metric.value;
+}
+
 /** Whether any clause of a findings predicate holds for these findings. */
-export function findingsPredicateHolds(predicate: WorkflowFindingsPredicate | undefined, findings: CheckFindings | undefined): boolean {
+export function findingsPredicateHolds(
+  predicate: WorkflowFindingsPredicate | undefined,
+  findings: CheckFindings | undefined,
+  parameters?: Record<string, string | number>
+): boolean {
   if (!findings) return false;
   const when = predicate ?? {};
   const hasSeverityClause = when.severity !== undefined || when.minCount !== undefined || (when.categories?.length ?? 0) > 0;
@@ -90,13 +103,13 @@ export function findingsPredicateHolds(predicate: WorkflowFindingsPredicate | un
     clauses.push(countAtOrAbove(pool, when.severity ?? 'high') >= Math.max(1, when.minCount ?? 1));
   }
   if (when.metric) {
-    clauses.push(compareMetric(findings.metrics?.[when.metric.metric], when.metric.operator, when.metric.value));
+    clauses.push(compareMetric(findings.metrics?.[when.metric.metric], when.metric.operator, predicateMetricValue(when.metric, parameters)));
   }
   return clauses.some(Boolean);
 }
 
 /** A short, human reading of a predicate: "2+ findings at high or above, or score < 90". */
-export function describeFindingsPredicate(predicate: WorkflowFindingsPredicate | undefined): string {
+export function describeFindingsPredicate(predicate: WorkflowFindingsPredicate | undefined, parameters?: Record<string, string | number>): string {
   const when = predicate ?? {};
   const parts: string[] = [];
   const hasSeverityClause = when.severity !== undefined || when.minCount !== undefined || (when.categories?.length ?? 0) > 0;
@@ -105,7 +118,7 @@ export function describeFindingsPredicate(predicate: WorkflowFindingsPredicate |
     const categories = when.categories?.length ? ` in ${when.categories.join('/')}` : '';
     parts.push(`${count === 1 ? 'any finding' : `${count}+ findings`} at ${when.severity ?? 'high'} or above${categories}`);
   }
-  if (when.metric) parts.push(`${when.metric.metric} ${when.metric.operator} ${when.metric.value}`);
+  if (when.metric) parts.push(`${when.metric.metric} ${when.metric.operator} ${predicateMetricValue(when.metric, parameters)}`);
   return parts.join(', or ');
 }
 
@@ -132,21 +145,22 @@ export type EdgeState = 'satisfied' | 'dead' | 'waiting';
 export function edgeStateFor(
   edge: WorkflowEdge,
   source: Pick<WorkflowNodeState, 'outcome' | 'attempts' | 'findings'> | undefined,
-  recovery?: { exhausted: boolean }
+  recovery?: { exhausted: boolean },
+  parameters?: Record<string, string | number>
 ): EdgeState {
   if (!source) return 'dead';
   const paused = source.outcome === 'failed' && !!source.attempts[source.attempts.length - 1]?.pause;
 
   switch (source.outcome) {
     case 'succeeded':
-      if (edge.on === 'findings') return findingsPredicateHolds(edge.when, source.findings) ? 'satisfied' : 'dead';
+      if (edge.on === 'findings') return findingsPredicateHolds(edge.when, source.findings, parameters) ? 'satisfied' : 'dead';
       return edge.on === 'success' || edge.on === 'always' ? 'satisfied' : 'dead';
     case 'failed':
       // Paused (provider limit / environment): the stage has no verdict yet, so
       // no edge — failure/always included — is taken. Routing into a fix stage
       // would only spend more effort against the same broken precondition.
       if (paused) return 'waiting';
-      if (edge.on === 'findings') return findingsPredicateHolds(edge.when, source.findings) ? 'satisfied' : 'dead';
+      if (edge.on === 'findings') return findingsPredicateHolds(edge.when, source.findings, parameters) ? 'satisfied' : 'dead';
       if (edge.on !== 'failure' && edge.on !== 'always') return 'dead';
       if (recovery?.exhausted) return 'dead';
       return 'satisfied';
@@ -172,6 +186,34 @@ export interface LoopStatus {
   fires: boolean;
   /** Fires with nothing left in the budget: a person must decide. */
   exhausted: boolean;
+  /** A keep-best loop whose condition still holds but which stopped after `patience` passes without beating the best. */
+  outOfPatience: boolean;
+}
+
+/**
+ * How many passes in a row, ending with the source's current result, have not beaten
+ * the best score before them. Zero when the latest pass set a new best.
+ */
+export function passesWithoutImprovement(
+  history: ReadonlyArray<{ edgeId: string; score?: number }>,
+  edgeId: string,
+  currentScore: number | undefined,
+  higherIsBetter: boolean
+): number {
+  const scores = [...history.filter(entry => entry.edgeId === edgeId).map(entry => entry.score), currentScore];
+  let best: number | undefined;
+  let streak = 0;
+  for (const score of scores) {
+    if (score === undefined) continue;
+    const better = best === undefined || (higherIsBetter ? score > best : score < best);
+    if (better) {
+      best = score;
+      streak = 0;
+    } else {
+      streak += 1;
+    }
+  }
+  return streak;
 }
 
 /** Waivers declared on the workflow's approval stages. */
@@ -213,14 +255,19 @@ export function loopStatuses(run: Pick<WorkflowRun, 'definition' | 'nodes' | 'pa
       : recorded;
     const iterationsTaken = loopIterationsTaken(run, edge.id);
     const budget = loopBudget(run, edge);
-    const satisfied = edgeStateFor(edge, source) === 'satisfied' && !(edge.on === 'findings' && awaitingSkeptic(run, edge.from));
+    const satisfied = edgeStateFor(edge, source, undefined, run.parameters) === 'satisfied' && !(edge.on === 'findings' && awaitingSkeptic(run, edge.from));
+    // Keep-best with patience: passes that keep failing to beat the best stop the loop.
+    const keepBest = edge.loop?.keepBest;
+    const outOfPatience =
+      satisfied && !!keepBest?.patience &&
+      passesWithoutImprovement(run.loopHistory ?? [], edge.id, source?.findings?.metrics?.[keepBest.metric], keepBest.higherIsBetter) >= keepBest.patience;
     // A person accepting this exact result ("approve anyway") stops it firing again;
     // the next result the source produces is judged afresh.
     const accepted = !!source && (run.loopDecisions ?? []).some(
       decision => decision.edgeId === edge.id && decision.decision === 'accept' && decision.sourceAttempt === source.attempts.length
     );
-    const fires = satisfied && !accepted;
-    return { edge, iterationsTaken, budget, fires, exhausted: fires && iterationsTaken >= budget };
+    const fires = satisfied && !accepted && !outOfPatience;
+    return { edge, iterationsTaken, budget, fires, exhausted: fires && iterationsTaken >= budget, outOfPatience };
   });
 }
 

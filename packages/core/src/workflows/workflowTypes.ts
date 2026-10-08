@@ -237,6 +237,14 @@ export interface WorkflowAgentTaskNode extends WorkflowNodeBase {
   /** Move up a tier on each retry (fast → standard → strong). Defaults to on when a tier is set. */
   escalateOnRetry?: boolean;
   /**
+   * Holds this mutating stage to the tests that judge it (FX-BE-166): after it commits, its
+   * change is checked for deleted or skipped tests, removed assertions and lowered coverage
+   * thresholds, and — unless `testsInScope` — for edits to existing test files. Any of those
+   * fails the attempt with the findings, so a loop cannot reach its target by weakening the
+   * checks that measure it. New test files are always allowed.
+   */
+  guardTests?: { testsInScope?: boolean; paths?: string[] };
+  /**
    * The stage whose work this one judges (FX-BE-164). At launch the stage runs on a
    * different AI provider from that stage's latest attempt when another is set up, else a
    * different model, else it runs and the run records that it was not independent.
@@ -439,8 +447,12 @@ export interface WorkflowFindingsPredicate {
   minCount?: number;
   /** Only findings in these categories count toward the severity clause. */
   categories?: string[];
-  /** Holds when this comparison against the stage's metrics is true (a missing metric never holds). */
-  metric?: { metric: string; operator: MetricThresholdCondition['operator']; value: number };
+  /**
+   * Holds when this comparison against the stage's metrics is true (a missing metric never
+   * holds). `valueFromParameter` takes the value from a numeric run parameter instead — a
+   * target the person starting the run sets — falling back to `value` when none was given.
+   */
+  metric?: { metric: string; operator: MetricThresholdCondition['operator']; value: number; valueFromParameter?: string };
 }
 
 /** The most iterations any loop may run, whatever its budget or grants say. */
@@ -458,7 +470,15 @@ export interface WorkflowLoopBudget {
    * stage's metric gets worse than the best seen, the worktree is restored to the
    * best iteration's snapshot before the loop goes round again, and the run ends there.
    */
-  keepBest?: { metric: string; higherIsBetter: boolean };
+  keepBest?: {
+    metric: string;
+    higherIsBetter: boolean;
+    /**
+     * Stop going round after this many passes in a row that did not beat the best. Absent
+     * means keep going until the budget runs out. The run then ends on the best iteration.
+     */
+    patience?: number;
+  };
 }
 
 export interface WorkflowEdge {

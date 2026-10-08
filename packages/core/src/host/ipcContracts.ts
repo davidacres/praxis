@@ -65,6 +65,9 @@ import type { CredentialBindingStatus } from '../projects/deploymentProfileStore
 import type { DeploymentRun } from '../projects/deploymentRunState';
 import type { PublishManifest } from '../projects/publishManifest';
 import type { DeploymentHealthResult } from '../deployments/directDeploymentOrchestrator';
+import type { RunEstimate } from '../workflows/workflowEstimate';
+import type { RunParameterIssue } from '../workflows/workflowValidation';
+import type { WorkflowRunParameter } from '../workflows/workflowTypes';
 import type { WorkflowEvidenceSourceRef } from '../workflows/workflowEvidence';
 import type { ReconciledService } from '../projects/runReconciliation';
 import type { RunLogLine, RunServiceStatus } from '../projects/runServiceManager';
@@ -1329,8 +1332,20 @@ export interface WorkflowsIpc {
       uncommittedChanges?: WorkflowUncommittedChanges;
       /** When a stage's AI runs out of budget: ask (default), switch AI automatically, or stop. */
       providerLimitPolicy?: WorkflowProviderLimitPolicy;
+      /** Values for the workflow's `parameters`; checked by `resolveRunParameters`, fixed for the run. */
+      parameters?: Record<string, string | number>;
     }
   ): Promise<WorkflowRunSummary>;
+  /**
+   * What starting this workflow involves, before anything is created: the parameters it asks
+   * for and the worst-case launches (and, where this machine has measured enough stage
+   * sessions, a token/spend range) given `parameters`. Read-only.
+   */
+  prepareRun(
+    projectId: string,
+    workflowId: string,
+    parameters?: Record<string, string | number>
+  ): Promise<{ parameters: WorkflowRunParameter[]; requiresMeasurableGoal: boolean; estimate: RunEstimate; issues: RunParameterIssue[] }>;
   /**
    * Product files with uncommitted changes that a new run's worktree would silently omit
    * (Praxis metadata excluded). Empty means a run can start; use it to warn before creating anything.
@@ -1379,6 +1394,19 @@ export interface WorkflowsIpc {
   bypassGate(runId: string, gate: string, actor: string, reason: string, nodeId?: string): Promise<WorkflowRunSummary>;
   /** Skips an optional approval (`WorkflowApprovalNode.optional`); what follows it is skipped too. */
   skipApproval(runId: string, nodeId: string, actor: string): Promise<WorkflowRunSummary>;
+  /**
+   * Answers a loop whose iteration budget ran out (FX-BE-162): `accept` continues past this
+   * result (a reason is required), `grant` adds `extraIterations` and goes round again (never
+   * past the ceiling), `stop` ends the run (a reason is required). Recorded with `actor`.
+   */
+  decideLoop(
+    runId: string,
+    edgeId: string,
+    actor: string,
+    decision: 'accept' | 'grant' | 'stop',
+    reason?: string,
+    extraIterations?: number
+  ): Promise<WorkflowRunSummary>;
   /** The full written output (report or plan) of a stage, or undefined when it wrote none. */
   stageReport(runId: string, nodeId: string): Promise<string | undefined>;
   /** Asks where to save a stage's written output as Markdown, and saves it there. */

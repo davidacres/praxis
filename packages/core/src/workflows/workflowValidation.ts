@@ -235,6 +235,12 @@ function normalizeNode(value: unknown): WorkflowNode {
       if (isModelTier(raw.modelTier)) node.modelTier = raw.modelTier;
       if (raw.escalateOnRetry === false) node.escalateOnRetry = false;
       if (isText(raw.independentOf)) node.independentOf = raw.independentOf.trim();
+      if (isObject(raw.guardTests)) {
+        node.guardTests = {
+          ...(raw.guardTests.testsInScope === true ? { testsInScope: true } : {}),
+          ...(Array.isArray(raw.guardTests.paths) ? { paths: raw.guardTests.paths.filter(isText).map(item => item.trim()) } : {})
+        };
+      }
       if (isText(raw.refutes)) node.refutes = raw.refutes.trim();
       return node;
     }
@@ -412,7 +418,13 @@ function normalizeEdge(value: unknown): WorkflowEdge {
       maxIterations: typeof raw.loop.maxIterations === 'number' && Number.isFinite(raw.loop.maxIterations) ? Math.floor(raw.loop.maxIterations) : 0
     };
     if (isObject(raw.loop.keepBest) && isText(raw.loop.keepBest.metric)) {
-      loop.keepBest = { metric: raw.loop.keepBest.metric.trim(), higherIsBetter: raw.loop.keepBest.higherIsBetter !== false };
+      loop.keepBest = {
+        metric: raw.loop.keepBest.metric.trim(),
+        higherIsBetter: raw.loop.keepBest.higherIsBetter !== false,
+        ...(typeof raw.loop.keepBest.patience === 'number' && Number.isFinite(raw.loop.keepBest.patience)
+          ? { patience: Math.floor(raw.loop.keepBest.patience) }
+          : {})
+      };
     }
     edge.loop = loop;
   }
@@ -435,7 +447,8 @@ function normalizePredicate(value: unknown): WorkflowFindingsPredicate | undefin
     predicate.metric = {
       metric: value.metric.metric.trim(),
       operator: value.metric.operator as MetricThresholdCondition['operator'],
-      value: value.metric.value
+      value: value.metric.value,
+      ...(isText(value.metric.valueFromParameter) ? { valueFromParameter: value.metric.valueFromParameter.trim() } : {})
     };
   }
   return predicate;
@@ -686,6 +699,13 @@ function validateEdges(
       });
     }
     if (edge.when) validatePredicate(edge.when, `${at}.when`, errors);
+    const fromParameter = edge.when?.metric?.valueFromParameter;
+    if (fromParameter) {
+      const parameter = (definition.parameters ?? []).find(candidate => candidate.id === fromParameter);
+      if (!parameter || parameter.kind === 'text') {
+        errors.push({ path: `${at}.when.metric.valueFromParameter`, message: `valueFromParameter must name a numeric run parameter; "${fromParameter}" is not one.` });
+      }
+    }
     if (edge.loop) {
       const { maxIterations } = edge.loop;
       if (!Number.isInteger(maxIterations) || maxIterations < 1 || maxIterations > WORKFLOW_MAX_LOOP_ITERATIONS) {
@@ -696,6 +716,9 @@ function validateEdges(
       }
       if (edge.loop.keepBest && !isText(edge.loop.keepBest.metric)) {
         errors.push({ path: `${at}.loop.keepBest.metric`, message: 'Keep-best needs the metric it compares.' });
+      }
+      if (edge.loop.keepBest?.patience !== undefined && (!Number.isInteger(edge.loop.keepBest.patience) || edge.loop.keepBest.patience < 1)) {
+        errors.push({ path: `${at}.loop.keepBest.patience`, message: 'Patience is a whole number of passes, 1 or more.' });
       }
       // A loop edge must point back into its own past; anything else is a forward
       // edge mislabelled, and would make the loop logic reopen unrelated work.

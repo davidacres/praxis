@@ -38,7 +38,7 @@ import {
 } from './workflowTypes';
 import type { AiProvider } from '../types';
 import { findSnapshot } from './workflowStageSession';
-import { SEVERITY_RANK, countableFindings, dagEdges, describeFindingsPredicate, loopBudget, pendingLoop } from './workflowEdges';
+import { SEVERITY_RANK, countableFindings, dagEdges, describeFindingsPredicate, loopBudget, loopStatuses, pendingLoop } from './workflowEdges';
 import { providerDisplayName } from '../ai/providers/registry';
 
 /**
@@ -731,6 +731,9 @@ function settleNode(
     next = applySkepticVerdicts(next, node.refutes, detail.findings, at, label(run, nodeId));
   }
 
+  // A keep-best loop that stops here — target met, or out of patience — ends on its best iteration.
+  next = restoreBestOnLoopExit(next, nodeId, at);
+
   for (const artifact of artifacts) {
     next = append(next, {
       at,
@@ -1059,7 +1062,7 @@ function takeLoop(run: WorkflowRun, edgeId: string, at: string): WorkflowRun {
   const budget = pending.status.budget;
   const why =
     edge.on === 'findings'
-      ? `${entry.findingCount} finding${entry.findingCount === 1 ? '' : 's'} matched (${describeFindingsPredicate(edge.when)})`
+      ? `${entry.findingCount} finding${entry.findingCount === 1 ? '' : 's'} matched (${describeFindingsPredicate(edge.when, run.parameters)})`
       : edge.on === 'failure'
         ? `it failed${entry.error ? `: ${firstLine(entry.error)}` : ''}`
         : `it ${entry.outcome}`;
@@ -1117,6 +1120,33 @@ export function bestIteration(
     if (!best || isWorse(best.score as number, entry.score, higherIsBetter)) best = entry;
   }
   return best;
+}
+
+/**
+ * When a keep-best loop's source settles and the loop will not go round again, the run
+ * should end on the best iteration. If this result scored worse than the best recorded,
+ * ask for the best iteration's code back.
+ */
+function restoreBestOnLoopExit(run: WorkflowRun, sourceId: string, at: string): WorkflowRun {
+  if (run.pendingRestore) return run;
+  const source = run.nodes[sourceId];
+  if (!source || !isTerminalOutcome(source.outcome)) return run;
+  for (const status of loopStatuses(run)) {
+    const { edge } = status;
+    const keepBest = edge.loop?.keepBest;
+    if (edge.from !== sourceId || !keepBest || status.fires) continue;
+    const score = source.findings?.metrics?.[keepBest.metric];
+    const best = bestIteration(run.loopHistory ?? [], edge.id, keepBest.higherIsBetter);
+    if (typeof score !== 'number' || best?.score === undefined || !best.snapshotRef || !isWorse(score, best.score, keepBest.higherIsBetter)) continue;
+    const why = status.outOfPatience
+      ? `${keepBest.patience} pass${keepBest.patience === 1 ? '' : 'es'} in a row did not beat iteration ${best.iteration}'s ${keepBest.metric} of ${best.score}`
+      : `the final ${keepBest.metric} of ${score} is worse than iteration ${best.iteration}'s ${best.score}`;
+    return append(
+      { ...run, pendingRestore: { ref: best.snapshotRef, edgeId: edge.id, iteration: best.iteration, reason: `${why}.`, at } },
+      { at, kind: 'loop-decided', nodeId: sourceId, message: `${label(run, edge.from)} stops looping: ${why}. The run ends on iteration ${best.iteration}'s code.` }
+    );
+  }
+  return run;
 }
 
 function decideLoop(run: WorkflowRun, command: Extract<WorkflowRunCommand, { kind: 'loop-decided' }>): WorkflowRun {

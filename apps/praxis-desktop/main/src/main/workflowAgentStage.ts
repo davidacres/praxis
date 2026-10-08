@@ -22,6 +22,9 @@ import {
   nodeOutputs,
   stageProvider,
   chooseIndependentStage,
+  assessTestChanges,
+  isGuardedPath,
+  type ChangedFile,
   formatIterationContext,
   formatRunParameters,
   type FinishedStageSession,
@@ -46,6 +49,7 @@ import { getServiceForConnection } from './serviceRegistry';
 import { workflowLogSink } from './workflowLogSink';
 import { launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 import { usableProviders } from './providerFallback';
+import { restoreWorktreeTo } from './runWork';
 
 /**
  * Agent stages as real, attributed sessions (FX-BE-025 / TASK-114, TASK-115).
@@ -273,6 +277,8 @@ export async function runWorkflowAgentStage(
   } as IssueDetails;
 
   const toolMode = preflight.binding.toolMode;
+  // Where the tree stood before this stage, so a test-guarded stage's change can be read whole.
+  const baseRef = node.guardTests && node.mutatesWorktree ? await headOf(worktreePath) : undefined;
   const settled = waitForSession(issueKey);
   let skillActivations: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }> = [];
 
@@ -347,10 +353,29 @@ export async function runWorkflowAgentStage(
     ? await freezeWorktree(worktreePath, context.stageName)
     : undefined;
 
-  const outcome = stageOutcomeFromSession(node, {
+  let outcome = stageOutcomeFromSession(node, {
     ...finished,
     ...(snapshotRef ? { snapshotRef } : {})
   });
+
+  // A stage held to its tests may not reach its goal by weakening them: read what it changed,
+  // and undo an attempt that did (as a new commit, so it stays inspectable).
+  if (node.guardTests && outcome.status === 'succeeded' && baseRef && snapshotRef && snapshotRef !== baseRef) {
+    const violations = assessTestChanges(await changedFiles(worktreePath, baseRef, snapshotRef, node.guardTests), node.guardTests);
+    if (violations.length > 0) {
+      const undone = await restoreWorktreeTo(worktreePath, baseRef, `Undo ${context.stageName}: it weakened the tests that judge it`).catch(error => {
+        workflowLogSink.appendLine(`Could not undo ${context.stageName}'s change: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      });
+      outcome = {
+        status: 'failed',
+        error: `This attempt weakened the tests that judge it, so its change was ${undone ? 'undone' : 'left in place but not accepted'}: ${violations
+          .map(violation => `${violation.file} — ${violation.message}`)
+          .join('; ')}. Fix the code rather than the tests.`,
+        findings: { findings: violations, metrics: { testGuardViolations: violations.length } }
+      };
+    }
+  }
   return {
     ...(await publishPlanOutputs(node, workflowRun, outcome, finished.responseText)),
     provider,
@@ -408,6 +433,42 @@ async function publishPlanToBoard(run: WorkflowRun, responseText: string | undef
     }
   }
   return { key: feature.key, title: feature.summary, itemKeys };
+}
+
+async function headOf(worktreePath: string): Promise<string | undefined> {
+  try {
+    return (await run('git', ['rev-parse', 'HEAD'], { cwd: worktreePath })).stdout.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** What changed between two commits, with patches for the files the test guard reads. */
+async function changedFiles(
+  worktreePath: string,
+  from: string,
+  to: string,
+  guard: NonNullable<WorkflowAgentTaskNode['guardTests']>
+): Promise<ChangedFile[]> {
+  const listing = (await run('git', ['diff', '--name-status', '-M', from, to], { cwd: worktreePath, maxBuffer: 8 * 1024 * 1024 })).stdout;
+  const changes: ChangedFile[] = [];
+  for (const line of listing.split('\n').filter(Boolean)) {
+    const [code, first, second] = line.split('\t');
+    const status: ChangedFile['status'] = code.startsWith('A') ? 'added' : code.startsWith('D') ? 'deleted' : code.startsWith('R') ? 'renamed' : 'modified';
+    const filePath = second ?? first;
+    if (!filePath) continue;
+    // A test renamed to something that is not a test is a deleted test, as far as what it checked goes.
+    if (status === 'renamed' && first && isGuardedPath(first, guard) && !isGuardedPath(filePath, guard)) {
+      changes.push({ path: first, status: 'deleted' });
+      continue;
+    }
+    if (!isGuardedPath(filePath, guard)) continue;
+    const patch = status === 'deleted'
+      ? undefined
+      : (await run('git', ['diff', '--no-color', '-U0', from, to, '--', filePath], { cwd: worktreePath, maxBuffer: 8 * 1024 * 1024 })).stdout;
+    changes.push({ path: filePath, status, ...(patch ? { patch } : {}) });
+  }
+  return changes;
 }
 
 /** Files a stage is handed for the length of its session, inside its worktree. */

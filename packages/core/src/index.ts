@@ -116,6 +116,8 @@ export * from './workflows/workflowValidation';
 export * from './workflows/workflowRun';
 export * from './workflows/workflowEdges';
 export * from './workflows/workflowIterationBrief';
+export * from './workflows/workflowEstimate';
+export * from './workflows/testGuard';
 export * from './workflows/stageModel';
 export * from './ai/workflowModelRecommendation';
 export * from './workflows/workflowScheduler';

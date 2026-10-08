@@ -31,6 +31,9 @@ import {
   stageSessionKey,
   summarizeWorkflowRun,
   validateWorkflow,
+  resolveRunParameters,
+  estimateWorkflowRun,
+  stageUsageSample,
   preflightWorkflow,
   getProviderDescriptor,
   workflowFileName,
@@ -334,6 +337,39 @@ export async function listWorkflowChoices(projectId: string): Promise<Array<{ wo
   return [...byId.values()].map(definition => ({ workflowId: definition.id, name: definition.name, trigger: definition.trigger ?? 'on-demand' }));
 }
 
+/** A project workflow by id, or the template it would be instantiated from — without saving anything. */
+async function runnableDefinition(projectId: string, workflowId: string): Promise<WorkflowDefinition | undefined> {
+  const own = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
+  if (own) return own;
+  const template = (await resolveTemplateLibrary(projectId)).find(candidate => candidate.definition.id === workflowId);
+  return template
+    ? instantiateTemplateForProject({ template: template.definition, projectId, at: new Date().toISOString(), newId: template.definition.id })
+    : undefined;
+}
+
+/** What starting a workflow asks for and could cost at worst — read-only; see `PraxisIpc.workflows.prepareRun`. */
+export async function prepareWorkflowRun(projectId: string, workflowId: string, supplied?: Record<string, unknown>) {
+  const definition = await runnableDefinition(projectId, workflowId);
+  if (!definition) throw new Error(`Workflow ${workflowId} was not found for this project.`);
+  const { values, issues } = resolveRunParameters(definition, supplied);
+  const settings = getSettingsBackend().read();
+  const active = settings.ai.activeProvider;
+  const estimate = estimateWorkflowRun(definition, {
+    parameters: values,
+    usage: stageUsageSample(getAiUsageLog().list()),
+    providerFor: node => (node.type === 'agent-task' || node.type === 'map' ? node.agent.providerId?.trim() || active || undefined : undefined),
+    tierModel: (provider, tier) => (provider && tier ? settings.ai.modelTiers?.[provider]?.[tier]?.trim() || undefined : undefined)
+  });
+  return {
+    parameters: definition.parameters ?? [],
+    requiresMeasurableGoal: definition.requiresMeasurableGoal === true,
+    estimate,
+    // Unfilled required values are the dialog's to show as the person types; only report
+    // problems with values actually given.
+    issues: supplied ? issues : []
+  };
+}
+
 export async function startWorkflowRun(input: {
   projectId: string;
   workflowId: string;
@@ -341,7 +377,7 @@ export async function startWorkflowRun(input: {
   issue?: { issueKey: string; connectionId?: string };
   controller?: { sessionKey: string; sessionId: string };
   planInput?: WorkflowPlanInput;
-  options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown; providerLimitPolicy?: unknown };
+  options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown; providerLimitPolicy?: unknown; parameters?: unknown };
 }): Promise<WorkflowRunSummary> {
   const { projectId, workflowId, taskTitle, issue, controller, planInput, options } = input;
   let definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
@@ -403,6 +439,13 @@ export async function startWorkflowRun(input: {
     : undefined;
   if (!uncommittedChanges) await assertWorkflowBaseReady(projectId);
 
+  // Values for the workflow's parameters (goal, iterations, target …), checked and fixed for the run.
+  const supplied = options?.parameters && typeof options.parameters === 'object' && !Array.isArray(options.parameters)
+    ? options.parameters as Record<string, unknown>
+    : undefined;
+  const { values: parameters, issues } = resolveRunParameters(definition, supplied);
+  if (issues.length > 0) throw new Error(issues.map(issue => issue.message).join(' '));
+
   const run = createWorkflowRun({
     runId: randomUUID(),
     projectId,
@@ -415,7 +458,8 @@ export async function startWorkflowRun(input: {
     ...(uncommittedChanges ? { uncommittedChanges } : {}),
     ...(aiProvider ? { aiProvider } : {}),
     ...(aiModel ? { aiModel } : {}),
-    ...(providerLimitPolicy ? { providerLimitPolicy } : {})
+    ...(providerLimitPolicy ? { providerLimitPolicy } : {}),
+    ...(Object.keys(parameters).length > 0 ? { parameters } : {})
   });
   await saveRun(run);
   if (controller) {
@@ -796,8 +840,14 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       issue?: { issueKey: string; connectionId?: string },
       controller?: { sessionKey: string; sessionId: string },
       planInput?: WorkflowPlanInput,
-      options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown; providerLimitPolicy?: unknown }
+      options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown; providerLimitPolicy?: unknown; parameters?: unknown }
     ): Promise<WorkflowRunSummary> => startWorkflowRun({ projectId, workflowId, taskTitle, issue, controller, planInput, options })
+  );
+
+  ipcMain.handle(
+    'workflows:prepareRun',
+    async (_event, projectId: string, workflowId: string, parameters?: Record<string, unknown>) =>
+      prepareWorkflowRun(projectId, workflowId, parameters)
   );
 
   ipcMain.handle(
@@ -960,6 +1010,47 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
         const result = skipApproval(run, nodeId, { actor, at: new Date().toISOString() });
         if (!result.ok) throw new Error(result.reason ?? 'The approval could not be skipped.');
         return result.run;
+      });
+      await getWorkflowOrchestrator().step(runId);
+      return summarize(runStore().get(runId)!);
+    }
+  );
+
+  // A loop whose budget ran out: continue past this result, go round again, or stop the run.
+  ipcMain.handle(
+    'workflows:decideLoop',
+    async (
+      _event,
+      runId: string,
+      edgeId: string,
+      actor: string,
+      decision: 'accept' | 'grant' | 'stop',
+      reason?: string,
+      extraIterations?: number
+    ): Promise<WorkflowRunSummary> => {
+      if (decision !== 'accept' && decision !== 'grant' && decision !== 'stop') throw new Error('Choose accept, grant or stop.');
+      if (!actor?.trim()) throw new Error('A loop decision must record who made it.');
+      if ((decision === 'accept' || decision === 'stop') && !reason?.trim()) {
+        throw new Error(decision === 'accept' ? 'Say why the result is acceptable as it is.' : 'Say why the run should stop.');
+      }
+      await withRun(runId, run => {
+        const next = applyWorkflowRunCommand(run, {
+          kind: 'loop-decided',
+          edgeId,
+          at: new Date().toISOString(),
+          actor,
+          decision,
+          ...(reason?.trim() ? { reason: reason.trim() } : {}),
+          ...(typeof extraIterations === 'number' ? { extraIterations } : {})
+        });
+        if (next === run) {
+          throw new Error(
+            decision === 'grant'
+              ? 'No more iterations can be granted: the loop is at its ceiling, or it is not waiting for a decision.'
+              : 'That loop is not waiting for a decision.'
+          );
+        }
+        return next;
       });
       await getWorkflowOrchestrator().step(runId);
       return summarize(runStore().get(runId)!);

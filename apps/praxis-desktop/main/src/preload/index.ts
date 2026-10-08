@@ -425,8 +425,10 @@ const praxis: PraxisIpc = {
     listPolicies: () => ipcRenderer.invoke('workflows:listPolicies'),
     savePolicy: (profile: WorkflowPolicyProfile) => ipcRenderer.invoke('workflows:savePolicy', profile),
     removePolicy: (profileId: string) => ipcRenderer.invoke('workflows:removePolicy', profileId),
-    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }, controller?: { sessionKey: string; sessionId: string }, planInput?: WorkflowPlanInput, options?: { permissionMode?: 'ask' | 'auto'; uncommittedChanges?: 'include' | 'omit'; providerLimitPolicy?: 'ask' | 'switch' | 'stop' }) =>
+    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }, controller?: { sessionKey: string; sessionId: string }, planInput?: WorkflowPlanInput, options?: { permissionMode?: 'ask' | 'auto'; uncommittedChanges?: 'include' | 'omit'; providerLimitPolicy?: 'ask' | 'switch' | 'stop'; parameters?: Record<string, string | number> }) =>
       ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle, issue, controller, planInput, options),
+    prepareRun: (projectId: string, workflowId: string, parameters?: Record<string, string | number>) =>
+      ipcRenderer.invoke('workflows:prepareRun', projectId, workflowId, parameters),
     checkRunBase: (projectId: string) => ipcRenderer.invoke('workflows:checkRunBase', projectId),
     commitRunBase: (projectId: string, message: string) => ipcRenderer.invoke('workflows:commitRunBase', projectId, message),
     selectControllerRun: (sessionKey: string, runId: string) =>
@@ -448,6 +450,9 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('workflows:bypassGate', runId, gate, actor, reason, nodeId),
     skipApproval: (runId: string, nodeId: string, actor: string) =>
       ipcRenderer.invoke('workflows:skipApproval', runId, nodeId, actor),
+    /** Answers a loop whose iteration budget ran out: continue past it, go round again, or stop. */
+    decideLoop: (runId: string, edgeId: string, actor: string, decision: 'accept' | 'grant' | 'stop', reason?: string, extraIterations?: number) =>
+      ipcRenderer.invoke('workflows:decideLoop', runId, edgeId, actor, decision, reason, extraIterations),
     stageReport: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:stageReport', runId, nodeId),
     saveStageReport: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:saveStageReport', runId, nodeId),
     retryStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:retryStage', runId, nodeId),

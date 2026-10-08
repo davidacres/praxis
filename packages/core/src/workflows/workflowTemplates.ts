@@ -677,10 +677,143 @@ export function resolveFullSdlcTemplate(
   return fullSdlcTemplate(stack);
 }
 
+/** The rubric an evaluator scores against, shared by the baseline and every later pass. */
+const IMPROVE_EVALUATION_BRIEF =
+  'Score how well the code meets the goal you are given, from 0 (not at all) to 100 (fully), against the rubric when one is given. ' +
+  'Be consistent: the same code must get the same score, so state the evidence behind it. ' +
+  'Report the score as metrics.score in your findings block, and list what stands between this code and a full score as findings, most important first, each with a concrete suggestion. ' +
+  'Do not change any code.';
+
+/**
+ * Improve until target (FX-BE-166): iterate on a solution toward a goal the person
+ * states, keeping the best version rather than the latest.
+ *
+ * Baseline → Improve (one focus) → Test (a hard gate) → Evaluate → (round again while
+ * the score is below target) → Approve. Each pass is a commit; one that scores worse
+ * than the best is undone before the next pass, which is told what failed. Two passes
+ * in a row without beating the best ends the loop, as does the iteration budget — and
+ * the run then ends on its best code, reported as "target not reached" if it was not.
+ *
+ * The evaluator runs on a different AI or model from the improver where one is set up,
+ * so the loop is not grading its own work; the improver may not weaken the tests that
+ * judge it. Without a target or a rubric there is nothing to tell improvement from
+ * churn, so the run refuses to start.
+ */
+export function improveUntilTargetTemplate(): WorkflowDefinition {
+  return {
+    schemaVersion: WORKFLOW_SCHEMA_VERSION,
+    id: 'improve-until-target',
+    name: 'Improve until target',
+    description: 'Iterate on a solution toward a stated goal, keeping the best version, until it reaches a target score or stops improving.',
+    scope: 'global',
+    version: 1,
+    entryNodeId: 'baseline',
+    builtIn: true,
+    createdAt: NOW,
+    updatedAt: NOW,
+    requiresMeasurableGoal: true,
+    parameters: [
+      { id: 'goal', label: 'Goal', kind: 'text', required: true, description: 'What "better" means for this code, in a sentence or two.' },
+      { id: 'target', label: 'Target score (0–100)', kind: 'number', min: 1, max: 100, description: 'Stop when the evaluator scores the code at or above this.' },
+      { id: 'rubric', label: 'Rubric', kind: 'text', description: 'How the evaluator should score, when the goal is not a number.' },
+      { id: 'iterations', label: 'Iterations', kind: 'integer', default: 3, min: 1, max: 10, bindsLoopEdge: 'e-improve-again', description: 'The most passes to make after the first.' }
+    ],
+    nodes: [
+      {
+        type: 'agent-task',
+        id: 'baseline',
+        name: 'Baseline',
+        x: 0,
+        y: 160,
+        inputs: [],
+        agent: { agentId: 'praxis-reviewer', profileId: 'praxis-reviewer', hostId: 'praxis-reviewer', scope: 'global', toolMode: 'read-only' },
+        instructions: `Measure the code as it is now, before any change. ${IMPROVE_EVALUATION_BRIEF}`,
+        outputs: [{ id: 'baseline-findings', kind: 'findings', required: true, description: 'The starting score and what holds it back.' }],
+        mutatesWorktree: false,
+        modelTier: 'standard'
+      },
+      {
+        type: 'agent-task',
+        id: 'improve',
+        name: 'Improve',
+        x: 240,
+        y: 160,
+        inputs: ['baseline-findings'],
+        agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full', skillNames: ['verification-report'] },
+        instructions:
+          'Make one focused improvement toward the goal: address the top three findings you are given and nothing else. ' +
+          'Keep the change small enough to review. Run the tests, then commit. Do not edit, skip or delete existing tests, and do not lower any threshold — the change is checked for that and an attempt that does it is undone.',
+        outputs: [{ id: 'change-diff', kind: 'diff', required: true }],
+        mutatesWorktree: true,
+        maxAttempts: 2,
+        guardTests: {}
+      },
+      installDependenciesNode(480, 60),
+      {
+        type: 'check',
+        id: 'test',
+        name: 'Tests',
+        x: 720,
+        y: 60,
+        inputs: ['change-diff', 'install-log'],
+        command: 'npm',
+        args: ['test'],
+        successExitCodes: [0],
+        outputs: [{ id: 'test-results', kind: 'test-results', required: true }],
+        satisfiesGate: 'qa'
+      },
+      {
+        type: 'agent-task',
+        id: 'evaluate',
+        name: 'Evaluate',
+        x: 960,
+        y: 160,
+        inputs: ['change-diff', 'test-results'],
+        agent: { agentId: 'praxis-reviewer', profileId: 'praxis-reviewer', hostId: 'praxis-reviewer', scope: 'global', toolMode: 'read-only' },
+        instructions: `Measure the improved code. ${IMPROVE_EVALUATION_BRIEF}`,
+        outputs: [{ id: 'evaluation', kind: 'findings', required: true, description: 'This pass\'s score and what still holds it back.' }],
+        mutatesWorktree: false,
+        satisfiesGate: 'review',
+        independentOf: 'improve',
+        modelTier: 'standard'
+      },
+      {
+        type: 'approval',
+        id: 'approve',
+        name: 'Approve',
+        x: 1200,
+        y: 160,
+        inputs: ['evaluation', 'test-results'],
+        prompt: 'The loop has stopped on its best version. Review the score history and the change, then approve it.',
+        requiredGates: ['qa', 'review'],
+        allowBypass: false
+      }
+    ],
+    edges: [
+      { id: 'e-baseline-improve', from: 'baseline', to: 'improve', on: 'success', required: true },
+      { id: 'e-improve-install', from: 'improve', to: 'install', on: 'success', required: true },
+      { id: 'e-install-test', from: 'install', to: 'test', on: 'success', required: true },
+      { id: 'e-test-evaluate', from: 'test', to: 'evaluate', on: 'success', required: true },
+      { id: 'e-evaluate-approve', from: 'evaluate', to: 'approve', on: 'success', required: true },
+      {
+        id: 'e-improve-again',
+        from: 'evaluate',
+        to: 'improve',
+        on: 'findings',
+        required: true,
+        // Round again while the score is under the target the person set (90 when none was given).
+        when: { metric: { metric: 'score', operator: '<', value: 90, valueFromParameter: 'target' } },
+        loop: { maxIterations: 3, keepBest: { metric: 'score', higherIsBetter: true, patience: 2 } }
+      }
+    ]
+  };
+}
+
 export function builtInWorkflowTemplates(): WorkflowDefinition[] {
   return [
     governedDeliveryTemplate(),
-    quickChangeTemplate()
+    quickChangeTemplate(),
+    improveUntilTargetTemplate()
   ];
 }
 
