@@ -105,6 +105,14 @@ export interface CheckFinding {
   category: string;
   message: string;
   suggestion?: string;
+  /**
+   * A skeptic stage's judgement of this finding (FX-BE-164). A `refuted` finding
+   * is kept on the record but no longer counts: not against a gate threshold,
+   * and not toward a findings edge, so a false finding cannot send a loop round.
+   */
+  verdict?: 'confirmed' | 'refuted';
+  /** The skeptic's evidence for its verdict. */
+  verdictReason?: string;
 }
 
 export interface CheckFindings {
@@ -228,6 +236,12 @@ export interface WorkflowAgentTaskNode extends WorkflowNodeBase {
   modelTier?: WorkflowModelTier;
   /** Move up a tier on each retry (fast → standard → strong). Defaults to on when a tier is set. */
   escalateOnRetry?: boolean;
+  /**
+   * The stage whose work this one judges (FX-BE-164). At launch the stage runs on a
+   * different AI provider from that stage's latest attempt when another is set up, else a
+   * different model, else it runs and the run records that it was not independent.
+   */
+  independentOf?: string;
 }
 
 /**
@@ -353,13 +367,46 @@ export interface WorkflowMergeNode extends WorkflowNodeBase {
   maxAttempts?: number;
 }
 
+/**
+ * Runs one agent stage per item of a list known only at run time (FX-BE-165): each
+ * finding of an upstream `findings` output, say, or each item of a plan.
+ *
+ * Read-only items share the run's worktree and run side by side. Mutating items each
+ * get their own worktree, branched from the same snapshot, and are merged back in item
+ * order, so the one-writer rule for the shared worktree never bends.
+ */
+export interface WorkflowMapNode extends WorkflowNodeBase {
+  type: 'map';
+  /** The artifact contract id whose items are fanned out. Must be one of `inputs`. */
+  over: string;
+  /** How items are read from it: one per finding, or one per plan item. */
+  itemSource: 'findings' | 'plan-items';
+  /** The stage each item runs. Its brief gains the item it was handed. */
+  agent: WorkflowAgentRef;
+  instructions: string;
+  /** Whether each item writes code (then it gets its own worktree) or only reads. */
+  mutatesWorktree: boolean;
+  /** At most this many items run at once. */
+  concurrency: number;
+  /** At most this many items run at all; the rest are recorded as deferred. */
+  maxItems: number;
+  /** `collect` runs every item and fails the node if any failed; `failFast` stops at the first failure. */
+  onItemFailure: 'collect' | 'failFast';
+  outputs: WorkflowArtifactContract[];
+  satisfiesGate?: WorkflowGateKind;
+  timeoutMs?: number;
+  model?: string;
+  modelTier?: WorkflowModelTier;
+}
+
 export type WorkflowNode =
   | WorkflowAgentTaskNode
   | WorkflowCheckNode
   | WorkflowDeploymentNode
   | WorkflowApprovalNode
   | WorkflowJoinNode
-  | WorkflowMergeNode;
+  | WorkflowMergeNode
+  | WorkflowMapNode;
 
 export type WorkflowNodeType = WorkflowNode['type'];
 
@@ -367,9 +414,45 @@ export type WorkflowNodeType = WorkflowNode['type'];
 
 /**
  * Which outcome traverses an edge. `always` is how a workflow routes to
- * cleanup or notification stages that must run either way.
+ * cleanup or notification stages that must run either way. `findings` routes on
+ * what a stage *found* rather than whether it ran (FX-BE-162): the edge is taken
+ * when the stage settled with structured findings matching the edge's `when`.
  */
-export type WorkflowEdgeOutcome = 'success' | 'failure' | 'always';
+export type WorkflowEdgeOutcome = 'success' | 'failure' | 'always' | 'findings';
+
+/**
+ * Which findings a `findings` edge routes on. Clauses are alternatives: the edge
+ * fires when **any** set clause holds, so a loop keeps going while any problem
+ * remains. Refuted findings (`CheckFinding.verdict`) never count.
+ */
+export interface WorkflowFindingsPredicate {
+  /** Count findings at or above this severity. Defaults to `high` when no clause is set. */
+  severity?: CheckFindingSeverity;
+  /** The severity clause holds when at least this many findings match. Defaults to 1. */
+  minCount?: number;
+  /** Only findings in these categories count toward the severity clause. */
+  categories?: string[];
+  /** Holds when this comparison against the stage's metrics is true (a missing metric never holds). */
+  metric?: { metric: string; operator: MetricThresholdCondition['operator']; value: number };
+}
+
+/** The most iterations any loop may run, whatever its budget or grants say. */
+export const WORKFLOW_MAX_LOOP_ITERATIONS = 10;
+
+/**
+ * A back-edge's bound (FX-BE-162). The only way a workflow may contain a cycle:
+ * every edge that closes one carries a budget, so every run is provably finite.
+ */
+export interface WorkflowLoopBudget {
+  /** How many times the loop may be taken before a person must decide. 1…`WORKFLOW_MAX_LOOP_ITERATIONS`. */
+  maxIterations: number;
+  /**
+   * Keep the best iteration rather than the latest (FX-BE-166): when the source
+   * stage's metric gets worse than the best seen, the worktree is restored to the
+   * best iteration's snapshot before the loop goes round again, and the run ends there.
+   */
+  keepBest?: { metric: string; higherIsBetter: boolean };
+}
 
 export interface WorkflowEdge {
   id: string;
@@ -383,6 +466,32 @@ export interface WorkflowEdge {
    * blocks downstream approval. Advisory branches set this false.
    */
   required: boolean;
+  /** Required for, and only meaningful on, a `findings` edge. */
+  when?: WorkflowFindingsPredicate;
+  /**
+   * Marks a back-edge: taking it reopens `to` and everything downstream of it as a
+   * new revision. A loop edge is not part of the run's DAG — readiness, snapshots and
+   * ancestry ignore it — and it is taken only once nothing in the run is still running.
+   */
+  loop?: WorkflowLoopBudget;
+}
+
+/**
+ * A value a person supplies when starting a run (FX-BE-166), such as a goal or
+ * how many times to iterate. Fixed for the life of the run and recorded on it.
+ */
+export interface WorkflowRunParameter {
+  /** Key in `WorkflowRun.parameters`; also how a stage brief names it. */
+  id: string;
+  label: string;
+  kind: 'text' | 'integer' | 'number';
+  description?: string;
+  required?: boolean;
+  default?: string | number;
+  min?: number;
+  max?: number;
+  /** An integer parameter that sets this loop edge's `maxIterations` for the run. */
+  bindsLoopEdge?: string;
 }
 
 // ── Definition ───────────────────────────────────────────────────────────
@@ -405,6 +514,13 @@ export interface WorkflowDefinition {
   entryNodeId: string;
   /** True for templates shipped with the app, which are never edited in place. */
   builtIn?: boolean;
+  /** Values asked for when a run starts. */
+  parameters?: WorkflowRunParameter[];
+  /**
+   * The run cannot start without a goal it can measure (FX-BE-166): a `target`
+   * parameter or a `rubric` parameter must be given a value.
+   */
+  requiresMeasurableGoal?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -541,14 +657,18 @@ export function isMergeNode(node: WorkflowNode): node is WorkflowMergeNode {
   return node.type === 'merge';
 }
 
+export function isMapNode(node: WorkflowNode): node is WorkflowMapNode {
+  return node.type === 'map';
+}
+
 /** Nodes that declare artifact outputs. Approval, merge and join stages produce none. */
 export function nodeOutputs(node: WorkflowNode): WorkflowArtifactContract[] {
-  return isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) ? node.outputs : [];
+  return isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) || isMapNode(node) ? node.outputs : [];
 }
 
 /** The gate a node stands behind, when it stands behind one. */
 export function nodeGate(node: WorkflowNode): WorkflowGateKind | undefined {
-  return isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) ? node.satisfiesGate : undefined;
+  return isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) || isMapNode(node) ? node.satisfiesGate : undefined;
 }
 
 /**
@@ -560,6 +680,9 @@ export function nodeMutatesWorktree(node: WorkflowNode): boolean {
   if (isAgentTaskNode(node)) return node.mutatesWorktree;
   if (isCheckNode(node)) return node.mutatesWorktree === true;
   if (isMergeNode(node)) return true;
+  // A map's mutating items each write to their own worktree and are merged back
+  // into the run's tree when the node settles, so the node as a whole is a writer.
+  if (isMapNode(node)) return node.mutatesWorktree;
   // A deployment stage ships an already-built artifact; it never touches the
   // implementation worktree, so — like approval and join — it always fans out.
   return false;

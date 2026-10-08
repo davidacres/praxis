@@ -190,3 +190,49 @@ test('TASK-238: parseOsvScanner maps osv-scanner output to CheckFindings', () =>
   const dispatched = parseCheckResult('osv-scanner', osvFixture);
   assert.equal(dispatched.findings.length, 1);
 });
+
+// ── npm audit --json as a check actually captures it (FX-BE-161 / TASK-421) ───
+
+const MIXED_AUDIT_OUTPUT = `npm warn config production Use \`--omit=dev\` instead.
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "lodash": {
+      "name": "lodash",
+      "severity": "high",
+      "range": "<4.17.21",
+      "fixAvailable": true
+    }
+  },
+  "metadata": { "vulnerabilities": { "high": 1, "total": 1 } }
+}
+npm notice New minor version of npm available!`;
+
+test('parseNpmAudit reads the report out of output interleaved with npm warnings', () => {
+  const res = parseNpmAudit(MIXED_AUDIT_OUTPUT);
+  assert.equal(res.findings.length, 1);
+  assert.equal(res.findings[0].severity, 'high');
+  assert.equal(res.findings[0].file, 'package-lock.json');
+  assert.equal(res.findings[0].suggestion, 'Run npm audit fix or update lodash');
+  assert.equal(res.metrics.highCount, 1);
+});
+
+test('a clean npm audit report is an empty finding list, not an error', () => {
+  const res = parseNpmAudit(JSON.stringify({ auditReportVersion: 2, vulnerabilities: {}, metadata: { vulnerabilities: { total: 0 } } }));
+  assert.deepEqual(res.findings, []);
+});
+
+test('npm reporting its own failure as JSON is a parse error naming why, never an empty clean result', () => {
+  const output = `npm warn audit 404 Not Found - POST https://npm.pkg.github.com/-/npm/v1/security/advisories/bulk
+{
+  "error": {
+    "code": null,
+    "summary": "audit endpoint returned an error",
+    "detail": ""
+  }
+}`;
+  assert.throws(
+    () => parseNpmAudit(output),
+    (err: unknown) => err instanceof CheckResultParseError && /audit endpoint returned an error/.test((err as Error).message)
+  );
+});

@@ -127,12 +127,19 @@ function buildNode(x: number, y: number): WorkflowCheckNode {
 }
 
 /**
- * Plan → Implement → Praxis Tests → (Review ∥ Security ∥ Install → Build → QA) → Gates → Approve.
+ * Plan → Implement → Praxis Tests → (Review ∥ Security ∥ Install → Build → QA) → Gates → Approve,
+ * with review and security findings looping back to Implement (FX-BF-108).
  *
  * The agent ids (`praxis-planner`, `praxis-implementer`, `praxis-reviewer`) are
  * conventional: a project points them at real Agent Hub agents, or the designer
  * flags them as unresolved. QA and security are deterministic checks precisely
  * so their gates cannot be waved through by an agent.
+ *
+ * Review delivers structured findings and the approval holds on any at `high` or
+ * above, so a review that reports a serious problem can no longer pass its gate
+ * by having said something. Rather than stop there, a blocking finding loops back
+ * to Implement — which is handed the findings — and everything after it runs
+ * again on the new code. The loops are bounded; when one runs out a person decides.
  */
 export function governedDeliveryTemplate(): WorkflowDefinition {
   return {
@@ -167,7 +174,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         y: 160,
         inputs: ['plan-doc'],
         agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full', skillNames: ['verification-report', 'visual-verification'] },
-        instructions: 'Implement the plan. Run automated tests to verify your changes, fix any broken or outdated tests, commit the clean change, and report the ref.',
+        instructions: 'Implement the plan. Run automated tests to verify your changes, fix any broken or outdated tests, commit the clean change, and report the ref. On a later iteration, fix the findings you are handed before anything else, and say how each was addressed.',
         outputs: [{ id: 'change-diff', kind: 'diff', required: true, description: 'The implemented change.' }],
         mutatesWorktree: true,
         maxAttempts: 2
@@ -191,12 +198,17 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         name: 'Review',
         x: 600,
         y: 0,
-        inputs: ['change-diff', 'test-contracts'],
+        inputs: ['plan-doc', 'change-diff', 'test-contracts'],
         agent: { agentId: 'praxis-reviewer', profileId: 'praxis-reviewer', hostId: 'praxis-reviewer', scope: 'global', toolMode: 'read-only' },
-        instructions: 'Review the implementation snapshot for correctness and quality using the change-diff input artifact and read-only file access. Do not run shell commands.',
-        outputs: [{ id: 'review-report', kind: 'report', required: true }],
+        instructions:
+          'Review the implementation snapshot for correctness, quality and security using the change-diff input artifact and read-only file access. ' +
+          'Judge it against the plan: report anything the plan asked for that the change does not do as a finding. ' +
+          'Rate severity honestly — high and critical findings send the change back to be fixed, and a finding you are unsure of is medium at most. Do not run shell commands.',
+        outputs: [{ id: 'review-findings', kind: 'findings', required: true, description: 'Structured review findings.' }],
         mutatesWorktree: false,
-        satisfiesGate: 'review'
+        satisfiesGate: 'review',
+        // The reviewer marks someone else's work: on another AI or model when one is set up.
+        independentOf: 'implement'
       },
       installDependenciesNode(600, 240),
       buildNode(840, 240),
@@ -242,9 +254,11 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         // command then exits 1 without having looked at anything and, as a required gate, would end
         // the run. The public advisory database is the source of truth; private package names simply
         // have no advisories there.
-        args: ['audit', '--audit-level=high', '--registry=https://registry.npmjs.org/'],
+        // `--json` so the advisories become findings the gate and the fix loop can read, not just an exit code.
+        args: ['audit', '--audit-level=high', '--json', '--registry=https://registry.npmjs.org/'],
         successExitCodes: [0],
-        outputs: [{ id: 'security-report', kind: 'report', required: true }],
+        adapter: 'npm-audit',
+        outputs: [{ id: 'security-findings', kind: 'findings', required: true }],
         satisfiesGate: 'security'
       },
       { type: 'join', id: 'gates', name: 'Gates', x: 1200, y: 160, inputs: [], mode: 'all' },
@@ -254,10 +268,14 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         name: 'Approve',
         x: 1440,
         y: 160,
-        inputs: ['review-report', 'test-contracts', 'qa-results', 'security-report'],
+        inputs: ['review-findings', 'test-contracts', 'qa-results', 'security-findings'],
         prompt: 'Review, QA, and security have passed. Approve this change for delivery?',
         requiredGates: ['review', 'qa', 'security'],
-        allowBypass: false
+        allowBypass: false,
+        gateThresholds: {
+          review: [{ type: 'severity', severityLevel: 'high', maxCount: 0 }],
+          security: [{ type: 'severity', severityLevel: 'high', maxCount: 0 }]
+        }
       }
     ],
     edges: [
@@ -272,7 +290,17 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
       { id: 'e-review-gates', from: 'review', to: 'gates', on: 'success', required: true },
       { id: 'e-qa-gates', from: 'qa', to: 'gates', on: 'success', required: true },
       { id: 'e-sec-gates', from: 'security', to: 'gates', on: 'success', required: true },
-      { id: 'e-gates-approve', from: 'gates', to: 'approve', on: 'success', required: true }
+      { id: 'e-gates-approve', from: 'gates', to: 'approve', on: 'success', required: true },
+      // Fix loops. A blocking review finding, or a high-severity advisory the audit found,
+      // sends the change back to Implement with the findings; everything after it re-runs.
+      {
+        id: 'e-review-fix', from: 'review', to: 'implement', on: 'findings', required: true,
+        when: { severity: 'high' }, loop: { maxIterations: 2 }
+      },
+      {
+        id: 'e-security-fix', from: 'security', to: 'implement', on: 'findings', required: true,
+        when: { severity: 'high' }, loop: { maxIterations: 1 }
+      }
     ]
   };
 }

@@ -28,6 +28,8 @@ function succeed(r: WorkflowRun, nodeId: string, minute: number, snapshotRef?: s
     nodeId,
     at: T(minute + 1),
     artifacts: outputs.map(contract => ({ contractId: contract.id, kind: contract.kind })),
+    // A stage that declares findings delivers them; an empty list is a clean result.
+    ...(outputs.some(contract => contract.kind === 'findings') ? { findings: { findings: [], metrics: {} } } : {}),
     ...(snapshotRef ? { snapshotRef } : {})
   });
   return advanceJoins(next, T(minute + 1));

@@ -27,7 +27,7 @@ function freshId(prefix: string): string {
 }
 
 const producesOutputs = (node: WorkflowNode): node is Extract<WorkflowNode, { outputs: WorkflowArtifactContract[] }> =>
-  node.type === 'agent-task' || node.type === 'check' || node.type === 'deployment';
+  node.type === 'agent-task' || node.type === 'check' || node.type === 'deployment' || node.type === 'map';
 
 export function newNode(type: WorkflowNodeType, at: { x: number; y: number }): WorkflowNode {
   const base = { id: freshId(type), x: at.x, y: at.y, inputs: [] as string[] };
@@ -52,6 +52,21 @@ export function newNode(type: WorkflowNodeType, at: { x: number; y: number }): W
       return { ...base, type: 'merge', name: 'Merge', onConflict: 'ai-resolve' };
     case 'join':
       return { ...base, type: 'join', name: 'Join', mode: 'all' };
+    case 'map':
+      return {
+        ...base,
+        type: 'map',
+        name: 'For each finding',
+        over: '',
+        itemSource: 'findings',
+        agent: { agentId: '', profileId: '', hostId: '', scope: 'global', toolMode: 'read-only' },
+        instructions: '',
+        mutatesWorktree: false,
+        concurrency: 3,
+        maxItems: 20,
+        onItemFailure: 'collect',
+        outputs: []
+      };
   }
 }
 

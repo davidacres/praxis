@@ -17,6 +17,7 @@ import {
   isAgentTaskNode,
   isCheckNode,
   isDeploymentNode,
+  isMapNode,
   nodeOutputs,
   WORKFLOW_SCHEMA_VERSION,
   type WorkflowArtifactContract,
@@ -88,6 +89,21 @@ export function newNode(type: WorkflowNodeType, at: { x: number; y: number }): W
       return { ...base, type: 'join', name: 'Join', mode: 'all' };
     case 'merge':
       return { ...base, type: 'merge', name: 'Merge to main', onConflict: 'ai-resolve' };
+    case 'map':
+      return {
+        ...base,
+        type: 'map',
+        name: 'For each finding',
+        over: '',
+        itemSource: 'findings',
+        agent: { agentId: '', profileId: '', hostId: '', scope: 'global', toolMode: 'read-only' },
+        instructions: '',
+        mutatesWorktree: false,
+        concurrency: 3,
+        maxItems: 20,
+        onItemFailure: 'collect',
+        outputs: []
+      };
   }
 }
 
@@ -171,7 +187,7 @@ export function duplicateNode(definition: WorkflowDefinition, nodeId: string): W
   copy.x = source.x + 40;
   copy.y = source.y + 40;
   copy.inputs = [];
-  if (isAgentTaskNode(copy) || isCheckNode(copy) || isDeploymentNode(copy)) {
+  if (isAgentTaskNode(copy) || isCheckNode(copy) || isDeploymentNode(copy) || isMapNode(copy)) {
     copy.outputs = copy.outputs.map(output => ({ ...output, id: `${output.id}-${copy.id}` }));
     copy.satisfiesGate = undefined;
   }
@@ -184,6 +200,10 @@ export interface ConnectInput {
   to: string;
   on?: WorkflowEdgeOutcome;
   required?: boolean;
+  /** The routing predicate of a `findings` edge. */
+  when?: WorkflowEdge['when'];
+  /** Makes the edge a bounded back-edge. */
+  loop?: WorkflowEdge['loop'];
 }
 
 /**
@@ -210,7 +230,9 @@ export function connectNodes(definition: WorkflowDefinition, input: ConnectInput
     from: input.from,
     to: input.to,
     on,
-    required: input.required ?? true
+    required: input.required ?? true,
+    ...(input.when ? { when: input.when } : {}),
+    ...(input.loop ? { loop: input.loop } : {})
   };
   return touch(definition, definition.nodes, [...definition.edges, edge]);
 }
@@ -226,13 +248,43 @@ export function disconnect(definition: WorkflowDefinition, edgeId: string): Work
 export function updateEdge(
   definition: WorkflowDefinition,
   edgeId: string,
-  patch: Partial<Pick<WorkflowEdge, 'on' | 'required'>>
+  patch: Partial<Pick<WorkflowEdge, 'on' | 'required' | 'when' | 'loop'>>
 ): WorkflowDefinition {
   return touch(
     definition,
     definition.nodes,
-    definition.edges.map(edge => (edge.id === edgeId ? { ...edge, ...patch } : edge))
+    definition.edges.map(edge => {
+      if (edge.id !== edgeId) return edge;
+      const next: WorkflowEdge = { ...edge, ...patch };
+      // `undefined` in a patch clears the field; an own-property set to undefined
+      // would otherwise survive into the saved JSON comparison.
+      if (patch.when === undefined && 'when' in patch) delete next.when;
+      if (patch.loop === undefined && 'loop' in patch) delete next.loop;
+      // A predicate means nothing on an edge that does not route on findings.
+      if (next.on !== 'findings') delete next.when;
+      return next;
+    })
   );
+}
+
+/** Whether a new edge from `from` to `to` would point back into its own past — i.e. must be a loop edge. */
+export function wouldCloseCycle(definition: WorkflowDefinition, from: string, to: string): boolean {
+  if (from === to) return true;
+  const outbound = new Map<string, string[]>();
+  for (const edge of definition.edges) {
+    if (edge.loop) continue;
+    outbound.set(edge.from, [...(outbound.get(edge.from) ?? []), edge.to]);
+  }
+  const seen = new Set<string>();
+  const queue = [to];
+  while (queue.length > 0) {
+    const id = queue.shift() as string;
+    if (id === from) return true;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    queue.push(...(outbound.get(id) ?? []));
+  }
+  return false;
 }
 
 export function setEntryNode(definition: WorkflowDefinition, nodeId: string): WorkflowDefinition {
@@ -247,7 +299,7 @@ export function addOutput(
   artifact: WorkflowArtifactContract
 ): WorkflowDefinition {
   const nodes = definition.nodes.map(node => {
-    if (node.id !== nodeId || !(isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node))) return node;
+    if (node.id !== nodeId || !(isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) || isMapNode(node))) return node;
     if (node.outputs.some(output => output.id === artifact.id)) return node;
     return { ...node, outputs: [...node.outputs, artifact] };
   });
@@ -256,7 +308,7 @@ export function addOutput(
 
 export function removeOutput(definition: WorkflowDefinition, nodeId: string, artifactId: string): WorkflowDefinition {
   const nodes = definition.nodes.map(node => {
-    if (node.id !== nodeId || !(isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node))) return node;
+    if (node.id !== nodeId || !(isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) || isMapNode(node))) return node;
     return { ...node, outputs: node.outputs.filter(output => output.id !== artifactId) };
   });
   // Any node consuming the removed artifact loses that input.
@@ -270,11 +322,14 @@ export interface DesignerFeedback {
   valid: boolean;
   /** Issues keyed by the node id they concern; `''` holds graph-level issues. */
   byNode: Record<string, WorkflowIssue[]>;
+  /** Issues keyed by the edge id they concern, so the designer can mark the edge itself. */
+  byEdge: Record<string, WorkflowIssue[]>;
   errors: WorkflowIssue[];
   warnings: WorkflowIssue[];
 }
 
 const NODE_PATH = /^nodes\[(\d+)\]/;
+const EDGE_PATH = /^edges\[(\d+)\]/;
 
 /**
  * Runs validation and buckets each issue under the node it points at, so the
@@ -283,12 +338,17 @@ const NODE_PATH = /^nodes\[(\d+)\]/;
 export function designerFeedback(definition: WorkflowDefinition): DesignerFeedback {
   const result = validateWorkflow(definition);
   const byNode: Record<string, WorkflowIssue[]> = {};
+  const byEdge: Record<string, WorkflowIssue[]> = {};
 
   for (const issue of [...result.errors, ...result.warnings]) {
+    const edgeMatch = EDGE_PATH.exec(issue.path);
+    const edgeId = edgeMatch ? definition.edges[Number(edgeMatch[1])]?.id : undefined;
+    // Edge issues also stay in the graph-level bucket, where the page lists them.
+    if (edgeId) byEdge[edgeId] = [...(byEdge[edgeId] ?? []), issue];
     const match = NODE_PATH.exec(issue.path);
     const key = match ? definition.nodes[Number(match[1])]?.id ?? '' : '';
     byNode[key] = [...(byNode[key] ?? []), issue];
   }
 
-  return { valid: result.valid, byNode, errors: result.errors, warnings: result.warnings };
+  return { valid: result.valid, byNode, byEdge, errors: result.errors, warnings: result.warnings };
 }

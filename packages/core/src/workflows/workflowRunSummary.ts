@@ -8,6 +8,7 @@
  * run logic and the explanation can be asserted in a test.
  */
 
+import { dagEdges, describeFindingsPredicate, loopStatuses, pendingLoop } from './workflowEdges';
 import {
   isApprovalNode,
   isJoinNode,
@@ -18,6 +19,8 @@ import {
   type WorkflowNode
 } from './workflowTypes';
 import {
+  bestIteration,
+  downstreamNodeIds,
   isPausedNode,
   pauseReasonOf,
   isRunSettled,
@@ -74,6 +77,45 @@ export interface StageRow {
   prompt?: string;
   /** Gates required by an approval stage. */
   requiredGates?: WorkflowGateKind[];
+  /** Set for a stage inside a loop: which pass of the loop it is on. */
+  loopIteration?: { edgeId: string; iteration: number; budget: number };
+}
+
+/** One recorded pass of a loop, for the run view's history. */
+export interface LoopHistoryRow {
+  iteration: number;
+  at: string;
+  outcome: 'succeeded' | 'failed';
+  findingCount: number;
+  /** The most severe findings that triggered it, capped for display. */
+  topFindings: Array<{ severity: string; message: string; file?: string; line?: number }>;
+  error?: string;
+  score?: number;
+  restoredTo?: string;
+}
+
+/** A loop edge as the run view shows it. */
+export interface LoopSummary {
+  edgeId: string;
+  fromNodeId: string;
+  fromName: string;
+  toNodeId: string;
+  toName: string;
+  on: WorkflowEdge['on'];
+  /** "any finding at high or above", "score < 90" … */
+  condition: string;
+  iterationsTaken: number;
+  budget: number;
+  /** The loop fires now and will be taken once running stages settle. */
+  firing: boolean;
+  /** Fires with its budget spent: the run waits for a person (accept, grant more, or stop). */
+  needsDecision: boolean;
+  history: LoopHistoryRow[];
+  /** Keep-best loops: the metric, and the best iteration so far. */
+  keepBest?: { metric: string; higherIsBetter: boolean; bestIteration?: number; bestScore?: number; currentScore?: number };
+  /** The source's open findings now (countable, most severe first), for a decision. */
+  openFindings?: LoopHistoryRow['topFindings'];
+  decisions: Array<{ at: string; actor: string; decision: 'accept' | 'grant' | 'stop'; reason?: string; extraIterations?: number }>;
 }
 
 export interface BranchGroup {
@@ -128,6 +170,12 @@ export interface WorkflowRunSummary {
   /** Whether this run is archived by the user. */
   archived?: boolean;
   archivedAt?: string;
+  /** Every loop edge's state and history; empty for a workflow with none. */
+  loops: LoopSummary[];
+  /** The loop waiting on a person, when one is. */
+  needsDecision?: { edgeId: string; message: string };
+  /** Values given for the workflow's parameters at start. */
+  parameters?: Record<string, string | number>;
 }
 
 function laneFor(
@@ -147,6 +195,101 @@ function laneFor(
   return 'idle';
 }
 
+const TOP_FINDINGS = 5;
+
+function topFindings(findings: CheckFindings['findings']): LoopHistoryRow['topFindings'] {
+  const rank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
+  return findings
+    .filter(finding => finding.verdict !== 'refuted')
+    .sort((left, right) => (rank[right.severity] ?? 0) - (rank[left.severity] ?? 0))
+    .slice(0, TOP_FINDINGS)
+    .map(finding => ({
+      severity: finding.severity,
+      message: finding.message,
+      ...(finding.file ? { file: finding.file } : {}),
+      ...(finding.line !== undefined ? { line: finding.line } : {})
+    }));
+}
+
+/** Loop edges as the run view reads them. */
+export function summarizeLoops(run: WorkflowRun): LoopSummary[] {
+  const pending = pendingLoop(run);
+  const name = (id: string): string => run.definition.nodes.find(node => node.id === id)?.name ?? id;
+  return loopStatuses(run).map(status => {
+    const { edge } = status;
+    const history = (run.loopHistory ?? []).filter(entry => entry.edgeId === edge.id);
+    const keepBest = edge.loop?.keepBest;
+    const best = keepBest ? bestIteration(run.loopHistory ?? [], edge.id, keepBest.higherIsBetter) : undefined;
+    const source = run.nodes[edge.from];
+    const currentScore = keepBest ? source?.findings?.metrics?.[keepBest.metric] : undefined;
+    const needsDecision = pending?.kind === 'decide' && pending.status.edge.id === edge.id;
+    return {
+      edgeId: edge.id,
+      fromNodeId: edge.from,
+      fromName: name(edge.from),
+      toNodeId: edge.to,
+      toName: name(edge.to),
+      on: edge.on,
+      condition: edge.on === 'findings' ? describeFindingsPredicate(edge.when) : edge.on === 'failure' ? 'the stage fails' : edge.on === 'always' ? 'every time' : 'the stage succeeds',
+      iterationsTaken: status.iterationsTaken,
+      budget: status.budget,
+      firing: status.fires && !status.exhausted,
+      needsDecision,
+      history: history.map(entry => ({
+        iteration: entry.iteration,
+        at: entry.at,
+        outcome: entry.outcome,
+        findingCount: entry.findingCount,
+        topFindings: topFindings(entry.findings),
+        ...(entry.error ? { error: entry.error } : {}),
+        ...(entry.score !== undefined ? { score: entry.score } : {}),
+        ...(entry.restoredTo ? { restoredTo: entry.restoredTo } : {})
+      })),
+      ...(keepBest
+        ? {
+            keepBest: {
+              metric: keepBest.metric,
+              higherIsBetter: keepBest.higherIsBetter,
+              ...(best ? { bestIteration: best.iteration, bestScore: best.score } : {}),
+              ...(typeof currentScore === 'number' ? { currentScore } : {})
+            }
+          }
+        : {}),
+      ...(needsDecision && source?.findings ? { openFindings: topFindings(source.findings.findings) } : {}),
+      decisions: (run.loopDecisions ?? [])
+        .filter(decision => decision.edgeId === edge.id)
+        .map(decision => ({
+          at: decision.at,
+          actor: decision.actor,
+          decision: decision.decision,
+          ...(decision.reason ? { reason: decision.reason } : {}),
+          ...(decision.extraIterations ? { extraIterations: decision.extraIterations } : {})
+        }))
+    };
+  });
+}
+
+/**
+ * Which pass of a loop each stage is on: every stage from the loop's target to
+ * its source (inclusive) is "in" the loop. A stage inside two loops reports the
+ * first in definition order.
+ */
+function loopIterationsByNode(run: WorkflowRun): Map<string, NonNullable<StageRow['loopIteration']>> {
+  const byNode = new Map<string, NonNullable<StageRow['loopIteration']>>();
+  for (const status of loopStatuses(run)) {
+    const { edge } = status;
+    const downstreamOfTarget = downstreamNodeIds(run, edge.to);
+    if (!downstreamOfTarget.has(edge.from)) continue;
+    for (const nodeId of downstreamOfTarget) {
+      // In the loop body only when the source is reachable from it too.
+      if (nodeId !== edge.from && !downstreamNodeIds(run, nodeId).has(edge.from)) continue;
+      if (byNode.has(nodeId)) continue;
+      byNode.set(nodeId, { edgeId: edge.id, iteration: Math.min(status.iterationsTaken + 1, status.budget + 1), budget: status.budget + 1 });
+    }
+  }
+  return byNode;
+}
+
 function attemptBudget(node: WorkflowNode): number | undefined {
   return node.type === 'agent-task' || node.type === 'check' || node.type === 'deployment'
     ? node.maxAttempts
@@ -158,6 +301,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
   const schedule = scheduleWorkflowRun(run);
   const ready = new Set(schedule.ready);
   const awaiting = new Set(schedule.awaitingApproval);
+  const inLoop = loopIterationsByNode(run);
 
   const stages: StageRow[] = run.definition.nodes.map(node => {
     const state = run.nodes[node.id];
@@ -199,9 +343,12 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
       ...(command ? { command } : {}),
       ...(lastAttempt?.exitCode !== undefined ? { exitCode: lastAttempt.exitCode } : {}),
       ...(durationMs !== undefined ? { durationMs } : {}),
-      ...(isApprovalNode(node) ? { prompt: node.prompt, requiredGates: node.requiredGates } : {})
+      ...(isApprovalNode(node) ? { prompt: node.prompt, requiredGates: node.requiredGates } : {}),
+      ...(inLoop.has(node.id) ? { loopIteration: inLoop.get(node.id) } : {})
     };
   });
+  const loops = summarizeLoops(run);
+  const deciding = loops.find(loop => loop.needsDecision);
 
   // Union across every approval node, not just the first — a gate kind
   // required by more than one approval node evaluates identically for each
@@ -269,7 +416,10 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     ...(run.archived ? { archived: true, archivedAt: run.archivedAt } : {}),
     permissionMode: run.permissionMode === 'auto' ? 'auto' : 'ask',
     providerLimitPolicy: run.providerLimitPolicy ?? 'ask',
-    exhaustedProviders: exhaustedProviders(run)
+    exhaustedProviders: exhaustedProviders(run),
+    loops,
+    ...(deciding && schedule.blocked ? { needsDecision: { edgeId: deciding.edgeId, message: schedule.blocked } } : {}),
+    ...(run.parameters ? { parameters: run.parameters } : {})
   };
 }
 
@@ -286,7 +436,7 @@ function chosenModelOf(run: WorkflowRun, node: WorkflowNode): string | undefined
 /** The parallel branches feeding each join, and whether they have converged. */
 export function branchGroups(run: WorkflowRun): BranchGroup[] {
   return run.definition.nodes.filter(isJoinNode).map(join => {
-    const inbound = run.definition.edges.filter(edge => edge.to === join.id);
+    const inbound = dagEdges(run.definition).filter(edge => edge.to === join.id);
     return {
       joinNodeId: join.id,
       joinName: join.name,
@@ -320,6 +470,9 @@ function explainRun(run: WorkflowRun, status: WorkflowRun['status'], blocked: st
   if (status === 'awaiting-approval') {
     return 'Every required gate has resolved; the run is waiting for a human approval.';
   }
+
+  // A pending loop explains the run better than the failure that fired it.
+  if (pendingLoop(run) && blocked) return blocked;
 
   const paused = Object.values(run.nodes).filter(state => isPausedNode(state));
   if (paused.length > 0) {

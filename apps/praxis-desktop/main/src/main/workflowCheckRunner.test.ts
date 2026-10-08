@@ -219,3 +219,49 @@ test('a secret echoed by a check is redacted before it becomes evidence, on disk
     assert.equal(bundle?.entries[0].redacted, true);
   });
 });
+
+/** A stand-in `npm` that prints `output` and exits with `code`, so a check runs the real classifier against it. */
+async function fakeNpm(dir: string, output: string, code: number): Promise<string> {
+  const path = join(dir, 'npm');
+  await writeFile(path, `#!/bin/sh\ncat <<'PRAXIS_EOF'\n${output}\nPRAXIS_EOF\nexit ${code}\n`, { mode: 0o755 });
+  return path;
+}
+
+test('an npm audit parsed into findings fails with them when it finds a high advisory', { skip: process.platform === 'win32' }, async () => {
+  await withTempDirs(async (cwd, evidenceRoot) => {
+    const report = JSON.stringify({ auditReportVersion: 2, vulnerabilities: { lodash: { name: 'lodash', severity: 'high', range: '<4.17.21', fixAvailable: true } } }, null, 2);
+    const node = check('', {
+      command: await fakeNpm(cwd, report, 1),
+      args: ['audit', '--audit-level=high', '--json'],
+      adapter: 'npm-audit',
+      outputs: [{ id: 'security-findings', kind: 'findings', required: true }]
+    });
+    const outcome = await runWorkflowCheck(node, runContext(node, cwd), undefined, evidenceRoot);
+    assert.equal(outcome.status, 'failed');
+    assert.equal(outcome.pause, undefined);
+    assert.equal(outcome.findings?.findings[0].severity, 'high');
+  });
+});
+
+test('an npm audit against a registry with no audit endpoint pauses, even with the npm-audit adapter attached', { skip: process.platform === 'win32' }, async () => {
+  await withTempDirs(async (cwd, evidenceRoot) => {
+    const output = `npm warn audit 404 Not Found - POST https://npm.pkg.github.com/-/npm/v1/security/advisories/bulk
+{
+  "error": {
+    "code": null,
+    "summary": "audit endpoint returned an error",
+    "detail": ""
+  }
+}`;
+    const node = check('', {
+      command: await fakeNpm(cwd, output, 1),
+      args: ['audit', '--audit-level=high', '--json'],
+      adapter: 'npm-audit',
+      outputs: [{ id: 'security-findings', kind: 'findings', required: true }]
+    });
+    const outcome = await runWorkflowCheck(node, runContext(node, cwd), undefined, evidenceRoot);
+    assert.equal(outcome.status, 'failed');
+    assert.equal(outcome.pause, 'environment', outcome.error);
+    assert.match(outcome.error ?? '', /does not support security audits/);
+  });
+});

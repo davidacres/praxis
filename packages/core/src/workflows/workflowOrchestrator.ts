@@ -43,6 +43,7 @@ import {
   type WorkflowRun
 } from './workflowRun';
 import { advanceJoins, scheduleWorkflowRun } from './workflowScheduler';
+import { pendingLoop } from './workflowEdges';
 import { findTimedOutNodes } from './workflowRecovery';
 
 /** What a dispatched stage reports back. */
@@ -117,6 +118,12 @@ export interface WorkflowRunPersistence {
 export interface WorkflowWorkspaceProvider {
   acquire(run: WorkflowRun): Promise<string>;
   release(run: WorkflowRun): Promise<void>;
+  /**
+   * Puts the run's worktree back to `ref`'s content as a new commit on the run's
+   * branch (keep-best loops, FX-BE-166). History is added to, never rewritten, so
+   * the iteration that was undone stays inspectable.
+   */
+  restore?(run: WorkflowRun, ref: string): Promise<void>;
 }
 
 export interface WorkflowOrchestratorOptions {
@@ -248,9 +255,28 @@ export class WorkflowOrchestrator {
     let run = this.options.runs.get(runId);
     if (!run) return;
 
+    // A keep-best loop asked for earlier code back. That has to land before any
+    // stage builds on the worktree — and before a settled run lets it go.
+    if (run.pendingRestore) run = await this.applyRestore(run);
+
     if (isRunSettled(run)) {
       await this.releaseWorkspace(run);
       return;
+    }
+
+    // A firing loop edge is taken once nothing in the run is still running, so a
+    // revision never reopens a stage out from under a session still working in it.
+    // Budget spent means a person decides; the scheduler holds the run meanwhile.
+    const loop = pendingLoop(run);
+    if (loop) {
+      const busy =
+        Object.values(run.nodes).some(state => state.outcome === 'running') ||
+        [...this.executions.keys()].some(key => key.startsWith(`${runId}:`));
+      if (loop.kind !== 'take' || busy) return;
+      const looped = applyWorkflowRunCommand(run, { kind: 'loop-taken', edgeId: loop.status.edge.id, at: this.now });
+      if (looped === run) return;
+      run = await this.persist(looped);
+      if (run.pendingRestore) run = await this.applyRestore(run);
     }
 
     // Joins carry no work, so settling them is synchronous progress: keep
@@ -452,7 +478,8 @@ export class WorkflowOrchestrator {
               && (() => {
                 const downstream = downstreamNodeIds(next, nodeId);
                 downstream.delete(nodeId);
-                return Object.values(next.nodes).some(state => downstream.has(state.nodeId) && state.attempts.length > 0)
+                // Only this revision's attempts count: a loop already reopened what came before.
+                return Object.values(next.nodes).some(state => downstream.has(state.nodeId) && state.attempts.length > (state.revisionBase ?? 0))
                   || next.gateDecisions.some(decision => downstream.has(decision.nodeId));
               })()
           );
@@ -529,6 +556,26 @@ export class WorkflowOrchestrator {
   }
 
   // ── Workspace ──────────────────────────────────────────────────────────
+
+  private async applyRestore(run: WorkflowRun): Promise<WorkflowRun> {
+    const restore = run.pendingRestore;
+    if (!restore) return run;
+    let ok = false;
+    let detail: string | undefined;
+    if (!this.options.workspace?.restore) {
+      detail = 'this host cannot restore a worktree';
+    } else if (!run.worktreePath) {
+      detail = 'the run has no worktree';
+    } else {
+      try {
+        await this.options.workspace.restore(run, restore.ref);
+        ok = true;
+      } catch (error) {
+        detail = error instanceof Error ? error.message : String(error);
+      }
+    }
+    return this.persist(applyWorkflowRunCommand(run, { kind: 'loop-restored', at: this.now, ok, ...(detail ? { detail } : {}) }));
+  }
 
   private async ensureWorkspace(run: WorkflowRun): Promise<WorkflowRun> {
     if (!this.options.workspace || run.worktreePath) return run;

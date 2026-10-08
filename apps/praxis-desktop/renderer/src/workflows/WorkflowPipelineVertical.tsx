@@ -41,7 +41,8 @@ const TYPE_ICON: Record<Stage['type'], Parameters<typeof Icon>[0]['name']> = {
   deployment: 'rocket',
   approval: 'shield',
   join: 'graph',
-  merge: 'git-branch'
+  merge: 'git-branch',
+  map: 'layers'
 };
 
 /** A paused step says why: the AI provider's limit, or its tooling not being able to run. */

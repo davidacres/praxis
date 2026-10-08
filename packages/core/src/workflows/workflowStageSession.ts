@@ -22,6 +22,7 @@ import {
   type WorkflowNode
 } from './workflowTypes';
 import type { WorkflowRun } from './workflowRun';
+import { dagEdges } from './workflowEdges';
 import type { StageAgentBinding } from './workflowPreflight';
 import type { AgentWorkflowProvenance, AgentWorkflowReference } from '../ai/agentTypes';
 
@@ -134,7 +135,9 @@ export function buildStageContext(
  */
 export function findSnapshot(run: WorkflowRun, nodeId: string): WorkflowImplementationSnapshot | undefined {
   const inbound = new Map<string, string[]>();
-  for (const edge of run.definition.edges) {
+  // A loop edge is not an inbound branch: walking it would hand a stage the
+  // snapshot of work that runs *after* it in the same revision.
+  for (const edge of dagEdges(run.definition)) {
     inbound.set(edge.to, [...(inbound.get(edge.to) ?? []), edge.from]);
   }
 

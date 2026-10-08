@@ -26,7 +26,9 @@ import {
   nodeGate,
   nodeMutatesWorktree,
   nodeOutputs,
+  WORKFLOW_MAX_LOOP_ITERATIONS,
   WORKFLOW_SCHEMA_VERSION,
+  type CheckFinding,
   type CheckFindings,
   type WorkflowArtifactRef,
   type WorkflowDefinition,
@@ -36,6 +38,7 @@ import {
 } from './workflowTypes';
 import type { AiProvider } from '../types';
 import { findSnapshot } from './workflowStageSession';
+import { SEVERITY_RANK, countableFindings, dagEdges, describeFindingsPredicate, loopBudget, loopStatuses, pendingLoop } from './workflowEdges';
 import { providerDisplayName } from '../ai/providers/registry';
 
 /**
@@ -95,7 +98,10 @@ export type WorkflowRunEventKind =
   | 'node-progress'
   | 'node-provider-switched'
   | 'artifact-produced'
-  | 'gate-decided';
+  | 'gate-decided'
+  | 'loop-taken'
+  | 'loop-decided'
+  | 'loop-restored';
 
 export interface WorkflowRunEvent {
   /** `<runId>-<sequence>`; the sequence is the log length at append time. */
@@ -151,6 +157,64 @@ export interface WorkflowNodeState {
    */
   phase?: string;
   findings?: CheckFindings;
+  /**
+   * Attempts before this index belong to earlier loop iterations (FX-BE-162). A loop
+   * opens a new revision of the stage, and `maxAttempts` bounds each revision on its
+   * own — otherwise a stage that succeeded twice in earlier iterations would have no
+   * retry left in the third.
+   */
+  revisionBase?: number;
+}
+
+/** One time a loop edge was taken: what triggered it, for the next pass's brief and the run view. */
+export interface WorkflowLoopIteration {
+  edgeId: string;
+  /** 1-based: the first time the loop was taken is iteration 1. */
+  iteration: number;
+  at: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  /** The source's outcome that fired the edge. */
+  outcome: 'succeeded' | 'failed';
+  /** The source's countable findings (refuted ones excluded), most severe first, capped. */
+  findings: CheckFinding[];
+  /** How many countable findings there were before the cap. */
+  findingCount: number;
+  metrics?: Record<string, number>;
+  /** The source's error, when it failed. */
+  error?: string;
+  /** The implementation snapshot this iteration's result describes. */
+  snapshotRef?: string;
+  /** The keep-best metric's value for this iteration, when the loop keeps the best. */
+  score?: number;
+  /** Set when this iteration scored worse than the best so far and the worktree was sent back to it. */
+  restoredTo?: string;
+}
+
+/** A person's answer to a loop whose budget ran out (FX-BE-162). */
+export interface WorkflowLoopDecision {
+  edgeId: string;
+  at: string;
+  actor: string;
+  /**
+   * `accept` lets the run continue past this result (approve anyway); `grant` adds
+   * iterations and goes round again; `stop` ends the run.
+   */
+  decision: 'accept' | 'grant' | 'stop';
+  reason?: string;
+  extraIterations?: number;
+  /** The source attempt the decision was about; an `accept` covers that result only. */
+  sourceAttempt: number;
+}
+
+/** A keep-best loop asked for the worktree to go back to an earlier iteration's snapshot. */
+export interface WorkflowPendingRestore {
+  ref: string;
+  edgeId: string;
+  /** Which iteration that snapshot came from, for the timeline. */
+  iteration: number;
+  reason: string;
+  at: string;
 }
 
 export interface WorkflowRun {
@@ -202,6 +266,14 @@ export interface WorkflowRun {
   stageModels?: Record<string, string>;
   /** Number of completed automatic recovery repairs per source node. */
   recoveryAttempts?: Record<string, number>;
+  /** Values given for the definition's `parameters` at start; fixed for the life of the run. */
+  parameters?: Record<string, string | number>;
+  /** Every time a loop edge was taken, oldest first. Iteration counts derive from this. */
+  loopHistory?: WorkflowLoopIteration[];
+  /** Decisions people made on loops whose budget ran out, oldest first. */
+  loopDecisions?: WorkflowLoopDecision[];
+  /** A keep-best restore the host has yet to apply to the worktree. */
+  pendingRestore?: WorkflowPendingRestore;
   /**
    * The git worktree this run's stages execute in, once acquired. Recorded on
    * the run so a restart re-attaches to the same tree instead of branching a
@@ -291,7 +363,21 @@ export type WorkflowRunCommand =
   /** Reports a sub-phase of an in-flight attempt; see `WorkflowNodeState.phase`. */
   | { kind: 'node-progress'; nodeId: string; at: string; phase: string; message?: string }
   | { kind: 'gate-decided'; at: string; decision: WorkflowGateDecision }
-  | { kind: 'cancel'; at: string; reason?: string };
+  | { kind: 'cancel'; at: string; reason?: string }
+  /** Takes a firing loop edge: reopens its target and everything downstream as a new revision. */
+  | { kind: 'loop-taken'; edgeId: string; at: string }
+  /** A person's answer to a loop whose budget is spent. */
+  | {
+      kind: 'loop-decided';
+      edgeId: string;
+      at: string;
+      actor: string;
+      decision: WorkflowLoopDecision['decision'];
+      reason?: string;
+      extraIterations?: number;
+    }
+  /** The host applied (or could not apply) `pendingRestore`. */
+  | { kind: 'loop-restored'; at: string; ok: boolean; detail?: string };
 
 /** Creates a run pinned to a definition snapshot, with every node pending. */
 export function createWorkflowRun(input: {
@@ -310,6 +396,7 @@ export function createWorkflowRun(input: {
   aiProvider?: AiProvider;
   aiModel?: string;
   providerLimitPolicy?: WorkflowProviderLimitPolicy;
+  parameters?: Record<string, string | number>;
 }): WorkflowRun {
   const nodes: Record<string, WorkflowNodeState> = {};
   for (const node of input.definition.nodes) {
@@ -337,7 +424,8 @@ export function createWorkflowRun(input: {
     ...(input.uncommittedChanges ? { uncommittedChanges: input.uncommittedChanges } : {}),
     ...(input.aiProvider ? { aiProvider: input.aiProvider } : {}),
     ...(input.aiModel ? { aiModel: input.aiModel } : {}),
-    ...(input.providerLimitPolicy && input.providerLimitPolicy !== 'ask' ? { providerLimitPolicy: input.providerLimitPolicy } : {})
+    ...(input.providerLimitPolicy && input.providerLimitPolicy !== 'ask' ? { providerLimitPolicy: input.providerLimitPolicy } : {}),
+    ...(input.parameters && Object.keys(input.parameters).length > 0 ? { parameters: { ...input.parameters } } : {})
   };
 
   return append(run, {
@@ -361,7 +449,14 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
   // exception is a person retrying a stage of a *failed* run: that reopens it.
   // A cancelled run stays cancelled, and a succeeded one has nothing to retry.
   const reopensFailedRun = (command.kind === 'node-retry' || command.kind === 'stage-provider-switched') && run.status === 'failed';
-  if (isRunSettled(run) && command.kind !== 'gate-decided' && command.kind !== 'node-stopped' && !reopensFailedRun) {
+  if (
+    isRunSettled(run) &&
+    command.kind !== 'gate-decided' &&
+    command.kind !== 'node-stopped' &&
+    // A restore requested before the run ended still has to reach the worktree.
+    command.kind !== 'loop-restored' &&
+    !reopensFailedRun
+  ) {
     return run;
   }
 
@@ -408,6 +503,12 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
       return recordGate(run, command.at, command.decision);
     case 'cancel':
       return cancelRun(run, command.at, command.reason);
+    case 'loop-taken':
+      return takeLoop(run, command.edgeId, command.at);
+    case 'loop-decided':
+      return decideLoop(run, command);
+    case 'loop-restored':
+      return restoredLoop(run, command.at, command.ok, command.detail);
   }
 }
 
@@ -452,7 +553,8 @@ export function reworkWorkflowRun(
       nodeId: state.nodeId,
       outcome: 'pending',
       attempts: state.attempts,
-      artifacts: []
+      artifacts: [],
+      ...(state.revisionBase !== undefined ? { revisionBase: state.revisionBase } : {})
     };
   }
 
@@ -840,6 +942,251 @@ function cancelRun(run: WorkflowRun, at: string, reason?: string): WorkflowRun {
   );
 }
 
+// ── Loops (FX-BE-162) ────────────────────────────────────────────────────
+
+/** Findings carried into a loop iteration's record, most severe first. */
+const LOOP_FINDINGS_CAP = 40;
+
+/**
+ * Takes a firing loop edge. Only legal when the edge fires, its budget has room,
+ * and nothing in the run is running — the orchestrator waits for the band to
+ * settle — so a replay or a stale trigger is a no-op rather than a second lap.
+ */
+function takeLoop(run: WorkflowRun, edgeId: string, at: string): WorkflowRun {
+  const pending = pendingLoop(run);
+  if (!pending || pending.kind !== 'take' || pending.status.edge.id !== edgeId) return run;
+  if (Object.values(run.nodes).some(state => state.outcome === 'running')) return run;
+
+  const { edge } = pending.status;
+  const source = run.nodes[edge.from];
+  if (!source || (source.outcome !== 'succeeded' && source.outcome !== 'failed')) return run;
+
+  const iteration = pending.status.iterationsTaken + 1;
+  const entry = loopIterationRecord(run, edge.id, iteration, at);
+
+  // Keep-best: when this iteration scored worse than the best seen, the next
+  // revision starts from the best iteration's code, not from this one.
+  let restore: WorkflowPendingRestore | undefined;
+  const keepBest = edge.loop?.keepBest;
+  if (keepBest && entry.score !== undefined) {
+    const best = bestIteration(run.loopHistory ?? [], edge.id, keepBest.higherIsBetter);
+    if (best?.score !== undefined && best.snapshotRef && isWorse(entry.score, best.score, keepBest.higherIsBetter)) {
+      entry.restoredTo = best.snapshotRef;
+      restore = {
+        ref: best.snapshotRef,
+        edgeId: edge.id,
+        iteration: best.iteration,
+        reason: `${keepBest.metric} fell to ${entry.score} from the best of ${best.score} (iteration ${best.iteration}).`,
+        at
+      };
+    }
+  }
+
+  const rework = reworkWorkflowRun(run, edge.to, at);
+  if (rework.reason) return run;
+
+  // Each requeued stage starts a fresh revision: its attempt budget restarts.
+  let next = rework.run;
+  for (const nodeId of rework.requeued) {
+    const state = next.nodes[nodeId];
+    if (state) next = withNode(next, { ...state, revisionBase: state.attempts.length });
+  }
+  next = {
+    ...next,
+    loopHistory: [...(run.loopHistory ?? []), entry],
+    ...(restore ? { pendingRestore: restore } : {})
+  };
+  const budget = pending.status.budget;
+  const why =
+    edge.on === 'findings'
+      ? `${entry.findingCount} finding${entry.findingCount === 1 ? '' : 's'} matched (${describeFindingsPredicate(edge.when)})`
+      : edge.on === 'failure'
+        ? `it failed${entry.error ? `: ${firstLine(entry.error)}` : ''}`
+        : `it ${entry.outcome}`;
+  next = append(next, {
+    at,
+    kind: 'loop-taken',
+    nodeId: edge.to,
+    message: `${label(run, edge.from)} looped back to ${label(run, edge.to)} (iteration ${iteration} of ${budget}): ${why}.${
+      restore ? ` Restoring iteration ${restore.iteration}'s code: ${restore.reason}` : ''
+    }`
+  });
+  return next;
+}
+
+function loopIterationRecord(run: WorkflowRun, edgeId: string, iteration: number, at: string): WorkflowLoopIteration {
+  const edge = run.definition.edges.find(candidate => candidate.id === edgeId)!;
+  const source = run.nodes[edge.from];
+  const countable = countableFindings(source?.findings?.findings ?? []).sort(
+    (left, right) => (SEVERITY_RANK[right.severity] ?? 0) - (SEVERITY_RANK[left.severity] ?? 0)
+  );
+  const lastAttempt = source?.attempts[source.attempts.length - 1];
+  const metrics = source?.findings?.metrics;
+  const keepBest = edge.loop?.keepBest;
+  const score = keepBest ? metrics?.[keepBest.metric] : undefined;
+  const snapshotRef = source?.assessedSnapshotRef ?? source?.snapshotRef ?? findSnapshot(run, edge.from)?.ref;
+  return {
+    edgeId,
+    iteration,
+    at,
+    sourceNodeId: edge.from,
+    targetNodeId: edge.to,
+    outcome: source?.outcome === 'failed' ? 'failed' : 'succeeded',
+    findings: countable.slice(0, LOOP_FINDINGS_CAP),
+    findingCount: countable.length,
+    ...(metrics && Object.keys(metrics).length > 0 ? { metrics: { ...metrics } } : {}),
+    ...(source?.outcome === 'failed' && lastAttempt?.error ? { error: lastAttempt.error } : {}),
+    ...(snapshotRef ? { snapshotRef } : {}),
+    ...(typeof score === 'number' && Number.isFinite(score) ? { score } : {})
+  };
+}
+
+function isWorse(score: number, than: number, higherIsBetter: boolean): boolean {
+  return higherIsBetter ? score < than : score > than;
+}
+
+/** The best-scoring recorded iteration of a keep-best loop. Ties keep the earliest. */
+export function bestIteration(
+  history: readonly WorkflowLoopIteration[],
+  edgeId: string,
+  higherIsBetter: boolean
+): WorkflowLoopIteration | undefined {
+  let best: WorkflowLoopIteration | undefined;
+  for (const entry of history) {
+    if (entry.edgeId !== edgeId || entry.score === undefined) continue;
+    if (!best || isWorse(best.score as number, entry.score, higherIsBetter)) best = entry;
+  }
+  return best;
+}
+
+function decideLoop(run: WorkflowRun, command: Extract<WorkflowRunCommand, { kind: 'loop-decided' }>): WorkflowRun {
+  const pending = pendingLoop(run);
+  if (!pending || pending.kind !== 'decide' || pending.status.edge.id !== command.edgeId) return run;
+  if (!command.actor.trim()) return run;
+  const { edge } = pending.status;
+  const source = run.nodes[edge.from];
+  if (!source) return run;
+  const reason = command.reason?.trim();
+  // Accepting a result the loop exists to fix, or ending the run, is a judgement someone answers for.
+  if ((command.decision === 'accept' || command.decision === 'stop') && !reason) return run;
+
+  let extraIterations: number | undefined;
+  if (command.decision === 'grant') {
+    const room = WORKFLOW_MAX_LOOP_ITERATIONS - pending.status.budget;
+    extraIterations = Math.min(room, Math.max(1, Math.floor(command.extraIterations ?? 1)));
+    if (extraIterations < 1) return run;
+  }
+
+  const decision: WorkflowLoopDecision = {
+    edgeId: edge.id,
+    at: command.at,
+    actor: command.actor.trim(),
+    decision: command.decision,
+    ...(reason ? { reason } : {}),
+    ...(extraIterations ? { extraIterations } : {}),
+    sourceAttempt: source.attempts.length
+  };
+  let next: WorkflowRun = { ...run, loopDecisions: [...(run.loopDecisions ?? []), decision] };
+  const loopName = `${label(run, edge.from)} → ${label(run, edge.to)}`;
+
+  if (command.decision === 'stop') {
+    const endedReason = `Stopped by ${decision.actor} after ${pending.status.iterationsTaken} loop iteration${pending.status.iterationsTaken === 1 ? '' : 's'} of ${loopName}: ${reason}`;
+    next = append(next, { at: command.at, kind: 'loop-decided', nodeId: edge.from, message: endedReason });
+    return append(
+      { ...next, status: 'failed', endedAt: command.at, endedReason },
+      { at: command.at, kind: 'run-failed', nodeId: edge.from, message: endedReason }
+    );
+  }
+
+  if (command.decision === 'grant') {
+    return append(next, {
+      at: command.at,
+      kind: 'loop-decided',
+      nodeId: edge.from,
+      message: `${decision.actor} granted ${extraIterations} more iteration${extraIterations === 1 ? '' : 's'} of ${loopName} (now ${loopBudget(next, edge)}).`
+    });
+  }
+
+  // Accept: the run continues past this result. A keep-best loop ends on its best
+  // iteration, so when this result is worse than the best, the code goes back to it.
+  const keepBest = edge.loop?.keepBest;
+  const score = keepBest ? source.findings?.metrics?.[keepBest.metric] : undefined;
+  const best = keepBest ? bestIteration(run.loopHistory ?? [], edge.id, keepBest.higherIsBetter) : undefined;
+  if (keepBest && typeof score === 'number' && best?.score !== undefined && best.snapshotRef && isWorse(score, best.score, keepBest.higherIsBetter)) {
+    next = {
+      ...next,
+      pendingRestore: {
+        ref: best.snapshotRef,
+        edgeId: edge.id,
+        iteration: best.iteration,
+        reason: `the final ${keepBest.metric} of ${score} is worse than iteration ${best.iteration}'s ${best.score}.`,
+        at: command.at
+      }
+    };
+  }
+  next = append(next, {
+    at: command.at,
+    kind: 'loop-decided',
+    nodeId: edge.from,
+    message: `${decision.actor} accepted ${label(run, edge.from)}'s result after ${pending.status.iterationsTaken} iteration${pending.status.iterationsTaken === 1 ? '' : 's'} of ${loopName}: ${reason}`
+  });
+  return settleRunIfDone(next, command.at);
+}
+
+function restoredLoop(run: WorkflowRun, at: string, ok: boolean, detail?: string): WorkflowRun {
+  const restore = run.pendingRestore;
+  if (!restore) return run;
+  const { pendingRestore: _done, ...rest } = run;
+  return append(rest, {
+    at,
+    kind: 'loop-restored',
+    message: ok
+      ? `Restored the code to iteration ${restore.iteration} (${restore.ref.slice(0, 7)}): ${restore.reason}`
+      : `Could not restore iteration ${restore.iteration} (${restore.ref.slice(0, 7)})${detail ? `: ${detail}` : '.'} The run continues from the latest code.`
+  });
+}
+
+/** Loop state read back from disk; anything unreadable is dropped rather than guessed. */
+function normalizeLoopState(raw: Record<string, unknown>): Pick<WorkflowRun, 'parameters' | 'loopHistory' | 'loopDecisions' | 'pendingRestore'> {
+  const out: Pick<WorkflowRun, 'parameters' | 'loopHistory' | 'loopDecisions' | 'pendingRestore'> = {};
+  if (raw.parameters && typeof raw.parameters === 'object' && !Array.isArray(raw.parameters)) {
+    const parameters = Object.fromEntries(
+      Object.entries(raw.parameters as Record<string, unknown>).filter(
+        (entry): entry is [string, string | number] => typeof entry[1] === 'string' || (typeof entry[1] === 'number' && Number.isFinite(entry[1]))
+      )
+    );
+    if (Object.keys(parameters).length > 0) out.parameters = parameters;
+  }
+  if (Array.isArray(raw.loopHistory)) {
+    const history = raw.loopHistory.filter(
+      (entry): entry is WorkflowLoopIteration =>
+        !!entry && typeof entry === 'object' &&
+        typeof (entry as WorkflowLoopIteration).edgeId === 'string' &&
+        typeof (entry as WorkflowLoopIteration).iteration === 'number' &&
+        Array.isArray((entry as WorkflowLoopIteration).findings)
+    );
+    if (history.length > 0) out.loopHistory = history;
+  }
+  if (Array.isArray(raw.loopDecisions)) {
+    const decisions = raw.loopDecisions.filter(
+      (entry): entry is WorkflowLoopDecision =>
+        !!entry && typeof entry === 'object' &&
+        typeof (entry as WorkflowLoopDecision).edgeId === 'string' &&
+        ['accept', 'grant', 'stop'].includes((entry as WorkflowLoopDecision).decision) &&
+        typeof (entry as WorkflowLoopDecision).sourceAttempt === 'number'
+    );
+    if (decisions.length > 0) out.loopDecisions = decisions;
+  }
+  const restore = raw.pendingRestore as WorkflowPendingRestore | undefined;
+  if (restore && typeof restore === 'object' && typeof restore.ref === 'string' && typeof restore.edgeId === 'string') {
+    out.pendingRestore = restore;
+  }
+  return out;
+}
+
+/** Every loop's status, re-exported for callers that already import the run module. */
+export { loopStatuses };
+
 // ── Derivation ───────────────────────────────────────────────────────────
 
 export function isRunSettled(run: WorkflowRun): boolean {
@@ -860,16 +1207,20 @@ function settleRunIfDone(run: WorkflowRun, at: string): WorkflowRun {
   // ticket for something a top-up or a registry fix resolves.
   if (states.some(state => isPausedNode(state))) return run;
 
+  // A loop edge that fires decides where the run goes next — round again, or a
+  // person's decision — so nothing is final until it has been taken or answered.
+  if (pendingLoop(run)) return run;
+
   const requiredFailure = states.find(state => {
     if (state.outcome !== 'failed') return false;
     if (!isRequiredNode(run, state.nodeId)) return false;
     if (canRetry(run, state.nodeId)) return false;
 
-    const hasOutboundFailurePath = run.definition.edges.some(
+    const hasOutboundFailurePath = dagEdges(run.definition).some(
       edge => edge.from === state.nodeId && (edge.on === 'failure' || edge.on === 'always')
     );
     if (hasOutboundFailurePath) {
-      const targets = run.definition.edges
+      const targets = dagEdges(run.definition)
         .filter(edge => edge.from === state.nodeId && (edge.on === 'failure' || edge.on === 'always'))
         .map(edge => edge.to);
       const targetsSettled = targets.every(tid => {
@@ -914,8 +1265,8 @@ export function canRetry(run: WorkflowRun, nodeId: string): boolean {
  * free — otherwise one empty account would leave a `maxAttempts: 1` stage with
  * no retry and no way to continue the run.
  */
-export function attemptsSpent(state: Pick<WorkflowNodeState, 'attempts'>): number {
-  return state.attempts.filter(attempt => !attempt.pause).length;
+export function attemptsSpent(state: Pick<WorkflowNodeState, 'attempts' | 'revisionBase'>): number {
+  return state.attempts.slice(state.revisionBase ?? 0).filter(attempt => !attempt.pause).length;
 }
 
 /** Why a failed node is waiting on the user rather than failed, if it is. */
@@ -960,7 +1311,7 @@ function stopNode(run: WorkflowRun, nodeId: string, at: string, reason?: string)
  */
 function isRequiredNode(run: WorkflowRun, nodeId: string): boolean {
   if (nodeId === run.definition.entryNodeId) return true;
-  const inbound = run.definition.edges.filter(edge => edge.to === nodeId);
+  const inbound = dagEdges(run.definition).filter(edge => edge.to === nodeId);
   return inbound.length === 0 || inbound.some(edge => edge.required);
 }
 
@@ -996,6 +1347,9 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
       // A stage's findings are what its gate thresholds are judged on: dropping them on reload
       // would make every severity threshold pass on a run read back from disk.
       ...(isStoredFindings(stored?.findings) ? { findings: stored.findings } : {}),
+      ...(typeof stored?.revisionBase === 'number' && Number.isInteger(stored.revisionBase) && stored.revisionBase >= 0
+        ? { revisionBase: stored.revisionBase }
+        : {}),
       // Only meaningful while running; a normalized non-running node simply
       // omits it rather than trusting a stale value from disk.
       ...(typeof stored?.phase === 'string' && isOutcome(stored?.outcome) && stored.outcome === 'running'
@@ -1050,6 +1404,7 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
           )
         }
       : {}),
+    ...normalizeLoopState(raw),
     ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),
     ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
@@ -1091,7 +1446,8 @@ function label(run: WorkflowRun, nodeId: string): string {
 
 export function downstreamNodeIds(run: WorkflowRun, nodeId: string): Set<string> {
   const outbound = new Map<string, string[]>();
-  for (const edge of run.definition.edges) {
+  // Loop edges are not part of the DAG; following one would make "downstream" the whole loop.
+  for (const edge of dagEdges(run.definition)) {
     outbound.set(edge.from, [...(outbound.get(edge.from) ?? []), edge.to]);
   }
   const affected = new Set<string>();

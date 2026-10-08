@@ -227,7 +227,33 @@ test('the governed-delivery security scan audits against the public registry, so
   const security = template?.nodes.find(node => node.id === 'security');
   assert.ok(security && security.type === 'check');
   assert.equal(security.command, 'npm');
-  assert.deepEqual(security.args, ['audit', '--audit-level=high', '--registry=https://registry.npmjs.org/']);
+  assert.deepEqual(security.args, ['audit', '--audit-level=high', '--json', '--registry=https://registry.npmjs.org/']);
+  // Parsed into findings, so the security gate and the fix loop read advisories, not just an exit code.
+  assert.equal(security.adapter, 'npm-audit');
+  assert.deepEqual(security.outputs.map(output => output.kind), ['findings']);
+});
+
+test('governed delivery: review delivers findings judged against the plan, the approval holds on high ones, and both loop back to Implement', () => {
+  const template = builtInWorkflowTemplates().find(candidate => candidate.id === 'governed-delivery');
+  assert.ok(template);
+  const review = template.nodes.find(node => node.id === 'review');
+  assert.ok(review && review.type === 'agent-task');
+  assert.deepEqual(review.outputs.map(output => [output.id, output.kind, output.required]), [['review-findings', 'findings', true]]);
+  assert.ok(review.inputs.includes('plan-doc'));
+  assert.equal(review.independentOf, 'implement');
+
+  const approve = template.nodes.find(node => node.id === 'approve');
+  assert.ok(approve && approve.type === 'approval');
+  assert.deepEqual(approve.gateThresholds?.review, [{ type: 'severity', severityLevel: 'high', maxCount: 0 }]);
+  assert.deepEqual(approve.gateThresholds?.security, [{ type: 'severity', severityLevel: 'high', maxCount: 0 }]);
+  assert.equal(approve.allowBypass, false, 'a delivery sign-off still cannot be waved through');
+
+  const loops = template.edges.filter(edge => edge.loop);
+  assert.deepEqual(loops.map(edge => [edge.from, edge.to, edge.on, edge.when?.severity, edge.loop?.maxIterations]), [
+    ['review', 'implement', 'findings', 'high', 2],
+    ['security', 'implement', 'findings', 'high', 1]
+  ]);
+  assert.deepEqual(validateWorkflow(template).errors, []);
 });
 
 test('governed delivery installs dependencies and builds before QA, and validates', () => {

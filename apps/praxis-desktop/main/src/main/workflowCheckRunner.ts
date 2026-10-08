@@ -146,6 +146,20 @@ export async function runWorkflowCheck(
     return { status: 'failed', error: `${result.error}${persistNote}`, artifacts };
   }
   if (adapterError) {
+    // A report that could not be parsed because the tool itself could not run (an audit
+    // against a registry with no audit endpoint, say) is the environment's failure: pause.
+    const environment = result.code !== null && !successCodes.includes(result.code)
+      ? classifyCheckEnvironmentFailure({ command: node.command, args: node.args, exitCode: result.code, output: redactedOutput })
+      : undefined;
+    if (environment) {
+      return {
+        status: 'failed',
+        exitCode: result.code ?? undefined,
+        error: `${environment.reason} ${environment.hint}${persistNote}`,
+        artifacts,
+        pause: 'environment' as const
+      };
+    }
     return {
       status: 'failed',
       exitCode: result.code ?? undefined,

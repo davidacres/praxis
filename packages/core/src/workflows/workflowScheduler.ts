@@ -18,6 +18,7 @@
  */
 
 import { providerDisplayName } from '../ai/providers/registry';
+import { dagEdges, describeFindingsPredicate, edgeStateFor, pendingLoop, type EdgeState } from './workflowEdges';
 import {
   isApprovalNode,
   isJoinNode,
@@ -58,9 +59,6 @@ export interface WorkflowSchedule {
   blocked?: string;
 }
 
-/** How an inbound edge stands given its source node's recorded outcome. */
-type EdgeState = 'satisfied' | 'dead' | 'waiting';
-
 export function scheduleWorkflowRun(run: WorkflowRun): WorkflowSchedule {
   const running = Object.values(run.nodes)
     .filter(state => state.outcome === 'running')
@@ -68,6 +66,32 @@ export function scheduleWorkflowRun(run: WorkflowRun): WorkflowSchedule {
 
   if (isRunSettled(run)) {
     return { ready: [], autoAdvance: [], skip: [], awaitingApproval: [], running };
+  }
+
+  // A firing loop edge decides where the run goes next. Until it is taken — once
+  // the stages still running have settled — or a person answers it, nothing new
+  // starts and no branch is written off: whatever is downstream of the loop's
+  // target is about to be reopened anyway.
+  const loop = pendingLoop(run);
+  if (loop) {
+    const from = run.definition.nodes.find(node => node.id === loop.status.edge.from)?.name ?? loop.status.edge.from;
+    const to = run.definition.nodes.find(node => node.id === loop.status.edge.to)?.name ?? loop.status.edge.to;
+    const why = loop.status.edge.on === 'findings' ? ` (${describeFindingsPredicate(loop.status.edge.when)})` : '';
+    return {
+      ready: [],
+      autoAdvance: [],
+      skip: [],
+      awaitingApproval: [],
+      running,
+      ...(running.length === 0 || loop.kind === 'decide'
+        ? {
+            blocked:
+              loop.kind === 'decide'
+                ? `Needs a decision: ${from} still matches its loop back to ${to}${why} after ${loop.status.iterationsTaken} of ${loop.status.budget} iterations.`
+                : `Looping back from ${from} to ${to}${why}.`
+          }
+        : {})
+    };
   }
 
   const ready: string[] = [];
@@ -198,7 +222,9 @@ function admit(run: WorkflowRun, ready: string[], running: string[]): string[] {
 type Verdict = { kind: 'ready' } | { kind: 'wait' } | { kind: 'skip'; reason: string };
 
 function evaluate(run: WorkflowRun, node: WorkflowNode): Verdict {
-  const inbound = run.definition.edges.filter(edge => edge.to === node.id);
+  // Loop edges are not inbound branches: a loop's target becomes ready again by
+  // being reopened (`loop-taken`), never by waiting on the stage that loops back.
+  const inbound = dagEdges(run.definition).filter(edge => edge.to === node.id);
 
   // The entry node — and any node validation accepted with no parents — starts
   // as soon as the run does.
@@ -227,31 +253,12 @@ function evaluate(run: WorkflowRun, node: WorkflowNode): Verdict {
 }
 
 function edgeState(run: WorkflowRun, edge: WorkflowEdge): EdgeState {
-  const source = run.nodes[edge.from];
-  if (!source) return 'dead';
-
-  switch (source.outcome) {
-    case 'succeeded':
-      return edge.on === 'success' || edge.on === 'always' ? 'satisfied' : 'dead';
-    case 'failed':
-      // Paused (provider limit / environment): the stage has no verdict yet, so
-      // no edge — failure/always included — is taken. Routing into a fix stage
-      // would only spend more effort against the same broken precondition.
-      if (isPausedNode(source)) return 'waiting';
-      if (edge.on !== 'failure' && edge.on !== 'always') return 'dead';
-      const sourceNode = run.definition.nodes.find(node => node.id === edge.from);
-      if (sourceNode?.type === 'check' && sourceNode.failureRecovery?.repairNodeId === edge.to) {
-        const completed = run.recoveryAttempts?.[sourceNode.id] ?? 0;
-        if (completed >= sourceNode.failureRecovery.maxAttempts) return 'dead';
-      }
-      return 'satisfied';
-    case 'skipped':
-    case 'cancelled':
-      // The source never ran, so nothing downstream of it can be reached.
-      return 'dead';
-    default:
-      return 'waiting';
-  }
+  const sourceNode = run.definition.nodes.find(node => node.id === edge.from);
+  const recovery =
+    sourceNode?.type === 'check' && sourceNode.failureRecovery?.repairNodeId === edge.to
+      ? { exhausted: (run.recoveryAttempts?.[sourceNode.id] ?? 0) >= sourceNode.failureRecovery.maxAttempts }
+      : undefined;
+  return edgeStateFor(edge, run.nodes[edge.from], recovery);
 }
 
 /**

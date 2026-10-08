@@ -24,7 +24,6 @@
 import {
   isApprovalNode,
   nodeGate,
-  type CheckFindingSeverity,
   type CheckFindings,
   type GateThresholdCondition,
   type WorkflowApprovalNode,
@@ -37,13 +36,7 @@ import { filterUnwaivedFindings } from './waiverRegister';
 import { findSnapshot } from './workflowStageSession';
 import { scheduleWorkflowRun } from './workflowScheduler';
 
-const SEVERITY_RANK: Record<CheckFindingSeverity, number> = {
-  info: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4
-};
+import { compareMetric, countAtOrAbove, countableFindings } from './workflowEdges';
 
 export interface GateStatus {
   gate: WorkflowGateKind;
@@ -158,7 +151,7 @@ export function evaluateGates(
 
             const rawFindings = evidence.findings?.findings ?? [];
             const { activeFindings, waivedFindings } = filterUnwaivedFindings(
-              rawFindings,
+              countableFindings(rawFindings),
               waivers,
               new Date(),
               currentSnapshotRef
@@ -173,10 +166,7 @@ export function evaluateGates(
             for (const cond of conditions) {
               if (cond.type === 'severity') {
                 const targetLevel = cond.severityLevel ?? 'high';
-                const targetRank = SEVERITY_RANK[targetLevel] ?? 3;
-                const count = activeFindings.filter(
-                  f => (SEVERITY_RANK[f.severity] ?? 0) >= targetRank
-                ).length;
+                const count = countAtOrAbove(activeFindings, targetLevel);
                 if (count > cond.maxCount) {
                   return {
                     gate,
@@ -256,8 +246,9 @@ export function evaluateGates(
         ];
 
         const rawFindings = state.findings?.findings ?? [];
+        // A finding a skeptic refuted is not a finding the change has.
         const { activeFindings, waivedFindings } = filterUnwaivedFindings(
-          rawFindings,
+          countableFindings(rawFindings),
           waivers,
           new Date(),
           currentSnapshotRef
@@ -266,16 +257,7 @@ export function evaluateGates(
         for (const cond of conditions) {
           if (cond.type === 'metric') {
             const actual = state.findings?.metrics?.[cond.metric];
-            let passed = false;
-            if (actual !== undefined) {
-              switch (cond.operator) {
-                case '>=': passed = actual >= cond.value; break;
-                case '<=': passed = actual <= cond.value; break;
-                case '>': passed = actual > cond.value; break;
-                case '<': passed = actual < cond.value; break;
-                case '==': passed = actual === cond.value; break;
-              }
-            }
+            const passed = compareMetric(actual, cond.operator, cond.value);
             if (!passed) {
               return {
                 gate,
@@ -287,10 +269,7 @@ export function evaluateGates(
             }
           } else if (cond.type === 'severity') {
             const targetLevel = cond.severityLevel ?? 'high';
-            const targetRank = SEVERITY_RANK[targetLevel] ?? 3;
-            const count = activeFindings.filter(
-              f => (SEVERITY_RANK[f.severity] ?? 0) >= targetRank
-            ).length;
+            const count = countAtOrAbove(activeFindings, targetLevel);
             if (count > cond.maxCount) {
               return {
                 gate,
@@ -377,7 +356,7 @@ export function evaluateGates(
     );
 
     const { activeFindings, waivedFindings } = filterUnwaivedFindings(
-      combinedFindings,
+      countableFindings(combinedFindings),
       waivers,
       new Date(),
       currentSnapshotRef
@@ -391,16 +370,7 @@ export function evaluateGates(
     for (const cond of conditions) {
       if (cond.type === 'metric') {
         const actual = combinedMetrics[cond.metric];
-        let passed = false;
-        if (actual !== undefined) {
-          switch (cond.operator) {
-            case '>=': passed = actual >= cond.value; break;
-            case '<=': passed = actual <= cond.value; break;
-            case '>': passed = actual > cond.value; break;
-            case '<': passed = actual < cond.value; break;
-            case '==': passed = actual === cond.value; break;
-          }
-        }
+        const passed = compareMetric(actual, cond.operator, cond.value);
         if (!passed) {
           return {
             gate,
@@ -411,10 +381,7 @@ export function evaluateGates(
         }
       } else if (cond.type === 'severity') {
         const targetLevel = cond.severityLevel ?? 'high';
-        const targetRank = SEVERITY_RANK[targetLevel] ?? 3;
-        const count = activeFindings.filter(
-          f => (SEVERITY_RANK[f.severity] ?? 0) >= targetRank
-        ).length;
+        const count = countAtOrAbove(activeFindings, targetLevel);
         if (count > cond.maxCount) {
           return {
             gate,

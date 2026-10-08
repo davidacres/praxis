@@ -358,6 +358,27 @@ function parseCoberturaXml(raw: string): CheckFindings {
 
 // ── npm audit --json ─────────────────────────────────────────────────────
 
+/**
+ * The JSON document in a command's captured output. A check's output interleaves
+ * stdout and stderr, so `npm audit --json` arrives with `npm warn …` lines around
+ * the report; the report is the block from the first line that opens an object to
+ * the last line that closes one.
+ */
+function extractJsonDocument(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed;
+  const lines = raw.split(/\r?\n/);
+  const start = lines.findIndex(line => /^\{\s*(?:"|$)/.test(line));
+  let end = -1;
+  for (let index = lines.length - 1; index > start; index -= 1) {
+    if (/^\}\s*$/.test(lines[index])) {
+      end = index;
+      break;
+    }
+  }
+  return start >= 0 && end > start ? lines.slice(start, end + 1).join('\n') : trimmed;
+}
+
 export function parseNpmAudit(raw: string): CheckFindings {
   if (!raw.trim()) {
     throw new CheckResultParseError('npm audit report is empty.');
@@ -365,13 +386,20 @@ export function parseNpmAudit(raw: string): CheckFindings {
 
   let doc: any;
   try {
-    doc = JSON.parse(raw);
+    doc = JSON.parse(extractJsonDocument(raw));
   } catch (err) {
     throw new CheckResultParseError(`Malformed npm audit JSON: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   if (!doc || typeof doc !== 'object') {
     throw new CheckResultParseError('Invalid npm audit format: expected JSON object.');
+  }
+
+  // npm reports its own failure (no audit endpoint, no network) as `{ "error": … }`. That
+  // is not a clean audit: say what went wrong rather than returning no findings.
+  if (doc.error && typeof doc.error === 'object' && !doc.vulnerabilities && !doc.advisories) {
+    const summary = String(doc.error.summary || doc.error.code || 'unknown error').trim();
+    throw new CheckResultParseError(`npm audit could not complete: ${summary}`);
   }
 
   const findings: CheckFinding[] = [];

@@ -13,13 +13,16 @@
 import type { AgentToolMode } from '../ai/agentTypes';
 import { isModelTier } from './stageModel';
 import type { FindingWaiver } from './waiverRegister';
+import { dagEdges, isLoopEdge } from './workflowEdges';
 import {
+  WORKFLOW_MAX_LOOP_ITERATIONS,
   WORKFLOW_SCHEMA_VERSION,
   isAgentTaskNode,
   isApprovalNode,
   isCheckNode,
   isDeploymentNode,
   isJoinNode,
+  isMapNode,
   isMergeNode,
   nodeGate,
   nodeOutputs,
@@ -35,7 +38,11 @@ import {
   type WorkflowDefinition,
   type WorkflowEdge,
   type WorkflowEdgeOutcome,
+  type WorkflowFindingsPredicate,
   type WorkflowGateKind,
+  type WorkflowLoopBudget,
+  type WorkflowMapNode,
+  type WorkflowRunParameter,
   type WorkflowNode,
   type WorkflowPolicyProfile,
   type WorkflowScope
@@ -62,8 +69,12 @@ export interface WorkflowMigrationResult {
   errors: WorkflowIssue[];
 }
 
-const NODE_TYPES = new Set(['agent-task', 'check', 'deployment', 'approval', 'join', 'merge']);
-const EDGE_OUTCOMES = new Set<WorkflowEdgeOutcome>(['success', 'failure', 'always']);
+const NODE_TYPES = new Set(['agent-task', 'check', 'deployment', 'approval', 'join', 'merge', 'map']);
+const EDGE_OUTCOMES = new Set<WorkflowEdgeOutcome>(['success', 'failure', 'always', 'findings']);
+const PARAMETER_KINDS = new Set<WorkflowRunParameter['kind']>(['text', 'integer', 'number']);
+/** Bounds on a map node's fan-out; a fan-out is cost, so it is never unbounded. */
+export const MAP_MAX_CONCURRENCY = 8;
+export const MAP_MAX_ITEMS = 50;
 const GATE_KINDS = new Set<WorkflowGateKind>(['review', 'qa', 'security']);
 const ARTIFACT_KINDS = new Set<WorkflowArtifactKind>(['plan', 'diff', 'report', 'test-results', 'log', 'note', 'findings']);
 const TOOL_MODES = new Set(['read-only', 'full', 'project-only']);
@@ -147,8 +158,29 @@ export function normalizeWorkflow(value: unknown): WorkflowDefinition {
   if (raw.trigger === 'ticket' || raw.trigger === 'on-demand') definition.trigger = raw.trigger;
   if (isText(raw.projectId)) definition.projectId = raw.projectId;
   if (raw.builtIn === true) definition.builtIn = true;
+  if (Array.isArray(raw.parameters)) {
+    const parameters = raw.parameters.map(normalizeParameter).filter((item): item is WorkflowRunParameter => !!item);
+    if (parameters.length > 0) definition.parameters = parameters;
+  }
+  if (raw.requiresMeasurableGoal === true) definition.requiresMeasurableGoal = true;
 
   return definition;
+}
+
+function normalizeParameter(value: unknown): WorkflowRunParameter | undefined {
+  if (!isObject(value)) return undefined;
+  const parameter: WorkflowRunParameter = {
+    id: typeof value.id === 'string' ? value.id : '',
+    label: typeof value.label === 'string' ? value.label : '',
+    kind: PARAMETER_KINDS.has(value.kind as WorkflowRunParameter['kind']) ? (value.kind as WorkflowRunParameter['kind']) : 'text'
+  };
+  if (isText(value.description)) parameter.description = value.description;
+  if (value.required === true) parameter.required = true;
+  if (typeof value.default === 'string' || (typeof value.default === 'number' && Number.isFinite(value.default))) parameter.default = value.default;
+  if (typeof value.min === 'number' && Number.isFinite(value.min)) parameter.min = value.min;
+  if (typeof value.max === 'number' && Number.isFinite(value.max)) parameter.max = value.max;
+  if (isText(value.bindsLoopEdge)) parameter.bindsLoopEdge = value.bindsLoopEdge;
+  return parameter;
 }
 
 function normalizeNode(value: unknown): WorkflowNode {
@@ -202,6 +234,29 @@ function normalizeNode(value: unknown): WorkflowNode {
       if (isText(raw.model)) node.model = raw.model.trim();
       if (isModelTier(raw.modelTier)) node.modelTier = raw.modelTier;
       if (raw.escalateOnRetry === false) node.escalateOnRetry = false;
+      if (isText(raw.independentOf)) node.independentOf = raw.independentOf.trim();
+      return node;
+    }
+    case 'map': {
+      const agentRaw = isObject(raw.agent) ? raw.agent : {};
+      const node: WorkflowMapNode = {
+        ...base,
+        type: 'map',
+        over: typeof raw.over === 'string' ? raw.over : '',
+        itemSource: raw.itemSource === 'plan-items' ? 'plan-items' : 'findings',
+        agent: normalizeAgentRef(agentRaw),
+        instructions: typeof raw.instructions === 'string' ? raw.instructions : '',
+        // Absent means mutating, for the same reason as an agent stage.
+        mutatesWorktree: raw.mutatesWorktree !== false,
+        concurrency: typeof raw.concurrency === 'number' && Number.isFinite(raw.concurrency) ? Math.floor(raw.concurrency) : 1,
+        maxItems: typeof raw.maxItems === 'number' && Number.isFinite(raw.maxItems) ? Math.floor(raw.maxItems) : 10,
+        onItemFailure: raw.onItemFailure === 'failFast' ? 'failFast' : 'collect',
+        outputs: Array.isArray(raw.outputs) ? raw.outputs.map(normalizeArtifact) : []
+      };
+      if (GATE_KINDS.has(raw.satisfiesGate as WorkflowGateKind)) node.satisfiesGate = raw.satisfiesGate as WorkflowGateKind;
+      if (typeof raw.timeoutMs === 'number') node.timeoutMs = raw.timeoutMs;
+      if (isText(raw.model)) node.model = raw.model.trim();
+      if (isModelTier(raw.modelTier)) node.modelTier = raw.modelTier;
       return node;
     }
     case 'check': {
@@ -287,6 +342,20 @@ function normalizeNode(value: unknown): WorkflowNode {
   }
 }
 
+function normalizeAgentRef(agentRaw: Record<string, unknown>): WorkflowMapNode['agent'] {
+  return {
+    agentId: typeof agentRaw.agentId === 'string' ? agentRaw.agentId : typeof agentRaw.hostId === 'string' ? agentRaw.hostId : '',
+    ...(typeof agentRaw.profileId === 'string' ? { profileId: agentRaw.profileId } : {}),
+    ...(typeof agentRaw.hostId === 'string' ? { hostId: agentRaw.hostId } : {}),
+    ...(typeof agentRaw.providerId === 'string' ? { providerId: agentRaw.providerId } : {}),
+    scope: agentRaw.scope === 'project' ? 'project' : 'global',
+    toolMode: TOOL_MODES.has(agentRaw.toolMode as string) ? (agentRaw.toolMode as AgentToolMode) : 'read-only',
+    ...(Array.isArray(agentRaw.skillNames)
+      ? { skillNames: agentRaw.skillNames.filter((item): item is string => typeof item === 'string') }
+      : {})
+  };
+}
+
 function normalizeArtifact(value: unknown): WorkflowArtifactContract {
   const raw = isObject(value) ? value : {};
   const artifact: WorkflowArtifactContract = {
@@ -325,13 +394,50 @@ function normalizeGateThresholds(value: unknown): Pick<WorkflowApprovalNode, 'ga
 
 function normalizeEdge(value: unknown): WorkflowEdge {
   const raw = isObject(value) ? value : {};
-  return {
+  const edge: WorkflowEdge = {
     id: typeof raw.id === 'string' ? raw.id : '',
     from: typeof raw.from === 'string' ? raw.from : '',
     to: typeof raw.to === 'string' ? raw.to : '',
     on: EDGE_OUTCOMES.has(raw.on as WorkflowEdgeOutcome) ? (raw.on as WorkflowEdgeOutcome) : 'success',
     required: raw.required !== false
   };
+  const when = normalizePredicate(raw.when);
+  if (when && edge.on === 'findings') edge.when = when;
+  // An unreadable budget is kept as 0 rather than dropped: dropping it would turn a
+  // bounded back-edge into an ordinary edge, and validation then reports a cycle
+  // instead of the budget the author actually got wrong.
+  if (isObject(raw.loop)) {
+    const loop: WorkflowLoopBudget = {
+      maxIterations: typeof raw.loop.maxIterations === 'number' && Number.isFinite(raw.loop.maxIterations) ? Math.floor(raw.loop.maxIterations) : 0
+    };
+    if (isObject(raw.loop.keepBest) && isText(raw.loop.keepBest.metric)) {
+      loop.keepBest = { metric: raw.loop.keepBest.metric.trim(), higherIsBetter: raw.loop.keepBest.higherIsBetter !== false };
+    }
+    edge.loop = loop;
+  }
+  return edge;
+}
+
+function normalizePredicate(value: unknown): WorkflowFindingsPredicate | undefined {
+  if (!isObject(value)) return undefined;
+  const predicate: WorkflowFindingsPredicate = {};
+  if (SEVERITIES.has(value.severity as string)) predicate.severity = value.severity as CheckFindingSeverity;
+  if (typeof value.minCount === 'number' && Number.isFinite(value.minCount)) predicate.minCount = Math.floor(value.minCount);
+  if (Array.isArray(value.categories)) {
+    const categories = value.categories.filter(isText).map(category => category.trim());
+    if (categories.length > 0) predicate.categories = categories;
+  }
+  if (
+    isObject(value.metric) && isText(value.metric.metric) &&
+    METRIC_OPERATORS.has(value.metric.operator as string) && typeof value.metric.value === 'number'
+  ) {
+    predicate.metric = {
+      metric: value.metric.metric.trim(),
+      operator: value.metric.operator as MetricThresholdCondition['operator'],
+      value: value.metric.value
+    };
+  }
+  return predicate;
 }
 
 // ── Validation ───────────────────────────────────────────────────────────
@@ -353,6 +459,7 @@ export function validateWorkflow(
   validateEntryAndShape(definition, nodesById, errors, warnings);
   validateArtifacts(definition, errors);
   validateGates(definition, errors);
+  validateParameters(definition, errors);
   if (policy) validatePolicy(definition, policy, errors);
 
   return { valid: errors.length === 0, errors, warnings };
@@ -399,6 +506,7 @@ function validateNodes(definition: WorkflowDefinition, errors: WorkflowIssue[]):
     if (isCheckNode(node)) validateCheckNode(node, at, errors);
     if (isDeploymentNode(node)) validateDeploymentNode(node, at, errors);
     if (isMergeNode(node)) validateMergeNode(node, at, errors);
+    if (isMapNode(node)) validateMapNode(node, at, errors);
     if (isApprovalNode(node) && !isText(node.prompt)) {
       errors.push({ path: `${at}.prompt`, message: 'An approval node needs a prompt.' });
     }
@@ -415,6 +523,32 @@ function validateMergeNode(
 ): void {
   if (node.maxAttempts !== undefined && node.maxAttempts < 1) {
     errors.push({ path: `${at}.maxAttempts`, message: 'maxAttempts must be 1 or greater.' });
+  }
+  if (node.timeoutMs !== undefined && node.timeoutMs <= 0) {
+    errors.push({ path: `${at}.timeoutMs`, message: 'timeoutMs must be greater than zero.' });
+  }
+}
+
+function validateMapNode(node: WorkflowMapNode, at: string, errors: WorkflowIssue[]): void {
+  if (!isText(node.agent.agentId)) {
+    errors.push({ path: `${at}.agent.agentId`, message: 'A map stage must name the agent each item runs.' });
+  }
+  if (!isText(node.instructions)) {
+    errors.push({ path: `${at}.instructions`, message: 'A map stage needs instructions for each item.' });
+  }
+  if (!isText(node.over)) {
+    errors.push({ path: `${at}.over`, message: 'A map stage must name the artifact it fans out over.' });
+  } else if (!node.inputs.includes(node.over)) {
+    errors.push({ path: `${at}.over`, message: `A map stage fans out over one of its inputs; add "${node.over}" to its inputs.` });
+  }
+  if (!node.mutatesWorktree && node.agent.toolMode === 'full') {
+    errors.push({ path: `${at}.agent.toolMode`, message: 'A non-mutating map stage cannot request full tool mode; use read-only or project-only.' });
+  }
+  if (!Number.isInteger(node.concurrency) || node.concurrency < 1 || node.concurrency > MAP_MAX_CONCURRENCY) {
+    errors.push({ path: `${at}.concurrency`, message: `concurrency must be between 1 and ${MAP_MAX_CONCURRENCY}.` });
+  }
+  if (!Number.isInteger(node.maxItems) || node.maxItems < 1 || node.maxItems > MAP_MAX_ITEMS) {
+    errors.push({ path: `${at}.maxItems`, message: `maxItems must be between 1 and ${MAP_MAX_ITEMS}.` });
   }
   if (node.timeoutMs !== undefined && node.timeoutMs <= 0) {
     errors.push({ path: `${at}.timeoutMs`, message: 'timeoutMs must be greater than zero.' });
@@ -541,12 +675,40 @@ function validateEdges(
       errors.push({ path: `${at}.to`, message: 'An edge cannot loop a node to itself.' });
     }
     if (!EDGE_OUTCOMES.has(edge.on)) {
-      errors.push({ path: `${at}.on`, message: 'Edge outcome must be success, failure, or always.' });
+      errors.push({ path: `${at}.on`, message: 'Edge outcome must be success, failure, always, or findings.' });
+    }
+    const source = nodesById.get(edge.from);
+    if (edge.on === 'findings' && source && !nodeOutputs(source).some(output => output.kind === 'findings')) {
+      errors.push({
+        path: `${at}.on`,
+        message: `A findings edge routes on what "${source.name || edge.from}" found, but that stage declares no findings output.`
+      });
+    }
+    if (edge.when) validatePredicate(edge.when, `${at}.when`, errors);
+    if (edge.loop) {
+      const { maxIterations } = edge.loop;
+      if (!Number.isInteger(maxIterations) || maxIterations < 1 || maxIterations > WORKFLOW_MAX_LOOP_ITERATIONS) {
+        errors.push({
+          path: `${at}.loop.maxIterations`,
+          message: `A loop edge needs a budget of 1 to ${WORKFLOW_MAX_LOOP_ITERATIONS} iterations.`
+        });
+      }
+      if (edge.loop.keepBest && !isText(edge.loop.keepBest.metric)) {
+        errors.push({ path: `${at}.loop.keepBest.metric`, message: 'Keep-best needs the metric it compares.' });
+      }
+      // A loop edge must point back into its own past; anything else is a forward
+      // edge mislabelled, and would make the loop logic reopen unrelated work.
+      if (nodesById.has(edge.from) && nodesById.has(edge.to) && edge.from !== edge.to && !ancestorsOf(definition, edge.from).has(edge.to)) {
+        errors.push({
+          path: `${at}.loop`,
+          message: `A loop edge must point back to a stage upstream of "${edge.from}"; "${edge.to}" is not.`
+        });
+      }
     }
   });
 
   definition.nodes.forEach((node, index) => {
-    const inbound = definition.edges.filter(edge => edge.to === node.id);
+    const inbound = dagEdges(definition).filter(edge => edge.to === node.id);
 
     if (isJoinNode(node)) {
       // A join that waits on one branch is a no-op the author almost certainly
@@ -615,15 +777,31 @@ function validateEntryAndShape(
     errors.push({ path: 'entryNodeId', message: `entryNodeId references unknown node: ${definition.entryNodeId}` });
     return;
   }
-  if (definition.edges.some(edge => edge.to === definition.entryNodeId)) {
+  if (dagEdges(definition).some(edge => edge.to === definition.entryNodeId)) {
     errors.push({ path: 'entryNodeId', message: 'The entry node cannot have inbound edges.' });
   }
 
+  // Loop edges are the one sanctioned way back; every other cycle is an error.
   const cycle = findCycle(definition, nodesById);
   if (cycle) {
-    errors.push({ path: 'edges', message: `Workflow contains a cycle: ${cycle.join(' → ')}` });
+    errors.push({
+      path: 'edges',
+      message: `Workflow contains a cycle: ${cycle.join(' → ')}. To loop back on purpose, mark the edge that returns as a loop edge with an iteration budget.`
+    });
     return; // Reachability on a cyclic graph reports noise, not signal.
   }
+
+  // An independent stage judges an earlier one, so it must run after it.
+  definition.nodes.forEach((node, index) => {
+    if (!isAgentTaskNode(node) || !node.independentOf) return;
+    const target = nodesById.get(node.independentOf);
+    const at = `nodes[${index}].independentOf`;
+    if (!target) errors.push({ path: at, message: `independentOf names an unknown stage: ${node.independentOf}` });
+    else if (!isAgentTaskNode(target) && !isMapNode(target)) errors.push({ path: at, message: `independentOf must name an agent stage; "${target.name}" is not one.` });
+    else if (!ancestorsOf(definition, node.id).has(target.id)) {
+      errors.push({ path: at, message: `"${node.name}" can only be independent of a stage that runs before it; "${target.name}" does not.` });
+    }
+  });
 
   const reachable = reachableFrom(definition, definition.entryNodeId);
   for (const [id] of nodesById) {
@@ -645,7 +823,7 @@ function validateEntryAndShape(
 /** Returns the node ids forming the first cycle found, or undefined. */
 function findCycle(definition: WorkflowDefinition, nodesById: Map<string, WorkflowNode>): string[] | undefined {
   const outbound = new Map<string, string[]>();
-  for (const edge of definition.edges) {
+  for (const edge of dagEdges(definition)) {
     if (!nodesById.has(edge.from) || !nodesById.has(edge.to)) continue;
     outbound.set(edge.from, [...(outbound.get(edge.from) ?? []), edge.to]);
   }
@@ -680,7 +858,7 @@ function findCycle(definition: WorkflowDefinition, nodesById: Map<string, Workfl
 
 function reachableFrom(definition: WorkflowDefinition, entryNodeId: string): Set<string> {
   const outbound = new Map<string, string[]>();
-  for (const edge of definition.edges) {
+  for (const edge of dagEdges(definition)) {
     outbound.set(edge.from, [...(outbound.get(edge.from) ?? []), edge.to]);
   }
   const reachable = new Set<string>();
@@ -697,7 +875,7 @@ function reachableFrom(definition: WorkflowDefinition, entryNodeId: string): Set
 /** Node ids that can run before `nodeId`, following edges backwards. */
 function ancestorsOf(definition: WorkflowDefinition, nodeId: string): Set<string> {
   const inbound = new Map<string, string[]>();
-  for (const edge of definition.edges) {
+  for (const edge of dagEdges(definition)) {
     inbound.set(edge.to, [...(inbound.get(edge.to) ?? []), edge.from]);
   }
   const seen = new Set<string>();
@@ -793,6 +971,97 @@ function validateGates(definition: WorkflowDefinition, errors: WorkflowIssue[]):
       }
     }
   });
+}
+
+function validatePredicate(predicate: WorkflowFindingsPredicate, at: string, errors: WorkflowIssue[]): void {
+  if (predicate.minCount !== undefined && (!Number.isInteger(predicate.minCount) || predicate.minCount < 1)) {
+    errors.push({ path: `${at}.minCount`, message: 'minCount must be a whole number of 1 or more.' });
+  }
+}
+
+function validateParameters(definition: WorkflowDefinition, errors: WorkflowIssue[]): void {
+  const seen = new Set<string>();
+  (definition.parameters ?? []).forEach((parameter, index) => {
+    const at = `parameters[${index}]`;
+    if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,39}$/.test(parameter.id)) {
+      errors.push({ path: `${at}.id`, message: 'A parameter id is a short name of letters, digits, - and _.' });
+    } else if (seen.has(parameter.id)) {
+      errors.push({ path: `${at}.id`, message: `Duplicate parameter id: ${parameter.id}` });
+    }
+    seen.add(parameter.id);
+    if (!isText(parameter.label)) errors.push({ path: `${at}.label`, message: 'A parameter needs a label.' });
+    if (parameter.min !== undefined && parameter.max !== undefined && parameter.min > parameter.max) {
+      errors.push({ path: `${at}.min`, message: 'min cannot be greater than max.' });
+    }
+    if (parameter.bindsLoopEdge) {
+      const edge = definition.edges.find(candidate => candidate.id === parameter.bindsLoopEdge);
+      if (!edge || !isLoopEdge(edge)) {
+        errors.push({ path: `${at}.bindsLoopEdge`, message: `bindsLoopEdge must name a loop edge; "${parameter.bindsLoopEdge}" is not one.` });
+      }
+      if (parameter.kind !== 'integer') {
+        errors.push({ path: `${at}.kind`, message: 'A parameter that sets a loop budget must be an integer.' });
+      }
+      if (parameter.max !== undefined && parameter.max > WORKFLOW_MAX_LOOP_ITERATIONS) {
+        errors.push({ path: `${at}.max`, message: `A loop budget cannot exceed ${WORKFLOW_MAX_LOOP_ITERATIONS}.` });
+      }
+    }
+  });
+}
+
+/** A problem with values supplied for a run's parameters, by parameter id. */
+export interface RunParameterIssue {
+  parameterId: string;
+  message: string;
+}
+
+/**
+ * Checks and coerces the values given for a workflow's parameters when a run
+ * starts. Text is kept as text — it reaches a stage brief as plain prose and is
+ * never interpolated into a command or a path.
+ */
+export function resolveRunParameters(
+  definition: Pick<WorkflowDefinition, 'parameters' | 'requiresMeasurableGoal'>,
+  supplied: Record<string, unknown> | undefined
+): { values: Record<string, string | number>; issues: RunParameterIssue[] } {
+  const values: Record<string, string | number> = {};
+  const issues: RunParameterIssue[] = [];
+  for (const parameter of definition.parameters ?? []) {
+    const raw = supplied?.[parameter.id] ?? parameter.default;
+    const empty = raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '');
+    if (empty) {
+      if (parameter.required) issues.push({ parameterId: parameter.id, message: `${parameter.label} is required.` });
+      continue;
+    }
+    if (parameter.kind === 'text') {
+      const text = String(raw).trim();
+      if (text.length > 4000) issues.push({ parameterId: parameter.id, message: `${parameter.label} must be 4000 characters or fewer.` });
+      else values[parameter.id] = text;
+      continue;
+    }
+    const number = typeof raw === 'number' ? raw : Number(String(raw).trim());
+    if (!Number.isFinite(number) || (parameter.kind === 'integer' && !Number.isInteger(number))) {
+      issues.push({ parameterId: parameter.id, message: `${parameter.label} must be ${parameter.kind === 'integer' ? 'a whole number' : 'a number'}.` });
+      continue;
+    }
+    const max = parameter.bindsLoopEdge ? Math.min(parameter.max ?? WORKFLOW_MAX_LOOP_ITERATIONS, WORKFLOW_MAX_LOOP_ITERATIONS) : parameter.max;
+    const min = parameter.bindsLoopEdge ? Math.max(parameter.min ?? 1, 1) : parameter.min;
+    if (min !== undefined && number < min) {
+      issues.push({ parameterId: parameter.id, message: `${parameter.label} must be at least ${min}.` });
+      continue;
+    }
+    if (max !== undefined && number > max) {
+      issues.push({ parameterId: parameter.id, message: `${parameter.label} must be at most ${max}.` });
+      continue;
+    }
+    values[parameter.id] = number;
+  }
+  if (definition.requiresMeasurableGoal && values.target === undefined && values.rubric === undefined) {
+    issues.push({
+      parameterId: 'target',
+      message: 'Give a numeric target or a rubric: without one the loop cannot tell an improvement from churn.'
+    });
+  }
+  return { values, issues };
 }
 
 function validatePolicy(
