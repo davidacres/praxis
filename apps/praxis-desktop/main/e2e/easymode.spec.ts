@@ -1134,13 +1134,15 @@ test('in EasyMode selecting a session opens details in the center', async () => 
   // The thread follows the latest message: the last one sits inside the
   // scroll body's visible area rather than below the fold under the ticket card.
   // Polled: the follow runs after layout settles (ResizeObserver + a frame), so a single read can race it.
+  // Generous timeout: under a full parallel suite those frames can be seconds late, and the
+  // default 5s poll timed out there while passing alone.
   await expect.poll(() => win.evaluate(() => {
     const body = document.querySelector('[data-testid="agent-details-body"]');
     const messages = document.querySelectorAll('[data-testid="agent-timeline-message"]');
     const last = messages[messages.length - 1];
     if (!body || !last) return false;
     return last.getBoundingClientRect().bottom <= body.getBoundingClientRect().bottom + 1;
-  })).toBe(true);
+  }), { timeout: 20000 }).toBe(true);
 
   // Take screenshot for visual inspection
   await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-session-ticket-details.png') });
