@@ -7,6 +7,7 @@ export interface SectionHeaderProps {
   onAdd: () => void;
   addAriaLabel: string;
   testId?: string;
+  containerTestId?: string;
   className?: string;
 }
 
@@ -20,10 +21,14 @@ export function SectionHeader({
   onAdd,
   addAriaLabel,
   testId,
+  containerTestId,
   className
 }: SectionHeaderProps) {
   return (
-    <div className={`easymode-section-header ${className ?? ''}`.trim()} data-testid={`section-header-${title.toLowerCase()}`}>
+    <div
+      className={`easymode-section-header ${className ?? ''}`.trim()}
+      data-testid={containerTestId ?? `section-header-${title.toLowerCase()}`}
+    >
       <div className="easymode-section-header__title-group">
         <span className="easymode-section-header__title">{title}</span>
         {typeof count === 'number' && (

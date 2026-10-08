@@ -45,6 +45,8 @@ test('getModelPricing provides rates for all major providers and gateway models'
   // Anthropic
   assert.deepEqual(getModelPricing('anthropic', 'claude-3-5-sonnet-20241022'), { inputPerMillionUsd: 3, outputPerMillionUsd: 15 });
   assert.deepEqual(getModelPricing('anthropic', 'claude-3-5-haiku-20241022'), { inputPerMillionUsd: 0.8, outputPerMillionUsd: 4 });
+  assert.deepEqual(getModelPricing('anthropic', 'claude-haiku-5-5'), { inputPerMillionUsd: 0.1, outputPerMillionUsd: 0.5 });
+  assert.deepEqual(getModelPricing('claude-code-cli', 'haiku'), { inputPerMillionUsd: 0.1, outputPerMillionUsd: 0.5 });
 
   // Gemini
   assert.deepEqual(getModelPricing('gemini', 'gemini-2.5-pro'), { inputPerMillionUsd: 1.25, outputPerMillionUsd: 5 });
@@ -62,6 +64,8 @@ test('getKnownContextLength provides context limits across all providers and mod
   assert.equal(getKnownContextLength('gpt-4o', 'openai'), 128000);
   assert.equal(getKnownContextLength('o1', 'openai'), 200000);
   assert.equal(getKnownContextLength('claude-3-5-sonnet-20241022', 'anthropic'), 200000);
+  assert.equal(getKnownContextLength('claude-haiku-5-5', 'anthropic'), 1000000);
+  assert.equal(getKnownContextLength('haiku', 'claude-code-cli'), 1000000);
   assert.equal(getKnownContextLength('gemini-2.5-pro', 'gemini'), 2097152);
   assert.equal(getKnownContextLength('gemini-2.5-flash', 'gemini'), 1048576);
   assert.equal(getKnownContextLength('glm-5.3', 'z-ai'), 128000);

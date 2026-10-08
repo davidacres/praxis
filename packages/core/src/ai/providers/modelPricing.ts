@@ -72,6 +72,8 @@ const ANTHROPIC_MODEL_PRICING: Record<string, ModelPriceRates> = {
   'claude-3-5-sonnet-latest': { inputPerMillionUsd: 3, outputPerMillionUsd: 15 },
   'claude-sonnet-4-6': { inputPerMillionUsd: 3, outputPerMillionUsd: 15 },
   'claude-sonnet-4.6': { inputPerMillionUsd: 3, outputPerMillionUsd: 15 },
+  'claude-haiku-5-5': { inputPerMillionUsd: 0.1, outputPerMillionUsd: 0.5 },
+  'claude-haiku-5.5': { inputPerMillionUsd: 0.1, outputPerMillionUsd: 0.5 },
   'claude-3-5-haiku-20241022': { inputPerMillionUsd: 0.8, outputPerMillionUsd: 4 },
   'claude-3-5-haiku': { inputPerMillionUsd: 0.8, outputPerMillionUsd: 4 },
   'claude-3.5-haiku': { inputPerMillionUsd: 0.8, outputPerMillionUsd: 4 },
@@ -128,6 +130,13 @@ export function getKnownContextLength(
 
   if (normalized.startsWith('glm-')) {
     return 128000;
+  }
+  if (
+    normalized.startsWith('claude-haiku-5') ||
+    normalized.includes('haiku-5') ||
+    normalized === 'haiku'
+  ) {
+    return 1000000;
   }
   if (
     normalized.startsWith('claude-3') ||
@@ -210,6 +219,15 @@ export function getModelPricing(
   // 3. Heuristic / prefix matching
   if (normalized.includes('sonnet')) {
     return ANTHROPIC_MODEL_PRICING['claude-3-5-sonnet'];
+  }
+  if (
+    normalized.includes('haiku-5.5') ||
+    normalized.includes('5-5-haiku') ||
+    normalized.includes('5.5-haiku') ||
+    normalized.includes('haiku-5') ||
+    normalized === 'haiku'
+  ) {
+    return ANTHROPIC_MODEL_PRICING['claude-haiku-5-5'];
   }
   if (normalized.includes('haiku-3.5') || normalized.includes('3-5-haiku') || normalized.includes('3.5-haiku')) {
     return ANTHROPIC_MODEL_PRICING['claude-3-5-haiku'];

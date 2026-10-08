@@ -205,7 +205,15 @@ export function EasyModeSessionCard({
       }}
     >
       <div className="easymode-session-card__head">
-        <Icon name="robot" size={14} />
+        {isRunning ? (
+          <span className="harmonic-pulse-glyph" aria-hidden="true" />
+        ) : session.state === 'completed' ? (
+          <Icon name="check" size={13} className="completed-glyph" />
+        ) : session.state === 'failed' || session.state === 'aborted' ? (
+          <Icon name="warning" size={13} className="failed-glyph" />
+        ) : (
+          <Icon name="robot" size={13} />
+        )}
         {editing ? (
           <input
             className="session-title-input"
@@ -292,6 +300,13 @@ export function EasyModeSessionCard({
         </div>
       </div>
 
+      {(session.state === 'awaiting_approval' || session.state === 'awaiting_input') && (
+        <div className="action-gate-callout" data-testid={`easymode-session-gate-${session.issueKey}`}>
+          <Icon name="warning" size={12} />
+          <span>Action Gate: {session.state === 'awaiting_approval' ? 'Approval required' : 'Input required'}</span>
+        </div>
+      )}
+
       {tickerText && (
         <div className="easymode-session-card__ticker" title={tickerText}>
           <span className="easymode-ticker-dot" />
@@ -299,13 +314,21 @@ export function EasyModeSessionCard({
         </div>
       )}
 
-      {/* Agents / Subagents list owned by this session */}
+      {/* A lone agent repeats the card title, so only show the tree once there are subagents under it. */}
+      {agentItems.length === 1 && session.model && (
+        <div className="easymode-session-card__meta" data-testid={`easymode-session-model-${session.issueKey}`}>
+          {session.model}
+        </div>
+      )}
+
+      {agentItems.length > 1 && (
       <div className="easymode-subagents-list" data-testid={`easymode-subagents-${session.issueKey}`}>
-        {agentItems.map(agent => {
+        {agentItems.map((agent, index) => {
           const statusClass = resolveAgentStatusClass(agent.status);
           const statusLabel = resolveAgentStatusLabel(agent.status);
           const isActive = activeAgentId === agent.id;
           const isPrimary = agent.id === session.issueKey;
+          const branchSym = agentItems.length > 1 ? (index === agentItems.length - 1 ? '└─' : '├─') : null;
 
           return (
             <div
@@ -322,6 +345,7 @@ export function EasyModeSessionCard({
                 }
               }}
             >
+              {branchSym && <span className="lineage-sym" aria-hidden="true">{branchSym}</span>}
               <span
                 className={`easymode-status ${statusClass}`}
                 aria-label={`Status: ${statusLabel}`}
@@ -339,6 +363,7 @@ export function EasyModeSessionCard({
           );
         })}
       </div>
+      )}
     </div>
   );
 }

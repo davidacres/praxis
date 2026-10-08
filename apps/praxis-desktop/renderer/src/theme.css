@@ -16987,11 +16987,180 @@ button.session-chat-attachment {
   flex-direction: column;
   height: 100%;
   width: 100%;
-  overflow-y: auto;
-  padding: 8px;
-  gap: 16px;
-  background: var(--bg-elevated);
+  background: var(--bg-sidebar, var(--bg-elevated));
   box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Horizon Bar: Workspace Anchor */
+.horizon-bar {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.07));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-sidebar, var(--bg-elevated));
+  flex-shrink: 0;
+}
+
+.horizon-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workspace-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 0;
+  flex: 1;
+}
+
+.workspace-title-wrap span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.workspace-folder-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.horizon-row-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.git-status-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.git-clean-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone-done, #10b981);
+  flex-shrink: 0;
+}
+
+.btn-new-session-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  border-radius: var(--radius-xs, 4px);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-new-session-compact:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.btn-new-session-compact:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.btn-new-session-compact kbd {
+  font-family: var(--font-mono, monospace);
+  font-size: 9.5px;
+  color: var(--text-tertiary);
+  background: var(--bg-sunken);
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+/* Micro Filter Rail */
+.filter-rail {
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.07));
+  background: var(--bg-sidebar, var(--bg-elevated));
+  flex-shrink: 0;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 3px;
+}
+
+.filter-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs, 4px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.filter-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.filter-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.filter-tab.is-active {
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.filter-count {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  opacity: 0.8;
+  background: var(--bg-sunken);
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+.easymode-sidebar-feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 8px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .easymode-section {
@@ -17102,6 +17271,7 @@ button.session-chat-attachment {
 }
 
 .easymode-session-card__head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -17228,7 +17398,76 @@ button.session-chat-attachment {
   }
 }
 
-/* ── EasyMode Automations List ─────────────────────────────────────── */
+/* Harmonic Pulse & Session Glyphs */
+.harmonic-pulse-glyph {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.harmonic-pulse-glyph::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  opacity: 0.6;
+  animation: harmonic-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes harmonic-breathe {
+  0%, 100% { transform: scale(0.9); opacity: 0.25; }
+  50% { transform: scale(1.4); opacity: 0.8; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .harmonic-pulse-glyph::after {
+    animation: none;
+    opacity: 0.4;
+  }
+}
+
+.completed-glyph {
+  color: var(--tone-done, #10b981);
+  flex-shrink: 0;
+}
+
+.failed-glyph {
+  color: var(--tone-failed, #ef4444);
+  flex-shrink: 0;
+}
+
+/* Action Gate Callout */
+.action-gate-callout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(227, 179, 65, 0.12);
+  border: 1px solid rgba(227, 179, 65, 0.32);
+  padding: 4px 8px;
+  border-radius: var(--radius-xs, 4px);
+  font-size: 11px;
+  color: var(--tone-warn, #e3b341);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.action-gate-callout svg {
+  flex-shrink: 0;
+}
+
+.lineage-sym {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-right: 2px;
+  user-select: none;
+}
+
+/* ── EasyMode Automations & Runs List ───────────────────────────────── */
 .easymode-automations-list {
   display: flex;
   flex-direction: column;
@@ -17236,6 +17475,7 @@ button.session-chat-attachment {
 }
 
 .easymode-automation-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -17350,6 +17590,119 @@ button.session-chat-attachment {
   gap: 6px;
 }
 
+/* Compact empty state: a single line plus the launchpad, left-aligned like the cards around it. */
+.easymode-empty-card--compact {
+  align-items: stretch;
+  text-align: left;
+  padding: 9px 10px;
+  gap: 6px;
+  border-style: solid;
+  border-color: var(--border-subtle, rgba(255, 255, 255, 0.06));
+  background: transparent;
+}
+
+.easymode-empty-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.easymode-empty-card--compact .easymode-empty-card__title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.easymode-empty-card__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  border-radius: var(--radius-xs, 4px);
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.easymode-empty-card__link:hover { background: var(--bg-hover); }
+.easymode-empty-card__link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.easymode-filter-empty {
+  margin: 2px 4px 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Run launchpad: one-click starters for this project's workflows. */
+.run-launchpad {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 6px 2px;
+}
+
+.easymode-empty-card--compact .run-launchpad { padding: 0; }
+
+.run-launchpad__label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.run-launchpad__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.run-launchpad__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+}
+
+.run-launchpad__chip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-launchpad__chip svg { flex-shrink: 0; color: var(--text-tertiary); }
+
+.run-launchpad__chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.run-launchpad__chip:hover svg { color: var(--accent); }
+.run-launchpad__chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.run-launchpad__chip--more {
+  border-style: dashed;
+  color: var(--text-tertiary);
+}
+
+.git-status-tag.is-dirty .git-clean-dot {
+  background: var(--tone-blocked, var(--warning, #d29922));
+}
+
 /* ── EasyMode Search Filter Bar ──────────────────────────────────── */
 .easymode-search-bar {
   display: flex;
@@ -17397,18 +17750,38 @@ button.session-chat-attachment {
 }
 
 /* ── EasyMode Session Card Micro-Interactions ────────────────────── */
+/* Row actions are an overlay on the row's right edge, not a flex child: they take no room
+   from the title or time until the pointer is over the row (or a button has keyboard focus),
+   the same as the classic sidebar's session rows. The fade matches the row's own surface. */
+.easymode-session-card,
+.easymode-automation-row {
+  --easymode-row-fade: var(--bg-elevated);
+}
+
+.easymode-session-card.is-selected,
+.easymode-automation-row.is-selected {
+  --easymode-row-fade: color-mix(in srgb, #ffffff 20%, var(--bg-elevated));
+}
+
 .easymode-card-actions {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 2px;
+  padding-left: 14px;
+  border-radius: var(--radius-xs, 4px);
+  background: linear-gradient(90deg, transparent 0, var(--easymode-row-fade) 14px, var(--easymode-row-fade) 100%);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease-out;
-  margin-left: auto;
 }
 
 .easymode-session-card:hover .easymode-card-actions,
-.easymode-session-card:focus-within .easymode-card-actions {
+.easymode-card-actions:focus-within {
   opacity: 1;
   pointer-events: auto;
 }
@@ -17491,20 +17864,42 @@ button.session-chat-attachment {
   background: color-mix(in srgb, var(--accent) 15%, transparent);
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The title keeps at least half the row; the stage badge gives way first. */
+.easymode-automation-row__head-row > .easymode-automation-row__title {
+  flex: 1 0 55%;
 }
 
 .easymode-automation-row__actions {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  z-index: 2;
   display: flex;
   align-items: center;
+  gap: 2px;
+  padding-left: 14px;
+  border-radius: var(--radius-xs, 4px);
+  background: linear-gradient(90deg, transparent 0, var(--easymode-row-fade) 14px, var(--easymode-row-fade) 100%);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease-out;
-  margin-left: auto;
+}
+
+/* A row with stages ends in the 18px expand chevron; keep the overlay clear of it. */
+.easymode-automation-row__actions.has-expand {
+  right: 34px;
 }
 
 .easymode-automation-row:hover .easymode-automation-row__actions,
-.easymode-automation-row:focus-within .easymode-automation-row__actions {
+.easymode-automation-row__actions:focus-within {
   opacity: 1;
   pointer-events: auto;
 }
@@ -17529,6 +17924,11 @@ button.session-chat-attachment {
   color: var(--accent);
 }
 
+.easymode-automation-action-btn--delete:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
 .easymode-automation-card {
   display: flex;
   flex-direction: column;
@@ -17540,6 +17940,135 @@ button.session-chat-attachment {
 
 .easymode-automation-card.is-selected {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+/* Segmented Pipeline Rail */
+.pipeline-gauge-container {
+  background: var(--bg-sunken, rgba(0, 0, 0, 0.25));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  padding: 6px 8px;
+  border-radius: var(--radius-xs, 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 3px 6px 4px;
+}
+
+.gauge-track {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 3px;
+}
+
+.gauge-step {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gauge-segment {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.gauge-step__label {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 0;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--text-tertiary);
+}
+
+.gauge-step__glyph {
+  flex-shrink: 0;
+  font-size: 9px;
+  width: 8px;
+  text-align: center;
+}
+
+.gauge-step__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gauge-step.is-passed .gauge-step__glyph { color: var(--tone-done, #10b981); }
+.gauge-step.is-active .gauge-step__label { color: var(--text); font-weight: 500; }
+.gauge-step.is-active .gauge-step__glyph { color: var(--accent); }
+.gauge-step.is-failed .gauge-step__label { color: var(--danger, #e5484d); }
+.gauge-step.is-skipped .gauge-step__name { text-decoration: line-through; }
+
+.gauge-segment.is-passed {
+  background: var(--tone-done, #10b981);
+  opacity: 0.85;
+}
+
+.gauge-segment.is-active {
+  background: var(--accent);
+  animation: segment-pulse 1.8s infinite ease-in-out;
+}
+
+.gauge-segment.is-failed {
+  background: var(--danger, #e5484d);
+}
+
+.gauge-segment.is-skipped {
+  background: repeating-linear-gradient(90deg, var(--border) 0 3px, transparent 3px 5px);
+}
+
+.gauge-segment.is-queued {
+  background: var(--border, rgba(255, 255, 255, 0.1));
+}
+
+@keyframes segment-pulse {
+  0%, 100% { opacity: 0.65; transform: scaleY(0.95); }
+  50% { opacity: 1; transform: scaleY(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gauge-segment.is-active {
+    animation: none;
+  }
+}
+
+.gauge-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+}
+
+.gauge-stage-current {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.gauge-indicator-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.gauge-ratio {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
 }
 
 .easymode-automation-expand-btn {
@@ -18876,3 +19405,13 @@ button.session-chat-attachment {
 .session-usage-provider-card { padding: var(--space-3); border-top: 1px solid var(--border); background: var(--bg-elevated); }
 .session-usage-provider-card .overview-budget-card { margin: 0; }
 .session-usage-models-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; cursor: pointer; justify-self: start; }
+
+/* A session with no subagents shows its model as one quiet line under the title instead of a repeated agent row. */
+.easymode-session-card__meta {
+  padding: 0 0 0 22px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -2519,6 +2519,38 @@ export function App() {
                       setStartRunDialog({ projectId: project.id });
                     }
                   }}
+                  runnableWorkflows={(() => {
+                    const project = easyModeProject ?? selectedProject ?? workspaceProjects[0];
+                    return project ? workflowsByProject[project.id] ?? [] : [];
+                  })()}
+                  onStartWorkflow={workflowId => {
+                    const project = easyModeProject ?? selectedProject ?? workspaceProjects[0];
+                    if (project) {
+                      setStartRunDialog({ projectId: project.id, workflowId });
+                    }
+                  }}
+                  onRenameWorkflowRun={async (run, name) => {
+                    try {
+                      await window.praxis.workflows.renameRun(run.runId, name);
+                    } catch (cause) {
+                      await confirm({ title: 'Could not rename the run', message: cause instanceof Error ? cause.message : String(cause), confirmLabel: 'OK' });
+                    }
+                  }}
+                  onArchiveWorkflowRun={async (run, archived) => {
+                    try {
+                      await window.praxis.workflows.archiveRun(run.runId, archived);
+                    } catch (cause) {
+                      await confirm({ title: 'Could not archive the run', message: cause instanceof Error ? cause.message : String(cause), confirmLabel: 'OK' });
+                    }
+                  }}
+                  onDeleteWorkflowRun={async run => {
+                    const result = await deleteRunFlow(run);
+                    if (result.error) {
+                      await confirm({ title: 'Could not delete the run', message: result.error, confirmLabel: 'OK' });
+                    } else if (result.deleted && route.feature === 'workflows' && route.workflowRunId === run.runId) {
+                      navigate({ projectId: route.projectId, feature: 'overview', workflowView: undefined, workflowRunId: undefined });
+                    }
+                  }}
                   onAbortSession={async issueKey => {
                     await window.praxis.ai.abort(issueKey).catch(() => undefined);
                   }}

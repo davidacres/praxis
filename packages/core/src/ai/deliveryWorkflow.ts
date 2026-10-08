@@ -176,6 +176,9 @@ const MODEL_SHORTHAND_MAP: Record<string, string> = {
   'sonnet-4.6': 'claude-sonnet-4-6',
   'sonnet-4-6': 'claude-sonnet-4-6',
   'sonnet4.6': 'claude-sonnet-4-6',
+  'haiku-5.5': 'claude-haiku-5-5',
+  'haiku-5-5': 'claude-haiku-5-5',
+  'haiku5.5': 'claude-haiku-5-5',
   'haiku-3.5': 'claude-haiku-3-5',
   'haiku-3-5': 'claude-haiku-3-5',
 };

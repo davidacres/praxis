@@ -22,6 +22,10 @@ test.afterEach(async () => {
   }
 });
 
+/** Computed opacity of a row's action overlay — `toBeVisible` ignores opacity, so it cannot tell hidden from shown. */
+const opacityOf = (locator: import('@playwright/test').Locator) =>
+  locator.evaluate(element => getComputedStyle(element).opacity);
+
 test('default sidebar is standard when enableEasyMode is false', async () => {
   app = await launchTestApp({
     preview: { enableEasyMode: false }
@@ -523,6 +527,17 @@ test('EasyMode session card displays live ticker, hover actions, and automations
   await expect(runningCard.locator('[data-testid="easymode-session-abort-SESSION-RUNNING"]')).toBeVisible();
   await expect(runningCard.locator('[data-testid="easymode-session-delete-SESSION-RUNNING"]')).toBeVisible();
 
+  // The actions are a hover-only overlay: invisible at rest and after a click once the pointer leaves
+  const runningActions = runningCard.locator('.easymode-card-actions');
+  const runningTitle = runningCard.locator('.easymode-session-card__title');
+  await win.mouse.move(0, 0);
+  await expect.poll(() => opacityOf(runningActions)).toBe('0');
+  const restingTitleWidth = (await runningTitle.boundingBox())!.width;
+  await runningCard.hover();
+  await expect.poll(() => opacityOf(runningActions)).toBe('1');
+  // ...and they take no room from the title, so showing them does not re-truncate it
+  expect((await runningTitle.boundingBox())!.width).toBeCloseTo(restingTitleWidth, 0);
+
   // Every card offers rename, archive and delete (parity with classic mode)
   for (const action of ['rename', 'archive', 'delete']) {
     await expect(runningCard.locator(`[data-testid="easymode-session-${action}-SESSION-RUNNING"]`)).toBeVisible();
@@ -765,6 +780,105 @@ test('automation stage sessions appear nested under automation and are excluded 
 
   // Take screenshot showing clean nesting and separation
   await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-automation-nested-stages.png') });
+});
+
+test('automation rows have rename, archive, delete and run actions like a session row', async () => {
+  app = await launchTestApp({ preview: { enableEasyMode: true } }, undefined, undefined, { openNewSession: false });
+  const win = app.window;
+
+  const projectId = await win.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'Automation Actions Project',
+        key: 'AUTO',
+        type: 'product',
+        purpose: '',
+        brief: {},
+        startingPoint: 'app-storage',
+        workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
+        starterTickets: [{ summary: 'Initial setup', description: '', issueType: 'Task', status: 'Todo' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+    return project.id;
+  });
+
+  // Serve one finished run and record every run operation the sidebar asks for.
+  await app.electronApp.evaluate(({ ipcMain }, projId) => {
+    const calls: Array<{ name: string; args: unknown[] }> = [];
+    (globalThis as { __runCalls?: typeof calls }).__runCalls = calls;
+    ipcMain.removeHandler('workflows:listRuns');
+    ipcMain.handle('workflows:listRuns', () => [
+      {
+        runId: 'run-actions',
+        projectId: projId,
+        workflowName: 'Nightly Audit',
+        status: 'succeeded',
+        explanation: 'Done',
+        stages: [],
+        startedAt: new Date().toISOString()
+      }
+    ]);
+    for (const name of ['renameRun', 'archiveRun', 'deleteRun']) {
+      ipcMain.removeHandler(`workflows:${name}`);
+      ipcMain.handle(`workflows:${name}`, (_event, ...args: unknown[]) => {
+        calls.push({ name, args });
+        return undefined;
+      });
+    }
+    ipcMain.removeHandler('workflows:inspectRunWork');
+    ipcMain.handle('workflows:inspectRunWork', () => ({ hasWork: false, commitCount: 0, commits: [], uncommittedFiles: 0 }));
+  }, projectId);
+  const recordedCalls = () => app!.electronApp.evaluate(() => (globalThis as { __runCalls?: unknown[] }).__runCalls ?? []);
+
+  await win.reload();
+  const row = win.locator('[data-testid="easymode-run-run-actions"]');
+  await expect(row).toBeVisible();
+
+  // Hover-only overlay: hidden at rest, no room taken from the title, hidden again after a click once the pointer leaves
+  const rowActions = row.locator('.easymode-automation-row__actions');
+  const rowTitle = row.locator('.easymode-automation-row__title');
+  await win.mouse.move(0, 0);
+  await expect.poll(() => opacityOf(rowActions)).toBe('0');
+  const restingTitleWidth = (await rowTitle.boundingBox())!.width;
+  await row.hover();
+  await expect.poll(() => opacityOf(rowActions)).toBe('1');
+  expect((await rowTitle.boundingBox())!.width).toBeCloseTo(restingTitleWidth, 0);
+  await row.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
+  await win.mouse.move(0, 0);
+  await expect.poll(() => opacityOf(rowActions)).toBe('0');
+  await row.hover();
+
+  // The same four actions a session row has, run last
+  for (const action of ['rename', 'archive', 'delete', 'action']) {
+    await expect(win.locator(`[data-testid="easymode-run-${action}-run-actions"]`)).toBeVisible();
+  }
+
+  await expect.poll(() => opacityOf(rowActions)).toBe('1');
+  await win.locator('[data-testid="easymode-sidebar"]').screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-automation-row-actions.png') });
+
+  // Rename edits the title in place and saves on Enter
+  await win.locator('[data-testid="easymode-run-rename-run-actions"]').click();
+  const titleInput = win.locator('[data-testid="easymode-run-title-input-run-actions"]');
+  await expect(titleInput).toHaveValue('Nightly Audit');
+  await titleInput.fill('Weekly Audit');
+  await titleInput.press('Enter');
+  await expect.poll(recordedCalls).toContainEqual({ name: 'renameRun', args: ['run-actions', 'Weekly Audit'] });
+
+  // Archive is immediate, like a session
+  await row.hover();
+  await win.locator('[data-testid="easymode-run-archive-run-actions"]').click();
+  await expect.poll(recordedCalls).toContainEqual({ name: 'archiveRun', args: ['run-actions', true] });
+
+  // Delete asks first, and only deletes once confirmed
+  await row.hover();
+  await win.locator('[data-testid="easymode-run-delete-run-actions"]').click();
+  await expect(win.getByText('Delete this run?')).toBeVisible();
+  expect((await recordedCalls() as Array<{ name: string }>).some(call => call.name === 'deleteRun')).toBe(false);
+  await win.getByRole('dialog').getByRole('button', { name: 'Delete run' }).click();
+  await expect.poll(recordedCalls).toContainEqual({ name: 'deleteRun', args: ['run-actions', { deleteWork: false }] });
 });
 
 test('classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree', async () => {
@@ -1019,14 +1133,14 @@ test('in EasyMode selecting a session opens details in the center', async () => 
 
   // The thread follows the latest message: the last one sits inside the
   // scroll body's visible area rather than below the fold under the ticket card.
-  const lastMessageFits = await win.evaluate(() => {
+  // Polled: the follow runs after layout settles (ResizeObserver + a frame), so a single read can race it.
+  await expect.poll(() => win.evaluate(() => {
     const body = document.querySelector('[data-testid="agent-details-body"]');
     const messages = document.querySelectorAll('[data-testid="agent-timeline-message"]');
     const last = messages[messages.length - 1];
     if (!body || !last) return false;
     return last.getBoundingClientRect().bottom <= body.getBoundingClientRect().bottom + 1;
-  });
-  expect(lastMessageFits).toBe(true);
+  })).toBe(true);
 
   // Take screenshot for visual inspection
   await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-session-ticket-details.png') });
@@ -1045,6 +1159,225 @@ test('in EasyMode selecting a session opens details in the center', async () => 
   await expect(agentDetailsPage).toBeVisible();
   await expect(win.locator('[data-testid="session-ticket-card"]')).toBeVisible();
 });
+
+test('capture visual verification of redesigned EasyMode sidebar in real Electron app', async () => {
+  app = await launchTestApp(
+    { preview: { enableEasyMode: true }, appearance: { theme: 'dark', look: 'obsidian' } },
+    undefined,
+    undefined,
+    { openNewSession: false }
+  );
+  const win = app.window;
+
+  const projectId = await win.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'praxis-desktop',
+        key: 'PRX',
+        type: 'product',
+        purpose: 'Desktop application and developer environment',
+        brief: {},
+        startingPoint: 'app-storage',
+        workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
+        starterTickets: [{ summary: 'Auth refactor', description: '', issueType: 'Task', status: 'Todo' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+    return project.id;
+  });
+
+  const now = new Date().toISOString();
+
+  // Mock listRuns to return multi-stage pipeline runs with segmented gauges
+  await app.electronApp.evaluate(({ ipcMain }, { projId, nowTime }) => {
+    ipcMain.removeHandler('workflows:cancelRun');
+    ipcMain.handle('workflows:cancelRun', () => undefined);
+    ipcMain.removeHandler('workflows:listRuns');
+    ipcMain.handle('workflows:listRuns', () => [
+      {
+        runId: 'run-sec-release',
+        projectId: projId,
+        workflowName: 'Security & Release',
+        status: 'running',
+        explanation: 'Auditing security and publishing release',
+        stages: [
+          {
+            nodeId: 'node-lint',
+            name: 'Lint & Types',
+            type: 'agent',
+            lane: 'done',
+            attempts: 1,
+            sessionKey: 'WF-run-sec-stage-lint',
+            chosenModel: 'claude-3-5-sonnet'
+          },
+          {
+            nodeId: 'node-audit',
+            name: 'Security Audit',
+            type: 'agent',
+            lane: 'running',
+            attempts: 1,
+            sessionKey: 'WF-run-sec-stage-audit',
+            chosenModel: 'claude-3-5-sonnet'
+          },
+          {
+            nodeId: 'node-release',
+            name: 'Package Release',
+            type: 'agent',
+            lane: 'idle',
+            attempts: 0
+          }
+        ],
+        startedAt: nowTime
+      },
+      {
+        runId: 'run-nightly-ci',
+        projectId: projId,
+        workflowName: 'Nightly CI & Audit',
+        status: 'succeeded',
+        explanation: 'All 3 stages completed successfully',
+        stages: [
+          {
+            nodeId: 'node-lint-2',
+            name: 'Lint & Types',
+            type: 'agent',
+            lane: 'done',
+            attempts: 1
+          },
+          {
+            nodeId: 'node-audit-2',
+            name: 'Security Audit',
+            type: 'agent',
+            lane: 'done',
+            attempts: 1
+          },
+          {
+            nodeId: 'node-pkg-2',
+            name: 'Package Release',
+            type: 'agent',
+            lane: 'done',
+            attempts: 1
+          }
+        ],
+        startedAt: nowTime
+      }
+    ]);
+  }, { projId: projectId, nowTime: now });
+
+  await win.reload();
+  await expect(win.locator('[data-testid="easymode-sidebar"]')).toBeVisible();
+
+  // Send live agent sessions: one running with subagent & ticker, one awaiting approval gate, one completed
+  await app.electronApp.evaluate(({ BrowserWindow }, { projId, nowTime }) => {
+    const parentKey = 'SESSION-AUTH-REFACTOR';
+    const subagentKey = 'SUBAGENT-TOKEN-VALIDATOR';
+
+    const parentRecord = {
+      issueKey: parentKey,
+      sessionId: 'sess-auth',
+      projectId: projId,
+      title: 'Refactor Auth Middleware',
+      state: 'executing',
+      startedAt: nowTime,
+      model: 'claude-3-5-sonnet',
+      taskDefinition: { goal: 'Refactor auth middleware.' },
+      events: [
+        {
+          timestamp: nowTime,
+          type: 'message',
+          summary: 'jwtBearer.ts enforcing token expiry…'
+        }
+      ]
+    };
+
+    const subagentRecord = {
+      issueKey: subagentKey,
+      parentSessionKey: parentKey,
+      sessionId: 'sess-token-sub',
+      projectId: projId,
+      title: 'TokenValidator',
+      state: 'executing',
+      startedAt: nowTime,
+      model: 'claude-3-5-haiku',
+      taskDefinition: { goal: 'Validate token expiry logic' }
+    };
+
+    const gateRecord = {
+      issueKey: 'SESSION-REVIEW-GATE',
+      sessionId: 'sess-gate',
+      projectId: projId,
+      title: 'API Route Security Review',
+      state: 'awaiting_approval',
+      startedAt: nowTime,
+      model: 'claude-3-5-sonnet',
+      taskDefinition: { goal: 'Review API route changes' }
+    };
+
+    const completedRecord = {
+      issueKey: 'SESSION-DB-MIGRATION',
+      sessionId: 'sess-db',
+      projectId: projId,
+      title: 'Database Schema Migration',
+      state: 'completed',
+      startedAt: nowTime,
+      model: 'claude-3-5-sonnet',
+      taskDefinition: { goal: 'Apply schema migration' }
+    };
+
+    for (const electronWin of BrowserWindow.getAllWindows()) {
+      electronWin.webContents.send('ai:sessionChanged', parentRecord);
+      electronWin.webContents.send('ai:sessionChanged', subagentRecord);
+      electronWin.webContents.send('ai:sessionChanged', gateRecord);
+      electronWin.webContents.send('ai:sessionChanged', completedRecord);
+    }
+  }, { projId: projectId, nowTime: now });
+
+  await expect(win.locator('[data-testid="easymode-session-card-SESSION-AUTH-REFACTOR"]')).toBeVisible();
+  await expect(win.locator('[data-testid="easymode-subagent-SUBAGENT-TOKEN-VALIDATOR"]')).toBeVisible();
+  await expect(win.locator('[data-testid="easymode-session-gate-SESSION-REVIEW-GATE"]')).toBeVisible();
+  await expect(win.locator('[data-testid="easymode-run-run-sec-release"]')).toBeVisible();
+  await expect(win.locator('[data-testid="easymode-gauge-run-sec-release"]')).toBeVisible();
+
+  // Dark Theme Captures
+  const dirs = [
+    path.resolve(__dirname, '../../.praxis/session-artifacts'),
+    path.resolve(__dirname, '../../../.praxis/session-artifacts'),
+    path.resolve(__dirname, '../.praxis/session-artifacts')
+  ];
+  for (const dir of dirs) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  await win.evaluate(() => {
+    document.documentElement.setAttribute('data-theme', 'praxis-dark');
+    document.documentElement.setAttribute('data-look', 'obsidian');
+  });
+  await win.waitForTimeout(800);
+  const darkFull = await win.screenshot();
+  const darkClose = await win.locator('[data-testid="easymode-sidebar"]').screenshot();
+
+  for (const dir of dirs) {
+    fs.writeFileSync(path.join(dir, 'easymode-sidebar-redesign.png'), darkFull);
+    fs.writeFileSync(path.join(dir, 'easymode-sidebar-closeup-dark.png'), darkClose);
+  }
+
+  // Light Theme Captures
+  await win.evaluate(() => {
+    document.documentElement.setAttribute('data-theme', 'praxis-light');
+    document.documentElement.setAttribute('data-look', 'parchment');
+  });
+  await win.waitForTimeout(400);
+
+  const lightFull = await win.screenshot();
+  const lightClose = await win.locator('[data-testid="easymode-sidebar"]').screenshot();
+
+  for (const dir of dirs) {
+    fs.writeFileSync(path.join(dir, 'easymode-sidebar-redesign-light.png'), lightFull);
+    fs.writeFileSync(path.join(dir, 'easymode-sidebar-closeup-light.png'), lightClose);
+  }
+});
+
 
 
 
