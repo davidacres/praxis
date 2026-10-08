@@ -44,7 +44,9 @@ Verified by `workflowLoops.test.ts` (validation, round-trips, routing, hold-then
 
 ## Dependencies
 
-None for the engine. FX-BE-161 is independent. FX-BE-163, FX-BE-164, FX-BE-165, FX-BE-166 and FX-BE-167 build on this story.
+None.
+
+The other stories of this feature build on this one (see the feature's delivery order).
 
 ## Description
 
