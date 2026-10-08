@@ -37,6 +37,10 @@ test('weakening a test is flagged, in each of its forms', () => {
   assert.deepEqual(rules([{ path: 'tests/test_api.py', status: 'modified', patch: '+@pytest.mark.skip\n def test_x():' }]), ['test-guard/skipped']);
 });
 
+test('adding tests to an existing test file is allowed: it only adds checks', () => {
+  assert.deepEqual(assessTestChanges([{ path: 'src/a.test.ts', status: 'modified', patch: '+test(\'empty\', () => {\n+  expect(f(\'\')).toBe(\'\');\n+});' }]), []);
+});
+
 test('editing an existing test is flagged unless tests are the stage\'s job — and weakening is flagged even then', () => {
   const edit = [{ path: 'src/a.test.ts', status: 'modified' as const, patch: '-  const input = 1;\n+  const input = 2;' }];
   assert.deepEqual(assessTestChanges(edit).map(finding => finding.ruleId), ['test-guard/edited']);

@@ -743,7 +743,7 @@ export function improveUntilTargetTemplate(): WorkflowDefinition {
         agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full', skillNames: ['verification-report'] },
         instructions:
           'Make one focused improvement toward the goal: address the top three findings you are given and nothing else. ' +
-          'Keep the change small enough to review. Run the tests, then commit. Do not edit, skip or delete existing tests, and do not lower any threshold — the change is checked for that and an attempt that does it is undone.',
+          'Keep the change small enough to review. Run the tests, then commit. Add new tests where the goal needs them, but do not change, skip or delete existing tests or lower any threshold — the change is checked for that and an attempt that does it is undone.',
         outputs: [{ id: 'change-diff', kind: 'diff', required: true }],
         mutatesWorktree: true,
         maxAttempts: 2,

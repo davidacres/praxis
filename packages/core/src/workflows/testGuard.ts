@@ -122,8 +122,10 @@ export function assessTestChanges(changes: readonly ChangedFile[], guard: TestGu
       findings.push(finding(path, 'test-guard/assertions-removed', `Removed ${lostAssertions} assertion${lostAssertions === 1 ? '' : 's'}.`, 'Keep what the test checked; change the code, not the expectation.'));
     }
 
-    if (!guard.testsInScope && (added.length > 0 || removed.length > 0) && skips <= 0 && lostAssertions <= 0) {
-      findings.push(finding(path, 'test-guard/edited', 'Edited an existing test, which this stage was not asked to do.', 'Leave existing tests as they are; add a new test if more coverage is needed.'));
+    // Adding to an existing test file only adds checks; changing or removing its lines is what can
+    // quietly move the goalposts, so that is what needs the stage to own its tests.
+    if (!guard.testsInScope && removed.length > 0 && skips <= 0 && lostAssertions <= 0) {
+      findings.push(finding(path, 'test-guard/edited', 'Changed an existing test, which this stage was not asked to do.', 'Leave existing tests as they are; add new tests beside them if more coverage is needed.'));
     }
   }
   return findings;
