@@ -822,16 +822,19 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
             const isWarn2 = item.quotaLimit.usedPercent >= 80;
             const fillClass2 = isLimit2 ? 'is-limit' : isWarn2 ? 'is-warn' : '';
 
+            const isCompact = Boolean(item.unavailableReason) && !item.rateLimitPill && !item.mtdSpendFormatted;
+
             return (
               <div
                 key={item.id}
-                className="ai-provider-card"
+                className={`ai-provider-card${isCompact ? ' is-compact' : ''}`}
                 data-testid={`ai-usage-budgets-card-${item.id}`}
+                data-compact={isCompact ? 'true' : undefined}
               >
                 <div className="ai-provider-card-head">
                   <div className="ai-provider-card-identity">
                     <div className="ai-provider-card-logo">
-                      <ProviderBrandLogo provider={item.id} size={32} />
+                      <ProviderBrandLogo provider={item.id} size={isCompact ? 22 : 32} />
                     </div>
                     <div className="ai-provider-card-names">
                       <div className="ai-provider-card-title">{item.label}</div>

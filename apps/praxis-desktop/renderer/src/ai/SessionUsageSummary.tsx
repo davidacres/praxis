@@ -30,7 +30,6 @@ export function SessionUsageSummary({
   const [windows, setWindows] = useState<Record<string, UsageBucket | undefined>>({});
   const [provider, setProvider] = useState<ProviderUsageSnapshot | undefined>();
   const [now, setNow] = useState(() => Date.now());
-  const [modelsOpen, setModelsOpen] = useState(false);
 
   const closeDetails = useCallback(() => {
     if (!open || detailsClosing) return;
@@ -80,16 +79,7 @@ export function SessionUsageSummary({
     return () => { cancelled = true; };
   }, [selectedProvider, session?.sessionId, session?.tokenUsage?.totalTokens, session?.cost?.amount]);
 
-  const modelTotals = new Map<string, { tokens: number; costs: Array<{ amount: number; currency: string }> }>();
-  for (const item of sessions) {
-    const key = item.model || 'Unknown model';
-    const row = modelTotals.get(key) ?? { tokens: 0, costs: [] };
-    row.tokens += item.tokenUsage?.totalTokens ?? 0;
-    if (item.cost) row.costs.push(item.cost);
-    modelTotals.set(key, row);
-  }
   const localCost = sessions.reduce((total, item) => total + (item.cost?.amount ?? 0), 0);
-  const localCurrency = sessions.find(item => item.cost?.currency)?.cost?.currency;
   const sessionTokens = session?.tokenUsage?.totalTokens;
   const isLimit = Boolean(session?.providerLimitReached || sessionLimitNotice(session));
   const quotaWindows = provider?.windows.filter(isQuota) ?? [];
@@ -199,26 +189,7 @@ export function SessionUsageSummary({
               {spendRatio >= 1 ? 'Your Praxis spend limit has been exceeded.' : 'You are approaching your Praxis spend limit.'}
             </div>
           )}
-          <div className="session-usage-models" data-testid="session-usage-models">
-            <button
-              type="button"
-              className="session-usage-models-toggle session-usage-label"
-              aria-expanded={modelsOpen}
-              data-testid="session-usage-models-toggle"
-              onClick={() => setModelsOpen(value => !value)}
-            >
-              <Icon name={modelsOpen ? 'chevron-down' : 'chevron-right'} size={11} />
-              By model
-            </button>
-            {modelsOpen && <>
-            {[...modelTotals.entries()].sort((a, b) => b[1].tokens - a[1].tokens).slice(0, 6).map(([model, row]) => (
-              <div className="session-usage-model-row" key={model}>
-                <span>{model}</span>
-                <span>{row.tokens ? `${Math.round(row.tokens).toLocaleString()} tokens` : '—'}{row.costs.length > 0 ? ` · ${row.costs.map(cost => formatCost(cost)).join(', ')}` : ''}</span>
-              </div>
-            ))}
-            </>}
-          </div>
+
         </div>
       )}
     </details>

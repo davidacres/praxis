@@ -172,15 +172,19 @@ export function ProviderCard({
   // fabrication. If we have no measured spend, say nothing.
   const displaySpend = spendFormatted && spendFormatted !== '$0.00' ? spendFormatted : null;
 
+  const hasData = (!snapshot.unavailableReason && (quotaWindows.length > 0 || consumptionWindows.length > 0)) || Boolean(rateLimitPill) || Boolean(displaySpend);
+  const isCompact = !hasData;
+
   return (
     <div
-      className="overview-budget-card ai-provider-card"
+      className={`overview-budget-card ai-provider-card${isCompact ? ' is-compact' : ''}`}
       data-testid={`${testIdPrefix}-card-${snapshot.provider}`}
+      data-compact={isCompact ? 'true' : undefined}
     >
       <div className="ai-provider-card-head overview-budget-card-head">
         <div className="ai-provider-card-identity">
           <div className="ai-provider-card-logo">
-            <ProviderBrandLogo provider={snapshot.provider} size={32} />
+            <ProviderBrandLogo provider={snapshot.provider} size={isCompact ? 22 : 32} />
           </div>
           <div className="ai-provider-card-names">
             <div className="ai-provider-card-title overview-budget-card-name">{label}</div>

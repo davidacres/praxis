@@ -6615,6 +6615,68 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   font-size: 12px;
 }
 
+/* Compact provider cards when there is no data */
+.ai-provider-card.is-compact,
+.overview-budget-card.is-compact {
+  padding: 10px 14px;
+  gap: 8px;
+  align-self: start;
+}
+
+.ai-provider-card.is-compact .ai-provider-card-identity,
+.overview-budget-card.is-compact .ai-provider-card-identity {
+  gap: 10px;
+}
+
+.ai-provider-card.is-compact .ai-provider-card-logo svg,
+.ai-provider-card.is-compact .ai-provider-card-logo img,
+.overview-budget-card.is-compact .ai-provider-card-logo svg,
+.overview-budget-card.is-compact .ai-provider-card-logo img {
+  width: 22px;
+  height: 22px;
+}
+
+.ai-provider-card.is-compact .ai-provider-card-title,
+.overview-budget-card.is-compact .ai-provider-card-title,
+.overview-budget-card.is-compact .overview-budget-card-name {
+  font-size: var(--text-sm, 13px);
+}
+
+.ai-provider-card.is-compact .ai-provider-card-type,
+.overview-budget-card.is-compact .ai-provider-card-type {
+  font-size: 10.5px;
+}
+
+.ai-provider-card.is-compact .ai-provider-card-status,
+.overview-budget-card.is-compact .ai-provider-card-status {
+  padding: 1px 7px;
+  font-size: 10.5px;
+  gap: 4px;
+}
+
+.ai-provider-card.is-compact .ai-provider-status-dot,
+.overview-budget-card.is-compact .ai-provider-status-dot {
+  width: 5px;
+  height: 5px;
+}
+
+.ai-provider-card.is-compact .ai-provider-card-nodata,
+.overview-budget-card.is-compact .overview-budget-nodata {
+  padding: 6px 10px;
+  gap: 2px;
+}
+
+.ai-provider-card.is-compact .ai-provider-card-nodata strong,
+.overview-budget-card.is-compact .overview-budget-nodata strong {
+  font-size: 11.5px;
+}
+
+.ai-provider-card.is-compact .ai-provider-card-nodata small,
+.overview-budget-card.is-compact .overview-budget-nodata small {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 /* Bottom Carousel Dock */
 .ai-fleet-carousel-dock {
   display: flex;
@@ -16473,9 +16535,7 @@ button.session-chat-attachment {
 .session-usage-label { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .03em; }
 .session-usage-warning-banner { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--bg-elevated)); font-size: var(--text-sm); }
 .session-usage-warning-banner.is-critical { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--bg-elevated)); }
-.session-usage-models, .session-usage-provider { display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-top: 1px solid var(--border); font-size: var(--text-sm); }
-.session-usage-model-row { display: flex; justify-content: space-between; gap: var(--space-3); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.session-usage-model-row span:last-child { color: var(--text-tertiary); text-align: right; }
+.session-usage-provider { display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-top: 1px solid var(--border); font-size: var(--text-sm); }
 .session-usage-provider { color: var(--text-tertiary); }
 .session-usage-provider-windows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border-top: 1px solid var(--border); background: var(--border); }
 @media (max-width: 900px) { .session-usage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -18725,8 +18785,8 @@ button.session-chat-attachment {
 
 /* ── EasyMode Ticket Details Card ─────────────────────────────────── */
 .session-ticket-card {
-  max-width: 900px;
-  margin: 0 auto 16px;
+  width: 100%;
+  margin: 0 0 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 8px);
   background: var(--bg-surface, var(--bg-elevated));
@@ -18978,9 +19038,7 @@ button.session-chat-attachment {
 
 /* ── EasyMode Agent Activity Feed ─────────────────────────────────── */
 .agent-activity-feed {
-  max-width: 900px;
   width: 100%;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -19463,7 +19521,6 @@ button.session-chat-attachment {
 .session-usage-meters + .session-usage-hide-btn { margin-left: var(--space-2); }
 .session-usage-provider-card { padding: var(--space-3); border-top: 1px solid var(--border); background: var(--bg-elevated); }
 .session-usage-provider-card .overview-budget-card { margin: 0; }
-.session-usage-models-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; cursor: pointer; justify-self: start; }
 
 /* A session with no subagents shows its model as one quiet line under the title instead of a repeated agent row. */
 .easymode-session-card__meta {
