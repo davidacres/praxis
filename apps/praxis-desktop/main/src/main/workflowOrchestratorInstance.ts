@@ -1,3 +1,4 @@
+import { cancelWorkflowMap, runWorkflowMap } from './workflowMapRunner';
 import { WorkflowIssueWriteBack } from './workflowIssueWriteBack';
 import { broadcastToAllWindows } from './windowBroadcast';
 import {
@@ -143,6 +144,9 @@ const dispatcher: StageDispatcher = {
     if (!projectFolderFor(run)) return false;
     return isCheckNode(node) || isMergeNode(node) || canDispatchAgentStage();
   },
+  runMap(node, context) {
+    return runWorkflowMap(node, context);
+  },
   runCheck(node, context) {
     return runWorkflowCheck(node, context, projectFolderFor(context.run), evidenceStorageRoot());
   },
@@ -154,6 +158,7 @@ const dispatcher: StageDispatcher = {
   },
   async cancelStage(nodeId, context) {
     await cancelWorkflowAgentStage(context.run.runId, nodeId);
+    await cancelWorkflowMap(context.run.runId, nodeId);
   }
 };
 

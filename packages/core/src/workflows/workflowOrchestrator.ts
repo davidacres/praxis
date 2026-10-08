@@ -25,6 +25,7 @@
 import {
   isAgentTaskNode,
   isCheckNode,
+  isMapNode,
   isMergeNode,
   nodeMutatesWorktree,
   type CheckFindings,
@@ -32,8 +33,10 @@ import {
   type WorkflowArtifactKind,
   type WorkflowBoardReference,
   type WorkflowCheckNode,
+  type WorkflowMapNode,
   type WorkflowMergeNode
 } from './workflowTypes';
+import type { WorkflowMapItemState } from './workflowMap';
 import {
   applyWorkflowRunCommand,
   downstreamNodeIds,
@@ -69,6 +72,8 @@ export interface StageOutcome {
   model?: string;
   /** For an `independentOf` stage: whether it ran apart from its author. */
   independence?: { independent: boolean; reason: string };
+  /** For a map node: how each item went. */
+  mapItems?: WorkflowMapItemState[];
 }
 
 export interface StageDispatchContext {
@@ -95,7 +100,7 @@ export interface StageDispatcher {
    *
    * Consulted *before* the stage is marked running, so declining costs nothing.
    */
-  canDispatch?(node: WorkflowCheckNode | WorkflowAgentTaskNode | WorkflowMergeNode, run: WorkflowRun): boolean;
+  canDispatch?(node: WorkflowCheckNode | WorkflowAgentTaskNode | WorkflowMergeNode | WorkflowMapNode, run: WorkflowRun): boolean;
   runCheck(node: WorkflowCheckNode, context: StageDispatchContext): Promise<StageOutcome>;
   /**
    * Starts an agent stage and resolves when its session ends. `sessionId` is
@@ -109,6 +114,8 @@ export interface StageDispatcher {
   ): Promise<StageOutcome>;
   /** Merges changes from the delivery worktree/branch into the base branch. */
   runMerge?(node: WorkflowMergeNode, context: StageDispatchContext): Promise<StageOutcome>;
+  /** Fans a map node's agent out over its items and folds their results (FX-BE-165). */
+  runMap?(node: WorkflowMapNode, context: StageDispatchContext): Promise<StageOutcome>;
   /** Stops a stage that has outrun its timeout or whose run was cancelled. */
   cancelStage?(nodeId: string, context: StageDispatchContext): Promise<void>;
 }
@@ -300,7 +307,7 @@ export class WorkflowOrchestrator {
       .filter(nodeId => !this.inFlight.has(this.key(runId, nodeId)))
       .filter(nodeId => {
         const node = current.definition.nodes.find(candidate => candidate.id === nodeId);
-        if (!node || (!isCheckNode(node) && !isAgentTaskNode(node) && !isMergeNode(node))) return false;
+        if (!node || (!isCheckNode(node) && !isAgentTaskNode(node) && !isMergeNode(node) && !isMapNode(node))) return false;
         return this.options.dispatcher.canDispatch?.(node, current) ?? true;
       });
     if (launchable.length === 0) return;
@@ -311,7 +318,7 @@ export class WorkflowOrchestrator {
 
     for (const nodeId of launchable) {
       const node = run.definition.nodes.find(candidate => candidate.id === nodeId);
-      if (!node || (!isCheckNode(node) && !isAgentTaskNode(node) && !isMergeNode(node))) continue;
+      if (!node || (!isCheckNode(node) && !isAgentTaskNode(node) && !isMergeNode(node) && !isMapNode(node))) continue;
 
       // Claim before persisting: two interleaved steps must not both launch,
       // and the claim is released only when the stage settles.
@@ -331,7 +338,7 @@ export class WorkflowOrchestrator {
 
   private async dispatch(
     runId: string,
-    node: WorkflowCheckNode | WorkflowAgentTaskNode | WorkflowMergeNode,
+    node: WorkflowCheckNode | WorkflowAgentTaskNode | WorkflowMergeNode | WorkflowMapNode,
     run: WorkflowRun
   ): Promise<void> {
     const controller = new AbortController();
@@ -353,6 +360,10 @@ export class WorkflowOrchestrator {
           throw new Error('Merge stage dispatcher is not configured.');
         }
         return this.options.dispatcher.runMerge(node, context);
+      }
+      if (isMapNode(node)) {
+        if (!this.options.dispatcher.runMap) throw new Error('This host cannot run map stages.');
+        return this.options.dispatcher.runMap(node, context);
       }
       return this.options.dispatcher.runAgentStage(node, context, sessionId => {
         void this.recordSession(runId, node.id, sessionId);
@@ -446,7 +457,8 @@ export class WorkflowOrchestrator {
                   ...(result.outcome.findings ? { findings: result.outcome.findings } : {}),
                   ...(result.outcome.provider ? { provider: result.outcome.provider } : {}),
                   ...(result.outcome.model ? { model: result.outcome.model } : {}),
-                  ...(result.outcome.independence ? { independence: result.outcome.independence } : {})
+                  ...(result.outcome.independence ? { independence: result.outcome.independence } : {}),
+                  ...(result.outcome.mapItems ? { mapItems: result.outcome.mapItems } : {})
                 })
               : applyWorkflowRunCommand(run, {
                   kind: 'node-failed',
@@ -458,7 +470,8 @@ export class WorkflowOrchestrator {
                   ...(result.outcome.pause ? { pause: result.outcome.pause } : {}),
                   ...(result.outcome.provider ? { provider: result.outcome.provider } : {}),
                   ...(result.outcome.model ? { model: result.outcome.model } : {}),
-                  ...(result.outcome.independence ? { independence: result.outcome.independence } : {})
+                  ...(result.outcome.independence ? { independence: result.outcome.independence } : {}),
+                  ...(result.outcome.mapItems ? { mapItems: result.outcome.mapItems } : {})
                 });
         if (next !== run) {
           const recoverySource = next.definition.nodes.find(candidate =>

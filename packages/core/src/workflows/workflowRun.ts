@@ -38,6 +38,7 @@ import {
 } from './workflowTypes';
 import type { AiProvider } from '../types';
 import { findSnapshot } from './workflowStageSession';
+import type { WorkflowMapItemState } from './workflowMap';
 import { SEVERITY_RANK, countableFindings, dagEdges, describeFindingsPredicate, loopBudget, loopStatuses, pendingLoop } from './workflowEdges';
 import { providerDisplayName } from '../ai/providers/registry';
 
@@ -174,6 +175,8 @@ export interface WorkflowNodeState {
    * retry left in the third.
    */
   revisionBase?: number;
+  /** For a map node: how each item went, latest attempt's view (FX-BE-165). */
+  mapItems?: WorkflowMapItemState[];
 }
 
 /** One time a loop edge was taken: what triggered it, for the next pass's brief and the run view. */
@@ -341,6 +344,7 @@ export type WorkflowRunCommand =
       provider?: string;
       model?: string;
       independence?: StageIndependence;
+      mapItems?: WorkflowMapItemState[];
     }
   | {
       kind: 'node-failed';
@@ -355,6 +359,7 @@ export type WorkflowRunCommand =
       provider?: string;
       model?: string;
       independence?: StageIndependence;
+      mapItems?: WorkflowMapItemState[];
     }
   /**
    * Moves a stage to another AI after the one it used ran out; a paused stage is
@@ -486,7 +491,8 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
         findings: command.findings,
         provider: command.provider,
         model: command.model,
-        independence: command.independence
+        independence: command.independence,
+        mapItems: command.mapItems
       });
     case 'node-failed':
       return settleNode(run, command.nodeId, 'failed', command.at, {
@@ -496,7 +502,8 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
         pause: command.pause,
         provider: command.provider,
         model: command.model,
-        independence: command.independence
+        independence: command.independence,
+        mapItems: command.mapItems
       });
     case 'stage-provider-switched':
       return switchStageProvider(run, command.nodeId, command.at, command.provider, command.model, command.automatic === true);
@@ -649,6 +656,7 @@ function settleNode(
     provider?: string;
     model?: string;
     independence?: StageIndependence;
+    mapItems?: WorkflowMapItemState[];
   }
 ): WorkflowRun {
   const state = run.nodes[nodeId];
@@ -709,7 +717,8 @@ function settleNode(
     artifacts,
     ...(effective === 'succeeded' && detail.snapshotRef ? { snapshotRef: detail.snapshotRef } : {}),
     ...(assessedSnapshotRef ? { assessedSnapshotRef } : {}),
-    ...(detail.findings ? { findings: detail.findings } : {})
+    ...(detail.findings ? { findings: detail.findings } : {}),
+    ...(detail.mapItems ? { mapItems: detail.mapItems } : state.mapItems ? { mapItems: state.mapItems } : {})
   });
   next = append(next, {
     at,
@@ -1436,6 +1445,9 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
       ...(isStoredFindings(stored?.findings) ? { findings: stored.findings } : {}),
       ...(typeof stored?.revisionBase === 'number' && Number.isInteger(stored.revisionBase) && stored.revisionBase >= 0
         ? { revisionBase: stored.revisionBase }
+        : {}),
+      ...(Array.isArray(stored?.mapItems)
+        ? { mapItems: stored.mapItems.filter(item => !!item && typeof item.key === 'string' && typeof item.outcome === 'string') }
         : {}),
       // Only meaningful while running; a normalized non-running node simply
       // omits it rather than trusting a stale value from disk.

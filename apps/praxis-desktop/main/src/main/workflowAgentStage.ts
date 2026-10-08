@@ -118,14 +118,30 @@ export function canDispatchAgentStage(): boolean {
   return !!settings.ai.activeProvider;
 }
 
+/**
+ * One item of a map node (FX-BE-165): the item runs as an agent stage of its own, in
+ * its own session and — when it writes — its own worktree, attributed to the map node.
+ */
+export interface MapItemLaunch {
+  /** The map node the item belongs to; the run knows the item only through it. */
+  contextNodeId: string;
+  sessionKey: string;
+  worktreePath: string;
+  /** The item's own section of the brief. */
+  brief: string;
+}
+
 export async function runWorkflowAgentStage(
   node: WorkflowAgentTaskNode,
   dispatch: StageDispatchContext,
-  onSession: (sessionId: string) => void
+  onSession: (sessionId: string) => void,
+  item?: MapItemLaunch
 ): Promise<StageOutcome> {
   dispatch.signal?.throwIfAborted();
   const workflowRun = dispatch.run;
-  const worktreePath = dispatch.worktreePath;
+  const worktreePath = item?.worktreePath ?? dispatch.worktreePath;
+  // The node the run records this work against: the stage itself, or the map an item belongs to.
+  const recordNodeId = item?.contextNodeId ?? node.id;
   if (!worktreePath) {
     return { status: 'failed', error: 'This stage needs a run worktree; attach a git folder to the project.' };
   }
@@ -149,8 +165,9 @@ export async function runWorkflowAgentStage(
   }
 
   dispatch.signal?.throwIfAborted();
-  const context = buildStageContext(workflowRun, node.id, preflight.binding);
-  if (!context) return { status: 'failed', error: `Stage ${node.id} is not part of this run.` };
+  const built = buildStageContext(workflowRun, recordNodeId, preflight.binding);
+  if (!built) return { status: 'failed', error: `Stage ${recordNodeId} is not part of this run.` };
+  const context = item ? { ...built, stageName: node.name, instructions: node.instructions } : built;
   const projectRoot = getProjectRoot(workflowRun.projectId);
   if (node.workflowPackId && !projectRoot) {
     return { status: 'failed', error: 'This stage declares a workflow pack, but its project has no workspace folder.' };
@@ -160,12 +177,14 @@ export async function runWorkflowAgentStage(
     : undefined;
   const stageContext = workflowPack ? { ...context, workflowPack } : context;
 
-  const issueKey = stageSessionKey(workflowRun.runId, node.id);
+  const issueKey = item?.sessionKey ?? stageSessionKey(workflowRun.runId, node.id);
   const sessions = getAiSessionManager();
   const settings = getSettingsBackend().read();
   // The stage's AI: one it was switched to in this run, its own choice, the run's, or the selected AI.
   const runProvider = workflowRun.aiProvider || settings.ai.activeProvider;
-  let provider = stageProvider(workflowRun, node.id, runProvider) as AiProvider;
+  let provider = (item
+    ? workflowRun.stageProviders?.[recordNodeId] ?? (node.agent.providerId?.trim() || undefined) ?? runProvider
+    : stageProvider(workflowRun, node.id, runProvider)) as AiProvider;
   const taskDefinition = buildStageTaskDefinition(stageContext);
 
   // What the person who started the run asked for (goal, target …), as plain prose.
@@ -217,19 +236,20 @@ export async function runWorkflowAgentStage(
 
   // Running again — a later loop iteration, or a retry after a failed attempt: hand the stage
   // the findings that sent it round and why its last attempt failed, so it does not repeat itself.
-  const iteration = formatIterationContext(workflowRun, node.id);
+  const iteration = formatIterationContext(workflowRun, recordNodeId);
   if (iteration) taskDefinition.scope += `\n\n${iteration}`;
+  if (item) taskDefinition.scope += `\n\n${item.brief}`;
 
   // Attempts that judged the stage and failed. The one launching now is not among them, and one
   // that stopped without a verdict (provider limit, environment) never spent the stage.
-  const failedAttempts = (workflowRun.nodes[node.id]?.attempts ?? []).filter(
+  const failedAttempts = (workflowRun.nodes[recordNodeId]?.attempts ?? []).filter(
     attempt => attempt.outcome === 'failed' && !attempt.pause
   ).length;
   // A model id belongs to the AI it was chosen for: the stage's exact model only
   // on the stage's own AI, the run's model only on the run's AI.
-  const switched = Boolean(workflowRun.stageProviders?.[node.id]);
+  const switched = Boolean(workflowRun.stageProviders?.[recordNodeId]);
   const ownProvider = node.agent.providerId?.trim();
-  const switchedModel = workflowRun.stageModels?.[node.id];
+  const switchedModel = workflowRun.stageModels?.[recordNodeId];
   let modelChoice: { model?: string; reason: string } = switchedModel
     ? { model: switchedModel, reason: 'explicitly chosen for this stage' }
     : chooseStageModel({
@@ -334,7 +354,7 @@ export async function runWorkflowAgentStage(
       worktreePath,
       toolMode,
       workflowRunId: workflowRun.runId,
-      workflowNodeId: node.id,
+      workflowNodeId: recordNodeId,
       workflowId: workflowRun.workflowId,
       workflowVersion: workflowRun.workflowVersion,
       workflowRole: 'stage',
@@ -360,7 +380,7 @@ export async function runWorkflowAgentStage(
 
   // A stage held to its tests may not reach its goal by weakening them: read what it changed,
   // and undo an attempt that did (as a new commit, so it stays inspectable).
-  if (node.guardTests && outcome.status === 'succeeded' && baseRef && snapshotRef && snapshotRef !== baseRef) {
+  if (!item && node.guardTests && outcome.status === 'succeeded' && baseRef && snapshotRef && snapshotRef !== baseRef) {
     const violations = assessTestChanges(await changedFiles(worktreePath, baseRef, snapshotRef, node.guardTests), node.guardTests);
     if (violations.length > 0) {
       const undone = await restoreWorktreeTo(worktreePath, baseRef, `Undo ${context.stageName}: it weakened the tests that judge it`).catch(error => {
