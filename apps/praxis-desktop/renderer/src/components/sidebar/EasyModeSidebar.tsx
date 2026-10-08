@@ -191,7 +191,7 @@ export function EasyModeSidebar({
       {/* Sidebar Feed Container */}
       <div className="easymode-sidebar-feed">
         {/* Sessions Section */}
-        <section className="easymode-section" aria-label="Sessions">
+        <section className="easymode-section easymode-section--sessions" aria-label="Sessions">
           <SectionHeader
             title="Sessions"
             count={rootSessions.length}
@@ -220,7 +220,7 @@ export function EasyModeSidebar({
         </section>
 
         {/* Runs Section (Structured Workflows) */}
-        <section className="easymode-section" aria-label="Runs">
+        <section className="easymode-section easymode-section--runs" aria-label="Runs">
           <SectionHeader
             title="Runs"
             count={allRuns.length}

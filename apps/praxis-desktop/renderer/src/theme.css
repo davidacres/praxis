@@ -19415,3 +19415,42 @@ button.session-chat-attachment {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Sessions scroll inside their own pane so the Runs section below stays on screen however long the list grows. */
+.easymode-sidebar-feed {
+  overflow: hidden;
+  padding-bottom: 8px;
+  gap: 8px;
+}
+.easymode-section--sessions {
+  flex: 1 1 0;
+  min-height: 140px;
+}
+.easymode-section--sessions > .easymode-section__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.easymode-section--runs {
+  flex: 0 1 auto;
+  max-height: 45%;
+  min-height: 72px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+.easymode-section--runs > .easymode-section__body {
+  min-height: 0;
+  overflow-y: auto;
+}
+.easymode-show-more {
+  align-self: flex-start;
+  margin: 2px 0 0 6px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.easymode-show-more:hover { color: var(--text-secondary); background: var(--bg-hover, transparent); }

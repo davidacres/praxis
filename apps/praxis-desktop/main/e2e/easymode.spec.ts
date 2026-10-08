@@ -1381,3 +1381,106 @@ test('capture visual verification of redesigned EasyMode sidebar in real Electro
 
 
 
+
+test('a long session list folds behind "Show more" and leaves the Runs section on screen', async () => {
+  app = await launchTestApp(
+    { preview: { enableEasyMode: true } },
+    undefined,
+    undefined,
+    { openNewSession: false }
+  );
+  const win = app.window;
+
+  const projectId = await win.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'overflow-demo',
+        key: 'OVF',
+        type: 'product',
+        purpose: 'Overflow check',
+        brief: {},
+        startingPoint: 'app-storage',
+        workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
+        starterTickets: [{ summary: 'Seed', description: '', issueType: 'Task', status: 'Todo' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+    return project.id;
+  });
+
+  const now = new Date().toISOString();
+  await app.electronApp.evaluate(({ ipcMain }, { projId, nowTime }) => {
+    ipcMain.removeHandler('workflows:cancelRun');
+    ipcMain.handle('workflows:cancelRun', () => undefined);
+    ipcMain.removeHandler('workflows:listRuns');
+    ipcMain.handle('workflows:listRuns', () => [
+      {
+        runId: 'run-overflow',
+        projectId: projId,
+        workflowName: 'Nightly CI',
+        status: 'succeeded',
+        explanation: 'done',
+        stages: [{ nodeId: 'n1', name: 'Lint', type: 'agent', lane: 'done', attempts: 1 }],
+        startedAt: nowTime
+      }
+    ]);
+  }, { projId: projectId, nowTime: now });
+
+  await win.reload();
+  await expect(win.locator('[data-testid="easymode-sidebar"]')).toBeVisible();
+
+  // 14 finished sessions, newest first, plus one older session that is still running.
+  await app.electronApp.evaluate(({ BrowserWindow }, { projId }) => {
+    const records = [];
+    for (let i = 0; i < 14; i += 1) {
+      records.push({
+        issueKey: `SESSION-DONE-${i}`,
+        sessionId: `sess-done-${i}`,
+        projectId: projId,
+        title: `Finished session ${i}`,
+        state: 'completed',
+        startedAt: new Date(Date.now() - i * 60_000).toISOString(),
+        model: 'claude-3-5-sonnet',
+        taskDefinition: { goal: 'done' }
+      });
+    }
+    records.push({
+      issueKey: 'SESSION-OLD-LIVE',
+      sessionId: 'sess-old-live',
+      projectId: projId,
+      title: 'Old but still running',
+      state: 'executing',
+      startedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      model: 'claude-3-5-sonnet',
+      taskDefinition: { goal: 'long task' }
+    });
+    for (const electronWin of BrowserWindow.getAllWindows()) {
+      for (const record of records) electronWin.webContents.send('ai:sessionChanged', record);
+    }
+  }, { projId: projectId });
+
+  const cards = win.locator('[data-testid^="easymode-session-card-"]');
+  const showMore = win.locator('[data-testid="easymode-sessions-show-more"]');
+  await expect(showMore).toBeVisible();
+
+  // The cap (5) plus the older-but-live session, which must never be folded away.
+  await expect(cards).toHaveCount(6);
+  await expect(win.locator('[data-testid="easymode-session-card-SESSION-OLD-LIVE"]')).toBeVisible();
+
+  // Runs stays inside the sidebar's visible area however long the session list is.
+  const sidebarBox = await win.locator('[data-testid="easymode-sidebar"]').boundingBox();
+  const runsBox = await win.locator('[data-testid="easymode-run-run-overflow"]').boundingBox();
+  expect(sidebarBox && runsBox).toBeTruthy();
+  expect(runsBox!.y + runsBox!.height).toBeLessThanOrEqual(sidebarBox!.y + sidebarBox!.height + 1);
+
+  await showMore.click();
+  await expect(cards).toHaveCount(15);
+  await expect(showMore).toHaveText('Show fewer');
+  // Even fully expanded, the Runs card is still on screen.
+  const runsAfter = await win.locator('[data-testid="easymode-run-run-overflow"]').boundingBox();
+  expect(runsAfter!.y + runsAfter!.height).toBeLessThanOrEqual(sidebarBox!.y + sidebarBox!.height + 1);
+
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-sessions-overflow.png') });
+});

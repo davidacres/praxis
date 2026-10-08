@@ -18,6 +18,13 @@ export interface EasyModeSessionsListProps {
   onArchiveSession?: (sessionKey: string, archived: boolean) => Promise<void>;
 }
 
+/** Finished sessions shown before the rest fold behind "Show more", so the Runs section below is never pushed off screen. */
+const COLLAPSED_SESSION_LIMIT = 5;
+
+function isAttentionState(state: AgentSessionRecord['state']): boolean {
+  return state === 'executing' || state === 'planning' || state === 'awaiting_approval' || state === 'awaiting_input';
+}
+
 export function EasyModeSessionsList({
   sessions,
   allSessions,
@@ -33,6 +40,7 @@ export function EasyModeSessionsList({
   onArchiveSession
 }: EasyModeSessionsListProps) {
   const [filterQuery, setFilterQuery] = useState('');
+  const [expanded, setExpanded] = useState(false);
 
   // Only display user root sessions at top level; subagents appear inside their parent session's card,
   // and automation stage sessions appear under their respective automation.
@@ -55,6 +63,16 @@ export function EasyModeSessionsList({
       return title.includes(q) || model.includes(q);
     });
   }, [rootSessions, filterQuery]);
+
+  // Live, waiting and selected sessions always stay visible; the cap only trims the finished tail.
+  // A search shows every match, since folding away a hit would look like it was not found.
+  const visibleSessions = useMemo(() => {
+    if (expanded || filterQuery.trim()) return filteredSessions;
+    return filteredSessions.filter(
+      (s, index) => index < COLLAPSED_SESSION_LIMIT || isAttentionState(s.state) || s.issueKey === selectedSessionKey
+    );
+  }, [filteredSessions, expanded, filterQuery, selectedSessionKey]);
+  const hiddenCount = filteredSessions.length - visibleSessions.length;
 
   if (rootSessions.length === 0) {
     return (
@@ -109,7 +127,7 @@ export function EasyModeSessionsList({
         </div>
       )}
 
-      {filteredSessions.map(session => (
+      {visibleSessions.map(session => (
         <EasyModeSessionCard
           key={session.issueKey}
           session={session}
@@ -124,6 +142,18 @@ export function EasyModeSessionsList({
           onArchiveSession={onArchiveSession}
         />
       ))}
+
+      {(hiddenCount > 0 || (expanded && filteredSessions.length > COLLAPSED_SESSION_LIMIT && !filterQuery.trim())) && (
+        <button
+          type="button"
+          className="easymode-show-more"
+          data-testid="easymode-sessions-show-more"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(value => !value)}
+        >
+          {expanded ? 'Show fewer' : `Show ${hiddenCount} more`}
+        </button>
+      )}
 
       {filteredSessions.length === 0 && filterQuery && (
         <div className="easymode-empty-hint">No sessions match &quot;{filterQuery}&quot;</div>
