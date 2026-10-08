@@ -1,8 +1,9 @@
+import { takeContextSnapshot } from './contextSnapshotHost';
 import { getLogBus } from './logBusInstance';
 import { randomUUID } from 'node:crypto';
 import * as fsp from 'node:fs/promises';
 import * as nodePath from 'node:path';
-import { BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { openRestrictedHtmlPreview } from './htmlArtifactPreview';
 import { broadcastToAllWindows } from './windowBroadcast';
 import {
@@ -36,6 +37,7 @@ import {
   type McpServerConfig,
   type SaveCustomProviderInput,
   buildHandoverEnvelope,
+  validateHandover,
   type IssueDetails,
   type IssueTrackerService,
   type PermissionDecision,
@@ -434,14 +436,20 @@ export async function handoverSession(issueKey: string, input: AiHandoverInput):
   }
   await sessionManager.refreshHandoverBrief(issueKey);
   const current = sessionManager.getAgentSession(issueKey) ?? record;
-  const envelope = buildHandoverEnvelope(current, { provider: targetProvider, model });
+  // What the work stands on — commit, files, dependencies — taken now and persisted as evidence (FX-BE-092).
+  const { snapshot, manifest, head } = await takeContextSnapshot(current, app.getPath('userData'));
+  const envelope = buildHandoverEnvelope(current, { provider: targetProvider, model, snapshot });
+  const blocking = validateHandover(envelope, snapshot, { sessionKey: issueKey, ...(head ? { head } : {}) }).filter(issue => issue.level === 'block');
+  if (blocking.length > 0) throw new Error(`Handover blocked: ${blocking.map(issue => issue.message).join(' ')}`);
   sessionManager.transitionAgentRuntime(issueKey, {
     provider: targetProvider,
     model,
     reason: 'provider_handover',
     clearNativeRuntime: true,
     eventSummary: `Handed over to ${descriptor.label}${model ? ` (${model})` : ''}`,
-    eventDetail: envelope.text
+    eventDetail: manifest
+      ? `${envelope.text}\n\nContext snapshot ${manifest.fingerprint.slice(0, 12)} (${manifest.included} files, ${manifest.excluded} left out) saved to ${manifest.path}`
+      : envelope.text
   });
   if (!continueRecordedSessionForHost) throw new Error('The AI host is not ready yet.');
   await continueRecordedSessionForHost(issueKey, envelope.text);

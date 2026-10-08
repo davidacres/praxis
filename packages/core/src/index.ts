@@ -27,6 +27,8 @@ export * from './ai/cliProbe';
 export * from './ai/providers/providerPreflight';
 export * from './ai/agentTypes';
 export * from './ai/sessionHandover';
+export * from './ai/contextSnapshot';
+export * from './ai/coordination';
 export * from './ai/agentContracts';
 export * from './ai/agentEventUtils';
 export * from './ai/agentWorkflowCatalog';

@@ -1,4 +1,5 @@
 import type { AiProvider } from '../types';
+import { formatContextSnapshot, type ContextSnapshot } from './contextSnapshot';
 import type { TokenUsage } from './gateway';
 import type {
   AgentEventSummary,
@@ -287,6 +288,8 @@ export function currentRuntimeEpoch(record: AgentSessionRecord): SessionRuntimeE
 }
 
 export interface HandoverEnvelope {
+  /** What the work stood on (FX-BE-092): source commit, files handed over and left out, dependencies. */
+  snapshot?: ContextSnapshot;
   fromProvider?: AiProvider;
   toProvider?: AiProvider;
   fromModel?: string;
@@ -320,7 +323,7 @@ function compactTranscript(events: AgentEventSummary[], maxChars = 6000): string
 
 export function buildHandoverEnvelope(
   record: AgentSessionRecord,
-  target: { provider?: AiProvider; model?: string }
+  target: { provider?: AiProvider; model?: string; snapshot?: ContextSnapshot }
 ): HandoverEnvelope {
   const purpose = resolveSessionPurpose(record);
   const brief = record.handoverBrief ?? emptyHandoverBrief();
@@ -355,6 +358,7 @@ export function buildHandoverEnvelope(
       brief.touchedFiles.length ? `Files: ${brief.touchedFiles.join(', ')}` : '',
       '',
       workspace ? `## Workspace\n${workspace}` : '',
+      target.snapshot ? formatContextSnapshot(target.snapshot) : '',
       transcript ? `## Conversation\n${transcript}` : '',
       '',
       'Continue the work described in Next steps.'
@@ -363,6 +367,7 @@ export function buildHandoverEnvelope(
       .join('\n')
   );
   return {
+    ...(target.snapshot ? { snapshot: target.snapshot } : {}),
     fromProvider: record.provider,
     toProvider: target.provider,
     fromModel: record.model,
