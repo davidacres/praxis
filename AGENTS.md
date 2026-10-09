@@ -51,8 +51,7 @@ file, so use the table.
 | AI runtime | `packages/core/src/ai/AGENTS.md` | other tools' agents/skills/instructions, ACP agent sessions, interactive ticket review |
 | Add-on marketplace | `packages/core/src/marketplace/AGENTS.md` | registry, install, catalogue |
 | Plan files | `apps/praxis-desktop/docs/AGENTS.md` | the rules a plan file must meet to appear on the board |
-| Phone app (Flutter) | `apps/praxis-flutter/AGENTS.md` | the phone app: protocol port, stage desktop, text metrics, deploy |
-| Phone app (Expo, being archived) | `apps/praxis-mobile/AGENTS.md` | the original React Native app the Flutter app replaces |
+| Phone app (Flutter) | `apps/praxis-mobile/AGENTS.md` | the phone app: protocol port, stage desktop, text metrics, deploy |
 
 ---
 

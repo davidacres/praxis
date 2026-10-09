@@ -1,6 +1,6 @@
 # Praxis Flutter — status
 
-_Last updated 2026-09-25._ A Flutter port of the Expo app in `apps/praxis-mobile`,
+_Last updated 2026-09-25._ A Flutter port of the Expo app (now removed),
 built to replace it. Everything below was checked on the iPhone 15 Pro
 simulator against `tool/stage_host.cjs` (the desktop's own LAN listener and
 host services over sample data), with the same steps run in a fresh Release
@@ -78,15 +78,22 @@ display size, connect/pairing screens.
 
 ## Archiving the Expo app
 
-Done in the repository already:
+The Expo app has been archived and is being removed. The Flutter app in
+`apps/praxis-mobile` is the only phone app in use.
 
-- `scripts/deploy-iphone.sh` (and `npm run mobile:deploy`) deploys the Flutter
-  app by default; `--app expo` still deploys the old one.
-- The device driver moved to `tools/device-driver` and drives the Flutter app
-  by default; the `mobile-device-testing` skill's docs and its bundled copy are
-  updated for Flutter.
-- Root `AGENTS.md` lists the Flutter app; `npm run test:flutter` and
-  `npm run mobile:stage-host` exist.
+Done:
+
+- `npm run test:flutter` and `npm run mobile:stage-host` run the Flutter app.
+- The device driver and the `mobile-device-testing` skill's docs use the Flutter
+  app by default.
+- Root `AGENTS.md` lists the Flutter app.
+
+Not right yet:
+
+- `scripts/deploy-iphone.sh --app expo` still points at `apps/praxis-mobile`, so
+  it deploys the Flutter app. The `expo` option should be removed.
+- The root `workspaces` still lists `apps/praxis-mobile`. That folder has no
+  `package.json`, so it is not an npm workspace. The lockfile lists it too.
 
 Still to do, in this order:
 
@@ -94,23 +101,21 @@ Still to do, in this order:
    (`packages/core/src/host/mobileProtocol.ts`,
    `apps/praxis-desktop/main/src/main/mobileSessionProjection.ts`): the
    desktop sends each reply's tokens and cost, which the Flutter app shows.
-   The uncommitted Expo edits in the same change can go with the archive.
 2. **Decide where the PRAXISMOBILE plans live.** `apps/praxis-mobile/docs/plans`,
    `project.praxis.md` and `docs/PLAN_MAP.md` are a folder-backed project
    linked from `apps/praxis-desktop/docs/PLAN_MAP.md` and `master-plan.md`.
-   Move them (e.g. to `apps/praxis-flutter/docs`) and fix those two links, or
+   Move them (e.g. to `apps/praxis-mobile/docs`) and fix those two links, or
    keep them in the archived folder.
-3. **Remove the Expo workspace**: take `apps/praxis-mobile` out of the root
-   `workspaces`, drop the `build:mobile`, `test:mobile` and `mobile:fixture`
-   scripts and `test:mobile` from `test`, then `npm install` to regenerate the
-   lockfile (keep the `//optionalDependencies` bindings note in mind).
-4. **Move the folder**: `git mv apps/praxis-mobile archive/praxis-mobile`, or
-   delete it — history keeps it either way.
-5. **Publish the skill**: `tools/device-driver/publish-skill.sh` (bumps the
+3. **Remove the Expo workspace from the root build.** Take `apps/praxis-mobile`
+   out of the root `workspaces`, drop the `build:mobile`, `test:mobile` and
+   `mobile:fixture` scripts and the `test:mobile` step in `test`, then run
+   `npm install` to regenerate the lockfile. Keep the `//optionalDependencies`
+   bindings note in mind.
+4. **Remove the `--app expo` option** from `scripts/deploy-iphone.sh` (see above).
+5. **Delete the archived Expo app folder.** History keeps it.
+6. **Publish the skill**: `tools/device-driver/publish-skill.sh` (bumps the
    version; the published copy still describes the Expo app).
-6. Remove the Expo app from the phone when you no longer want it.
-
-`packages/mobile-protocol` stays: the desktop uses it.
+7. Remove the Expo app from the phone when you no longer want it.
 
 ## How to run
 
@@ -118,7 +123,7 @@ Still to do, in this order:
 npm run build:core && npm --prefix apps/praxis-desktop/main run compile   # once, for the stage desktop
 npm run mobile:stage-host        # prints a pairing invitation (127.0.0.1 — reachable from the simulator)
 npm run test:flutter
-cd apps/praxis-flutter && flutter run -d <simulator>
+cd apps/praxis-mobile && flutter run -d <simulator>
 npm run mobile:deploy            # physical iPhone, Release
 ```
 

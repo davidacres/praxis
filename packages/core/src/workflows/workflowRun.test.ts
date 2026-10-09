@@ -7,9 +7,11 @@ import {
   stageProvider,
   stageModel,
   createWorkflowRun,
+  compactWorkflowRunEvents,
   normalizeWorkflowRun,
   reworkWorkflowRun,
-  type WorkflowRun
+  type WorkflowRun,
+  type WorkflowRunEvent
 } from './workflowRun';
 import { advanceJoins, deriveRunStatus, scheduleWorkflowRun } from './workflowScheduler';
 import { findTimedOutNodes, nextActions, recoverWorkflowRun } from './workflowRecovery';
@@ -990,4 +992,28 @@ test('switching a stage to another AI and model records stageModels and chosenMo
   assert.equal(run.stageModels, undefined);
   const summary2 = summarizeWorkflowRun(run);
   assert.equal(summary2.stages.find(s => s.nodeId === 'plan')?.chosenModel, undefined);
+});
+
+test('compactWorkflowRunEvents preserves lifecycle events and bounds repetitive node-progress', () => {
+  const events: WorkflowRunEvent[] = [
+    { id: '1', at: T(1), kind: 'run-started' as const, message: 'start' },
+    { id: '2', at: T(2), kind: 'node-started' as const, nodeId: 'qa', attempt: 1, message: 'qa started' }
+  ];
+  for (let i = 0; i < 100; i++) {
+    events.push({ id: `p-${i}`, at: T(3), kind: 'node-progress' as const, nodeId: 'qa', attempt: 1, message: `tick ${i}` });
+  }
+  events.push({ id: 'done', at: T(4), kind: 'node-succeeded' as const, nodeId: 'qa', attempt: 1, message: 'qa succeeded' });
+
+  // When active (not settled), keeps up to 50 latest progress events plus lifecycle events
+  const inFlight = compactWorkflowRunEvents(events, false);
+  assert.equal(inFlight.filter(e => e.kind === 'node-progress').length, 50);
+  assert.equal(inFlight[inFlight.length - 1].kind, 'node-succeeded');
+  assert.equal(inFlight[0].kind, 'run-started');
+
+  // When settled, compacts down to latest 10 progress events while keeping all lifecycle events
+  const settled = compactWorkflowRunEvents(events, true);
+  assert.equal(settled.filter(e => e.kind === 'node-progress').length, 10);
+  assert.equal(settled[settled.length - 1].kind, 'node-succeeded');
+  assert.equal(settled[0].kind, 'run-started');
+  assert.equal(settled[1].kind, 'node-started');
 });

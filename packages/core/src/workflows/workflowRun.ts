@@ -969,13 +969,17 @@ function progressNode(run: WorkflowRun, nodeId: string, at: string, phase: strin
   if (state.phase === phase && previous?.kind === 'node-progress' && previous.message === eventMessage) return run;
 
   const next = withNode(run, { ...state, phase });
-  return append(next, {
+  const appended = append(next, {
     at,
     kind: 'node-progress',
     nodeId,
     attempt: state.attempts.length,
     message: eventMessage
   });
+  return {
+    ...appended,
+    events: compactWorkflowRunEvents(appended.events, false)
+  };
 }
 
 function recordGate(run: WorkflowRun, at: string, decision: WorkflowGateDecision): WorkflowRun {
@@ -1008,10 +1012,11 @@ function cancelRun(run: WorkflowRun, at: string, reason?: string): WorkflowRun {
     next = append(next, { at, kind: 'node-cancelled', nodeId, message: `${label(run, nodeId)} cancelled.` });
   }
 
-  return append(
+  const cancelled = append(
     { ...next, status: 'cancelled', endedAt: at, ...(reason ? { endedReason: reason } : {}) },
     { at, kind: 'run-cancelled', message: `Run cancelled${reason ? `: ${reason}` : '.'}` }
   );
+  return { ...cancelled, events: compactWorkflowRunEvents(cancelled.events, true) };
 }
 
 // ── Loops (FX-BE-162) ────────────────────────────────────────────────────
@@ -1333,18 +1338,20 @@ function settleRunIfDone(run: WorkflowRun, at: string): WorkflowRun {
     return true;
   });
   if (requiredFailure) {
-    return append(
+    const settled = append(
       { ...run, status: 'failed', endedAt: at, endedReason: `Required stage "${requiredFailure.nodeId}" failed.` },
       { at, kind: 'run-failed', nodeId: requiredFailure.nodeId, message: `Run failed at ${label(run, requiredFailure.nodeId)}.` }
     );
+    return { ...settled, events: compactWorkflowRunEvents(settled.events, true) };
   }
 
   if (states.every(state => isTerminalOutcome(state.outcome))) {
     const succeeded = states.some(state => state.outcome === 'succeeded');
-    return append(
+    const settled = append(
       { ...run, status: succeeded ? 'succeeded' : 'failed', endedAt: at },
       { at, kind: succeeded ? 'run-succeeded' : 'run-failed', message: succeeded ? 'Run completed.' : 'Run ended without a successful stage.' }
     );
+    return { ...settled, events: compactWorkflowRunEvents(settled.events, true) };
   }
 
   return run;
@@ -1472,7 +1479,10 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     definition,
     ...(typeof raw.displayName === 'string' && raw.displayName.trim() ? { displayName: raw.displayName.trim().slice(0, 120) } : {}),
     nodes,
-    events: Array.isArray(raw.events) ? (raw.events as WorkflowRunEvent[]) : [],
+    events: compactWorkflowRunEvents(
+      Array.isArray(raw.events) ? (raw.events as WorkflowRunEvent[]) : [],
+      isStatus(raw.status) && (raw.status === 'succeeded' || raw.status === 'failed' || raw.status === 'cancelled')
+    ),
     gateDecisions: Array.isArray(raw.gateDecisions) ? (raw.gateDecisions as WorkflowGateDecision[]) : [],
     startedAt: typeof raw.startedAt === 'string' ? raw.startedAt : '',
     ...(typeof raw.endedAt === 'string' ? { endedAt: raw.endedAt } : {}),
@@ -1516,6 +1526,64 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     ...(raw.archived === true ? { archived: true } : {}),
     ...(typeof raw.archivedAt === 'string' ? { archivedAt: raw.archivedAt } : {})
   };
+}
+
+/**
+ * Bounds the number of transient `node-progress` events kept in a run.
+ * Structural lifecycle events, artifacts, gates, loops, and verdicts are always preserved.
+ */
+export function compactWorkflowRunEvents(events: WorkflowRunEvent[], isSettled: boolean): WorkflowRunEvent[] {
+  if (events.length === 0) return events;
+  if (!isSettled) {
+    let progressCount = 0;
+    for (let i = 0; i < events.length; i++) {
+      if (events[i].kind === 'node-progress') progressCount++;
+    }
+    if (progressCount <= 50) return events;
+
+    const progressByNodeAttempt = new Map<string, number>();
+    const keep = new Set<number>();
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i];
+      if (e.kind !== 'node-progress') {
+        keep.add(i);
+      } else {
+        const key = `${e.nodeId ?? ''}-${e.attempt ?? 0}`;
+        const count = progressByNodeAttempt.get(key) ?? 0;
+        if (count < 50) {
+          progressByNodeAttempt.set(key, count + 1);
+          keep.add(i);
+        }
+      }
+    }
+    return events.filter((_, i) => keep.has(i));
+  }
+
+  let hasProgress = false;
+  for (let i = 0; i < events.length; i++) {
+    if (events[i].kind === 'node-progress') {
+      hasProgress = true;
+      break;
+    }
+  }
+  if (!hasProgress) return events;
+
+  const progressByNodeAttempt = new Map<string, number>();
+  const keep = new Set<number>();
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind !== 'node-progress') {
+      keep.add(i);
+    } else {
+      const key = `${e.nodeId ?? ''}-${e.attempt ?? 0}`;
+      const count = progressByNodeAttempt.get(key) ?? 0;
+      if (count < 10) {
+        progressByNodeAttempt.set(key, count + 1);
+        keep.add(i);
+      }
+    }
+  }
+  return events.filter((_, i) => keep.has(i));
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────

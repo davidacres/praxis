@@ -78,6 +78,8 @@ export interface AcpAgentStartOptions {
   mcpServers?: AcpMcpServer[];
   /** A host-scheduled AI-to-AI turn; do not persist its routing instruction as a user turn. */
   internalConversationTurn?: boolean;
+  /** The follow-up answers a gadget: its transcript turn is hidden, but the agent still receives it. */
+  gadgetAnswer?: boolean;
   /** Host-supplied participant and handover context for an AI-to-AI or directed turn. */
   conversationContext?: string;
   /** Images pasted/dropped into the composer, riding alongside the follow-up prompt as ACP image content blocks. */
@@ -264,7 +266,8 @@ function evt(
   summary: string,
   detail?: string,
   data?: AgentToolEventData,
-  attachments?: WireImageAttachment[]
+  attachments?: WireImageAttachment[],
+  gadgetAnswer?: boolean
 ): AgentEventSummary {
   return {
     timestamp: now(),
@@ -272,7 +275,8 @@ function evt(
     summary,
     detail,
     ...(data ? { data } : {}),
-    ...(attachments?.length ? { attachments } : {})
+    ...(attachments?.length ? { attachments } : {}),
+    ...(gadgetAnswer ? { gadgetAnswer } : {})
   };
 }
 
@@ -1128,7 +1132,7 @@ export class AcpAgentHost {
       issueKey,
       options.internalConversationTurn
         ? evt('conversation_turn', 'Conversation turn started')
-        : evt('user_input_completed', 'You', followUp, undefined, followUpImages)
+        : evt('user_input_completed', 'You', followUp, undefined, followUpImages, options.gadgetAnswer)
     );
     this.sessionManager.updateAgentState(issueKey, 'executing');
 

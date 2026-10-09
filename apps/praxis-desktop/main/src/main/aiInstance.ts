@@ -5,6 +5,7 @@ import { app } from 'electron';
 import {
   AcpAgentHost,
   AiSessionManager,
+  FileSessionTranscriptStore,
   listCatalogModels,
   getKnownContextLength,
   getModelPricing,
@@ -73,8 +74,11 @@ let analysisStore: JsonKeyValueStore | undefined;
  */
 export function getAiSessionManager(): AiSessionManager {
   if (!sessionManager) {
+    const transcriptsDir = path.join(app.getPath('userData'), 'ai-transcripts');
+    const transcriptStore = new FileSessionTranscriptStore(transcriptsDir);
     sessionManager = new AiSessionManager(
-      new JsonKeyValueStore(path.join(app.getPath('userData'), 'ai-sessions.json'))
+      new JsonKeyValueStore(path.join(app.getPath('userData'), 'ai-sessions.json')),
+      transcriptStore
     );
   }
   return sessionManager;

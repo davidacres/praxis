@@ -259,6 +259,74 @@ test('image artifacts render as clickable chat previews', async () => {
   await expect(lightbox).toHaveCount(0);
 });
 
+test('artifact gadget renders handover metadata and item category badges', async () => {
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-handover-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'handover-delivery',
+      payload: {
+        title: 'Work Handover & Verification',
+        artifacts: [
+          {
+            name: 'fullwidth-chat.png',
+            path: '.praxis/session-artifacts/fullwidth-chat.png',
+            category: 'evidence',
+            verdict: 'passed',
+            description: 'Screenshot of full-width chat'
+          },
+          {
+            name: 'summary-report.json',
+            path: 'output/summary-report.json',
+            category: 'deliverable',
+            description: 'Structured completion output'
+          }
+        ],
+        handover: {
+          verdict: 'passed',
+          testSummary: { total: 17, passed: 17, failed: 0 },
+          gitRef: 'feat/handover',
+          nextSteps: 'Proceed with user sign-off',
+          requiresSignoff: true
+        }
+      },
+      actions: [{ actionId: 'sign-off', label: 'Approve & Close', effect: 'informational' }]
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'Work completed with handover receipt.')
+  );
+
+  const gadget = win.locator('[data-testid="gadget-artifact"]');
+  await expect(gadget).toContainText('Work Handover & Verification');
+
+  const handoverCard = gadget.locator('[data-testid="gadget-artifact-handover"]');
+  await expect(handoverCard).toBeVisible();
+  await expect(handoverCard.locator('[data-testid="gadget-artifact-handover-verdict"]')).toContainText('Verified · Passed');
+  await expect(handoverCard.locator('[data-testid="gadget-artifact-handover-tests"]')).toContainText('17/17 tests passed');
+  await expect(handoverCard.locator('[data-testid="gadget-artifact-handover-gitref"]')).toContainText('feat/handover');
+  await expect(handoverCard.locator('[data-testid="gadget-artifact-handover-signoff"]')).toContainText('Sign-off required');
+  await expect(handoverCard.locator('[data-testid="gadget-artifact-handover-next-steps"]')).toContainText('Proceed with user sign-off');
+
+  await expect(gadget.locator('[data-testid="gadget-artifact-item-category"]').first()).toHaveText('evidence');
+  await expect(gadget.locator('[data-testid="gadget-artifact-item-verdict"]').first()).toHaveText('passed');
+
+  const gadgetBox = await gadget.boundingBox();
+  if (gadgetBox) {
+    await win.screenshot({
+      path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-handover-gadget.png'),
+      clip: {
+        x: Math.max(0, gadgetBox.x - 20),
+        y: Math.max(0, gadgetBox.y - 20),
+        width: gadgetBox.width + 40,
+        height: gadgetBox.height + 40
+      }
+    });
+  }
+});
+
 test('HTML artifacts open in an isolated in-app preview', async () => {
   const html = fs.readFileSync(path.resolve(__dirname, '../../.praxis/visualizations/session-list-card-mockup.html'), 'utf8');
   const artifact = {
@@ -442,7 +510,11 @@ test('answering a choice records it through the ledger and leaves it answered', 
   // the host has real work still to do.
   await expect(gadget).toHaveAttribute('data-gadget-state', 'completed');
   await expect(gadget.locator('[data-testid="gadget-inert-note"]')).toContainText('This decision has been made');
-  await expect(submit).toBeDisabled();
+  // Answered, the choice collapses to what was picked: no options, no submit.
+  await expect(gadget.getByRole('radio')).toHaveCount(0);
+  await expect(submit).toHaveCount(0);
+  await expect(gadget.locator('[data-testid="gadget-answered"]')).toContainText('Claude');
+  await win.screenshot({ path: 'output/playwright/chat-gadget-choice-answered.png', fullPage: true });
 
   // Answering a `choice` gadget also reports the answer back to the agent as
   // a follow-up turn — the same path a typed reply takes — so the model that
@@ -453,6 +525,9 @@ test('answering a choice records it through the ledger and leaves it answered', 
   const followUp = JSON.parse(mock!.requests[1]!.body) as { messages: Array<{ role: string; content: string }> };
   expect(followUp.messages.at(-1)).toMatchObject({ role: 'user' });
   expect(followUp.messages.at(-1)!.content).toContain('Claude');
+  // The collapsed gadget already shows the decision, so the follow-up is not
+  // repeated as a message from the user in the transcript.
+  await expect(win.locator('[data-testid="session-chat-thread"]')).not.toContainText('Gadget response');
 
   // The gadget is durable, not a transient renderer detail. Reloading the
   // selected session restores the completed choice without triggering another
@@ -461,6 +536,8 @@ test('answering a choice records it through the ledger and leaves it answered', 
   await win.locator('[data-testid="nav-conversations"]').click();
   await expect(win.locator('[data-testid="gadget-choice"]')).toHaveAttribute('data-gadget-state', 'completed');
   await expect(win.locator('[data-testid="gadget-choice"]')).toContainText('This decision has been made');
+  // The chosen answer survives the reload, read back from the ledger.
+  await expect(win.locator('[data-testid="gadget-choice"] [data-testid="gadget-answered"]')).toContainText('Claude');
   expect(mock!.requests).toHaveLength(2);
 
   // The decision is in the durable ledger, with the evidence of what was asked.

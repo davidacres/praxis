@@ -1,7 +1,7 @@
 # Physical iPhone: build, install, verify
 
 Run from the Praxis repository root unless stated. The app is the Flutter app
-in `apps/praxis-flutter` (bundle id `com.acresweb.praxis.mobile.praxis`,
+in `apps/praxis-mobile` (bundle id `com.acresweb.praxis.mobile.praxis`,
 shown on the phone as "Praxis Flutter").
 
 ## One-command deployment (recommended)
@@ -20,7 +20,7 @@ the compiled Dart code is embedded, installs and launches it.
 Get `<udid>` and `<CoreDevice id>` from `bash preflight.sh`.
 
 ```sh
-cd apps/praxis-flutter
+cd apps/praxis-mobile
 flutter pub get
 flutter build ios --release --no-codesign            # compiles Dart and generates the Xcode settings
 cd ios
@@ -28,7 +28,7 @@ xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
   -destination 'id=<udid>' -derivedDataPath build/device-release \
   -allowProvisioningUpdates DEVELOPMENT_TEAM=WY4B2H77A5 build > /tmp/praxis-ios-build.log 2>&1
 grep -E 'error:|\*\* BUILD' /tmp/praxis-ios-build.log
-APP=apps/praxis-flutter/ios/build/device-release/Build/Products/Release-iphoneos/Runner.app
+APP=apps/praxis-mobile/ios/build/device-release/Build/Products/Release-iphoneos/Runner.app
 ```
 
 `** BUILD SUCCEEDED **` is required.

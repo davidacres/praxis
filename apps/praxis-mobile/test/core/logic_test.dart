@@ -482,6 +482,14 @@ void main() {
       expect(canDrawGadget(GadgetEnvelope({'kind': 'hologram', 'version': 1})), false);
     });
 
+    test('an answered choice collapses to the labels it was answered with', () {
+      GadgetEnvelope answered(Json answer) => GadgetEnvelope({...choice, 'answer': answer});
+      expect(answeredChoiceLabels(GadgetEnvelope(choice)), isNull);
+      expect(answeredChoiceLabels(answered({'kind': 'choice', 'selected': 'a'})), ['A']);
+      expect(answeredChoiceLabels(answered({'kind': 'selection', 'selected': ['a', 'z']})), ['A', 'z']);
+      expect(answeredChoiceLabels(answered({'kind': 'confirmation', 'confirmed': true})), isNull);
+    });
+
     test('a gadget\'s scope resolves the session an image reference loads against', () {
       final withWork = GadgetEnvelope({
         ...choice,

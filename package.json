@@ -27,8 +27,8 @@
     "test:mobile": "npm test --workspace=@praxis/mobile",
     "mobile:fixture": "npm run fixture --workspace=@praxis/mobile",
     "mobile:deploy": "./scripts/deploy-iphone.sh",
-    "mobile:stage-host": "node apps/praxis-flutter/tool/stage_host.cjs",
-    "test:flutter": "cd apps/praxis-flutter && flutter test",
+    "mobile:stage-host": "node apps/praxis-mobile/tool/stage_host.cjs",
+    "test:flutter": "cd apps/praxis-mobile && flutter test",
     "renderer:dev": "npm run dev --workspace=@praxis/desktop-renderer",
     "build:renderer": "npm run build --workspace=@praxis/desktop-renderer",
     "renderer:textures": "npm run textures --workspace=@praxis/desktop-renderer",
@@ -104,7 +104,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.0",
     "babel-preset-expo": "~57.0.11",
-    "typescript": "^6.0.2"
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "@davidacres/praxis-desktop": "^0.3.3-selfsigned.1"

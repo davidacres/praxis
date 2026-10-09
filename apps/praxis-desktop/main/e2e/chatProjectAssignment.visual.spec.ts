@@ -77,6 +77,8 @@ test('assign chat picker and project session placement', async () => {
   const ticketChatRow = page.getByTestId('session-list-row').filter({ hasText: 'Ticket research notes' });
   await expect(ticketChatRow).toBeVisible();
   await ticketChatRow.hover();
+  await expect(ticketChatRow.getByTestId('session-assign-btn')).toBeVisible();
+  await expect(ticketChatRow.getByTestId('session-assign-btn')).toHaveAttribute('title', 'Assign to ticket');
   await ticketChatRow.getByTestId('session-actions-menu').click();
   await page.getByTestId('session-assign-project-menu-item').click();
   await expect(page.getByTestId('assign-chat-dialog')).toBeVisible();

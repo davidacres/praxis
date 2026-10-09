@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ChoiceGadgetPayload, GadgetActionValue } from '@praxis/core';
+import { Icon } from '../../../ui/Icon';
 import { GadgetActionBar, GadgetHeading } from '../controls';
 import { payloadOf, type GadgetRendererProps } from '../gadgetContract';
 
@@ -15,6 +16,26 @@ export function ChoiceGadget({ gadget, actionable, busy, onSubmit }: GadgetRende
   const multiple = payload.multiple === true;
   const [selected, setSelected] = useState<string[]>(payload.defaultValue ? [payload.defaultValue] : []);
   const titleId = `${gadget.gadgetId}-title`;
+
+  // Once answered, the decision is a fact, not a control: collapse to the
+  // chosen option(s) so the transcript reads as what was picked, not as a
+  // form that still looks askable.
+  const answered = gadget.answer?.kind === 'choice' || gadget.answer?.kind === 'selection' ? gadget.answer : undefined;
+  if (answered) {
+    const picked = answered.kind === 'choice' ? [answered.selected] : answered.selected;
+    const labels = picked.map(value => payload.options.find(option => option.value === value)?.label ?? value);
+    return (
+      <div className="gadget-answered" data-testid="gadget-answered">
+        <span className="gadget-answered-question" id={titleId}>
+          {payload.question}
+        </span>
+        <span className="gadget-answered-value">
+          <Icon name="check" size={12} />
+          {labels.join(', ')}
+        </span>
+      </div>
+    );
+  }
 
   const toggle = (value: string) => {
     setSelected(current => {

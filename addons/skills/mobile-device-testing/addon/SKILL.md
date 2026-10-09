@@ -82,7 +82,7 @@ Details: `references/physical-iphone.md`, `references/simulator.md`.
 
 - Physical iPhone: `./scripts/deploy-iphone.sh` builds the Flutter app in
   Release, installs and launches it.
-- Simulator: `flutter build ios --simulator --debug` in `apps/praxis-flutter`,
+- Simulator: `flutter build ios --simulator --debug` in `apps/praxis-mobile`,
   then `xcrun simctl install booted build/ios/iphonesimulator/Runner.app`.
 - Verify the product before testing: `Runner.app/Frameworks/App.framework/App`
   (the compiled Dart code) exists and the bundle id is

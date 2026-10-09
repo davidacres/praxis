@@ -50,9 +50,9 @@ export interface ParsedChatBlocks {
   malformed: number;
 }
 
-function pushMarkdown(blocks: RawChatBlockInput[], text: string): void {
+function pushMarkdown(blocks: RawChatBlockInput[], text: string, blockId?: string): void {
   const trimmed = text.trim();
-  if (trimmed) blocks.push({ type: 'markdown', markdown: trimmed });
+  if (trimmed) blocks.push({ type: 'markdown', markdown: trimmed, ...(blockId ? { blockId } : {}) });
 }
 
 /**
@@ -109,17 +109,18 @@ export function parseChatBlocks(text: string, options: ChatBlockParseOptions): P
   let lastIndex = 0;
   let found = 0;
   let malformed = 0;
+  let mdIndex = 0;
 
   FENCE.lastIndex = 0;
   for (let match = FENCE.exec(text); match !== null; match = FENCE.exec(text)) {
-    pushMarkdown(blocks, text.slice(lastIndex, match.index));
+    pushMarkdown(blocks, text.slice(lastIndex, match.index), `${options.idPrefix}-md-${mdIndex++}`);
     lastIndex = match.index + match[0].length;
     found += 1;
 
     const lenient = parseLenientJson(match[1]);
     if (!lenient.ok) {
       malformed += 1;
-      pushMarkdown(blocks, `\`\`\`json\n${match[1].trim()}\n\`\`\``);
+      pushMarkdown(blocks, `\`\`\`json\n${match[1].trim()}\n\`\`\``, `${options.idPrefix}-md-${mdIndex++}`);
       continue;
     }
     const parsed = clampChoiceText(lenient.value);
@@ -142,6 +143,6 @@ export function parseChatBlocks(text: string, options: ChatBlockParseOptions): P
     });
   }
 
-  pushMarkdown(blocks, text.slice(lastIndex));
+  pushMarkdown(blocks, text.slice(lastIndex), `${options.idPrefix}-md-${mdIndex++}`);
   return { blocks, containsGadget: found > 0, malformed };
 }

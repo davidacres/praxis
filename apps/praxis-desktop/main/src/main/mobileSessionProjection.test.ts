@@ -172,3 +172,21 @@ test('a streaming reply hides a gadget fence that is still being written', () =>
   const streaming = snapshot.messages.find(message => message.status === 'streaming');
   assert.equal(streaming?.text, 'Here is the choice.');
 });
+
+test('a gadget answer is not repeated as a user message on the phone', () => {
+  const snapshot = mobileSessionSnapshot(record({
+    events: [
+      { timestamp: '2026-09-22T09:00:00.000Z', type: 'user_input_completed', summary: 'Hello' },
+      { timestamp: '2026-09-22T09:00:01.000Z', type: 'message', summary: 'Pick one' },
+      { timestamp: '2026-09-22T09:00:02.000Z', type: 'user_input_completed', summary: 'Gadget response: Claude', gadgetAnswer: true },
+      { timestamp: '2026-09-22T09:00:03.000Z', type: 'message', summary: 'Using Claude.' },
+    ],
+  }), 12);
+  assert.deepEqual(snapshot.messages.map(message => [message.role, message.text]), [
+    ['user', 'Help'],
+    ['user', 'Hello'],
+    ['assistant', 'Pick one'],
+    ['assistant', 'Using Claude.'],
+    ['assistant', 'Streaming now'],
+  ]);
+});

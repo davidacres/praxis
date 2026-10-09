@@ -843,6 +843,8 @@ export interface AiIpc {
   removeCustomProvider(id: AiProvider): Promise<void>;
   /** Every persisted agent session, most recently started first. */
   listSessions(): Promise<AgentSessionRecord[]>;
+  /** Gets a single agent session by issueKey or sessionId, hydrating its full event transcript on demand. */
+  getSession(issueKey: string): Promise<AgentSessionRecord | undefined>;
   listInterruptedSessions(): Promise<AgentSessionRecord[]>;
   resumeInterruptedSession(issueKey: string): Promise<void>;
   dismissInterruptedSessions(issueKeys: string[]): Promise<void>;
@@ -876,7 +878,12 @@ export interface AiIpc {
    * `images` are attachments pasted/dropped into the composer, forwarded to the
    * agent with the message as provider-native image content.
    */
-  continueSession(issueKey: string, message: string, images?: WireImageAttachment[]): Promise<void>;
+  continueSession(
+    issueKey: string,
+    message: string,
+    images?: WireImageAttachment[],
+    options?: { gadgetAnswer?: boolean }
+  ): Promise<void>;
   /** Changes the model used for the next turn of an idle session. */
   updateSessionModel(issueKey: string, model: string): Promise<AgentSessionRecord>;
   /** Changes the reasoning/thinking effort used for the next turn of an idle session. */

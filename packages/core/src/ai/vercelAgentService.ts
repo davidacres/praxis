@@ -76,7 +76,8 @@ function evt(
   summary: string,
   detail?: string,
   data?: AgentToolEventData,
-  attachments?: WireImageAttachment[]
+  attachments?: WireImageAttachment[],
+  gadgetAnswer?: boolean
 ): AgentEventSummary {
   return {
     timestamp: now(),
@@ -84,7 +85,8 @@ function evt(
     summary,
     detail,
     ...(data ? { data } : {}),
-    ...(attachments?.length ? { attachments } : {})
+    ...(attachments?.length ? { attachments } : {}),
+    ...(gadgetAnswer ? { gadgetAnswer } : {})
   };
 }
 
@@ -118,6 +120,8 @@ export interface VercelAgentStartOptions {
   };
   /** A host-scheduled AI-to-AI turn; its routing instruction is not a human chat message. */
   internalConversationTurn?: boolean;
+  /** The follow-up answers a gadget: its transcript turn is hidden, but the agent still receives it. */
+  gadgetAnswer?: boolean;
   /** Host-supplied participant and handover context for an AI-to-AI or directed turn. */
   conversationContext?: string;
   /** Normalized reasoning/thinking effort for this turn. Defaults to `'off'`. */
@@ -763,7 +767,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       hasFollowUp
         ? options.internalConversationTurn
           ? evt('conversation_turn', 'Conversation turn started')
-          : evt('user_input_completed', 'You', followUp, undefined, followUpImages)
+          : evt('user_input_completed', 'You', followUp, undefined, followUpImages, options.gadgetAnswer)
         : evt('session_start', 'Session resumed')
     );
     this.logger.appendLine(`[ApiAgent] Starting follow-up turn provider=${provider} session=${issueKey} model=${model} at=${new Date().toISOString()}`);

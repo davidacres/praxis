@@ -16,7 +16,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { KeyValueStore } from '../host/stateStore';
 import { migrateWorkflow, validateWorkflow, type WorkflowIssue } from './workflowValidation';
-import { normalizeWorkflowRun, type WorkflowRun } from './workflowRun';
+import { compactWorkflowRunEvents, isRunSettled, normalizeWorkflowRun, type WorkflowRun } from './workflowRun';
 import type {
   GateThresholdCondition,
   MetricThresholdCondition,
@@ -556,12 +556,17 @@ export class WorkflowRunStore {
 
   /** Inserts or replaces a run. The run itself is the unit of atomicity. */
   public async save(run: WorkflowRun): Promise<WorkflowRun> {
+    const isSettled = isRunSettled(run);
+    const normalized: WorkflowRun = {
+      ...run,
+      events: compactWorkflowRunEvents(run.events, isSettled)
+    };
     const runs = this.list();
-    const index = runs.findIndex(candidate => candidate.runId === run.runId);
-    if (index >= 0) runs[index] = run;
-    else runs.push(run);
+    const index = runs.findIndex(candidate => candidate.runId === normalized.runId);
+    if (index >= 0) runs[index] = normalized;
+    else runs.push(normalized);
     await this.state.update(RUNS_KEY, runs);
-    return run;
+    return normalized;
   }
 
   public async remove(runId: string): Promise<void> {

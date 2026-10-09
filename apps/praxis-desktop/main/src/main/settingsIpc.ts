@@ -23,7 +23,7 @@ import { restartMobileLanAfterKeyRotation } from './mobileListenerInstance';
 import { setDesktopAppearance } from './mobileAppearance';
 
 async function removeUserDataFile(name: string): Promise<void> {
-  await fs.rm(path.join(app.getPath('userData'), name), { force: true });
+  await fs.rm(path.join(app.getPath('userData'), name), { force: true, recursive: true });
 }
 
 /**
@@ -56,7 +56,11 @@ export function registerSettingsIpc(): void {
   ipcMain.handle('settings:clearSessionData', async () => {
     const activeIssues = getAllActiveTaskIssueKeys();
     await Promise.all(activeIssues.map(issueKey => abortActiveTask(issueKey)));
-    await Promise.all([removeUserDataFile('ai-sessions.json'), removeUserDataFile('ai-analysis.json')]);
+    await Promise.all([
+      removeUserDataFile('ai-sessions.json'),
+      removeUserDataFile('ai-analysis.json'),
+      removeUserDataFile('ai-transcripts')
+    ]);
     resetAiStores();
   });
 

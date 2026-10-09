@@ -50,8 +50,12 @@ import { registerMarketplaceIpc } from './marketplaceIpc';
 import { reconcileInstalledOnLaunch } from './marketplaceInstance';
 import { initMobileHost } from './mobileListenerInstance';
 import { ensureEnvironmentPath } from './shellEnvironment';
+import { initMemoryManager } from './memoryManager';
 
 const isMac = process.platform === 'darwin';
+
+// Instruct V8 to prioritize low memory footprint and expose GC for idle compaction
+app.commandLine.appendSwitch('js-flags', '--optimize_for_size --expose-gc');
 
 // Ensure child processes inherit the user's interactive login shell PATH on macOS and Linux
 ensureEnvironmentPath();
@@ -339,6 +343,8 @@ void app.whenReady().then(async () => {
 
   // No File/Edit/View/Window/Help menubar — the custom title bar is the only chrome.
   Menu.setApplicationMenu(null);
+
+  initMemoryManager();
 
   registerBoardIpc();
   registerIssueIpc();

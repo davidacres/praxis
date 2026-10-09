@@ -1095,3 +1095,136 @@ export function isSessionForProject(
   return false;
 }
 
+/**
+ * Normalizes a provider or model name to a canonical provider key
+ * so we can deduplicate variants (e.g. 'claude-code-cli' and 'anthropic')
+ * while recognizing distinct AI engines (e.g. OpenAI vs Claude vs Gemini).
+ */
+export function canonicalAiProvider(providerOrModel: string): string {
+  const norm = providerOrModel.toLowerCase().trim();
+  if (norm === 'codex-cli' || norm === 'openai' || norm.includes('openai') || norm.includes('codex') || norm.startsWith('gpt') || norm.startsWith('o1') || norm.startsWith('o3') || norm.startsWith('o4')) {
+    return 'openai';
+  }
+  if (norm === 'claude-code-cli' || norm === 'anthropic' || norm.includes('claude') || norm.includes('anthropic') || norm.startsWith('sonnet') || norm.startsWith('opus') || norm.startsWith('haiku')) {
+    return 'anthropic';
+  }
+  if (norm === 'gemini' || norm.includes('gemini')) {
+    return 'gemini';
+  }
+  if (norm === 'cursor-cli' || norm.includes('cursor')) {
+    return 'cursor-cli';
+  }
+  if (norm === 'antigravity-cli' || norm.includes('antigravity')) {
+    return 'antigravity-cli';
+  }
+  if (norm === 'copilot-cli' || norm.includes('copilot') || norm.includes('github')) {
+    return 'copilot-cli';
+  }
+  if (norm.includes('deepseek')) {
+    return 'deepseek';
+  }
+  if (norm.includes('mistral') || norm.includes('codestral')) {
+    return 'mistral';
+  }
+  if (norm.includes('groq')) {
+    return 'groq';
+  }
+  if (norm.includes('ollama') || norm.includes('local') || norm.includes('llama') || norm.includes('qwen')) {
+    return 'ollama';
+  }
+  if (norm === 'vercel-gateway' || norm.includes('vercel')) {
+    return 'vercel-gateway';
+  }
+  if (norm.includes('z-ai') || norm.includes('z.ai')) {
+    return 'z-ai';
+  }
+  if (norm.includes('minimax')) {
+    return 'minimax';
+  }
+  if (norm.includes('bifrost')) {
+    return 'bifrost';
+  }
+  if (norm.includes('together')) {
+    return 'together';
+  }
+  if (norm.includes('lmstudio') || norm.includes('lm-studio')) {
+    return 'lmstudio';
+  }
+  return norm;
+}
+
+/**
+ * Extracts the set of unique AI providers involved in a session, in order of occurrence.
+ * Checks the session's primary provider, runtime epochs (model changes/handovers),
+ * multi-AI conversation participants, speaker events, and child subagents.
+ */
+export function extractSessionAiProviders(session: AgentSessionRecord, childSessions?: AgentSessionRecord[]): string[] {
+  const result: string[] = [];
+  const seenCanonical = new Set<string>();
+
+  const add = (candidate?: string) => {
+    if (!candidate || !candidate.trim()) return;
+    const canon = canonicalAiProvider(candidate);
+    if (!canon || seenCanonical.has(canon)) return;
+    seenCanonical.add(canon);
+    result.push(candidate);
+  };
+
+  // 1. Primary provider
+  add(session.provider);
+
+  // 2. Runtime epochs (recorded when switching model/provider or handover)
+  if (session.runtimeEpochs) {
+    for (const epoch of session.runtimeEpochs) {
+      add(epoch.provider);
+      if (!epoch.provider && epoch.model) {
+        add(epoch.model);
+      }
+    }
+  }
+
+  // 3. Multi-AI conversation participants (e.g. consult, debate, pair)
+  if (session.conversation?.participants) {
+    for (const participant of session.conversation.participants) {
+      add(participant.provider);
+      if (!participant.provider && participant.model) {
+        add(participant.model);
+      }
+    }
+  }
+
+  // 4. Events with distinct speakers
+  if (session.events) {
+    for (const event of session.events) {
+      if (event.speaker?.provider) {
+        add(event.speaker.provider);
+      }
+    }
+  }
+
+  // 5. Child sessions / subagents (if provided)
+  if (childSessions) {
+    for (const child of childSessions) {
+      if (child.issueKey === session.issueKey) continue;
+      add(child.provider);
+      if (child.runtimeEpochs) {
+        for (const epoch of child.runtimeEpochs) {
+          add(epoch.provider);
+        }
+      }
+      if (child.conversation?.participants) {
+        for (const p of child.conversation.participants) {
+          add(p.provider);
+        }
+      }
+    }
+  }
+
+  // 6. If no provider found yet, attempt inference from session.model
+  if (result.length === 0 && session.model) {
+    add(session.model);
+  }
+
+  return result;
+}
+

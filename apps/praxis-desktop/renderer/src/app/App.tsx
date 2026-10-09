@@ -1026,6 +1026,35 @@ export function App() {
     };
   }, []);
 
+  const activeTargetSessionKey = route.sessionKey || (
+    route.feature === 'sessions'
+      ? (agentSessions.find(s => !isConversationSession(s))?.issueKey)
+      : route.feature === 'conversations'
+      ? (agentSessions.find(isConversationSession)?.issueKey)
+      : undefined
+  );
+
+  useEffect(() => {
+    const targetKey = activeTargetSessionKey;
+    if (!targetKey) return;
+    const session = agentSessions.find(s => s.issueKey === targetKey || s.sessionId === targetKey);
+    if (session && !session.eventsLoaded) {
+      let cancelled = false;
+      void window.praxis.ai.getSession(targetKey).then(fullSession => {
+        if (!cancelled && fullSession) {
+          setAgentSessions(current => {
+            const exists = current.some(s => s.issueKey === fullSession.issueKey);
+            if (!exists) return [fullSession, ...current];
+            return current.map(s => (s.issueKey === fullSession.issueKey ? fullSession : s));
+          });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [activeTargetSessionKey, agentSessions]);
+
   useEffect(() => {
     localStorage.setItem('tm-sidebar-mode', mode);
   }, [mode]);
@@ -2058,6 +2087,11 @@ export function App() {
           sessionKey={route.sessionKey}
           agentId={route.subagentId}
           sessions={agentSessions}
+          initialBrowserOpen={route.browserOpen}
+          initialBrowserUrl={route.browserUrl}
+          onBrowserOpenChange={handleBrowserOpenChange}
+          onBrowserUrlChange={handleBrowserUrlChange}
+          browserSuspended={nativeOverlayOpen}
           onClose={() => {
             if (settings?.preview.enableEasyMode) {
               navigate({
@@ -2569,6 +2603,12 @@ export function App() {
                       navigate(settings?.preview?.enableEasyMode ? { feature: 'overview' } : { feature: route.feature });
                     }
                   }}
+                  onAssignConversation={async (issueKey, projectId, ticketKey) => {
+                    const project = workspaceProjects.find(candidate => candidate.id === projectId);
+                    if (!project) throw new Error('That project is no longer available in this workspace.');
+                    await window.praxis.ai.assignSessionToProject(issueKey, projectId, ticketKey, project.workspaceFolder);
+                  }}
+                  assignableProjects={workspaceProjects}
                 />
               ) : (
                 <Sidebar

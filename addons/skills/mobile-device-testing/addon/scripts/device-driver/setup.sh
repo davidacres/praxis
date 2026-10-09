@@ -12,7 +12,7 @@ if [ "${1:-}" = "--simulator" ]; then TARGET=simulator; SIM_NAME="${2:-}"; fi
 
 if [ -z "${PRAXIS_DRIVER_TEAM:-}" ]; then
   # Sign with the same team as the Praxis app when this copy sits in the repo.
-  for project in "${PRAXIS_IOS_PROJECT:-}" "$DRIVER_DIR/../../apps/praxis-flutter/ios/Runner.xcodeproj"; do
+  for project in "${PRAXIS_IOS_PROJECT:-}" "$DRIVER_DIR/../../apps/praxis-mobile/ios/Runner.xcodeproj"; do
     if [ -n "$project" ] && [ -f "$project/project.pbxproj" ]; then
       PRAXIS_DRIVER_TEAM=$(grep -m1 -oE 'DEVELOPMENT_TEAM = [A-Z0-9]+' "$project/project.pbxproj" | awk '{print $3}' || true)
       break

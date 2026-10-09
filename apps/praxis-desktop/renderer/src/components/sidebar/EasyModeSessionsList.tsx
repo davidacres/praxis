@@ -16,6 +16,7 @@ export interface EasyModeSessionsListProps {
   onDeleteSession?: (sessionKey: string) => void;
   onRenameSession?: (sessionKey: string, title: string) => Promise<void>;
   onArchiveSession?: (sessionKey: string, archived: boolean) => Promise<void>;
+  onAssignSession?: (session: AgentSessionRecord) => void;
 }
 
 /** Finished sessions shown before the rest fold behind "Show more", so the Runs section below is never pushed off screen. */
@@ -37,7 +38,8 @@ export function EasyModeSessionsList({
   onAbortSession,
   onDeleteSession,
   onRenameSession,
-  onArchiveSession
+  onArchiveSession,
+  onAssignSession
 }: EasyModeSessionsListProps) {
   const [filterQuery, setFilterQuery] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -140,6 +142,7 @@ export function EasyModeSessionsList({
           onDeleteSession={onDeleteSession}
           onRenameSession={onRenameSession}
           onArchiveSession={onArchiveSession}
+          onAssignSession={onAssignSession}
         />
       ))}
 

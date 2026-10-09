@@ -17,7 +17,7 @@ import {
   digestActionValue,
   failGadgetAction
 } from './actionLedger';
-import { GadgetService } from './gadgetService';
+import { GadgetService, GADGET_BLOCKS_STORAGE_KEY } from './gadgetService';
 
 const HOST = 'host-1';
 const SCOPE = { hostId: HOST, projectId: 'project-1', sessionId: 'session-1', workId: 'FX-1', revision: 2 };
@@ -398,6 +398,28 @@ test('a revoked gadget stops accepting answers', async () => {
   assert.equal(block.type === 'gadget' && block.gadget.state, 'revoked');
 });
 
+test('an answered gadget carries the recorded answer when its blocks are read', async () => {
+  const gadgets = service();
+  gadgets.publish('session-1', [{ type: 'gadget', gadget: gadget() }]);
+  const [unanswered] = gadgets.getBlocks('session-1');
+  assert.equal(unanswered.type === 'gadget' && unanswered.gadget.answer, undefined);
+
+  await gadgets.submit(action(), SCOPE_CONTEXT, async () => ({}));
+  const [answered] = gadgets.getBlocks('session-1');
+  assert.deepEqual(answered.type === 'gadget' && answered.gadget.answer, { kind: 'choice', selected: 'local' });
+  // The answer is read-time evidence, not stored on the block the service keeps.
+  assert.equal(gadgets.getBlocks('session-1').length, 1);
+});
+
+test('a refused answer is not presented as the recorded answer', async () => {
+  const gadgets = service();
+  gadgets.publish('session-1', [{ type: 'gadget', gadget: gadget() }]);
+  const result = await gadgets.submit(action({ scope: { ...SCOPE, sessionId: 'other' } }), SCOPE_CONTEXT, async () => ({}));
+  assert.equal(result.status, 'rejected');
+  const [block] = gadgets.getBlocks('session-1');
+  assert.equal(block.type === 'gadget' && block.gadget.answer, undefined);
+});
+
 test('reading blocks while disconnected marks live gadgets non-actionable', () => {
   const gadgets = service();
   gadgets.publish('session-1', [{ type: 'gadget', gadget: gadget() }]);
@@ -444,3 +466,40 @@ test('re-publishing the same message replaces its blocks, including a refused ga
   const blocks = service.getBlocks('s-1');
   assert.deepEqual(blocks.map(block => [block.blockId, block.type]), [['msg-2-1', 'fallback'], ['msg-2-2', 'gadget']]);
 });
+
+test('re-publishing markdown blocks replaces in place rather than stacking duplicates', () => {
+  const service = new GadgetService({ hostId: 'host-1', now: () => '2026-09-24T10:00:00.000Z' });
+  const inputs = [
+    { type: 'markdown' as const, blockId: 'msg-0-md-0', markdown: 'Hello world' },
+    { type: 'markdown' as const, blockId: 'msg-0-md-1', markdown: 'Footer text' }
+  ];
+  service.publish('s-1', inputs);
+  service.publish('s-1', inputs);
+  const blocks = service.getBlocks('s-1');
+  assert.equal(blocks.length, 2);
+  assert.deepEqual(blocks.map(b => b.blockId), ['msg-0-md-0', 'msg-0-md-1']);
+});
+
+test('loading legacy store with duplicate markdown blocks sanitizes them on initialization', () => {
+  const memoryStore = new Map<string, unknown>();
+  const store = {
+    get: <T>(key: string) => memoryStore.get(key) as T | undefined,
+    update: async (key: string, value: unknown) => { memoryStore.set(key, value); }
+  };
+  // Simulate bloated legacy store
+  memoryStore.set(GADGET_BLOCKS_STORAGE_KEY, {
+    'session-bloated': [
+      { type: 'markdown', blockId: 'b-1', markdown: 'Duplicated message' },
+      { type: 'markdown', blockId: 'b-2', markdown: 'Duplicated message' },
+      { type: 'markdown', blockId: 'b-3', markdown: 'Duplicated message' },
+      { type: 'markdown', blockId: 'b-4', markdown: 'Different message' }
+    ]
+  });
+
+  const service = new GadgetService({ hostId: 'host-1', store, now: () => '2026-09-24T10:00:00.000Z' });
+  const blocks = service.getBlocks('session-bloated');
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0].type === 'markdown' && blocks[0].markdown, 'Duplicated message');
+  assert.equal(blocks[1].type === 'markdown' && blocks[1].markdown, 'Different message');
+});
+

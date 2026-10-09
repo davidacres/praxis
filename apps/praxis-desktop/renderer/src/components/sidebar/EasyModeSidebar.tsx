@@ -3,6 +3,7 @@ import type { AgentSessionRecord, GitStatusSnapshot, WorkflowRunSummary, Project
 import { SectionHeader } from './SectionHeader';
 import { EasyModeSessionsList } from './EasyModeSessionsList';
 import { EasyModeAutomationsList } from './EasyModeAutomationsList';
+import { AssignSessionDialog } from './AssignSessionDialog';
 import { Icon } from '../../ui/Icon';
 
 export interface EasyModeSidebarProps {
@@ -17,6 +18,8 @@ export interface EasyModeSidebarProps {
   onDeleteSession?: (sessionKey: string) => void;
   onRenameSession?: (sessionKey: string, title: string) => Promise<void>;
   onArchiveSession?: (sessionKey: string, archived: boolean) => Promise<void>;
+  onAssignConversation?: (issueKey: string, projectId: string, ticketKey?: string) => Promise<void>;
+  assignableProjects?: ProjectRecord[];
   projects: ProjectRecord[];
   runsByProjectId: Record<string, WorkflowRunSummary[]>;
   activeWorkflowRunId?: string;
@@ -50,6 +53,8 @@ export function EasyModeSidebar({
   onDeleteSession,
   onRenameSession,
   onArchiveSession,
+  onAssignConversation,
+  assignableProjects,
   projects,
   runsByProjectId,
   activeWorkflowRunId,
@@ -66,6 +71,7 @@ export function EasyModeSidebar({
 }: EasyModeSidebarProps) {
   const [filterTab, setFilterTab] = useState<'all' | 'live' | 'gates'>('all');
   const [gitStatus, setGitStatus] = useState<GitStatusSnapshot | null>(null);
+  const [assignSession, setAssignSession] = useState<AgentSessionRecord>();
 
   const activeProject = projects[0];
   const workspaceFolder = activeProject?.workspaceFolder;
@@ -214,6 +220,7 @@ export function EasyModeSidebar({
                 onDeleteSession={onDeleteSession}
                 onRenameSession={onRenameSession}
                 onArchiveSession={onArchiveSession}
+                onAssignSession={setAssignSession}
               />
             )}
           </div>
@@ -251,6 +258,13 @@ export function EasyModeSidebar({
           </div>
         </section>
       </div>
+
+      <AssignSessionDialog
+        session={assignSession}
+        assignableProjects={assignableProjects && assignableProjects.length > 0 ? assignableProjects : projects}
+        onClose={() => setAssignSession(undefined)}
+        onAssign={onAssignConversation ?? (async () => {})}
+      />
     </aside>
   );
 }

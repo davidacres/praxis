@@ -491,13 +491,15 @@ export function registerAiIpc(): void {
       conversationContext?: string;
       /** Images pasted/dropped into the composer, forwarded to the agent with the message. */
       images?: WireImageAttachment[];
+      /** The message reports a gadget answer; the transcript hides it but the agent receives it. */
+      gadgetAnswer?: boolean;
     }
   ): Promise<void> {
     const followUp = message.trim();
     if (!followUp) {
       throw new Error('Enter a follow-up message.');
     }
-    const record = sessionManager.getAgentSession(issueKey);
+    const record = await sessionManager.ensureSessionTranscript(issueKey);
     if (!record) {
       throw new Error(`No agent session found for ${issueKey}.`);
     }
@@ -528,6 +530,7 @@ export function registerAiIpc(): void {
       toolMode,
       internalConversationTurn: options?.internalConversationTurn,
       conversationContext: options?.conversationContext,
+      gadgetAnswer: options?.gadgetAnswer,
       ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp) : {}),
       ...(prepared.plan.state === 'gateway'
         ? { toolExtension: mergeToolExtensions(trackerToolExtension(trackerService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode)) }
@@ -718,9 +721,13 @@ export function registerAiIpc(): void {
 
   ipcMain.handle('ai:listSessions', async () => {
     recoverTicketReviewProjects(sessionManager);
-    return [...sessionManager.getAllAgentSessions().values()].sort((a, b) =>
+    return sessionManager.listAgentSessionSummaries().sort((a, b) =>
       b.startedAt.localeCompare(a.startedAt)
     );
+  });
+
+  ipcMain.handle('ai:getSession', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
+    return sessionManager.ensureSessionTranscript(issueKey);
   });
 
   ipcMain.handle(
@@ -830,7 +837,13 @@ export function registerAiIpc(): void {
     if (!projectId?.trim()) throw new Error('Choose a project.');
     const project = getProjectStore().get(projectId);
     if (!project) throw new Error(`Project ${projectId} was not found.`);
-    if (ticketKey && !project.workItems.some(item => item.key === ticketKey)) throw new Error(`Ticket ${ticketKey} does not belong to ${project.name}.`);
+    if (ticketKey && !project.workItems.some(item => item.key === ticketKey)) {
+      const service = await getServiceForConnection(`project:${projectId}`).catch(() => undefined);
+      const issue = service ? await service.getIssue(ticketKey).catch(() => undefined) : undefined;
+      if (!issue) {
+        throw new Error(`Ticket ${ticketKey} does not belong to ${project.name}.`);
+      }
+    }
     sessionManager.updateAgentRuntime(issueKey, { projectId, linkedIssueKey: ticketKey, workingDirectory });
     return sessionManager.getAgentSession(issueKey)!;
   });
@@ -1208,12 +1221,16 @@ export function registerAiIpc(): void {
       _event: Electron.IpcMainInvokeEvent,
       issueKey: string,
       message: string,
-      images?: WireImageAttachment[]
+      images?: WireImageAttachment[],
+      options?: { gadgetAnswer?: boolean }
     ) => {
       if (sessionManager.getAgentSession(issueKey)?.conversation?.state === 'running') {
         throw new Error('Stop the multi-AI conversation before sending a single-agent follow-up.');
       }
-      await continueRecordedSession(issueKey, message, { images: sanitizeImages(images) });
+      await continueRecordedSession(issueKey, message, {
+        images: sanitizeImages(images),
+        gadgetAnswer: options?.gadgetAnswer === true
+      });
     }
   );
 

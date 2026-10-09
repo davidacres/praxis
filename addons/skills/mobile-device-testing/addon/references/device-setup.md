@@ -12,7 +12,7 @@ the phone-side steps to the user; you cannot change settings on the phone.
 - CocoaPods (`brew install cocoapods`). The driver's project generator uses the
   `xcodeproj` gem bundled with it; `gem install xcodeproj` also works.
 - Flutter (`flutter --version`) and the Praxis repository; `flutter pub get`
-  in `apps/praxis-flutter` installs the app's packages and Pods.
+  in `apps/praxis-mobile` installs the app's packages and Pods.
 
 ## Physical iPhone — first time
 

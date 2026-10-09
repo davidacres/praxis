@@ -57,9 +57,63 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
     }
   };
 
+  const handover = payload.handover;
+
   return (
     <>
       <GadgetHeading title={payload.title} id={`${gadget.gadgetId}-title`} />
+      {handover && (
+        <div className="gadget-artifact-handover" data-testid="gadget-artifact-handover">
+          <div className="gadget-artifact-handover__header">
+            {handover.verdict && (
+              <span
+                className={`gadget-artifact-verdict-pill verdict-${handover.verdict}`}
+                data-testid="gadget-artifact-handover-verdict"
+              >
+                <Icon
+                  name={
+                    handover.verdict === 'passed'
+                      ? 'check-square'
+                      : handover.verdict === 'failed'
+                        ? 'warning'
+                        : 'info'
+                  }
+                  size={12}
+                />
+                {handover.verdict === 'passed'
+                  ? 'Verified · Passed'
+                  : handover.verdict === 'failed'
+                    ? 'Verification Failed'
+                    : 'Needs Review'}
+              </span>
+            )}
+            {handover.testSummary && (
+              <span className="gadget-artifact-chip" data-testid="gadget-artifact-handover-tests">
+                <Icon name="check-square" size={12} />
+                {handover.testSummary.passed}/{handover.testSummary.total} tests passed
+                {handover.testSummary.failed > 0 && ` (${handover.testSummary.failed} failed)`}
+              </span>
+            )}
+            {handover.gitRef && (
+              <span className="gadget-artifact-chip" data-testid="gadget-artifact-handover-gitref">
+                <Icon name="git-branch" size={12} />
+                <code>{handover.gitRef}</code>
+              </span>
+            )}
+            {handover.requiresSignoff && (
+              <span className="gadget-artifact-chip is-signoff" data-testid="gadget-artifact-handover-signoff">
+                <Icon name="shield" size={12} />
+                Sign-off required
+              </span>
+            )}
+          </div>
+          {handover.nextSteps && (
+            <div className="gadget-artifact-handover__next-steps" data-testid="gadget-artifact-handover-next-steps">
+              <span className="gadget-artifact-handover__next-label">Next steps:</span> {handover.nextSteps}
+            </div>
+          )}
+        </div>
+      )}
       <ul className="gadget-artifacts">
         {payload.artifacts.map(artifact => {
           const size = formatSize(artifact.sizeBytes);
@@ -69,7 +123,25 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
             <li key={artifact.path} className={previewableImage ? 'gadget-artifact-image-item' : undefined}>
               <Icon name="file" size={13} />
               <span className="gadget-artifact-body">
-                <strong>{artifact.name}</strong>
+                <div className="gadget-artifact-title-row">
+                  <strong>{artifact.name}</strong>
+                  {artifact.category && (
+                    <span
+                      className={`gadget-artifact-category-badge category-${artifact.category}`}
+                      data-testid="gadget-artifact-item-category"
+                    >
+                      {artifact.category}
+                    </span>
+                  )}
+                  {artifact.verdict && (
+                    <span
+                      className={`gadget-artifact-item-verdict verdict-${artifact.verdict}`}
+                      data-testid="gadget-artifact-item-verdict"
+                    >
+                      {artifact.verdict}
+                    </span>
+                  )}
+                </div>
                 <code className="gadget-artifact-path">{artifact.path}</code>
                 {artifact.description && <small>{artifact.description}</small>}
                 {previewableHtml && (

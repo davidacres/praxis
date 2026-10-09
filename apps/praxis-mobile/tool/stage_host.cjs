@@ -10,7 +10,7 @@
  * compared screen by screen. Nothing here reaches a model or a repository.
  *
  *   npm run build:core && npm --prefix apps/praxis-desktop/main run compile   (once)
- *   node apps/praxis-flutter/tool/stage_host.cjs [--port 43110] [--control 43191]
+ *   node apps/praxis-mobile/tool/stage_host.cjs [--port 43110] [--control 43191]
  *
  * It prints a pairing invitation (the compact QR text). The control port takes
  *   GET /theme/light | /theme/dark | /theme/none   switch the desktop theme live

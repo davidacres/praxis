@@ -13,9 +13,10 @@ import type {
   WorkspaceRecord
 } from '@praxis/core';
 import { agentStateLabel, agentStateLaneClass, isTerminalAgentState } from '../ai/aiSessionState';
-import { formatElapsed, formatTokens, isConversationSession, isSynthesizedKey, isTicketReviewKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
+import { extractSessionAiProviders, formatElapsed, formatTokens, isConversationSession, isSynthesizedKey, isTicketReviewKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { providerLabel } from '../ai/modelProviders';
+import { SessionAiIcons } from '../ai/SessionAiIcons';
 import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
 import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
@@ -29,6 +30,7 @@ import { WorkModeView } from '../projects/WorkModeView';
 import { ChipSelect } from '../ui/ChipSelect';
 import { SessionOrganizer } from './SessionOrganizer';
 import { TeamChatsSection } from '../assistant/TeamChatsSection';
+import { AssignSessionDialog } from '../components/sidebar/AssignSessionDialog';
 
 export type SidebarMode = 'classic' | 'work';
 
@@ -165,7 +167,8 @@ function ProjectSessionRow({
   onSelectSession,
   onRenameSession,
   onDeleteSession,
-  onArchiveSession
+  onArchiveSession,
+  onAssignSession
 }: {
   session: AgentSessionRecord;
   active: boolean;
@@ -174,6 +177,7 @@ function ProjectSessionRow({
   onRenameSession: (issueKey: string, title: string) => Promise<void>;
   onDeleteSession: (issueKey: string) => Promise<void>;
   onArchiveSession: (issueKey: string, archived: boolean) => Promise<void>;
+  onAssignSession?: (session: AgentSessionRecord) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => sessionTitle(session));
@@ -246,6 +250,8 @@ function ProjectSessionRow({
     }
   };
 
+  const providers = extractSessionAiProviders(session);
+
   return (
     <div className="project-session-entry">
       <div
@@ -262,7 +268,13 @@ function ProjectSessionRow({
           }
         }}
       >
-        <span className="tree-icon" title={session.linkedIssueKey ? `Linked to ${session.linkedIssueKey}` : kind === 'ticket' ? 'Ticket session' : 'General chat session'}><Icon name={kind === 'ticket' ? 'ticket' : 'chats'} size={13} /></span>
+        <span className="tree-icon" title={session.linkedIssueKey ? `Linked to ${session.linkedIssueKey}` : kind === 'ticket' ? 'Ticket session' : 'General chat session'}>
+          {providers.length > 0 ? (
+            <SessionAiIcons providers={providers} size={14} />
+          ) : (
+            <Icon name={kind === 'ticket' ? 'ticket' : 'chats'} size={13} />
+          )}
+        </span>
         <span className="session-nav-card-main">
           <span className="session-nav-card-title-row">
             {editing ? (
@@ -302,6 +314,17 @@ function ProjectSessionRow({
         {!editing && (
           <>
             <span className="session-nav-actions">
+              <button
+                className="icon-btn icon-btn-sm"
+                aria-label={`Assign session ${title} to ticket`}
+                title="Assign to ticket"
+                data-testid="session-assign-btn"
+                disabled={mutating}
+                onClick={event => {
+                  event.stopPropagation();
+                  onAssignSession?.(session);
+                }}
+              ><Icon name="ticket" size={12} /></button>
               <button
                 className="icon-btn icon-btn-sm"
                 aria-label={`Rename session ${title}`}
@@ -798,6 +821,7 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [localQuery, setLocalQuery] = useState('');
   const [localSearching, setLocalSearching] = useState(false);
+  const [assignSession, setAssignSession] = useState<AgentSessionRecord>();
   const effectiveSearching = searching ?? localSearching;
   const effectiveQuery = query !== undefined ? query : localQuery;
   const setEffectiveQuery = onQueryChange ?? setLocalQuery;
@@ -1007,6 +1031,7 @@ export function Sidebar({
                         onRenameSession={onRenameSession}
                         onDeleteSession={onDeleteSession}
                         onArchiveSession={onArchiveSession}
+                        onAssignSession={setAssignSession}
                       />
                     ) }))} />;
                     return <div className="project-tree" key={project.id} data-testid="project-tree">
@@ -1551,6 +1576,12 @@ export function Sidebar({
             )
           )}
       </div>
+      <AssignSessionDialog
+        session={assignSession}
+        assignableProjects={assignableProjects}
+        onClose={() => setAssignSession(undefined)}
+        onAssign={onAssignConversation}
+      />
     </nav>
   );
 }
@@ -1605,38 +1636,6 @@ function SessionsNav({
   const [mutatingKey, setMutatingKey] = useState<string>();
   const [error, setError] = useState<string>();
   const [assignSession, setAssignSession] = useState<AgentSessionRecord>();
-  const [assignProjectId, setAssignProjectId] = useState('');
-  const [assignTicketKey, setAssignTicketKey] = useState('');
-  const [assigning, setAssigning] = useState(false);
-  const [assignProjectTickets, setAssignProjectTickets] = useState<IssueSummary[]>([]);
-  const [assignTicketsLoading, setAssignTicketsLoading] = useState(false);
-
-  /**
-   * A project's tickets live wherever its storage does — `project.workItems`
-   * only for `storage: 'app'`; for `storage: 'folder'` it's always empty and
-   * the real tickets are served by `FolderService` through the project's own
-   * `project:<id>` connection. Fetch through `issue.list` so both storages
-   * populate the Ticket field.
-   */
-  useEffect(() => {
-    if (!assignProjectId) {
-      setAssignProjectTickets([]);
-      return;
-    }
-    let cancelled = false;
-    setAssignTicketsLoading(true);
-    void window.praxis.issue
-      .list(
-        { projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' },
-        0,
-        200,
-        `project:${assignProjectId}`
-      )
-      .then(page => { if (!cancelled) setAssignProjectTickets(page.issues ?? []); })
-      .catch(() => { if (!cancelled) setAssignProjectTickets([]); })
-      .finally(() => { if (!cancelled) setAssignTicketsLoading(false); });
-    return () => { cancelled = true; };
-  }, [assignProjectId]);
   const [sessionMenuKey, setSessionMenuKey] = useState<string>();
   const { confirmChoice } = useDialogs();
 
@@ -1824,6 +1823,7 @@ function SessionsNav({
       const elapsed = formatElapsed(session.startedAt, session.completedAt);
       const tokens = formatTokens(session.tokenUsage);
       const visibleSessionKey = session.linkedIssueKey ?? (isSynthesizedKey(session.issueKey) ? undefined : session.issueKey);
+      const providers = extractSessionAiProviders(session, kids);
       return (
         <Fragment key={session.issueKey}>
         <div
@@ -1844,7 +1844,11 @@ function SessionsNav({
           }}
         >
           <span className="tree-icon">
-            <Icon name="robot" size={14} />
+            {providers.length > 0 ? (
+              <SessionAiIcons providers={providers} size={14} />
+            ) : (
+              <Icon name="robot" size={14} />
+            )}
           </span>
           <span className="session-nav-card-main">
             <span className="session-nav-card-title-row">
@@ -1923,13 +1927,26 @@ function SessionsNav({
                   <button type="button" role="menuitem" data-testid="session-assign-project-menu-item" onClick={event => {
                     event.stopPropagation();
                     setSessionMenuKey(undefined);
-                    setAssignProjectId(assignableProjects[0]?.id ?? '');
-                    setAssignTicketKey('');
                     setError(undefined);
                     setAssignSession(session);
                   }}><Icon name="folder" size={13} />Assign to project</button>
                 </div>}
                 </>}
+                <button
+                  className="icon-btn icon-btn-sm"
+                  aria-label={`Assign session ${title} to ticket`}
+                  title="Assign to ticket"
+                  data-testid="session-assign-btn"
+                  disabled={mutating}
+                  onClick={event => {
+                    event.stopPropagation();
+                    setSessionMenuKey(undefined);
+                    setError(undefined);
+                    setAssignSession(session);
+                  }}
+                >
+                  <Icon name="ticket" size={12} />
+                </button>
                 <button
                   className="icon-btn icon-btn-sm"
                   aria-label={`Rename session ${title}`}
@@ -2019,51 +2036,12 @@ function SessionsNav({
       {!collapsed && sessions.length === 0 && (
         <span className="sidebar-empty-hint" data-testid="sessions-nav-empty">No AI sessions yet</span>
       )}
-      {assignSession && <div className="modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !assigning) setAssignSession(undefined); }}>
-        <section className="modal-card session-assign-dialog" role="dialog" aria-modal="true" aria-labelledby="assign-chat-title" data-testid="assign-chat-dialog">
-          <header className="modal-header session-assign-header">
-            <div className="session-assign-heading">
-              <h3 id="assign-chat-title">Assign chat to a project</h3>
-              <p className="session-assign-description">Choose where “{sessionTitle(assignSession)}” belongs.</p>
-            </div>
-            <button type="button" className="icon-btn icon-btn-sm" aria-label="Close assignment dialog" title="Close" onClick={() => { if (!assigning) setAssignSession(undefined); }} disabled={assigning}>
-              <Icon name="close" size={13} />
-            </button>
-          </header>
-          <div className="modal-body session-assign-body">
-            <div className="session-assign-field">
-              <span className="session-assign-field-label">Project</span>
-              <ChipSelect value={assignProjectId} options={assignableProjects.map(project => ({ value: project.id, label: project.name, icon: 'folder' as const }))}
-                onChange={value => { setAssignProjectId(value); setAssignTicketKey(''); }} ariaLabel="Project" placeholder="Select a project" icon="folder" block data-testid="assign-chat-project-select" />
-            </div>
-            <div className="session-assign-field">
-              <span className="session-assign-field-label">Ticket <span>(optional)</span></span>
-              <ChipSelect value={assignTicketKey} options={[
-                { value: '', label: 'General', icon: 'chats' },
-                // A files-only project (`planningMode: 'files'`) has no board connection to
-                // query, so `issue.list` comes back empty there — fall back to the project
-                // record's own `workItems` (its only source of tickets in that mode).
-                ...(assignProjectTickets.length > 0
-                  ? assignProjectTickets
-                  : assignableProjects.find(project => project.id === assignProjectId)?.workItems ?? []
-                ).map(item => ({ value: item.key, label: `${item.key} · ${item.summary}`, icon: 'ticket' as const }))
-              ]} onChange={setAssignTicketKey} ariaLabel="Ticket (optional)" placeholder={assignTicketsLoading ? 'Loading tickets…' : 'General'} icon="ticket" block disabled={!assignProjectId || assignTicketsLoading} data-testid="assign-chat-ticket-select" />
-            </div>
-          </div>
-          {error && <div className="error-banner">{error}</div>}
-          <footer className="modal-footer session-assign-footer">
-            <button type="button" className="btn" onClick={() => setAssignSession(undefined)} disabled={assigning}>Cancel</button>
-            <button type="button" className="btn btn-primary" disabled={!assignProjectId || assigning} data-testid="assign-chat-confirm" onClick={() => {
-              setAssigning(true);
-              setError(undefined);
-              void onAssignConversation(assignSession.issueKey, assignProjectId, assignTicketKey || undefined)
-                .then(() => setAssignSession(undefined))
-                .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
-                .finally(() => setAssigning(false));
-            }}>{assigning ? 'Assigning…' : 'Assign chat'}</button>
-          </footer>
-        </section>
-      </div>}
+      <AssignSessionDialog
+        session={assignSession}
+        assignableProjects={assignableProjects}
+        onClose={() => setAssignSession(undefined)}
+        onAssign={onAssignConversation}
+      />
       {!collapsed &&
         <SessionOrganizer scope={testId} items={rootItems.map(item => ({ id: item.kind === 'session' ? item.session.issueKey : `run:${item.runId}`, node: (() => {
           if (item.kind === 'session') return renderNode(item.session, 0);

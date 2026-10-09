@@ -158,6 +158,91 @@ test('refuses an artifact path that escapes the workspace', () => {
   assert.equal(error.path, 'payload.artifacts[0].path');
 });
 
+test('validates artifact handover metadata and item categories', () => {
+  const payload = {
+    title: 'Verification & Delivery',
+    artifacts: [
+      {
+        name: 'Report',
+        path: 'output/report.html',
+        category: 'report',
+        verdict: 'passed'
+      },
+      {
+        name: 'Visual snapshot',
+        path: 'output/snapshot.png',
+        category: 'evidence',
+        verdict: 'passed'
+      }
+    ],
+    handover: {
+      verdict: 'passed',
+      testSummary: { total: 10, passed: 10, failed: 0, skipped: 0 },
+      gitRef: 'feat/handover',
+      nextSteps: 'Ready for merge',
+      requiresSignoff: true
+    }
+  };
+
+  const validated = expectOk(envelope('artifact', payload));
+  assert.equal((validated.payload as any).title, 'Verification & Delivery');
+  assert.equal((validated.payload as any).handover.verdict, 'passed');
+  assert.equal((validated.payload as any).handover.testSummary.passed, 10);
+  assert.equal((validated.payload as any).artifacts[0].category, 'report');
+
+  const fallback = gadgetFallbackText(validated);
+  assert.ok(fallback.includes('[report] (passed) Report — output/report.html'));
+  assert.ok(fallback.includes('Verdict: PASSED'));
+  assert.ok(fallback.includes('Tests: 10/10 passed'));
+  assert.ok(fallback.includes('Git ref: feat/handover'));
+  assert.ok(fallback.includes('Next steps: Ready for merge'));
+  assert.ok(fallback.includes('Requires sign-off: yes'));
+});
+
+test('refuses invalid category, verdict, or testSummary numbers', () => {
+  assert.equal(
+    expectError(
+      envelope('artifact', {
+        title: 'Files',
+        artifacts: [{ name: 'x', path: 'out.txt', category: 'invalid-cat' }]
+      })
+    ).path,
+    'payload.artifacts[0].category'
+  );
+
+  assert.equal(
+    expectError(
+      envelope('artifact', {
+        title: 'Files',
+        artifacts: [{ name: 'x', path: 'out.txt', verdict: 'super-pass' }]
+      })
+    ).path,
+    'payload.artifacts[0].verdict'
+  );
+
+  assert.equal(
+    expectError(
+      envelope('artifact', {
+        title: 'Files',
+        artifacts: [{ name: 'x', path: 'out.txt' }],
+        handover: { verdict: 'maybe' }
+      })
+    ).path,
+    'payload.handover.verdict'
+  );
+
+  assert.equal(
+    expectError(
+      envelope('artifact', {
+        title: 'Files',
+        artifacts: [{ name: 'x', path: 'out.txt' }],
+        handover: { testSummary: { total: -1, passed: 0, failed: 0 } }
+      })
+    ).path,
+    'payload.handover.testSummary.total'
+  );
+});
+
 test('refuses an expiry that precedes issue, and a self-superseding gadget', () => {
   assert.equal(
     expectError(envelope('choice', CHOICE_PAYLOAD, { expiresAt: '2026-09-13T09:00:00.000Z' })).path,
@@ -401,7 +486,28 @@ test('text with no fence parses to a single markdown block and skips the work', 
   assert.equal(mayContainGadget('just prose'), false);
   const parsed = parseChatBlocks('just prose', PARSE_OPTIONS);
   assert.equal(parsed.containsGadget, false);
-  assert.deepEqual(parsed.blocks, [{ type: 'markdown', markdown: 'just prose' }]);
+  assert.deepEqual(parsed.blocks, [{ type: 'markdown', markdown: 'just prose', blockId: `${PARSE_OPTIONS.idPrefix}-md-0` }]);
+});
+
+test('re-parsing prose with gadgets produces stable block IDs for markdown and gadget blocks', () => {
+  const text = [
+    'Leading prose.',
+    '```praxis-gadget',
+    JSON.stringify({ kind: 'choice', payload: CHOICE_PAYLOAD, actions: [] }),
+    '```',
+    'Trailing prose.'
+  ].join('\n');
+  const first = parseChatBlocks(text, PARSE_OPTIONS);
+  const second = parseChatBlocks(text, { ...PARSE_OPTIONS, issuedAt: '2026-09-13T12:00:00.000Z' });
+  assert.equal(first.blocks.length, 3);
+  assert.deepEqual(
+    first.blocks.map(b => b.blockId),
+    second.blocks.map(b => b.blockId)
+  );
+  assert.deepEqual(
+    first.blocks.map(b => b.blockId),
+    [`${PARSE_OPTIONS.idPrefix}-md-0`, `${PARSE_OPTIONS.idPrefix}-1`, `${PARSE_OPTIONS.idPrefix}-md-1`]
+  );
 });
 
 test('several gadgets in one message keep their order and get distinct IDs', () => {

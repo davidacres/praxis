@@ -395,15 +395,66 @@ const PAYLOAD_VALIDATORS: { [K in GadgetKind]: (payload: Record<string, unknown>
       if (filePath.includes('..')) {
         fail('schema-invalid', `"${path}.path" must not traverse outside the workspace.`, `${path}.path`);
       }
+      const category = readString(artifact, 'category', path, { max: 50 });
+      if (category !== undefined && !['deliverable', 'evidence', 'report', 'diff', 'log'].includes(category)) {
+        fail('schema-invalid', `"${path}.category" must be one of: deliverable, evidence, report, diff, log.`, `${path}.category`);
+      }
+      const verdict = readString(artifact, 'verdict', path, { max: 50 });
+      if (verdict !== undefined && !['passed', 'failed', 'needs-review'].includes(verdict)) {
+        fail('schema-invalid', `"${path}.verdict" must be one of: passed, failed, needs-review.`, `${path}.verdict`);
+      }
       return {
         name: readString(artifact, 'name', path, { required: true, max: 400 })!,
         path: filePath,
         mediaType: readString(artifact, 'mediaType', path, { max: 200 }),
         description: readString(artifact, 'description', path),
-        sizeBytes: readNumber(artifact, 'sizeBytes', path, { min: 0 })
+        sizeBytes: readNumber(artifact, 'sizeBytes', path, { min: 0 }),
+        ...(category ? { category } : {}),
+        ...(verdict ? { verdict } : {})
       };
     });
-    return { title: readString(payload, 'title', 'payload', { required: true, max: 400 }), artifacts };
+
+    let handover: Record<string, unknown> | undefined;
+    if (payload.handover !== undefined && payload.handover !== null) {
+      const rawHandover = requireRecord(payload.handover, 'payload.handover');
+      const hoVerdict = readString(rawHandover, 'verdict', 'payload.handover', { max: 50 });
+      if (hoVerdict !== undefined && !['passed', 'failed', 'needs-review'].includes(hoVerdict)) {
+        fail('schema-invalid', '"payload.handover.verdict" must be one of: passed, failed, needs-review.', 'payload.handover.verdict');
+      }
+
+      let testSummary: Record<string, unknown> | undefined;
+      if (rawHandover.testSummary !== undefined && rawHandover.testSummary !== null) {
+        const rawTs = requireRecord(rawHandover.testSummary, 'payload.handover.testSummary');
+        const total = readNumber(rawTs, 'total', 'payload.handover.testSummary', { required: true, min: 0 })!;
+        const passed = readNumber(rawTs, 'passed', 'payload.handover.testSummary', { required: true, min: 0 })!;
+        const failed = readNumber(rawTs, 'failed', 'payload.handover.testSummary', { required: true, min: 0 })!;
+        const skipped = readNumber(rawTs, 'skipped', 'payload.handover.testSummary', { min: 0 });
+        testSummary = {
+          total,
+          passed,
+          failed,
+          ...(skipped !== undefined ? { skipped } : {})
+        };
+      }
+
+      const gitRef = readString(rawHandover, 'gitRef', 'payload.handover', { max: 120 });
+      const nextSteps = readString(rawHandover, 'nextSteps', 'payload.handover', { max: 2_000 });
+      const requiresSignoff = readBoolean(rawHandover, 'requiresSignoff', 'payload.handover');
+
+      handover = {
+        ...(hoVerdict ? { verdict: hoVerdict } : {}),
+        ...(testSummary ? { testSummary } : {}),
+        ...(gitRef ? { gitRef } : {}),
+        ...(nextSteps ? { nextSteps } : {}),
+        ...(requiresSignoff !== undefined ? { requiresSignoff } : {})
+      };
+    }
+
+    return {
+      title: readString(payload, 'title', 'payload', { required: true, max: 400 }),
+      artifacts,
+      ...(handover && Object.keys(handover).length > 0 ? { handover } : {})
+    };
   },
 
   handoff(payload) {

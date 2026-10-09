@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import type { AgentSessionRecord, AgentTaskState } from '@praxis/core';
 import { Icon } from '../../ui/Icon';
 import { useDialogs } from '../../ui/dialogs';
-import { sessionTitle, extractSubagents, formatStarted } from '../../ai/sessionNav';
+import { sessionTitle, extractSubagents, formatStarted, extractSessionAiProviders } from '../../ai/sessionNav';
+import { SessionAiIcons } from '../../ai/SessionAiIcons';
 
 export interface EasyModeSessionCardProps {
   session: AgentSessionRecord;
@@ -15,6 +16,7 @@ export interface EasyModeSessionCardProps {
   onDeleteSession?: (sessionKey: string) => void;
   onRenameSession?: (sessionKey: string, title: string) => Promise<void>;
   onArchiveSession?: (sessionKey: string, archived: boolean) => Promise<void>;
+  onAssignSession?: (session: AgentSessionRecord) => void;
 }
 
 function resolveAgentStatusClass(state: AgentTaskState): string {
@@ -47,7 +49,8 @@ export function EasyModeSessionCard({
   onAbortSession,
   onDeleteSession,
   onRenameSession,
-  onArchiveSession
+  onArchiveSession,
+  onAssignSession
 }: EasyModeSessionCardProps) {
   const [isBusy, setIsBusy] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -66,6 +69,14 @@ export function EasyModeSessionCard({
   const subagents = React.useMemo(() => {
     return extractSubagents(session, allSessions);
   }, [session, allSessions]);
+
+  const childSessions = React.useMemo(() => {
+    return (allSessions ?? []).filter(s => s && s.parentSessionKey === session.issueKey);
+  }, [allSessions, session.issueKey]);
+
+  const providers = React.useMemo(() => {
+    return extractSessionAiProviders(session, childSessions);
+  }, [session, childSessions]);
 
   // Primary agent item followed by all subagents
   const agentItems: Array<{ id: string; title: string; role: string; status: AgentTaskState; meta?: string }> = React.useMemo(() => {
@@ -211,8 +222,11 @@ export function EasyModeSessionCard({
           <Icon name="check" size={13} className="completed-glyph" />
         ) : session.state === 'failed' || session.state === 'aborted' ? (
           <Icon name="warning" size={13} className="failed-glyph" />
-        ) : (
+        ) : providers.length === 0 ? (
           <Icon name="robot" size={13} />
+        ) : null}
+        {providers.length > 0 && (
+          <SessionAiIcons providers={providers} size={14} className="easymode-session-ai-icons" />
         )}
         {editing ? (
           <input
@@ -260,6 +274,20 @@ export function EasyModeSessionCard({
               <Icon name="close" size={11} />
             </button>
           )}
+          <button
+            type="button"
+            className="easymode-card-action-btn"
+            title="Assign to ticket"
+            aria-label="Assign to ticket"
+            data-testid={`easymode-session-assign-${session.issueKey}`}
+            onClick={e => {
+              e.stopPropagation();
+              onAssignSession?.(session);
+            }}
+            disabled={isBusy}
+          >
+            <Icon name="ticket" size={11} />
+          </button>
           <button
             type="button"
             className="easymode-card-action-btn"

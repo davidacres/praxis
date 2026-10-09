@@ -57,7 +57,11 @@ class GadgetViewWidget extends StatelessWidget {
     Widget body;
     if (canDrawGadget(gadget)) {
       try {
-        body = _body(gadget, answerable);
+        // Once answered, a choice collapses to what was picked: no options, no action bar.
+        final answered = answeredChoiceLabels(gadget);
+        body = answered != null
+            ? _AnsweredChoice(question: _string(gadget.payload['question']), labels: answered)
+            : _body(gadget, answerable);
       } catch (error) {
         Diagnostics.instance.record('Showing a ${gadget.kind} from the agent', error);
         body = MarkdownView(gadget.fallbackText);
@@ -336,6 +340,32 @@ class _OptionRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// An answered choice: the question, then what was picked. Mirrors the desktop's collapsed `ChoiceGadget`.
+class _AnsweredChoice extends StatelessWidget {
+  const _AnsweredChoice({required this.question, required this.labels});
+  final String question;
+  final List<String> labels;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(question, style: _dim(context)),
+        SizedBox(height: t.s(4)),
+        Row(
+          children: [
+            Text('✓', style: ts(context, 14, weight: FontWeight.w600, color: t.palette.accent)),
+            SizedBox(width: t.s(6)),
+            Expanded(child: Text(labels.join(', '), style: ts(context, 14, weight: FontWeight.w600))),
+          ],
+        ),
+      ],
     );
   }
 }

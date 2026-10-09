@@ -227,6 +227,12 @@ export interface AgentEventSummary {
   speaker?: AgentConversationSpeaker;
   /** Images pasted/dropped into a `user_input_completed` turn, for the chat transcript to redisplay. */
   attachments?: WireImageAttachment[];
+  /**
+   * Set on a `user_input_completed` turn that only reports a gadget answer. The
+   * answered gadget already shows the decision, so the transcript hides this
+   * turn; the agent still receives it as context.
+   */
+  gadgetAnswer?: boolean;
   /** Model reasoning/thinking generated during this turn. */
   reasoning?: string;
   /** Duration of the turn execution in milliseconds. */
@@ -485,6 +491,10 @@ export interface AgentSessionRecord {
   conversation?: AgentConversation;
   delivery?: DeliverySessionMetadata;
   events: AgentEventSummary[];
+  /** Whether the full event transcript is currently loaded in memory. */
+  eventsLoaded?: boolean;
+  /** Total number of events in this session, available even when events are unloaded. */
+  eventCount?: number;
   planText?: string;
   reasoningText?: string;
   responseText?: string;

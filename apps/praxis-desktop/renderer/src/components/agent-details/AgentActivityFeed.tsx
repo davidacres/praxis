@@ -7,10 +7,7 @@ import { agentEventIcon, agentEventToneClass, isTerminalAgentState } from '../..
 import { formatCost, isLatestEditToPath, liveActivity } from '../../ai/sessionNav';
 import { providerIconName, providerLabel } from '../../ai/modelProviders';
 import { ToolExecutionCard } from './ToolExecutionCard';
-import { LiveTurnActivityIndicator, formatElapsedDuration } from '../../ai/LiveTurnActivityIndicator';
-import { GadgetBlockList } from '../../ai/gadgets';
-import { useSessionGadgets } from '../../ai/gadgets/useSessionGadgets';
-import { gadgetMessageKey, visibleMessageText } from '../../ai/gadgets/messageText';
+import { SessionChatThread } from '../../ai/SessionChatThread';
 
 export interface AgentActivityFeedProps {
   session: AgentSessionRecord;
@@ -101,67 +98,7 @@ export function AgentActivityFeed({
   const { confirm } = useDialogs();
   const [undoingChange, setUndoingChange] = useState<string>();
   const [error, setError] = useState<string>();
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const { gadgetBlocks, gadgetResults, submitGadgetAction } = useSessionGadgets(session, session.events ?? []);
-
-  const handleCopy = (key: string, text: string) => {
-    void navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
-
-  const handleQuote = (fullText: string) => {
-    const selection = window.getSelection()?.toString().trim();
-    const textToQuote = selection || fullText;
-    const quoteBlock = textToQuote
-      .split('\n')
-      .map(line => `> ${line}`)
-      .join('\n') + '\n\n';
-
-    const composer = document.querySelector('[data-testid="session-follow-up-input"]') as HTMLTextAreaElement | null;
-    if (composer) {
-      const currentVal = composer.value;
-      const newVal = currentVal ? `${currentVal}\n\n${quoteBlock}` : quoteBlock;
-      const proto = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-      if (proto) {
-        proto.call(composer, newVal);
-      } else {
-        composer.value = newVal;
-      }
-      composer.dispatchEvent(new Event('input', { bubbles: true }));
-      composer.focus();
-      composer.setSelectionRange(newVal.length, newVal.length);
-    }
-  };
-
-  const handleBranch = async (text: string) => {
-    const previewText = text.slice(0, 100).replace(/\n/g, ' ');
-    const ok = await confirm({
-      title: 'Branch session from this turn?',
-      message: `Create a new session starting from this turn: "${previewText}…"?`,
-      confirmLabel: 'Branch Session',
-      danger: false
-    });
-    if (!ok) return;
-
-    try {
-      const record = await window.praxis.ai.delegate({
-        projectId: session.projectId,
-        task: {
-          goal: `Branch of ${session.issueKey}: continue from "${previewText}"`
-        },
-        provider: session.provider,
-        model: session.model,
-        mode: session.mode || 'chat'
-      });
-      if (record?.issueKey && onSelectSession) {
-        onSelectSession(record.issueKey);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
 
   const undoEdit = async (eventTimestamp: string, path: string) => {
     const ok = await confirm({
@@ -364,10 +301,6 @@ export function AgentActivityFeed({
   }
 
   if (viewMode === 'conversation') {
-    const providerClass = session.provider ? ` session-chat-provider-${session.provider}` : '';
-    const authorName = session.model || (session.provider ? providerLabel(session.provider) : 'AI agent');
-    const authorIcon = session.provider ? providerIconName(session.provider) : 'robot';
-
     return (
       <div className="agent-activity-feed is-chat" data-testid="agent-activity-feed">
         {error && (
@@ -379,211 +312,13 @@ export function AgentActivityFeed({
             </button>
           </div>
         )}
-
-        <div className="session-chat-thread" data-testid="session-chat-thread">
-          {timelineItems.map((item, index) => {
-            if (item.type === 'prompt') {
-              const copyId = `prompt-${index}`;
-              return (
-                <div
-                  key={`prompt-${item.timestamp}-${index}`}
-                  className="session-chat-message is-user"
-                  data-testid="agent-timeline-prompt"
-                >
-                  <div className="session-chat-header">
-                    <div className="session-chat-author">You</div>
-                    <div className="session-chat-header-actions">
-                      {item.timestamp && (
-                        <span className="session-chat-timestamp">
-                          {formatTime(item.timestamp)}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn-sm session-chat-action-btn session-chat-quote-btn"
-                        aria-label="Quote to reply"
-                        title="Quote message (or highlight text to quote selection)"
-                        data-testid="session-chat-quote-btn"
-                        onClick={() => handleQuote(item.text)}
-                      >
-                        <Icon name="chats" size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn-sm session-chat-copy-btn"
-                        aria-label="Copy message text"
-                        title={copiedKey === copyId ? 'Copied!' : 'Copy message text'}
-                        onClick={() => handleCopy(copyId, item.text)}
-                      >
-                        <Icon name={copiedKey === copyId ? 'check' : 'copy'} size={12} />
-                      </button>
-                    </div>
-                  </div>
-                  <Markdown text={item.text} testId="session-chat-markdown" />
-                </div>
-              );
-            }
-
-            if (item.type === 'message') {
-              const copyId = `msg-${index}`;
-              const displayText = visibleMessageText(item.text);
-              const progress = getTaskProgress(displayText);
-              const cardGadgetBlocks = gadgetBlocks[gadgetMessageKey(index)] ?? [];
-
-              return (
-                <div
-                  key={`msg-${item.timestamp}-${index}`}
-                  className={`session-chat-message is-assistant${providerClass}`}
-                  data-testid="agent-timeline-message"
-                >
-                  <div className="session-chat-header">
-                    <div className="session-chat-author">
-                      <Icon name={authorIcon} size={13} />
-                      <span>{item.modelId || authorName}</span>
-                    </div>
-                    <div className="session-chat-header-actions">
-                      {item.timestamp && (
-                        <span className="session-chat-timestamp">
-                          {formatTime(item.timestamp)}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn-sm session-chat-action-btn session-chat-branch-btn"
-                        aria-label="Branch session from this turn"
-                        title="Branch session from this turn"
-                        data-testid="session-chat-branch-btn"
-                        onClick={() => void handleBranch(displayText)}
-                      >
-                        <Icon name="git-branch" size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn-sm session-chat-action-btn session-chat-quote-btn"
-                        aria-label="Quote to reply"
-                        title="Quote message (or highlight text to quote selection)"
-                        data-testid="session-chat-quote-btn"
-                        onClick={() => handleQuote(displayText)}
-                      >
-                        <Icon name="chats" size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn-sm session-chat-copy-btn"
-                        aria-label="Copy message text"
-                        title={copiedKey === copyId ? 'Copied!' : 'Copy message text'}
-                        onClick={() => handleCopy(copyId, displayText)}
-                      >
-                        <Icon name={copiedKey === copyId ? 'check' : 'copy'} size={12} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Task checklist progress if tasks are found in message */}
-                  {progress && (
-                    <div className="session-chat-tasks-progress" data-testid="session-chat-tasks-progress">
-                      <div className="session-chat-tasks-progress-header">
-                        <span className="session-chat-tasks-label">
-                          <Icon name="check" size={12} />
-                          Tasks Progress ({progress.completed} of {progress.total} completed)
-                        </span>
-                        <span className="session-chat-tasks-count">
-                          {Math.round((progress.completed / progress.total) * 100)}%
-                        </span>
-                      </div>
-                      <div className="session-chat-tasks-progress-bar">
-                        <div
-                          className="session-chat-tasks-progress-fill"
-                          style={{ width: `${(progress.completed / progress.total) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <Markdown text={displayText} testId="session-chat-markdown" />
-
-                  {/* Interactive Gadgets in message (choices, forms, diffs, confirmations) */}
-                  {cardGadgetBlocks.length > 0 && (
-                    <div className="session-chat-gadgets" data-testid="session-chat-gadgets">
-                      <GadgetBlockList
-                        blocks={cardGadgetBlocks}
-                        results={gadgetResults}
-                        onSubmit={(gadgetId, actionId, value) => void submitGadgetAction(gadgetId, actionId, value)}
-                      />
-                    </div>
-                  )}
-
-                  {/* Per-turn telemetry, the same chips the classic chat shows under a reply. */}
-                  {(item.durationMs !== undefined || item.tokenUsage || (item.cost && item.cost.amount > 0)) && (
-                    <div className="session-chat-telemetry-bar" data-testid="session-chat-telemetry">
-                      {item.durationMs !== undefined && (
-                        <span className="session-telemetry-chip" title={`Turn duration: ${(item.durationMs / 1000).toFixed(1)}s`}>
-                          <Icon name="zap" size={11} />
-                          <span>{formatElapsedDuration(item.durationMs)}</span>
-                        </span>
-                      )}
-                      {item.tokenUsage && (
-                        <span
-                          className="session-telemetry-chip"
-                          title={`Input: ${(item.tokenUsage.inputTokens ?? 0).toLocaleString()} tokens${item.tokenUsage.cachedInputTokens ? ` (${item.tokenUsage.cachedInputTokens.toLocaleString()} cached)` : ''} · Output: ${(item.tokenUsage.outputTokens ?? 0).toLocaleString()} tokens${item.tokenUsage.reasoningTokens ? ` (${item.tokenUsage.reasoningTokens.toLocaleString()} reasoning)` : ''}`}
-                        >
-                          <Icon name="sparkles" size={11} />
-                          <span>{(item.tokenUsage.totalTokens ?? ((item.tokenUsage.inputTokens ?? 0) + (item.tokenUsage.outputTokens ?? 0))).toLocaleString()} tok</span>
-                        </span>
-                      )}
-                      {item.cost && item.cost.amount > 0 && (
-                        <span className="session-telemetry-chip" title="Estimated turn cost">
-                          <span>{formatCost(item.cost) ?? `${item.cost.amount.toFixed(4)} ${item.cost.currency}`}</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            if (item.type === 'event' && item.event.type === 'error') {
-              return (
-                <div
-                  key={`err-${item.timestamp}-${index}`}
-                  className="agent-activity-error-banner"
-                  data-testid="agent-timeline-error-event"
-                >
-                  <Icon name="warning" size={14} />
-                  <span>{item.event.summary}</span>
-                </div>
-              );
-            }
-
-            return null;
-          })}
-
-          {/* Feature 3: Live in-progress active turn indicator */}
-          {isExecuting && (
-            <div
-              className={`session-chat-message is-assistant is-running${providerClass}`}
-              data-testid="session-chat-live-turn"
-            >
-              <div className="session-chat-header">
-                <div className="session-chat-author">
-                  <Icon name={authorIcon} size={13} />
-                  <span>{authorName}</span>
-                </div>
-              </div>
-              {session.reasoningText && (
-                <div className="session-chat-streaming-text" data-testid="session-chat-streaming-text">
-                  <Markdown text={session.reasoningText} testId="session-chat-markdown-streaming" />
-                </div>
-              )}
-              <LiveTurnActivityIndicator
-                startedAt={session.events?.[session.events.length - 1]?.timestamp ?? session.startedAt}
-                statusText={liveActivity(session) ?? 'Working…'}
-                provider={session.provider}
-                model={session.model}
-              />
-            </div>
-          )}
-        </div>
+        <SessionChatThread
+          session={session}
+          subagentId={subagentId}
+          isExecuting={isExecuting}
+          onSelectSession={onSelectSession}
+          testIdVariant="timeline"
+        />
       </div>
     );
   }

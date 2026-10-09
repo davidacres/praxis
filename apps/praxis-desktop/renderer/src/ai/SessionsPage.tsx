@@ -60,39 +60,8 @@ const MODE_TRANSITION: Record<SessionMode, string> = {
     'Switch this conversation into Chat mode. Answer my next requests directly and do not inspect or modify tickets unless I explicitly ask.'
 };
 
-/** Image thumbnails for a user turn in the chat transcript; click enlarges. */
-export function TranscriptAttachments({ attachments }: { attachments: WireImageAttachment[] | undefined }) {
-  const [enlarged, setEnlarged] = useState<{ image: WireImageAttachment; index: number }>();
-  if (!attachments?.length) return null;
-  return (
-    <div className="session-chat-attachments" data-testid="session-chat-attachments">
-      {attachments.map((image, index) => (
-        <button
-          key={`${index}-${image.dataBase64.length}`}
-          type="button"
-          className="session-chat-attachment"
-          data-testid="session-chat-attachment"
-          title="View full size"
-          onClick={() => setEnlarged({ image, index })}
-        >
-          <img src={`data:${image.mimeType};base64,${image.dataBase64}`} alt={`Attached image ${index + 1}`} />
-        </button>
-      ))}
-      {enlarged && createPortal(
-        <div
-          className="session-image-lightbox"
-          data-testid="session-image-lightbox"
-          role="dialog"
-          aria-label={`Attached image ${enlarged.index + 1}, full size`}
-          onClick={() => setEnlarged(undefined)}
-        >
-          <img src={`data:${enlarged.image.mimeType};base64,${enlarged.image.dataBase64}`} alt={`Attached image ${enlarged.index + 1}`} />
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-}
+import { TranscriptAttachments, SessionChatThread } from './SessionChatThread';
+export { TranscriptAttachments, SessionChatThread };
 
 export interface SessionComposerOptions {
   /** Preserve the embedding surface's input and action selectors. */
@@ -634,20 +603,29 @@ export function SessionsPage({
   const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
   const [browserMaximized, setBrowserMaximized] = useState(false);
   const browserDismissed = useRef(initialBrowserOpen === false);
+  const [isCompact, setIsCompact] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('praxis:easymode-chat-width') === 'compact';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleWidth = () => {
+    setIsCompact(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('praxis:easymode-chat-width', next ? 'compact' : 'full');
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
   const { settings } = useSettings();
   const eventsRef = useRef<HTMLDivElement>(null);
   const followChatRef = useRef(true);
-  const [copiedMessageKey, setCopiedMessageKey] = useState<string | undefined>();
-
-  const copyMessageText = (key: string, text: string) => {
-    if (!text) return;
-    void navigator.clipboard?.writeText(text).then(() => {
-      setCopiedMessageKey(key);
-      setTimeout(() => {
-        setCopiedMessageKey(prev => prev === key ? undefined : prev);
-      }, 2000);
-    }).catch(() => undefined);
-  };
 
   useEffect(() => {
     setBrowserOpen(initialBrowserOpen ?? false);
@@ -1016,10 +994,14 @@ export function SessionsPage({
     const svg = path?.ownerSVGElement;
     const capsule = activityCapsuleRef.current;
     if (!path || !svg || !capsule || !followUpCollapsed || !isTurnActive) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     let animationFrame = 0;
     let startedAt: number | undefined;
+    let cachedLength = 0;
+    let lastRendered = 0;
     const duration = activityOrbitDurationMs;
+    const frameInterval = 25; // ~40 FPS max to avoid 120Hz display CPU spikes
 
     const updateGeometry = () => {
       const width = svg.clientWidth;
@@ -1042,12 +1024,26 @@ export function SessionsPage({
         `V ${radius}`,
         `A ${radius} ${radius} 0 0 1 ${radius} 0.5 Z`
       ].join(' '));
+      cachedLength = path.getTotalLength();
       startedAt = undefined;
     };
 
     const updatePerimeter = (now: number = performance.now()) => {
-      const pathLength = path.getTotalLength();
-      if (!pathLength) return;
+      if (document.hidden) {
+        animationFrame = requestAnimationFrame(updatePerimeter);
+        return;
+      }
+      if (now - lastRendered < frameInterval) {
+        animationFrame = requestAnimationFrame(updatePerimeter);
+        return;
+      }
+      lastRendered = now;
+
+      const pathLength = cachedLength || path.getTotalLength();
+      if (!pathLength) {
+        animationFrame = requestAnimationFrame(updatePerimeter);
+        return;
+      }
       if (startedAt === undefined) startedAt = now;
       const elapsed = now - startedAt;
       const distance = ((elapsed % duration) / duration) * pathLength;
@@ -2281,7 +2277,7 @@ export function SessionsPage({
       data-testid="sessions-view"
     >
       <div
-        className={`session-console${browserOpen && selected ? ' browser-open' : ''}${browserOpen && selected && browserMaximized ? ' browser-maximized' : ''}`}
+        className={`session-console${isCompact ? ' is-compact-width' : ' is-full-width'}${browserOpen && selected ? ' browser-open' : ''}${browserOpen && selected && browserMaximized ? ' browser-maximized' : ''}`}
         data-testid="session-console"
       >
         {!selected && (
@@ -2362,6 +2358,16 @@ export function SessionsPage({
                 onClick={togglePlainSurface}
               >
                 <Icon name="theme" size={13} />
+              </button>
+              <button
+                type="button"
+                className={`icon-btn icon-btn-sm session-width-toggle-btn${isCompact ? ' is-compact' : ' is-full'}`}
+                data-testid="session-width-toggle-btn"
+                aria-pressed={isCompact}
+                title={isCompact ? 'Expand to full width' : 'Collapse to compact width (900px)'}
+                onClick={handleToggleWidth}
+              >
+                <Icon name={isCompact ? 'window-maximize' : 'compress'} size={13} />
               </button>
               <button
                 type="button"
@@ -2460,279 +2466,25 @@ export function SessionsPage({
               </div>
             )}
 
-            <div className="session-chat-scroll" ref={eventsRef} data-testid="session-chat-thread">
-              <div className="session-chat-message is-user">
-                <div className="session-chat-header">
-                  <div className="session-chat-author">You</div>
-                  <div className="session-chat-header-actions">
-                    {selected.startedAt && (
-                      <span
-                        className="session-chat-timestamp"
-                        title={formatFullDateTime(selected.startedAt)}
-                      >
-                        {formatMessageTime(selected.startedAt)}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn-sm session-chat-copy-btn"
-                      aria-label="Copy message text"
-                      title={copiedMessageKey === 'user-goal' ? 'Copied!' : 'Copy message text'}
-                      onClick={() => copyMessageText('user-goal', selected.taskDefinition.goal)}
-                    >
-                      <Icon name={copiedMessageKey === 'user-goal' ? 'check' : 'copy'} size={12} />
-                    </button>
-                  </div>
-                </div>
-                <div>{selected.taskDefinition.goal}</div>
-              </div>
-              {conversationEvents.map((event, index) => {
-                const terminalContext = event.type === 'user_input_completed' ? parseTerminalContext(event.detail) : undefined;
-                const messageKey = `event-${event.timestamp}-${index}`;
-                const rawText = event.type === 'message'
-                  ? visibleMessageText(event.detail ?? event.summary ?? '')
-                  : stripGadgetFences(terminalContext?.message ?? event.detail ?? event.summary ?? '');
-                // Later round-trips of a turn are folded into the card at the
-                // start of their run, so they are not rendered on their own.
-                if (messageRunCovering(messageRuns, index)) return null;
-
-                const thoughtRun = thoughtRunStartingAt(thoughtRuns, index);
-                const messageRun = messageRunStartingAt(messageRuns, index);
-                // Narration reads as the agent talking to itself between tool
-                // calls, so it belongs beside the reasoning rather than in the
-                // transcript — the same text appearing in both is what made
-                // the thread feel repetitive.
-                const narration = messageRun?.narration ?? [];
-                const thoughtSteps = [...(thoughtRun?.steps ?? []), ...narration];
-                const caption = thoughtRun
-                  ? thoughtCaption(thoughtRun, conversationEvents, toolCallsAt)
-                  : captionText(messageRun?.durationMs, messageRun?.toolCalls);
-                const lastMember = messageRun
-                  ? conversationEvents[messageRun.memberIndices[messageRun.memberIndices.length - 1]]
-                  : event;
-                const turnToolCalls = (lastMember && turnTools.get(lastMember)?.calls) ?? [];
-                const hasThought = Boolean(thoughtRun) || narration.length > 0;
-                // The caption already carries duration and tool calls, so the
-                // telemetry bar leaves them out rather than repeating them.
-                const captionShown = hasThought && Boolean(caption);
-                const telemetrySource = messageRun ?? event;
-                const toolNames = messageRun ? messageRun.toolNames : event.toolNames;
-                const hasTelemetry = event.type === 'message' && (
-                  (!captionShown && telemetrySource.durationMs !== undefined) ||
-                  telemetrySource.tokenUsage !== undefined ||
-                  telemetrySource.cost !== undefined ||
-                  telemetrySource.modelId !== undefined ||
-                  (!captionShown && toolNames && toolNames.length > 0)
-                );
-                const toolCallCount = messageRun?.toolCalls ?? toolNames?.length ?? 0;
-                // Gadgets belong to the message that carried them, and a merged turn
-                // keeps its gadgets on the reply — the last message — so gather them
-                // from every message in the run, not just the one the card starts at.
-                const cardGadgetBlocks = (messageRun ? messageRun.memberIndices : [index])
-                  .flatMap(member => gadgetBlocks[gadgetMessageKey(member)] ?? []);
-                const runText = messageRun ? messageRun.parts.join('\n\n') : rawText;
-
-                return (
-                  <div
-                    className={`session-chat-message ${event.type === 'message' ? `is-assistant session-chat-participant-${event.speaker?.participantId ?? 'legacy'}${event.speaker ? ` session-chat-provider-${event.speaker.provider}` : ''}` : 'is-user'}`}
-                    key={`${event.timestamp}-${index}`}
-                    data-testid={event.type === 'message' ? 'session-chat-assistant' : 'session-chat-user'}
-                  >
-                    <div className="session-chat-header">
-                      <div className="session-chat-author">{event.type === 'message'
-                        ? event.speaker
-                          ? <><Icon name={providerIconName(event.speaker.provider)} size={13} />{`${providerLabel(event.speaker.provider)}${event.speaker.model ? ` · ${event.speaker.model}` : ''}`}</>
-                          : 'AI agent'
-                        : 'You'}</div>
-                      <div className="session-chat-header-actions">
-                        {event.timestamp && (
-                          <span
-                            className="session-chat-timestamp"
-                            title={formatFullDateTime(event.timestamp)}
-                          >
-                            {formatMessageTime(event.timestamp)}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          className="icon-btn icon-btn-sm session-chat-copy-btn"
-                          aria-label="Copy message text"
-                          title={copiedMessageKey === messageKey ? 'Copied!' : 'Copy message text'}
-                          onClick={() => copyMessageText(messageKey, runText)}
-                        >
-                          <Icon name={copiedMessageKey === messageKey ? 'check' : 'copy'} size={12} />
-                        </button>
-                      </div>
-                    </div>
-                    {terminalContext && (
-                      <details className="session-chat-terminal-context">
-                        <summary><Icon name="terminal" size={13} /> Recent terminal output <span>{terminalContext.cwd}</span></summary>
-                        <pre>{terminalContext.output}</pre>
-                      </details>
-                    )}
-                    {hasThought && (
-                      <details className="session-chat-thought" data-testid="session-thought-disclosure">
-                        <summary className="session-chat-thought-summary" data-testid="session-thought-summary">
-                          <Icon name="sparkles" size={11} />
-                          <span className="session-chat-thought-label">Thought</span>
-                          {caption && <span className="session-chat-thought-meta">{caption}</span>}
-                        </summary>
-                        <div className="session-chat-thought-content">
-                          {turnToolCalls.length > 0 && (
-                            <ul className="session-chat-thought-tools" data-testid="session-thought-tools">
-                              {turnToolCalls.map((call, callIndex) => (
-                                <li key={callIndex} className={call.ok === false ? 'is-failed' : undefined}>
-                                  <Icon name={call.ok === false ? 'close' : call.ok ? 'check' : 'tools'} size={11} />
-                                  <span className="session-chat-thought-tool-name">{call.name}</span>
-                                  {call.detail && <span className="session-chat-thought-tool-detail">{call.detail}</span>}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          {thoughtSteps.map((step, stepIndex) => (
-                            <Markdown
-                              key={stepIndex}
-                              text={step}
-                              testId="session-thought-markdown"
-                              imageSessionId={selected?.issueKey}
-                            />
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                    <Markdown
-                      text={runText}
-                      testId="session-chat-markdown"
-                      imageSessionId={selected?.issueKey}
-                    />
-                    {event.type === 'user_input_completed' && <TranscriptAttachments attachments={event.attachments} />}
-                    {/* Whatever this message asked for, rendered where it was
-                        asked rather than pooled at the bottom of the thread. */}
-                    <GadgetBlockList
-                      blocks={cardGadgetBlocks}
-                      busyGadgetId={busyGadgetId}
-                      results={gadgetResults}
-                      onSubmit={(gadgetId, actionId, value) => void submitGadgetAction(gadgetId, actionId, value)}
-                    />
-                    {hasTelemetry && (
-                      <div className="session-chat-telemetry-bar" data-testid="session-chat-telemetry">
-                        {!captionShown && telemetrySource.durationMs !== undefined && (
-                          <span className="session-telemetry-chip" title={`Turn duration: ${(telemetrySource.durationMs / 1000).toFixed(1)}s`}>
-                            <Icon name="zap" size={11} />
-                            <span>{formatElapsedDuration(telemetrySource.durationMs)}</span>
-                          </span>
-                        )}
-                        {telemetrySource.tokenUsage && (
-                          <span
-                            className="session-telemetry-chip"
-                            title={`Input: ${(telemetrySource.tokenUsage.inputTokens ?? 0).toLocaleString()} tokens${telemetrySource.tokenUsage.cachedInputTokens ? ` (${telemetrySource.tokenUsage.cachedInputTokens.toLocaleString()} cached)` : ''} · Output: ${(telemetrySource.tokenUsage.outputTokens ?? 0).toLocaleString()} tokens${telemetrySource.tokenUsage.reasoningTokens ? ` (${telemetrySource.tokenUsage.reasoningTokens.toLocaleString()} reasoning)` : ''}`}
-                          >
-                            <Icon name="sparkles" size={11} />
-                            <span>{(telemetrySource.tokenUsage.totalTokens ?? ((telemetrySource.tokenUsage.inputTokens ?? 0) + (telemetrySource.tokenUsage.outputTokens ?? 0))).toLocaleString()} tok</span>
-                          </span>
-                        )}
-                        {telemetrySource.cost && telemetrySource.cost.amount > 0 && (
-                          <span className="session-telemetry-chip" title="Estimated turn cost">
-                            <span>{formatCost(telemetrySource.cost) ?? `${telemetrySource.cost.amount.toFixed(4)} ${telemetrySource.cost.currency}`}</span>
-                          </span>
-                        )}
-                        {telemetrySource.modelId && (
-                          <span className="session-telemetry-chip" title={`Model: ${telemetrySource.modelId}`}>
-                            <Icon name="robot" size={11} />
-                            <span>{telemetrySource.modelId}</span>
-                          </span>
-                        )}
-                        {!captionShown && toolNames && toolNames.length > 0 && (
-                          <button
-                            type="button"
-                            className="session-telemetry-chip is-clickable"
-                            title="View tool execution details in Activity tab"
-                            onClick={() => {
-                              window.dispatchEvent(new CustomEvent('praxis:session-tab', { detail: { tab: 'activity' } }));
-                            }}
-                          >
-                            <Icon name="tools" size={11} />
-                            <span>{toolCallCount} tool {toolCallCount === 1 ? 'call' : 'calls'}</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {optimisticFollowUp?.suppressPreviousResponse && (
-                <div
-                  className="session-chat-message is-user"
-                  data-testid="session-chat-user"
-                  data-pending="true"
-                >
-                  <div className="session-chat-header">
-                    <div className="session-chat-author">You</div>
-                    <div className="session-chat-header-actions">
-                      <span className="session-chat-timestamp">Just now</span>
-                    </div>
-                  </div>
-                  {optimisticTerminalContext && (
-                    <details className="session-chat-terminal-context">
-                      <summary><Icon name="terminal" size={13} /> Recent terminal output <span>{optimisticTerminalContext.cwd}</span></summary>
-                      <pre>{optimisticTerminalContext.output}</pre>
-                    </details>
-                  )}
-                  <Markdown
-                    text={stripGadgetFences(optimisticTerminalContext?.message ?? optimisticFollowUp.message)}
-                    testId="session-chat-markdown"
-                    imageSessionId={selected?.issueKey}
-                  />
-                  {optimisticFollowUp.images?.length
-                    ? <TranscriptAttachments attachments={optimisticFollowUp.images} />
-                    : null}
-                </div>
-              )}
-              {shouldRenderResponseFallback && (
-                <div className="session-chat-message is-assistant session-chat-participant-legacy" data-testid="session-response">
-                  <div className="session-chat-header">
-                    <div className="session-chat-author">{selected?.conversation?.state === 'running'
-                      ? (() => { const speaker = selected.conversation.participants.find(participant => participant.id === selected.conversation?.currentSpeakerId); return speaker ? <><Icon name={providerIconName(speaker.provider)} size={13} />{`${providerLabel(speaker.provider)}${speaker.model ? ` · ${speaker.model}` : ''}`}</> : 'AI agent'; })()
-                      : 'AI agent'}</div>
-                    <div className="session-chat-header-actions">
-                      <button
-                        type="button"
-                        className="icon-btn icon-btn-sm session-chat-copy-btn"
-                        aria-label="Copy message text"
-                        title={copiedMessageKey === 'fallback-response' ? 'Copied!' : 'Copy message text'}
-                        onClick={() => copyMessageText('fallback-response', visibleResponseText)}
-                      >
-                        <Icon name={copiedMessageKey === 'fallback-response' ? 'check' : 'copy'} size={12} />
-                      </button>
-                    </div>
-                  </div>
-                  <Markdown text={visibleResponseText} testId="session-chat-markdown" imageSessionId={selected?.issueKey} />
-                </div>
-              )}
-              {livePendingConversationMessages.map((pending, index) => (
-                <div
-                  className="session-chat-message is-user"
-                  key={`pending-${pending.participantId}-${index}-${pending.message}`}
-                  data-testid="session-chat-user"
-                  data-pending="true"
-                >
-                  <div className="session-chat-author">You</div>
-                  <Markdown text={stripGadgetFences(pending.message)} testId="session-chat-markdown" imageSessionId={selected?.issueKey} />
-                </div>
-              ))}
-              {isTurnActive && !visibleResponseText ? (
-                <LiveTurnActivityIndicator
-                  startedAt={activeTurnStartedAt}
-                  statusText={liveActivityText ?? 'Thinking…'}
-                  provider={activityProvider}
-                />
-              ) : (
-                !visibleResponseText && conversationEvents.length === 0 && !isSelectedFailed && (
-                  <span className="placeholder-text">Waiting for the agent to respond…</span>
-                )
-              )}
-
-            </div>
+            <SessionChatThread
+              session={selected}
+              isExecuting={isTurnActive}
+              onSelectSession={onSelectSession}
+              conversationEvents={conversationEvents}
+              optimisticFollowUp={optimisticFollowUp}
+              optimisticTerminalContext={optimisticTerminalContext}
+              visibleResponseText={visibleResponseText}
+              shouldRenderResponseFallback={shouldRenderResponseFallback}
+              livePendingConversationMessages={livePendingConversationMessages}
+              activeTurnStartedAt={activeTurnStartedAt}
+              liveActivityText={liveActivityText}
+              activityProvider={activityProvider}
+              scrollRef={eventsRef}
+              gadgetBlocks={gadgetBlocks}
+              gadgetResults={gadgetResults}
+              busyGadgetId={busyGadgetId}
+              onSubmitGadgetAction={(gadgetId, actionId, value) => void submitGadgetAction(gadgetId, actionId, value)}
+            />
 
             {activeComposer}
             {browserOpen && (

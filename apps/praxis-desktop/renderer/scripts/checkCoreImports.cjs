@@ -19,7 +19,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const ts = require('typescript');
+const parser = require('@babel/parser');
 
 const SRC_ROOT = path.join(__dirname, '..', 'src');
 const BANNED_MODULE = '@praxis/core';
@@ -41,28 +41,25 @@ function listSourceFiles(dir) {
 /** @param {string} filePath @returns {string[]} human-readable violation lines */
 function checkFile(filePath) {
   const text = fs.readFileSync(filePath, 'utf8');
-  const source = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true, filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const ast = parser.parse(text, {
+    sourceType: 'module',
+    plugins: ['typescript', 'jsx']
+  });
   const violations = [];
 
-  const visit = node => {
-    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === BANNED_MODULE) {
-      const clause = node.importClause;
-      const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+  for (const node of ast.program.body) {
+    if (node.type === 'ImportDeclaration' && node.source.value === BANNED_MODULE) {
+      if (node.importKind === 'type') continue;
+      const line = node.loc ? node.loc.start.line : 1;
       const isValueImport =
-        !clause ||
-        (!clause.isTypeOnly &&
-          ((clause.name && true) || // default import
-            (clause.namedBindings &&
-              (ts.isNamespaceImport(clause.namedBindings) || // `import * as x`
-                (ts.isNamedImports(clause.namedBindings) &&
-                  clause.namedBindings.elements.some(element => !element.isTypeOnly))))));
+        !node.specifiers ||
+        node.specifiers.length === 0 ||
+        node.specifiers.some(spec => spec.importKind !== 'type');
       if (isValueImport) {
         violations.push(`${path.relative(process.cwd(), filePath)}:${line}: value import from '${BANNED_MODULE}' — use \`import type\` only (see AGENTS.md: "The renderer imports types only from core at runtime").`);
       }
     }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
+  }
   return violations;
 }
 

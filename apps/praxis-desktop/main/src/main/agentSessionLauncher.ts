@@ -70,6 +70,7 @@ export interface AgentTaskContinueInput {
   workingDirectory?: string;
   toolMode: AgentToolMode;
   internalConversationTurn?: boolean;
+  gadgetAnswer?: boolean;
   conversationContext?: string;
   mcpServers?: AcpAgentStartOptions['mcpServers'];
   toolExtension?: VercelAgentStartOptions['toolExtension'];
@@ -281,6 +282,7 @@ export async function continueAgentTask(
       workingDirectory: input.workingDirectory,
       toolMode: input.toolMode,
       internalConversationTurn: input.internalConversationTurn,
+      gadgetAnswer: input.gadgetAnswer,
       conversationContext: input.conversationContext,
       ...(input.images?.length ? { images: input.images } : {}),
       ...(input.mcpServers ? { mcpServers: input.mcpServers } : {})
@@ -304,6 +306,7 @@ export async function continueAgentTask(
     workingDirectory: input.workingDirectory,
     toolMode: input.toolMode,
     internalConversationTurn: input.internalConversationTurn,
+    gadgetAnswer: input.gadgetAnswer,
     conversationContext: input.conversationContext,
     ...(input.toolExtension ? { toolExtension: input.toolExtension } : {})
   }, input.message, input.images);

@@ -13,7 +13,7 @@ open -a Simulator                          # optional: watch it
 ## Build and install
 
 ```sh
-cd apps/praxis-flutter
+cd apps/praxis-mobile
 flutter build ios --simulator --debug
 xcrun simctl install booted build/ios/iphonesimulator/Runner.app
 xcrun simctl launch booted com.acresweb.praxis.mobile.praxis
@@ -22,7 +22,7 @@ xcrun simctl launch booted com.acresweb.praxis.mobile.praxis
 `flutter run -d <simulator udid>` also builds, installs and gives hot reload.
 
 For realistic data without a real desktop, run the stage desktop
-(`node apps/praxis-flutter/tool/stage_host.cjs`): the desktop's own LAN
+(`node apps/praxis-mobile/tool/stage_host.cjs`): the desktop's own LAN
 listener and host services over sample sessions, runs and questions. It prints
 a pairing invitation for `127.0.0.1`, which the simulator can reach.
 

@@ -951,10 +951,10 @@ export function IssueDetail({
     let cancelled = false;
     setAgentSession(undefined);
     void window.praxis.ai
-      .listSessions()
-      .then(sessions => {
-        if (!cancelled) {
-          setAgentSession(sessions.find(session => session.issueKey === issueKey));
+      .getSession(issueKey)
+      .then(session => {
+        if (!cancelled && session) {
+          setAgentSession(session);
         }
       })
       .catch(() => undefined);

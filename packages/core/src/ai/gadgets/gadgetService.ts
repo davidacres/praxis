@@ -16,6 +16,7 @@ import type {
   ChatBlock,
   GadgetAction,
   GadgetActionResult,
+  GadgetActionValue,
   GadgetCapability,
   GadgetError
 } from './contracts';
@@ -67,8 +68,53 @@ export class GadgetService {
 
   public constructor(private readonly options: GadgetServiceOptions) {
     this.ledger = new GadgetActionLedger(options.store);
-    this.blocks = options.store?.get<BlocksBySession>(GADGET_BLOCKS_STORAGE_KEY) ?? {};
+    this.blocks = this.sanitizeLoadedBlocks(options.store?.get<BlocksBySession>(GADGET_BLOCKS_STORAGE_KEY) ?? {});
     this.now = options.now ?? (() => new Date().toISOString());
+  }
+
+  private sanitizeLoadedBlocks(raw: BlocksBySession): BlocksBySession {
+    const cleaned: BlocksBySession = {};
+    let changed = false;
+    for (const [sessionId, blocks] of Object.entries(raw)) {
+      if (!Array.isArray(blocks)) continue;
+      const seenGadget = new Set<string>();
+      const seenMarkdown = new Set<string>();
+      const seenBlockIds = new Set<string>();
+      const deduplicated: ChatBlock[] = [];
+      for (const block of blocks) {
+        if (!block || typeof block !== 'object') continue;
+        if (block.type === 'gadget' && block.gadget?.gadgetId) {
+          if (!seenGadget.has(block.gadget.gadgetId) && !seenBlockIds.has(block.blockId)) {
+            seenGadget.add(block.gadget.gadgetId);
+            seenBlockIds.add(block.blockId);
+            deduplicated.push(block);
+          } else {
+            changed = true;
+          }
+        } else if (block.type === 'markdown' && block.markdown) {
+          if (!seenMarkdown.has(block.markdown) && !seenBlockIds.has(block.blockId)) {
+            seenMarkdown.add(block.markdown);
+            seenBlockIds.add(block.blockId);
+            deduplicated.push(block);
+          } else {
+            changed = true;
+          }
+        } else {
+          if (!seenBlockIds.has(block.blockId)) {
+            seenBlockIds.add(block.blockId);
+            deduplicated.push(block);
+          } else {
+            changed = true;
+          }
+        }
+      }
+      cleaned[sessionId] = deduplicated;
+      if (deduplicated.length !== blocks.length) changed = true;
+    }
+    if (changed) {
+      void this.options.store?.update(GADGET_BLOCKS_STORAGE_KEY, cleaned);
+    }
+    return cleaned;
   }
 
   public get actionLedger(): GadgetActionLedger {
@@ -84,7 +130,7 @@ export class GadgetService {
   public publish(sessionId: string, inputs: readonly RawChatBlockInput[]): ChatBlock[] {
     const existing = this.blocks[sessionId] ?? [];
     const published = inputs.map((input, index) => {
-      const blockId = input.blockId ?? `${sessionId}-block-${existing.length + index + 1}`;
+      const blockId = input.blockId ?? `${sessionId}-block-${index + 1}`;
       if (input.type === 'markdown') return { type: 'markdown', blockId, markdown: input.markdown } satisfies ChatBlock;
       return coerceGadgetBlock(input.gadget, blockId, { capability: this.options.capability });
     });
@@ -100,7 +146,7 @@ export class GadgetService {
       const index =
         block.type === 'gadget'
           ? merged.findIndex(candidate => (candidate.type === 'gadget' && candidate.gadget.gadgetId === block.gadget.gadgetId) || candidate.blockId === block.blockId)
-          : merged.findIndex(candidate => candidate.blockId === block.blockId);
+          : merged.findIndex(candidate => candidate.blockId === block.blockId || (candidate.type === 'markdown' && block.type === 'markdown' && candidate.markdown === block.markdown));
       if (index === -1) merged.push(block);
       else merged[index] = block;
     }
@@ -233,8 +279,17 @@ export class GadgetService {
         submissionStatus: this.ledger.effectiveStatus(block.gadget.gadgetId, block.gadget.scope.sessionId),
         connected
       });
-      return { ...block, gadget: { ...block.gadget, state } };
+      const answer = this.recordedAnswer(block.gadget);
+      return { ...block, gadget: { ...block.gadget, state, ...(answer ? { answer } : {}) } };
     });
+  }
+
+  /** The value the ledger accepted for this gadget, if the user has answered it. */
+  private recordedAnswer(gadget: AnyGadgetEnvelope): GadgetActionValue | undefined {
+    const accepted = this.ledger
+      .forGadget(gadget.gadgetId, gadget.scope.sessionId)
+      .filter(record => record.status === 'completed' || record.status === 'accepted');
+    return accepted.at(-1)?.evidence.value;
   }
 
   private async persistBlocks(): Promise<void> {

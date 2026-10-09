@@ -115,10 +115,35 @@ export function gadgetFallbackText(envelope: AnyGadgetEnvelope): string {
 
     case 'artifact': {
       const payload = envelope.payload as ArtifactGadgetPayload;
-      return section(
-        payload.title,
-        bullet(payload.artifacts.map(artifact => `${artifact.name} — ${artifact.path}${artifact.description ? ` (${artifact.description})` : ''}`))
-      );
+      const parts: string[] = [];
+      const items = payload.artifacts.map(artifact => {
+        const meta: string[] = [];
+        if (artifact.category) meta.push(`[${artifact.category}]`);
+        if (artifact.verdict) meta.push(`(${artifact.verdict})`);
+        const prefix = meta.length ? `${meta.join(' ')} ` : '';
+        return `${prefix}${artifact.name} — ${artifact.path}${artifact.description ? ` (${artifact.description})` : ''}`;
+      });
+      parts.push(section(payload.title, bullet(items)));
+
+      if (payload.handover) {
+        const ho = payload.handover;
+        const details: string[] = [];
+        if (ho.verdict) details.push(`Verdict: ${ho.verdict.toUpperCase()}`);
+        if (ho.testSummary) {
+          details.push(
+            `Tests: ${ho.testSummary.passed}/${ho.testSummary.total} passed` +
+              (ho.testSummary.failed ? `, ${ho.testSummary.failed} failed` : '') +
+              (ho.testSummary.skipped ? `, ${ho.testSummary.skipped} skipped` : '')
+          );
+        }
+        if (ho.gitRef) details.push(`Git ref: ${ho.gitRef}`);
+        if (ho.nextSteps) details.push(`Next steps: ${ho.nextSteps}`);
+        if (ho.requiresSignoff) details.push(`Requires sign-off: yes`);
+        if (details.length) {
+          parts.push(section('Handover Summary', bullet(details)));
+        }
+      }
+      return parts.join('\n\n');
     }
 
     case 'handoff': {

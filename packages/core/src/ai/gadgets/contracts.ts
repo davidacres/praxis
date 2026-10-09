@@ -273,16 +273,47 @@ export interface DiffGadgetPayload {
   openInChangesRef?: string;
 }
 
+export type ArtifactCategory = 'deliverable' | 'evidence' | 'report' | 'diff' | 'log';
+export type ArtifactVerdict = 'passed' | 'failed' | 'needs-review';
+
+export interface ArtifactTestSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  skipped?: number;
+}
+
+export interface ArtifactHandoverMetadata {
+  /** Overall verification or handover verdict */
+  verdict?: ArtifactVerdict;
+  /** Summary of tests executed for this handover */
+  testSummary?: ArtifactTestSummary;
+  /** Git commit ref, branch, or stage node that produced the handover */
+  gitRef?: string;
+  /** Next suggested steps or actions for recipient */
+  nextSteps?: string;
+  /** Whether explicit sign-off is required before downstream continuation */
+  requiresSignoff?: boolean;
+}
+
+export interface ArtifactItem {
+  name: string;
+  /** Workspace-relative; an absolute path outside the scope is refused. */
+  path: string;
+  mediaType?: string;
+  sizeBytes?: number;
+  description?: string;
+  /** Role/category of this specific artifact file */
+  category?: ArtifactCategory;
+  /** Pass/fail/review verdict for this specific artifact */
+  verdict?: ArtifactVerdict;
+}
+
 export interface ArtifactGadgetPayload {
   title: string;
-  artifacts: {
-    name: string;
-    /** Workspace-relative; an absolute path outside the scope is refused. */
-    path: string;
-    mediaType?: string;
-    sizeBytes?: number;
-    description?: string;
-  }[];
+  artifacts: ArtifactItem[];
+  /** Optional handover and verification summary metadata */
+  handover?: ArtifactHandoverMetadata;
 }
 
 export interface HandoffGadgetPayload {
@@ -357,6 +388,12 @@ export interface GadgetEnvelope<K extends GadgetKind = GadgetKind> {
   /** Empty for an informational gadget. */
   actions: GadgetActionDescriptor[];
   state?: GadgetLifecycleState;
+  /**
+   * What the user recorded, once answered. Attached when blocks are read from
+   * the ledger rather than stored on the envelope, so a reloaded conversation
+   * can still show the chosen answer after the surface has collapsed.
+   */
+  answer?: GadgetActionValue;
   /** Set by validation when a secret-shaped string was masked in the payload. */
   redacted?: boolean;
 }

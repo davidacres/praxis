@@ -9,6 +9,8 @@ import {
   type SubagentItem
 } from '../../ai/sessionNav';
 import { providerLabel } from '../../ai/modelProviders';
+import { useSettings } from '../../settings/useSettings';
+import { BrowserPane } from '../../browser/BrowserPane';
 import { AgentActivityFeed } from './AgentActivityFeed';
 import { SessionTicketCard } from './SessionTicketCard';
 import { SessionComposer } from '../../ai/SessionComposer';
@@ -20,7 +22,14 @@ export interface AgentDetailsPageProps {
   onClose: () => void;
   onSelectSession: (sessionKey: string) => void;
   onSelectAgent?: (sessionKey: string, agentId?: string) => void;
+  initialBrowserOpen?: boolean;
+  initialBrowserUrl?: string;
+  onBrowserOpenChange?: (open: boolean) => void;
+  onBrowserUrlChange?: (url: string) => void;
+  browserSuspended?: boolean;
 }
+
+const CHAT_WIDTH_STORAGE_KEY = 'praxis:easymode-chat-width';
 
 export function AgentDetailsPage({
   sessionKey,
@@ -28,11 +37,38 @@ export function AgentDetailsPage({
   sessions,
   onClose,
   onSelectSession,
-  onSelectAgent
+  onSelectAgent,
+  initialBrowserOpen,
+  initialBrowserUrl,
+  onBrowserOpenChange,
+  onBrowserUrlChange,
+  browserSuspended
 }: AgentDetailsPageProps) {
+  const { settings } = useSettings();
+  const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
+  const [browserMaximized, setBrowserMaximized] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [isCompact, setIsCompact] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(CHAT_WIDTH_STORAGE_KEY) === 'compact';
+    } catch {
+      return false;
+    }
+  });
   const bodyRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
+
+  const handleToggleWidth = () => {
+    setIsCompact(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem(CHAT_WIDTH_STORAGE_KEY, next ? 'compact' : 'full');
+      } catch {
+        // ignore storage errors in restricted contexts
+      }
+      return next;
+    });
+  };
 
   // 1. Locate parent session
   const parentSession = useMemo(() => {
@@ -188,7 +224,11 @@ export function AgentDetailsPage({
   };
 
   return (
-    <div className="agent-details-page" data-testid="agent-details-page">
+    <div
+      className={`agent-details-page ${isCompact ? 'is-compact-width' : 'is-full-width'}${browserOpen ? ' browser-open' : ''}${browserOpen && browserMaximized ? ' browser-maximized' : ''}`}
+      data-testid="agent-details-page"
+      data-width-mode={isCompact ? 'compact' : 'full'}
+    >
       {/* Top Header Bar */}
       <header className="agent-details-header" data-testid="agent-details-header">
         <div className="agent-details-header__left">
@@ -253,6 +293,34 @@ export function AgentDetailsPage({
               <span>{model}</span>
             </span>
           )}
+
+          {/* Width Mode Toggle (Full / Compact) */}
+          <button
+            type="button"
+            className={`btn btn-ghost btn-icon agent-details-width-toggle-btn ${isCompact ? 'is-compact' : 'is-full'}`}
+            data-testid="agent-details-width-toggle-btn"
+            onClick={handleToggleWidth}
+            aria-label={isCompact ? 'Switch to full width' : 'Switch to compact width'}
+            title={isCompact ? 'Expand to full width' : 'Collapse to compact width (900px)'}
+          >
+            <Icon name={isCompact ? 'window-maximize' : 'compress'} size={14} />
+          </button>
+
+          {/* In-App Browser Toggle */}
+          <button
+            type="button"
+            className={`btn btn-ghost btn-icon agent-details-browser-btn${browserOpen ? ' active' : ''}`}
+            data-testid="session-browser-toggle"
+            aria-pressed={browserOpen}
+            title={browserOpen ? 'Hide the in-app browser' : 'Show the in-app browser'}
+            onClick={() => {
+              const next = !browserOpen;
+              setBrowserOpen(next);
+              onBrowserOpenChange?.(next);
+            }}
+          >
+            <Icon name="globe" size={14} />
+          </button>
 
           {/* Abort Action */}
           {isExecuting && (
@@ -327,6 +395,26 @@ export function AgentDetailsPage({
           options={{ showWorkflowControl: false }}
         />
       </div>
+
+      {/* In-App Browser Dock */}
+      {browserOpen && (
+        <div
+          className={`session-browser-dock${settings?.ai.browserTools.enabled ? ' ai-controlled' : ''}`}
+          title={settings?.ai.browserTools.enabled ? 'The AI can drive this browser' : undefined}
+        >
+          <BrowserPane
+            initialUrl={initialBrowserUrl}
+            onNavigate={onBrowserUrlChange}
+            suspended={browserSuspended}
+            maximized={browserMaximized}
+            onToggleMaximize={() => setBrowserMaximized(value => !value)}
+            onClose={() => {
+              setBrowserOpen(false);
+              onBrowserOpenChange?.(false);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

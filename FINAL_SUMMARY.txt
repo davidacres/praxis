@@ -207,7 +207,7 @@ NEXT STEPS: DEVICE TESTING
 ================================================================================
 
 1. BUILD THE APP
-   $ cd apps/praxis-flutter
+   $ cd apps/praxis-mobile
    $ flutter pub get
    $ flutter build ios/apk/web
 

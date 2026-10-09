@@ -242,7 +242,7 @@ export function useSessionGadgets(
       ) {
         const summary = describeGadgetAnswer(findGadgetEnvelope(gadgetBlocks, gadgetId), actionId, value);
         if (summary) {
-          await window.praxis.ai.continueSession(session.issueKey, summary);
+          await window.praxis.ai.continueSession(session.issueKey, summary, undefined, { gadgetAnswer: true });
         }
       }
     } finally {

@@ -73,6 +73,7 @@ export * from './state/filterStore';
 export * from './taskDesigner/taskDesignerState';
 export * from './taskDesigner/masterPlan';
 export * from './ai/aiSessionManager';
+export * from './ai/sessionTranscriptStore';
 export * from './ai/gadgets';
 export * from './backends/issueTrackerService';
 export * from './backends/stubBackendService';

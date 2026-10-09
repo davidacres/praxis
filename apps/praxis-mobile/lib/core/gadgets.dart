@@ -40,6 +40,29 @@ typedef FormValues = Map<String, Object>;
 
 List<Json> formFields(Json payload) => (payload['fields'] as List? ?? const []).whereType<Json>().toList();
 
+/// The labels a choice was answered with, from the host's recorded answer. Null
+/// while unanswered, or for anything but a choice. Mirrors the desktop's collapsed `ChoiceGadget`.
+List<String>? answeredChoiceLabels(GadgetEnvelope gadget) {
+  final answer = gadget.answer;
+  if (gadget.kind != 'choice' || answer == null) return null;
+  final List<dynamic> picked;
+  if (answer['kind'] == 'choice') {
+    picked = [answer['selected']];
+  } else if (answer['kind'] == 'selection') {
+    picked = (answer['selected'] as List?) ?? const [];
+  } else {
+    return null;
+  }
+  final options = (gadget.payload['options'] as List? ?? const []).whereType<Json>().toList();
+  String labelFor(String value) {
+    for (final option in options) {
+      if (option['value'] == value && option['label'] is String) return option['label'] as String;
+    }
+    return value;
+  }
+  return [for (final value in picked.whereType<String>()) labelFor(value)];
+}
+
 FormValues initialFormValues(Json payload) {
   final values = <String, Object>{};
   for (final field in formFields(payload)) {

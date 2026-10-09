@@ -10,8 +10,12 @@ export function SessionComposerActivityOrbit({ testId }: { testId: string }) {
     const svg = path?.ownerSVGElement;
     const capsule = capsuleRef.current;
     if (!path || !svg || !capsule) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     let frame = 0;
     let startedAt: number | undefined;
+    let cachedLength = 0;
+    let lastRendered = 0;
+    const frameInterval = 25; // ~40 FPS max to avoid 120Hz display CPU spikes
 
     const updateGeometry = () => {
       const width = svg.clientWidth;
@@ -30,10 +34,21 @@ export function SessionComposerActivityOrbit({ testId }: { testId: string }) {
         `V ${radius}`,
         `A ${radius} ${radius} 0 0 1 ${radius} 0.5 Z`
       ].join(' '));
+      cachedLength = path.getTotalLength();
       startedAt = undefined;
     };
     const animate = (now: number) => {
-      const length = path.getTotalLength();
+      if (document.hidden) {
+        frame = requestAnimationFrame(animate);
+        return;
+      }
+      if (now - lastRendered < frameInterval) {
+        frame = requestAnimationFrame(animate);
+        return;
+      }
+      lastRendered = now;
+
+      const length = cachedLength || path.getTotalLength();
       if (length) {
         if (startedAt === undefined) startedAt = now;
         const distance = ((now - startedAt) % 3500) / 3500 * length;

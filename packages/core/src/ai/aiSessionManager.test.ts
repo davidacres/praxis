@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AiSessionManager } from './aiSessionManager';
+import { InMemorySessionTranscriptStore } from './sessionTranscriptStore';
 import type { KeyValueStore } from '../host/stateStore';
 
 function storeWith(agentSessions: Record<string, unknown>): KeyValueStore {
@@ -505,3 +506,57 @@ test('starting an approved turn clears the restart recovery marker', () => {
   manager.updateAgentState('SESSION-abc', 'executing');
   assert.equal(manager.getAgentSession('SESSION-abc')?.interruptedByRestart, undefined);
 });
+
+test('lazy session transcripts migrate on load and hydrate on demand', async () => {
+  const transcriptStore = new InMemorySessionTranscriptStore();
+  const rawStore = storeWith({
+    'SESSION-lazy': {
+      ...baseRecord('completed'),
+      issueKey: 'SESSION-lazy',
+      sessionId: 's-lazy-1',
+      events: [
+        { timestamp: '2026-01-01T00:00:00.000Z', type: 'session_start', summary: 'started' },
+        { timestamp: '2026-01-01T00:00:01.000Z', type: 'message', summary: 'hello world' }
+      ]
+    }
+  });
+
+  const manager = new AiSessionManager(rawStore, transcriptStore);
+  // On load, metadata is present but events array is unloaded
+  const initial = manager.getAgentSession('SESSION-lazy');
+  assert.ok(initial);
+  assert.equal(initial.eventsLoaded, false);
+  assert.equal(initial.events.length, 0);
+  assert.equal(initial.eventCount, 2);
+
+  // listAgentSessionSummaries leaves idle session events empty
+  const summaries = manager.listAgentSessionSummaries();
+  const summary = summaries.find(s => s.issueKey === 'SESSION-lazy');
+  assert.ok(summary);
+  assert.equal(summary.events.length, 0);
+  assert.equal(summary.eventsLoaded, false);
+  assert.equal(summary.eventCount, 2);
+
+  // ensureSessionTranscript hydrates events from transcript store
+  const hydrated = await manager.ensureSessionTranscript('SESSION-lazy');
+  assert.ok(hydrated);
+  assert.equal(hydrated.eventsLoaded, true);
+  assert.equal(hydrated.events.length, 2);
+  assert.equal(hydrated.events[1].summary, 'hello world');
+
+  // Appending an event updates and persists both index and transcript store
+  manager.appendAgentEvents('SESSION-lazy', [
+    { timestamp: '2026-01-01T00:00:02.000Z', type: 'message', summary: 'third event' }
+  ]);
+  assert.equal(manager.getAgentSession('SESSION-lazy')?.events.length, 3);
+  const storedTranscript = await transcriptStore.loadTranscript('s-lazy-1');
+  assert.ok(storedTranscript);
+  assert.equal(storedTranscript.events.length, 3);
+
+  // Removing session purges transcript from store
+  manager.removeAgentSession('SESSION-lazy');
+  assert.equal(manager.getAgentSession('SESSION-lazy'), undefined);
+  const deletedTranscript = await transcriptStore.loadTranscript('s-lazy-1');
+  assert.equal(deletedTranscript, undefined);
+});
+

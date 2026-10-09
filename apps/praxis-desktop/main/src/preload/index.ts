@@ -256,6 +256,7 @@ const praxis: PraxisIpc = {
     saveCustomProvider: (input: SaveCustomProviderInput) => ipcRenderer.invoke('ai:saveCustomProvider', input),
     removeCustomProvider: (id: AiProvider) => ipcRenderer.invoke('ai:removeCustomProvider', id),
     listSessions: () => ipcRenderer.invoke('ai:listSessions'),
+    getSession: (issueKey: string) => ipcRenderer.invoke('ai:getSession', issueKey),
     listInterruptedSessions: () => ipcRenderer.invoke('ai:listInterruptedSessions'),
     resumeInterruptedSession: issueKey => ipcRenderer.invoke('ai:resumeInterruptedSession', issueKey),
     dismissInterruptedSessions: issueKeys => ipcRenderer.invoke('ai:dismissInterruptedSessions', issueKeys),
@@ -272,8 +273,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:archiveSession', issueKey, archived),
     delegate: (input: AiDelegateInput) => ipcRenderer.invoke('ai:delegate', input),
     abort: (issueKey: string) => ipcRenderer.invoke('ai:abort', issueKey),
-    continueSession: (issueKey: string, message: string, images?: WireImageAttachment[]) =>
-      ipcRenderer.invoke('ai:continueSession', issueKey, message, images),
+    continueSession: (issueKey: string, message: string, images?: WireImageAttachment[], options?: { gadgetAnswer?: boolean }) =>
+      ipcRenderer.invoke('ai:continueSession', issueKey, message, images, options),
     updateSessionModel: (issueKey: string, model: string) =>
       ipcRenderer.invoke('ai:updateSessionModel', issueKey, model),
     updateSessionReasoningEffort: (issueKey: string, reasoningEffort: ReasoningEffort) =>

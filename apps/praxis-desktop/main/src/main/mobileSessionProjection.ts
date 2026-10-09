@@ -108,6 +108,9 @@ function persistedMessages(record: AgentSessionRecord, resolveGadgets?: MobileGa
           : undefined;
     const raw = (event.detail || event.summary).trim();
     if (!role || !raw) return;
+    // The answered gadget shows the decision; the follow-up reaches the agent
+    // but is not repeated as a message from the user on the phone either.
+    if (role === 'user' && event.gadgetAnswer) return;
     if (role === 'user' && handoverBriefs.has(raw)) return;
     if (
       role === 'user' &&

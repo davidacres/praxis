@@ -538,16 +538,26 @@ test('EasyMode session card displays live ticker, hover actions, and automations
   // ...and they take no room from the title, so showing them does not re-truncate it
   expect((await runningTitle.boundingBox())!.width).toBeCloseTo(restingTitleWidth, 0);
 
-  // Every card offers rename, archive and delete (parity with classic mode)
-  for (const action of ['rename', 'archive', 'delete']) {
+  // Every card offers assign to ticket, rename, archive and delete (parity with classic mode)
+  for (const action of ['assign', 'rename', 'archive', 'delete']) {
     await expect(runningCard.locator(`[data-testid="easymode-session-${action}-SESSION-RUNNING"]`)).toBeVisible();
   }
 
-  // Completed card has no stop button
+  // Completed card has no stop button, but offers assign to ticket
   const completedCard = win.locator('[data-testid="easymode-session-card-SESSION-COMPLETED"]');
   await expect(completedCard).toBeVisible();
   await expect(completedCard.locator('[data-testid="easymode-session-delete-SESSION-COMPLETED"]')).toBeVisible();
+  await expect(completedCard.locator('[data-testid="easymode-session-assign-SESSION-COMPLETED"]')).toBeVisible();
   await expect(completedCard.locator('[data-testid="easymode-session-abort-SESSION-COMPLETED"]')).toHaveCount(0);
+
+  // Clicking assign button opens the assignment dialog
+  await completedCard.hover();
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-session-assign-actions.png') });
+  await completedCard.locator('[data-testid="easymode-session-assign-SESSION-COMPLETED"]').click();
+  await expect(win.getByTestId('assign-chat-dialog')).toBeVisible();
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-session-assign-dialog.png') });
+  await win.getByRole('button', { name: 'Cancel' }).click();
+  await expect(win.getByTestId('assign-chat-dialog')).toHaveCount(0);
 });
 
 test('opening a folder in EasyMode scopes sessions to that folder and excludes unrelated sessions', async () => {
@@ -860,6 +870,7 @@ test('automation rows have rename, archive, delete and run actions like a sessio
   await win.locator('[data-testid="easymode-sidebar"]').screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-automation-row-actions.png') });
 
   // Rename edits the title in place and saves on Enter
+  await row.hover();
   await win.locator('[data-testid="easymode-run-rename-run-actions"]').click();
   const titleInput = win.locator('[data-testid="easymode-run-title-input-run-actions"]');
   await expect(titleInput).toHaveValue('Nightly Audit');
@@ -1144,8 +1155,27 @@ test('in EasyMode selecting a session opens details in the center', async () => 
     return last.getBoundingClientRect().bottom <= body.getBoundingClientRect().bottom + 1;
   }), { timeout: 20000 }).toBe(true);
 
-  // Take screenshot for visual inspection
-  await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-session-ticket-details.png') });
+  // Verify default width is full
+  await expect(agentDetailsPage).toHaveAttribute('data-width-mode', 'full');
+  await expect(agentDetailsPage).toHaveClass(/is-full-width/);
+  const widthToggleBtn = win.locator('[data-testid="agent-details-width-toggle-btn"]');
+  await expect(widthToggleBtn).toBeVisible();
+
+  // Take screenshot for visual inspection (full width)
+  await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-fullwidth-chat.png') });
+
+  // Toggle to compact width
+  await widthToggleBtn.click();
+  await expect(agentDetailsPage).toHaveAttribute('data-width-mode', 'compact');
+  await expect(agentDetailsPage).toHaveClass(/is-compact-width/);
+
+  // Take screenshot for visual inspection (compact width)
+  await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-compact-chat.png') });
+
+  // Toggle back to full width
+  await widthToggleBtn.click();
+  await expect(agentDetailsPage).toHaveAttribute('data-width-mode', 'full');
+  await expect(agentDetailsPage).toHaveClass(/is-full-width/);
 
   // 4. Close details to return to canvas
   await win.locator('[data-testid="agent-details-back-btn"]').click();

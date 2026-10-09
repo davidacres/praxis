@@ -15,9 +15,9 @@ export function DetachedChatWindow({ issueKey }: { issueKey: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    void window.praxis.ai.listSessions().then(sessions => {
+    void window.praxis.ai.getSession(issueKey).then(sess => {
       if (cancelled) return;
-      setSession(sessions.find(candidate => candidate.issueKey === issueKey));
+      setSession(sess);
       setLoaded(true);
     });
     const offChanged = window.praxis.ai.onSessionChanged(record => {

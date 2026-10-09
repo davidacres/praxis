@@ -143,6 +143,8 @@ extension type GadgetEnvelope(Json json) {
   String get kind => _str(json, 'kind') ?? '';
   String get fallbackText => _str(json, 'fallbackText') ?? '';
   Json get payload => _map(json, 'payload') ?? const {};
+  /// What the user answered with, once the host has recorded it.
+  Json? get answer => _map(json, 'answer');
   List<GadgetActionDescriptor> get actions => _list(json, 'actions').map(GadgetActionDescriptor.new).toList();
   GadgetScope get scope => GadgetScope(_map(json, 'scope') ?? const {});
 

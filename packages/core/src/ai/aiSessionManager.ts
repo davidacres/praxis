@@ -37,6 +37,8 @@ import { isProviderLimitError, extractProviderLimitMessage } from './providerLim
 import { estimateCostUsd } from './providers/modelPricing';
 import type { ReasoningEffort } from './providers/reasoningSupport';
 
+import type { SessionTranscript, SessionTranscriptStore } from './sessionTranscriptStore';
+
 const STORAGE_KEY = 'praxis.aiSessions';
 const AGENT_STORAGE_KEY = 'praxis.agentSessions';
 const WORKFLOW_ASSIGNMENT_STORAGE_KEY = 'praxis.issueWorkflowAssignments';
@@ -51,6 +53,15 @@ export class AiSessionManager {
   private modelOverrides: Map<string, string>;
   /** Revision at the start of the in-flight brief refresh, so a late complete cannot clobber a newer one. */
   private handoverRefreshBase = new Map<string, number>();
+
+  /** Optional separate store for lazy-loaded conversation event transcripts. */
+  private readonly transcriptStore?: SessionTranscriptStore;
+  /** In-memory cache of loaded conversation transcripts. */
+  private readonly transcriptCache = new Map<string, SessionTranscript>();
+  /** LRU queue of session IDs with transcripts currently hydrated in memory. */
+  private readonly transcriptLru: string[] = [];
+  /** Maximum number of non-active transcripts held hydrated in memory simultaneously. */
+  private static readonly MAX_LOADED_TRANSCRIPTS = 10;
 
   private readonly _onDidChangeSession = new Emitter<{
     issueKey: string;
@@ -74,7 +85,11 @@ export class AiSessionManager {
   /** Fires when an issue-level model override changes. */
   public readonly onDidChangeModelOverride = this._onDidChangeModelOverride.event;
 
-  public constructor(private readonly workspaceState: KeyValueStore) {
+  public constructor(
+    private readonly workspaceState: KeyValueStore,
+    transcriptStore?: SessionTranscriptStore
+  ) {
+    this.transcriptStore = transcriptStore;
     this.sessions = this.loadSessions();
     this.agentSessions = this.loadAgentSessions();
     this.workflowAssignments = this.loadWorkflowAssignments();
@@ -170,11 +185,15 @@ export class AiSessionManager {
       runtimeEpochs: [initialRuntimeEpoch(provider, trimmedModel, startedAt, runtime?.runtimeSessionId)],
       mode: taskDefinition.sessionMode ?? (taskDefinition.kind === 'analysis' ? 'analysis' : taskDefinition.kind === 'review' ? 'review' : 'chat'),
       events: [],
+      eventsLoaded: true,
+      eventCount: 0,
       stepCount: 0,
       startedAt,
       boardId: this.sessions.get(issueKey)?.boardId
     };
     this.agentSessions.set(issueKey, record);
+    this.touchLru(record.sessionId);
+    this.saveTranscriptForSession(record);
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
     return record;
@@ -356,6 +375,124 @@ export class AiSessionManager {
     return new Map(this.agentSessions);
   }
 
+  /**
+   * Lazily loads and attaches the full conversation transcript (events, reasoning, history)
+   * for a session if it is not already hydrated in memory.
+   */
+  public async ensureSessionTranscript(issueKey: string): Promise<AgentSessionRecord | undefined> {
+    const record = this.agentSessions.get(issueKey) ?? this.findAgentSessionBySessionId(issueKey);
+    if (!record) return undefined;
+    if (record.eventsLoaded) {
+      this.touchLru(record.sessionId);
+      return record;
+    }
+
+    if (!this.transcriptStore) {
+      record.eventsLoaded = true;
+      return record;
+    }
+
+    let transcript = this.transcriptCache.get(record.sessionId);
+    if (!transcript) {
+      try {
+        transcript = await this.transcriptStore.loadTranscript(record.sessionId);
+      } catch (err) {
+        console.error(`[ai] Failed to load transcript for ${record.sessionId}:`, err);
+      }
+    }
+
+    if (transcript) {
+      record.events = transcript.events ?? [];
+      record.conversationHistory = transcript.conversationHistory;
+      if (transcript.planText !== undefined) record.planText = transcript.planText;
+      if (transcript.reasoningText !== undefined) record.reasoningText = transcript.reasoningText;
+      if (transcript.responseText !== undefined) record.responseText = transcript.responseText;
+    } else {
+      record.events = [];
+    }
+    record.eventCount = record.events.length;
+    record.eventsLoaded = true;
+    this.transcriptCache.set(record.sessionId, {
+      events: record.events,
+      conversationHistory: record.conversationHistory,
+      planText: record.planText,
+      reasoningText: record.reasoningText,
+      responseText: record.responseText
+    });
+    this.touchLru(record.sessionId);
+    return record;
+  }
+
+  /**
+   * Return a lightweight list of all agent session records for listing surfaces.
+   * Completed/idle sessions have heavy event arrays stripped so they don't bloat IPC or UI heap.
+   */
+  public listAgentSessionSummaries(): AgentSessionRecord[] {
+    return [...this.agentSessions.values()];
+  }
+
+  private saveTranscriptForSession(record: AgentSessionRecord): void {
+    if (!this.transcriptStore) return;
+    const transcript: SessionTranscript = {
+      events: record.events,
+      conversationHistory: record.conversationHistory,
+      planText: record.planText,
+      reasoningText: record.reasoningText,
+      responseText: record.responseText
+    };
+    this.transcriptCache.set(record.sessionId, transcript);
+    this.touchLru(record.sessionId);
+    void this.transcriptStore.saveTranscript(record.sessionId, transcript).catch(err => {
+      console.error(`[ai] Failed to save transcript for ${record.sessionId}:`, err);
+    });
+  }
+
+  private touchLru(sessionId: string): void {
+    const idx = this.transcriptLru.indexOf(sessionId);
+    if (idx !== -1) {
+      this.transcriptLru.splice(idx, 1);
+    }
+    this.transcriptLru.push(sessionId);
+    this.evictLruIfNeeded();
+  }
+
+  private evictLruIfNeeded(): void {
+    if (!this.transcriptStore) return;
+    while (this.transcriptLru.length > AiSessionManager.MAX_LOADED_TRANSCRIPTS) {
+      const candidateIdx = this.transcriptLru.findIndex(sessionId => {
+        const record = this.findAgentSessionBySessionId(sessionId);
+        return record && !this.isSessionActive(record);
+      });
+      if (candidateIdx === -1) {
+        break;
+      }
+      const [evictedSessionId] = this.transcriptLru.splice(candidateIdx, 1);
+      this.transcriptCache.delete(evictedSessionId);
+      const record = this.findAgentSessionBySessionId(evictedSessionId);
+      if (record) {
+        record.events = [];
+        record.conversationHistory = undefined;
+        record.eventsLoaded = false;
+      }
+    }
+  }
+
+  private isSessionActive(record: AgentSessionRecord): boolean {
+    return (
+      record.state === 'planning' ||
+      record.state === 'executing' ||
+      record.state === 'awaiting_approval' ||
+      record.state === 'awaiting_input'
+    );
+  }
+
+  private findAgentSessionBySessionId(sessionId: string): AgentSessionRecord | undefined {
+    for (const record of this.agentSessions.values()) {
+      if (record.sessionId === sessionId) return record;
+    }
+    return undefined;
+  }
+
   /** Persist a user-editable display title for an agent session. */
   public renameAgentSession(issueKey: string, title: string): AgentSessionRecord {
     const record = this.agentSessions.get(issueKey);
@@ -531,6 +668,9 @@ export class AiSessionManager {
     if (incrementSteps) {
       record.stepCount += incrementSteps;
     }
+    record.eventsLoaded = true;
+    record.eventCount = record.events.length;
+    this.saveTranscriptForSession(record);
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
   }
@@ -549,6 +689,7 @@ export class AiSessionManager {
     }
     record.planText = planText;
     if (options?.persist ?? true) {
+      this.saveTranscriptForSession(record);
       void this.persistAgentSessions();
     }
     this._onDidChangeAgentSession.fire(record);
@@ -566,6 +707,7 @@ export class AiSessionManager {
     }
     record.conversationHistory = history ? [...history] : undefined;
     if (options?.persist ?? true) {
+      this.saveTranscriptForSession(record);
       void this.persistAgentSessions();
     }
     this._onDidChangeAgentSession.fire(record);
@@ -774,6 +916,14 @@ export class AiSessionManager {
     const record = this.agentSessions.get(issueKey);
     if (record) {
       this.agentSessions.delete(issueKey);
+      this.transcriptCache.delete(record.sessionId);
+      const lruIdx = this.transcriptLru.indexOf(record.sessionId);
+      if (lruIdx !== -1) {
+        this.transcriptLru.splice(lruIdx, 1);
+      }
+      if (this.transcriptStore) {
+        void this.transcriptStore.deleteTranscript(record.sessionId).catch(() => {});
+      }
       void this.persistAgentSessions();
     }
   }
@@ -987,6 +1137,8 @@ export class AiSessionManager {
       summary: next.eventSummary,
       detail: next.eventDetail
     });
+    record.eventCount = record.events.length;
+    this.saveTranscriptForSession(record);
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
     return record;
@@ -1024,6 +1176,8 @@ export class AiSessionManager {
     };
     record.conversation = conversation;
     record.events.push({ timestamp: new Date().toISOString(), type: 'conversation_turn', summary: `Started ${input.mode} conversation with ${guest.displayLabel}` });
+    record.eventCount = record.events.length;
+    this.saveTranscriptForSession(record);
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
     return record;
@@ -1119,6 +1273,8 @@ export class AiSessionManager {
     record.model = owner.model;
     record.toolMode = conversation.originalToolMode;
     record.events.push({ timestamp: new Date().toISOString(), type: 'conversation_turn', summary: state === 'capped' ? `Conversation stopped at its ${conversation.turnCap}-turn cap.` : state === 'failed' ? 'Conversation stopped after a provider failure.' : 'Conversation stopped by you.' });
+    record.eventCount = record.events.length;
+    this.saveTranscriptForSession(record);
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
     return record;
@@ -1198,6 +1354,8 @@ export class AiSessionManager {
     ]);
 
     const result = new Map<string, AgentSessionRecord>();
+    const legacyToMigrate: Array<{ sessionId: string; transcript: SessionTranscript }> = [];
+
     for (const [key, value] of Object.entries(stored)) {
       if (
         value &&
@@ -1206,39 +1364,94 @@ export class AiSessionManager {
         typeof value.taskDefinition === 'object'
       ) {
         const interrupted = INTERRUPTED_STATES.has(value.state);
-        const events = Array.isArray(value.events)
+        const rawEvents = Array.isArray(value.events)
           ? value.events.map(event =>
               event && typeof event === 'object' && event.data && typeof event.data !== 'object'
                 ? { ...event, data: undefined }
                 : event
             )
           : [];
-        result.set(key, hydrateSessionHandoverFields({
+        const hasLegacyEvents = rawEvents.length > 0;
+        const events = interrupted
+          ? [
+              ...rawEvents,
+              {
+                timestamp: new Date().toISOString(),
+                type: 'aborted' as const,
+                summary: 'Session interrupted by an app restart'
+              }
+            ]
+          : rawEvents;
+
+        if (this.transcriptStore && hasLegacyEvents) {
+          legacyToMigrate.push({
+            sessionId: value.sessionId,
+            transcript: {
+              events,
+              conversationHistory: value.conversationHistory,
+              planText: value.planText,
+              reasoningText: value.reasoningText,
+              responseText: value.responseText
+            }
+          });
+        }
+
+        const subagentEvents = this.transcriptStore ? extractSubagentEvents(events) : events;
+
+        const sessionRecord: AgentSessionRecord = hydrateSessionHandoverFields({
           ...value,
           toolMode: value.toolMode === 'read-only' || value.toolMode === 'project-only' ? value.toolMode : 'full',
           state: interrupted ? 'aborted' : value.state,
           ...(interrupted ? { interruptedByRestart: true } : {}),
           completedAt: interrupted ? (value.completedAt ?? new Date().toISOString()) : value.completedAt,
-          events: interrupted
-            ? [
-                ...events,
-                {
-                  timestamp: new Date().toISOString(),
-                  type: 'aborted' as const,
-                  summary: 'Session interrupted by an app restart'
-                }
-              ]
-            : events
-        }, interrupted));
+          events: subagentEvents,
+          conversationHistory: this.transcriptStore ? undefined : value.conversationHistory,
+          eventsLoaded: !this.transcriptStore,
+          eventCount: value.eventCount ?? events.length,
+          stepCount: value.stepCount ?? events.length
+        }, interrupted);
+
+        result.set(key, sessionRecord);
       }
     }
+
+    if (legacyToMigrate.length > 0) {
+      void this.migrateLegacyTranscripts(legacyToMigrate);
+    }
+
     return result;
+  }
+
+  private async migrateLegacyTranscripts(
+    items: Array<{ sessionId: string; transcript: SessionTranscript }>
+  ): Promise<void> {
+    if (!this.transcriptStore) return;
+    for (const item of items) {
+      this.transcriptCache.set(item.sessionId, item.transcript);
+      try {
+        await this.transcriptStore.saveTranscript(item.sessionId, item.transcript);
+      } catch (err) {
+        console.error(`[ai] Failed to migrate transcript for ${item.sessionId}:`, err);
+      }
+    }
+    await this.persistAgentSessions();
   }
 
   private async persistAgentSessions(): Promise<void> {
     const record: Record<string, AgentSessionRecord> = {};
     for (const [key, session] of this.agentSessions) {
-      record[key] = session;
+      if (this.transcriptStore) {
+        record[key] = {
+          ...session,
+          events: extractSubagentEvents(session.events ?? []),
+          conversationHistory: undefined,
+          acpAvailableCommands: undefined,
+          eventsLoaded: false,
+          eventCount: session.eventCount ?? (session.eventsLoaded ? session.events.length : session.stepCount)
+        };
+      } else {
+        record[key] = session;
+      }
     }
     await this.workspaceState.update(AGENT_STORAGE_KEY, record);
   }
@@ -1307,4 +1520,13 @@ export class AiSessionManager {
     }
     await this.workspaceState.update(MODEL_OVERRIDE_STORAGE_KEY, record);
   }
+}
+
+function extractSubagentEvents(events: AgentEventSummary[]): AgentEventSummary[] {
+  if (!events || events.length === 0) return [];
+  const subagentToolNames = new Set(['agent', 'task', 'invoke_subagent', 'subagent', 'delegate']);
+  return events.filter(e => {
+    const raw = e.data?.toolName?.toLowerCase() ?? '';
+    return subagentToolNames.has(raw) || raw.includes('subagent');
+  });
 }
