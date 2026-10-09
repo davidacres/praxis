@@ -921,7 +921,9 @@ export function SessionsPage({
     hadTypedInInflightComposerRef.current = false;
   }, [selected?.issueKey]);
 
-  // Auto-dispatch queued follow-up as soon as the session finishes its active turn.
+  // Auto-dispatch a queued follow-up once the active turn finishes — but only when it
+  // finished normally. A turn the person cancelled (or one that failed) does not carry on
+  // with the next message: it goes back into the composer, unsent, for them to decide.
   useEffect(() => {
     if (!selected || !isTerminalAgentState(selected.state) || sendingFollowUp) return;
     const queued = queuedFollowUpsBySession[selected.issueKey];
@@ -932,6 +934,11 @@ export function SessionsPage({
       delete next[selected.issueKey];
       return next;
     });
+    if (selected.state !== 'completed') {
+      setFollowUp(current => current || queued.message);
+      if (queued.images?.length) setFollowUpImages(queued.images);
+      return;
+    }
 
     void (async () => {
       setSendingFollowUp(true);

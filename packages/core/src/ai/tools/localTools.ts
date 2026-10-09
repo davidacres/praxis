@@ -414,7 +414,7 @@ export class LocalToolExecutor {
 
     let run: Awaited<ReturnType<typeof runShellCommand>>;
     try {
-      run = await runShellCommand(command, { cwd: this.ctx.workingDirectory, timeoutMs: SHELL_TIMEOUT_MS, maxBuffer: 2 * 1024 * 1024 });
+      run = await runShellCommand(command, { cwd: this.ctx.workingDirectory, timeoutMs: SHELL_TIMEOUT_MS, maxBuffer: 2 * 1024 * 1024, signal: this.ctx.signal });
     } catch (error) {
       if (decision?.ok) await decision.release();
       throw error;

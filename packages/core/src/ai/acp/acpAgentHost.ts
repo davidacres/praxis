@@ -226,8 +226,12 @@ function assistantMessageEvent(task: ActiveAcpTask, telemetry?: AcpTurnTelemetry
 
 /** How long a `session/cancel` notification is given before we stop waiting. */
 const CANCEL_GRACE_MS = 3000;
-/** How long an in-flight turn is given to unwind after cancel, before the child is killed anyway. */
-const STOP_GRACE_MS = 5000;
+/**
+ * How long an in-flight turn is given to unwind after cancel, before the child is killed
+ * anyway. A well-behaved agent stops within a fraction of a second; one that ignores the
+ * cancel keeps working until this runs out, so it is kept short — Cancel means stop.
+ */
+const STOP_GRACE_MS = 2000;
 
 /**
  * Awaits `work`, but gives up after `ms`. Used only where the alternative is an
@@ -927,6 +931,8 @@ export class AcpAgentHost {
         );
       }
       task.agentModel = options.model ? undefined : await currentAcpModel(client);
+      // Cancelled while the agent was still starting: the request is never sent.
+      if (task.ending) return;
       const response = await client.prompt(combinedPrompt, options.images);
       if (client.sessionId) {
         this.sessionManager.updateAgentRuntime(issue.key, { runtimeSessionId: client.sessionId });
@@ -1131,6 +1137,8 @@ export class AcpAgentHost {
       await applyAcpModel(client, options.model);
       await applyAcpReasoning(client, record.reasoningEffort ?? options.reasoningEffort);
       task.agentModel = (record.model ?? options.model) ? undefined : await currentAcpModel(client);
+      // Cancelled while the agent was still starting: the request is never sent.
+      if (task.ending) return;
       const response = await client.prompt(prompt, followUpImages);
       if (client.sessionId) {
         this.sessionManager.updateAgentRuntime(issueKey, { runtimeSessionId: client.sessionId });
@@ -1160,6 +1168,8 @@ export class AcpAgentHost {
     })().catch(error => {
       const text = error instanceof Error ? error.message : String(error);
       this.logger.appendLine(`[AcpAgent] Follow-up failed for ${issueKey}: ${text}`);
+      // Stopping the agent breaks its connection; that is the cancel, not a failure.
+      if (task.ending) return;
       const record = this.sessionManager.getAgentSession(issueKey);
       const limitCandidate = isProviderLimitError(error)
         ? error
@@ -1275,6 +1285,8 @@ export class AcpAgentHost {
     }
     this.logger.appendLine(options.logLine);
     await this.cleanupTask(issueKey, task);
+    // Stopping means stopping: commands the agent started outlive it otherwise.
+    await task.client.terminateProcessTree();
   }
 
   /**

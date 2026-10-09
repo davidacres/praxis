@@ -84,7 +84,7 @@ export async function stopProcessGroup(pgid: number, graceMs = 2000): Promise<bo
   return processGroupMembers(pgid).length === 0;
 }
 
-export function runShellCommand(command: string, options: { cwd: string; timeoutMs: number; maxBuffer: number }): Promise<ShellRun> {
+export function runShellCommand(command: string, options: { cwd: string; timeoutMs: number; maxBuffer: number; signal?: AbortSignal }): Promise<ShellRun> {
   if (!PROCESS_GROUPS_SUPPORTED) {
     return new Promise(resolve => {
       nodeChildProcess.exec(command, { cwd: options.cwd, timeout: options.timeoutMs, maxBuffer: options.maxBuffer, windowsHide: true }, (error, stdout, stderr) => {
@@ -118,6 +118,14 @@ export function runShellCommand(command: string, options: { cwd: string; timeout
       timedOut = true;
       if (pgid) void stopProcessGroup(pgid);
     }, options.timeoutMs);
+    // The turn was cancelled: the command and everything it started stop with it.
+    let cancelled = false;
+    const cancel = () => {
+      cancelled = true;
+      if (pgid) void stopProcessGroup(pgid);
+    };
+    if (options.signal?.aborted) cancel();
+    else options.signal?.addEventListener('abort', cancel, { once: true });
 
     const finish = (code: number | null, signal: NodeJS.Signals | null, failure?: Error) => {
       if (settled) return;
@@ -132,7 +140,8 @@ export function runShellCommand(command: string, options: { cwd: string; timeout
         child.stderr.destroy();
         const survivors = pgid ? processGroupMembers(pgid) : [];
         const exitCode = code ?? (signal ? 128 : 1);
-        const error = failure?.message ?? (timedOut ? `timed out after ${Math.round(options.timeoutMs / 1000)} s; the command's processes were stopped` : exitCode !== 0 ? `exited with code ${exitCode}${signal ? ` (${signal})` : ''}` : undefined);
+        options.signal?.removeEventListener('abort', cancel);
+        const error = failure?.message ?? (cancelled ? 'cancelled: the command and the processes it started were stopped' : timedOut ? `timed out after ${Math.round(options.timeoutMs / 1000)} s; the command's processes were stopped` : exitCode !== 0 ? `exited with code ${exitCode}${signal ? ` (${signal})` : ''}` : undefined);
         resolve({ stdout, stderr, exitCode, ...(error ? { error } : {}), timedOut, pgid, survivors });
       };
       if (ended === 2) settle();

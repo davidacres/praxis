@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { refusalForAgent, type CoordinationGate } from '../coordination/coordinationGate';
+import { PROCESS_GROUPS_SUPPORTED, processGroupMembers, stopProcessGroup } from '../tools/processTree';
 import * as nodePath from 'node:path';
 import * as nodeFs from 'node:fs/promises';
 import { Readable, Writable } from 'node:stream';
@@ -241,7 +242,9 @@ export class AcpClientWrapper {
     const child = spawn(this.options.command, this.options.args ?? [], {
       cwd: this.options.workingDirectory,
       env: { ...process.env, ...this.options.env },
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      // Its own process group (macOS/Linux), so a cancel can stop the commands it starts too.
+      ...(PROCESS_GROUPS_SUPPORTED ? { detached: true } : {})
     });
     this.child = child;
 
@@ -717,6 +720,18 @@ export class AcpClientWrapper {
     await this.connection.agent.notify(acpModule.AGENT_METHODS.session_cancel, {
       sessionId: this.resumedSessionId ?? this.session!.sessionId
     });
+  }
+
+  /**
+   * Stops everything the agent started — every process still in its process group, such as
+   * a shell command its own tool launched — once the agent itself has been shut down. Used
+   * when a person cancels: without it, the agent stops but its commands carry on.
+   * (macOS/Linux; a process that moved itself to a new session escapes the group.)
+   */
+  public async terminateProcessTree(): Promise<void> {
+    const pgid = this.child?.pid;
+    if (!PROCESS_GROUPS_SUPPORTED || !pgid || processGroupMembers(pgid).length === 0) return;
+    await stopProcessGroup(pgid, 1500);
   }
 
   /** Closes the connection and kills the subprocess. */
