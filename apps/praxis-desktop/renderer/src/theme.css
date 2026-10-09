@@ -19327,7 +19327,9 @@ button.session-chat-attachment {
 .ai-setup-grid { grid-template-columns: repeat(2, minmax(300px, 1fr)); }
 .ai-setup-choice .project-choice-kicker { color: var(--provider-tone, var(--accent)); }
 .ai-setup-preview .ai-setup-preview-body { display: flex; align-items: center; flex: 1; gap: 12px; padding: 10px; background-image: linear-gradient(90deg, color-mix(in srgb, var(--provider-tone, var(--accent)) 10%, transparent), transparent 70%); }
-.ai-setup-preview-mark, .ai-setup-card-mark { display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; border: 1px solid color-mix(in srgb, var(--provider-tone, var(--accent)) 45%, var(--border)); border-radius: 10px; color: var(--provider-tone, var(--accent)); background: color-mix(in srgb, var(--provider-tone, var(--accent)) 12%, var(--bg-elevated)); }
+/* The provider's own logo, drawn straight on the surface — no tile behind it. */
+.ai-setup-preview-mark, .ai-setup-card-mark { display: grid; place-items: center; flex: 0 0 auto; width: 40px; height: 40px; }
+.ai-setup-default-logo { vertical-align: -2px; }
 .ai-setup-preview-lines, .ai-setup-preview-key { display: grid; flex: 1; gap: 6px; min-width: 0; }
 .ai-setup-preview-lines i { display: block; width: 90%; height: 3px; border-radius: 2px; background: var(--border-strong); }
 .ai-setup-preview-lines i.short { width: 45%; background: color-mix(in srgb, var(--provider-tone, var(--accent)) 55%, var(--border)); }

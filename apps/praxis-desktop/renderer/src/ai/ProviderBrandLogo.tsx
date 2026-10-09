@@ -84,8 +84,18 @@ export function ProviderBrandLogo({ provider, size = 32, className = '' }: Provi
     );
   }
 
-  // 5. MiniMax / Z.ai
-  if (norm === 'z-ai' || norm.includes('minimax') || norm.includes('z-ai') || norm.includes('z.ai')) {
+  // 5a. Z.ai — no brand artwork here yet: a monogram, rather than another company's logo.
+  if (norm === 'z-ai' || norm.includes('z-ai') || norm.includes('z.ai')) {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} className={className} style={{ color: 'var(--text)' }} aria-label="Z.ai" role="img">
+        <rect x="2" y="2" width="20" height="20" rx="5" fill="currentColor" />
+        <path d="M7.5 7.5h9l-9 9h9" fill="none" stroke="var(--bg-elevated, #fff)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  // 5b. MiniMax
+  if (norm.includes('minimax')) {
     return (
       <svg
         viewBox="0 0 24 24"

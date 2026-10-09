@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import type { AiProvider, AiProviderStatus } from '@praxis/core';
-import { Icon } from '../ui/Icon';
-import { providerIconName } from '../ai/modelProviders';
+import { ProviderBrandLogo } from '../ai/ProviderBrandLogo';
 import { isProviderUsable } from '../ai/providerAvailability';
 
 /** Set once the wizard has been completed (or an existing profile already had a usable provider). */
@@ -152,7 +151,7 @@ function ProviderPreview({ provider }: { provider: SetupProvider }) {
   return <span className={`project-type-preview ai-setup-preview ${cli ? 'cli' : 'api'}`} aria-hidden="true">
     <span className="project-preview-bar"><i /><i /><i /><b>{cli ? provider.command : 'api key'}</b></span>
     <span className="ai-setup-preview-body">
-      <span className="ai-setup-preview-mark"><Icon name={providerIconName(provider.id)} size={24} /></span>
+      <span className="ai-setup-preview-mark"><ProviderBrandLogo provider={provider.id} size={30} /></span>
       {cli
         ? <span className="ai-setup-preview-lines"><i /><i className="short" /><i className="medium" /></span>
         : <span className="ai-setup-preview-key"><i /><i /><i /><i /><i /><i /><i /><i /></span>}
@@ -200,7 +199,7 @@ function ConnectCard({ provider, status, ready, reload, onVerified }: { provider
   });
 
   return <section className={`ai-setup-card${ready ? ' ready' : ''}`} data-testid={`ai-setup-card-${provider.id}`} style={{ '--provider-tone': provider.tone } as CSSProperties}>
-    <span className="ai-setup-card-mark"><Icon name={providerIconName(provider.id)} size={20} /></span>
+    <span className="ai-setup-card-mark"><ProviderBrandLogo provider={provider.id} size={30} /></span>
     <div className="ai-setup-card-body">
       <header><strong>{provider.title}</strong><span className={`ai-setup-state${ready ? ' ready' : ''}`}>{ready ? '✓ Connected' : cli ? (status?.configured ? 'Found' : 'Not found') : 'Needs a key'}</span></header>
       {cli ? <>
@@ -231,7 +230,7 @@ function ReviewStep({ providers, defaultId, onDefault }: { providers: SetupProvi
     <header className="review-summary-heading"><span>Ready</span><div><h2>{providers.length} provider{providers.length === 1 ? '' : 's'} connected</h2></div><p>New sessions start with your default. You can switch provider and model per session, and manage everything in Settings → AI Provider.</p></header>
     <div className="ai-setup-default-list" role="radiogroup" aria-label="Default provider">{providers.map(provider => <button key={provider.id} type="button" role="radio" aria-checked={provider.id === defaultId} data-testid={`ai-setup-default-${provider.id}`} className={`start-choice ai-setup-default${provider.id === defaultId ? ' selected' : ''}`} style={{ '--provider-tone': provider.tone } as CSSProperties} onClick={() => onDefault(provider.id)}>
       <span className="radio-dot" />
-      <span><strong><Icon name={providerIconName(provider.id)} size={14} /> {provider.title}</strong><small>{provider.id === defaultId ? 'Default for new sessions' : provider.detail}</small></span>
+      <span><strong><ProviderBrandLogo provider={provider.id} size={14} className="ai-setup-default-logo" /> {provider.title}</strong><small>{provider.id === defaultId ? 'Default for new sessions' : provider.detail}</small></span>
     </button>)}</div>
     <p className="review-summary-note"><span>✓</span>Nothing runs until you start a session.</p>
   </div>;
