@@ -1,11 +1,11 @@
 ---
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 **Created:** 2026-10-02T10:59:50.748Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-395
 type: Task
-status: In Progress
+status: Done
 created: 2026-10-02
 priority: High
 ---
@@ -50,5 +50,23 @@ Claude Code denial (`coordinationHook.live.test.ts`, `PRAXIS_LIVE_CLAUDE=1`); th
 journey (`e2e/coordination.spec.ts`); full functional e2e suite green with a broker per
 app launch.
 
-Remaining: Linux and Windows runs, sleep / clock changes, hook crash, other runtimes'
-adapters, surviving descendants and service transfer.
+Then, the same day:
+
+- **Sleep and clock changes.** The broker's clock is monotonic (a system-clock change moves
+  no lease); a gap between its beats extends every lease by the gap before any is judged, and
+  a really-gone owner still expires one lease after waking (core and host tests).
+- **Hook failures.** A silent broker and one that dies mid-request both deny the edit with why
+  (`coordinationHook.test.ts`); a killed hook process lets Claude Code run the tool (live).
+- **Other runtimes.** Codex live denial and release (`PRAXIS_LIVE_CODEX=1`); Copilot and
+  Gemini adapters tested against their contracts, unproven live (see the matrix).
+- **Surviving descendants.** A backgrounded server keeps its process and port claims after
+  the tool and the turn, released only when the group is gone (`localTools.test.ts`); a
+  service claim that went to recovery when its session ended is cleared with that evidence.
+- **Waiting / release, visually.** `e2e/coordinationWait.spec.ts`: a refused agent waits once,
+  is shown waiting in the inspector, is woken by the release and writes; a left-running server
+  is stopped from the inspector; a real click in the in-app browser takes it from an agent.
+  Screenshots: `.praxis/session-artifacts/session-coordination-waiting.png`,
+  `session-coordination-woken.png`, `session-coordination-service.png`.
+- The randomised safety property now includes person takeovers.
+
+Linux and Windows runs are deferred to TASK-438 at the owner's direction.

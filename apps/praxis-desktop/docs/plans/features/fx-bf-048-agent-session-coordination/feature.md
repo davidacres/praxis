@@ -1,11 +1,11 @@
 ---
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 **Created:** 2026-10-02T10:59:50.632Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-048
 type: Feature
-status: In Progress
+status: Done
 created: 2026-10-02
 priority: High
 ---
@@ -53,6 +53,7 @@ The research document records the gap review and each task's correction. Two rea
 
 ## Progress 2026-10-09
 
-The broker, gates, Claude Code hook, coordination tools and inspector are built and
-tested (see FX-BE-150). Not complete: other runtimes' adapters, service claims, waiting
-routes and Linux / Windows verification.
+Complete on macOS (see FX-BE-150 and the
+[capability matrix](../../../research/coordination-capability-matrix.md)): broker, gates,
+services, bounded waiting, takeover, revalidation, sleep/clock handling, and native hooks for
+Claude Code and Codex proven live. Linux and Windows verification is deferred to TASK-438.

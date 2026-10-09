@@ -285,6 +285,8 @@ Canonical sequencing and architectural decisions: [SDLC quality gates roadmap](s
 | [TASK-251](/apps/praxis-desktop/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-091-ingest-ci-security-and-quality-reports/tasks/task-251-map-imported-reports-to-findings-evidence.md) | Task | Map imported reports to findings evidence bound to the SHA | Planned | TASK-250, TASK-237 |
 | [TASK-252](/apps/praxis-desktop/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-091-ingest-ci-security-and-quality-reports/tasks/task-252-add-an-observe-mode-gate-on-ci-evidence.md) | Task | Add an observe-mode gate resting on imported CI evidence | Planned | TASK-251, TASK-239 |
 | [FX-BE-091](/apps/praxis-desktop/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-091-ingest-ci-security-and-quality-reports/story.md) | Story | Ingest CI security and quality reports | Planned | FX-BE-087, FX-BE-053 |
+| [TASK-437](/apps/praxis-desktop/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-168-iterative-sdlc-loop-template/tasks/task-437-iterative-sdlc-loop-template.md) | Task | Add the iterative SDLC loop template with BDD and four review stages | Done | TASK-249 |
+| [FX-BE-168](/apps/praxis-desktop/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-168-iterative-sdlc-loop-template/story.md) | Story | Iterative SDLC loop template (renumbered from a duplicate FX-BE-092) | Done | FX-BE-087, FX-BE-088, FX-BE-089, FX-BE-090 |
 | [FX-BF-034](/apps/praxis-desktop/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/feature.md) | Feature | Full SDLC quality and security gates | Planned | FX-BE-020, FX-BE-024, FX-BE-033 |
 
 
@@ -564,13 +566,14 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 
 | Ref | Type | Name | Status | Depends on |
 | --- | --- | --- | --- | --- |
-| [FX-BF-048](plans/features/fx-bf-048-agent-session-coordination/feature.md) | Feature | Agent session communication and resource coordination | In Progress | None |
-| [FX-BE-150](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/story.md) | Story | Coordinate session activity and exclusive resources | In Progress | FX-BF-048 |
+| [FX-BF-048](plans/features/fx-bf-048-agent-session-coordination/feature.md) | Feature | Agent session communication and resource coordination | Done | None |
+| [FX-BE-150](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/story.md) | Story | Coordinate session activity and exclusive resources | Done | FX-BF-048 |
 | [TASK-391](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-391-coordination-contracts.md) | Task | Define coordination schema and resource conflicts | Done | FX-BE-150 |
 | [TASK-392](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-392-coordination-broker.md) | Task | Design and implement the single local broker | Done | TASK-391 |
-| [TASK-393](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-393-coordination-runtime.md) | Task | Gate session tools and reconcile their lifecycle | In Progress | TASK-391, TASK-392 |
-| [TASK-394](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-394-coordination-communication.md) | Task | Expose bounded messages and resource waiting status | In Progress | TASK-393 |
-| [TASK-395](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-395-coordination-verification.md) | Task | Prove contention, isolation and safe recovery | In Progress | TASK-393, TASK-394 |
+| [TASK-393](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-393-coordination-runtime.md) | Task | Gate session tools and reconcile their lifecycle | Done | TASK-391, TASK-392 |
+| [TASK-394](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-394-coordination-communication.md) | Task | Expose bounded messages and resource waiting status | Done | TASK-393 |
+| [TASK-395](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-395-coordination-verification.md) | Task | Prove contention, isolation and safe recovery | Done | TASK-393, TASK-394 |
+| [TASK-438](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-438-coordination-linux-windows.md) | Task | Verify session coordination on Linux and Windows (deferred) | Backlog | TASK-395 |
 
 ## Adaptive workflow engine
 

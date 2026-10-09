@@ -371,6 +371,7 @@ const praxis: PraxisIpc = {
   coordination: {
     state: () => ipcRenderer.invoke('coordination:state'),
     recover: (claimId: string, note: string) => ipcRenderer.invoke('coordination:recover', claimId, note),
+    stopService: (pgid: number) => ipcRenderer.invoke('coordination:stopService', pgid),
     onChanged: (listener: () => void) => {
       const handler = () => listener();
       ipcRenderer.on('coordination:changed', handler);

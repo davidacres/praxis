@@ -32,10 +32,33 @@ import {
  *
  * On takeover, claims the previous broker recorded as executing become `recovery-required`
  * under the new epoch: their work may still be running.
+ *
+ * Time is the broker's own **monotonic** clock, so a person changing the system clock moves
+ * no lease. When the broker notices it was not running for a while (the machine slept, the
+ * process was stopped) it extends every lease by the gap before judging any of them: nobody
+ * could heartbeat while it was asleep, and work that was running is not "silent" for that.
  */
 
 export const COORDINATION_FILE = 'agent.sessions.chat.json';
 const LOCK_FILE = 'broker.lock';
+const TICK_MS = 15_000;
+
+/**
+ * Wall-clock-shaped milliseconds that only ever move forward at the rate of real time: the
+ * wall clock when this process started, plus monotonic time since. Immune to clock changes.
+ */
+export function brokerClock(): number {
+  return performance.timeOrigin + performance.now();
+}
+
+export interface LeaderOptions {
+  now?: () => number;
+  onChange?: (state: CoordinationState) => void;
+  /** How often leases are judged (tests use a short beat). */
+  tickMs?: number;
+  /** A gap between beats longer than this means the broker was suspended. Default three beats. */
+  suspendedAfterMs?: number;
+}
 const TOKEN_FILE = 'broker.token';
 
 export interface CoordinationEndpoint {
@@ -127,16 +150,27 @@ class Leader implements CoordinationEndpoint {
   public blockedReason?: string;
   private readonly onChange?: (state: CoordinationState) => void;
 
-  constructor(private readonly root: string, private readonly token: string, epoch: string, options: { now?: () => number; onChange?: (state: CoordinationState) => void } = {}) {
+  constructor(private readonly root: string, private readonly token: string, epoch: string, private readonly options: LeaderOptions = {}) {
     const loaded = readState(path.join(root, COORDINATION_FILE), epoch);
     this.state = loaded.state;
     this.blockedReason = loaded.blockedReason;
-    this.now = options.now ?? Date.now;
+    this.now = options.now ?? brokerClock;
     this.onChange = options.onChange;
     if (!this.blockedReason) this.persist(this.state);
   }
 
   private readonly now: () => number;
+  private lastBeat = 0;
+
+  /** One beat: first account for any time the broker was suspended, then judge leases. */
+  async beat(): Promise<void> {
+    const tickMs = this.options.tickMs ?? TICK_MS;
+    const at = this.now();
+    const gap = this.lastBeat ? at - this.lastBeat : 0;
+    this.lastBeat = at;
+    if (gap > (this.options.suspendedAfterMs ?? tickMs * 3)) await this.send({ kind: 'suspended', pausedMs: gap - tickMs });
+    await this.send({ kind: 'tick' });
+  }
 
   private persist(state: CoordinationState): void {
     writeAtomic(path.join(this.root, COORDINATION_FILE), state);
@@ -152,7 +186,8 @@ class Leader implements CoordinationEndpoint {
     });
     if (process.platform !== 'win32') fs.chmodSync(where, 0o600);
     // Leases and stale sessions are judged on the broker's clock, on a steady beat.
-    this.ticker = setInterval(() => void this.send({ kind: 'tick' }), 15_000);
+    this.lastBeat = this.now();
+    this.ticker = setInterval(() => void this.beat(), this.options.tickMs ?? TICK_MS);
     this.ticker.unref?.();
   }
 
@@ -206,7 +241,7 @@ class Leader implements CoordinationEndpoint {
   }
 
   async snapshot(sessionKey?: string, since?: number): Promise<unknown> {
-    return sessionKey ? scopedSnapshot(this.state, sessionKey, since) : this.state;
+    return { ...(sessionKey ? scopedSnapshot(this.state, sessionKey, since) : this.state), now: this.now() };
   }
 
   /** Clears an unreadable state (after a person looked at the copy) and starts granting again. */
@@ -294,8 +329,8 @@ class Follower implements CoordinationEndpoint {
  */
 export async function joinCoordination(
   root = defaultCoordinationRoot(),
-  options: { now?: () => number; onChange?: (state: CoordinationState) => void } = {}
-): Promise<CoordinationEndpoint & { reset?: () => void }> {
+  options: LeaderOptions = {}
+): Promise<CoordinationEndpoint & { reset?: () => void; beat?: () => Promise<void> }> {
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
   const tokenFile = path.join(root, TOKEN_FILE);
   if (!fs.existsSync(tokenFile)) {
@@ -358,7 +393,7 @@ export class ResilientCoordination implements CoordinationEndpoint {
 
   constructor(
     private readonly root = defaultCoordinationRoot(),
-    private readonly options: { now?: () => number; onChange?: (state: CoordinationState) => void } = {}
+    private readonly options: LeaderOptions = {}
   ) {}
 
   get role(): 'leader' | 'follower' {

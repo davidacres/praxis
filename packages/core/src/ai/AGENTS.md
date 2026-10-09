@@ -281,8 +281,23 @@ to undo:
   process is alive.
 - **ACP refusals must be `RequestError`s.** A plain `Error` reaches the agent as a bare
   "Internal error" and it retries blind; `e2e/coordination.spec.ts` asserts the reason arrives.
-- **Never write a hook into anyone's global config.** The Claude Code adapter
-  (`main/coordinationHook.ts`) is opt-in and is proven with `claude --settings <file>`.
+- **Never write a hook into anyone's global config.** The hook adapter
+  (`main/coordinationHook.ts`, `--runtime claude|codex|copilot|gemini`) is opt-in, and its live
+  tests pass configuration for one invocation only (`claude --settings`, Codex's
+  `--dangerously-bypass-hook-trust --enable hooks` in a throwaway repo).
+- **A broker that is up but failing is not availability.** Hooks and gates deny on a broker
+  error or timeout; only "no broker running at all" lets a hook allow.
+- **Waiting is a separate, bounded call** (`wait_for_files`, `coordination_wait`), never a
+  gate that sleeps. It cancels at the broker on timeout, abort or turn end, and must not
+  grant a turn that has ended.
+- **A shell command's leftovers are services.** `run_shell` runs as a process group; anything
+  still in it after the shell exits keeps a `process` claim (and its ports) until the group is
+  gone. Releasing with evidence (`release(evidence)`) is how the host clears one that went to
+  recovery meanwhile.
+- **Leases are on the broker's monotonic clock**, and a gap between beats (sleep) extends them
+  (`suspended`). Durations shown to people use the snapshot's `now`, not the reader's clock.
+- **Only live surfaces can be taken over** (`takeover`: browser, app, desktop). Files,
+  checkouts and processes are released by their owner or recovered, never taken.
 - **Tests never join a real broker.** `launchTestApp` sets `PRAXIS_COORDINATION_ROOT` per
   profile; `PRAXIS_COORDINATION=off` disables gates entirely.
 

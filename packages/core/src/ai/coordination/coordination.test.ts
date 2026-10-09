@@ -201,11 +201,58 @@ test('messages are bounded, redacted and acknowledged', () => {
   assert.deepEqual(state.events.find(event => event.sequence === message.sequence)?.ackedBy, ['B']);
 });
 
+test('a person can take a live UI surface from an agent, and the agent is told its view is out of date', () => {
+  let state = registered(['agent', 'person:praxis']);
+  state = acquire(state, 'agent', 'a1', [{ resource: { kind: 'browser', surface: 'in-app:1' } }, { resource: file('x.ts') }]).state;
+  const taken = run(state, { kind: 'takeover', requestId: 'person-1', sessionKey: 'person:praxis', items: [{ resource: { kind: 'browser', surface: 'in-app:1' }, mode: 'exclusive' }], reason: 'using the in-app browser' });
+  assert.equal(taken.result.ok, true);
+  state = taken.state;
+  assert.deepEqual(state.claims.map(claim => [claim.owner.sessionKey, claim.resource.kind]), [['agent', 'file'], ['person:praxis', 'browser']], 'only the surface moves; the file stays the agent\'s');
+  const notice = state.events.find(entry => entry.type === 'taken-over');
+  assert.equal(notice?.toSessionKey, 'agent');
+  assert.match(notice?.text ?? '', /out of date/);
+  // The agent's next browser call is refused, naming the person.
+  const again = acquire(state, 'agent', 'a2', [{ resource: { kind: 'browser', surface: 'in-app:1' } }], false);
+  assert.equal(again.result.ok && again.result.acquire?.status, 'blocked');
+  // Repeated input is idempotent; a file cannot be taken.
+  assert.equal(run(state, { kind: 'takeover', requestId: 'person-1', sessionKey: 'person:praxis', items: [{ resource: { kind: 'browser', surface: 'in-app:1' }, mode: 'exclusive' }], reason: 'again' }).state, state);
+  assert.equal(run(state, { kind: 'takeover', requestId: 'person-2', sessionKey: 'person:praxis', items: [{ resource: file('x.ts'), mode: 'exclusive' }], reason: 'grab' }).result.ok, false);
+});
+
+test('a process group is its own resource; event deltas say when they have a gap', () => {
+  assert.equal(resourcesOverlap({ kind: 'process', host: 'h', pgid: 10 }, { kind: 'process', host: 'h', pgid: 10 }), true);
+  assert.equal(resourcesOverlap({ kind: 'process', host: 'h', pgid: 10 }, { kind: 'process', host: 'h', pgid: 11 }), false);
+  assert.equal(resourcesOverlap({ kind: 'process', host: 'h', pgid: 10 }, { kind: 'worktree', worktree: WT }), false, 'a running service does not block edits');
+
+  let state = registered(['A']);
+  const start = state.sequence;
+  for (let index = 0; index < 600; index += 1) state = run(state, { kind: 'message', from: 'A', text: `note ${index}` }).state;
+  assert.equal(scopedSnapshot(state, 'A', state.sequence - 3).events.length, 3);
+  assert.equal(scopedSnapshot(state, 'A', state.sequence - 3).resync, false);
+  assert.equal(scopedSnapshot(state, 'A', start).resync, true, 'the events after `start` were trimmed: the reader must resync');
+  assert.equal(scopedSnapshot(state, 'A').resync, false, 'a first read is a whole snapshot anyway');
+});
+
+test('a suspension (sleep) extends leases instead of sending live work to recovery; a gone owner still expires after', () => {
+  let state = registered(['A', 'B']);
+  state = acquire(state, 'A', 'a1', [{ resource: file('x.ts') }], {}, 1000).state;
+  const asleep = 2 * 60 * 60 * 1000;
+  // Without the suspension notice, the first tick after waking would expire it.
+  assert.equal(run(state, { kind: 'tick' }, 1000 + asleep).state.claims[0].state, 'recovery-required');
+  state = run(state, { kind: 'suspended', pausedMs: asleep }, 1000 + asleep).state;
+  state = run(state, { kind: 'tick' }, 1000 + asleep + 1000).state;
+  assert.equal(state.claims[0].state, 'executing', 'the owner gets a full lease after waking to heartbeat');
+  assert.equal(state.sessions.A.state, 'active');
+  assert.match(state.events.at(-1)?.text ?? '', /paused for 7200 s/);
+  state = run(state, { kind: 'tick' }, 1000 + asleep + COORDINATION_LEASE_MS + 1).state;
+  assert.equal(state.claims[0].state, 'recovery-required', 'no heartbeat after waking: it really stopped');
+});
+
 test('property: across random interleavings no two conflicting claims are ever held at once', () => {
   const resources: CoordinationResource[] = [file('a.ts'), file('b.ts'), dir('src'), file('src/c.ts'), { kind: 'worktree', worktree: WT }, { kind: 'browser', surface: 'main' }, { kind: 'desktop' }];
   let seed = 7;
   const random = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
-  const sessions = ['A', 'B', 'C', 'D'];
+  const sessions = ['A', 'B', 'C', 'D', 'person'];
   let state = registered(sessions);
   let now = 1000;
   for (let step = 0; step < 3000; step += 1) {
@@ -229,6 +276,9 @@ test('property: across random interleavings no two conflicting claims are ever h
       for (const claim of state.claims.filter(candidate => candidate.state === 'recovery-required')) {
         state = run(state, { kind: 'recover', claimId: claim.claimId, actor: 'test', note: 'stopped' }, now).state;
       }
+    } else if (roll < 0.97) {
+      const surface = random() < 0.5 ? { kind: 'browser' as const, surface: 'main' } : { kind: 'desktop' as const };
+      state = run(state, { kind: 'takeover', requestId: `p${step}`, sessionKey: 'person', items: [{ resource: surface, mode: 'exclusive' }], reason: 'person' }, now).state;
     } else {
       state = run(state, { kind: 'end-turn', owner: { sessionKey: who } }, now).state;
     }

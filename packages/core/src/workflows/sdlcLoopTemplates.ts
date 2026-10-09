@@ -1,5 +1,5 @@
 /**
- * Iterative SDLC loop template (FX-BE-092 / TASK-253).
+ * Iterative SDLC loop template (FX-BE-168 / TASK-437).
  *
  * The user-visible shape: plan → author BDD scenarios → implement → a wide
  * parallel verification band (lint, typecheck, unit tests, BDD run, SAST,

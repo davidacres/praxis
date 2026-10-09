@@ -1,11 +1,11 @@
 ---
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 **Created:** 2026-10-02T10:59:50.747Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-393
 type: Task
-status: In Progress
+status: Done
 created: 2026-10-02
 priority: High
 ---
@@ -53,6 +53,26 @@ hook adapter (`coordinationHook.ts`) proven live against Claude Code 2.1.295 —
 before the losing write — never installed automatically, never the broker itself,
 allowing with a stated reason on outage, malformed payload or timeout.
 
-Remaining: service and process-tree claims, interactive command claims, revalidating
-branch/HEAD at execution, Codex / Gemini / Copilot native adapters (Codex's hooks did not
-fire in a probe; see the capability matrix).
+Then, the same day:
+
+- **Services and process trees.** `run_shell` runs each command as its own process group
+  (macOS/Linux) and returns when the shell exits, not when inherited pipes close. Whatever
+  is left running is a service: claimed as a `process` resource plus each port it listens on
+  (checked again as it starts), kept across turns, released with evidence when the group
+  exits or is stopped (inspector **Stop**), and stopped when the app quits. A timeout stops
+  the whole group.
+- **Interactive commands.** No Praxis agent route sends input to a running command
+  (`run_shell` has stdin closed; ACP terminals are not advertised) — a decided boundary,
+  recorded in the capability matrix with Codex's `write_stdin` as an ungated native route.
+- **Branch/HEAD revalidation.** Every gated write or command compares the checkout with what
+  the session last acted on; a move it did not make refuses that one write with what changed.
+- **Native adapters.** One hook script, `--runtime claude|codex|copilot|gemini`. Codex 0.159.3
+  proven live (its earlier probe failed only on Codex's hook-trust review). Copilot 1.0.91
+  and Gemini 0.43 adapters are built and tested against each installed CLI's contract but
+  could not run live (quota exhausted; account refused) and are not advertised.
+- **Failure semantics.** A running broker that errors, dies mid-request or does not answer in
+  8 s, or the hook failing, denies the edit; no broker at all allows. A hook process killed
+  outright lets Claude Code run the tool (proven live) — hooks stay cooperative.
+- A subagent stopping no longer ends its parent's turn.
+
+Platform runs on Linux and Windows are deferred to TASK-438.

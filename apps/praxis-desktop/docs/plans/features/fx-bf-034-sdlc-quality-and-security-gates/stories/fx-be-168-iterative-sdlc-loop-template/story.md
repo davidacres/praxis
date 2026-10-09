@@ -2,7 +2,7 @@
 **Status:** ✅ Complete
 **Type:** Story
 type: Story
-id: FX-BE-092
+id: FX-BE-168
 title: "Iterative SDLC loop template"
 status: Done
 feature: FX-BF-034
@@ -10,7 +10,7 @@ updated: 2026-09-10
 dependencies: [FX-BE-087, FX-BE-088, FX-BE-089, FX-BE-090]
 ---
 
-# FX-BE-092: Iterative SDLC loop template
+# FX-BE-168: Iterative SDLC loop template
 
 **Priority:** Medium
 **Created:** 2026-09-10
@@ -21,7 +21,7 @@ A marketplace template family (`full-sdlc-loop`, per-stack variants) that realiz
 
 ## Tasks
 
-- [x] [TASK-253](tasks/task-253-iterative-sdlc-loop-template.md) — Add the iterative SDLC loop template with BDD and four review stages
+- [x] [TASK-437](tasks/task-253-iterative-sdlc-loop-template.md) — Add the iterative SDLC loop template with BDD and four review stages
 
 ## Description
 

@@ -1035,6 +1035,11 @@ export interface CoordinationIpc {
   state(): Promise<{ state: CoordinationState; role: 'leader' | 'follower'; blockedReason: string | null }>;
   /** A person confirms a claim awaiting recovery really stopped. */
   recover(claimId: string, note: string): Promise<void>;
+  /**
+   * Stops a service an agent's shell command left running (its whole process group). Only a
+   * process this app instance started can be stopped from here; false otherwise.
+   */
+  stopService(pgid: number): Promise<boolean>;
   onChanged(listener: () => void): () => void;
 }
 

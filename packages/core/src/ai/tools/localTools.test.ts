@@ -4,7 +4,8 @@ import * as fs from 'node:fs/promises';
 import * as fsSync from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { LocalToolExecutor, type ToolPermissionRequest } from './localTools';
+import { LocalToolExecutor, runningServices, stopService, type ToolPermissionRequest } from './localTools';
+import { processGroupMembers, runShellCommand } from './processTree';
 
 async function withTempDir(run: (dir: string) => Promise<void>): Promise<void> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-localtools-'));
@@ -187,6 +188,70 @@ test('a write or shell command another session holds is refused before it happen
     assert.equal(shell.ok, true);
     assert.deepEqual(asked, ['file:busy.ts', 'file:free.ts', 'worktree:'], 'a shell command owns the whole worktree');
     assert.equal(released, 2);
+  } finally {
+    fsSync.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a shell command that leaves a service running returns at once and keeps a claim until it exits', { skip: process.platform === 'win32' }, async () => {
+  const root = fsSync.mkdtempSync(path.join(os.tmpdir(), 'praxis-svc-'));
+  try {
+    const claims: Array<{ kinds: string[]; lifetime?: string; released?: string }> = [];
+    const gate = {
+      worktree: root,
+      acquire: async (input: { items: Array<{ resource: { kind: string; port?: number } }>; lifetime?: string }) => {
+        const entry: { kinds: string[]; lifetime?: string; released?: string } = { kinds: input.items.map(item => item.resource.kind + (item.resource.port ? `:${item.resource.port}` : '')), lifetime: input.lifetime };
+        claims.push(entry);
+        return { ok: true as const, release: async (evidence?: string) => { entry.released = evidence ?? 'released'; } };
+      }
+    };
+    const executor = new LocalToolExecutor({ workingDirectory: root, toolMode: 'full', requestPermission: async () => 'allow_always', coordination: gate as never });
+    // A server that inherits the tool's output pipes: before process groups this held the tool open until the 5 min timeout.
+    const script = path.join(root, 'server.js');
+    fsSync.writeFileSync(script, "require('http').createServer(() => {}).listen(0, '127.0.0.1', function () { console.log('listening ' + this.address().port); });");
+    const started = Date.now();
+    const result = await executor.execute('run_shell', { command: `echo before; node ${JSON.stringify(script)} & sleep 1; echo after` });
+    assert.ok(Date.now() - started < 10_000, 'the tool returns when the shell exits, not when the server does');
+    assert.equal(result.ok, true);
+    assert.match(result.content, /before[\s\S]*after/);
+    assert.match(result.content, /Still running in the background: 1 process \(group \d+\), listening on port \d+/);
+
+    assert.equal(claims.length, 3);
+    assert.deepEqual([claims[0].kinds, claims[0].lifetime, claims[0].released], [['worktree'], 'tool', 'released'], 'the command\'s own claim ends with it');
+    assert.deepEqual([claims[1].kinds, claims[1].lifetime], [['process'], 'service']);
+    assert.equal(claims[2].lifetime, 'service');
+    assert.match(claims[2].kinds[0] ?? '', /^port:\d+$/, 'the port it listens on is claimed');
+    assert.equal(claims[1].released ?? claims[2].released, undefined, 'the service claims are held while it runs');
+
+    const [service] = runningServices();
+    assert.ok(service && processGroupMembers(service.pgid).length > 0);
+    assert.equal(await stopService(service.pgid), true);
+    assert.equal(processGroupMembers(service.pgid).length, 0);
+    assert.match(claims[1].released ?? '', /group \d+\) stopped from Praxis/, 'released with the evidence that it stopped');
+    assert.match(claims[2].released ?? '', /stopped from Praxis/);
+    assert.equal(runningServices().length, 0);
+  } finally {
+    fsSync.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a service that exits on its own releases its claim; a timeout stops the whole process group', { skip: process.platform === 'win32' }, async () => {
+  const root = fsSync.mkdtempSync(path.join(os.tmpdir(), 'praxis-svc-'));
+  try {
+    let released: string | undefined;
+    const gate = { worktree: root, acquire: async () => ({ ok: true as const, release: async (evidence?: string) => { if (evidence) released = evidence; } }) };
+    const executor = new LocalToolExecutor({ workingDirectory: root, toolMode: 'full', requestPermission: async () => 'allow_always', coordination: gate as never });
+    const result = await executor.execute('run_shell', { command: 'sleep 3 > /dev/null 2>&1 &' });
+    assert.match(result.content, /Still running in the background: 1 process/);
+    const deadline = Date.now() + 10_000;
+    while (!released && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 200));
+    assert.match(released ?? '', /exited/, 'the watcher saw the group go and released it');
+
+    const timed = await runShellCommand('sleep 30 & sleep 30', { cwd: root, timeoutMs: 500, maxBuffer: 1024 });
+    assert.equal(timed.timedOut, true);
+    assert.match(timed.error ?? '', /timed out/);
+    await new Promise(resolve => setTimeout(resolve, 2500));
+    assert.equal(processGroupMembers(timed.pgid!).length, 0, 'the backgrounded sleep was stopped with its shell');
   } finally {
     fsSync.rmSync(root, { recursive: true, force: true });
   }

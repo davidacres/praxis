@@ -24,6 +24,10 @@
  *   waiting on it is refused with an explanation instead of queued.
  * - **Idempotent.** A repeated request id returns the same grant or queue position; a
  *   repeated release or recovery is a no-op.
+ * - **A person outranks an agent at a live UI.** `takeover` moves a browser, app or desktop
+ *   claim from whichever agent holds it to the person, and tells that agent what it saw there
+ *   is out of date. Nothing else can be taken: files, checkouts and processes are only ever
+ *   released by their owner or recovered.
  */
 
 import { claimsConflict, describeResource } from './coordinationPolicy';
@@ -69,8 +73,11 @@ export type CoordinationCommand =
       items: CoordinationRequestItem[];
       reason: string;
       lifetime: ClaimLifetime;
-      /** Queue when busy (with an optional deadline), or fail at once. */
-      wait: false | { untilMs?: number };
+      /**
+       * Queue when busy, or fail at once. `forMs` bounds the wait on the broker's own clock —
+       * prefer it to `untilMs`, since a client's clock is not the broker's.
+       */
+      wait: false | { untilMs?: number; forMs?: number };
     }
   | { kind: 'start'; owner: CoordinationOwner; claimIds: string[]; generation?: number }
   | { kind: 'cleanup'; owner: CoordinationOwner; claimIds: string[] }
@@ -82,13 +89,25 @@ export type CoordinationCommand =
   | { kind: 'delegate'; owner: CoordinationOwner; claimId: string; to: CoordinationOwner }
   /** The host or a person confirms a recovery-required claim's work stopped. */
   | { kind: 'recover'; claimId: string; actor: string; note: string }
+  /** A person took over a live UI surface (browser, app, desktop) an agent may hold. */
+  | { kind: 'takeover'; requestId: string; sessionKey: string; items: CoordinationRequestItem[]; reason: string }
   | { kind: 'message'; from: string; to?: string; text: string; needsAck?: boolean }
   | { kind: 'ack'; sessionKey: string; sequence: number }
+  /**
+   * The broker was not running for `pausedMs` (the machine slept, the process was stopped).
+   * Nobody could heartbeat in that time, so it is not counted against anyone: every lease
+   * and heartbeat moves forward by it. An owner that is really gone still expires — one
+   * lease after the broker resumed.
+   */
+  | { kind: 'suspended'; pausedMs: number }
   | { kind: 'tick' };
 
 export type CoordinationResult =
   | { ok: true; acquire?: AcquireResult; sequence?: number }
   | { ok: false; error: string };
+
+/** The only resources a person may take from an agent: the surfaces they are looking at. */
+const TAKEOVER_KINDS = new Set(['browser', 'app-ui', 'desktop']);
 
 const sameOwner = (left: CoordinationOwner, right: CoordinationOwner): boolean =>
   left.sessionKey === right.sessionKey && (left.executionId ?? '') === (right.executionId ?? '');
@@ -288,7 +307,8 @@ export function applyCoordination(
         }
       }
       if (state.waiters.length >= COORDINATION_MAX_WAITERS) return fail('Too many waiting requests; try again later.');
-      const waiter: CoordinationRequest = { ...request, enqueuedAt: now, ...(command.wait.untilMs !== undefined ? { waitUntil: command.wait.untilMs } : {}) };
+      const waitUntil = command.wait.forMs !== undefined ? now + command.wait.forMs : command.wait.untilMs;
+      const waiter: CoordinationRequest = { ...request, enqueuedAt: now, ...(waitUntil !== undefined ? { waitUntil } : {}) };
       const next = event({ ...state, waiters: [...state.waiters, waiter] }, now, 'resource-blocked', `${command.owner.sessionKey} is waiting: ${command.reason}`, { sessionKey: command.owner.sessionKey });
       return done(next, { acquire: { status: 'queued', position: next.waiters.length, blockers } });
     }
@@ -384,6 +404,26 @@ export function applyCoordination(
       next = event(next, now, 'recovered', `${command.actor} confirmed ${describeResource(claim.resource)} is free (was ${claim.owner.sessionKey}'s): ${command.note}`, { claimIds: [claim.claimId] });
       return done(promoteWaiters(next, now));
     }
+    case 'takeover': {
+      if (!state.sessions[command.sessionKey]) return fail('Register the session before taking over.');
+      if (command.items.length === 0 || command.items.some(item => !TAKEOVER_KINDS.has(item.resource.kind))) {
+        return fail('Only the in-app browser, the live app or the desktop can be taken over; anything else is released by its owner.');
+      }
+      const owner = { sessionKey: command.sessionKey };
+      // Already the person's: a repeated input refreshes nothing and says nothing.
+      if (state.claims.some(claim => claim.requestId === command.requestId)) return { state, result: { ok: true } };
+      const displaced = state.claims.filter(claim => !sameOwner(claim.owner, owner) && command.items.some(item => claimsConflict(claim, item)));
+      let next: CoordinationState = { ...state, claims: state.claims.filter(claim => !displaced.includes(claim)) };
+      for (const loser of new Set(displaced.map(claim => claim.owner.sessionKey))) {
+        next = event(next, now, 'taken-over', `A person took over ${displaced.filter(claim => claim.owner.sessionKey === loser).map(claim => describeResource(claim.resource)).join(', ')} from ${loser}. Anything ${loser} saw there is out of date; it must not act on it again until it is handed back.`, {
+          sessionKey: command.sessionKey,
+          toSessionKey: loser,
+          claimIds: displaced.filter(claim => claim.owner.sessionKey === loser).map(claim => claim.claimId)
+        });
+      }
+      const granted = grant(next, { requestId: command.requestId, owner, items: command.items, reason: command.reason, lifetime: 'sequence' }, now, 'executing');
+      return done(granted.state, { acquire: { status: 'granted', claimIds: granted.claimIds, generation: granted.generation } });
+    }
     case 'message': {
       if (!state.sessions[command.from]) return fail('Unknown session.');
       if (!command.text.trim()) return fail('A message needs text.');
@@ -398,6 +438,14 @@ export function applyCoordination(
           : candidate
       );
       return done(event({ ...state, events }, now, 'acknowledged', `${command.sessionKey} acknowledged message ${command.sequence}.`, { sessionKey: command.sessionKey }));
+    }
+    case 'suspended': {
+      const pausedMs = Math.max(0, Math.round(command.pausedMs));
+      if (pausedMs === 0) return { state, result: { ok: true } };
+      const claims = state.claims.map(claim => (claim.state === 'recovery-required' ? claim : { ...claim, leaseUntil: claim.leaseUntil + pausedMs }));
+      const sessions = Object.fromEntries(Object.entries(state.sessions).map(([key, session]) => [key, session.state === 'ended' ? session : { ...session, heartbeatAt: session.heartbeatAt + pausedMs }]));
+      const waiters = state.waiters.map(waiter => (waiter.waitUntil !== undefined ? { ...waiter, waitUntil: waiter.waitUntil + pausedMs } : waiter));
+      return done(event({ ...state, claims, sessions, waiters }, now, 'activity', `Coordination was paused for ${Math.round(pausedMs / 1000)} s (the machine slept or the broker was stopped); leases were extended by that much rather than expired.`));
     }
     case 'tick': {
       let next = state;
@@ -434,9 +482,14 @@ export function applyCoordination(
   }
 }
 
-/** What one session may see: its scope's sessions and claims, messages to it or its scope. */
+/**
+ * What one session may see: its scope's sessions and claims, messages to it or its scope.
+ * With `sinceSequence`, only the events after it — and `resync: true` when some of those were
+ * already trimmed, so the reader knows its delta has a gap and takes the snapshot as a whole.
+ */
 export function scopedSnapshot(state: CoordinationState, sessionKey: string, sinceSequence = 0) {
   const scope = state.sessions[sessionKey]?.scope;
+  const oldest = state.events[0]?.sequence;
   const visible = (key?: string) => !key || key === sessionKey || !scope || state.sessions[key]?.scope === scope;
   return {
     schemaVersion: state.schemaVersion,
@@ -446,6 +499,7 @@ export function scopedSnapshot(state: CoordinationState, sessionKey: string, sin
     claims: state.claims.map(claim => (visible(claim.owner.sessionKey) ? claim : { ...claim, owner: { sessionKey: 'another project' }, reason: 'in use', requestId: '' })),
     waiters: state.waiters.filter(waiter => visible(waiter.owner.sessionKey)),
     events: state.events.filter(entry => entry.sequence > sinceSequence && visible(entry.sessionKey) && (!entry.toSessionKey || entry.toSessionKey === sessionKey || entry.sessionKey === sessionKey)),
-    lastSequence: state.sequence
+    lastSequence: state.sequence,
+    resync: sinceSequence > 0 && (sinceSequence > state.sequence || (oldest !== undefined && oldest > sinceSequence + 1))
   };
 }

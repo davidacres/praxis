@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { stopService } from '@praxis/core';
 import { getAcpAgentHost, getVercelAgentService, hasActiveTask } from './aiInstance';
 import { endCoordinatedTurn, getCoordination, onCoordinationChanged } from './coordinationInstance';
 import { broadcastToAllWindows } from './windowBroadcast';
@@ -30,5 +31,10 @@ export function registerCoordinationIpc(): void {
   ipcMain.handle('coordination:recover', async (_event, claimId: string, note: string) => {
     const result = await getCoordination().send({ kind: 'recover', claimId, actor: 'you, in Praxis', note: note.trim() || 'Confirmed in Praxis that the work stopped.' });
     if (!result.ok) throw new Error(result.error);
+  });
+
+  ipcMain.handle('coordination:stopService', async (_event, pgid: unknown) => {
+    if (typeof pgid !== 'number' || !Number.isInteger(pgid) || pgid <= 1) return false;
+    return stopService(pgid);
   });
 }

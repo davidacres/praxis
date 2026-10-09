@@ -35,7 +35,12 @@ export type CoordinationResource =
   /** A build output directory; shared mode = tests consuming it. */
   | { kind: 'build-output'; dir: string }
   | { kind: 'port'; port: number }
-  | { kind: 'fixture'; id: string };
+  | { kind: 'fixture'; id: string }
+  /**
+   * A process group a session started that outlived its tool call (a dev server, a watcher):
+   * tracked so it is visible and its claim lasts as long as the processes do.
+   */
+  | { kind: 'process'; host: string; pgid: number };
 
 export type CoordinationResourceKind = CoordinationResource['kind'];
 
@@ -129,6 +134,8 @@ export type CoordinationEventType =
   | 'recovery-required'
   | 'recovered'
   | 'delegated'
+  /** A person took a live UI surface from an agent: the agent's view of it is out of date. */
+  | 'taken-over'
   | 'message'
   | 'acknowledged'
   | 'done'
@@ -158,6 +165,11 @@ export interface CoordinationState {
   claims: CoordinationClaim[];
   waiters: CoordinationRequest[];
   events: CoordinationEvent[];
+  /**
+   * The broker's clock when a snapshot was taken (never persisted). Every time in the state is
+   * on that clock, so durations are measured against this, not the reader's own clock.
+   */
+  now?: number;
 }
 
 /** Who holds what a request wanted, as the requester is allowed to see it. */

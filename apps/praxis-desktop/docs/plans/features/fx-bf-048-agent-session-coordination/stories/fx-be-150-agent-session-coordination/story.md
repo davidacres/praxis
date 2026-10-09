@@ -1,11 +1,11 @@
 ---
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 **Created:** 2026-10-02T10:59:50.746Z
 **Type:** Story
 **Priority:** Medium
 id: FX-BE-150
 type: Story
-status: In Progress
+status: Done
 created: 2026-10-02
 priority: High
 ---
@@ -48,6 +48,7 @@ FX-BF-048. Existing session identity, tool mode, permission and workflow schedul
 - [TASK-393: Runtime and tool gates](tasks/task-393-coordination-runtime.md)
 - [TASK-394: Communication and status](tasks/task-394-coordination-communication.md)
 - [TASK-395: Concurrency and recovery proof](tasks/task-395-coordination-verification.md)
+- [TASK-438: Linux and Windows verification](tasks/task-438-coordination-linux-windows.md) — deferred (Backlog)
 
 ## Validation
 
@@ -70,6 +71,9 @@ The research gap review maps every identified gap to tasks. The native adapter c
 
 ## Progress 2026-10-09
 
-TASK-391 and TASK-392 are done; TASK-393–395 are in progress with the remaining scope
-listed on each. Coverage is labelled honestly: gateway sessions are enforced, every ACP
-session and the Claude Code hook are cooperative.
+TASK-391 to TASK-395 are done on macOS: services and process trees, bounded waiting, event
+deltas, person takeover of the in-app browser, branch/HEAD revalidation, sleep- and
+clock-proof leases, hook failure semantics, and live Claude Code and Codex hook denial.
+Coverage is labelled honestly: gateway sessions are enforced; every ACP session and every
+hook is cooperative; Copilot and Gemini adapters are unproven live and not advertised.
+Linux and Windows verification is deferred to TASK-438 (Backlog) at the owner's direction.

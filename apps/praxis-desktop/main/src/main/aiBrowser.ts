@@ -12,6 +12,14 @@ import {
   type BrowserScreenshotResult
 } from '@praxis/core';
 import { browserDiagnosticsStorageRoot } from './browserDiagnosticsStorage';
+import { personUsedBrowser } from './coordinationInstance';
+
+/**
+ * Input only a person produces: agents drive the page through `executeJavaScript`, which
+ * dispatches DOM events and never reaches the input pipeline. Pointer movement alone is not
+ * taking over — hovering over the pane should not stop an agent.
+ */
+const PERSON_INPUT = new Set(['mouseDown', 'rawKeyDown', 'keyDown', 'char', 'mouseWheel', 'gestureScrollBegin', 'touchStart']);
 
 /**
  * The single in-app browser surface the AI can drive and the user can watch.
@@ -150,6 +158,10 @@ class AiBrowserManager {
     wc.on('did-start-loading', () => emit(true));
     wc.on('did-stop-loading', () => emit(false));
     wc.on('page-title-updated', () => emit(wc.isLoading()));
+    // A person touching the browser takes it over from any agent driving it (FX-BF-048 / TASK-394).
+    wc.on('input-event', (_event, input) => {
+      if (PERSON_INPUT.has(input.type)) void personUsedBrowser().catch(() => undefined);
+    });
 
     return view;
   }

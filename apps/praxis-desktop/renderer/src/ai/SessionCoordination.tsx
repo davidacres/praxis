@@ -45,11 +45,14 @@ function describe(resource: CoordinationResource): string {
       return `port ${resource.port}`;
     case 'fixture':
       return `fixture ${resource.id}`;
+    case 'process':
+      return `processes (group ${resource.pgid})`;
   }
 }
 
-function since(ms: number): string {
-  const seconds = Math.max(1, Math.round((Date.now() - ms) / 1000));
+/** How long ago, on the broker's clock (`now` is when the snapshot was taken there). */
+function since(ms: number, now: number): string {
+  const seconds = Math.max(1, Math.round((now - ms) / 1000));
   return seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.round(seconds / 60)}m` : `${Math.round(seconds / 3600)}h`;
 }
 
@@ -81,6 +84,7 @@ export function SessionCoordination({ sessionKey }: { sessionKey: string }) {
   }, []);
 
   if (!state) return null;
+  const now = state.now ?? Date.now();
   const me = state.sessions[sessionKey];
   const scope = me?.scope;
   const nearby = (claim: CoordinationClaim) => claim.owner.sessionKey === sessionKey || !scope || state.sessions[claim.owner.sessionKey]?.scope === scope;
@@ -89,6 +93,16 @@ export function SessionCoordination({ sessionKey }: { sessionKey: string }) {
   const waiting = state.waiters.filter(waiter => waiter.owner.sessionKey === sessionKey || !scope || state.sessions[waiter.owner.sessionKey]?.scope === scope);
   if (!me && others.length === 0 && !blockedReason) return null;
 
+  const stop = (pgid: number) => {
+    setError(undefined);
+    window.praxis.coordination
+      .stopService(pgid)
+      .then(stopped => {
+        if (!stopped) setError('Those processes were not started from this Praxis window, or have already stopped.');
+      })
+      .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+  };
+
   const recover = (claim: CoordinationClaim) => {
     setError(undefined);
     window.praxis.coordination.recover(claim.claimId, `Confirmed in Praxis that ${claim.owner.sessionKey} stopped.`).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
@@ -96,13 +110,18 @@ export function SessionCoordination({ sessionKey }: { sessionKey: string }) {
 
   const row = (claim: CoordinationClaim) => (
     <li key={claim.claimId} className={`is-${claim.state}`} data-testid="session-coordination-claim">
-      <Icon name={claim.state === 'recovery-required' ? 'warning' : 'file'} size={12} />
+      <Icon name={claim.state === 'recovery-required' ? 'warning' : claim.resource.kind === 'process' ? 'terminal' : 'file'} size={12} />
       <span className="session-coordination-text">
         <strong>{describe(claim.resource)}</strong>
         {claim.owner.sessionKey !== sessionKey && <> · {claim.owner.sessionKey}</>}
-        <span className="session-coordination-reason"> — {claim.reason} · {since(claim.grantedAt)}</span>
+        <span className="session-coordination-reason"> — {claim.reason} · {since(claim.grantedAt, now)}</span>
         {claim.state === 'recovery-required' && <span className="session-coordination-reason"> · its session stopped responding</span>}
       </span>
+      {claim.resource.kind === 'process' && claim.state !== 'recovery-required' && (
+        <button type="button" className="btn btn-quiet btn-compact" onClick={() => stop((claim.resource as { pgid: number }).pgid)} data-testid="session-coordination-stop">
+          Stop
+        </button>
+      )}
       {claim.state === 'recovery-required' && (
         <button type="button" className="btn btn-quiet btn-compact" onClick={() => recover(claim)} data-testid="session-coordination-recover">
           Confirm stopped
@@ -143,7 +162,7 @@ export function SessionCoordination({ sessionKey }: { sessionKey: string }) {
                 <Icon name="dot" size={12} />
                 <span className="session-coordination-text">
                   {waiter.owner.sessionKey === sessionKey ? 'This session' : waiter.owner.sessionKey}
-                  <span className="session-coordination-reason"> — {waiter.reason} · {since(waiter.enqueuedAt)}</span>
+                  <span className="session-coordination-reason"> — {waiter.reason} · {since(waiter.enqueuedAt, now)}</span>
                 </span>
               </li>
             ))}

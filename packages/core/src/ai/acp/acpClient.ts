@@ -339,7 +339,7 @@ export class AcpClientWrapper {
         : undefined;
       // A plain Error reaches the agent as a bare "Internal error"; a RequestError keeps the
       // reason, so the agent learns who holds the file instead of retrying blind.
-      if (decision && !decision.ok) throw acpModule.RequestError.internalError({ reason: decision.reason }, refusalForAgent(decision.reason));
+      if (decision && !decision.ok) throw acpModule.RequestError.internalError({ reason: decision.reason }, refusalForAgent(decision.reason, gate?.wait ? 'coordination_wait' : undefined));
       try {
         await nodeFs.writeFile(path, ctx.params.content, 'utf8');
       } finally {

@@ -9,7 +9,7 @@
  *   with anything beneath it; a file with the same file. Different worktrees never
  *   conflict — corresponding files there are separate checkouts.
  * - the index of one worktree is separate from its files: staging does not block edits.
- * - a live app instance, a browser surface, a port, a fixture: the same one conflicts.
+ * - a live app instance, a browser surface, a port, a fixture, a process group: the same one conflicts.
  * - the desktop's input is one resource for the whole machine.
  * - build output: the same directory, or one inside the other.
  */
@@ -57,6 +57,8 @@ export function resourcesOverlap(left: CoordinationResource, right: Coordination
       return left.port === (right as typeof left).port;
     case 'fixture':
       return left.id === (right as typeof left).id;
+    case 'process':
+      return left.host === (right as typeof left).host && left.pgid === (right as typeof left).pgid;
     case 'build-output': {
       const a = canonicalPath(left.dir, caseInsensitive);
       const b = canonicalPath((right as typeof left).dir, caseInsensitive);
@@ -91,5 +93,6 @@ export function describeResource(resource: CoordinationResource): string {
     case 'build-output': return `build output ${resource.dir}`;
     case 'port': return `port ${resource.port}`;
     case 'fixture': return `fixture ${resource.id}`;
+    case 'process': return `process group ${resource.pgid}`;
   }
 }

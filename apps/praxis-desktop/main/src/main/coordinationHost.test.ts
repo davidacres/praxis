@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { COORDINATION_FILE, ResilientCoordination, joinCoordination } from './coordinationHost';
+import { COORDINATION_FILE, ResilientCoordination, brokerClock, joinCoordination } from './coordinationHost';
 
 const HOST = path.join(__dirname, 'coordinationHost.js');
 
@@ -159,6 +159,45 @@ test('a request without the user\'s token is refused', async () => {
     assert.equal(fs.statSync(path.join(root, 'broker.token')).mode & 0o077, 0, 'the token is readable by its owner only');
   } finally {
     await leader.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the broker clock ignores a change to the system clock', () => {
+  const realNow = Date.now;
+  const before = brokerClock();
+  try {
+    Date.now = () => realNow() + 3 * 60 * 60 * 1000;
+    const after = brokerClock();
+    assert.ok(after - before >= 0 && after - before < 1000, 'moved by real elapsed time only');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('waking from sleep extends leases instead of sending running work to recovery; silence after waking still expires', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-sleep-'));
+  let now = 1_000_000;
+  // A long beat so only explicit beats run; the clock is the test's.
+  const broker = await joinCoordination(root, { now: () => now, tickMs: 60_000 });
+  try {
+    await broker.send({ kind: 'register', session: { sessionKey: 'A', runtime: 'gateway', coverage: 'enforced' } });
+    await broker.send({ kind: 'acquire', requestId: 'a1', owner: { sessionKey: 'A' }, items: [{ resource: { kind: 'file', worktree: '/w', path: 'x.ts' }, mode: 'exclusive' }], reason: 'editing', lifetime: 'tool', wait: false });
+    now += 2 * 60 * 60 * 1000; // the lid was closed for two hours
+    await broker.beat!();
+    let state = (await broker.snapshot()) as { claims: Array<{ state: string }>; events: Array<{ text: string }> };
+    assert.equal(state.claims[0].state, 'executing', 'not recovery-required: nobody could heartbeat while asleep');
+    assert.ok(state.events.some(entry => /paused for 7140 s/.test(entry.text)));
+
+    // Beats on time, no heartbeat from A: after one lease it is really silent.
+    for (let beat = 0; beat < 3; beat += 1) {
+      now += 45_000;
+      await broker.beat!();
+    }
+    state = (await broker.snapshot()) as typeof state;
+    assert.equal(state.claims[0].state, 'recovery-required');
+  } finally {
+    await broker.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

@@ -49,7 +49,7 @@ function findingsWith(severity: CheckFinding['severity']): { findings: CheckFind
   };
 }
 
-test('TASK-253: every sdlcLoop variant passes workflow validation', () => {
+test('TASK-437: every sdlcLoop variant passes workflow validation', () => {
   for (const wf of sdlcLoopMarketplaceTemplates()) {
     const result = validateWorkflow(wf);
     assert.strictEqual(result.valid, true, `${wf.id} validation errors: ${JSON.stringify(result.errors)}`);
@@ -57,7 +57,7 @@ test('TASK-253: every sdlcLoop variant passes workflow validation', () => {
   }
 });
 
-test('TASK-253: node DAG carries every requested SDLC responsibility', () => {
+test('TASK-437: node DAG carries every requested SDLC responsibility', () => {
   const wf = loopWorkflow();
   const ids = wf.nodes.map(n => n.id);
   for (const expected of ['plan', 'bdd-author', 'implement', 'lint', 'typecheck', 'unit-test', 'bdd-run', 'sast', 'secrets', 'sca', 'review', 'test-review', 'security-review', 'ux-review', 'gates', 'approve', 'deploy']) {
@@ -72,7 +72,7 @@ test('TASK-253: node DAG carries every requested SDLC responsibility', () => {
   assert.ok(testReview && testReview.type === 'agent-task' && testReview.inputs.includes('bdd-scenarios'));
 });
 
-test('TASK-253: reviewer stages own the gates; UX review is advisory', () => {
+test('TASK-437: reviewer stages own the gates; UX review is advisory', () => {
   const wf = loopWorkflow();
   const byId = new Map(wf.nodes.map(n => [n.id, n]));
   const gateOf = (id: string) => {
@@ -94,7 +94,7 @@ test('TASK-253: reviewer stages own the gates; UX review is advisory', () => {
   assert.ok(ux && ux.type === 'agent-task' && ux.satisfiesGate === undefined, 'ux-review must not own a gate');
 });
 
-test('TASK-253: review stages require findings artifacts, not prose', () => {
+test('TASK-437: review stages require findings artifacts, not prose', () => {
   const wf = loopWorkflow();
   let run = runToApproval(wf);
   const at = (n: number) => new Date(Date.UTC(2026, 8, 10, 10, n)).toISOString();
@@ -105,7 +105,7 @@ test('TASK-253: review stages require findings artifacts, not prose', () => {
   assert.ok(last?.error?.includes('required artifacts'));
 });
 
-test('TASK-253: failing stages are retryable within their attempt budget', () => {
+test('TASK-437: failing stages are retryable within their attempt budget', () => {
   const wf = loopWorkflow();
   let run = runToApproval(wf);
   const at = (n: number) => new Date(Date.UTC(2026, 8, 10, 10, n)).toISOString();
@@ -121,7 +121,7 @@ test('TASK-253: failing stages are retryable within their attempt budget', () =>
   assert.equal(implement.maxAttempts, 3);
 });
 
-test('TASK-253: a high review finding holds approval; a clean run approves', () => {
+test('TASK-437: a high review finding holds approval; a clean run approves', () => {
   const wf = loopWorkflow();
   let run = runToApproval(wf);
   const at = (n: number) => new Date(Date.UTC(2026, 8, 10, 10, n)).toISOString();
@@ -169,7 +169,7 @@ test('TASK-253: a high review finding holds approval; a clean run approves', () 
   }
 });
 
-test('TASK-253: coverage threshold holds the qa gate when line coverage is low', () => {
+test('TASK-437: coverage threshold holds the qa gate when line coverage is low', () => {
   const wf = loopWorkflow();
   let run = runToApproval(wf);
   const at = (n: number) => new Date(Date.UTC(2026, 8, 10, 10, n)).toISOString();
@@ -203,7 +203,7 @@ test('TASK-253: coverage threshold holds the qa gate when line coverage is low',
   assert.equal(qa.state, 'failed', '42% coverage must fail the 80% threshold');
 });
 
-test('TASK-253: instantiation for a project produces a valid project-scoped copy', () => {
+test('TASK-437: instantiation for a project produces a valid project-scoped copy', () => {
   // Reuse the same instantiation path the template library exposes.
   const { instantiateTemplateForProject } = require('./workflowTemplates') as typeof import('./workflowTemplates');
   const copy = instantiateTemplateForProject({ template: loopWorkflow(), projectId: 'p1', at: '2026-09-10T00:00:00Z' });
@@ -212,7 +212,7 @@ test('TASK-253: instantiation for a project produces a valid project-scoped copy
   assert.deepEqual(validateWorkflow(copy).errors, []);
 });
 
-test('TASK-253: variants differ only in commands, not in graph shape', () => {
+test('TASK-437: variants differ only in commands, not in graph shape', () => {
   const node = loopWorkflow();
   for (const wf of sdlcLoopMarketplaceTemplates()) {
     assert.equal(wf.nodes.length, node.nodes.length, wf.id);

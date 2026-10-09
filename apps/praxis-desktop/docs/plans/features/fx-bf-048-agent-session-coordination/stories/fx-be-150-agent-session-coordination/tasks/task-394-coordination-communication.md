@@ -1,11 +1,11 @@
 ---
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 **Created:** 2026-10-02T10:59:50.748Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-394
 type: Task
-status: In Progress
+status: Done
 created: 2026-10-02
 priority: High
 ---
@@ -45,5 +45,19 @@ inspector block showing coverage (enforced / cooperative / observed), what the s
 holds, what other sessions in the repository hold or wait for, and a "Confirm stopped"
 recovery that is attributed in the event log.
 
-Remaining: a bounded wait / wake API on the agent routes (gates fail fast today), event
-deltas with compaction recovery for agents, manual takeover pausing automation.
+Then, the same day:
+
+- **Bounded waiting.** Gateway `wait_for_files` and ACP `coordination_wait`: queued at the
+  broker in turn order with a relative deadline (max 120 s), woken once by the release with a
+  fresh grant started at once, cancelled by the agent's abort, its turn ending, or the
+  timeout — leaving nothing queued and granting nothing late. Refusals point at the wait
+  tool once; the tool says not to loop.
+- **Event deltas.** `coordination_status` takes `since` and returns only what happened after
+  it, or the whole picture with a note when the log was trimmed past that point (`resync`).
+  Messages can ask for an acknowledgement; `coordination_ack` gives it.
+- **Manual takeover.** Real input in the in-app browser (Electron's input pipeline, which the
+  agent's `executeJavaScript` never touches) takes the browser from the agent at the broker;
+  the agent is told what it saw is out of date and is refused it until the person has left
+  it alone for 30 s. Only live surfaces can be taken; files and processes cannot.
+- The inspector shows waiting sessions with how long, services with **Stop**, and times on
+  the broker's clock.

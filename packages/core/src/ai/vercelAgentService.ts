@@ -499,12 +499,14 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       return;
     }
 
+    const gate = this.coordinationFor?.(issueKey, options.workingDirectory);
     const toolExecutor = new LocalToolExecutor({
       workingDirectory: options.workingDirectory,
       toolMode: options.toolMode,
       shouldAutoAllow: options.permissionMode === 'auto' ? shouldAutoAllowToolPermission : undefined,
       requestPermission: async request => this.requestPermission(issueKey, request),
-      ...optionalCoordination(this.coordinationFor?.(issueKey, options.workingDirectory))
+      signal: task.abortController.signal,
+      ...optionalCoordination(gate)
     });
     const compositeExecutor = {
       execute: (name: string, args: Record<string, unknown>) =>
@@ -521,7 +523,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       gateway: options.gateway,
       modelId: toWireModelId(options.model),
       systemPrompt: options.systemPrompt,
-      tools: [...localToolDefinitionsForMode(options.toolMode), ...(options.toolExtension?.definitions ?? [])],
+      tools: [...localToolDefinitionsForMode(options.toolMode, { coordinated: !!gate?.wait }), ...(options.toolExtension?.definitions ?? [])],
       toolExecutor: compositeExecutor,
       history: options.history,
       userPrompt: options.userPrompt,
