@@ -368,6 +368,15 @@ const praxis: PraxisIpc = {
     providerSnapshots: () => ipcRenderer.invoke('aiUsage:providerSnapshots'),
     setProviderUsageKey: (provider: AiProvider, value: string) => ipcRenderer.invoke('aiUsage:setProviderUsageKey', provider, value)
   },
+  coordination: {
+    state: () => ipcRenderer.invoke('coordination:state'),
+    recover: (claimId: string, note: string) => ipcRenderer.invoke('coordination:recover', claimId, note),
+    onChanged: (listener: () => void) => {
+      const handler = () => listener();
+      ipcRenderer.on('coordination:changed', handler);
+      return () => ipcRenderer.off('coordination:changed', handler);
+    }
+  },
   taskDesigner: {
     getState: (boardId: string, connectionId?: string) =>
       ipcRenderer.invoke('taskDesigner:getState', boardId, connectionId),

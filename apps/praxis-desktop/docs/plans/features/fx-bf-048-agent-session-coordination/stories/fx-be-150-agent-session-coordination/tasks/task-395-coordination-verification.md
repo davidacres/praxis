@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Created:** 2026-10-02T10:59:50.748Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-395
 type: Task
-status: Backlog
+status: In Progress
 created: 2026-10-02
 priority: High
 ---
@@ -39,4 +39,16 @@ The reviewed gap matrix in the research document has matching evidence for each 
 
 ## Comments
 
+## Progress 2026-10-09
 
+Delivered: contention, multi-resource all-or-none, FIFO and reservation lapse, deadlock
+refusal, sibling executions, delegation, scoped disclosure, message bounds, a randomised
+3,000-step safety property (`coordination.test.ts`); two real processes, leader SIGKILL
+takeover, live-lock refusal, malformed state, wrong token (`coordinationHost.test.ts`);
+hook denial / release / outage / malformed payload (`coordinationHook.test.ts`); live
+Claude Code denial (`coordinationHook.live.test.ts`, `PRAXIS_LIVE_CLAUDE=1`); the e2e
+journey (`e2e/coordination.spec.ts`); full functional e2e suite green with a broker per
+app launch.
+
+Remaining: Linux and Windows runs, sleep / clock changes, hook crash, other runtimes'
+adapters, surviving descendants and service transfer.

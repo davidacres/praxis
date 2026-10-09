@@ -523,3 +523,17 @@ test('normalizeWorkflow keeps a stage\'s model choice and drops an unreadable on
   assert.equal(bad.modelTier, undefined, 'an unreadable tier is dropped, never turned into another one');
   assert.equal(bad.escalateOnRetry, undefined);
 });
+
+test('a merge stage keeps its declared paths and out-of-scope policy, and rejects a path outside the repository (FX-BE-094)', () => {
+  const definition = normalizeWorkflow({
+    ...deliveryWorkflow(),
+    nodes: [{ type: 'merge', id: 'm', name: 'Merge', declaredPaths: ['src/pay', ' docs ', '', 7, '../elsewhere', '/etc'], outOfScope: 'block' }],
+    entryNodeId: 'm',
+    edges: []
+  });
+  const merge = definition.nodes[0] as Extract<WorkflowDefinition['nodes'][number], { type: 'merge' }>;
+  assert.deepEqual(merge.declaredPaths, ['src/pay', 'docs', '../elsewhere', '/etc']);
+  assert.equal(merge.outOfScope, 'block');
+  const issues = validateWorkflow(definition).errors.filter(issue => issue.path.includes('declaredPaths'));
+  assert.deepEqual(issues.map(issue => issue.path), ['nodes[0].declaredPaths[2]', 'nodes[0].declaredPaths[3]']);
+});

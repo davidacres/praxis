@@ -1,3 +1,5 @@
+import { registerCoordinationIpc } from './coordinationIpc';
+import { disposeCoordination } from './coordinationInstance';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage } from 'electron';
@@ -351,6 +353,7 @@ void app.whenReady().then(async () => {
   registerBrowserIpc();
   registerBoardPrefsIpc();
   registerAiIpc();
+  registerCoordinationIpc();
   registerTicketReviewIpc();
   registerAiUsageIpc();
   startAiUsageTracking();
@@ -439,4 +442,6 @@ app.on('before-quit', () => {
   void getAgentRuntimeManager().dispose();
   // User-added local MCP servers are child processes of this one as well.
   void disposeUserMcp();
+  // Release this process's claims and hand the broker over to whichever instance is left.
+  void disposeCoordination();
 });

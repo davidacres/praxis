@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-02T10:59:50.746Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-391
 type: Task
-status: Backlog
+status: Done
 created: 2026-10-02
 priority: High
 ---
@@ -39,4 +39,13 @@ Capability report and hook event contract are reviewed before TASK-392/TASK-393 
 
 ## Comments
 
+## Delivered 2026-10-09
 
+Contract in `packages/core/src/ai/coordination/coordinationTypes.ts` (schema version,
+epoch, revision, sequence; reserved / executing / cleaning-up / recovery-required states;
+session / turn / execution-owner / request identity; tool / sequence / turn / service
+lifetimes; file, directory, worktree, checkout, git-index, app-ui, browser, desktop,
+build-output, port, fixture resources; shared stable reads) and conflict rules in
+`coordinationPolicy.ts`. The capability matrix for the installed runtimes, with what was
+and was not proven, is [coordination-capability-matrix.md](../../../../../research/coordination-capability-matrix.md).
+No global configuration was modified to produce it.

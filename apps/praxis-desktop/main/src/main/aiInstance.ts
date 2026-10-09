@@ -43,6 +43,7 @@ import { JsonKeyValueStore } from './adapters/jsonKeyValueStore';
 import { getSecretsStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { getLogBus } from './logBusInstance';
+import { coordinationGateFor } from './coordinationInstance';
 import { ensureEnvironmentPath } from './shellEnvironment';
 
 const execFileAsync = promisify(execFile);
@@ -109,6 +110,8 @@ const mainProcessLogger: VercelAgentLogger & AcpAgentLogger = getLogBus().tee('a
 export function getVercelAgentService(): VercelAgentService {
   if (!agentService) {
     agentService = new VercelAgentService(getAiSessionManager(), mainProcessLogger);
+    // Every gateway tool runs through Praxis, so its writes and commands are enforced.
+    agentService.setCoordination((issueKey, workingDirectory) => coordinationGateFor(issueKey, workingDirectory, 'enforced'));
   }
   return agentService;
 }
@@ -117,6 +120,8 @@ export function getVercelAgentService(): VercelAgentService {
 export function getAcpAgentHost(): AcpAgentHost {
   if (!acpAgentHost) {
     acpAgentHost = new AcpAgentHost(getAiSessionManager(), mainProcessLogger);
+    // Only writes the agent routes through Praxis are gated; its own tools are not: cooperative.
+    acpAgentHost.setCoordination((issueKey, workingDirectory) => coordinationGateFor(issueKey, workingDirectory, 'cooperative'));
   }
   return acpAgentHost;
 }

@@ -1,4 +1,6 @@
 import { abortActiveTask, getAiSessionManager } from './aiInstance';
+import { endCoordinatedSession } from './coordinationInstance';
+import { disposeCoordinationMcpForSession } from './coordinationMcp';
 import { disposeBrowserMcpForSession } from './browserMcp';
 import { disposeTrackerMcpForSession } from './trackerMcp';
 import { broadcastToAllWindows } from './windowBroadcast';
@@ -13,6 +15,8 @@ export async function deleteAgentSession(issueKey: string): Promise<void> {
   await abortActiveTask(issueKey);
   disposeBrowserMcpForSession(issueKey);
   disposeTrackerMcpForSession(issueKey);
+  disposeCoordinationMcpForSession(issueKey);
+  endCoordinatedSession(issueKey);
   sessionManager.removeAgentSession(issueKey);
   sessionManager.removeSession(issueKey);
   broadcastToAllWindows('ai:sessionDeleted', issueKey);

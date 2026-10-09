@@ -79,6 +79,7 @@ import { getSettingsBackend } from './settingsBackendInstance';
 import { AiBrowserBridge } from './aiBrowser';
 import { browserMcpServerForSession } from './browserMcp';
 import { trackerMcpServerForSession } from './trackerMcp';
+import { coordinationMcpServerForSession } from './coordinationMcp';
 import { testUserMcpServer, userMcpAcpServers, userMcpToolExtension } from './userMcp';
 import { deleteAgentSession } from './deleteAgentSession';
 import { getServiceForConnection } from './serviceRegistry';
@@ -330,11 +331,13 @@ function browserToolExtension(toolMode: AgentToolMode): ToolExtension | undefine
 function mcpServersOption(
   browserMcp: Awaited<ReturnType<typeof browserMcpServerForSession>>,
   trackerMcp: Awaited<ReturnType<typeof trackerMcpServerForSession>>,
-  toolMode: string | undefined
+  toolMode: string | undefined,
+  coordinationMcp?: Awaited<ReturnType<typeof coordinationMcpServerForSession>>
 ): { mcpServers?: AcpMcpServer[] } {
   const servers: AcpMcpServer[] = [
     ...(browserMcp ? [browserMcp] : []),
     ...(trackerMcp ? [trackerMcp] : []),
+    ...(coordinationMcp ? [coordinationMcp] : []),
     ...userMcpAcpServers(toolMode)
   ];
   return servers.length > 0 ? { mcpServers: servers } : {};
@@ -513,6 +516,9 @@ export function registerAiIpc(): void {
     const trackerMcp = prepared.plan.state === 'acp'
       ? await trackerMcpServerForSession(issueKey, trackerService, toolMode)
       : undefined;
+    const coordinationMcp = prepared.plan.state === 'acp'
+      ? await coordinationMcpServerForSession(issueKey, workingDirectory, toolMode)
+      : undefined;
     await continueAgentTask(prepared, {
       issueKey,
       message: followUp,
@@ -522,7 +528,7 @@ export function registerAiIpc(): void {
       toolMode,
       internalConversationTurn: options?.internalConversationTurn,
       conversationContext: options?.conversationContext,
-      ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode) : {}),
+      ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp) : {}),
       ...(prepared.plan.state === 'gateway'
         ? { toolExtension: mergeToolExtensions(trackerToolExtension(trackerService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode)) }
         : {})
@@ -1079,6 +1085,9 @@ export function registerAiIpc(): void {
       const trackerMcp = prepared.plan.state === 'acp'
         ? await trackerMcpServerForSession(issue.key, issueService, toolMode)
         : undefined;
+      const coordinationMcp = prepared.plan.state === 'acp'
+        ? await coordinationMcpServerForSession(issue.key, effectiveWorkingDirectory, toolMode)
+        : undefined;
       await launchAgentTask(prepared, {
         issue,
         taskDefinition,
@@ -1089,7 +1098,7 @@ export function registerAiIpc(): void {
         reasoningEffort,
         permissionMode: input.permissionMode ?? 'manual',
         ...((input.permissionMode === 'bypass' || input.permissionMode === 'autopilot') ? { autoApprovePermissions: true } : {}),
-        ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode) : {}),
+        ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp) : {}),
         ...(prepared.plan.state === 'gateway'
           ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode)) }
           : {})

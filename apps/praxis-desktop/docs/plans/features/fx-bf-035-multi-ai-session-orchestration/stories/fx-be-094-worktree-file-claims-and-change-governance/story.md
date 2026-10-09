@@ -1,14 +1,14 @@
 ---
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.260Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-094
 title: "Worktree, file claims and change governance"
-status: In Progress
+status: Done
 feature: FX-BF-035
-updated: 2026-09-25
+updated: 2026-10-09
 dependencies: [FX-BE-092, FX-BF-003]
 ---
 
@@ -76,3 +76,25 @@ Not yet delivered, which is why this is In Progress rather than Done:
   change) has no implementation.
 
 Remaining scope is TASK-263 and TASK-265.
+
+## Review 2026-10-09 — remaining scope delivered, Done
+
+- TASK-263: path claims are the FX-BF-048 coordination broker's `file` / `directory` /
+  `worktree` claims (`packages/core/src/ai/coordination/`). Overlap is worktree-scoped
+  (`resourcesOverlap`: a folder covers its descendants, different worktrees never collide,
+  case-insensitive file systems handled). Claims expire — an unused reservation is dropped,
+  an executing claim whose owner goes silent becomes `recovery-required` and is never
+  handed over — and are released by their owner, at turn end, or by attributed recovery.
+  Gateway writes and commands, ACP hosted writes and the in-app browser ask the broker
+  before acting. "Two sessions cannot acquire overlapping write claims" is enforced, and a
+  randomised 3,000-step test proves no two conflicting claims are ever held at once
+  (shown to fail when conflict detection is broken).
+- TASK-265: a merge stage can declare the paths a run was meant to change
+  (`declaredPaths`) and a policy (`outOfScope: block | escalate`, default escalate).
+  `runWorkflowMerge` checks the branch's changed paths with `assessChangeScope`: `block`
+  holds the merge back naming the paths, `escalate` merges and reports each one as an
+  `out-of-scope-change` finding. Evidence: `workflowMergeRunner.test.ts`,
+  `workflowValidation.test.ts`, `coordination.test.ts`.
+- End-to-end: `e2e/coordination.spec.ts` — a real ACP agent is refused a file another
+  session holds (file untouched), the inspector shows the holder, a silent holder's claim
+  waits for a person's recovery, and the fix then lands.

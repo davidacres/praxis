@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { CoordinationGate } from './coordination/coordinationGate';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 import type { AiProvider, IssueDetails } from '../types';
@@ -33,6 +34,9 @@ import { providerNeedsApiKey } from './providerSecrets';
 import { localToolDefinitionsForMode, LocalToolExecutor, type PermissionDecision } from './tools';
 import { shouldAutoAllowToolPermission } from './tools/shellAllowlist';
 import { isProviderLimitError, extractProviderLimitMessage } from './providerLimitError';
+
+/** The ACP/gateway option carrying a session's coordination gate, when it has one. */
+const optionalCoordination = (gate: CoordinationGate | undefined): { coordination?: CoordinationGate } => (gate ? { coordination: gate } : {});
 
 interface ActiveTask {
   issueKey: string;
@@ -128,6 +132,13 @@ export class VercelAgentService {
     private readonly sessionManager: AiSessionManager,
     private readonly logger: VercelAgentLogger
   ) {}
+
+  private coordinationFor?: (issueKey: string, workingDirectory: string) => CoordinationGate | undefined;
+
+  /** Supplies the gate each session's side effects are asked through (FX-BF-048). */
+  public setCoordination(factory: ((issueKey: string, workingDirectory: string) => CoordinationGate | undefined) | undefined): void {
+    this.coordinationFor = factory;
+  }
 
   public onDidChangeActiveTask(listener: (issueKey: string) => void): () => void {
     this.activeTaskListeners.add(listener);
@@ -492,7 +503,8 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       workingDirectory: options.workingDirectory,
       toolMode: options.toolMode,
       shouldAutoAllow: options.permissionMode === 'auto' ? shouldAutoAllowToolPermission : undefined,
-      requestPermission: async request => this.requestPermission(issueKey, request)
+      requestPermission: async request => this.requestPermission(issueKey, request),
+      ...optionalCoordination(this.coordinationFor?.(issueKey, options.workingDirectory))
     });
     const compositeExecutor = {
       execute: (name: string, args: Record<string, unknown>) =>

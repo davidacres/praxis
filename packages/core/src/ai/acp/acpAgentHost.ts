@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { CoordinationGate } from '../coordination/coordinationGate';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
 import type { AiProvider, IssueDetails } from '../../types';
 import type { TokenUsage, WireImageAttachment } from '../gateway/wire';
@@ -34,6 +35,9 @@ import {
 import { isProviderLimitError, isLimitNoticeReply, extractProviderLimitMessage } from '../providerLimitError';
 import { probeCliProvider, type ProviderCapabilityManifest } from '../providers/providerPreflight';
 import type { ReasoningEffort } from '../providers/reasoningSupport';
+
+/** The ACP/gateway option carrying a session's coordination gate, when it has one. */
+const optionalCoordination = (gate: CoordinationGate | undefined): { coordination?: CoordinationGate } => (gate ? { coordination: gate } : {});
 
 /**
  * Phase-2 peer of `VercelAgentService` for `kind: 'cli-agent'` providers —
@@ -393,6 +397,13 @@ export class AcpAgentHost {
     private readonly sessionManager: AiSessionManager,
     private readonly logger: AcpAgentLogger
   ) {}
+
+  private coordinationFor?: (issueKey: string, workingDirectory: string) => CoordinationGate | undefined;
+
+  /** Supplies the gate each session's side effects are asked through (FX-BF-048). */
+  public setCoordination(factory: ((issueKey: string, workingDirectory: string) => CoordinationGate | undefined) | undefined): void {
+    this.coordinationFor = factory;
+  }
 
   public onDidChangeActiveTask(listener: (issueKey: string) => void): () => void {
     this.activeTaskListeners.add(listener);
@@ -834,6 +845,7 @@ export class AcpAgentHost {
       authMethod: options.authMethod,
       workingDirectory: workingDirectory || process.cwd(),
       toolMode,
+      ...optionalCoordination(this.coordinationFor?.(issue.key, workingDirectory || process.cwd())),
       mcpServers: options.mcpServers,
       requestPermission: request => this.requestPermission(issue.key, request),
       onSessionUpdate: update => {

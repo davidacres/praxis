@@ -7,6 +7,7 @@ import type {
   TeamChatSummary
 } from '../ai/assistant/assistantTypes';
 import type { AiUsageEvent } from '../ai/aiUsageLog';
+import type { CoordinationState } from '../ai/coordination/coordinationTypes';
 import type { UsageBucket, UsageComparison, UsageDashboardSummary, UsageGranularity } from '../ai/aiUsageStats';
 import type { ProviderUsageSnapshot, ProviderUsageSnapshotsResult } from '../ai/providerUsage';
 import type { AgentRecommendationCandidate, AgentRecommendationResult } from '../ai/workflowAgentRecommendation';
@@ -1029,6 +1030,14 @@ export interface AiIpc {
  * the recommendation handler itself); there is deliberately no `record`
  * method here for the renderer to call.
  */
+/** Agent session coordination (FX-BF-048): who holds what, who waits, and recovery. */
+export interface CoordinationIpc {
+  state(): Promise<{ state: CoordinationState; role: 'leader' | 'follower'; blockedReason: string | null }>;
+  /** A person confirms a claim awaiting recovery really stopped. */
+  recover(claimId: string, note: string): Promise<void>;
+  onChanged(listener: () => void): () => void;
+}
+
 export interface AiUsageIpc {
   /** Bucketed totals for the `periodsBack` most recent periods at this granularity, oldest first, zero-filled. */
   series(granularity: UsageGranularity, periodsBack: number): Promise<UsageBucket[]>;
@@ -1123,6 +1132,7 @@ export interface PraxisIpc {
   boardPrefs: BoardPrefsIpc;
   ai: AiIpc;
   aiUsage: AiUsageIpc;
+  coordination: CoordinationIpc;
   agentRuntime: AgentRuntimeIpc;
   gadgets: GadgetsIpc;
   marketplace: MarketplaceIpc;

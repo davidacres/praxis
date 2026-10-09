@@ -378,6 +378,14 @@ export interface WorkflowMergeNode extends WorkflowNodeBase {
   noFastForward?: boolean;
   /** Handling on conflict: 'fail' or 'ai-resolve' (default 'ai-resolve'). */
   onConflict?: 'fail' | 'ai-resolve';
+  /**
+   * Repository paths (files or folders) this run was meant to change (FX-BE-094 / TASK-265).
+   * A changed path outside them is held back (`block`) or flagged (`escalate`) per
+   * `outOfScope`. Absent, the merge has no narrower scope to check against.
+   */
+  declaredPaths?: string[];
+  /** What an undeclared change does to the merge (default `escalate`). */
+  outOfScope?: 'block' | 'escalate';
   timeoutMs?: number;
   maxAttempts?: number;
 }

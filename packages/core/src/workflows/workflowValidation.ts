@@ -338,6 +338,8 @@ function normalizeNode(value: unknown): WorkflowNode {
       if (typeof raw.targetBranch === 'string') node.targetBranch = raw.targetBranch;
       if (raw.noFastForward === false) node.noFastForward = false;
       if (raw.onConflict === 'fail' || raw.onConflict === 'ai-resolve') node.onConflict = raw.onConflict;
+      if (Array.isArray(raw.declaredPaths)) node.declaredPaths = raw.declaredPaths.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0).map(entry => entry.trim());
+      if (raw.outOfScope === 'block' || raw.outOfScope === 'escalate') node.outOfScope = raw.outOfScope;
       if (typeof raw.timeoutMs === 'number') node.timeoutMs = raw.timeoutMs;
       if (typeof raw.maxAttempts === 'number') node.maxAttempts = raw.maxAttempts;
       return node;
@@ -540,6 +542,11 @@ function validateMergeNode(
   }
   if (node.timeoutMs !== undefined && node.timeoutMs <= 0) {
     errors.push({ path: `${at}.timeoutMs`, message: 'timeoutMs must be greater than zero.' });
+  }
+  for (const [index, declared] of (node.declaredPaths ?? []).entries()) {
+    if (declared.startsWith('/') || /^[A-Za-z]:[\\/]/.test(declared) || declared.split(/[\\/]/).includes('..')) {
+      errors.push({ path: `${at}.declaredPaths[${index}]`, message: 'A declared path is relative to the repository and stays inside it.' });
+    }
   }
 }
 

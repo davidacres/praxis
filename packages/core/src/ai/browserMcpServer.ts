@@ -24,6 +24,11 @@ export interface BrowserMcpSessionHooks {
   onHostAllowed(host: string): void;
   /** Report each completed tool call so the host can log it on the session. */
   onToolCall?(name: string, ok: boolean, content: string): void;
+  /**
+   * Asked before every browser tool (FX-BF-048): a refusal stops the call, and its text is
+   * the tool's result. The host holds the browser for the whole sequence, not one call.
+   */
+  beforeToolCall?(name: string): Promise<{ ok: true } | { ok: false; reason: string }>;
 }
 
 export interface BrowserMcpRegistration {
@@ -123,6 +128,11 @@ export class BrowserMcpServer {
     );
     server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_LIST }));
     server.setRequestHandler(CallToolRequestSchema, async request => {
+      const gate = hooks.beforeToolCall ? await hooks.beforeToolCall(request.params.name) : { ok: true as const };
+      if (!gate.ok) {
+        hooks.onToolCall?.(request.params.name, false, gate.reason);
+        return { content: [{ type: 'text', text: gate.reason }], isError: true };
+      }
       const result = await executeBrowserTool(
         request.params.name,
         (request.params.arguments ?? {}) as Record<string, unknown>,

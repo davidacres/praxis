@@ -1,7 +1,9 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
+  assessChangeScope,
   captureEvidenceEntry,
+  computeFindingFingerprint,
   createEvidenceBundle,
   evidenceBundleId,
   withEvidenceEntry,
@@ -61,6 +63,14 @@ export async function runWorkflowMerge(
     return { status: 'failed', error: `Source branch ${sourceBranch} was not found.` };
   }
 
+  // Changes outside what the run declared are held back or flagged before anything merges.
+  const scope = await checkDeclaredScope(node, root, sourceBranch, targetBranch);
+  if (scope) log += `${scope.message}\n`;
+  if (scope?.action === 'block') {
+    await writeMergeEvidence(context, node, evidenceRoot, log);
+    return { status: 'failed', error: scope.message, findings: scope.findings };
+  }
+
   // Check status of target repo
   const statusCheck = await git(root, ['status', '--porcelain']);
   if (statusCheck.stdout.trim().length > 0) {
@@ -105,7 +115,8 @@ export async function runWorkflowMerge(
     await writeMergeEvidence(context, node, evidenceRoot, log);
     return {
       status: 'succeeded',
-      exitCode: 0
+      exitCode: 0,
+      ...(scope ? { findings: scope.findings } : {})
     };
   }
 
@@ -142,6 +153,37 @@ export async function runWorkflowMerge(
     status: 'failed',
     exitCode: mergeResult.exitCode,
     error: `Merge conflict in ${conflictedFiles.length} file(s): ${conflictedFiles.join(', ')}.`
+  };
+}
+
+/**
+ * FX-BE-094 / TASK-265: the paths the source branch changed, judged against the merge
+ * node's declared paths. `undefined` when nothing is declared or everything is in scope.
+ */
+async function checkDeclaredScope(node: WorkflowMergeNode, root: string, sourceBranch: string, targetBranch: string) {
+  if (!node.declaredPaths?.length) return undefined;
+  const diff = await git(root, ['diff', '--name-only', `${targetBranch}...${sourceBranch}`]);
+  if (diff.exitCode !== 0) return undefined;
+  const changed = diff.stdout.split('\n').map(line => line.trim()).filter(Boolean);
+  const assessment = assessChangeScope(
+    changed,
+    node.declaredPaths.map(declared => ({ kind: 'directory' as const, worktree: root, path: declared })),
+    root,
+    node.outOfScope ?? 'escalate'
+  );
+  if (assessment.action === 'none' || !assessment.message) return undefined;
+  const severity = assessment.action === 'block' ? ('high' as const) : ('medium' as const);
+  const message = assessment.message;
+  return {
+    action: assessment.action,
+    message,
+    findings: {
+      findings: assessment.outOfScope.map(file => {
+        const finding = { ruleId: 'out-of-scope-change', file, severity, category: 'scope', message: `${file} changed but is outside the paths this run declared.` };
+        return { ...finding, fingerprint: computeFindingFingerprint(finding) };
+      }),
+      metrics: { outOfScope: assessment.outOfScope.length, inScope: assessment.inScope.length }
+    }
   };
 }
 

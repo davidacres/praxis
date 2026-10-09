@@ -85,6 +85,9 @@ and Electron integration. Last audited: 2026-09-15.
 | Change model during a session | ✓ | Composer action; blocked while a turn is running; records a runtime epoch (FX-BE-115) |
 | Hand over to another AI | ✓ | Same Praxis session and worktree; receiving AI gets a redacted brief and is asked to inspect files (FX-BE-115) |
 | Multi-AI conversation in one session | ✓ | Opt-in Bring in another AI (consult / debate / pair); attributed assistant speakers, sequential tool ownership and capped turns; not default handover (FX-BE-122) |
+| Handover context snapshot | ✓ | Every handover carries a bounded, versioned snapshot (commit, files handed over and left out with reasons, ticket dependencies); a malformed or stale handover is blocked with the reason (FX-BE-092) |
+| Session coordination | Partial | One local broker per OS user: gateway writes and commands are enforced, ACP hosted writes, the in-app browser and the coordination tools are cooperative; the inspector shows holders, waiters, coverage and recovery; opt-in Claude Code hook proven live. Other runtimes' hooks, service claims and Linux/Windows runs are open (FX-BF-048, [capability matrix](research/coordination-capability-matrix.md)) |
+| Out-of-scope changes at merge | ✓ | A merge stage's `declaredPaths` + `outOfScope: block \| escalate` hold back or flag undeclared changes (FX-BE-094) |
 | AI review of issue | ✓ | Issue detail action; review panel streams markdown |
 | Issue analysis window | ✓ | Issue detail action; runs analysis workflow + shows results inline |
 | Delivery workflow (publish command / artifact pattern) | ✓ | Workflow stages with delivery gates; publishes artifacts to Claude.ai |

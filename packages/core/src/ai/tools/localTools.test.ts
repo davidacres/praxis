@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { LocalToolExecutor, type ToolPermissionRequest } from './localTools';
@@ -153,4 +154,40 @@ test('read_image escapes the workspace', async () => {
     const result = await executor(dir).execute('read_image', { path: '../../etc/hosts' });
     assert.equal(result.ok, false);
   });
+});
+
+// ── Coordination gate (FX-BF-048 / TASK-393) ─────────────────────────────
+
+test('a write or shell command another session holds is refused before it happens', async () => {
+  const root = fsSync.mkdtempSync(path.join(os.tmpdir(), 'praxis-gate-'));
+  try {
+    const asked: string[] = [];
+    let released = 0;
+    const gate = {
+      worktree: root,
+      acquire: async (input: { items: Array<{ resource: { kind: string; path?: string } }>; reason: string }) => {
+        asked.push(`${input.items[0].resource.kind}:${input.items[0].resource.path ?? ''}`);
+        return input.items[0].resource.path === 'busy.ts'
+          ? { ok: false as const, reason: 'file busy.ts is held by SESSION-B (editing).' }
+          : { ok: true as const, release: async () => { released += 1; } };
+      }
+    };
+    const executor = new LocalToolExecutor({ workingDirectory: root, toolMode: 'full', requestPermission: async () => 'allow_always', coordination: gate as never });
+
+    const refused = await executor.execute('write_file', { path: 'busy.ts', content: 'x' });
+    assert.equal(refused.ok, false);
+    assert.match(refused.content, /Not done: file busy\.ts is held by SESSION-B .*do not retry in a loop/);
+    assert.equal(fsSync.existsSync(path.join(root, 'busy.ts')), false, 'the losing write never touched the disk');
+
+    const written = await executor.execute('write_file', { path: 'free.ts', content: 'y' });
+    assert.equal(written.ok, true);
+    assert.equal(released, 1, 'the claim is released once the write is done');
+
+    const shell = await executor.execute('run_shell', { command: 'echo hi' });
+    assert.equal(shell.ok, true);
+    assert.deepEqual(asked, ['file:busy.ts', 'file:free.ts', 'worktree:'], 'a shell command owns the whole worktree');
+    assert.equal(released, 2);
+  } finally {
+    fsSync.rmSync(root, { recursive: true, force: true });
+  }
 });

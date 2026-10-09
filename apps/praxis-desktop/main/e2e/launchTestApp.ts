@@ -113,7 +113,10 @@ export async function launchTestApp(
     PRAXIS_AI_WORKING_DIR: userDataDir,
     // Other AI tools' user-level folders (~/.claude, ~/.codex, …) are read from
     // here, so a developer's real home never leaks into a test.
-    PRAXIS_NATIVE_SOURCES_HOME: userDataDir
+    PRAXIS_NATIVE_SOURCES_HOME: userDataDir,
+    // The coordination broker is shared by every Praxis on the machine; a test
+    // gets its own, so it never joins (or blocks) a developer's live sessions.
+    PRAXIS_COORDINATION_ROOT: path.join(userDataDir, 'coordination')
   } as Record<string, string>;
   // Per-test env overrides; `undefined` deletes a variable so a developer's
   // real credentials (e.g. AI_GATEWAY_API_KEY) can't leak into a test.

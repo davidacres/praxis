@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Created:** 2026-10-02T10:59:50.632Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-048
 type: Feature
-status: Backlog
+status: In Progress
 created: 2026-10-02
 priority: High
 ---
@@ -51,4 +51,8 @@ The research document records the gap review and each task's correction. Two rea
 
 ## Comments
 
+## Progress 2026-10-09
 
+The broker, gates, Claude Code hook, coordination tools and inspector are built and
+tested (see FX-BE-150). Not complete: other runtimes' adapters, service claims, waiting
+routes and Linux / Windows verification.

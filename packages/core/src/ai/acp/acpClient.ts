@@ -1,4 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { refusalForAgent, type CoordinationGate } from '../coordination/coordinationGate';
+import * as nodePath from 'node:path';
 import * as nodeFs from 'node:fs/promises';
 import { Readable, Writable } from 'node:stream';
 // Type-only import: `@agentclientprotocol/sdk` ships ESM-only, and this
@@ -129,6 +131,11 @@ export interface AcpClientOptions {
   /** Session cwd and the fs sandbox root for `fs/read_text_file`/`fs/write_text_file`. */
   workingDirectory: string;
   toolMode?: AgentToolMode;
+  /**
+   * Asked before a hosted file write (FX-BF-048). Native agent tools do not come through
+   * here, which is why an ACP session's coverage is cooperative, not enforced.
+   */
+  coordination?: CoordinationGate;
   /** Provider-owned ACP session to resume when supported by the agent. */
   resumeSessionId?: string;
   /**
@@ -322,7 +329,22 @@ export class AcpClientWrapper {
         throw new Error('File writes are unavailable in read-only tool mode.');
       }
       const path = resolveSandboxedPath(this.options.workingDirectory, ctx.params.path);
-      await nodeFs.writeFile(path, ctx.params.content, 'utf8');
+      const gate = this.options.coordination;
+      const decision = gate
+        ? await gate.acquire({
+            items: [{ resource: { kind: 'file', worktree: gate.worktree, path: nodePath.relative(gate.worktree, path) }, mode: 'exclusive' }],
+            reason: `write ${ctx.params.path}`,
+            lifetime: 'tool'
+          })
+        : undefined;
+      // A plain Error reaches the agent as a bare "Internal error"; a RequestError keeps the
+      // reason, so the agent learns who holds the file instead of retrying blind.
+      if (decision && !decision.ok) throw acpModule.RequestError.internalError({ reason: decision.reason }, refusalForAgent(decision.reason));
+      try {
+        await nodeFs.writeFile(path, ctx.params.content, 'utf8');
+      } finally {
+        if (decision?.ok) await decision.release();
+      }
     });
 
     app.onNotification(acpModule.CLIENT_METHODS.session_update, ctx => {

@@ -1,4 +1,5 @@
 import * as nodeFs from 'node:fs/promises';
+import { refusalForAgent, type CoordinationGate } from '../coordination/coordinationGate';
 import * as nodePath from 'node:path';
 import * as nodeChildProcess from 'node:child_process';
 import type { GatewayToolDefinition } from '../gateway';
@@ -24,6 +25,11 @@ export interface LocalToolContext {
   requestPermission: (request: ToolPermissionRequest) => Promise<PermissionDecision>;
   /** Optional always-allow check before prompting (e.g. shell allowlist). */
   shouldAutoAllow?: (request: ToolPermissionRequest) => boolean;
+  /**
+   * Asked before a write or a shell command (FX-BF-048). A refusal means the side effect
+   * does not happen. Absent, tools run as before.
+   */
+  coordination?: CoordinationGate;
 }
 
 export interface ToolExecutionResult {
@@ -275,9 +281,25 @@ export class LocalToolExecutor {
       return { ok: false, content: 'Permission denied for write_file' };
     }
 
-    const previous = await nodeFs.readFile(absolute, 'utf8').catch(() => '');
-    await nodeFs.mkdir(nodePath.dirname(absolute), { recursive: true });
-    await nodeFs.writeFile(absolute, content, 'utf8');
+    // Owned before it is written: a file another session holds is not touched.
+    const gate = this.ctx.coordination;
+    const decision = gate
+      ? await gate.acquire({
+          items: [{ resource: { kind: 'file', worktree: gate.worktree, path: nodePath.relative(gate.worktree, absolute) }, mode: 'exclusive' }],
+          reason: `write ${inputPath}`,
+          lifetime: 'tool'
+        })
+      : undefined;
+    if (decision && !decision.ok) return { ok: false, content: refusalForAgent(decision.reason) };
+
+    let previous = '';
+    try {
+      previous = await nodeFs.readFile(absolute, 'utf8').catch(() => '');
+      await nodeFs.mkdir(nodePath.dirname(absolute), { recursive: true });
+      await nodeFs.writeFile(absolute, content, 'utf8');
+    } finally {
+      if (decision?.ok) await decision.release();
+    }
 
     const data: AgentToolEventData = { toolName: 'write_file', kind: 'write', ok: true };
     if (content.length > MAX_DIFF_BYTES || content.includes('\0')) {
@@ -337,7 +359,18 @@ export class LocalToolExecutor {
       return { ok: false, content: 'Permission denied for run_shell' };
     }
 
-    return await new Promise<ToolExecutionResult>(resolve => {
+    // A shell command can touch anything in the checkout, so it owns the whole worktree while it runs.
+    const gate = this.ctx.coordination;
+    const decision = gate
+      ? await gate.acquire({
+          items: [{ resource: { kind: 'worktree', worktree: gate.worktree }, mode: 'exclusive' }],
+          reason: `run \`${command.length > 80 ? `${command.slice(0, 80)}…` : command}\``,
+          lifetime: 'tool'
+        })
+      : undefined;
+    if (decision && !decision.ok) return { ok: false, content: refusalForAgent(decision.reason) };
+
+    const result = await new Promise<ToolExecutionResult>(resolve => {
       nodeChildProcess.exec(
         command,
         {
@@ -374,6 +407,8 @@ export class LocalToolExecutor {
         }
       );
     });
+    if (decision?.ok) await decision.release();
+    return result;
   }
 }
 

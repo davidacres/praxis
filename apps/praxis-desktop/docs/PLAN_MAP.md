@@ -320,37 +320,37 @@ Canonical sequencing and architectural decisions: [multi-AI orchestration roadma
 
 | Ref | Type | Name | Status | Depends on |
 | --- | --- | --- | --- | --- |
-| FX-BF-035 | Feature | Multi-AI session orchestration across Claude, Codex and Copilot | Planned | FX-BF-011, FX-BF-012, FX-BF-013, FX-BF-015, FX-BF-019 |
-| FX-BE-092 | Story | Shared session context and handoff contracts | Planned | FX-BF-011, FX-BF-019 |
-| FX-BE-093 | Story | Provider adapters and capability preflight | Planned | FX-BE-092 |
-| FX-BE-094 | Story | Worktree, file claims and change governance | Planned | FX-BE-092, FX-BF-003 |
-| FX-BE-095 | Story | Orchestration runtime, task graph and recovery | Planned | FX-BE-093, FX-BE-094, FX-BF-013 |
+| FX-BF-035 | Feature | Multi-AI session orchestration across Claude, Codex and Copilot | Done | FX-BF-011, FX-BF-012, FX-BF-013, FX-BF-015, FX-BF-019 |
+| FX-BE-092 | Story | Shared session context and handoff contracts | Done | FX-BF-011, FX-BF-019 |
+| FX-BE-093 | Story | Provider adapters and capability preflight | Done | FX-BE-092 |
+| FX-BE-094 | Story | Worktree, file claims and change governance | Done | FX-BE-092, FX-BF-003 |
+| FX-BE-095 | Story | Orchestration runtime, task graph and recovery | Done | FX-BE-093, FX-BE-094, FX-BF-013 |
 | FX-BE-115 | Story | Continuous session handover, model switching and living brief | Complete | FX-BE-092, FX-BE-093, FX-BF-015, FX-BF-017 |
-| FX-BE-096 | Story | Session operations and review experience | Planned | FX-BE-095, FX-BE-115, FX-BF-014, FX-BF-015 |
+| FX-BE-096 | Story | Session operations and review experience | Done | FX-BE-095, FX-BE-115, FX-BF-014, FX-BF-015 |
 | FX-BE-122 | Story | Opt-in multi-AI conversation in one session | Complete | FX-BE-115, FX-BE-092, FX-BF-015, FX-BF-017 |
-| TASK-253 | Task | Define shared session contracts | Planned | FX-BE-092 |
-| TASK-254 | Task | Generate bounded context snapshots | Planned | TASK-253 |
-| TASK-255 | Task | Generate provider-specific prompts | Planned | TASK-254 |
-| TASK-256 | Task | Validate handoffs and redact evidence | Planned | TASK-255 |
-| TASK-257 | Task | Define provider adapter contracts | Planned | FX-BE-092 |
-| TASK-258 | Task | Implement Codex adapter | Planned | TASK-257 |
-| TASK-259 | Task | Implement Claude Code adapter | Planned | TASK-257 |
-| TASK-260 | Task | Implement Copilot adapter and fallback | Planned | TASK-257 |
-| TASK-261 | Task | Add provider capability preflight | Planned | TASK-257 |
-| TASK-262 | Task | Implement session worktree lifecycle | Planned | FX-BE-092, FX-BF-003 |
-| TASK-263 | Task | Add path claims and overlap detection | Planned | TASK-262 |
-| TASK-264 | Task | Capture Git change-set evidence | Planned | TASK-262 |
-| TASK-265 | Task | Prepare merge candidates and conflicts | Planned | TASK-264 |
-| TASK-266 | Task | Implement dependency-aware scheduler | Planned | FX-BE-093, FX-BE-094 |
-| TASK-267 | Task | Add redacted append-only event log | Planned | TASK-266 |
-| TASK-268 | Task | Implement timeout and recovery policies | Planned | TASK-267 |
-| TASK-269 | Task | Add stage joins and handoff gates | Planned | TASK-266, TASK-268 |
-| TASK-270 | Task | Add deterministic stub-agent workflow | Planned | TASK-269 |
-| TASK-271 | Task | Add session monitor and live events | Planned | FX-BE-095 |
-| TASK-272 | Task | Add context and change inspection | Planned | TASK-271 |
-| TASK-273 | Task | Add safe session operations | Planned | TASK-271 |
-| TASK-274 | Task | Add merge-readiness ledger | Planned | TASK-272, TASK-273 |
-| TASK-275 | Task | Add accessibility and E2E verification | Planned | TASK-274 |
+| TASK-253 | Task | Define shared session contracts | Done | FX-BE-092 |
+| TASK-254 | Task | Generate bounded context snapshots | Done | TASK-253 |
+| TASK-255 | Task | Generate provider-specific prompts | Done | TASK-254 |
+| TASK-256 | Task | Validate handoffs and redact evidence | Done | TASK-255 |
+| TASK-257 | Task | Define provider adapter contracts | Done | FX-BE-092 |
+| TASK-258 | Task | Implement Codex adapter | Done | TASK-257 |
+| TASK-259 | Task | Implement Claude Code adapter | Done | TASK-257 |
+| TASK-260 | Task | Implement Copilot adapter and fallback | Done | TASK-257 |
+| TASK-261 | Task | Add provider capability preflight | Done | TASK-257 |
+| TASK-262 | Task | Implement session worktree lifecycle | Done | FX-BE-092, FX-BF-003 |
+| TASK-263 | Task | Add path claims and overlap detection | Done | TASK-262 |
+| TASK-264 | Task | Capture Git change-set evidence | Done | TASK-262 |
+| TASK-265 | Task | Prepare merge candidates and conflicts | Done | TASK-264 |
+| TASK-266 | Task | Implement dependency-aware scheduler | Done | FX-BE-093, FX-BE-094 |
+| TASK-267 | Task | Add redacted append-only event log | Done | TASK-266 |
+| TASK-268 | Task | Implement timeout and recovery policies | Done | TASK-267 |
+| TASK-269 | Task | Add stage joins and handoff gates | Done | TASK-266, TASK-268 |
+| TASK-270 | Task | Add deterministic stub-agent workflow | Done | TASK-269 |
+| TASK-271 | Task | Add session monitor and live events | Done | FX-BE-095 |
+| TASK-272 | Task | Add context and change inspection | Done | TASK-271 |
+| TASK-273 | Task | Add safe session operations | Done | TASK-271 |
+| TASK-274 | Task | Add merge-readiness ledger | Done | TASK-272, TASK-273 |
+| TASK-275 | Task | Add accessibility and E2E verification | Done | TASK-274 |
 | TASK-322 | Task | Add purpose, living-brief and runtime-epoch session contracts | Complete | FX-BE-115, FX-BE-092 |
 | TASK-323 | Task | Refresh a revision-safe living brief after every completed turn | Complete | TASK-322 |
 | TASK-324 | Task | Change models between turns with runtime epochs | Complete | TASK-322, FX-BE-093 |
@@ -564,13 +564,13 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 
 | Ref | Type | Name | Status | Depends on |
 | --- | --- | --- | --- | --- |
-| [FX-BF-048](plans/features/fx-bf-048-agent-session-coordination/feature.md) | Feature | Agent session communication and resource coordination | Backlog | None |
-| [FX-BE-150](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/story.md) | Story | Coordinate session activity and exclusive resources | Backlog | FX-BF-048 |
-| [TASK-391](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-391-coordination-contracts.md) | Task | Define coordination schema and resource conflicts | Backlog | FX-BE-150 |
-| [TASK-392](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-392-coordination-broker.md) | Task | Design and implement the single local broker | Backlog | TASK-391 |
-| [TASK-393](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-393-coordination-runtime.md) | Task | Gate session tools and reconcile their lifecycle | Backlog | TASK-391, TASK-392 |
-| [TASK-394](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-394-coordination-communication.md) | Task | Expose bounded messages and resource waiting status | Backlog | TASK-393 |
-| [TASK-395](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-395-coordination-verification.md) | Task | Prove contention, isolation and safe recovery | Backlog | TASK-393, TASK-394 |
+| [FX-BF-048](plans/features/fx-bf-048-agent-session-coordination/feature.md) | Feature | Agent session communication and resource coordination | In Progress | None |
+| [FX-BE-150](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/story.md) | Story | Coordinate session activity and exclusive resources | In Progress | FX-BF-048 |
+| [TASK-391](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-391-coordination-contracts.md) | Task | Define coordination schema and resource conflicts | Done | FX-BE-150 |
+| [TASK-392](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-392-coordination-broker.md) | Task | Design and implement the single local broker | Done | TASK-391 |
+| [TASK-393](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-393-coordination-runtime.md) | Task | Gate session tools and reconcile their lifecycle | In Progress | TASK-391, TASK-392 |
+| [TASK-394](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-394-coordination-communication.md) | Task | Expose bounded messages and resource waiting status | In Progress | TASK-393 |
+| [TASK-395](plans/features/fx-bf-048-agent-session-coordination/stories/fx-be-150-agent-session-coordination/tasks/task-395-coordination-verification.md) | Task | Prove contention, isolation and safe recovery | In Progress | TASK-393, TASK-394 |
 
 ## Adaptive workflow engine
 

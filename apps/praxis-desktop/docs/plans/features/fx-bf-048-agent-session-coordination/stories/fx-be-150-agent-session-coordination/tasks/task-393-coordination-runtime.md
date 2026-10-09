@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Created:** 2026-10-02T10:59:50.747Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-393
 type: Task
-status: Backlog
+status: In Progress
 created: 2026-10-02
 priority: High
 ---
@@ -43,4 +43,16 @@ Pass the research document's two-agent UI acceptance journey and each supported 
 
 ## Comments
 
+## Progress 2026-10-09
 
+Delivered: gates on the gateway's `write_file` (file) and `run_shell` (whole worktree) —
+**enforced**; on ACP hosted `fs/write_text_file` with the refusal reason carried to the
+agent; on the in-app browser MCP as a sequence claim held until turn end; turn end and
+session deletion release / recover; app joins the broker at startup. Opt-in Claude Code
+hook adapter (`coordinationHook.ts`) proven live against Claude Code 2.1.295 — denial
+before the losing write — never installed automatically, never the broker itself,
+allowing with a stated reason on outage, malformed payload or timeout.
+
+Remaining: service and process-tree claims, interactive command claims, revalidating
+branch/HEAD at execution, Codex / Gemini / Copilot native adapters (Codex's hooks did not
+fire in a probe; see the capability matrix).

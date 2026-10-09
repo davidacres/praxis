@@ -260,3 +260,29 @@ When starting an AI session on a ticket ("Start AI"):
 - **System Prompt Integration:** `AgentTaskDefinition.ticketContext` carries this structured markdown package into `buildTaskSystemPrompt`. The prompt includes explicit lifecycle directives instructing the AI to transition the ticket to "In Progress" with a plan comment at kickoff, post milestone updates as stages progress, and submit a completion summary before transitioning to "In Review" or "Done".
 - **Universal Tracker Tools via MCP (`TrackerMcpServer`):** ACP agents (Claude Code, Codex, Copilot CLI) and API Gateway agents alike receive tracker tools (`tracker_get_ticket`, `tracker_list_transitions`, `tracker_add_comment`, `tracker_update_ticket`, `tracker_transition_ticket`). In ACP sessions, `trackerMcpServerForSession` binds a local loopback MCP endpoint and routes tool calls to the session's `IssueTrackerService`.
 - **Flexible Transition Matching:** `tracker_transition_ticket` accepts either transition ID, target status name, or transition name, matching against available workflow transitions so agents can naturally transition tickets without guessing backend-specific IDs.
+
+## Session coordination (`coordination/`, FX-BF-048)
+
+One broker per OS user decides who may touch what; `applyCoordination` is the pure state
+machine, the desktop host (`main/coordinationHost.ts`) elects a leader, persists before it
+answers, and serves other processes over a token-authenticated socket. Rules that are easy
+to undo:
+
+- **A refusal means the side effect does not happen.** Every gate (`LocalToolExecutor`,
+  `AcpClientWrapper`'s `fs/write_text_file`, `BrowserMcpServer.beforeToolCall`) asks
+  *before* acting and releases after. Telemetry after the fact is not enforcement.
+- **Label coverage honestly.** Gateway sessions are `enforced`; anything an agent can do
+  with its own tools (every ACP session, the Claude Code hook) is `cooperative`. Never
+  upgrade a label without a gate the route cannot bypass — see
+  `apps/praxis-desktop/docs/research/coordination-capability-matrix.md`.
+- **Silence is not release.** An executing claim whose owner goes quiet becomes
+  `recovery-required` and stays blocking until a person or the host confirms it stopped
+  (`recover`, attributed). Never auto-reassign it, and never take over a lock whose owner
+  process is alive.
+- **ACP refusals must be `RequestError`s.** A plain `Error` reaches the agent as a bare
+  "Internal error" and it retries blind; `e2e/coordination.spec.ts` asserts the reason arrives.
+- **Never write a hook into anyone's global config.** The Claude Code adapter
+  (`main/coordinationHook.ts`) is opt-in and is proven with `claude --settings <file>`.
+- **Tests never join a real broker.** `launchTestApp` sets `PRAXIS_COORDINATION_ROOT` per
+  profile; `PRAXIS_COORDINATION=off` disables gates entirely.
+

@@ -105,3 +105,29 @@ test('a session endpoint survives register/dispose churn on the shared listener'
     server.stop();
   }
 });
+
+test('a browser call refused by coordination never reaches the browser (FX-BF-048)', async () => {
+  const bridge = fakeBridge();
+  const server = new BrowserMcpServer({ bridge });
+  let holder: string | undefined = 'SESSION-B';
+  const reg = await server.register({
+    allowedHosts: () => ['example.com'],
+    requestNavigatePermission: async () => 'deny',
+    onHostAllowed: () => {},
+    beforeToolCall: async () => (holder ? { ok: false, reason: `Not done: the in-app browser is held by ${holder}.` } : { ok: true })
+  });
+  try {
+    const client = await connect(reg.url);
+    const refused = await client.callTool({ name: 'browser_navigate', arguments: { url: 'https://example.com/a' } });
+    assert.equal(refused.isError, true);
+    assert.match((refused.content as Array<{ text: string }>)[0].text, /held by SESSION-B/);
+    assert.deepEqual(bridge.navigated, [], 'the losing navigation never happened');
+    holder = undefined;
+    await client.callTool({ name: 'browser_navigate', arguments: { url: 'https://example.com/b' } });
+    assert.deepEqual(bridge.navigated, ['https://example.com/b']);
+    await client.close();
+  } finally {
+    reg.dispose();
+    server.stop();
+  }
+});

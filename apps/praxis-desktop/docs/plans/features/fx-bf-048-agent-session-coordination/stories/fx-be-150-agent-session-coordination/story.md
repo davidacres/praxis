@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Created:** 2026-10-02T10:59:50.746Z
 **Type:** Story
 **Priority:** Medium
 id: FX-BE-150
 type: Story
-status: Backlog
+status: In Progress
 created: 2026-10-02
 priority: High
 ---
@@ -68,4 +68,8 @@ The research gap review maps every identified gap to tasks. The native adapter c
 
 ## Comments
 
+## Progress 2026-10-09
 
+TASK-391 and TASK-392 are done; TASK-393–395 are in progress with the remaining scope
+listed on each. Coverage is labelled honestly: gateway sessions are enforced, every ACP
+session and the Claude Code hook are cooperative.

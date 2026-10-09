@@ -6,6 +6,7 @@ import { agentStateBadgeClass, isTerminalAgentState } from './aiSessionState';
 import { SessionChanges } from './SessionChanges';
 import { SessionHandoverBrief, SessionPurposeBlock, SessionRuntimeHistory } from './SessionHandover';
 import { SessionTasks } from './SessionTasks';
+import { SessionCoordination } from './SessionCoordination';
 import { SessionActivity } from './SessionActivity';
 import { SessionSubagentsSummaryBlock, SessionSubagentsTab } from './SessionSubagents';
 import { extractSubagents, failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, reasoningSnippet, sessionMode, sessionTitle } from './sessionNav';
@@ -281,6 +282,9 @@ export function SessionInspector({
 
             {/* What the agent says it's doing, live */}
             <SessionTasks session={session} />
+
+            {/* Who else is working here, and what this session holds */}
+            <SessionCoordination sessionKey={session.issueKey} />
 
             {subagents.length > 0 && (
               <SessionSubagentsSummaryBlock

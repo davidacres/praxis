@@ -2,6 +2,7 @@ import { BrowserMcpServer, type AcpHttpMcpServer } from '@praxis/core';
 import { AiBrowserBridge } from './aiBrowser';
 import { getAcpAgentHost } from './aiInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
+import { holdBrowserForSequence } from './coordinationInstance';
 
 /**
  * Bridges the in-app browser to ACP agents (Claude Code, Codex): a loopback
@@ -59,7 +60,10 @@ export async function browserMcpServerForSession(
     },
     onToolCall: (name, ok, content) => {
       getAcpAgentHost().appendExternalToolEvent(issueKey, name, ok, content);
-    }
+    },
+    // One agent drives the in-app browser at a time: held from its first browser call
+    // until its turn ends, so another session cannot navigate away mid-sequence.
+    beforeToolCall: () => holdBrowserForSequence(issueKey)
   });
 
   const config: AcpHttpMcpServer = {

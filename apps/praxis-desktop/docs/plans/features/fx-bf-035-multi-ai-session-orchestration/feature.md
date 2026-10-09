@@ -1,12 +1,12 @@
 ---
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.191Z
 **Type:** Feature
 **Priority:** Medium
 type: Feature
 id: FX-BF-035
 title: "Multi-AI session orchestration across Claude, Codex and Copilot"
-status: In Progress
+status: Done
 updated: 2026-09-25
 dependencies: [FX-BF-011, FX-BF-012, FX-BF-013, FX-BF-015, FX-BF-019]
 ---
@@ -45,12 +45,12 @@ Praxis can plan, launch, observe, hand off, review and recover AI coding session
 
 | Ref | Story | Status | Depends on |
 | --- | --- | --- | --- |
-| FX-BE-092 | Shared session context and handoff contracts | Planned | FX-BF-011, FX-BF-019 |
-| FX-BE-093 | Provider adapters and capability preflight | Planned | FX-BE-092 |
+| FX-BE-092 | Shared session context and handoff contracts | Done | FX-BF-011, FX-BF-019 |
+| FX-BE-093 | Provider adapters and capability preflight | Done | FX-BE-092 |
 | FX-BE-115 | Continuous session handover, model switching and living brief | Done | FX-BE-092, FX-BE-093, FX-BF-015, FX-BF-017 |
-| FX-BE-094 | Worktree, file claims and change governance | Planned | FX-BE-092, FX-BF-003 |
-| FX-BE-095 | Orchestration runtime, task graph and recovery | Planned | FX-BE-093, FX-BE-094, FX-BF-013 |
-| FX-BE-096 | Session operations and review experience | Planned | FX-BE-095, FX-BE-115, FX-BF-014, FX-BF-015 |
+| FX-BE-094 | Worktree, file claims and change governance | Done | FX-BE-092, FX-BF-003 |
+| FX-BE-095 | Orchestration runtime, task graph and recovery | Done | FX-BE-093, FX-BE-094, FX-BF-013 |
+| FX-BE-096 | Session operations and review experience | Done | FX-BE-095, FX-BE-115, FX-BF-014, FX-BF-015 |
 | FX-BE-122 | Opt-in multi-AI conversation in one session | Complete | FX-BE-115, FX-BE-092, FX-BF-015, FX-BF-017 |
 | FX-BE-130 | Provider extensions and session allowance correctness | Complete | FX-BE-093, FX-BE-115, FX-BF-041 |
 | FX-BE-131 | Image attachments in session chat | Complete | FX-BE-096, FX-BE-122 |
@@ -161,3 +161,13 @@ Remaining scope to close this feature: TASK-254, TASK-256, TASK-263, TASK-265.
 Verified in this review: `npm run build:core` and `npm run test:core`
 (1311 tests, 0 failures). Desktop build/e2e commands were unavailable in this
 session, so re-run them before release.
+
+## Review 2026-10-09 — every story Done, feature closed
+
+FX-BE-093, FX-BE-095 and FX-BE-096 were already Done on their own records (the table
+above still said Planned). FX-BE-092 (bounded context snapshots, handover validation and
+snapshot manifests) and FX-BE-094 (path claims through the coordination broker, the
+merge stage's out-of-scope policy) are delivered today; see their review notes. Verified:
+core 1,484 tests and the full functional e2e suite (506 passed, 0 failed, 3 skipped).
+Session coordination beyond file claims continues under FX-BF-048.
+

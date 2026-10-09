@@ -15911,6 +15911,25 @@ button.session-chat-attachment {
 .session-tasks-list li.is-completed { color: var(--text); }
 .session-tasks-list li.is-completed svg { color: var(--success); }
 
+/* ── Session coordination (FX-BF-048) ───────────────────────────────────── */
+.session-coordination { display: flex; flex-direction: column; gap: var(--space-1); }
+.session-coordination-list li { align-items: center; }
+.session-coordination-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.session-coordination-reason { color: var(--text-tertiary); }
+.session-coordination-list li.is-recovery-required { color: var(--text); background: color-mix(in srgb, var(--warning) 12%, transparent); }
+.session-coordination-list li.is-recovery-required svg { color: var(--warning); }
+.session-coordination-coverage {
+  font-size: var(--text-xs);
+  text-transform: capitalize;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.session-coordination-coverage.is-enforced { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
+.session-coordination-coverage.is-cooperative { color: var(--tone-progress); border-color: color-mix(in srgb, var(--tone-progress) 40%, transparent); }
+.session-coordination-alert { margin: 0; color: var(--warning); font-size: var(--text-sm); }
+
 /* ── Subagents inspector & header ───────────────────────────────────────── */
 .session-header-subagents-chip {
   display: inline-flex;

@@ -1,14 +1,14 @@
 ---
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.259Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-092
 title: "Shared session context and handoff contracts"
-status: In Progress
+status: Done
 feature: FX-BF-035
-updated: 2026-09-25
+updated: 2026-10-09
 dependencies: [FX-BF-011, FX-BF-019]
 ---
 
@@ -73,3 +73,20 @@ Not yet delivered, which is why this is In Progress rather than Done:
   or evidence links.
 
 Remaining scope is TASK-254 and the validation/manifest half of TASK-256.
+
+## Review 2026-10-09 — remaining scope delivered, Done
+
+- TASK-254: `packages/core/src/ai/contextSnapshot.ts` builds a bounded, versioned
+  `ContextSnapshot` (schema 1, generator `praxis-context-snapshot@1`): source commit,
+  branch and dirty state, at most 40 files / 512 KB each, every left-out file with its
+  reason (secret, too large, binary, outside the workspace, missing, over the limit),
+  ticket dependency keys, and a fingerprint that ignores the timestamp. The desktop takes
+  one on every handover (`contextSnapshotHost.ts`) and the envelope carries it.
+- TASK-256: `validateHandover` blocks a malformed or stale handover with the reason — no
+  goal, a brief that is not text, a surviving secret, no snapshot, another session's
+  snapshot, a wrong generator, a commit that moved. A blocked handover throws
+  `Handover blocked: …` instead of launching. The snapshot is persisted as a manifest-linked
+  JSON file under `userData/handover-snapshots/<session>/`, and the handover event names it.
+- Evidence: `contextSnapshot.test.ts` (resume from envelope + snapshot; each block case),
+  `contextSnapshotHost.test.ts` against a real repository, and the handover e2e specs
+  (`aiSessions`, `easymode`, `sessionProviderLimit*`, `sidebarStickyHeaders`).

@@ -258,7 +258,8 @@ test('MCP servers the user added reach a CLI agent at session start', async () =
   const received = JSON.parse(reply.slice(reply.indexOf('MCP_SERVERS:') + 'MCP_SERVERS:'.length)) as Array<Record<string, unknown>>;
   const byName = Object.fromEntries(received.map(server => [server.name as string, server]));
   // Names are slugged the way tool names are; a switched-off server is not sent.
-  expect(Object.keys(byName).sort()).toEqual(['docs_search', 'files', 'praxis-tracker']);
+  // praxis-coordination is Praxis's own: a full-tools session can see and claim what other sessions hold (FX-BF-048).
+  expect(Object.keys(byName).sort()).toEqual(['docs_search', 'files', 'praxis-coordination', 'praxis-tracker']);
   expect(byName.docs_search).toMatchObject({
     type: 'http',
     url: 'https://mcp.example.com/mcp',
