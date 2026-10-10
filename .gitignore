@@ -79,6 +79,12 @@ Desktop.ini
 test-results/
 playwright-report/
 apps/praxis-desktop/main/output/
+**/output/playwright/
+
+# E2E evidence screenshots. Specs write these with assorted relative paths, so
+# they land in several .praxis/session-artifacts folders. Every run rewrites
+# every PNG, so tracking them adds megabytes of history per commit.
+**/.praxis/session-artifacts/
 
 # Python artifacts
 __pycache__/
