@@ -12,7 +12,7 @@
 # publishing; the token itself is never printed.
 set -euo pipefail
 
-REPO="$(cd "$(dirname "$0")/../../../.." && pwd)"
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 SKILL_DIR="$REPO/addons/skills/mobile-device-testing"
 REGISTRY=https://npm.pkg.github.com
 DRY_RUN=0

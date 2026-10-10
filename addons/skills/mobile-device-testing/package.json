@@ -1,6 +1,6 @@
 {
   "name": "@davidacres/praxis-addon-mobile-device-testing",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Run automated UI tests of the Praxis mobile app on an iOS simulator or a physical iPhone, including device setup and evidence capture.",
   "author": "davidacres",
   "license": "MIT",
@@ -16,7 +16,7 @@
     "name": "Mobile Device Testing",
     "summary": "Builds, installs and drives the Praxis mobile app on a simulator or real iPhone with XCUITest, checks device setup first, and records screenshots and accessibility trees as evidence.",
     "author": "davidacres",
-    "contentVersion": "1.0.2",
+    "contentVersion": "1.0.3",
     "minAppVersion": "0.3.0"
   }
 }
