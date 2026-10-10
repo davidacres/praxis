@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { AgentSessionRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
@@ -24,6 +24,7 @@ export function SessionGitBranchControl({ session, disabled = false }: SessionGi
 
   const [currentBranch, setCurrentBranch] = useState<string | undefined>(session.worktreeBranch);
   const [branches, setBranches] = useState<string[]>([]);
+  const [branchFilter, setBranchFilter] = useState('');
   const [isGitRepo, setIsGitRepo] = useState<boolean>(Boolean(session.worktreeBranch));
   const [loading, setLoading] = useState<boolean>(false);
   const [busyAction, setBusyAction] = useState<string | undefined>();
@@ -76,21 +77,25 @@ export function SessionGitBranchControl({ session, disabled = false }: SessionGi
     return () => document.removeEventListener('pointerdown', onDocumentPointerDown);
   }, [menuPosition]);
 
-  const handleCreateBranch = async () => {
+  const handleCreateBranch = async (customName?: string) => {
     if (!repositoryPath) return;
-    setMenuPosition(undefined);
-    const name = await prompt({
-      title: 'New git branch',
-      label: 'Branch name',
-      placeholder: 'feature/short-description',
-      confirmLabel: 'Create branch',
-      validate: value => (/^[a-z0-9][a-z0-9._/-]*$/i.test(value.trim()) ? undefined : 'Letters, digits, and . _ / - only.')
-    });
+    let name = customName?.trim();
+    if (!name) {
+      setMenuPosition(undefined);
+      name = (await prompt({
+        title: 'New git branch',
+        label: 'Branch name',
+        placeholder: 'feature/short-description',
+        confirmLabel: 'Create branch',
+        validate: value => (/^[a-z0-9][a-z0-9._/-]*$/i.test(value.trim()) ? undefined : 'Letters, digits, and . _ / - only.')
+      }))?.trim();
+    }
     if (!name) return;
 
     setBusyAction('Creating branch…');
     try {
-      await window.praxis.git.createBranch(repositoryPath, name.trim());
+      await window.praxis.git.createBranch(repositoryPath, name);
+      setBranchFilter('');
       await refreshGitInfo();
     } catch (err) {
       console.error('Failed to create branch:', err);
@@ -101,10 +106,10 @@ export function SessionGitBranchControl({ session, disabled = false }: SessionGi
 
   const handleCheckoutBranch = async (branchName: string) => {
     if (!repositoryPath || branchName === currentBranch) return;
-    setMenuPosition(undefined);
     setBusyAction(`Switching to ${branchName}…`);
     try {
       await window.praxis.git.checkout(repositoryPath, branchName);
+      setBranchFilter('');
       await refreshGitInfo();
     } catch (err) {
       console.error('Failed to switch branch:', err);
@@ -163,6 +168,15 @@ export function SessionGitBranchControl({ session, disabled = false }: SessionGi
   const displayBranch = currentBranch || (isGitRepo ? 'HEAD' : undefined);
   const chipLabel = busyAction || (loading && !displayBranch ? 'Reading git…' : displayBranch || (repositoryPath ? 'No git repository' : 'No folder'));
 
+  const trimmedFilter = branchFilter.trim();
+  const filteredBranches = useMemo(() => {
+    if (!trimmedFilter) return branches;
+    return branches.filter(b => b.toLowerCase().includes(trimmedFilter.toLowerCase()));
+  }, [branches, trimmedFilter]);
+
+  const exactMatchBranch = branches.find(b => b.toLowerCase() === trimmedFilter.toLowerCase());
+  const canQuickCreate = trimmedFilter.length > 0 && !exactMatchBranch && /^[a-z0-9][a-z0-9._/-]*$/i.test(trimmedFilter);
+
   return (
     <>
       <button
@@ -204,103 +218,124 @@ export function SessionGitBranchControl({ session, disabled = false }: SessionGi
           data-testid="session-git-branch-menu"
           style={{ position: 'fixed', bottom: menuPosition.bottom, left: menuPosition.left }}
         >
-          <div className="popover-label">Git Branch & Worktree</div>
+          <div className="popover-label">Git & Workspace</div>
 
-          <div className="session-git-menu-info">
-            <div className="session-git-menu-info__row">
-              <span className="session-git-menu-info__label">Current:</span>
-              <strong className="session-git-menu-info__value">{displayBranch || 'None'}</strong>
+          {/* Worktree Toggle Row */}
+          <div className="session-git-worktree-toggle-row" data-testid="session-git-worktree-toggle-row">
+            <div className="session-git-worktree-toggle-info">
+              <div className="session-git-worktree-toggle-title">
+                <Icon name="folder" size={13} />
+                <strong>Isolated worktree</strong>
+                {isWorktree && <span className="session-git-worktree-tag">active</span>}
+              </div>
+              <div className="session-git-worktree-toggle-desc">
+                {isWorktree
+                  ? `${basename(session.worktreePath)} (from ${session.worktreeBaseBranch || 'main'})`
+                  : 'Isolate session changes from your main checkout'}
+              </div>
             </div>
-            {isWorktree ? (
-              <div className="session-git-menu-info__row">
-                <span className="session-git-menu-info__label">Worktree:</span>
-                <span className="session-git-menu-info__path" title={session.worktreePath}>
-                  {basename(session.worktreePath)}
-                </span>
-                {session.worktreeBaseBranch && (
-                  <span className="session-git-menu-info__base">from {session.worktreeBaseBranch}</span>
-                )}
-              </div>
-            ) : (
-              <div className="session-git-menu-info__row">
-                <span className="session-git-menu-info__label">Repo:</span>
-                <span className="session-git-menu-info__path" title={repositoryPath}>
-                  {basename(repositoryPath)}
-                </span>
-              </div>
-            )}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isWorktree}
+              aria-label="Isolated worktree"
+              className="switch"
+              data-testid="session-git-worktree-toggle"
+              disabled={busyAction !== undefined}
+              onClick={() => {
+                if (isWorktree) {
+                  void handleRemoveWorktree();
+                } else {
+                  void handleSetWorktree();
+                }
+              }}
+            />
           </div>
 
           <div className="session-git-menu-divider" />
 
-          {/* Branch Actions */}
-          <button
-            type="button"
-            className="composer-provider-option session-git-menu-action"
-            data-testid="session-git-create-branch-btn"
-            onClick={() => void handleCreateBranch()}
-          >
-            <Icon name="plus" size={14} />
-            <span className="heading-option-body">
-              <strong>New branch…</strong>
-              <small>Create and switch to a new git branch</small>
+          {/* Branch Section Header & Inline Action */}
+          <div className="session-git-branch-header">
+            <span className="session-git-menu-subtitle">Branches</span>
+            <span className="session-git-current-badge" title="Active checkout branch">
+              Active: <code>{displayBranch || 'None'}</code>
             </span>
-          </button>
+          </div>
 
-          {/* Worktree Actions */}
-          {!isWorktree ? (
+          {/* Branch Search / Name Input linked to New Button */}
+          <div className="session-git-branch-input-row">
+            <div className="session-git-branch-search">
+              <Icon name="search" size={12} className="session-git-search-icon" />
+              <input
+                type="text"
+                className="session-git-branch-input"
+                placeholder="Branch name or filter…"
+                value={branchFilter}
+                onChange={e => setBranchFilter(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (exactMatchBranch) {
+                      void handleCheckoutBranch(exactMatchBranch);
+                    } else if (canQuickCreate) {
+                      void handleCreateBranch(trimmedFilter);
+                    } else if (!trimmedFilter) {
+                      void handleCreateBranch();
+                    }
+                  }
+                }}
+              />
+            </div>
             <button
               type="button"
-              className="composer-provider-option session-git-menu-action"
-              data-testid="session-git-set-worktree-btn"
-              onClick={() => void handleSetWorktree()}
+              className={`btn btn-xs session-git-branch-action-btn ${canQuickCreate ? 'btn-primary' : 'btn-ghost'}`}
+              data-testid="session-git-create-branch-btn"
+              disabled={busyAction !== undefined}
+              title={
+                canQuickCreate
+                  ? `Create new branch "${trimmedFilter}" and checkout`
+                  : exactMatchBranch
+                    ? `Switch to "${exactMatchBranch}"`
+                    : 'Create a new branch…'
+              }
+              onClick={() => {
+                if (canQuickCreate) {
+                  void handleCreateBranch(trimmedFilter);
+                } else if (exactMatchBranch) {
+                  void handleCheckoutBranch(exactMatchBranch);
+                } else {
+                  void handleCreateBranch();
+                }
+              }}
             >
-              <Icon name="folder" size={14} />
-              <span className="heading-option-body">
-                <strong>Set up worktree…</strong>
-                <small>Run this session in an isolated git checkout</small>
-              </span>
+              <Icon name="plus" size={11} />
+              <span>{canQuickCreate ? 'Create' : 'New'}</span>
             </button>
-          ) : (
-            <button
-              type="button"
-              className="composer-provider-option session-git-menu-action session-git-menu-action--danger"
-              data-testid="session-git-remove-worktree-btn"
-              onClick={() => void handleRemoveWorktree()}
-            >
-              <Icon name="close" size={14} />
-              <span className="heading-option-body">
-                <strong>Remove worktree…</strong>
-                <small>Return to main repository and delete worktree</small>
-              </span>
-            </button>
-          )}
+          </div>
 
-          {/* Other branches to switch to */}
-          {branches.length > 1 && (
-            <>
-              <div className="session-git-menu-divider" />
-              <div className="session-git-menu-subtitle">Switch branch</div>
-              <div className="session-git-branch-list">
-                {branches.map(branchName => {
-                  const isCurrent = branchName === currentBranch;
-                  return (
-                    <button
-                      key={branchName}
-                      type="button"
-                      className={`composer-provider-option session-git-branch-item${isCurrent ? ' active' : ''}`}
-                      data-testid={`session-git-branch-option-${branchName}`}
-                      onClick={() => void handleCheckoutBranch(branchName)}
-                    >
-                      <Icon name="git-branch" size={13} />
-                      <span className="session-git-branch-item__name">{branchName}</span>
-                      {isCurrent && <Icon name="check" size={13} />}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
+          {/* Tight and Clean Branch List */}
+          <div className="session-git-branch-list" data-testid="session-git-branch-list">
+            {filteredBranches.length === 0 ? (
+              <div className="session-git-empty-branches">No matching branches</div>
+            ) : (
+              filteredBranches.map(branchName => {
+                const isCurrent = branchName === currentBranch;
+                return (
+                  <button
+                    key={branchName}
+                    type="button"
+                    className={`session-git-branch-item${isCurrent ? ' active' : ''}`}
+                    data-testid={`session-git-branch-option-${branchName}`}
+                    onClick={() => void handleCheckoutBranch(branchName)}
+                  >
+                    <Icon name="git-branch" size={12} className="session-git-branch-icon" />
+                    <span className="session-git-branch-item__name" title={branchName}>{branchName}</span>
+                    {isCurrent && <Icon name="check" size={12} className="session-git-branch-item__current" />}
+                  </button>
+                );
+              })
+            )}
+          </div>
         </div>,
         document.body
       )}
