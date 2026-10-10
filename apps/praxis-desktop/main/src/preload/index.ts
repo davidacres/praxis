@@ -297,6 +297,8 @@ const praxis: PraxisIpc = {
     editHandoverBrief: (issueKey: string, expectedRevision: number, edits: AiHandoverBriefEdits) =>
       ipcRenderer.invoke('ai:editHandoverBrief', issueKey, expectedRevision, edits),
     removeWorktree: (issueKey: string) => ipcRenderer.invoke('ai:removeWorktree', issueKey),
+    setWorktree: (issueKey: string, options?: { baseBranch?: string; branchName?: string }) =>
+      ipcRenderer.invoke('ai:setWorktree', issueKey, options),
     switchSessionMode: (issueKey: string, mode: SessionMode) =>
       ipcRenderer.invoke('ai:switchSessionMode', issueKey, mode),
     setAcpMode: (issueKey: string, modeId: string) => ipcRenderer.invoke('ai:setAcpMode', issueKey, modeId),

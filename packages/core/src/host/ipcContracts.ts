@@ -913,6 +913,10 @@ export interface AiIpc {
    * Fails if the session has no worktree or its task is still running.
    */
   removeWorktree(issueKey: string): Promise<void>;
+  /**
+   * Creates or attaches a dedicated git worktree for an existing session.
+   */
+  setWorktree(issueKey: string, options?: { baseBranch?: string; branchName?: string }): Promise<AgentSessionRecord>;
   /** Switches the active phase of a session and continues it with that mode's contract. */
   switchSessionMode(issueKey: string, mode: SessionMode): Promise<void>;
   /**

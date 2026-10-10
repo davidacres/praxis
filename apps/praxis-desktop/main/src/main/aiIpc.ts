@@ -1191,6 +1191,50 @@ export function registerAiIpc(): void {
   });
 
   ipcMain.handle(
+    'ai:setWorktree',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      issueKey: string,
+      options?: { baseBranch?: string; branchName?: string }
+    ) => {
+      const record = sessionManager.getAgentSession(issueKey);
+      if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+      if (hasActiveTask(issueKey)) {
+        throw new Error('Wait for the current session to finish before creating a worktree.');
+      }
+      const workingDirectory = record.workingDirectory?.trim();
+      if (!workingDirectory) {
+        throw new Error('A working directory is required to set a worktree.');
+      }
+      const settings = getSettingsBackend().read();
+      const baseBranch =
+        options?.baseBranch?.trim() ||
+        (await getCurrentBranch(workingDirectory)) ||
+        settings.delivery.defaultBaseBranch.trim();
+      if (!baseBranch) {
+        throw new Error('Could not determine a base branch for the worktree.');
+      }
+      const manager = new GitWorktreeManager({ appendLine: message => console.log(`[ai] ${message}`) });
+      const issueSummary = record.title || issueKey;
+      const branch = options?.branchName?.trim() || undefined;
+      const prepared = await manager.prepareDeliveryWorktree(
+        { key: issueKey, summary: issueSummary, branch },
+        baseBranch,
+        workingDirectory,
+        { forceClean: false, reuseExisting: true }
+      );
+      sessionManager.updateAgentRuntime(issueKey, {
+        workingDirectory: prepared.worktreePath,
+        worktreePath: prepared.worktreePath,
+        worktreeBranch: prepared.branchName,
+        worktreeBaseBranch: prepared.baseBranch,
+        worktreeName: prepared.worktreeName
+      });
+      return sessionManager.getAgentSession(issueKey)!;
+    }
+  );
+
+  ipcMain.handle(
     'ai:switchSessionMode',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, mode: SessionMode) => {
       switchSessionMode(issueKey, mode);

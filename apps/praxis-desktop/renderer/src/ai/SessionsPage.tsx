@@ -28,6 +28,7 @@ import { SessionUsageSummary } from './SessionUsageSummary';
 import { SessionComposerToolbar } from './SessionComposerToolbar';
 import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
+import { SessionGitBranchControl } from './SessionGitBranchControl';
 import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, formatModelCost, getKnownContextLength, getModelPricing, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
@@ -2189,6 +2190,10 @@ export function SessionsPage({
                       void window.praxis.ai.updateSessionPermissionMode(selected.issueKey, permissionMode);
                     }}
                     testId="session"
+                    disabled={conversationRunning || !canChangeSessionRuntime(selected)}
+                  />
+                  <SessionGitBranchControl
+                    session={selected}
                     disabled={conversationRunning || !canChangeSessionRuntime(selected)}
                   />
                 </div>

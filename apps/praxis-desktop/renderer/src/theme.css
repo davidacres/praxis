@@ -2860,7 +2860,113 @@ textarea {
 .session-permission-option .heading-option-body strong,
 .session-permission-option .heading-option-body small { width: 100%; text-align: left; }
 .session-permission-option .heading-option-body small { overflow: visible; text-overflow: clip; white-space: normal; }
-.session-composer-footer { display: flex; align-items: center; margin-top: var(--space-1); }
+.session-composer-footer { display: flex; align-items: center; margin-top: var(--space-1); gap: var(--space-2, 8px); }
+.session-git-branch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+.session-git-branch-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-git-worktree-tag {
+  font-size: 9px;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: var(--radius-xs, 3px);
+  background: rgba(227, 179, 65, 0.16);
+  color: var(--tone-warn, #e3b341);
+  border: 1px solid rgba(227, 179, 65, 0.3);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.session-git-branch-menu {
+  width: min(360px, calc(100vw - 24px));
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1100;
+}
+.session-git-menu-info {
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-secondary, rgba(255, 255, 255, 0.04));
+  border-radius: var(--radius-sm, 6px);
+  margin-bottom: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+.session-git-menu-info__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.session-git-menu-info__label {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  min-width: 48px;
+}
+.session-git-menu-info__value {
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+}
+.session-git-menu-info__path {
+  color: var(--text-secondary);
+  font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-git-menu-info__base {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+.session-git-menu-divider {
+  height: 1px;
+  background: var(--border-subtle, rgba(255, 255, 255, 0.08));
+  margin: var(--space-1) 0;
+}
+.session-git-menu-subtitle {
+  padding: var(--space-1) var(--space-2);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+}
+.session-git-menu-action {
+  align-items: center;
+  gap: var(--space-2);
+}
+.session-git-menu-action--danger:hover {
+  color: var(--tone-failed, #ef4444);
+}
+.session-git-branch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.session-git-branch-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+.session-git-branch-item__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .composer-reasoning-slider {
   display: inline-flex;
