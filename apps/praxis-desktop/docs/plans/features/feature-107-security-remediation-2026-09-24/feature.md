@@ -1,6 +1,6 @@
 # Security remediation — 2026-09-24
 
-**Status:** 📋 Proposed
+**Status:** In Progress
 **Created:** 2026-09-24T15:41:50.591Z
 **Type:** Feature
 **Priority:** Highest
@@ -107,3 +107,4 @@ The following are scope calls on items that do exist, and should be settled befo
 
 ## Comments
 
+**2026-10-10:** Status corrected during backlog review: the four P0 items (107-1..107-4) and the gitleaks gate shipped; 13 P1-P3 items were re-checked against the code and are all still unfixed, so the feature stays open.

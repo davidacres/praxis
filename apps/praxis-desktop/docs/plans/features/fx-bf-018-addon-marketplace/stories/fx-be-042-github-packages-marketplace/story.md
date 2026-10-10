@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 To Do
+**Status:** In Progress
 **Created:** 2026-09-06T05:44:06.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-042
 title: GitHub Packages add-on marketplace
-status: Done
+status: In Progress
 feature: FX-BF-018
-updated: 2026-09-25
+updated: 2026-10-10
 commits: []
 dependencies: []
 validation: [npm run check-types, npm run test:core, npm run test:desktop, npm run test:desktop:themes]
@@ -167,3 +167,5 @@ Status corrected from In Progress → Done. Verified in the current tree:
 
 Validation commands: `npm run check-types`, `npm run test:core`
 (not rerun as part of this review).
+
+**2026-10-10:** Status corrected during backlog review: not 'To Do' — the core engine, host wiring, renderer integration, 49 unit tests and 5 e2e specs are built (see As built). Only the Open items remain: live-registry agent add-on proof, token fallback to a GitHub connection, and a published example add-on.

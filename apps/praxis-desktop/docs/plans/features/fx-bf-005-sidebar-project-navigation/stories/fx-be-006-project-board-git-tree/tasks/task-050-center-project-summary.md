@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Task
 **Priority:** Medium
@@ -7,7 +7,7 @@ id: TASK-050
 title: Replace center project navigation cards with focused project summary
 status: Done
 story: FX-BE-006
-updated: 2026-08-27
+updated: 2026-10-10
 dependencies: [TASK-049]
 validation: ["npm run frontend:build"]
 ---
@@ -35,4 +35,4 @@ Remove duplicate Boards/Git navigation cards from the center pane while retainin
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

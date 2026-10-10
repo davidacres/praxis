@@ -1,5 +1,5 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-09-01T19:20:12.656Z
 **Type:** Feature
 **Priority:** Medium
@@ -8,7 +8,7 @@ slug: agent-delivery-workflows
 title: Governed agent delivery workflows
 status: Done
 owner: Electron desktop app
-updated: 2026-09-02
+updated: 2026-10-10
 issues: docs/issues/features/fx-bf-012-agent-delivery-workflows/feature-issues.md
 stories: [FX-BE-018, FX-BE-019, FX-BE-020, FX-BE-021, FX-BE-022, FX-BE-023]
 validation: [npm run check-types, npm run build:core, npm run build:renderer, npm run test:core, npm run test:desktop]
@@ -66,4 +66,4 @@ A user can select a project delivery template, run it against a task, observe ev
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: all child stories and tasks are Complete and the feature's 'Close when' criteria are met by the shipped work (see 'As built'), so the feature is Done.

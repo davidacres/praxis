@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-06T13:13:26.000Z
 **Type:** Story
 **Priority:** Medium
@@ -8,7 +8,7 @@ id: FX-BE-009
 title: Project-details inspector, theme-aware detail panes, per-board plain background, sidebar board removal, no-boards centre state
 status: Done
 feature: FX-BF-008
-updated: 2026-09-06
+updated: 2026-10-10
 commits: []
 dependencies: [FX-BF-005]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -85,4 +85,4 @@ Taken from the feature's own close-when list:
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

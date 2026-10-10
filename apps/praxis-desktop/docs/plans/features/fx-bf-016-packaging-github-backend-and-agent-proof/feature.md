@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** Blocked
 **Created:** 2026-09-05T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-016
 slug: packaging-github-backend-and-agent-proof
 title: Packaging, GitHub backend, and multi-file/terminal proof
-status: In Progress
+status: blocked
 owner: Electron desktop app
-updated: 2026-09-25
+updated: 2026-10-10
 issues: docs/issues/features/fx-bf-016-packaging-github-backend-and-agent-proof/feature-issues.md
 stories: [FX-BE-034, FX-BE-035, FX-BE-036]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -91,3 +91,5 @@ Feature remains In Progress: child FX-BE-034 (signed auto-update) is still
 Blocked, and FX-BE-062/FX-BE-063 (GitLab CI executor, pipeline setup UX)
 remain unimplemented in the tree (no gitlab executor in
 `packages/core/src/deployments/`). Other children verified Done.
+
+**2026-10-10:** Status corrected during backlog review: still valid but cannot proceed until the project owner supplies Apple/Windows signing credentials. Frontmatter already said blocked.

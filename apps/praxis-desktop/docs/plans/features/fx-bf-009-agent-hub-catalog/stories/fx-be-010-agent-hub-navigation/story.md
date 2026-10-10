@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T20:04:21.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Agent Hub navigation and scope-aware catalog
 status: Done
 feature: FX-BF-009
 issue: docs/issues/features/fx-bf-009-agent-hub-catalog/stories/fx-be-010-agent-hub-navigation/issue.md
-updated: 2026-08-31
+updated: 2026-10-10
 tasks: [TASK-076, TASK-077]
 dependencies: [FX-BF-005]
 validation: [npm run check-types, npm run build:renderer, focused Agent Hub Playwright tests]
@@ -47,4 +47,4 @@ The route is visibly distinct from Sessions and the catalog correctly reflects b
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

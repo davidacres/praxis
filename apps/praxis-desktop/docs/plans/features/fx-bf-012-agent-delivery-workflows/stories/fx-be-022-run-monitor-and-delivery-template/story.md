@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-01T23:09:52.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Run monitor, delivery template, and end-to-end verification
 status: Done
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-022-run-monitor-and-delivery-template/issue.md
-updated: 2026-09-02
+updated: 2026-10-10
 tasks: [TASK-104, TASK-105, TASK-106]
 dependencies: [FX-BE-019, FX-BE-020, FX-BE-021]
 validation: [npm run build, npm run test:core, npm run test:desktop]
@@ -52,4 +52,4 @@ The built-in workflow completes from a project task through approval with every 
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

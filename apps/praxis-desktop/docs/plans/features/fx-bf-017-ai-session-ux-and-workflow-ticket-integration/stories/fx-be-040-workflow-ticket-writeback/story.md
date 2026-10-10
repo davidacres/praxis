@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-06T13:13:26.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Ticket-triggered workflow runs with outcome write-back
 status: Done
 feature: FX-BF-017
 issue: docs/issues/features/fx-bf-017-ai-session-ux-and-workflow-ticket-integration/stories/fx-be-040-workflow-ticket-writeback/issue.md
-updated: 2026-09-06
+updated: 2026-10-10
 commits: [230329a]
 dependencies: [FX-BF-013]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -71,4 +71,4 @@ cancel) left no trace anywhere a team using a real tracker would see it.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

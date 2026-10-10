@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-05T07:33:00.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Cost, context, and task visibility
 status: Done
 feature: FX-BF-015
 issue: docs/issues/features/fx-bf-015-session-review-cost-and-correction/stories/fx-be-032-cost-context-and-task-visibility/issue.md
-updated: 2026-09-05
+updated: 2026-10-10
 commits: [354cc9e, 3890b5d, 211d1d6, fca5812, faf4901, f5cd881, a14ad4e, f494822, a326db3, 56e5757, 532e56d, a02e98b]
 dependencies: [FX-BF-011]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -88,4 +88,4 @@ scrolling the transcript.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

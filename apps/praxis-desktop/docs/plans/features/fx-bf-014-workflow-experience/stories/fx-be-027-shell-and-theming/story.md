@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T10:59:12.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Shell integration and theming foundation
 status: Done
 feature: FX-BF-014
 issue: docs/issues/features/fx-bf-014-workflow-experience/stories/fx-be-027-shell-and-theming/issue.md
-updated: 2026-09-02
+updated: 2026-10-10
 tasks: ['TASK-120', 'TASK-121', 'TASK-122']
 dependencies: [FX-BF-013]
 validation: [npm run check-types, npm run build:renderer, npm run build:desktop, npm run test:desktop]
@@ -53,4 +53,4 @@ Every workflow screen renders through the shell and the token system, verified b
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

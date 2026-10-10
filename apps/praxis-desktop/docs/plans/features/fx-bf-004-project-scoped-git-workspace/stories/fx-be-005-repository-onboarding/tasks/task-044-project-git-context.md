@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Task
 **Priority:** Medium
@@ -7,7 +7,7 @@ id: TASK-044
 title: Define project Git context and typed repository preflight contract
 status: Done
 story: FX-BE-005
-updated: 2026-08-27
+updated: 2026-10-10
 dependencies: [FX-BF-003]
 validation: ["npm run electron:check-types"]
 ---
@@ -40,4 +40,4 @@ Do not make renderer code infer repository state from error strings.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

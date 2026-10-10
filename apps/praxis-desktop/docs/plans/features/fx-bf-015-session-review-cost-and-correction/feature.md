@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
@@ -8,7 +8,7 @@ slug: session-review-cost-and-correction
 title: Session review, cost, and correction controls
 status: Done
 owner: Electron desktop app
-updated: 2026-09-05
+updated: 2026-10-10
 issues: docs/issues/features/fx-bf-015-session-review-cost-and-correction/feature-issues.md
 stories: [FX-BE-031, FX-BE-032, FX-BE-033]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -98,3 +98,4 @@ See each story's own "As built" section for detail. Summary:
 
 ## Description
 
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Praxis diff workspace and safe Git workflows
 status: Done
 feature: FX-BF-003
 issue: docs/issues/features/fx-bf-003-git-visual-integration/stories/fx-be-004-praxis-diff-workspace/issue.md
-updated: 2026-08-27
+updated: 2026-10-10
 tasks: [TASK-038, TASK-039, TASK-040, TASK-041, TASK-042, TASK-043]
 dependencies: [FX-BE-003]
 validation:
@@ -86,4 +86,4 @@ The repository-wide Electron suite currently has unrelated legacy board-navigati
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

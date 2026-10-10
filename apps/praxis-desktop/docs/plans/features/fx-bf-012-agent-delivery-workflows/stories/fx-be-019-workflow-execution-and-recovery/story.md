@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-01T23:09:52.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Workflow execution, persistence, and recovery
 status: Done
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-019-workflow-execution-and-recovery/issue.md
-updated: 2026-09-02
+updated: 2026-10-10
 tasks: [TASK-095, TASK-096, TASK-097]
 dependencies: [FX-BE-018, FX-BF-011]
 validation: [npm run build:core, npm run test:core, npm run check-types]
@@ -52,4 +52,4 @@ Core and Electron tests demonstrate deterministic execution, failure isolation, 
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

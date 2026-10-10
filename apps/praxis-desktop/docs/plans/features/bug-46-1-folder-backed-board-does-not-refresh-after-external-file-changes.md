@@ -7,7 +7,7 @@
 **Reported By:** David Acres
 id: FX-BG-046
 title: Folder-backed board does not refresh after external file changes
-status: Backlog
+status: Done
 updated: 2026-09-25
 ---
 
@@ -178,3 +178,5 @@ Tests: new FolderService test (boardConfigFile.test.ts) covers external edit, re
 Status: Succeeded · Duration: 13m 23s
 
 - ✅ Implement: succeeded
+## Comments
+**2026-10-10:** Frontmatter status corrected from Backlog to Done to match the header, which already read Complete.

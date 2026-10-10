@@ -1,11 +1,11 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Story
 **Priority:** High
 id: FX-BE-155
 type: Story
-status: In Progress
+status: Done
 created: 2026-10-03
 owner: Electron desktop app
 ---
@@ -50,4 +50,4 @@ Conversations with the virtual engineering team are preserved as permanent proje
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: delivered by FX-BF-050 — the assistant is built and covered by assistant.spec.ts, and the parity doc (desktop-feature-parity.md) and renderer/AGENTS.md already document it.

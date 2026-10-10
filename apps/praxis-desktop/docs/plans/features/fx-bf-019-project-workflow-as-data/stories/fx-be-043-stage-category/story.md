@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-06T14:40:37.000Z
 **Type:** Story
 **Priority:** Medium
@@ -8,7 +8,7 @@ id: FX-BE-043
 title: Stage category as a first-class field
 status: Done
 feature: FX-BF-019
-updated: 2026-09-06
+updated: 2026-10-10
 commits: []
 dependencies: []
 validation: [npm run check-types, npm run test:core]
@@ -62,4 +62,4 @@ category; the project's own workflow type is the one that does not.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

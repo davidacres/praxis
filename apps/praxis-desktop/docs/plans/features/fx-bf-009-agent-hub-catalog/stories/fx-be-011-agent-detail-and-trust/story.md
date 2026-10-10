@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T20:04:21.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Agent and skill detail, trust, and capabilities
 status: Done
 feature: FX-BF-009
 issue: docs/issues/features/fx-bf-009-agent-hub-catalog/stories/fx-be-011-agent-detail-and-trust/issue.md
-updated: 2026-08-31
+updated: 2026-10-10
 tasks: [TASK-078, TASK-079]
 dependencies: [FX-BE-010]
 validation: [npm run check-types, focused Agent Hub Playwright tests]
@@ -46,4 +46,4 @@ Detail and trust states are understandable, keyboard accessible, and covered by 
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

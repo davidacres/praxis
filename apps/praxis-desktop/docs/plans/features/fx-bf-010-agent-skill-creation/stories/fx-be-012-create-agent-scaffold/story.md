@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T20:04:21.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Create Agent wizard and starter scaffold
 status: Done
 feature: FX-BF-010
 issue: docs/issues/features/fx-bf-010-agent-skill-creation/stories/fx-be-012-create-agent-scaffold/issue.md
-updated: 2026-08-31
+updated: 2026-10-10
 tasks: [TASK-080, TASK-081]
 dependencies: [FX-BE-010]
 validation: [npm run test:core, npm run check-types, focused desktop tests]
@@ -46,4 +46,4 @@ A new agent can be created, discovered, inspected, and safely left unstarted.
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

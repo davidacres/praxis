@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T20:04:21.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Runtime lifecycle dashboard
 status: Done
 feature: FX-BF-011
 issue: docs/issues/features/fx-bf-011-agent-runtime-session-integration/stories/fx-be-015-runtime-lifecycle-dashboard/issue.md
-updated: 2026-08-31
+updated: 2026-10-10
 tasks: [TASK-086, TASK-087]
 dependencies: [FX-BE-011]
 validation: [npm run test:core, npm run check-types, focused desktop tests]
@@ -46,4 +46,4 @@ Runtime state is accurate after refresh, lifecycle actions are safe, and no proc
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

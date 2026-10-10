@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-049
 slug: dashboard-ai-usage-visibility
 title: Dashboard AI usage visibility
-status: Backlog
+status: Done
 created: 2026-10-03
 owner: Electron desktop app
 ---
@@ -122,3 +122,5 @@ ledger and asserts the exact figures.
 
 
 ## Comments
+
+**2026-10-10:** Closed during backlog review: the Overview AI usage panel, core aggregation (aiUsageStats), IPC summary, Settings model breakdown (UsageModelBreakdown) and e2e coverage (overviewAiUsage.spec.ts, aiUsageDashboardRedesign.spec.ts) are all in the tree.

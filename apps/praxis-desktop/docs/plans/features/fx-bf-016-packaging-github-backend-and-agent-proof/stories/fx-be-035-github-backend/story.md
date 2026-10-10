@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-05T07:33:00.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Real GitHub backend
 status: Done
 feature: FX-BF-016
 issue: docs/issues/features/fx-bf-016-packaging-github-backend-and-agent-proof/stories/fx-be-035-github-backend/issue.md
-updated: 2026-09-05
+updated: 2026-10-10
 commits: [5fd2cf6, 60aa032, 580613c, fe77ae8]
 dependencies: []
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -111,4 +111,4 @@ gate is unchanged at 13 passed. **Met.**
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: delivered (see story body and commits); status had not been updated.

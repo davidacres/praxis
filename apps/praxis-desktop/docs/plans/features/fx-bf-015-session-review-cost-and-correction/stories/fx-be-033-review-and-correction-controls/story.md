@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-05T07:33:00.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Review and correction controls
 status: Done
 feature: FX-BF-015
 issue: docs/issues/features/fx-bf-015-session-review-cost-and-correction/stories/fx-be-033-review-and-correction-controls/issue.md
-updated: 2026-09-05
+updated: 2026-10-10
 commits: [d5ad6c4, 55b77a4, 5222d3e, ad30d9a, e73e301]
 dependencies: [FX-BE-032]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -81,4 +81,4 @@ one hunk or one edit — entirely from the Sessions console.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

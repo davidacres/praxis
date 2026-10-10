@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T20:04:21.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Import and validate runtime items
 status: Done
 feature: FX-BF-010
 issue: docs/issues/features/fx-bf-010-agent-skill-creation/stories/fx-be-014-import-and-validate-runtime-items/issue.md
-updated: 2026-08-31
+updated: 2026-10-10
 tasks: [TASK-084, TASK-085]
 dependencies: [FX-BE-011]
 validation: [npm run test:core, npm run check-types, focused desktop tests]
@@ -46,4 +46,4 @@ Import is safe, deterministic, scope-aware, and covered by malicious-path and in
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

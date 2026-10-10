@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-06T13:13:26.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Command palette issue search
 status: Done
 feature: FX-BF-017
 issue: docs/issues/features/fx-bf-017-ai-session-ux-and-workflow-ticket-integration/stories/fx-be-037-command-palette-issue-search/issue.md
-updated: 2026-09-06
+updated: 2026-10-10
 commits: [fd6a0f9]
 dependencies: [FX-BF-005]
 validation: [npm run check-types, npm run test:desktop]
@@ -56,4 +56,4 @@ this could not be a static index.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

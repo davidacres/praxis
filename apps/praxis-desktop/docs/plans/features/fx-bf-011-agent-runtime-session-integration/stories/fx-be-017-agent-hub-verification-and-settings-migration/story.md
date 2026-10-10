@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T20:04:21.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Advanced Settings boundary and verification
 status: Done
 feature: FX-BF-011
 issue: docs/issues/features/fx-bf-011-agent-runtime-session-integration/stories/fx-be-017-agent-hub-verification-and-settings-migration/issue.md
-updated: 2026-08-31
+updated: 2026-10-10
 tasks: [TASK-090, TASK-091]
 dependencies: [FX-BE-015, FX-BE-016]
 validation: [npm run check-types, npm run build:renderer, npm run desktop:copy-renderer, focused Playwright tests]
@@ -46,4 +46,4 @@ The Agent Hub and Settings boundary are coherent and all affected checks pass.
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

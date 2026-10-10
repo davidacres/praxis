@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.224Z
 **Type:** Story
 **Priority:** Medium
@@ -8,7 +8,7 @@ id: FX-BE-048
 title: A single naming rule for Praxis files
 status: Done
 feature: FX-BF-020
-updated: 2026-09-06
+updated: 2026-10-10
 commits: []
 dependencies: []
 validation: [npm run check-types, npm run test:desktop]
@@ -59,4 +59,4 @@ no rename-on-next-write.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.
