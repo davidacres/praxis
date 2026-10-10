@@ -1739,8 +1739,8 @@ export function SessionsPage({
                 {isSingleAgentRunning ? (
                   followUpCollapsed ? (
                     <>
-                      {liveActivityText && (
-                        <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid={composerOptions.activityTestId ?? "session-composer-activity-chip"}>
+                      {composerOptions.activityTestId && liveActivityText && (
+                        <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid={composerOptions.activityTestId}>
                           {activityProvider ? (
                             <Icon
                               name={providerIconName(activityProvider)}

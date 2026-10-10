@@ -669,9 +669,18 @@ export function SessionChatThread({
             </div>
           </div>
           {session.reasoningText && (
-            <div className="session-chat-streaming-text" data-testid="session-chat-streaming-text">
-              <Markdown text={session.reasoningText} testId="session-chat-markdown-streaming" />
-            </div>
+            <details
+              className="session-chat-thought session-chat-thought-streaming"
+              data-testid="session-thought-disclosure"
+            >
+              <summary className="session-chat-thought-summary" data-testid="session-thought-summary">
+                <Icon name="sparkles" size={11} />
+                <span className="session-chat-thought-label">Thinking process</span>
+              </summary>
+              <div className="session-chat-thought-content session-chat-streaming-text" data-testid="session-chat-streaming-text">
+                <Markdown text={session.reasoningText} testId="session-chat-markdown-streaming" imageSessionId={session?.issueKey} />
+              </div>
+            </details>
           )}
           <LiveTurnActivityIndicator
             startedAt={activeTurnStartedAt ?? session.events?.[session.events.length - 1]?.timestamp ?? session.startedAt}

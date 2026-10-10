@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AiProvider } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { StatusGlyph } from '../ui/StatusGlyph';
 import { providerIconName } from './modelProviders';
 
 export interface LiveTurnActivityIndicatorProps {
@@ -77,7 +78,7 @@ export function LiveTurnActivityIndicator({
           className={`session-activity-icon session-activity-icon-${provider}`}
         />
       ) : (
-        <span className="session-activity-dot" aria-hidden="true" />
+        <StatusGlyph status="running" size="sm" ariaLabel="Active turn running" />
       )}
       <span className="session-activity-label">{statusText}</span>
       <span className="session-activity-timer" data-testid="session-activity-timer" aria-label={`Elapsed time: ${formattedTime}`}>

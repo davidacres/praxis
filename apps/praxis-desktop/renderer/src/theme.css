@@ -9371,6 +9371,21 @@ button.session-chat-attachment {
 
 .session-chat-thought[open] .session-chat-thought-summary { color: var(--text-secondary); }
 
+.session-chat-thought-streaming {
+  margin: var(--space-1) 0 var(--space-2);
+}
+
+.session-chat-thought-streaming .session-chat-thought-summary > svg {
+  animation: session-activity-pulse 1.1s ease-in-out infinite;
+  color: var(--accent);
+}
+
+.session-chat-thought-content.session-chat-streaming-text {
+  border-bottom: 0;
+  padding-bottom: 0;
+  opacity: 1;
+}
+
 .session-chat-thought-content {
   max-height: 260px;
   margin: 0 0 var(--space-3);
@@ -17788,6 +17803,366 @@ button.session-chat-attachment {
   color: var(--tone-failed, #ef4444);
   flex-shrink: 0;
 }
+
+/* Enhanced .easymode-status-dot */
+.easymode-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.easymode-status-dot.is-running {
+  background: var(--accent, #ffffff);
+  box-shadow: 0 0 8px var(--accent, #ffffff);
+  animation: easymode-glow 1.5s ease-in-out infinite;
+}
+
+.easymode-status-dot.is-complete {
+  background: var(--tone-done, #10b981);
+}
+
+.easymode-status-dot.is-failed {
+  background: var(--tone-failed, #ef4444);
+}
+
+/* ==========================================================================
+   STATUS GLYPH & ENHANCED ACTIVITY INDICATORS
+   ========================================================================== */
+
+.status-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  vertical-align: middle;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+/* Override default dot styling on easymode-status when applied to StatusGlyph container */
+.status-glyph.easymode-status {
+  border-radius: unset;
+  background: transparent !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+/* Sizing */
+.status-glyph--sm,
+.status-glyph--sm.easymode-status {
+  width: 12px;
+  height: 12px;
+}
+
+.status-glyph--md,
+.status-glyph--md.easymode-status {
+  width: 15px;
+  height: 15px;
+}
+
+.status-glyph--lg,
+.status-glyph--lg.easymode-status {
+  width: 18px;
+  height: 18px;
+}
+
+/* 1. Dynamic Micro-Waveform (Running / Executing) */
+.status-glyph__waveform {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: 1.5px;
+}
+
+.status-glyph--sm .status-glyph__waveform {
+  gap: 1.5px;
+}
+
+.status-glyph--md .status-glyph__waveform {
+  gap: 2px;
+}
+
+.status-glyph--lg .status-glyph__waveform {
+  gap: 2.5px;
+}
+
+.status-glyph__bar {
+  display: block;
+  border-radius: 999px;
+  background: var(--accent, #ffffff);
+  transform-origin: center;
+  will-change: transform, opacity;
+  box-shadow: 0 0 5px var(--accent-soft, rgba(255, 255, 255, 0.4));
+}
+
+.status-glyph--sm .status-glyph__bar {
+  width: 2px;
+  height: 10px;
+}
+
+.status-glyph--md .status-glyph__bar {
+  width: 2.5px;
+  height: 12px;
+}
+
+.status-glyph--lg .status-glyph__bar {
+  width: 3px;
+  height: 15px;
+}
+
+.status-glyph__bar.bar-1 {
+  animation: status-waveform-pulse-1 0.95s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.status-glyph__bar.bar-2 {
+  animation: status-waveform-pulse-2 0.95s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  animation-delay: 0.16s;
+}
+
+.status-glyph__bar.bar-3 {
+  animation: status-waveform-pulse-3 0.95s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  animation-delay: 0.32s;
+}
+
+@keyframes status-waveform-pulse-1 {
+  0%, 100% {
+    transform: scaleY(0.3);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes status-waveform-pulse-2 {
+  0%, 100% {
+    transform: scaleY(0.85);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scaleY(0.25);
+    opacity: 0.45;
+  }
+}
+
+@keyframes status-waveform-pulse-3 {
+  0%, 100% {
+    transform: scaleY(0.35);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scaleY(0.95);
+    opacity: 1;
+  }
+}
+
+/* Pulse / Harmonic Ring Variant */
+.status-glyph__ring-outer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.status-glyph__ring-outer::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent, #ffffff);
+  opacity: 0.6;
+  animation: status-ring-pulse 2s cubic-bezier(0.2, 0.8, 0.4, 1) infinite;
+}
+
+.status-glyph__ring-core {
+  width: 45%;
+  height: 45%;
+  border-radius: 50%;
+  background: var(--accent, #ffffff);
+  box-shadow: 0 0 6px var(--accent, #ffffff);
+  animation: status-core-breathe 2s ease-in-out infinite;
+}
+
+@keyframes status-ring-pulse {
+  0% {
+    transform: scale(0.65);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+@keyframes status-core-breathe {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+/* 2. Action Gate / Awaiting Approval / Input */
+.status-glyph__gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tone-warn, #eab308);
+  width: 100%;
+  height: 100%;
+  animation: status-gate-pulse 2.2s ease-in-out infinite;
+}
+
+.status-glyph__gate-svg {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes status-gate-pulse {
+  0%, 100% {
+    transform: scale(0.94);
+    filter: drop-shadow(0 0 1px rgba(234, 179, 8, 0.3));
+    opacity: 0.88;
+  }
+  50% {
+    transform: scale(1.08);
+    filter: drop-shadow(0 0 6px rgba(234, 179, 8, 0.85));
+    opacity: 1;
+  }
+}
+
+/* 3. Completed State */
+.status-glyph__completed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tone-done, #10b981);
+  width: 100%;
+  height: 100%;
+  animation: status-spring-in 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.status-glyph__check-svg {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes status-spring-in {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 4. Failed / Aborted State */
+.status-glyph__failed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tone-failed, #ef4444);
+  width: 100%;
+  height: 100%;
+}
+
+.status-glyph__cross-svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* 5. Idle / Resting State */
+.status-glyph__resting-bars {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5px;
+  width: 100%;
+  height: 100%;
+  opacity: 0.45;
+}
+
+.status-glyph--sm .status-glyph__resting-bars {
+  gap: 1.5px;
+}
+
+.status-glyph--md .status-glyph__resting-bars {
+  gap: 2px;
+}
+
+.status-glyph--lg .status-glyph__resting-bars {
+  gap: 2.5px;
+}
+
+.status-glyph__resting-bar {
+  display: block;
+  border-radius: 999px;
+  background: var(--text-tertiary, rgba(255, 255, 255, 0.4));
+}
+
+.status-glyph--sm .status-glyph__resting-bar {
+  width: 2px;
+  height: 4px;
+}
+
+.status-glyph--md .status-glyph__resting-bar {
+  width: 2.5px;
+  height: 5px;
+}
+
+.status-glyph--lg .status-glyph__resting-bar {
+  width: 3px;
+  height: 6px;
+}
+
+.status-glyph__resting-ring {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.status-glyph__resting-ring-dot {
+  width: 50%;
+  height: 50%;
+  border-radius: 50%;
+  border: 1px solid var(--text-tertiary, rgba(255, 255, 255, 0.4));
+  opacity: 0.6;
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .status-glyph__bar,
+  .status-glyph__ring-outer::before,
+  .status-glyph__ring-core,
+  .status-glyph__gate,
+  .status-glyph__completed,
+  .easymode-status-dot.is-running {
+    animation: none !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
+
 
 /* Action Gate Callout */
 .action-gate-callout {

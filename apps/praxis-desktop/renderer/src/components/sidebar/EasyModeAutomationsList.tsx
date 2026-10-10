@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { AgentSessionRecord, ProjectRecord, WorkflowRunSummary } from '@praxis/core';
 import { formatStarted } from '../../ai/sessionNav';
 import { Icon } from '../../ui/Icon';
+import { StatusGlyph } from '../../ui/StatusGlyph';
 
 export interface EasyModeAutomationsListProps {
   projects: ProjectRecord[];
@@ -337,9 +338,11 @@ export function EasyModeAutomationsList({
                 </span>
               )}
               <div className="easymode-automation-row__status-col">
-                <span
-                  className={`easymode-status ${statusClass}`}
-                  aria-label={`Status: ${statusLabel}`}
+                <StatusGlyph
+                  status={run.status}
+                  size="sm"
+                  className={statusClass}
+                  ariaLabel={`Status: ${statusLabel}`}
                   title={statusLabel}
                 />
               </div>
@@ -500,7 +503,7 @@ export function EasyModeAutomationsList({
                       tabIndex={0}
                       title={`Stage: ${stage.name} (${stageLaneLabel(stage.lane)})`}
                     >
-                      <span className={`easymode-stage-dot easymode-stage-dot--${stage.lane}`} />
+                      <StatusGlyph status={stage.lane} size="sm" className={`easymode-stage-dot--${stage.lane}`} />
                       <span className="easymode-stage-name">{stage.name}</span>
                       {stage.chosenModel && (
                         <span className="easymode-stage-model">{stage.chosenModel}</span>

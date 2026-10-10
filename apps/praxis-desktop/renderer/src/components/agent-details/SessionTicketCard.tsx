@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AgentSessionRecord } from '@praxis/core';
 import { Icon } from '../../ui/Icon';
+import { StatusGlyph } from '../../ui/StatusGlyph';
 import { agentStateLabel } from '../../ai/aiSessionState';
 
 export interface SessionTicketCardProps {
@@ -51,10 +52,7 @@ export function SessionTicketCard({ session }: SessionTicketCardProps) {
         </div>
 
         <div className="session-ticket-card__header-right">
-          <span
-            className={`easymode-status-dot is-${session.state === 'executing' ? 'running' : session.state === 'failed' ? 'failed' : 'complete'}`}
-            aria-hidden="true"
-          />
+          <StatusGlyph status={session.state} size="sm" />
           <span className="session-ticket-card__status-text" data-testid="session-ticket-status">
             {agentStateLabel(session.state)}
           </span>

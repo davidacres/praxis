@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AgentSessionRecord } from '@praxis/core';
 import { Icon } from '../../ui/Icon';
+import { StatusGlyph } from '../../ui/StatusGlyph';
 import { agentStateLabel, isTerminalAgentState } from '../../ai/aiSessionState';
 import {
   extractSubagents,
@@ -272,10 +273,7 @@ export function AgentDetailsPage({
         <div className="agent-details-header__right">
           {/* Status Indicator */}
           <div className="agent-details-status" data-testid="agent-details-status">
-            <span
-              className={`easymode-status-dot is-${status === 'executing' ? 'running' : status === 'failed' ? 'failed' : 'complete'}`}
-              aria-hidden="true"
-            />
+            <StatusGlyph status={status} size="md" />
             <span className="agent-details-status-text">{agentStateLabel(status)}</span>
           </div>
 
@@ -349,7 +347,7 @@ export function AgentDetailsPage({
             data-testid="subagent-nav-primary"
             onClick={() => handleSelectSub(parentSession.issueKey)}
           >
-            <span className={`easymode-status-dot is-${parentSession.state === 'executing' ? 'running' : parentSession.state === 'failed' ? 'failed' : 'complete'}`} />
+            <StatusGlyph status={parentSession.state} size="sm" />
             <span>Primary Agent</span>
           </button>
           {allSubagents.map(sub => {
@@ -362,7 +360,7 @@ export function AgentDetailsPage({
                 data-testid={`subagent-nav-${sub.id}`}
                 onClick={() => handleSelectSub(sub.sessionKey || sub.id)}
               >
-                <span className={`easymode-status-dot is-${sub.status === 'executing' ? 'running' : sub.status === 'failed' ? 'failed' : 'complete'}`} />
+                <StatusGlyph status={sub.status} size="sm" />
                 <span>{sub.title}</span>
               </button>
             );

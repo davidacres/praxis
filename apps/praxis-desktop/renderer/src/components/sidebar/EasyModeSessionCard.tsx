@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { AgentSessionRecord, AgentTaskState } from '@praxis/core';
 import { Icon } from '../../ui/Icon';
+import { StatusGlyph } from '../../ui/StatusGlyph';
 import { useDialogs } from '../../ui/dialogs';
 import { sessionTitle, extractSubagents, formatStarted, extractSessionAiProviders } from '../../ai/sessionNav';
 import { SessionAiIcons } from '../../ai/SessionAiIcons';
@@ -267,27 +268,23 @@ export function EasyModeSessionCard({
         </div>
 
         <div className="easymode-session-card__status-col">
-          {session.state === 'awaiting_approval' || session.state === 'awaiting_input' ? (
-            <span
-              className="easymode-gate-symbol"
-              title={`Action Gate: ${session.state === 'awaiting_approval' ? 'Approval required' : 'Input required'}`}
-              aria-label={`Action Gate: ${session.state === 'awaiting_approval' ? 'Approval required' : 'Input required'}`}
-            >
-              <Icon name="warning" size={12} className="warning-glyph" />
-            </span>
-          ) : isRunning ? (
-            <span className="harmonic-pulse-glyph" aria-hidden="true" title="Running" />
-          ) : session.state === 'completed' ? (
-            <span title="Completed" className="completed-glyph">
-              <Icon name="check" size={12} />
-            </span>
-          ) : session.state === 'failed' || session.state === 'aborted' ? (
-            <span title="Failed" className="failed-glyph">
-              <Icon name="close" size={12} />
-            </span>
-          ) : (
-            <span className="easymode-status easymode-status--idle" title="Idle" />
-          )}
+          <StatusGlyph
+            status={session.state}
+            size="md"
+            title={
+              session.state === 'awaiting_approval'
+                ? 'Action Gate: Approval required'
+                : session.state === 'awaiting_input'
+                  ? 'Action Gate: Input required'
+                  : isRunning
+                    ? 'Running'
+                    : session.state === 'completed'
+                      ? 'Completed'
+                      : session.state === 'failed' || session.state === 'aborted'
+                        ? 'Failed'
+                        : 'Idle'
+            }
+          />
         </div>
 
         <div className="easymode-card-actions">
@@ -397,9 +394,11 @@ export function EasyModeSessionCard({
               }}
             >
               {branchSym && <span className="lineage-sym" aria-hidden="true">{branchSym}</span>}
-              <span
-                className={`easymode-status ${statusClass}`}
-                aria-label={`Status: ${statusLabel}`}
+              <StatusGlyph
+                status={agent.status}
+                size="sm"
+                className={statusClass}
+                ariaLabel={`Status: ${statusLabel}`}
                 title={statusLabel}
               />
               <span className="easymode-agent-row__title" title={agent.title}>
