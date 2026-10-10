@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T20:04:21.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Skill activation and session handoff
 status: Done
 feature: FX-BF-011
 issue: docs/issues/features/fx-bf-011-agent-runtime-session-integration/stories/fx-be-016-skill-activation-and-session-handoff/issue.md
-updated: 2026-08-31
+updated: 2026-10-10
 tasks: [TASK-088, TASK-089]
 dependencies: [FX-BE-015]
 validation: [npm run check-types, focused Sessions and Agent Hub Playwright tests]
@@ -46,4 +46,4 @@ An Agent Hub selection launches a correctly attributed session and links back to
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

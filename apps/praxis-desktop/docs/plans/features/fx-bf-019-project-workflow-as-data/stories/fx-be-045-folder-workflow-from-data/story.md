@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-06T14:40:37.000Z
 **Type:** Story
 **Priority:** Medium
@@ -8,7 +8,7 @@ id: FX-BE-045
 title: Folder boards read their workflow instead of declaring it
 status: Done
 feature: FX-BF-019
-updated: 2026-09-06
+updated: 2026-10-10
 commits: []
 dependencies: [FX-BE-044]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -68,4 +68,4 @@ must be unchanged.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

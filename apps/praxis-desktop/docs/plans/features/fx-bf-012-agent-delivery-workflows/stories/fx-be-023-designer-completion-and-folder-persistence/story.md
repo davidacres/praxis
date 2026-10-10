@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:54:54.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Designer completion and folder persistence
 status: Done
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-023-designer-completion-and-folder-persistence/issue.md
-updated: 2026-09-02
+updated: 2026-10-10
 tasks: [TASK-107, TASK-108, TASK-109, TASK-110]
 dependencies: [FX-BE-021]
 validation: [npm run build, npm run test:core, npm run test:desktop]
@@ -73,4 +73,4 @@ suite green.
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

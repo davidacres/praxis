@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Task
 **Priority:** Medium
@@ -7,7 +7,7 @@ id: TASK-052
 title: Verify navigation semantics, accessibility, responsive layout, and migration snapshots
 status: Done
 story: FX-BE-006
-updated: 2026-08-27
+updated: 2026-10-10
 dependencies: [TASK-049, TASK-050, TASK-051]
 validation: ["npm run frontend:build", "npm run electron:check-types", "npm run electron:copy-renderer", "npm run test:e2e --workspace @praxis/desktop-main -- e2e/projects.spec.ts"]
 ---
@@ -36,4 +36,4 @@ Prove the new tree is understandable and stable in the packaged renderer.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

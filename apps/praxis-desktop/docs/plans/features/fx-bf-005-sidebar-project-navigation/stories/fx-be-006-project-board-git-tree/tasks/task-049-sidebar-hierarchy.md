@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Task
 **Priority:** Medium
@@ -7,7 +7,7 @@ id: TASK-049
 title: Refactor sidebar hierarchy for project-owned Boards and Git
 status: Done
 story: FX-BE-006
-updated: 2026-08-27
+updated: 2026-10-10
 dependencies: [FX-BF-004]
 validation: ["npm run frontend:build"]
 ---
@@ -36,4 +36,4 @@ Make Projects → Boards and Git the canonical tree, with clear expand/collapse,
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

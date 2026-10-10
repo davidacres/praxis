@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-28T19:08:27.000Z
 **Type:** Story
 **Priority:** Medium
@@ -8,7 +8,7 @@ id: FX-BE-008
 title: Saved workspace model, versioned file format, and sidebar flow
 status: Done
 feature: FX-BF-007
-updated: 2026-08-27
+updated: 2026-10-10
 tasks: [TASK-060, TASK-061, TASK-062]
 dependencies: [FX-BF-005]
 validation:
@@ -57,4 +57,4 @@ Core contracts, Electron IPC, renderer flow, and verification are complete.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

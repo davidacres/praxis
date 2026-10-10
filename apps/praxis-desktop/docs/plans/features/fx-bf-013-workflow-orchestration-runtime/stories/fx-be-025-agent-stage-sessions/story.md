@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:54:54.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Agent stage sessions and completion
 status: Done
 feature: FX-BF-013
 issue: docs/issues/features/fx-bf-013-workflow-orchestration-runtime/stories/fx-be-025-agent-stage-sessions/issue.md
-updated: 2026-09-02
+updated: 2026-10-10
 tasks: [TASK-114, TASK-115, TASK-116]
 dependencies: [FX-BE-020, FX-BE-024]
 validation: [npm run build, npm run test:core, npm run test:desktop]
@@ -67,4 +67,4 @@ attributed, and its diff and report reach the downstream gates.
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

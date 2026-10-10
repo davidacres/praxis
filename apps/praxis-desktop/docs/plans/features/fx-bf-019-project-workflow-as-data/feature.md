@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-06T00:00:00.000Z
 **Type:** Feature
 **Priority:** High
@@ -8,7 +8,7 @@ slug: project-workflow-as-data
 title: A project's workflow is data, authored once and rendered by every backend
 status: Done
 owner: Electron desktop app
-updated: 2026-09-06
+updated: 2026-10-10
 issues: docs/issues/features/fx-bf-019-project-workflow-as-data/feature-issues.md
 stories: [FX-BE-043, FX-BE-044, FX-BE-045, FX-BE-046, FX-BE-047]
 validation: [npm run check-types, npm run test:core, npm run test:desktop, npm run test:desktop:themes]
@@ -156,4 +156,4 @@ from it rather than frozen beside it.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Project-scoped Git entry point and repository onboarding
 status: Done
 feature: FX-BF-004
 issue: docs/issues/features/fx-bf-004-project-scoped-git-workspace/stories/fx-be-005-repository-onboarding/issue.md
-updated: 2026-08-27
+updated: 2026-10-10
 tasks: [TASK-044, TASK-045, TASK-046, TASK-047, TASK-048]
 dependencies: [FX-BF-003]
 validation:
@@ -70,4 +70,4 @@ The project-first Git flow is usable by a non-expert from an empty project throu
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

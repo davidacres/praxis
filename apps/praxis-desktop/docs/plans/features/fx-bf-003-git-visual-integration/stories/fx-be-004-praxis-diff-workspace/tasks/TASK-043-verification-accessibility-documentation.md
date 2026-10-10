@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Task
 **Priority:** Medium
@@ -7,7 +7,7 @@ id: TASK-043
 title: Verification, accessibility, and documentation
 status: Done
 story: FX-BE-004
-updated: 2026-08-27
+updated: 2026-10-10
 dependencies: [TASK-039, TASK-040, TASK-041, TASK-042]
 validation: [npm run test --workspace @praxis/core, npm run test:git --workspace @praxis/desktop-main, npm run build --workspace @praxis/desktop-renderer, npm run copy-renderer --workspace @praxis/desktop-main, npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts, git diff --check]
 ---
@@ -38,4 +38,4 @@ Completed on 2026-08-27 with 7/7 core tests, the real-repository Git service sui
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Task
 **Priority:** Medium
@@ -7,7 +7,7 @@ id: TASK-041
 title: Graph-native workflows, history, and blame
 status: Done
 story: FX-BE-004
-updated: 2026-08-27
+updated: 2026-10-10
 dependencies: [TASK-039]
 validation: [npm run check-types --workspace @praxis/desktop-renderer, apps/praxis-desktop/main/e2e/gitGraph.spec.ts]
 ---
@@ -33,4 +33,4 @@ Keep common Git work anchored to visible branches, commits, and files rather tha
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

@@ -1,12 +1,12 @@
 ---
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Feature
 **Priority:** High
 id: FX-BF-050
 slug: app-wide-virtual-team-assistant
 title: App-wide Virtual Team Assistant
-status: Complete
+status: Done
 created: 2026-10-03
 owner: Electron desktop app
 ---
@@ -106,3 +106,5 @@ Not done / follow-ups: full test:desktop suite not run (scoped to affected specs
 
 **PRX-F50** — 2026-10-03T18:26:37.494Z
 Reopened: the earlier "Done" was premature. Audit against the task specs found unmet criteria: create-subtask action (409), Preview Changes button (405), auto-expanding 6-line composer and per-turn context detach (406), git diff hunks in context (407), no e2e for update-ticket / update-workflow / git context / rename / restart persistence (409, 408, 411, 410), no main-process assistantIpc tests (402/403), and no theme / surface-pack visual validation or assistant coverage in keyboard-focus + tooltip specs (412). Will implement and verify these, then re-close with evidence.
+
+**2026-10-10:** Closed during backlog review: delivered by FX-BF-050 — the assistant is built and covered by assistant.spec.ts, and the parity doc (desktop-feature-parity.md) and renderer/AGENTS.md already document it.

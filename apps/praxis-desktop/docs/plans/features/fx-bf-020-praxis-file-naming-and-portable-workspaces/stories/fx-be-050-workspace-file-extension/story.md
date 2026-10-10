@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.225Z
 **Type:** Story
 **Priority:** Medium
@@ -8,7 +8,7 @@ id: FX-BE-050
 title: A workspace file is .praxis.json, not .praxis
 status: Done
 feature: FX-BF-020
-updated: 2026-09-06
+updated: 2026-10-10
 commits: []
 dependencies: [FX-BE-048, FX-BE-049]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -70,4 +70,4 @@ If double-click-to-open is built later, the association registers against
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

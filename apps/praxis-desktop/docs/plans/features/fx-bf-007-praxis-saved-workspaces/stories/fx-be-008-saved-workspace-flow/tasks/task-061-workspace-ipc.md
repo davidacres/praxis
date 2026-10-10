@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-28T19:08:27.000Z
 **Type:** Task
 **Priority:** Medium
@@ -23,4 +23,4 @@ operations through the Electron main process and preload bridge.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

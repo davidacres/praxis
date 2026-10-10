@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-06T13:13:26.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Surface ACP session modes and slash commands
 status: Done
 feature: FX-BF-017
 issue: docs/issues/features/fx-bf-017-ai-session-ux-and-workflow-ticket-integration/stories/fx-be-038-acp-modes-and-commands/issue.md
-updated: 2026-09-06
+updated: 2026-10-10
 commits: [dc91dcb]
 dependencies: [FX-BF-011]
 validation: [npm run check-types, npm run test:desktop]
@@ -67,4 +67,4 @@ was really just a missing case.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

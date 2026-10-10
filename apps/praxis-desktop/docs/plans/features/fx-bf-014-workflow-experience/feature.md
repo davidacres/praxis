@@ -1,5 +1,5 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
@@ -8,7 +8,7 @@ slug: workflow-experience
 title: Workflow experience — native UI for the designer and run monitor
 status: Done
 owner: Electron desktop app
-updated: 2026-09-03
+updated: 2026-10-10
 issues: docs/issues/features/fx-bf-014-workflow-experience/feature-issues.md
 stories: [FX-BE-027, FX-BE-028, FX-BE-029, FX-BE-030]
 design: docs/plans/workflow-experience-design.md
@@ -84,3 +84,5 @@ The feature shipped centre-heavy; a follow-up moved it into the shell:
 
 
 ## Comments
+
+**2026-10-10:** Status rollup corrected during backlog review: all child stories and tasks are Complete and the feature's 'Close when' criteria are met by the shipped work (see 'As built'), so the feature is Done.

@@ -1,11 +1,11 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-412
 type: Task
-status: In Progress
+status: Done
 created: 2026-10-03
 priority: Medium
 ---
@@ -42,4 +42,5 @@ priority: Medium
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: delivered by FX-BF-050 — the assistant is built and covered by assistant.spec.ts, and the parity doc (desktop-feature-parity.md) and renderer/AGENTS.md already document it.
+**2026-10-10:** Verified on re-review: assistant.spec.ts (20/20 pass, including persona colour/badge, focus ring + tooltips, and every theme and surface pack), parity doc row (desktop-feature-parity.md) and renderer/AGENTS.md notes are all present.

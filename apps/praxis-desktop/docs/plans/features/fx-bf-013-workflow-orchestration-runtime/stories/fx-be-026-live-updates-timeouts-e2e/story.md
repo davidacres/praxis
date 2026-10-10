@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:54:54.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Live updates, timeouts, and end-to-end verification
 status: Done
 feature: FX-BF-013
 issue: docs/issues/features/fx-bf-013-workflow-orchestration-runtime/stories/fx-be-026-live-updates-timeouts-e2e/issue.md
-updated: 2026-09-02
+updated: 2026-10-10
 tasks: [TASK-117, TASK-118, TASK-119]
 dependencies: [FX-BE-024, FX-BE-025]
 validation: [npm run build, npm run test:core, npm run test:desktop]
@@ -63,4 +63,4 @@ a packaged desktop test, and the monitor stays live throughout.
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

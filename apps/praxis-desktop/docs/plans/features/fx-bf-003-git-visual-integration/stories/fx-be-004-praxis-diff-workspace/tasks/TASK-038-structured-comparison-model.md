@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Task
 **Priority:** Medium
@@ -7,7 +7,7 @@ id: TASK-038
 title: Structured comparison and patch model
 status: Done
 story: FX-BE-004
-updated: 2026-08-27
+updated: 2026-10-10
 dependencies: [FX-BE-003]
 validation: [npm run test --workspace @praxis/core, npm run test:git --workspace @praxis/desktop-main]
 ---
@@ -34,4 +34,4 @@ Replace the opaque patch string with typed files, hunks, lines, status, counts, 
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: the work is implemented in the shipped code (renderer, main and core) and the parent feature's 'As built' notes; the ticket's status had not been rolled up.

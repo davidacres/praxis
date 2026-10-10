@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T10:59:12.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Run Monitor
 status: Done
 feature: FX-BF-014
 issue: docs/issues/features/fx-bf-014-workflow-experience/stories/fx-be-029-run-monitor/issue.md
-updated: 2026-09-02
+updated: 2026-10-10
 tasks: ['TASK-126', 'TASK-127', 'TASK-128']
 dependencies: [FX-BE-027]
 validation: [npm run check-types, npm run build:renderer, npm run build:desktop, npm run test:desktop]
@@ -54,4 +54,4 @@ A run reads as a status board and every stage's evidence is one click away in th
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

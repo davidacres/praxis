@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-05T07:33:00.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Prove multi-file and terminal-using agent paths
 status: Done
 feature: FX-BF-016
 issue: docs/issues/features/fx-bf-016-packaging-github-backend-and-agent-proof/stories/fx-be-036-multi-file-and-terminal-proof/issue.md
-updated: 2026-09-25
+updated: 2026-10-10
 commits: [5222d3e]
 dependencies: [FX-BE-031]
 validation: [npm run check-types, npm run test:desktop]
@@ -86,3 +86,5 @@ Status corrected from To Do → Done. Verified in the current tree:
 
 Validation commands: `npm run check-types`, `npm run build:desktop`
 (not rerun as part of this review).
+
+**2026-10-10:** Closed during backlog review: delivered (see story body and commits); status had not been updated.

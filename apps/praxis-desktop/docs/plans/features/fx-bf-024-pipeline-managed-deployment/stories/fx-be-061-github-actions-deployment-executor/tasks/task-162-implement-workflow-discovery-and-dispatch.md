@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-162
 title: "Implement workflow discovery and dispatch"
 status: Done
 story: FX-BE-061
-updated: 2026-09-09
+updated: 2026-10-10
 dependencies: [FX-BF-023]
 ---
 
@@ -157,4 +157,4 @@ by this check resolving cleanly). `npm run check-types` in
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: frontmatter already recorded Done and the code is present (workflow discovery/dispatch, observation, result mapping in packages/core/src/deployments/githubActions*); the header status was stale.

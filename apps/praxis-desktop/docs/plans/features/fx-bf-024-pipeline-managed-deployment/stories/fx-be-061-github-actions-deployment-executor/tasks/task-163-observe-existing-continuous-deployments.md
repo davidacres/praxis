@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-163
 title: "Observe existing continuous deployments"
 status: Done
 story: FX-BE-061
-updated: 2026-09-09
+updated: 2026-10-10
 dependencies: [TASK-162]
 ---
 
@@ -145,4 +145,4 @@ in TASK-162). `npm run compile` — clean. `npm test` from the repo root —
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: frontmatter already recorded Done and the code is present (workflow discovery/dispatch, observation, result mapping in packages/core/src/deployments/githubActions*); the header status was stale.

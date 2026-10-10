@@ -1,5 +1,5 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.981Z
 **Type:** Feature
 **Priority:** Medium
@@ -8,7 +8,7 @@ slug: agent-hub-catalog
 title: Agent Hub catalog and navigation
 status: Done
 owner: Electron desktop app
-updated: 2026-09-03
+updated: 2026-10-10
 issues: docs/issues/features/fx-bf-009-agent-hub-catalog/feature-issues.md
 stories: [FX-BE-010, FX-BE-011]
 validation: [npm run check-types, npm run build:renderer, npm run test:desktop]
@@ -97,4 +97,4 @@ classes — which is why it read as out of place. Reworked to one idiom:
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: all child stories and tasks are Complete and the feature's 'Close when' criteria are met by the shipped work (see 'As built'), so the feature is Done.

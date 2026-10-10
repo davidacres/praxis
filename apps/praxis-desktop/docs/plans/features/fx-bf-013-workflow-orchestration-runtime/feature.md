@@ -1,5 +1,5 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
@@ -8,7 +8,7 @@ slug: workflow-orchestration-runtime
 title: Workflow orchestration runtime
 status: Done
 owner: Electron desktop app
-updated: 2026-09-02
+updated: 2026-10-10
 issues: docs/issues/features/fx-bf-013-workflow-orchestration-runtime/feature-issues.md
 stories: [FX-BE-024, FX-BE-025, FX-BE-026]
 validation: [npm run check-types, npm run build, npm run test:core, npm run test:desktop]
@@ -68,3 +68,5 @@ re-running completed stages, and the monitor reflects every transition live.
 
 
 ## Comments
+
+**2026-10-10:** Status rollup corrected during backlog review: all child stories and tasks are Complete and the feature's 'Close when' criteria are met by the shipped work (see 'As built'), so the feature is Done.

@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T10:59:12.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Workflow Library and Designer
 status: Done
 feature: FX-BF-014
 issue: docs/issues/features/fx-bf-014-workflow-experience/stories/fx-be-028-library-and-designer/issue.md
-updated: 2026-09-02
+updated: 2026-10-10
 tasks: ['TASK-123', 'TASK-124', 'TASK-125']
 dependencies: [FX-BE-027]
 validation: [npm run check-types, npm run build:renderer, npm run build:desktop, npm run test:desktop]
@@ -96,4 +96,4 @@ Reworked so the shell does the heavy lifting:
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: every task under this story is already Complete, so the story is Done.

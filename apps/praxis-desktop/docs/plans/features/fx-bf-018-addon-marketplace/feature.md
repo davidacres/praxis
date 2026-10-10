@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 To Do
+**Status:** In Progress
 **Created:** 2026-09-06T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-018
 slug: addon-marketplace
 title: Add-on marketplace
-status: Done
+status: In Progress
 owner: Electron desktop app
-updated: 2026-09-25
+updated: 2026-10-10
 stories: [FX-BE-042]
 validation: [npm run check-types, npm run test:core, npm run test:desktop, npm run test:desktop:themes]
 ---
@@ -123,3 +123,5 @@ now show Done, and the underlying delivery is present in the tree (see the
 per-story review comments for file-level evidence). Validation commands from
 the stories (`npm run check-types`, `npm run test:core`) were not rerun as
 part of this review.
+
+**2026-10-10:** Status corrected during backlog review: not 'To Do' — the core engine, host wiring, renderer integration, 49 unit tests and 5 e2e specs are built (see As built). Only the Open items remain: live-registry agent add-on proof, token fallback to a GitHub connection, and a published example add-on.

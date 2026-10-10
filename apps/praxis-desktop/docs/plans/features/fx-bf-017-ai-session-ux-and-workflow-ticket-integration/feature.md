@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-05T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
@@ -8,7 +8,7 @@ slug: ai-session-ux-and-workflow-ticket-integration
 title: AI session UX and workflow ticket integration
 status: Done
 owner: Electron desktop app
-updated: 2026-09-06
+updated: 2026-10-10
 issues: docs/issues/features/fx-bf-017-ai-session-ux-and-workflow-ticket-integration/feature-issues.md
 stories: [FX-BE-037, FX-BE-038, FX-BE-039, FX-BE-040, FX-BE-041]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -97,4 +97,4 @@ ACP mode/commands chips, the spend report, and the command-palette issue search.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

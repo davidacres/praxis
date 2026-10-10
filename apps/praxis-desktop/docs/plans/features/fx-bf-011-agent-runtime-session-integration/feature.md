@@ -1,5 +1,5 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.982Z
 **Type:** Feature
 **Priority:** Medium
@@ -8,7 +8,7 @@ slug: agent-runtime-session-integration
 title: Agent runtime and session integration
 status: Done
 owner: Electron desktop app
-updated: 2026-09-03
+updated: 2026-10-10
 issues: docs/issues/features/fx-bf-011-agent-runtime-session-integration/feature-issues.md
 stories: [FX-BE-015, FX-BE-016, FX-BE-017]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -114,4 +114,4 @@ Reworked to the one idiom:
 
 ## Comments
 
-
+**2026-10-10:** Status rollup corrected during backlog review: all child stories and tasks are Complete and the feature's 'Close when' criteria are met by the shipped work (see 'As built'), so the feature is Done.

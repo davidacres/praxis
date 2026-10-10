@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-05T07:33:00.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Verify and harden the ticket-to-agent flow
 status: Done
 feature: FX-BF-015
 issue: docs/issues/features/fx-bf-015-session-review-cost-and-correction/stories/fx-be-031-verify-and-harden-ticket-to-agent/issue.md
-updated: 2026-09-05
+updated: 2026-10-10
 commits: [14326bf, aa271de, b42a6ea, 3ae1789, c9e9463]
 dependencies: [FX-BF-011]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -77,4 +77,4 @@ the other.
 
 ## Comments
 
-
+**2026-10-10:** Closed during backlog review: all items in this feature are delivered and recorded as Complete in its Items table / 'As built' notes; the header status had not been rolled up.

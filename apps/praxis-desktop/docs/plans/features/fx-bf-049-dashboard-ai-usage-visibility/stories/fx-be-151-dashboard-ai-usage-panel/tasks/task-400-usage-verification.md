@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-03T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-400
 type: Task
-status: Backlog
+status: Done
 created: 2026-10-03
 priority: High
 ---
@@ -57,3 +57,5 @@ changed and why, and which manual interactions verified the panel.
 
 
 ## Comments
+
+**2026-10-10:** Closed during backlog review: the Overview AI usage panel, core aggregation (aiUsageStats), IPC summary, Settings model breakdown (UsageModelBreakdown) and e2e coverage (overviewAiUsage.spec.ts, aiUsageDashboardRedesign.spec.ts) are all in the tree.

@@ -1,5 +1,5 @@
 ---
-**Status:** 📋 Proposed
+**Status:** Blocked
 **Created:** 2026-09-05T07:33:00.000Z
 **Type:** Story
 **Priority:** Medium
@@ -9,7 +9,7 @@ title: Signed auto-update
 status: blocked
 feature: FX-BF-016
 issue: docs/issues/features/fx-bf-016-packaging-github-backend-and-agent-proof/stories/fx-be-034-signed-auto-update/issue.md
-updated: 2026-09-05
+updated: 2026-10-10
 commits: [30ead0b]
 dependencies: []
 validation: [npm run build]
@@ -57,4 +57,4 @@ A user installs a signed build once and it updates itself from then on.
 
 ## Comments
 
-
+**2026-10-10:** Status corrected during backlog review: still valid but cannot proceed until the project owner supplies Apple/Windows signing credentials. Frontmatter already said blocked.
