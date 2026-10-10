@@ -216,50 +216,80 @@ export function EasyModeSessionCard({
       }}
     >
       <div className="easymode-session-card__head">
-        {isRunning ? (
-          <span className="harmonic-pulse-glyph" aria-hidden="true" />
-        ) : session.state === 'completed' ? (
-          <Icon name="check" size={13} className="completed-glyph" />
-        ) : session.state === 'failed' || session.state === 'aborted' ? (
-          <Icon name="warning" size={13} className="failed-glyph" />
-        ) : providers.length === 0 ? (
-          <Icon name="robot" size={13} />
-        ) : null}
-        {providers.length > 0 && (
-          <SessionAiIcons providers={providers} size={14} className="easymode-session-ai-icons" />
-        )}
-        {editing ? (
-          <input
-            className="session-title-input"
-            data-testid={`easymode-session-title-input-${session.issueKey}`}
-            aria-label={`Session title for ${title}`}
-            value={draft}
-            disabled={isBusy}
-            autoFocus
-            onClick={e => e.stopPropagation()}
-            onChange={e => setDraft(e.target.value)}
-            onBlur={() => void commitRename()}
-            onKeyDown={e => {
-              e.stopPropagation();
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                e.currentTarget.blur();
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                setEditing(false);
-              }
-            }}
-          />
-        ) : (
-          <span className="easymode-session-card__title" title={title}>
-            {title}
-          </span>
-        )}
-        {timeFormatted && (
-          <span className="easymode-session-card__time">
-            {timeFormatted}
-          </span>
-        )}
+        <Icon name="chats" size={13} className="easymode-session-card__type-icon" />
+
+        <div className="easymode-session-card__content">
+          <div className="easymode-session-card__title-row">
+            {editing ? (
+              <input
+                className="session-title-input"
+                data-testid={`easymode-session-title-input-${session.issueKey}`}
+                aria-label={`Session title for ${title}`}
+                value={draft}
+                disabled={isBusy}
+                autoFocus
+                onClick={e => e.stopPropagation()}
+                onChange={e => setDraft(e.target.value)}
+                onBlur={() => void commitRename()}
+                onKeyDown={e => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setEditing(false);
+                  }
+                }}
+              />
+            ) : (
+              <span className="easymode-session-card__title" title={title}>
+                {title}
+              </span>
+            )}
+            {timeFormatted && (
+              <span className="easymode-session-card__time">
+                {timeFormatted}
+              </span>
+            )}
+          </div>
+
+          <div className="easymode-session-card__subtitle">
+            {providers.length > 0 && (
+              <SessionAiIcons providers={providers} size={12} className="easymode-session-ai-icons" />
+            )}
+            {session.model && (
+              <span className="easymode-session-card__model-tag" data-testid={`easymode-session-model-${session.issueKey}`}>
+                {session.model}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="easymode-session-card__status-col">
+          {session.state === 'awaiting_approval' || session.state === 'awaiting_input' ? (
+            <span
+              className="easymode-gate-symbol"
+              title={`Action Gate: ${session.state === 'awaiting_approval' ? 'Approval required' : 'Input required'}`}
+              aria-label={`Action Gate: ${session.state === 'awaiting_approval' ? 'Approval required' : 'Input required'}`}
+            >
+              <Icon name="warning" size={12} className="warning-glyph" />
+            </span>
+          ) : isRunning ? (
+            <span className="harmonic-pulse-glyph" aria-hidden="true" title="Running" />
+          ) : session.state === 'completed' ? (
+            <span title="Completed" className="completed-glyph">
+              <Icon name="check" size={12} />
+            </span>
+          ) : session.state === 'failed' || session.state === 'aborted' ? (
+            <span title="Failed" className="failed-glyph">
+              <Icon name="close" size={12} />
+            </span>
+          ) : (
+            <span className="easymode-status easymode-status--idle" title="Idle" />
+          )}
+        </div>
+
         <div className="easymode-card-actions">
           {isRunning && (
             <button
@@ -339,13 +369,6 @@ export function EasyModeSessionCard({
         <div className="easymode-session-card__ticker" title={tickerText}>
           <span className="easymode-ticker-dot" />
           <span className="easymode-ticker-text">{tickerText}</span>
-        </div>
-      )}
-
-      {/* A lone agent repeats the card title, so only show the tree once there are subagents under it. */}
-      {agentItems.length === 1 && session.model && (
-        <div className="easymode-session-card__meta" data-testid={`easymode-session-model-${session.issueKey}`}>
-          {session.model}
         </div>
       )}
 

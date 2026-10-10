@@ -474,6 +474,19 @@ class AppStore extends ChangeNotifier {
   @visibleForTesting
   void setConnectionForTesting(ShellConnection phase) => _setPhase(phase);
 
+  @visibleForTesting
+  void setWorkForTesting(List<WorkItem> items) {
+    work = items;
+    _changed();
+  }
+
+  @visibleForTesting
+  void setWorkflowRunsForTesting(List<RunSnapshot> runs) {
+    workflowRuns = runs;
+    runsSupported = true;
+    _changed();
+  }
+
   // ---------------------------------------------------------------- derived
 
   SessionSnapshot? sessionFor(String sessionId) => _snapshots[sessionId];
@@ -1159,7 +1172,10 @@ class AppStore extends ChangeNotifier {
   // ---------------------------------------------------------------- actions
 
   Map<String, Object?> _target([Map<String, String?> extra = const {}]) {
-    final session = _snapshots[extra['sessionId']];
+    final targetSessionId = extra['sessionId'];
+    final session = targetSessionId != null
+        ? (_snapshots[targetSessionId] ?? _snapshots.values.where((s) => s.sessionKey == targetSessionId).firstOrNull)
+        : null;
     // Existing sessions carry their own scope; a standalone conversation must
     // not inherit the project currently selected for workflows and new sessions.
     final projectId = session != null ? session.projectId : _projectId;

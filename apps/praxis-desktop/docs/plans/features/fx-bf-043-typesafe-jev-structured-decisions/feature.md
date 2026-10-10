@@ -59,7 +59,10 @@ hand-maintained rules. Candidate sites (verify each still exists before starting
 | Stage failure triage (real failure vs environment vs provider limit) | `classifyCheckEnvironmentFailure` (core), `isProviderLimitError` | Deliberately narrow signatures | **High**: a false "environment" pauses and hides a real failure |
 | Choosing a workflow edge (success / failure / always) | workflow orchestrator | Deterministic | Medium |
 
-The first is the recommended trial: cheapest to test, lowest blast radius.
+The first is the cheapest trial. **The one most likely to be worth shipping is the
+retry decision** (the second row, framed as "should this failed stage be retried?"):
+today that call is mostly a person reading a log. The spike's primary target is that
+decision, with its evidence bar defined in `TASK-439`.
 
 ## Design constraints for any future integration
 
@@ -177,7 +180,10 @@ hand-maintained rules. Candidate sites (verify each still exists before starting
 | Stage failure triage (real failure vs environment vs provider limit) | `classifyCheckEnvironmentFailure` (core), `isProviderLimitError` | Deliberately narrow signatures | **High**: a false "environment" pauses and hides a real failure |
 | Choosing a workflow edge (success / failure / always) | workflow orchestrator | Deterministic | Medium |
 
-The first is the recommended trial: cheapest to test, lowest blast radius.
+The first is the cheapest trial. **The one most likely to be worth shipping is the
+retry decision** (the second row, framed as "should this failed stage be retried?"):
+today that call is mostly a person reading a log. The spike's primary target is that
+decision, with its evidence bar defined in `TASK-439`.
 
 ## Design constraints for any future integration
 
@@ -239,3 +245,8 @@ production code ships under this feature until a go decision exists.
 
 
 ## Comments
+
+**2026-10-10** — The spike's primary target is now the retry decision for failed
+workflow stages, judged by estimated human interventions removed against a bar fixed
+before the run. Design and bar: `FX-BE-136` (Description, Comments) and `TASK-439`.
+This feature stays parked; the go / no-go still depends on the spike's report.

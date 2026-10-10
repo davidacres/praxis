@@ -279,11 +279,7 @@ export function EasyModeAutomationsList({
                 }
               }}
             >
-              <span
-                className={`easymode-status ${statusClass}`}
-                aria-label={`Status: ${statusLabel}`}
-                title={statusLabel}
-              />
+              <Icon name="play" size={13} className="easymode-automation-row__type-icon" />
               <div className="easymode-automation-row__details">
                 <div className="easymode-automation-row__head-row">
                   {editingRunId === run.runId ? (
@@ -324,15 +320,29 @@ export function EasyModeAutomationsList({
                     </span>
                   )}
                 </div>
-                <span className="easymode-automation-row__project" title={project.name}>
-                  {project.name}
-                </span>
+                <div className="easymode-automation-row__sub-row">
+                  <span className="easymode-automation-row__project" title={project.name}>
+                    {project.name}
+                  </span>
+                  {activeStage?.chosenModel && (
+                    <span className="easymode-automation-row__model">
+                      {activeStage.chosenModel}
+                    </span>
+                  )}
+                </div>
               </div>
               {timeFormatted && (
                 <span className="easymode-automation-row__time">
                   {timeFormatted}
                 </span>
               )}
+              <div className="easymode-automation-row__status-col">
+                <span
+                  className={`easymode-status ${statusClass}`}
+                  aria-label={`Status: ${statusLabel}`}
+                  title={statusLabel}
+                />
+              </div>
               {hasStages && (
                 <button
                   type="button"

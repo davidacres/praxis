@@ -5,18 +5,32 @@ import '../app/connection.dart';
 import '../app/diagnostics.dart';
 import '../app/store.dart';
 import '../app/theme.dart';
+import '../core/models.dart';
+import '../core/palette.dart';
 import '../core/time.dart';
 import '../core/workflow_runs.dart';
+import 'app_icon.dart';
 import 'kit.dart';
-import 'wordmark.dart';
+import 'provider_brand_logo.dart';
 
 enum _SettingsPage { server, permissions, app }
 
-const _routes = [('desktops', '⌁', 'Desktops'), ('attention', '!', 'Attention'), ('activity', '⌁', 'Activity')];
+/// The desktop easy-mode filter rail: everything, what is moving, what is waiting on a person.
+enum _Filter { all, live, gates }
+
+/// Finished sessions shown before the rest fold behind "Show more", as on the desktop.
+const _collapsedSessionLimit = 5;
+
+bool _workIsLive(WorkItem item) => item.draft || item.status == 'active' || item.status == 'awaiting-input';
+bool _workIsGate(WorkItem item) => !item.draft && item.status == 'awaiting-input';
+bool _runIsLive(RunSnapshot run) => run.status == 'running' || run.status == 'awaiting-approval';
+bool _runIsGate(RunSnapshot run) => run.status == 'awaiting-approval' || run.stages.any((stage) => stage.lane == 'awaiting');
+
+const _routes = [('desktops', 'server', 'Desktops'), ('attention', 'warning', 'Attention'), ('activity', 'radio-tower', 'Activity')];
 const _settings = [
-  (_SettingsPage.server, '⌁', 'Desktop connection', 'Connection and host details'),
-  (_SettingsPage.permissions, '◇', 'Permissions', 'What the desktop allows this phone'),
-  (_SettingsPage.app, '⚙', 'App settings', 'Appearance and notifications'),
+  (_SettingsPage.server, 'server', 'Desktop connection', 'Connection and host details'),
+  (_SettingsPage.permissions, 'shield', 'Permissions', 'What the desktop allows this phone'),
+  (_SettingsPage.app, 'gear', 'App settings', 'Appearance and notifications'),
 ];
 
 ({String label, Tone tone}) _connectionText(ShellConnection connection) => switch (connection) {
@@ -44,6 +58,8 @@ class AppSidebar extends StatefulWidget {
 
 class _AppSidebarState extends State<AppSidebar> {
   _SettingsPage? _page;
+  _Filter _filter = _Filter.all;
+  bool _showAllSessions = false;
 
   @override
   void didUpdateWidget(AppSidebar oldWidget) {
@@ -55,7 +71,7 @@ class _AppSidebarState extends State<AppSidebar> {
   Widget build(BuildContext context) {
     final p = context.p;
     final media = MediaQuery.of(context);
-    final width = (media.size.width * 0.88).clamp(0.0, 370.0);
+    final width = (media.size.width * 0.85).clamp(0.0, 340.0);
     return IgnorePointer(
       ignoring: !widget.visible,
       child: AnimatedOpacity(
@@ -99,28 +115,20 @@ class _AppSidebarState extends State<AppSidebar> {
     final p = t.palette;
     final stageKeys = runStageSessionKeys(store.workflowRuns);
     final visible = store.work.where((item) => item.draft || (!stageKeys.contains(item.workId) && !isStageSessionKey(item.workId, item.runId))).toList();
-    // The desktop's rule: a conversation belongs to no project, run or stage.
-    final conversations = visible.where((item) => item.draft || ((item.projectId ?? '').isEmpty && (item.runId ?? '').isEmpty)).toList();
-    final sessions = visible.where((item) => !conversations.contains(item)).toList();
+    final allRuns = store.runsSupported ? store.workflowRuns : const <RunSnapshot>[];
+    final counts = {
+      _Filter.all: visible.length + allRuns.length,
+      _Filter.live: visible.where(_workIsLive).length + allRuns.where(_runIsLive).length,
+      _Filter.gates: visible.where(_workIsGate).length + allRuns.where(_runIsGate).length,
+    };
+    final sessions = visible.where((item) => switch (_filter) { _Filter.all => true, _Filter.live => _workIsLive(item), _Filter.gates => _workIsGate(item) }).toList();
+    final runs = allRuns.where((run) => switch (_filter) { _Filter.all => true, _Filter.live => _runIsLive(run), _Filter.gates => _runIsGate(run) }).toList();
+    // Live, waiting and open sessions always stay; the cap only trims the finished tail.
+    final shownSessions = _showAllSessions
+        ? sessions
+        : [for (final (index, item) in sessions.indexed) if (index < _collapsedSessionLimit || _workIsLive(item) || store.openWorkId == item.workId) item];
+    final hiddenSessions = sessions.length - shownSessions.length;
     final unresolved = store.attention.where((item) => !item.resolved).length;
-
-    Widget workRow(WorkItem item) => _NavRow(
-      icon: item.draft
-          ? '＋'
-          : (item.status == 'active' || item.status == 'awaiting-input')
-          ? '●'
-          : '✓',
-      label: item.title,
-      caption: item.draft
-          ? 'Draft · not sent yet'
-          : '${item.mode == 'chat' ? '' : '${item.mode[0].toUpperCase()}${item.mode.substring(1)} · '}${item.status}${item.model != null ? ' · ${item.model}' : ''}',
-      active: store.openWorkId == item.workId,
-      onTap: () {
-        store.setRoute('work');
-        store.openWork(item.workId);
-        widget.onClose();
-      },
-    );
 
     void navigate(String route) {
       store.setRoute(route);
@@ -128,68 +136,288 @@ class _AppSidebarState extends State<AppSidebar> {
       widget.onClose();
     }
 
+    final projectName = store.project.name.isNotEmpty
+        ? store.project.name
+        : (store.selectedDesktop?.name ?? (store.host.hostName.isNotEmpty ? store.host.hostName : 'Praxis'));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Horizon Bar: Workspace Anchor (matching EasyMode horizon-bar)
         Container(
-          constraints: const BoxConstraints(minHeight: 68),
-          padding: const EdgeInsets.symmetric(horizontal: 15),
+          padding: EdgeInsets.fromLTRB(t.s(10), t.s(8), t.s(8), t.s(8)),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: p.border)),
+            color: p.bgSunken,
+            border: Border(bottom: BorderSide(color: p.border.withValues(alpha: 0.7))),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const PraxisWordmark(width: 102, height: 32),
-              const Spacer(),
-              Pressable(
-                label: 'Close navigation',
-                onTap: widget.onClose,
-                excludeChildSemantics: true,
-                builder: (context, _) => SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: Center(
-                    child: Text(
-                      '×',
-                      style: ts(context, 22, scaled: false, weight: FontWeight.w300, color: p.textDim),
+              Row(
+                children: [
+                  // Folder icon + project / workspace name
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AppIcon('folder', size: 14, color: p.accent),
+                        SizedBox(width: t.s(6)),
+                        Flexible(
+                          child: Text(
+                            projectName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: ts(context, 12.5, weight: FontWeight.w600, color: p.text),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
+                  SizedBox(width: t.s(6)),
+                  // EasyMode compact + New session button
+                  Pressable(
+                    label: 'New session',
+                    onTap: () {
+                      store.startNewChat();
+                      widget.onClose();
+                    },
+                    excludeChildSemantics: true,
+                    builder: (context, pressed) => Container(
+                      height: t.s(24),
+                      padding: EdgeInsets.symmetric(horizontal: t.s(7)),
+                      decoration: BoxDecoration(
+                        color: pressed ? p.surfaceRaised : p.surface,
+                        borderRadius: BorderRadius.circular(t.s(4)),
+                        border: Border.all(color: pressed ? p.accent : p.border),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AppIcon('plus', size: 10, color: p.text),
+                          SizedBox(width: t.s(3)),
+                          Text('New', style: ts(context, 10.5, weight: FontWeight.w500, color: p.text)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: t.s(4)),
+                  // Close button
+                  Pressable(
+                    label: 'Close navigation',
+                    onTap: widget.onClose,
+                    excludeChildSemantics: true,
+                    builder: (context, pressed) => Container(
+                      width: t.s(24),
+                      height: t.s(24),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: pressed ? p.surfaceRaised : Colors.transparent,
+                        borderRadius: BorderRadius.circular(t.s(4)),
+                      ),
+                      child: AppIcon('close', size: 12, color: p.textDim),
+                    ),
+                  ),
+                ],
               ),
+              if (store.desktopLabel.isNotEmpty && store.desktopLabel != projectName) ...[
+                SizedBox(height: t.s(4)),
+                Row(
+                  children: [
+                    Container(
+                      width: 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: store.connection == ShellConnection.ready ? p.ok : p.warn,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    SizedBox(width: t.s(5)),
+                    Expanded(
+                      child: Text(
+                        '${store.desktopLabel} · ${store.connection == ShellConnection.ready ? 'connected' : 'offline'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ts(context, 10, family: monospace, color: p.textDim),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
+
+        // Micro Filter Rail (All / Live / Gates)
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: t.s(8), vertical: t.s(5)),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: p.border.withValues(alpha: 0.5))),
+          ),
+          child: Row(
+            children: [
+              for (final filter in _Filter.values) ...[
+                if (filter != _Filter.all) SizedBox(width: t.s(3)),
+                _EasyFilterTab(
+                  label: '${filter.name[0].toUpperCase()}${filter.name.substring(1)}',
+                  count: counts[filter] ?? 0,
+                  active: _filter == filter,
+                  onTap: () => setState(() {
+                    _filter = filter;
+                    _showAllSessions = false;
+                  }),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        // Scrollable Feed
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 24),
+            padding: EdgeInsets.fromLTRB(t.s(6), t.s(6), t.s(6), t.s(16)),
             children: [
-              Pressable(
-                label: 'New chat',
-                onTap: () {
+              // Sessions Section
+              _EasySectionHeader(
+                title: 'SESSIONS',
+                count: sessions.length,
+                onAdd: () {
                   store.startNewChat();
                   widget.onClose();
                 },
-                excludeChildSemantics: true,
-                builder: (context, pressed) => Container(
-                  height: t.s(44),
-                  decoration: BoxDecoration(
-                    color: pressed ? p.accentMuted : p.accentSoft,
-                    borderRadius: BorderRadius.circular(t.s(10)),
-                    border: Border.all(color: p.accent),
+              ),
+              if (sessions.isEmpty)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(t.s(8), t.s(4), t.s(8), t.s(10)),
+                  child: Text(
+                    _filter != _Filter.all
+                        ? 'Nothing matches this filter.'
+                        : store.access.value?.projects.isNotEmpty == true
+                        ? 'This phone has project-only access. Sessions require desktop-wide access in Desktop Settings → Mobile access.'
+                        : 'No sessions yet. Start one with + New.',
+                    style: ts(context, 11, lineHeight: 16, color: p.textDim),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('＋', style: ts(context, 16, scaled: false, lineHeight: 18, color: p.accent)),
-                      SizedBox(width: t.s(8)),
-                      Text('New chat', style: ts(context, 13, weight: FontWeight.w700, color: p.text)),
-                    ],
+                )
+              else ...[
+                for (final item in shownSessions)
+                  Padding(
+                    padding: EdgeInsets.only(bottom: t.s(4)),
+                    child: _EasyModeSessionCardWidget(
+                      item: item,
+                      active: store.openWorkId == item.workId,
+                      onTap: () {
+                        store.setRoute('work');
+                        store.openWork(item.workId);
+                        widget.onClose();
+                      },
+                    ),
+                  ),
+              ],
+              if (hiddenSessions > 0 || (_showAllSessions && sessions.length > _collapsedSessionLimit))
+                Pressable(
+                  label: _showAllSessions ? 'Show fewer sessions' : 'Show $hiddenSessions more sessions',
+                  onTap: () => setState(() => _showAllSessions = !_showAllSessions),
+                  excludeChildSemantics: true,
+                  builder: (context, pressed) => Container(
+                    height: t.s(30),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _showAllSessions ? 'Show fewer' : 'Show $hiddenSessions more',
+                      style: ts(context, 11, weight: FontWeight.w500, color: pressed ? p.text : p.textDim),
+                    ),
                   ),
                 ),
-              ),
+
+              // Runs Section
+              if (store.runsSupported) ...[
+                SizedBox(height: t.s(8)),
+                _EasySectionHeader(
+                  title: 'RUNS',
+                  count: runs.length,
+                  onAdd: store.workflows.isNotEmpty
+                      ? () {
+                          // Start the first available workflow or open chat
+                          store.startNewChat();
+                          widget.onClose();
+                        }
+                      : null,
+                ),
+                if (runs.isEmpty) ...[
+                  if (store.workflows.isNotEmpty && _filter == _Filter.all) ...[
+                    // Compact Launchpad matching desktop EasyMode
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(t.s(6), t.s(2), t.s(6), t.s(8)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Start a run', style: ts(context, 10, weight: FontWeight.w600, color: p.textDim)),
+                          SizedBox(height: t.s(4)),
+                          Wrap(
+                            spacing: t.s(4),
+                            runSpacing: t.s(4),
+                            children: [
+                              for (final wf in store.workflows.take(3))
+                                Pressable(
+                                  label: 'Start ${wf.name}',
+                                  onTap: () {
+                                    store.startWorkflow(wf.workflowId, 'Start ${wf.name}');
+                                    widget.onClose();
+                                  },
+                                  excludeChildSemantics: true,
+                                  builder: (context, pressed) => Container(
+                                    padding: EdgeInsets.symmetric(horizontal: t.s(8), vertical: t.s(4)),
+                                    decoration: BoxDecoration(
+                                      color: pressed ? p.surfaceRaised : p.surface,
+                                      borderRadius: BorderRadius.circular(t.s(4)),
+                                      border: Border.all(color: p.border),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        AppIcon('play', size: 9, color: p.accent),
+                                        SizedBox(width: t.s(5)),
+                                        Text(wf.name, style: ts(context, 11, weight: FontWeight.w500, color: p.text)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(t.s(8), t.s(4), t.s(8), t.s(8)),
+                      child: Text(
+                        _filter != _Filter.all ? 'Nothing matches this filter.' : 'No runs in this project yet.',
+                        style: ts(context, 11, lineHeight: 16, color: p.textDim),
+                      ),
+                    ),
+                ] else
+                  for (final run in runs)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: t.s(4)),
+                      child: _EasyModeRunCardWidget(
+                        run: run,
+                        active: store.openRunId == run.runId,
+                        onTap: () {
+                          store.openRun(run.runId);
+                          widget.onClose();
+                        },
+                        onSelectStageSession: (stageSessionKey) {
+                          store.setRoute('work');
+                          store.openWork(stageSessionKey);
+                          widget.onClose();
+                        },
+                      ),
+                    ),
+              ],
+
+              // Navigation & Detail Sections
+              SizedBox(height: t.s(12)),
               const _SectionLabel('NAVIGATION'),
               for (final route in _routes)
-                _NavRow(
+                _EasyNavRow(
                   icon: route.$2,
                   label: route.$3,
                   active: store.primaryRoute == route.$1 && store.openWorkId == null && store.openRunId == null,
@@ -203,56 +431,16 @@ class _AppSidebarState extends State<AppSidebar> {
                     }
                   },
                 ),
-              _SectionHeading(label: 'CONVERSATIONS', trailing: Padding(padding: const EdgeInsets.only(top: 8, right: 8), child: _count(context, conversations.length))),
-              if (conversations.isEmpty)
-                Padding(
-                  padding: EdgeInsets.fromLTRB(t.s(8), 0, t.s(8), t.s(6)),
-                  child: Text(store.access.value?.projects.isNotEmpty == true ? 'This phone has project-only access. Conversations require desktop-wide access in Desktop Settings → Mobile access.' : 'No conversations yet. Start one with New chat.', style: ts(context, 11, lineHeight: 16, color: p.textDim)),
-                )
-              else
-                for (final item in conversations) workRow(item),
-              _SectionHeading(label: 'SESSIONS', trailing: Padding(padding: const EdgeInsets.only(top: 8, right: 8), child: _count(context, sessions.length))),
-              if (sessions.isEmpty)
-                Padding(
-                  padding: EdgeInsets.fromLTRB(t.s(8), 0, t.s(8), t.s(6)),
-                  child: Text('No project or ticket sessions yet.', style: ts(context, 11, lineHeight: 16, color: p.textDim)),
-                )
-              else
-                for (final item in sessions) workRow(item),
-              if (store.runsSupported) ...[
-                _SectionHeading(
-                  label: 'AUTOMATIONS',
-                  trailing: Padding(padding: const EdgeInsets.only(top: 8, right: 8), child: _count(context, store.workflowRuns.length)),
-                ),
-                if (store.workflowRuns.isEmpty)
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(t.s(8), 0, t.s(8), t.s(6)),
-                    child: Text(
-                      'No automations in this project yet. Start one from a chat’s workflow menu or on the desktop.',
-                      style: ts(context, 11, lineHeight: 16, color: p.textDim),
-                    ),
-                  )
-                else
-                  for (final run in store.workflowRuns)
-                    _NavRow(
-                      icon: runStatus(run).icon,
-                      label: run.workflowName,
-                      caption: runCaption(run),
-                      active: store.openRunId == run.runId,
-                      onTap: () {
-                        store.openRun(run.runId);
-                        widget.onClose();
-                      },
-                    ),
-              ],
+
               if (store.openWorkId != null) ...[
+                SizedBox(height: t.s(6)),
                 const _SectionLabel('THIS SESSION'),
                 Row(
                   children: [
                     for (final view in const ['chat', 'progress', 'changes']) ...[
-                      if (view != 'chat') const SizedBox(width: 6),
+                      if (view != 'chat') SizedBox(width: t.s(4)),
                       Expanded(
-                        child: _ViewTab(
+                        child: _EasySubTab(
                           label: '${view[0].toUpperCase()}${view.substring(1)}',
                           active: store.detail == view,
                           onTap: () {
@@ -266,56 +454,898 @@ class _AppSidebarState extends State<AppSidebar> {
                   ],
                 ),
               ],
+
+              SizedBox(height: t.s(6)),
               const _SectionLabel('SETTINGS'),
               for (final item in _settings)
-                _NavRow(icon: item.$2, label: item.$3, caption: item.$4, drillsIn: true, onTap: () => setState(() => _page = item.$1)),
+                _EasyNavRow(
+                  icon: item.$2,
+                  label: item.$3,
+                  caption: item.$4,
+                  drillsIn: true,
+                  onTap: () => setState(() => _page = item.$1),
+                ),
             ],
           ),
         ),
+
+        // Sidebar Footer
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          padding: EdgeInsets.symmetric(horizontal: t.s(14), vertical: t.s(10)),
           decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: p.border)),
+            border: Border(top: BorderSide(color: p.border.withValues(alpha: 0.7))),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Local connection · Noise IK encrypted', style: ts(context, 10, scaled: false, color: p.textDim)),
-              Text(store.hostInfo != null ? 'rev ${store.hostInfo!.surfaceRevision}' : 'rev 1', style: ts(context, 10, scaled: false, color: p.textDim)),
+              Expanded(
+                child: Text(
+                  'Local connection · Noise IK encrypted',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ts(context, 10, scaled: false, color: p.textDim),
+                ),
+              ),
+              SizedBox(width: t.s(8)),
+              Text(
+                store.hostInfo != null ? 'rev ${store.hostInfo!.surfaceRevision}' : 'rev 1',
+                style: ts(context, 10, scaled: false, color: p.textDim),
+              ),
             ],
           ),
         ),
       ],
     );
   }
-
-  Widget _count(BuildContext context, int count) => Text('$count', style: ts(context, 10, scaled: false, color: context.p.textDim));
 }
 
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
-  final String text;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(context.t.s(8), context.t.s(14), context.t.s(8), context.t.s(6)),
-    child: Text(
-      text,
-      style: ts(context, 10, weight: FontWeight.w700, letterSpacing: 0.9, color: context.p.textDim),
-    ),
-  );
-}
+/// Compact EasyMode filter tab button with inline count pill.
+class _EasyFilterTab extends StatelessWidget {
+  const _EasyFilterTab({
+    required this.label,
+    required this.count,
+    required this.active,
+    required this.onTap,
+  });
 
-class _SectionHeading extends StatelessWidget {
-  const _SectionHeading({required this.label, required this.trailing});
   final String label;
-  final Widget trailing;
+  final int count;
+  final bool active;
+  final VoidCallback onTap;
+
   @override
-  Widget build(BuildContext context) =>
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.center, children: [_SectionLabel(label), trailing]);
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final p = t.palette;
+
+    return Pressable(
+      label: '$label, $count items',
+      selected: active,
+      onTap: onTap,
+      excludeChildSemantics: true,
+      builder: (context, pressed) => Container(
+        padding: EdgeInsets.symmetric(horizontal: t.s(8), vertical: t.s(4)),
+        decoration: BoxDecoration(
+          color: active
+              ? p.surfaceRaised
+              : pressed
+              ? p.surface
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(t.s(4)),
+          border: active ? Border.all(color: p.border) : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: ts(
+                context,
+                11,
+                weight: active ? FontWeight.w600 : FontWeight.w500,
+                color: active ? p.text : p.textDim,
+              ),
+            ),
+            SizedBox(width: t.s(5)),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: t.s(5), vertical: t.s(1)),
+              decoration: BoxDecoration(
+                color: p.bgSunken,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '$count',
+                style: ts(
+                  context,
+                  10,
+                  scaled: false,
+                  family: monospace,
+                  color: active ? p.textSecondary : p.textDim,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _NavRow extends StatelessWidget {
-  const _NavRow({required this.icon, required this.label, this.caption, this.active = false, this.badge, this.drillsIn = false, required this.onTap});
+/// EasyMode Section Header with title, count badge, and compact + button.
+class _EasySectionHeader extends StatelessWidget {
+  const _EasySectionHeader({
+    required this.title,
+    this.count,
+    this.onAdd,
+  });
+
+  final String title;
+  final int? count;
+  final VoidCallback? onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final p = t.palette;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(t.s(6), t.s(8), t.s(4), t.s(4)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: ts(
+                  context,
+                  11,
+                  weight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: p.textDim,
+                ),
+              ),
+              if (count != null) ...[
+                SizedBox(width: t.s(6)),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: t.s(6), vertical: t.s(1)),
+                  decoration: BoxDecoration(
+                    color: p.bgSunken,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: ts(context, 10, scaled: false, color: p.textDim),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (onAdd != null)
+            Pressable(
+              label: 'Add $title',
+              onTap: onAdd,
+              excludeChildSemantics: true,
+              builder: (context, pressed) => Container(
+                width: t.s(22),
+                height: t.s(22),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: pressed ? p.surfaceRaised : Colors.transparent,
+                  borderRadius: BorderRadius.circular(t.s(4)),
+                ),
+                child: AppIcon(
+                  'plus',
+                  size: 11,
+                  color: p.textDim,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Session Card redesigned in EasyMode visual language:
+/// Rounded corners (6px), subtle hover/selected states, status dot/glyph, AI provider icon,
+/// status badge label, title, and warning tone Action Gate callout when waiting for input.
+class _EasyModeSessionCardWidget extends StatelessWidget {
+  const _EasyModeSessionCardWidget({
+    required this.item,
+    required this.active,
+    required this.onTap,
+  });
+
+  final WorkItem item;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final p = t.palette;
+
+    final isRunning = item.status == 'active' || item.status == 'executing' || item.status == 'planning';
+    final isGate = item.status == 'awaiting-input' || item.status == 'awaiting_approval';
+    final isDone = item.status == 'completed' || item.status == 'finished';
+    final isFailed = item.status == 'failed' || item.status == 'aborted';
+
+    // Status glyph indicator (positioned on the right)
+    Widget statusIndicator;
+    if (item.draft) {
+      statusIndicator = SizedBox(
+        width: 14,
+        height: 14,
+        child: Center(child: AppIcon('plus', size: 10, color: p.textDim)),
+      );
+    } else if (isRunning) {
+      statusIndicator = SizedBox(
+        width: 14,
+        height: 14,
+        child: Center(
+          child: Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: p.accent,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: p.accent.withValues(alpha: 0.6),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } else if (isGate) {
+      statusIndicator = SizedBox(
+        width: 14,
+        height: 14,
+        child: Center(
+          child: AppIcon('warning', size: 11, color: p.warn, strokeWidth: 1.4),
+        ),
+      );
+    } else if (isDone) {
+      statusIndicator = SizedBox(
+        width: 14,
+        height: 14,
+        child: Center(
+          child: AppIcon('check', size: 11, color: p.ok, strokeWidth: 1.6),
+        ),
+      );
+    } else if (isFailed) {
+      statusIndicator = SizedBox(
+        width: 14,
+        height: 14,
+        child: Center(
+          child: AppIcon('close', size: 11, color: p.danger, strokeWidth: 1.5),
+        ),
+      );
+    } else {
+      statusIndicator = SizedBox(
+        width: 14,
+        height: 14,
+        child: Center(
+          child: Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: p.textDim, shape: BoxShape.circle),
+          ),
+        ),
+      );
+    }
+
+    final provider = item.provider;
+    final model = item.model;
+    final hasAiSubtitle = (provider != null && provider.isNotEmpty) || (model != null && model.isNotEmpty);
+
+    return Pressable(
+      label: '${item.title}, ${item.status}${provider != null ? ', $provider' : ''}${model != null ? ', $model' : ''}',
+      selected: active,
+      onTap: onTap,
+      excludeChildSemantics: true,
+      builder: (context, pressed) => Container(
+        padding: EdgeInsets.symmetric(horizontal: t.s(6), vertical: t.s(5)),
+        decoration: BoxDecoration(
+          color: active
+              ? (p.dark ? Colors.white.withValues(alpha: 0.15) : p.accentSoft)
+              : pressed
+              ? p.surfaceRaised
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(t.s(5)),
+          border: Border.all(
+            color: active
+                ? p.accent.withValues(alpha: 0.4)
+                : pressed
+                ? p.border
+                : Colors.transparent,
+          ),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Session icon on the left
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: Center(
+                    child: AppIcon(
+                      'chats',
+                      size: 11.5,
+                      color: active ? p.accent : p.textDim,
+                    ),
+                  ),
+                ),
+                SizedBox(width: t.s(6)),
+                // Title
+                Expanded(
+                  child: Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ts(
+                      context,
+                      12.5,
+                      weight: active ? FontWeight.w600 : FontWeight.w500,
+                      color: active ? p.text : p.textSecondary,
+                    ),
+                  ),
+                ),
+                SizedBox(width: t.s(6)),
+                // Status icon on the right
+                statusIndicator,
+              ],
+            ),
+            // AI Provider and Model on a new line below title
+            if (hasAiSubtitle) ...[
+              SizedBox(height: t.s(3)),
+              Padding(
+                padding: EdgeInsets.only(left: 20),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (provider != null && provider.isNotEmpty) ...[
+                      Container(
+                        padding: EdgeInsets.all(t.s(1.5)),
+                        decoration: BoxDecoration(
+                          color: p.bgSunken,
+                          borderRadius: BorderRadius.circular(t.s(3)),
+                          border: Border.all(color: p.border.withValues(alpha: 0.5)),
+                        ),
+                        child: ProviderBrandLogo(provider: provider, size: 10),
+                      ),
+                      SizedBox(width: t.s(4)),
+                    ],
+                    if (model != null && model.isNotEmpty)
+                      Flexible(
+                        child: Text(
+                          model,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: ts(
+                            context,
+                            10,
+                            scaled: false,
+                            family: monospace,
+                            color: active ? p.textSecondary : p.textDim,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// EasyMode Automation/Run card widget matching desktop styling with pipeline gauge & expandable stages.
+class _EasyModeRunCardWidget extends StatefulWidget {
+  const _EasyModeRunCardWidget({
+    required this.run,
+    required this.active,
+    required this.onTap,
+    this.onSelectStageSession,
+  });
+
+  final RunSnapshot run;
+  final bool active;
+  final VoidCallback onTap;
+  final void Function(String sessionKey)? onSelectStageSession;
+
+  @override
+  State<_EasyModeRunCardWidget> createState() => _EasyModeRunCardWidgetState();
+}
+
+class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
+  bool? _manuallyExpanded;
+
+  String _stageLaneLabel(String lane) {
+    return switch (lane) {
+      'idle' => 'Pending',
+      'ready' => 'Ready',
+      'running' => 'Running',
+      'awaiting' => 'Needs review',
+      'done' => 'Completed',
+      'failed' => 'Failed',
+      'skipped' => 'Skipped',
+      'paused' => 'Paused',
+      _ => lane,
+    };
+  }
+
+  String _gaugeGlyph(String lane) {
+    return switch (lane) {
+      'done' => '✓',
+      'running' => '●',
+      'awaiting' => '!',
+      'failed' => '✕',
+      'skipped' => '–',
+      _ => '○',
+    };
+  }
+
+  Color _gaugeSegmentColor(String lane, Palette p) {
+    return switch (lane) {
+      'done' => p.ok,
+      'running' => p.accent,
+      'awaiting' => p.warn,
+      'failed' => p.danger,
+      'skipped' => p.border,
+      _ => p.borderStrong.withValues(alpha: 0.4),
+    };
+  }
+
+  Color _stageDotColor(String lane, Palette p) {
+    return switch (lane) {
+      'done' => p.ok,
+      'running' => p.accent,
+      'awaiting' || 'paused' => p.warn,
+      'failed' => p.danger,
+      _ => p.textDim,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final p = t.palette;
+    final run = widget.run;
+
+    final info = runStatus(run);
+    final isRunning = run.status == 'running';
+    final isGate = run.status == 'awaiting-approval';
+    final hasStages = run.stages.isNotEmpty;
+
+    final activeStage = run.stages.where((s) => s.lane == 'running' || s.lane == 'awaiting').firstOrNull;
+    final isExpanded = _manuallyExpanded ?? (isRunning || isGate || widget.active);
+
+    final provider = run.aiProvider;
+    final hasAiSubtitle = provider != null && provider.isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: widget.active
+            ? (p.dark ? Colors.white.withValues(alpha: 0.08) : p.accentSoft.withValues(alpha: 0.5))
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(t.s(5)),
+        border: Border.all(
+          color: widget.active ? p.accent.withValues(alpha: 0.3) : Colors.transparent,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Pressable(
+            label: '${run.workflowName}, ${run.status}',
+            selected: widget.active,
+            onTap: widget.onTap,
+            excludeChildSemantics: true,
+            builder: (context, pressed) => Container(
+              padding: EdgeInsets.symmetric(horizontal: t.s(6), vertical: t.s(5)),
+              decoration: BoxDecoration(
+                color: pressed ? p.surfaceRaised : Colors.transparent,
+                borderRadius: BorderRadius.circular(t.s(5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Automation icon on the left
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: Center(
+                          child: AppIcon(
+                            'play',
+                            size: 11,
+                            color: p.accent,
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: t.s(6)),
+                      // Workflow Name
+                      Expanded(
+                        child: Text(
+                          run.workflowName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: ts(
+                            context,
+                            12.5,
+                            weight: widget.active ? FontWeight.w600 : FontWeight.w500,
+                            color: widget.active ? p.text : p.textSecondary,
+                          ),
+                        ),
+                      ),
+                      if (activeStage != null && !isGate) ...[
+                        SizedBox(width: t.s(4)),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: t.s(4), vertical: t.s(1)),
+                          decoration: BoxDecoration(
+                            color: p.accent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(t.s(3)),
+                          ),
+                          child: Text(
+                            activeStage.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: ts(context, 9, scaled: false, weight: FontWeight.w600, color: p.accent),
+                          ),
+                        ),
+                      ],
+                      if (hasStages) ...[
+                        SizedBox(width: t.s(2)),
+                        Pressable(
+                          label: isExpanded ? 'Hide stages' : 'Show stages',
+                          onTap: () => setState(() => _manuallyExpanded = !isExpanded),
+                          excludeChildSemantics: true,
+                          builder: (context, expandPressed) => Container(
+                            width: t.s(18),
+                            height: t.s(18),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: expandPressed ? p.surfaceRaised : Colors.transparent,
+                              borderRadius: BorderRadius.circular(t.s(3)),
+                            ),
+                            child: AppIcon(
+                              isExpanded ? 'chevron-down' : 'chevron-right',
+                              size: 11,
+                              color: p.textDim,
+                              strokeWidth: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                      SizedBox(width: t.s(4)),
+                      // Status glyph on the right (shows warning glyph when gate)
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: Center(
+                          child: isGate
+                              ? AppIcon('warning', size: 11, color: p.warn, strokeWidth: 1.4)
+                              : isRunning
+                              ? Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    color: p.accent,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: p.accent.withValues(alpha: 0.6),
+                                        blurRadius: 4,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : run.status == 'succeeded'
+                              ? AppIcon('check', size: 11, color: p.ok, strokeWidth: 1.6)
+                              : run.status == 'failed'
+                              ? AppIcon('close', size: 11, color: p.danger, strokeWidth: 1.5)
+                              : Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(color: p.textDim, shape: BoxShape.circle),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (hasAiSubtitle) ...[
+                    SizedBox(height: t.s(3)),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 20),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(t.s(1.5)),
+                            decoration: BoxDecoration(
+                              color: p.bgSunken,
+                              borderRadius: BorderRadius.circular(t.s(3)),
+                              border: Border.all(color: p.border.withValues(alpha: 0.5)),
+                            ),
+                            child: ProviderBrandLogo(provider: provider, size: 10),
+                          ),
+                          SizedBox(width: t.s(4)),
+                          Text(
+                            provider,
+                            style: ts(context, 10, scaled: false, color: p.textDim),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          // Segmented Pipeline Gauge Rail (matching desktop EasyMode gauge)
+          if (hasStages) ...[
+            Container(
+              margin: EdgeInsets.symmetric(horizontal: t.s(6), vertical: t.s(2)),
+              padding: EdgeInsets.all(t.s(5)),
+              decoration: BoxDecoration(
+                color: p.bgSunken,
+                borderRadius: BorderRadius.circular(t.s(4)),
+                border: Border.all(color: p.border.withValues(alpha: 0.4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Segmented bar
+                  Row(
+                    children: [
+                      for (var i = 0; i < run.stages.length; i++) ...[
+                        if (i > 0) SizedBox(width: t.s(3)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                height: t.s(3.5),
+                                decoration: BoxDecoration(
+                                  color: _gaugeSegmentColor(run.stages[i].lane, p),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              if (run.stages.length <= 4) ...[
+                                SizedBox(height: t.s(3)),
+                                Row(
+                                  children: [
+                                    Text(
+                                      _gaugeGlyph(run.stages[i].lane),
+                                      style: ts(
+                                        context,
+                                        8,
+                                        scaled: false,
+                                        weight: FontWeight.w700,
+                                        color: _stageDotColor(run.stages[i].lane, p),
+                                      ),
+                                    ),
+                                    SizedBox(width: t.s(2)),
+                                    Expanded(
+                                      child: Text(
+                                        run.stages[i].name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: ts(
+                                          context,
+                                          9,
+                                          scaled: false,
+                                          weight: run.stages[i].lane == 'running' || run.stages[i].lane == 'awaiting'
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                          color: run.stages[i].lane == 'running' || run.stages[i].lane == 'awaiting'
+                                              ? p.text
+                                              : p.textDim,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  SizedBox(height: t.s(4)),
+                  // Gauge Meta Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (activeStage != null) ...[
+                              Container(
+                                width: 5,
+                                height: 5,
+                                decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle),
+                              ),
+                              SizedBox(width: t.s(4)),
+                              Flexible(
+                                child: Text(
+                                  '${run.stages.indexOf(activeStage) + 1}/${run.stages.length} ${activeStage.name}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: ts(context, 10, scaled: false, weight: FontWeight.w500, color: p.text),
+                                ),
+                              ),
+                            ] else if (run.status == 'succeeded') ...[
+                              AppIcon('check', size: 10, color: p.ok, strokeWidth: 1.6),
+                              SizedBox(width: t.s(4)),
+                              Text(
+                                'All ${run.stages.length} stages completed',
+                                style: ts(context, 10, scaled: false, color: p.textDim),
+                              ),
+                            ] else ...[
+                              Text(
+                                '${run.stages.length} stages · ${info.label}',
+                                style: ts(context, 10, scaled: false, color: p.textDim),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${run.stages.where((s) => s.lane == 'done').length}/${run.stages.length}',
+                        style: ts(context, 9.5, scaled: false, family: monospace, color: p.textDim),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Nested Stage Rows (expandable, matching EasyMode .easymode-automation-stages)
+          if (hasStages && isExpanded) ...[
+            Container(
+              margin: EdgeInsets.fromLTRB(t.s(6), 0, t.s(6), t.s(3)),
+              padding: EdgeInsets.symmetric(horizontal: t.s(4), vertical: t.s(2)),
+              decoration: BoxDecoration(
+                color: p.bgSunken.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(t.s(4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final stage in run.stages) ...[
+                    Pressable(
+                      label: 'Stage ${stage.name}, ${_stageLaneLabel(stage.lane)}',
+                      onTap: () {
+                        if (stage.sessionKey != null && widget.onSelectStageSession != null) {
+                          widget.onSelectStageSession!(stage.sessionKey!);
+                        } else {
+                          widget.onTap();
+                        }
+                      },
+                      excludeChildSemantics: true,
+                      builder: (context, stagePressed) => Container(
+                        padding: EdgeInsets.symmetric(horizontal: t.s(5), vertical: t.s(2.5)),
+                        decoration: BoxDecoration(
+                          color: stagePressed ? p.surfaceRaised : Colors.transparent,
+                          borderRadius: BorderRadius.circular(t.s(3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: _stageDotColor(stage.lane, p),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            if (stage.provider != null && stage.provider!.isNotEmpty) ...[
+                              SizedBox(width: t.s(4)),
+                              ProviderBrandLogo(provider: stage.provider!, size: 10),
+                            ],
+                            SizedBox(width: t.s(5)),
+                            Expanded(
+                              child: Text(
+                                stage.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: ts(
+                                  context,
+                                  10.5,
+                                  weight: stage.lane == 'running' || stage.lane == 'awaiting'
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: stage.lane == 'running' || stage.lane == 'awaiting' ? p.text : p.textSecondary,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: t.s(4)),
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: Center(
+                                child: stage.lane == 'done'
+                                    ? AppIcon('check', size: 9.5, color: p.ok, strokeWidth: 1.6)
+                                    : stage.lane == 'running'
+                                    ? Container(
+                                        width: 5,
+                                        height: 5,
+                                        decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle),
+                                      )
+                                    : stage.lane == 'awaiting'
+                                    ? AppIcon('warning', size: 9.5, color: p.warn, strokeWidth: 1.4)
+                                    : stage.lane == 'failed'
+                                    ? AppIcon('close', size: 9.5, color: p.danger, strokeWidth: 1.5)
+                                    : Container(
+                                        width: 5,
+                                        height: 5,
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: p.borderStrong, width: 1.1),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Navigation row styled cleanly in EasyMode fashion.
+class _EasyNavRow extends StatelessWidget {
+  const _EasyNavRow({
+    required this.icon,
+    required this.label,
+    this.caption,
+    this.active = false,
+    this.badge,
+    this.drillsIn = false,
+    required this.onTap,
+  });
+
   final String icon;
   final String label;
   final String? caption;
@@ -328,35 +1358,40 @@ class _NavRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.t;
     final p = t.palette;
+
     return Pressable(
       label: caption != null ? '$label, $caption' : label,
       selected: active,
       onTap: onTap,
       excludeChildSemantics: true,
       builder: (context, pressed) => Container(
-        constraints: BoxConstraints(minHeight: t.s(47)),
-        padding: EdgeInsets.symmetric(horizontal: t.s(7), vertical: t.s(6)),
+        constraints: BoxConstraints(minHeight: t.s(36)),
+        padding: EdgeInsets.symmetric(horizontal: t.s(8), vertical: t.s(6)),
         decoration: BoxDecoration(
-          color: pressed
+          color: active
+              ? (p.dark ? Colors.white.withValues(alpha: 0.12) : p.accentSoft)
+              : pressed
               ? p.surfaceRaised
-              : active
-              ? p.accentSoft
-              : null,
-          borderRadius: BorderRadius.circular(t.s(8)),
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(t.s(6)),
+          border: Border.all(
+            color: active ? p.accent.withValues(alpha: 0.35) : Colors.transparent,
+          ),
         ),
         child: Row(
           children: [
-            Container(
-              width: 28,
-              height: 28,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: active ? p.accentMuted : p.surface, borderRadius: BorderRadius.circular(7)),
-              child: Text(
-                icon,
-                style: ts(context, 13, scaled: false, weight: FontWeight.w700, color: active ? p.text : p.textDim),
+            SizedBox(
+              width: 20,
+              child: Center(
+                child: AppIcon(
+                  icon,
+                  size: 13,
+                  color: active ? p.accent : p.textDim,
+                  strokeWidth: 1.3,
+                ),
               ),
             ),
-            SizedBox(width: t.s(9)),
+            SizedBox(width: t.s(8)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,10 +1401,15 @@ class _NavRow extends StatelessWidget {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: ts(context, 13, weight: FontWeight.w600, color: active ? p.text : p.textSecondary),
+                    style: ts(
+                      context,
+                      13,
+                      weight: active ? FontWeight.w600 : FontWeight.w500,
+                      color: active ? p.text : p.textSecondary,
+                    ),
                   ),
                   if (caption != null) ...[
-                    SizedBox(height: t.s(2)),
+                    SizedBox(height: t.s(1)),
                     Text(
                       caption!,
                       maxLines: 1,
@@ -381,19 +1421,20 @@ class _NavRow extends StatelessWidget {
               ),
             ),
             if (badge != null) ...[
-              SizedBox(width: t.s(9)),
+              SizedBox(width: t.s(6)),
               Container(
-                constraints: const BoxConstraints(minWidth: 20),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: p.warn, borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(color: p.warn, borderRadius: BorderRadius.circular(8)),
                 child: Text(
                   badge!,
-                  textAlign: TextAlign.center,
-                  style: ts(context, 10, scaled: false, weight: FontWeight.w800, color: p.bgSunken),
+                  style: ts(context, 10, scaled: false, weight: FontWeight.w700, color: p.bgSunken),
                 ),
               ),
             ],
-            if (drillsIn) ...[SizedBox(width: t.s(9)), Text('›', style: ts(context, 18, scaled: false, color: p.textDim))],
+            if (drillsIn) ...[
+              SizedBox(width: t.s(6)),
+              Text('›', style: ts(context, 16, scaled: false, color: p.textDim)),
+            ],
           ],
         ),
       ),
@@ -401,8 +1442,9 @@ class _NavRow extends StatelessWidget {
   }
 }
 
-class _ViewTab extends StatelessWidget {
-  const _ViewTab({required this.label, required this.active, required this.onTap});
+/// Compact sub-tab for session details (chat, progress, changes).
+class _EasySubTab extends StatelessWidget {
+  const _EasySubTab({required this.label, required this.active, required this.onTap});
   final String label;
   final bool active;
   final VoidCallback onTap;
@@ -411,30 +1453,44 @@ class _ViewTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.t;
     final p = t.palette;
+
     return Pressable(
       label: label,
       selected: active,
       onTap: onTap,
       excludeChildSemantics: true,
       builder: (context, pressed) => Container(
-        constraints: BoxConstraints(minHeight: t.s(40)),
+        height: t.s(28),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: pressed
+          color: active
               ? p.surfaceRaised
-              : active
-              ? p.accentSoft
-              : p.surface,
-          borderRadius: BorderRadius.circular(t.s(8)),
-          border: Border.all(color: active ? p.accent : p.border),
+              : pressed
+              ? p.surface
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(t.s(4)),
+          border: Border.all(color: active ? p.accent.withValues(alpha: 0.5) : p.border),
         ),
         child: Text(
           label,
-          style: ts(context, 12, weight: FontWeight.w700, color: active ? p.text : p.textSecondary),
+          style: ts(context, 11, weight: active ? FontWeight.w600 : FontWeight.w500, color: active ? p.text : p.textDim),
         ),
       ),
     );
   }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(context.t.s(6), context.t.s(10), context.t.s(6), context.t.s(4)),
+    child: Text(
+      text,
+      style: ts(context, 10, weight: FontWeight.w700, letterSpacing: 0.6, color: context.p.textDim),
+    ),
+  );
 }
 
 class _DetailRow extends StatelessWidget {

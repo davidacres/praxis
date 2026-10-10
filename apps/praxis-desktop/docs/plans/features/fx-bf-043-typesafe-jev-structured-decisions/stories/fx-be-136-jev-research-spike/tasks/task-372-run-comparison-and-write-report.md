@@ -25,6 +25,7 @@ A go / no-go recommendation backed by measured results.
 
 ## Acceptance criteria
 
+- Report judges the retry decision against the bar fixed in `TASK-439` and converts the result into estimated human interventions removed.
 - Report states the confidence threshold and the share of inputs above it.
 - Recommendation names a first target if go, or the reason if no-go.
 

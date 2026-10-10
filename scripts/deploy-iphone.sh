@@ -60,9 +60,17 @@ bad()  { printf '\033[31m  ✗ %s\033[0m\n' "$1" >&2; }
 command -v xcodebuild >/dev/null || { bad "Xcode command-line tools are missing"; exit 1; }
 command -v xcrun >/dev/null || { bad "xcrun is missing"; exit 1; }
 
+DEV_JSON=""
+BUILD_LOG=""
+FLUTTER_LOG=""
+
+cleanup() {
+  rm -f "${DEV_JSON:-}" "${BUILD_LOG:-}" "${FLUTTER_LOG:-}" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 step "Detecting connected physical iPhone"
 DEV_JSON="$(mktemp -t praxis-devices.XXXXXX.json)"
-trap 'rm -f "$DEV_JSON"' EXIT
 
 xcrun devicectl list devices --json-output "$DEV_JSON" >/dev/null 2>&1 || {
   bad "xcrun devicectl failed to list devices"
@@ -76,6 +84,8 @@ devices = data.get("result", {}).get("devices", [])
 target = sys.argv[2].strip() if len(sys.argv) > 2 else ""
 
 found = None
+paired_offline = []
+
 for d in devices:
     hw = d.get("hardwareProperties", {})
     conn = d.get("connectionProperties", {})
@@ -89,17 +99,19 @@ for d in devices:
     ios_ver = props.get("osVersionNumber", "")
     dev_mode = props.get("developerModeStatus", "")
     tunnel = conn.get("tunnelState", "")
+    transport = conn.get("transportType", "unknown")
 
     if target:
         if target in (udid, core_id, name):
-            found = (name, model, ios_ver, udid, core_id, dev_mode, tunnel)
+            found = (name, model, ios_ver, udid, core_id, dev_mode, tunnel, transport)
             break
     else:
         if tunnel == "connected":
-            found = (name, model, ios_ver, udid, core_id, dev_mode, tunnel)
-            break
-        elif not found and conn.get("pairingState") == "paired":
-            found = (name, model, ios_ver, udid, core_id, dev_mode, tunnel)
+            # Prefer wired over wireless if multiple devices are connected
+            if not found or (transport == "wired" and found[7] != "wired"):
+                found = (name, model, ios_ver, udid, core_id, dev_mode, tunnel, transport)
+        elif conn.get("pairingState") == "paired":
+            paired_offline.append((name, model, ios_ver, udid, core_id, tunnel))
 
 if found:
     print(f"DEVICE_NAME={repr(found[0])}")
@@ -109,25 +121,42 @@ if found:
     print(f"DEVICE_CORE_ID={repr(found[4])}")
     print(f"DEVICE_MODE={repr(found[5])}")
     print(f"DEVICE_TUNNEL={repr(found[6])}")
+    print(f"DEVICE_TRANSPORT={repr(found[7])}")
+else:
+    if paired_offline:
+        print("PAIRED_OFFLINE=1")
+        for p in paired_offline:
+            print(f"# Paired offline: {p[0]} ({p[1]}, iOS {p[2]}) - {p[4]}")
 PY
 )
 
-if [ -z "$DEVICE_INFO" ]; then
-  bad "No physical iPhone found."
+if [ -z "$DEVICE_INFO" ] || echo "$DEVICE_INFO" | grep -q "^PAIRED_OFFLINE=1"; then
+  bad "No active physical iPhone found."
+  if echo "$DEVICE_INFO" | grep -q "^PAIRED_OFFLINE=1"; then
+    echo "  Previously paired devices are currently offline/sleeping:"
+    echo "$DEVICE_INFO" | grep "^# Paired offline:" | sed 's/^# /    /'
+    echo ""
+  fi
   echo "  Please ensure:"
-  echo "  1. iPhone is connected by USB, unlocked, and trusted."
+  echo "  1. iPhone is connected by USB, unlocked, and trusted (\"Trust This Computer\")."
   echo "  2. Developer Mode is turned on in Settings → Privacy & Security."
+  echo "  3. Device is awake and recognized in Xcode (Window → Devices and Simulators)."
   exit 1
 fi
 
 eval "$DEVICE_INFO"
 
 ok "$DEVICE_NAME ($DEVICE_MODEL, iOS $DEVICE_OS)"
-echo "    UDID (xcodebuild): $DEVICE_UDID"
 echo "    CoreDevice ID:     $DEVICE_CORE_ID"
+echo "    Connection:        $DEVICE_TRANSPORT ($DEVICE_TUNNEL)"
+if [ -n "$DEVICE_UDID" ]; then
+  echo "    UDID:              $DEVICE_UDID"
+fi
 
 if [ "$DEVICE_TUNNEL" != "connected" ]; then
-  warn "Tunnel state is '$DEVICE_TUNNEL'. If deployment fails, reconnect the USB cable and verify device trust."
+  bad "Target device '$DEVICE_NAME' is not reachable (tunnel state: '$DEVICE_TUNNEL')."
+  echo "  Please reconnect the device via USB and ensure it is unlocked."
+  exit 1
 fi
 
 if [ "$DEVICE_MODE" != "enabled" ]; then
@@ -139,7 +168,12 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
   command -v flutter >/dev/null || export PATH="$HOME/flutter/bin:$PATH"
   command -v flutter >/dev/null || { bad "flutter is not on PATH"; exit 1; }
   step "Preparing the Flutter Release build"
-  (cd "$MOBILE_DIR" && flutter pub get >/dev/null && flutter build ios --release --no-codesign >/dev/null)
+  FLUTTER_LOG="$(mktemp -t praxis-flutter-build.XXXXXX.log)"
+  if ! (cd "$MOBILE_DIR" && flutter pub get && flutter build ios --release --no-codesign) > "$FLUTTER_LOG" 2>&1; then
+    bad "Flutter preparation failed!"
+    cat "$FLUTTER_LOG" >&2
+    exit 1
+  fi
 
   if [ "$CLEAN_BUILD" -eq 1 ]; then
     step "Cleaning build cache"
@@ -148,7 +182,6 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
 
   step "Compiling iOS Release build for $DEVICE_NAME"
   BUILD_LOG="$(mktemp -t praxis-ios-build.XXXXXX.log)"
-  trap 'rm -f "$DEV_JSON" "$BUILD_LOG"' EXIT
 
   TEAM_ID="${PRAXIS_DEVELOPMENT_TEAM:-}"
   if [ -z "$TEAM_ID" ]; then
@@ -160,7 +193,7 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
     -workspace "$WORKSPACE" \
     -scheme "$SCHEME" \
     -configuration Release \
-    -destination "id=$DEVICE_UDID" \
+    -destination "generic/platform=iOS" \
     -derivedDataPath "$DERIVED_DATA" \
     -allowProvisioningUpdates \
     DEVELOPMENT_TEAM="$TEAM_ID" \
@@ -196,8 +229,71 @@ ok "Compiled Dart code present"
 
 # Install onto device
 step "Installing $APP_NAME on $DEVICE_NAME"
-xcrun devicectl device install app --device "$DEVICE_CORE_ID" "$APP_PATH"
-ok "Installed $BUNDLE_ID successfully"
+set +e
+INSTALL_OUT=$(xcrun devicectl device install app --device "$DEVICE_CORE_ID" "$APP_PATH" 2>&1)
+INSTALL_STATUS=$?
+set -e
+
+if [ $INSTALL_STATUS -ne 0 ]; then
+  # If devicectl failed due to DDI / CoreDevice limitation, try fallback via pymobiledevice3 (installation_proxy)
+  if echo "$INSTALL_OUT" | grep -qi "DeveloperDiskImage"; then
+    warn "devicectl could not mount Developer Disk Image on this device. Trying direct installation via installation_proxy..."
+    PMD_CMD=""
+    if command -v uvx >/dev/null 2>&1; then
+      PMD_CMD="uvx pymobiledevice3"
+    elif command -v pymobiledevice3 >/dev/null 2>&1; then
+      PMD_CMD="pymobiledevice3"
+    fi
+
+    if [ -n "$PMD_CMD" ]; then
+      set +e
+      # If device is connected wirelessly, use --native to ride Apple's remotepairingd tunnel
+      if [ "$DEVICE_TRANSPORT" = "localNetwork" ] || [ "$DEVICE_TRANSPORT" = "wifi" ]; then
+        FALLBACK_OUT=$($PMD_CMD apps install --native "$APP_PATH" 2>&1)
+        FALLBACK_STATUS=$?
+      else
+        FALLBACK_OUT=$($PMD_CMD apps install "$APP_PATH" 2>&1)
+        FALLBACK_STATUS=$?
+        if [ $FALLBACK_STATUS -ne 0 ]; then
+          FALLBACK_OUT=$($PMD_CMD apps install --native "$APP_PATH" 2>&1)
+          FALLBACK_STATUS=$?
+        fi
+      fi
+      set -e
+      if [ $FALLBACK_STATUS -eq 0 ]; then
+        INSTALL_STATUS=0
+        ok "Installed $BUNDLE_ID successfully via installation_proxy"
+      else
+        echo "$FALLBACK_OUT" >&2
+      fi
+    fi
+  fi
+fi
+
+if [ $INSTALL_STATUS -ne 0 ]; then
+  bad "Failed to install $APP_NAME on $DEVICE_NAME"
+  echo "$INSTALL_OUT" >&2
+  if echo "$INSTALL_OUT" | grep -qi "DeveloperDiskImage"; then
+    echo "" >&2
+    warn "Developer Disk Image (DDI) issue detected on the device." >&2
+    echo "  This typically occurs when the device runs a newer iOS version or has unmounted debug services." >&2
+    echo "  Please open Xcode → Window → Devices and Simulators, select '$DEVICE_NAME', and let Xcode prepare the device." >&2
+  elif echo "$INSTALL_OUT" | grep -qi "maximum number of installed apps"; then
+    echo "" >&2
+    warn "Free developer account limit reached (max 3 sideloaded apps)." >&2
+    echo "  Remove an existing app from the device or uninstall via:" >&2
+    echo "  xcrun devicectl device uninstall app --device '$DEVICE_CORE_ID' <bundle_id>" >&2
+  elif echo "$INSTALL_OUT" | grep -qi "connection was invalidated\|peer is no longer reachable"; then
+    echo "" >&2
+    warn "Lost connection to $DEVICE_NAME." >&2
+    echo "  Please reconnect the iPhone via USB, unlock it, and ensure it stays awake." >&2
+  fi
+  exit $INSTALL_STATUS
+else
+  if [ $INSTALL_STATUS -eq 0 ] && ! echo "$INSTALL_OUT" | grep -qi "DeveloperDiskImage"; then
+    ok "Installed $BUNDLE_ID successfully"
+  fi
+fi
 
 # Launch app
 if [ "$NO_LAUNCH" -eq 0 ]; then
@@ -213,8 +309,11 @@ if [ "$NO_LAUNCH" -eq 0 ]; then
     if echo "$LAUNCH_OUT" | grep -qi "Locked"; then
       warn "Praxis installed successfully, but could not launch because $DEVICE_NAME is locked."
       echo "  Please unlock your iPhone and tap Praxis on the home screen."
+    elif echo "$LAUNCH_OUT" | grep -qi "DeveloperDiskImage"; then
+      warn "Could not launch automatically (device has unmounted debug services)."
+      echo "  Tap the Praxis icon on your iPhone home screen to open it."
     else
-      warn "Could not launch Praxis automatically: $LAUNCH_OUT"
+      warn "Could not launch Praxis automatically."
       echo "  You can open Praxis manually from your iPhone home screen."
     fi
   fi

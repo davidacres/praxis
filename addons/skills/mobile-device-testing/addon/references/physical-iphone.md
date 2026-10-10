@@ -25,7 +25,7 @@ flutter pub get
 flutter build ios --release --no-codesign            # compiles Dart and generates the Xcode settings
 cd ios
 xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
-  -destination 'id=<udid>' -derivedDataPath build/device-release \
+  -destination 'generic/platform=iOS' -derivedDataPath build/device-release \
   -allowProvisioningUpdates DEVELOPMENT_TEAM=WY4B2H77A5 build > /tmp/praxis-ios-build.log 2>&1
 grep -E 'error:|\*\* BUILD' /tmp/praxis-ios-build.log
 APP=apps/praxis-mobile/ios/build/device-release/Build/Products/Release-iphoneos/Runner.app
