@@ -6,7 +6,6 @@
   "workspaces": [
     "apps/praxis-desktop/main",
     "apps/praxis-desktop/renderer",
-    "apps/praxis-mobile",
     "packages/*"
   ],
   "scripts": {
@@ -14,7 +13,7 @@
     "hooks:install": "git config core.hooksPath .githooks",
     "check-types": "npm run check-types --workspaces --if-present",
     "build": "npm run build:core && npm run build:mobile-protocol && npm run build:mobile-relay && npm run build:renderer && npm run desktop:copy-renderer && npm run build:desktop",
-    "test": "npm run build && npm run test:core && npm run test:skills && npm run test:praxis-contracts && npm run test:mobile-protocol && npm run test:mobile-relay && npm run test:mobile && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop:mobile && npm run test:desktop && npm run test:desktop:themes",
+    "test": "npm run build && npm run test:core && npm run test:skills && npm run test:praxis-contracts && npm run test:mobile-protocol && npm run test:mobile-relay && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop:mobile && npm run test:desktop && npm run test:desktop:themes",
     "build:core": "npm run compile --workspace=@praxis/core",
     "test:core": "npm test --workspace=@praxis/core",
     "test:skills": "node scripts/sync-agent-skills.mjs --check",
@@ -23,9 +22,6 @@
     "test:mobile-protocol": "npm test --workspace=@praxis/mobile-protocol",
     "build:mobile-relay": "npm run compile --workspace=@praxis/mobile-relay",
     "test:mobile-relay": "npm test --workspace=@praxis/mobile-relay",
-    "build:mobile": "npm run compile --workspace=@praxis/mobile",
-    "test:mobile": "npm test --workspace=@praxis/mobile",
-    "mobile:fixture": "npm run fixture --workspace=@praxis/mobile",
     "mobile:deploy": "./scripts/deploy-iphone.sh",
     "mobile:stage-host": "node apps/praxis-mobile/tool/stage_host.cjs",
     "test:flutter": "cd apps/praxis-mobile && flutter test",
@@ -102,8 +98,6 @@
     "electron-winstaller": false
   },
   "devDependencies": {
-    "@babel/core": "^7.25.0",
-    "babel-preset-expo": "~57.0.11",
     "typescript": "^7.0.2"
   },
   "dependencies": {

@@ -76,46 +76,28 @@ display size, connect/pairing screens.
 - Retrying a refused message sends a new command id (Expo resends the same one,
   which the desktop answers with the refusal's empty result).
 
-## Archiving the Expo app
+## Expo app removal
 
-The Expo app has been archived and is being removed. The Flutter app in
-`apps/praxis-mobile` is the only phone app in use.
+The Expo app has been removed from the build. The Flutter app in
+`apps/praxis-mobile` is the only phone app.
 
 Done:
 
 - `npm run test:flutter` and `npm run mobile:stage-host` run the Flutter app.
-- The device driver and the `mobile-device-testing` skill's docs use the Flutter
-  app by default.
-- Root `AGENTS.md` lists the Flutter app.
+- `scripts/deploy-iphone.sh` deploys only the Flutter app (no `--app` option).
+- The root `workspaces`, the `build:mobile`, `test:mobile` and `mobile:fixture`
+  scripts, the `test:mobile` step in `test`, and the Expo-only dev dependencies
+  are gone, and the lockfile is regenerated.
+- The device driver, the `mobile-device-testing` skill's docs and the root
+  `AGENTS.md` use the Flutter app. The PRAXISMOBILE plans live in
+  `apps/praxis-mobile/docs`.
 
-Not right yet:
+Still to do:
 
-- `scripts/deploy-iphone.sh --app expo` still points at `apps/praxis-mobile`, so
-  it deploys the Flutter app. The `expo` option should be removed.
-- The root `workspaces` still lists `apps/praxis-mobile`. That folder has no
-  `package.json`, so it is not an npm workspace. The lockfile lists it too.
-
-Still to do, in this order:
-
-1. **Commit the per-message usage change** already in the working tree
-   (`packages/core/src/host/mobileProtocol.ts`,
-   `apps/praxis-desktop/main/src/main/mobileSessionProjection.ts`): the
-   desktop sends each reply's tokens and cost, which the Flutter app shows.
-2. **Decide where the PRAXISMOBILE plans live.** `apps/praxis-mobile/docs/plans`,
-   `project.praxis.md` and `docs/PLAN_MAP.md` are a folder-backed project
-   linked from `apps/praxis-desktop/docs/PLAN_MAP.md` and `master-plan.md`.
-   Move them (e.g. to `apps/praxis-mobile/docs`) and fix those two links, or
-   keep them in the archived folder.
-3. **Remove the Expo workspace from the root build.** Take `apps/praxis-mobile`
-   out of the root `workspaces`, drop the `build:mobile`, `test:mobile` and
-   `mobile:fixture` scripts and the `test:mobile` step in `test`, then run
-   `npm install` to regenerate the lockfile. Keep the `//optionalDependencies`
-   bindings note in mind.
-4. **Remove the `--app expo` option** from `scripts/deploy-iphone.sh` (see above).
-5. **Delete the archived Expo app folder.** History keeps it.
-6. **Publish the skill**: `tools/device-driver/publish-skill.sh` (bumps the
+1. **Delete the archived Expo app folder.** History keeps it.
+2. **Publish the skill**: `tools/device-driver/publish-skill.sh` (bumps the
    version; the published copy still describes the Expo app).
-7. Remove the Expo app from the phone when you no longer want it.
+3. Remove the Expo app from the phone when you no longer want it.
 
 ## How to run
 

@@ -1,2 +1,0 @@
-import assert from 'node:assert/strict';import test from 'node:test';import {isLanContinuationComplete} from './mobileLanContinuation';
-test('requires all LAN continuation evidence',()=>{const e={pairing:true,discovery:true,continuation:true,followUp:true,reconnect:true,decision:true,result:true};assert.equal(isLanContinuationComplete(e),true);assert.equal(isLanContinuationComplete({...e,result:false}),false);});

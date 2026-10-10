@@ -286,7 +286,7 @@ class _WorkDetailState extends State<WorkDetail> {
     });
   }
 
-  /// Effects the Expo screen runs on render: load models to name them, refresh usage when a turn ends, re-read run progress.
+  /// Effects run on render: load models to name them, refresh usage when a turn ends, re-read run progress.
   void _effects(AppStore store, WorkItem item, SelectionInfo info) {
     final providerId = info.providerId;
     if (providerId != null && !store.models.containsKey(providerId) && store.connection == ShellConnection.ready && (item.draft || info.canConfigure)) {

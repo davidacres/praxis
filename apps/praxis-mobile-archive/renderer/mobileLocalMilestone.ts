@@ -1,2 +1,0 @@
-export interface LocalExecutionMilestone{paired:boolean;hostSelected:boolean;workflowStarted:boolean;reconnected:boolean;decisionScoped:boolean;revokedBlocksAccess:boolean;jobContinuesAfterDisconnect:boolean;}
-export function isLocalExecutionMilestoneComplete(m:LocalExecutionMilestone):boolean{return m.paired&&m.hostSelected&&m.workflowStarted&&m.reconnected&&m.decisionScoped&&m.revokedBlocksAccess&&m.jobContinuesAfterDisconnect;}

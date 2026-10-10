@@ -1,2 +1,0 @@
-import assert from 'node:assert/strict';import test from 'node:test';import {MobileLanTransport} from './mobileLanTransport';
-test('connects and sends JSON over injected LAN socket',async()=>{let sent='';const t=new MobileLanTransport({connect:async()=>({send:x=>{sent=x;},close:()=>{}})},'192.168.1.2',43100);await t.connect();const p=t.request<{ok:boolean}>({x:1});(t as any).socket.onmessage?.({data:'{"ok":true}'});assert.deepEqual(await p,{ok:true});assert.equal(sent,'{"x":1}');});

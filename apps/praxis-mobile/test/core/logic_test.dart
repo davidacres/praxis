@@ -1,5 +1,4 @@
-// Ports of the Expo app's renderer tests (apps/praxis-mobile/renderer/*.test.ts),
-// so the Flutter logic is held to the same cases.
+// Unit tests for the pure phone-app logic (markdown, usage, theme, gadgets, invitations).
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';

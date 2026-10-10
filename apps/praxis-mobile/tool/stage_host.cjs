@@ -6,7 +6,7 @@
  * replies, every gadget kind, runs awaiting approval / failed / running,
  * a pending permission, changes with diffs, providers and models.
  *
- * Both the Expo and the Flutter app can pair with it, so the same data can be
+ * The Flutter app pairs with it, so the same data can be
  * compared screen by screen. Nothing here reaches a model or a repository.
  *
  *   npm run build:core && npm --prefix apps/praxis-desktop/main run compile   (once)

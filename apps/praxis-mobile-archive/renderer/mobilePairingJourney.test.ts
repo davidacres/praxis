@@ -1,2 +1,0 @@
-import assert from 'node:assert/strict';import test from 'node:test';import {isLocalPairingJourneyComplete} from './mobilePairingJourney';
-test('requires every pairing safety step',()=>{const j={tokenCreated:true,tokenConsumed:true,deviceConfirmed:true,scopeBound:true,reconnectVerified:true,revocationVerified:true};assert.equal(isLocalPairingJourneyComplete(j),true);assert.equal(isLocalPairingJourneyComplete({...j,scopeBound:false}),false);});

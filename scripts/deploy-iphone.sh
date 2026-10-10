@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Deploy the Praxis phone app (Release build) to a physical iPhone.
-# Default: the Flutter app (apps/praxis-mobile). --app expo: the Expo app (apps/praxis-mobile).
+# Deploys the Flutter app (apps/praxis-mobile).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-APP="flutter"
 SKIP_BUILD=0
 NO_LAUNCH=0
 CLEAN_BUILD=0
@@ -18,7 +17,6 @@ Usage: ./scripts/deploy-iphone.sh [options]
 Deploys the Praxis phone app in Release mode to a connected physical iPhone.
 
 Options:
-  --app flutter|expo  Which app to deploy (default: flutter)
   --skip-build        Skip rebuilding and install the current Release build
   --clean             Clean the build cache before compiling
   --no-launch         Install the app without launching it
@@ -39,32 +37,19 @@ while [[ $# -gt 0 ]]; do
     --clean) CLEAN_BUILD=1; shift ;;
     --no-launch) NO_LAUNCH=1; shift ;;
     --device) TARGET_DEVICE="$2"; shift 2 ;;
-    --app) APP="$2"; shift 2 ;;
     --help|-h) usage ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 
-case "$APP" in
-  flutter)
-    MOBILE_DIR="$REPO_ROOT/apps/praxis-mobile"
-    IOS_DIR="$MOBILE_DIR/ios"
-    WORKSPACE="ios/Runner.xcworkspace"; SCHEME="Runner"
-    DERIVED_DATA="$IOS_DIR/build/device-release"
-    APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Runner.app"
-    # Uses the team's existing Xcode-managed profile, so no Apple account needs to be signed in.
-    BUNDLE_ID="com.acresweb.praxis.mobile.praxis"
-    APP_NAME="Praxis" ;;
-  expo)
-    MOBILE_DIR="$REPO_ROOT/apps/praxis-mobile"
-    IOS_DIR="$MOBILE_DIR/ios"
-    WORKSPACE="ios/Praxis.xcworkspace"; SCHEME="Praxis"
-    DERIVED_DATA="$IOS_DIR/build/device-release"
-    APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Praxis.app"
-    BUNDLE_ID="com.acresweb.praxis.mobile"
-    APP_NAME="Praxis" ;;
-  *) echo "Unknown --app '$APP' (use flutter or expo)" >&2; exit 1 ;;
-esac
+MOBILE_DIR="$REPO_ROOT/apps/praxis-mobile"
+IOS_DIR="$MOBILE_DIR/ios"
+WORKSPACE="ios/Runner.xcworkspace"; SCHEME="Runner"
+DERIVED_DATA="$IOS_DIR/build/device-release"
+APP_PATH="$DERIVED_DATA/Build/Products/Release-iphoneos/Runner.app"
+# Uses the team's existing Xcode-managed profile, so no Apple account needs to be signed in.
+BUNDLE_ID="com.acresweb.praxis.mobile.praxis"
+APP_NAME="Praxis"
 
 step() { printf '\033[36m==> %s\033[0m\n' "$1"; }
 ok()   { printf '\033[32m  ✓ %s\033[0m\n' "$1"; }
@@ -151,15 +136,10 @@ fi
 
 # Build
 if [ "$SKIP_BUILD" -eq 0 ]; then
-  if [ "$APP" = expo ]; then
-    step "Building core packages"
-    (cd "$REPO_ROOT" && npm run build:core && npm run build:mobile-protocol)
-  else
-    command -v flutter >/dev/null || export PATH="$HOME/flutter/bin:$PATH"
-    command -v flutter >/dev/null || { bad "flutter is not on PATH"; exit 1; }
-    step "Preparing the Flutter Release build"
-    (cd "$MOBILE_DIR" && flutter pub get >/dev/null && flutter build ios --release --no-codesign >/dev/null)
-  fi
+  command -v flutter >/dev/null || export PATH="$HOME/flutter/bin:$PATH"
+  command -v flutter >/dev/null || { bad "flutter is not on PATH"; exit 1; }
+  step "Preparing the Flutter Release build"
+  (cd "$MOBILE_DIR" && flutter pub get >/dev/null && flutter build ios --release --no-codesign >/dev/null)
 
   if [ "$CLEAN_BUILD" -eq 1 ]; then
     step "Cleaning build cache"
@@ -171,9 +151,6 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
   trap 'rm -f "$DEV_JSON" "$BUILD_LOG"' EXIT
 
   TEAM_ID="${PRAXIS_DEVELOPMENT_TEAM:-}"
-  if [ -z "$TEAM_ID" ]; then
-    TEAM_ID=$(node -p 'try { require("./apps/praxis-mobile/app.json").expo.ios.appleTeamId || "" } catch(e){ "" }')
-  fi
   if [ -z "$TEAM_ID" ]; then
     TEAM_ID="WY4B2H77A5"
   fi
@@ -201,7 +178,7 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
   ok "Release build succeeded"
 fi
 
-# Verify the app and embedded JavaScript bundle
+# Verify the app and its compiled Dart code
 step "Verifying Release bundle"
 if [ ! -d "$APP_PATH" ]; then
   bad "$(basename "$APP_PATH") not found at $APP_PATH"
@@ -214,24 +191,8 @@ if [ "$INSTALLED_BUNDLE_ID" != "$BUNDLE_ID" ]; then
   exit 1
 fi
 
-if [ "$APP" = expo ]; then
-JS_BUNDLE="$APP_PATH/main.jsbundle"
-if [ ! -f "$JS_BUNDLE" ]; then
-  bad "main.jsbundle missing in $APP_PATH!"
-  bad "Physical iPhone requires embedded JavaScript bundle in Release mode to run without Metro."
-  exit 1
-fi
-
-BUNDLE_SIZE=$(wc -c < "$JS_BUNDLE" | tr -d ' ')
-if [ "$BUNDLE_SIZE" -lt 100000 ]; then
-  bad "main.jsbundle is unexpectedly small ($BUNDLE_SIZE bytes)."
-  exit 1
-fi
-ok "Embedded JS bundle verified ($(( BUNDLE_SIZE / 1024 )) KB)"
-else
-  [ -f "$APP_PATH/Frameworks/App.framework/App" ] || { bad "Compiled Dart code (App.framework) missing in $APP_PATH"; exit 1; }
-  ok "Compiled Dart code present"
-fi
+[ -f "$APP_PATH/Frameworks/App.framework/App" ] || { bad "Compiled Dart code (App.framework) missing in $APP_PATH"; exit 1; }
+ok "Compiled Dart code present"
 
 # Install onto device
 step "Installing $APP_NAME on $DEVICE_NAME"
