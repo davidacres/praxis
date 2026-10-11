@@ -94,7 +94,8 @@ export class ProjectIssueTrackerService implements IssueTrackerService {
       key: `${project.key}-${nextSequence(project)}`, summary: input.summary.trim(),
       description: input.description?.trim() ?? '', issueType,
       status: project.workflowStages[0].name, createdAt: now, updatedAt: now,
-      ...(parentKey ? { parentKey } : {})
+      ...(parentKey ? { parentKey } : {}),
+      ...(input.origin === 'capture' ? { origin: input.origin } : {})
     };
     project.workItems.push(item); project.updatedAt = now; await this.store.replace(project);
     return this.getIssue(item.key);
@@ -146,6 +147,7 @@ export class ProjectIssueTrackerService implements IssueTrackerService {
       statusCategory: item.status === project.workflowStages.at(-1)?.name ? 'done' : undefined,
       projectKey: project.key, projectName: project.name, created: item.createdAt, updated: item.updatedAt,
       ...(item.parentKey ? { parentKey: item.parentKey } : {}),
+      ...(item.origin === 'capture' ? { origin: item.origin } : {}),
       ...(parent ? { parentIssue: toParentIssueReference(parent) } : {})
     };
   }

@@ -1147,6 +1147,9 @@ export interface AssistantIpc {
 }
 
 export interface PraxisIpc {
+  activity: {
+    list(projectId: string): Promise<import('../projects/projectActivity').ProjectActivitySnapshot>;
+  };
   assistant: AssistantIpc;
   app: AppIpc;
   board: BoardIpc;

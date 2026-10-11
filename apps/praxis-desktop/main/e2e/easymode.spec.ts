@@ -1514,5 +1514,77 @@ test('a long session list folds behind "Show more" and leaves the Runs section o
   const runsAfter = await win.locator('[data-testid="easymode-run-run-overflow"]').boundingBox();
   expect(runsAfter!.y + runsAfter!.height).toBeLessThanOrEqual(sidebarBox!.y + sidebarBox!.height + 1);
 
+  // The main window supports 480px minimum height. Neither pane may grow
+  // beyond the sidebar and silently clip its controls at that size.
+  await app.electronApp.evaluate(({ BrowserWindow }) => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    mainWindow.setSize(900, 480);
+  });
+  await win.evaluate(() => window.praxis.window.setZoomFactor(1.5));
+  await expect.poll(() => win.evaluate(() => window.innerHeight)).toBe(320);
+  await expect.poll(async () => win.locator('.easymode-sidebar-feed').evaluate(feed => {
+    const sidebar = feed.closest('.easymode-sidebar')!.getBoundingClientRect();
+    const bounds = feed.getBoundingClientRect();
+    return bounds.bottom <= sidebar.bottom + 1;
+  })).toBe(true);
+  const feed = win.locator('.easymode-sidebar-feed');
+  expect(await feed.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  await feed.evaluate(element => { element.scrollTop = 0; });
+  const feedBox = (await feed.boundingBox())!;
+  await win.mouse.move(feedBox.x + 5, feedBox.y + 5);
+  await win.mouse.wheel(0, 500);
+  await expect.poll(() => feed.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  const sessionBody = win.locator('.easymode-section--sessions > .easymode-section__body');
+  expect(await sessionBody.evaluate(body => body.scrollHeight > body.clientHeight)).toBe(true);
+  await win.getByTestId('section-header-add-sessions').focus();
+  await showMore.focus();
+  await expect(showMore).toBeInViewport();
+  await showMore.press('Space');
+  await expect(cards).toHaveCount(6);
+  await showMore.press('Space');
+  await expect(cards).toHaveCount(15);
+  // Tab from the final Sessions control reaches the Runs add button.
+  await showMore.press('Tab');
+  await expect(win.getByTestId('section-header-add-automations')).toBeFocused();
+  await expect(win.getByTestId('section-header-add-automations')).toBeInViewport();
+  const capture = path.resolve(__dirname, '../../../../.praxis/session-artifacts/easymode-short-window.png');
+  fs.mkdirSync(path.dirname(capture), { recursive: true });
+  const pixels = await app.electronApp.evaluate(async ({ BrowserWindow }) =>
+    (await BrowserWindow.getAllWindows()[0].capturePage()).toPNG().toString('base64')
+  );
+  fs.writeFileSync(capture, Buffer.from(pixels, 'base64'));
+
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-sessions-overflow.png') });
+});
+
+test('paused and not_started sessions beyond the first five stay visible in All and Live', async () => {
+  app = await launchTestApp({ preview: { enableEasyMode: true } }, undefined, undefined, { openNewSession: false });
+  const win = app.window;
+  await app.electronApp.evaluate(({ BrowserWindow }) => {
+    const records = Array.from({ length: 6 }, (_, index) => ({
+      issueKey: `SESSION-FINISHED-${index}`, sessionId: `finished-${index}`, title: `Finished ${index}`,
+      state: 'completed', startedAt: new Date(Date.now() - index * 60000).toISOString(),
+      taskDefinition: { goal: 'Completed work' }, events: []
+    }));
+    for (const state of ['paused', 'not_started']) {
+      records.push({ issueKey: `SESSION-${state}`, sessionId: state, title: `Needs attention: ${state}`,
+        state, startedAt: new Date(Date.now() - 86400000).toISOString(), taskDefinition: { goal: 'Unfinished work' }, events: [] });
+    }
+    for (const record of records) BrowserWindow.getAllWindows()[0].webContents.send('ai:sessionChanged', record);
+  });
+  const sidebar = win.getByTestId('easymode-sidebar');
+  const cards = sidebar.locator('[data-testid^="easymode-session-card-"]');
+  await expect(cards).toHaveCount(7);
+  for (const state of ['paused', 'not_started']) await expect(win.getByTestId(`easymode-session-card-SESSION-${state}`)).toBeVisible();
+  await expect(win.getByTestId('easymode-sessions-show-more')).toHaveText('Show 1 more');
+  await sidebar.getByRole('tab', { name: /^Live/ }).click();
+  await expect(sidebar.getByRole('tab', { name: /^Live/ })).toContainText('2');
+  await expect(cards).toHaveCount(2);
+  for (const state of ['paused', 'not_started']) await expect(win.getByTestId(`easymode-session-card-SESSION-${state}`)).toBeVisible();
+  await sidebar.getByRole('tab', { name: /^Gates/ }).click();
+  await expect(cards).toHaveCount(0);
+  await sidebar.getByRole('tab', { name: /^Live/ }).click();
+  const capture = path.resolve(__dirname, '../../../../.praxis/session-artifacts/easymode-unfinished-live.png');
+  fs.mkdirSync(path.dirname(capture), { recursive: true });
+  await sidebar.screenshot({ path: capture });
 });

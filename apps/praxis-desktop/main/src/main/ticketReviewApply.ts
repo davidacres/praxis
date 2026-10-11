@@ -1,3 +1,4 @@
+import { runAsAgent } from './projectActivityInstance';
 import {
   TICKET_REVIEW_APPLY_FIELDS,
   reviewedIssueKey,
@@ -125,10 +126,10 @@ export async function applyTicketReview(
   const applied: string[] = [];
   if (changesTicket && before) {
     const { label } = describeAppliedChanges(before, { summary, description });
-    const updated = await service.updateIssue(issueKey, {
+    const updated = await runAsAgent(() => service.updateIssue(issueKey, {
       ...(summary ? { summary } : {}),
       ...(description ? { description } : {})
-    });
+    }));
     recordTicketReviewBaseline(sessionId, updated);
     if (label) {
       applied.push(label);
@@ -140,7 +141,7 @@ export async function applyTicketReview(
     }
   }
   if (comment) {
-    await service.addComment(issueKey, comment);
+    await runAsAgent(() => service.addComment(issueKey, comment));
     applied.push('posted a comment');
   }
 

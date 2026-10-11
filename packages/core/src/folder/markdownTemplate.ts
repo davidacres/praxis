@@ -134,6 +134,8 @@ export interface GenerateOptions {
   fieldValues?: Record<string, string>;
   /** Section bodies that replace a rule's default body on creation, by section name. */
   sectionBodies?: Record<string, string>;
+  /** Creation-only `**Origin:**` line; deliberately not a FIELD_RULE, so upgrades never add or touch it. */
+  origin?: string;
 }
 
 function buildDefaultDescription(issueType: IssueType): string {
@@ -195,6 +197,9 @@ export function generateIssueMarkdown(
   // Parent (creation-only, not part of template rules)
   if (opts.parentKey) {
     lines.push(`**Parent:** ${opts.parentKey}`);
+  }
+  if (opts.origin) {
+    lines.push(`**Origin:** ${opts.origin}`);
   }
 
   lines.push('');

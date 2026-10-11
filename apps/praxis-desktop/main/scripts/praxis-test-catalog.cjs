@@ -9,7 +9,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const ts = require('typescript');
+const parser = require('@babel/parser');
 
 const repoRoot = path.resolve(__dirname, '../../../..');
 const testRoot = path.join(repoRoot, 'apps/praxis-desktop/main/e2e');
@@ -26,12 +26,13 @@ function sourceFiles(root) {
 }
 
 function literalText(node) {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  if (node?.type === 'StringLiteral') return node.value;
+  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
   return undefined;
 }
 
 function isTestCall(expression) {
-  return ts.isIdentifier(expression) && expression.text === 'test';
+  return expression?.type === 'Identifier' && expression.name === 'test';
 }
 
 function stableId(file, title) {
@@ -48,12 +49,13 @@ function collectTests() {
   for (const absolute of sourceFiles(testRoot)) {
     const relative = path.relative(repoRoot, absolute).split(path.sep).join('/');
     const source = fs.readFileSync(absolute, 'utf8');
-    const file = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const file = parser.parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] });
     function visit(node) {
-      if (ts.isCallExpression(node) && isTestCall(node.expression)) {
+      if (!node || typeof node !== 'object') return;
+      if (node.type === 'CallExpression' && isTestCall(node.callee)) {
         const title = literalText(node.arguments[0]);
         if (title) {
-          const line = file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
+          const line = node.loc.start.line;
           tests.push({
             id: stableId(relative, title),
             title,
@@ -67,7 +69,10 @@ function collectTests() {
           });
         }
       }
-      ts.forEachChild(node, visit);
+      for (const value of Object.values(node)) {
+        if (Array.isArray(value)) value.forEach(visit);
+        else if (value && typeof value === 'object' && typeof value.type === 'string') visit(value);
+      }
     }
     visit(file);
   }

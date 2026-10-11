@@ -537,10 +537,12 @@ export class AcpAgentHost {
       return Promise.resolve('deny');
     }
     const record = this.sessionManager.getAgentSession(issueKey);
-    const permissionText = `${request.kind ?? ''} ${request.title}`.toLowerCase();
+    // Titles are agent-authored display text, not an authorization boundary.
+    // Unclassified actions (including missing kinds) fail closed in read-only mode.
+    const readOnlyKind = request.kind === 'read' || request.kind === 'search' || request.kind === 'think' || request.kind === 'fetch';
     if (
-      (record?.toolMode === 'read-only' || record?.toolMode === 'project-only') &&
-      (record?.toolMode === 'project-only' || /(write|edit|delete|remove|shell|terminal|command|execute|create|update|transition|comment)/.test(permissionText))
+      record?.toolMode === 'project-only' ||
+      (record?.toolMode === 'read-only' && !readOnlyKind)
     ) {
       this.appendEvent(issueKey, evt('warning', `Blocked by read-only tools: ${request.title}`));
       return Promise.resolve('deny');
@@ -548,7 +550,8 @@ export class AcpAgentHost {
     if (task.allowPermissionsForTask) {
       return Promise.resolve('allow_always');
     }
-    if (task.autoAllowSafePermissions && /\b(read|list)\b/.test(permissionText)) {
+    const permissionText = `${request.kind ?? ''} ${request.title}`.toLowerCase();
+    if (task.autoAllowSafePermissions && (record?.toolMode === 'read-only' ? readOnlyKind : /\b(read|list)\b/.test(permissionText))) {
       return Promise.resolve('allow_always');
     }
     return new Promise<PermissionDecision>(resolve => {

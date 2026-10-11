@@ -92,7 +92,7 @@ test('a turn that narrates between tool calls renders as one assistant card', as
   // are four calls.
   await expect(thought.locator('[data-testid="session-thought-summary"]')).toContainText('4 tool calls');
 
-  await thought.locator('summary').click();
+  await thought.locator('[data-testid="session-thought-summary"]').click();
   const toolRows = thought.locator('[data-testid="session-thought-tools"] li');
   await expect(toolRows).toHaveCount(4);
   await expect(toolRows.first()).toContainText('read_file');

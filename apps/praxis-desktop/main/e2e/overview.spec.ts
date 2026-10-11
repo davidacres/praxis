@@ -37,7 +37,7 @@ test('renders the workspace overview dashboard', async () => {
   }));
   expect(themed.pageBackground).toMatch(/rgba?\(0, 0, 0, 0\)/);
   expect(themed.panelBackground).not.toBe(themed.pageBackground);
-  expect(themed.accent).toBe('#7c5cff');
+  expect(themed.accent).toBe('#7758f5');
   await page.keyboard.press('Escape');
   await page.screenshot({ path: 'output/playwright/overview-dashboard-tm-default-1.png', fullPage: true });
 });

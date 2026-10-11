@@ -173,3 +173,18 @@ test('a folder-backed project without a workspace folder fails validation', () =
     /folder-backed project requires a workspace folder/i
   );
 });
+
+test('createProjectService: a captured item keeps its origin across a reload; anything but "capture" is not stored', async () => {
+  const store = new ProjectStore(memoryStore());
+  await store.create(projectRecord({ workItems: [] }));
+  const service = createProjectService(store, 'p1');
+  const captured = await service.createIssue({ projectKey: 'DEMO', issueType: 'Task', summary: 'Quick note', origin: 'capture' });
+  const typed = await service.createIssue({ projectKey: 'DEMO', issueType: 'Task', summary: 'Typed' });
+  const forged = await service.createIssue({ projectKey: 'DEMO', issueType: 'Task', summary: 'Forged', origin: 'import' as never });
+  assert.equal(captured.origin, 'capture');
+  const details = await service.getBoardDetails({ id: 'project-board-p1' } as never);
+  const byKey = new Map(details.issues.map(issue => [issue.key, issue.origin]));
+  assert.deepEqual([byKey.get(captured.key), byKey.get(typed.key), byKey.get(forged.key)], ['capture', undefined, undefined]);
+  assert.equal(store.get('p1')?.workItems.find(item => item.key === forged.key)?.origin, undefined);
+  service.dispose();
+});

@@ -22,6 +22,8 @@ import { Sidebar, type FeatureId, type SidebarMode } from './Sidebar';
 import { SessionRecoveryDialog } from '../ai/SessionRecoveryDialog';
 import { NewSession, type SessionWorkflowOption } from '../ai/NewSession';
 import { NewIssuePage } from '../issues/NewIssuePage';
+import { QuickCapture, issueCreationAvailability } from '../issues/QuickCapture';
+import { ProjectReviewPanel } from '../projects/ProjectReviewPanel';
 import { ImportProjectsWizard } from '../projects/ImportProjectsWizard';
 import { BoardView } from '../board/BoardView';
 import { BoardDetailsPanel } from '../board/BoardDetailsPanel';
@@ -157,6 +159,8 @@ interface Route {
   aiProvider?: AiProvider;
   aiModel?: string;
   gitView?: 'graph' | 'changes' | 'conflicts';
+  /** Commit to select when the graph opens (What Changed → Open commit). Transient. */
+  gitCommit?: string;
   /** The saved workflow open in the designer (`feature === 'workflows'`). */
   workflowId?: string;
   /** The Workflows feature is showing the run monitor or policy manager rather than a designer. */
@@ -516,6 +520,7 @@ export function App() {
   const [splashBrief] = useState(() => { try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return false; } });
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
   const [boardSettingsOpenFor, setBoardSettingsOpenFor] = useState<string>();
   const [projectDocument, setProjectDocument] = useState<ProjectDocument>();
@@ -1093,6 +1098,15 @@ export function App() {
     ? projects.filter(project => activeWorkspace.projectIds.includes(project.id))
     : [];
   const selectedProject = workspaceProjects.find(project => project.id === route.projectId);
+  // The title bar's What Changed reaches the project in view, else the last one viewed, from any page (FX-BE-159 AC8).
+  const lastProjectIdRef = useRef<string>();
+  if (selectedProject) lastProjectIdRef.current = selectedProject.id;
+  const reviewProject = selectedProject ?? workspaceProjects.find(project => project.id === lastProjectIdRef.current) ?? workspaceProjects[0];
+  const [reviewRequest, setReviewRequest] = useState<{ view: 'review' | 'changes'; at: number }>();
+  const openProjectReview = useCallback((projectId: string, view: 'review' | 'changes') => {
+    setReviewRequest({ view, at: Date.now() });
+    navigate({ projectId });
+  }, [navigate]);
 
   const agentSelection: CatalogSelection | undefined =
     route.feature !== 'agents'
@@ -1344,6 +1358,11 @@ export function App() {
     // session, open the palette or navigate: the shell they act on isn't there.
     if (aiSetupNeeded) { setPaletteOpen(false); return; }
     const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        setQuickCaptureOpen(true);
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault();
         openQuickSession();
@@ -1473,6 +1492,8 @@ export function App() {
     workspaceProjects.forEach(project => {
       entries.push({ id: `project:${project.id}`, label: project.name, hint: `${project.key} · ${project.type}`, group: 'Projects', icon: 'folder-open', run: () => navigate({ projectId: project.id }) });
       entries.push({ id: `project-git:${project.id}`, label: `${project.name}: Git graph`, hint: project.key, group: 'Projects', icon: 'git-branch', keywords: 'repository history commits', run: () => navigate({ projectId: project.id, feature: 'git' }) });
+      entries.push({ id: `project-review:${project.id}`, label: `${project.name}: Daily Review`, hint: project.key, group: 'Projects', icon: 'check-square', keywords: 'blocked aging stale overdue triage', run: () => openProjectReview(project.id, 'review') });
+      entries.push({ id: `project-changes:${project.id}`, label: `${project.name}: What Changed`, hint: project.key, group: 'Projects', icon: 'clock', keywords: 'activity history recent changes feed', run: () => openProjectReview(project.id, 'changes') });
       entries.push({ id: `project-run:${project.id}`, label: `${project.name}: Run`, hint: project.key, group: 'Projects', icon: 'server', keywords: 'run profile services launch', run: () => navigate({ projectId: project.id, feature: 'run' }) });
       if (settings?.preview?.enableDeployments) {
         entries.push({ id: `project-deployments:${project.id}`, label: `${project.name}: Deployments`, hint: project.key, group: 'Projects', icon: 'rocket', keywords: 'deploy deployment profile target executor', run: () => navigate({ projectId: project.id, feature: 'deployments' }) });
@@ -1541,7 +1562,7 @@ export function App() {
       entries.push({ id: `settings:${id}`, label, hint: 'Settings', group: 'Settings', icon: 'gear', run: () => setSettingsDialogCategory(id) });
     });
     return entries;
-  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestAddProject, openExistingFolder, updateSettings, settings?.preview?.enableEasyMode, toggleFocusMode, inSession, toggleAssistant]);
+  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestAddProject, openExistingFolder, updateSettings, settings?.preview?.enableEasyMode, toggleFocusMode, inSession, toggleAssistant, openProjectReview]);
 
   /** Four stops over controls the shell already renders — see Walkthrough. */
   const walkthroughStops = useMemo<WalkthroughStop[]>(() => [
@@ -1592,19 +1613,7 @@ export function App() {
    * first launch after the startup heal). It permits rather than blocks, which
    * is what that board did before it had a row at all.
    */
-  const canCreateIssue = !connection
-    ? true
-    : connection.mode === 'demo'
-      ? true
-      : connection.mode === 'app' || connection.mode === 'folder' || connection.mode === 'project' || connection.mode === 'github'
-        ? connection.settings.allowIssueCreation === true
-        : false;
-  const createIssueHint =
-    !connection || connection.mode === 'demo' || canCreateIssue
-      ? undefined
-      : connection.mode === 'app' || connection.mode === 'folder' || connection.mode === 'project' || connection.mode === 'github'
-        ? 'Issue creation is disabled for this connection. Enable "Allow issue creation" in its settings.'
-        : `Ticket creation is not available for ${backendModeMeta(connection.mode).label} connections yet.`;
+  const { allowed: canCreateIssue, hint: createIssueHint } = issueCreationAvailability(connection);
 
   const onboardingProjectWizard = Boolean(projectWizardMode && projectWizardPresentation === 'onboarding');
   // WebContentsView is a native sibling of the renderer and always paints
@@ -1613,6 +1622,7 @@ export function App() {
   // through it.
   const nativeOverlayOpen = Boolean(
     showSplash
+      || quickCaptureOpen
       || settingsDialogCategory
       || workspaceDialogOpen
       || whatsNewOpen
@@ -2118,7 +2128,26 @@ export function App() {
       );
     }
     if (selectedProject && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments' && route.feature !== 'sessions' && route.feature !== 'conversations' && route.feature !== 'connections' && route.feature !== 'overview') {
-      return <ProjectWorkspace project={selectedProject} sessions={agentSessions} onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })} onStartTour={startWalkthrough} />;
+      return <ProjectWorkspace project={selectedProject} sessions={agentSessions} onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })} onStartTour={startWalkthrough}
+        reviewPanel={<ProjectReviewPanel key={selectedProject.id} project={selectedProject} sessions={agentSessions} request={reviewRequest}
+          onOpenPlanFile={relativePath => {
+            void window.praxis.projects.readDocument(selectedProject.id, relativePath)
+              .then(setProjectDocument)
+              .catch(error => console.error('Failed to open project document:', error));
+          }}
+          onOpenCommit={hash => navigate({ projectId: selectedProject.id, feature: 'git', gitView: 'graph', gitCommit: hash })}
+          onOpenIssue={(issue, connectionId) => {
+            const board = boards.find(candidate => candidate.connectionId === connectionId);
+            // Same route as the sidebar's: a projectId here would keep project home in the centre pane.
+            if (board) navigate({ boardId: board.id, issueKey: issue.key });
+          }}
+          onOpenSession={sessionKey => navigate({ projectId: selectedProject.id, feature: 'sessions', sessionKey })}
+          onOpenBoard={() => {
+            const board = boards.find(candidate => candidate.connectionId === `project:${selectedProject.id}`)
+              ?? boards.find(candidate => selectedProject.linkedBoards.some(linked => linked.connectionId === candidate.connectionId));
+            if (board) openBoard(board.id);
+          }}
+        />} />;
     }
     if (route.feature === 'connections') {
       // No view-scroll wrapper: the manager's two panes own their own scrolling.
@@ -2164,6 +2193,8 @@ export function App() {
         />;
       }
       return <GitGraphPage
+        key={route.gitCommit}
+        initialCommit={route.gitCommit}
         repositoryPath={selectedProject?.workspaceFolder}
         onOpenChanges={() => navigate({ projectId: selectedProject?.id, feature: 'git', gitView: 'changes' })}
         auxSlot={auxSlotEl}
@@ -2400,6 +2431,8 @@ export function App() {
         onCloseWorkspace={closeWorkspace}
         onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
         onQuickSession={openQuickSession}
+        onQuickCapture={() => setQuickCaptureOpen(true)}
+        onOpenWhatChanged={reviewProject ? () => openProjectReview(reviewProject.id, 'changes') : undefined}
         onNewProject={() => requestAddProject()}
         onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
         mode={mode}
@@ -3179,6 +3212,14 @@ export function App() {
         <CommandPalette entries={paletteEntries} onSearch={searchIssues} onClose={() => setPaletteOpen(false)} />
       )}
       {walkthroughOpen && <Walkthrough stops={walkthroughStops} onDone={finishWalkthrough} />}
+      {!aiSetupNeeded && <QuickCapture
+        open={quickCaptureOpen}
+        boards={workspaceBoards}
+        connections={connections}
+        initialBoard={selectedBoard ?? workspaceBoards.find(board => activeProjectId && projectIdForConnection(board.connectionId, connections) === activeProjectId)}
+        onClose={() => setQuickCaptureOpen(false)}
+        onCreated={(board, issueKey) => { refreshBoards(); refreshBoardDetails(); navigate({ boardId: board.id, issueKey }); }}
+      />}
       {!aiSetupNeeded && <AssistantFloating />}
     </div>
   );

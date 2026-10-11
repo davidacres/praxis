@@ -1,3 +1,4 @@
+import { runAsAgent } from './projectActivityInstance';
 import { takeContextSnapshot } from './contextSnapshotHost';
 import { getLogBus } from './logBusInstance';
 import { randomUUID } from 'node:crypto';
@@ -259,7 +260,7 @@ export function trackerToolExtension(
         if (name === 'tracker_add_comment') {
           const body = str(args, 'body');
           if (!body) return { ok: false, content: 'body is required.' };
-          await service.addComment(issueKey, body);
+          await runAsAgent(() => service.addComment(issueKey, body));
           return { ok: true, content: `Comment added to ${issueKey}.` };
         }
         if (name === 'tracker_update_ticket') {
@@ -269,7 +270,7 @@ export function trackerToolExtension(
             ...(args.assignee === null || typeof args.assignee === 'string' ? { assignee: args.assignee as string | null } : {}),
             ...(str(args, 'priority') ? { priority: str(args, 'priority') } : {})
           };
-          return { ok: true, content: JSON.stringify(await service.updateIssue(issueKey, update), null, 2) };
+          return { ok: true, content: JSON.stringify(await runAsAgent(() => service.updateIssue(issueKey, update)), null, 2) };
         }
         if (name === 'tracker_transition_ticket') {
           const rawTransition = str(args, 'transitionId') || str(args, 'targetStatus') || str(args, 'status');
@@ -288,7 +289,7 @@ export function trackerToolExtension(
           } catch {
             // fallback to raw ID
           }
-          await service.transitionIssue(issueKey, effectiveId);
+          await runAsAgent(() => service.transitionIssue(issueKey, effectiveId));
           return { ok: true, content: `Transition ${effectiveId} applied to ${issueKey}.` };
         }
         return { ok: false, content: `Unknown tracker tool: ${name}` };

@@ -1,3 +1,4 @@
+import { runAsAgent } from './projectActivityInstance';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -439,13 +440,13 @@ async function publishPlanToBoard(run: WorkflowRun, responseText: string | undef
   const projectKey = (await service.getProjects())[0]?.key ?? getProjectStore().get(run.projectId)?.key;
   if (!projectKey) throw new Error('The run\'s project has no board to create the plan on.');
   const inputs = planIssueInputs(plan, projectKey);
-  const feature = await service.createIssue(inputs.feature).catch(error => {
+  const feature = await runAsAgent(() => service.createIssue(inputs.feature)).catch(error => {
     throw new Error(`Could not create the plan on the board: ${error instanceof Error ? error.message : String(error)}`);
   });
   const itemKeys: string[] = [];
   for (const item of inputs.items(feature.key)) {
     try {
-      itemKeys.push((await service.createIssue(item)).key);
+      itemKeys.push((await runAsAgent(() => service.createIssue(item))).key);
     } catch (error) {
       throw new Error(
         `Plan ${feature.key} was created, but only ${itemKeys.length} of ${plan.items.length} items were added before the board refused "${item.summary}": ${error instanceof Error ? error.message : String(error)}. Finish or delete ${feature.key} on the board before retrying, or the retry creates a second plan.`

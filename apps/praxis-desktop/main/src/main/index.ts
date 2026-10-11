@@ -1,3 +1,4 @@
+import { registerProjectActivityIpc } from './projectActivityInstance';
 import { registerCoordinationIpc } from './coordinationIpc';
 import { disposeCoordination } from './coordinationInstance';
 import * as fs from 'node:fs';
@@ -348,6 +349,7 @@ void app.whenReady().then(async () => {
 
   registerBoardIpc();
   registerIssueIpc();
+  registerProjectActivityIpc();
   registerConnectionIpc();
   registerProjectImportIpc();
   registerFolderIpc();

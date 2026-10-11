@@ -212,6 +212,13 @@ export interface SubTaskSummary {
   assignee?: string;
 }
 
+/**
+ * How a ticket entered the board. `capture` = Quick Capture (FX-BE-158), shown
+ * as a "Captured" badge until the item leaves its first column. Recorded only
+ * by backends Praxis owns (app storage, folder); external trackers ignore it.
+ */
+export type IssueOrigin = 'capture';
+
 export interface IssueSummary {
   id?: string;
   key: string;
@@ -255,6 +262,7 @@ export interface IssueSummary {
    * unset, and consumers fall back to another stable sort (e.g. `key`).
    */
   childSeq?: number;
+  origin?: IssueOrigin;
   raw?: unknown;
 }
 
@@ -284,6 +292,8 @@ export interface CreateIssueInput {
   severity?: string;
   /** Folder-backed only: bodies for template sections by heading (e.g. `Steps to Reproduce`). Ignored elsewhere. */
   sections?: Record<string, string>;
+  /** App-storage and folder only: provenance recorded on the new item. Ignored elsewhere. */
+  origin?: IssueOrigin;
 }
 
 export interface UpdateIssueInput {

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { AgentSessionRecord, GitStatusSnapshot, WorkflowRunSummary, ProjectRecord } from '@praxis/core';
 import { SectionHeader } from './SectionHeader';
-import { EasyModeSessionsList } from './EasyModeSessionsList';
+import { EasyModeSessionsList, isAttentionState } from './EasyModeSessionsList';
 import { EasyModeAutomationsList } from './EasyModeAutomationsList';
 import { AssignSessionDialog } from './AssignSessionDialog';
 import { Icon } from '../../ui/Icon';
@@ -108,7 +108,7 @@ export function EasyModeSidebar({
   const { allCount, liveCount, gateCount } = useMemo(() => {
     const total = rootSessions.length + allRuns.length;
     const live = rootSessions.filter(
-      s => s.state === 'executing' || s.state === 'planning' || s.state === 'awaiting_approval' || s.state === 'awaiting_input'
+      s => isAttentionState(s.state)
     ).length + allRuns.filter(r => r.run.status === 'running' || r.run.status === 'awaiting-approval').length;
     const gates = rootSessions.filter(
       s => s.state === 'awaiting_approval' || s.state === 'awaiting_input'

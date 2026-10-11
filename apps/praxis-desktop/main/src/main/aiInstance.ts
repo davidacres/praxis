@@ -1,3 +1,4 @@
+import { recordSessionActivity } from './projectActivityInstance';
 import { execFile } from 'node:child_process';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
@@ -84,6 +85,7 @@ export function getAiSessionManager(): AiSessionManager {
       new JsonKeyValueStore(path.join(app.getPath('userData'), 'ai-sessions.json')),
       transcriptStore
     );
+    sessionManager.onDidChangeAgentSession(recordSessionActivity);
   }
   return sessionManager;
 }

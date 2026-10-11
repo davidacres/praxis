@@ -32,6 +32,9 @@ export interface TitleBarProps {
   onNewSession?: () => void;
   /** Opens a session composer pre-set for a quick, workflow-driven session. */
   onQuickSession?: () => void;
+  onQuickCapture?: () => void;
+  /** Opens the active project's What Changed view. */
+  onOpenWhatChanged?: () => void;
   onNewProject?: () => void;
   onImportProjects?: () => void;
   mode?: SidebarMode;
@@ -88,6 +91,8 @@ export function TitleBar({
   onCloseWorkspace,
   onNewSession,
   onQuickSession,
+  onQuickCapture,
+  onOpenWhatChanged,
   onNewProject,
   onImportProjects,
   mode = 'classic',
@@ -410,6 +415,18 @@ export function TitleBar({
             onClick={onNewSession}
           >
             <Icon name="robot" size={13} />
+          </button>
+        )}
+
+        {!easyMode && onQuickCapture && (
+          <button type="button" className="new-pill new-pill-icon" aria-label="Quick Capture" title="Quick Capture (⌘⇧C / Ctrl+Shift+C)" data-testid="quick-capture" onClick={onQuickCapture}>
+            <Icon name="ticket" size={13} />
+          </button>
+        )}
+
+        {!easyMode && onOpenWhatChanged && (
+          <button type="button" className="new-pill new-pill-icon" aria-label="What Changed" data-testid="titlebar-what-changed" onClick={onOpenWhatChanged}>
+            <Icon name="clock" size={13} />
           </button>
         )}
 

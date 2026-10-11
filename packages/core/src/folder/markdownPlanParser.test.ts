@@ -11,6 +11,7 @@ import {
   parsePlanFolder,
   resolvePlanDependencyKeys
 } from './markdownPlanParser';
+import { ensureFrontMatter, generateIssueMarkdown } from './markdownTemplate';
 
 /** Minimal plans root: one feature folder with a typed markdown file. */
 async function writeFeature(plansRoot: string, title: string): Promise<void> {
@@ -233,6 +234,32 @@ test('frontmatter-only dependencies resolve to real board keys end to end', asyn
     assert.deepEqual(storyItem?.depTokens, ['FX-BF-003']);
     const resolved = resolvePlanDependencyKeys(parsed, 'PRAXIS');
     assert.deepEqual(resolved.get('PRAXIS-S03-5'), ['PRAXIS-F03']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a captured item round-trips its Origin line, and the upgrade pass neither adds nor rewrites one', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'praxis-plan-origin-'));
+  const featureDir = path.join(root, 'features', 'feature-01-demo');
+  await mkdir(featureDir, { recursive: true });
+  const createdAt = '2026-10-11T09:00:00.000Z';
+  const captured = generateIssueMarkdown('Task', 'Captured note', { createdAt, parentKey: 'PRX-F01', origin: 'capture' });
+  const plain = generateIssueMarkdown('Task', 'Typed ticket', { createdAt, parentKey: 'PRX-F01' });
+  assert.match(captured, /^\*\*Origin:\*\* capture$/m);
+  assert.doesNotMatch(plain, /Origin/);
+  assert.equal(ensureFrontMatter(captured, 'Task'), captured);
+  assert.doesNotMatch(ensureFrontMatter(plain, 'Task'), /Origin/);
+  await writeFile(path.join(featureDir, 'feature.md'), generateIssueMarkdown('Feature', 'Demo', { createdAt }));
+  await writeFile(path.join(featureDir, 'task-01-1-captured-note.md'), captured);
+  await writeFile(path.join(featureDir, 'task-01-2-typed-ticket.md'), plain);
+  const forged = generateIssueMarkdown('Task', 'Forged origin', { createdAt, parentKey: 'PRX-F01' })
+    .replace('**Priority:**', '**Origin:** <script>\n**Priority:**');
+  await writeFile(path.join(featureDir, 'task-01-3-forged-origin.md'), forged);
+  try {
+    const parsed = await parsePlanFolder(root);
+    const origins = Object.fromEntries(parsed.childItems.map(item => [item.title, item.origin ?? null]));
+    assert.deepEqual(origins, { 'Captured note': 'capture', 'Typed ticket': null, 'Forged origin': null });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

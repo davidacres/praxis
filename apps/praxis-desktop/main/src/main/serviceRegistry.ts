@@ -1,3 +1,4 @@
+import { observeIssueService, recordPlanActivity } from './projectActivityInstance';
 import type { BackendMode, IssueTrackerService, LogSink } from '@praxis/core';
 import {
   GitLabBoardService,
@@ -233,7 +234,7 @@ function createGitHubService(connectionId: string): IssueTrackerService {
  * throws a clear message on mutation, never silently to demo, which used to
  * make a misconfigured connection indistinguishable from demo data.
  */
-export async function getServiceForConnection(
+async function resolveServiceForConnection(
   connectionId: string | undefined
 ): Promise<IssueTrackerService> {
   if (!connectionId) {
@@ -270,6 +271,7 @@ export async function getServiceForConnection(
       // Tell open boards when files changed on disk, so they re-query without
       // a reselect or relaunch.
       service.onDidReloadFromDisk(() => broadcastToAllWindows('board:changed', connectionId));
+      service.onDidChangePlanFile(filePath => recordPlanActivity(connectionId, filePath));
       folderServices.set(connectionId, service);
       return service;
     }
@@ -349,4 +351,9 @@ export function disposeAllServices(): void {
     service.dispose();
   }
   projectServices.clear();
+}
+
+export async function getServiceForConnection(connectionId: string | undefined): Promise<IssueTrackerService> {
+  const service = await resolveServiceForConnection(connectionId);
+  return connectionId ? observeIssueService(service, connectionId) : service;
 }

@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import { BrowserWindow, ipcMain } from 'electron';
-import { attachRendererNavigationGuard, rendererDir } from './rendererNavigationGuard';
+import { attachRendererNavigationGuard, isOwnRendererSender, rendererDir } from './rendererNavigationGuard';
 import { broadcastToAllWindows } from './windowBroadcast';
 
 /**
@@ -95,11 +95,21 @@ export function closeAllDetachedChats(): void {
 }
 
 export function registerDetachedChatIpc(devServerUrl: string | undefined): void {
-  ipcMain.handle('detachedChat:open', async (_event, issueKey: string) => {
+  const assertSender = (event: Electron.IpcMainInvokeEvent) => {
+    if (!isOwnRendererSender(event, devServerUrl)) {
+      throw new Error('Detached chat requires a trusted renderer.');
+    }
+  };
+  ipcMain.handle('detachedChat:open', async (event, issueKey: string) => {
+    assertSender(event);
     openDetachedChat(issueKey, devServerUrl);
   });
-  ipcMain.handle('detachedChat:close', async (_event, issueKey: string) => {
+  ipcMain.handle('detachedChat:close', async (event, issueKey: string) => {
+    assertSender(event);
     closeDetachedChat(issueKey);
   });
-  ipcMain.handle('detachedChat:list', async () => detachedChatKeys());
+  ipcMain.handle('detachedChat:list', async event => {
+    assertSender(event);
+    return detachedChatKeys();
+  });
 }

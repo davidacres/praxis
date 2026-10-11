@@ -37,9 +37,12 @@ export function GitGraphPage({
   repositoryPath,
   onOpenChanges,
   auxSlot,
-  onRequireAux
+  onRequireAux,
+  initialCommit
 }: {
   repositoryPath?: string;
+  /** Select this commit on first load (What Changed's "Open commit"), when it is in the loaded history. */
+  initialCommit?: string;
   onOpenChanges: () => void;
   /** The shell's right-pane element the commit inspector portals into. */
   auxSlot: HTMLElement | null;
@@ -94,7 +97,9 @@ export function GitGraphPage({
       setSnapshot(next);
       setCompareLeft(current => current || next.currentBranch || next.branches.find(branch => !branch.isRemote)?.name || 'HEAD');
       setCompareRight(current => current || next.branches.find(branch => !branch.isRemote && branch.name !== next.currentBranch)?.name || next.currentBranch || 'HEAD');
-      setSelectedHash(current => current && next.commits.some(commit => commit.hash === current) ? current : next.commits[0]?.hash);
+      setSelectedHash(current => current && next.commits.some(commit => commit.hash === current) ? current
+        : initialCommit && next.commits.some(commit => commit.hash === initialCommit) ? initialCommit : next.commits[0]?.hash);
+      if (initialCommit && next.commits.some(commit => commit.hash === initialCommit)) onRequireAux?.();
       const nextStatus = await window.praxis.git.status(next.repositoryPath);
       setStatus(nextStatus);
       setConflictPath(nextStatus.files.find(file => file.conflicted)?.path);

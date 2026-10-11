@@ -160,6 +160,24 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     .map(block => (block.type === 'text' ? block.text : ''))
     .join('');
 
+  if (promptText.includes('PERMISSION_KIND_MATRIX')) {
+    const outcomes = [];
+    for (const kind of ['edit', 'move', 'execute', 'other', undefined, null, 'read', 'search']) {
+      const response = await ctx.client.request(acp.CLIENT_METHODS.session_request_permission, {
+        sessionId: ctx.params.sessionId,
+        toolCall: { toolCallId: `matrix-${outcomes.length}`, title: 'Project context', ...(kind !== undefined ? { kind } : {}) },
+        // No rejection choice: the client must cancel rather than select Allow.
+        options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }]
+      });
+      outcomes.push({ kind: kind ?? 'missing', ...response.outcome });
+    }
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: JSON.stringify(outcomes) } }
+    });
+    return { stopReason: 'end_turn' };
+  }
+
   if (promptText.includes('EMIT_THOUGHT')) {
     // Two chunks, as a real agent streams its reasoning.
     for (const text of ['Checking the ', 'ACP thought path.']) {

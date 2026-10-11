@@ -171,13 +171,17 @@ export function pickPermissionOptionId(
         : ['reject_once', 'reject_always'];
   for (const kind of preferredKinds) {
     const match = options.find(
-      o => o.kind === kind || o.optionId === kind || o.optionId === kind.replace('_', '-')
+      o => o.kind === kind || (
+        !['allow_once', 'allow_always', 'reject_once', 'reject_always'].includes(o.kind) &&
+        (o.optionId === kind || o.optionId === kind.replace('_', '-'))
+      )
     );
     if (match) {
       return match.optionId;
     }
   }
-  return options[0]?.optionId;
+  // A denial must never fall back to an agent's allow-only option list.
+  return decision === 'deny' ? undefined : options[0]?.optionId;
 }
 
 /**

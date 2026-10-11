@@ -413,6 +413,12 @@ export function BoardView({
     const requested = filters.statuses.length > 0 ? filters.statuses : available;
     return [...new Set(requested.map(status => status.trim()).filter(Boolean))];
   }, [details.columnStatusOrder, details.columns, filters.statuses]);
+  /** FX-BE-158: a captured stub reads as untriaged until it leaves the board's first column. */
+  const intakeStatus = details.columnStatusOrder?.[0] ?? details.columns[0]?.name;
+  const isUntriagedCapture = (issue: IssueSummary) => issue.origin === 'capture' && issue.status === intakeStatus;
+  const capturedBadge = (
+    <span className="issue-card-captured" data-testid="issue-card-captured" title="Added with Quick Capture — move it out of this column once triaged">Captured</span>
+  );
   const pageStatuses = useMemo<(string | undefined)[]>(
     () => (pagedStatuses.length > 0 ? pagedStatuses : [undefined]),
     [pagedStatuses]
@@ -929,6 +935,7 @@ export function BoardView({
       <div className="issue-card-meta">
         <span className="issue-card-context" title={context}>{context}</span>
         {issue.parentIssue && <span className="issue-card-type">{issue.issueType}</span>}
+        {isUntriagedCapture(issue) && capturedBadge}
         {childCount > 0 && (
           <span
             className="issue-card-child-count"
@@ -1111,6 +1118,7 @@ export function BoardView({
             >
               <span className="issue-card-key">{issue.key}</span>
               <span className="board-list-row-title">{issue.summary}</span>
+              {isUntriagedCapture(issue) && capturedBadge}
               {childCount > 0 && (
                 <span
                   className="issue-card-child-count"

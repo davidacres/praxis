@@ -52,7 +52,7 @@ const BUILT_IN_THEMES: ThemeDefinition[] = [
   {
     id: 'tm-default-1', name: 'TMDefault1', family: 'Praxis', section: 'Recent', mode: 'light',
     description: 'The original Praxis light palette.',
-    preview: { canvas: '#f6f6f6', panel: '#ffffff', raised: '#ececec', border: '#cdcdcd', text: '#1f1f1f', muted: '#8b8b8b', accent: '#7c5cff', success: '#3fb950', warning: '#d29922', danger: '#b52d2d' }
+    preview: { canvas: '#f6f6f6', panel: '#ffffff', raised: '#ececec', border: '#cdcdcd', text: '#1f1f1f', muted: '#8b8b8b', accent: '#7758f5', success: '#3fb950', warning: '#d29922', danger: '#b52d2d' }
   },
   {
     id: 'tm-default-2', name: 'TMDefault2', family: 'Praxis', section: 'Recent', mode: 'dark',

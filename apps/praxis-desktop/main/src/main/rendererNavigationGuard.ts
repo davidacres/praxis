@@ -1,6 +1,22 @@
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type BrowserWindow, shell } from 'electron';
+import { type BrowserWindow, type IpcMainInvokeEvent, type WebContents, shell } from 'electron';
+
+const rendererSenders = new WeakSet<WebContents>();
+
+/** Only the main frame of a guarded, live application renderer may invoke privileged IPC. */
+export function isOwnRendererSender(event: IpcMainInvokeEvent, devServerUrl: string | undefined): boolean {
+  try {
+    return rendererSenders.has(event.sender)
+      && !event.sender.isDestroyed()
+      && !!event.senderFrame
+      && !event.senderFrame.isDestroyed()
+      && event.senderFrame === event.sender.mainFrame
+      && isOwnRendererUrl(event.senderFrame.url, devServerUrl);
+  } catch {
+    return false;
+  }
+}
 
 /** Same compiled output directory (`out/main/`) for every file in this package. */
 export const rendererDir = path.join(__dirname, '../../renderer');
@@ -36,6 +52,7 @@ export function openInOsBrowser(url: string): void {
  * to the OS browser instead.
  */
 export function attachRendererNavigationGuard(win: BrowserWindow, devServerUrl: string | undefined): void {
+  rendererSenders.add(win.webContents);
   const guard = (event: Electron.Event, url: string) => {
     if (isOwnRendererUrl(url, devServerUrl)) return;
     event.preventDefault();

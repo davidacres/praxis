@@ -213,7 +213,7 @@
   --bg: #f6f6f6; --bg-elevated: #ffffff; --bg-sunken: #ececec; --bg-input: #ffffff;
   --bg-hover: rgba(0,0,0,.05); --bg-active: rgba(0,0,0,.09); --border: #e0e0e0; --border-strong: #cdcdcd;
   --text: #1f1f1f; --text-secondary: #616161; --text-tertiary: #8b8b8b; --danger: #b52d2d;
-  --accent: #7c5cff; --accent-hover: #6a4ce0; --accent-contrast: #fff; --accent-soft: rgba(124,92,255,.16); --accent-border: rgba(124,92,255,.4);
+  --accent: #7758f5; --accent-hover: #6a4ce0; --accent-contrast: #fff; --accent-soft: rgba(124,92,255,.16); --accent-border: rgba(124,92,255,.4);
   --caption-hover: rgba(0,0,0,.07); --shadow-panel: 0 8px 24px rgba(0,0,0,.12);
 }
 :root[data-theme='tm-default-2'] {
@@ -234,7 +234,7 @@
   --bg: #f5f5f4; --bg-elevated: #fafaf7; --bg-sunken: #f0f0eb; --bg-input: #fafaf7;
   --bg-hover: rgba(25,25,25,.055); --bg-active: rgba(25,25,25,.1); --border: #e5e5df; --border-strong: #bfbfba;
   --text: #191919; --text-secondary: #666663; --text-tertiary: #91918d; --danger: #cc5247;
-  --accent: #b85f45; --accent-hover: #9e4f39; --accent-contrast: #fff; --accent-soft: rgba(204,120,92,.16); --accent-border: rgba(184,95,69,.45);
+  --accent: #b25c43; --accent-hover: #9e4f39; --accent-contrast: #fff; --accent-soft: rgba(204,120,92,.16); --accent-border: rgba(184,95,69,.45);
   --caption-hover: rgba(25,25,25,.07); --shadow-panel: 0 8px 24px rgba(25,25,25,.14);
 }
 :root[data-theme='humanist-dark'] {
@@ -255,7 +255,7 @@
   --bg: #0d1117; --bg-elevated: #161b22; --bg-sunken: #010409; --bg-input: #0d1117;
   --bg-hover: rgba(177,186,196,.08); --bg-active: rgba(177,186,196,.12); --border: #21262d; --border-strong: #30363d;
   --text: #e6edf3; --text-secondary: #b1bac4; --text-tertiary: #7d8590; --danger: #f85149;
-  --accent: #2f81f7; --accent-hover: #388bfd; --accent-contrast: #fff; --accent-soft: rgba(47,129,247,.14); --accent-border: rgba(47,129,247,.45);
+  --accent: #2f81f7; --accent-hover: #388bfd; --accent-contrast: #0d1117; --accent-soft: rgba(47,129,247,.14); --accent-border: rgba(47,129,247,.45);
   --caption-hover: rgba(177,186,196,.09); --shadow-panel: 0 8px 24px rgba(1,4,9,.65);
 }
 :root[data-theme='jira-cloud'] {
@@ -269,16 +269,16 @@
 :root[data-theme='nord-dark'] { --bg:#2e3440; --bg-elevated:#3b4252; --bg-sunken:#242933; --bg-input:#434c5e; --bg-hover:rgba(236,239,244,.07); --bg-active:rgba(236,239,244,.12); --border:#4c566a; --border-strong:#81a1c1; --text:#eceff4; --text-secondary:#d8dee9; --text-tertiary:#a9b5c6; --danger:#bf616a; --accent:#88c0d0; --accent-hover:#8fbcbb; --accent-contrast:#2e3440; --accent-soft:rgba(136,192,208,.18); --accent-border:rgba(136,192,208,.45); --caption-hover:rgba(236,239,244,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.45); }
 :root[data-theme='one-dark'] { --bg:#282c34; --bg-elevated:#21252b; --bg-sunken:#1b1d23; --bg-input:#2c313c; --bg-hover:rgba(171,178,191,.08); --bg-active:rgba(171,178,191,.12); --border:#3e4451; --border-strong:#5c6370; --text:#abb2bf; --text-secondary:#9da5b4; --text-tertiary:#7f848e; --danger:#e06c75; --accent:#61afef; --accent-hover:#74baf2; --accent-contrast:#282c34; --accent-soft:rgba(97,175,239,.18); --accent-border:rgba(97,175,239,.45); --caption-hover:rgba(171,178,191,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.45); }
 :root[data-theme='monokai-dark'] { --bg:#272822; --bg-elevated:#1e1f1c; --bg-sunken:#171814; --bg-input:#3e3d32; --bg-hover:rgba(248,248,242,.08); --bg-active:rgba(248,248,242,.12); --border:#575b61; --border-strong:#75715e; --text:#f8f8f2; --text-secondary:#c5c8c6; --text-tertiary:#a6a6a0; --danger:#f92672; --accent:#f92672; --accent-hover:#ff4f91; --accent-contrast:#272822; --accent-soft:rgba(249,38,114,.18); --accent-border:rgba(249,38,114,.45); --caption-hover:rgba(248,248,242,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.45); }
-:root[data-theme='catppuccin-latte'] { --bg:#eff1f5; --bg-elevated:#e6e9ef; --bg-sunken:#dce0e8; --bg-input:#f5f5f5; --bg-hover:rgba(76,79,105,.06); --bg-active:rgba(76,79,105,.1); --border:#bcc0cc; --border-strong:#9ca0b0; --text:#4c4f69; --text-secondary:#6c6f85; --text-tertiary:#7c7f93; --danger:#d20f39; --accent:#8839ef; --accent-hover:#7c2fe0; --accent-contrast:#fff; --accent-soft:rgba(136,57,239,.13); --accent-border:rgba(136,57,239,.4); --caption-hover:rgba(76,79,105,.07); --shadow-panel:0 8px 24px rgba(76,79,105,.16); }
+:root[data-theme='catppuccin-latte'] { --bg:#eff1f5; --bg-elevated:#e6e9ef; --bg-sunken:#dce0e8; --bg-input:#f5f5f5; --bg-hover:rgba(76,79,105,.06); --bg-active:rgba(76,79,105,.1); --border:#bcc0cc; --border-strong:#9ca0b0; --text:#4c4f69; --text-secondary:#5c5f77; --text-tertiary:#7c7f93; --danger:#d20f39; --accent:#8839ef; --accent-hover:#7c2fe0; --accent-contrast:#fff; --accent-soft:rgba(136,57,239,.13); --accent-border:rgba(136,57,239,.4); --caption-hover:rgba(76,79,105,.07); --shadow-panel:0 8px 24px rgba(76,79,105,.16); }
 :root[data-theme='catppuccin-mocha'] { --bg:#1e1e2e; --bg-elevated:#181825; --bg-sunken:#11111b; --bg-input:#313244; --bg-hover:rgba(205,214,244,.08); --bg-active:rgba(205,214,244,.12); --border:#45475a; --border-strong:#585b70; --text:#cdd6f4; --text-secondary:#bac2de; --text-tertiary:#a6adc8; --danger:#f38ba8; --accent:#cba6f7; --accent-hover:#d5b7f9; --accent-contrast:#1e1e2e; --accent-soft:rgba(203,166,247,.17); --accent-border:rgba(203,166,247,.45); --caption-hover:rgba(205,214,244,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.5); }
 :root[data-theme='tokyo-night'] { --bg:#1a1b26; --bg-elevated:#16161e; --bg-sunken:#13131b; --bg-input:#24283b; --bg-hover:rgba(192,202,245,.08); --bg-active:rgba(192,202,245,.12); --border:#3b4261; --border-strong:#565f89; --text:#c0caf5; --text-secondary:#a9b1d6; --text-tertiary:#565f89; --danger:#f7768e; --accent:#7aa2f7; --accent-hover:#89b4fa; --accent-contrast:#1a1b26; --accent-soft:rgba(122,162,247,.18); --accent-border:rgba(122,162,247,.45); --caption-hover:rgba(192,202,245,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.5); }
-:root[data-theme='solarized-light'] { --bg:#fdf6e3; --bg-elevated:#eee8d5; --bg-sunken:#e4ddc8; --bg-input:#fffaf0; --bg-hover:rgba(101,123,131,.06); --bg-active:rgba(101,123,131,.1); --border:#d3cbb7; --border-strong:#b9b09b; --text:#657b83; --text-secondary:#586e75; --text-tertiary:#93a1a1; --danger:#dc322f; --accent:#268bd2; --accent-hover:#1e78b8; --accent-contrast:#fff; --accent-soft:rgba(38,139,210,.14); --accent-border:rgba(38,139,210,.4); --caption-hover:rgba(101,123,131,.07); --shadow-panel:0 8px 24px rgba(101,123,131,.18); }
+:root[data-theme='solarized-light'] { --bg:#fdf6e3; --bg-elevated:#eee8d5; --bg-sunken:#e4ddc8; --bg-input:#fffaf0; --bg-hover:rgba(101,123,131,.06); --bg-active:rgba(101,123,131,.1); --border:#d3cbb7; --border-strong:#b9b09b; --text:#657b83; --text-secondary:#586e75; --text-tertiary:#93a1a1; --danger:#dc322f; --accent:#217ab9; --accent-hover:#1e78b8; --accent-contrast:#fff; --accent-soft:rgba(38,139,210,.14); --accent-border:rgba(38,139,210,.4); --caption-hover:rgba(101,123,131,.07); --shadow-panel:0 8px 24px rgba(101,123,131,.18); }
 :root[data-theme='gruvbox-dark'] { --bg:#282828; --bg-elevated:#1d2021; --bg-sunken:#161819; --bg-input:#3c3836; --bg-hover:rgba(235,219,178,.08); --bg-active:rgba(235,219,178,.12); --border:#504945; --border-strong:#665c54; --text:#ebdbb2; --text-secondary:#d5c4a1; --text-tertiary:#a89984; --danger:#cc241d; --accent:#d79921; --accent-hover:#fabd2f; --accent-contrast:#282828; --accent-soft:rgba(215,153,33,.18); --accent-border:rgba(215,153,33,.45); --caption-hover:rgba(235,219,178,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.48); }
 :root[data-theme='ayu-light'] { --bg:#fafafa; --bg-elevated:#f3f3f3; --bg-sunken:#e6e6e6; --bg-input:#fff; --bg-hover:rgba(87,95,102,.06); --bg-active:rgba(87,95,102,.1); --border:#d6d6d6; --border-strong:#bdbdbd; --text:#575f66; --text-secondary:#6f7780; --text-tertiary:#8a9199; --danger:#f07171; --accent:#e6a23c; --accent-hover:#d18f2b; --accent-contrast:#fff; --accent-soft:rgba(230,162,60,.16); --accent-border:rgba(230,162,60,.42); --caption-hover:rgba(87,95,102,.07); --shadow-panel:0 8px 24px rgba(87,95,102,.15); }
 :root[data-theme='rose-pine'] { --bg:#191724; --bg-elevated:#1f1d2e; --bg-sunken:#13111d; --bg-input:#26233a; --bg-hover:rgba(224,222,244,.08); --bg-active:rgba(224,222,244,.12); --border:#403d52; --border-strong:#524f67; --text:#e0def4; --text-secondary:#c4c1d9; --text-tertiary:#908caa; --danger:#eb6f92; --accent:#ebbcba; --accent-hover:#f0c5c3; --accent-contrast:#191724; --accent-soft:rgba(235,188,186,.18); --accent-border:rgba(235,188,186,.45); --caption-hover:rgba(224,222,244,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.5); }
 :root[data-theme='vscode-dark-plus'] { --bg:#1e1e1e; --bg-elevated:#252526; --bg-sunken:#181818; --bg-input:#3c3c3c; --bg-hover:rgba(204,204,204,.08); --bg-active:rgba(204,204,204,.12); --border:#454545; --border-strong:#6b6b6b; --text:#d4d4d4; --text-secondary:#cccccc; --text-tertiary:#a6a6a6; --danger:#f14c4c; --accent:#007acc; --accent-hover:#0098ff; --accent-contrast:#fff; --accent-soft:rgba(0,122,204,.2); --accent-border:rgba(0,152,255,.5); --caption-hover:rgba(204,204,204,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.5); }
 :root[data-theme='vscode-light-plus'] { --bg:#fff; --bg-elevated:#f3f3f3; --bg-sunken:#e8e8e8; --bg-input:#fff; --bg-hover:rgba(51,51,51,.06); --bg-active:rgba(51,51,51,.1); --border:#c8c8c8; --border-strong:#999; --text:#333; --text-secondary:#616161; --text-tertiary:#767676; --danger:#e51400; --accent:#007acc; --accent-hover:#005a9e; --accent-contrast:#fff; --accent-soft:rgba(0,122,204,.13); --accent-border:rgba(0,122,204,.42); --caption-hover:rgba(51,51,51,.07); --shadow-panel:0 8px 24px rgba(0,0,0,.14); }
-:root[data-theme='xcode-light'] { --bg:#fff; --bg-elevated:#f2f2f7; --bg-sunken:#e5e5ea; --bg-input:#fff; --bg-hover:rgba(29,29,31,.06); --bg-active:rgba(29,29,31,.1); --border:#c7c7cc; --border-strong:#aeaeb2; --text:#1d1d1f; --text-secondary:#6e6e73; --text-tertiary:#8e8e93; --danger:#d70015; --accent:#0a84ff; --accent-hover:#006edb; --accent-contrast:#fff; --accent-soft:rgba(10,132,255,.14); --accent-border:rgba(10,132,255,.42); --caption-hover:rgba(29,29,31,.07); --shadow-panel:0 8px 24px rgba(0,0,0,.15); }
+:root[data-theme='xcode-light'] { --bg:#fff; --bg-elevated:#f2f2f7; --bg-sunken:#e5e5ea; --bg-input:#fff; --bg-hover:rgba(29,29,31,.06); --bg-active:rgba(29,29,31,.1); --border:#c7c7cc; --border-strong:#aeaeb2; --text:#1d1d1f; --text-secondary:#6e6e73; --text-tertiary:#8e8e93; --danger:#d70015; --accent:#0973de; --accent-hover:#006edb; --accent-contrast:#fff; --accent-soft:rgba(10,132,255,.14); --accent-border:rgba(10,132,255,.42); --caption-hover:rgba(29,29,31,.07); --shadow-panel:0 8px 24px rgba(0,0,0,.15); }
 :root[data-theme='xcode-dark'] { --bg:#1e1e1e; --bg-elevated:#292929; --bg-sunken:#151515; --bg-input:#333; --bg-hover:rgba(242,242,247,.07); --bg-active:rgba(242,242,247,.11); --border:#3f3f3f; --border-strong:#636366; --text:#f2f2f7; --text-secondary:#c7c7cc; --text-tertiary:#98989d; --danger:#ff453a; --accent:#0a84ff; --accent-hover:#409cff; --accent-contrast:#fff; --accent-soft:rgba(10,132,255,.18); --accent-border:rgba(64,156,255,.48); --caption-hover:rgba(242,242,247,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.52); }
 :root[data-theme='rider-dark'] { --bg:#2b2b2b; --bg-elevated:#3c3f41; --bg-sunken:#252526; --bg-input:#45494a; --bg-hover:rgba(223,225,229,.075); --bg-active:rgba(223,225,229,.12); --border:#515151; --border-strong:#6c7072; --text:#dfe1e5; --text-secondary:#c5c8cc; --text-tertiary:#a9b0b8; --danger:#db5c5c; --accent:#4a88c7; --accent-hover:#5d9bd9; --accent-contrast:#fff; --accent-soft:rgba(74,136,199,.2); --accent-border:rgba(93,155,217,.48); --caption-hover:rgba(223,225,229,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.48); }
 :root[data-theme='christmas-workshop'] { --bg:#10251b; --bg-elevated:#173326; --bg-sunken:#0b1b13; --bg-input:#214433; --bg-hover:rgba(247,242,231,.075); --bg-active:rgba(247,242,231,.12); --border:#315b45; --border-strong:#4d7d61; --text:#f7f2e7; --text-secondary:#d7dfd8; --text-tertiary:#b8c8bd; --danger:#ff6b6b; --accent:#d64045; --accent-hover:#ed565b; --accent-contrast:#fffdf7; --accent-soft:rgba(214,64,69,.2); --accent-border:rgba(237,86,91,.5); --caption-hover:rgba(247,242,231,.08); --shadow-panel:0 8px 24px rgba(0,0,0,.55); }
@@ -4218,6 +4218,20 @@ textarea {
 .issue-card-type {
   color: var(--text-tertiary);
   background: var(--bg-hover);
+}
+
+/* FX-BE-158: an untriaged Quick Capture stub. Dashed = not yet shaped; kept off the accent so it never reads as the card's context chip. */
+.issue-card-captured {
+  flex-shrink: 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.board-list-row .issue-card-captured {
+  font-size: var(--text-xs);
 }
 
 .issue-card-child-count {
@@ -10453,6 +10467,40 @@ button.session-chat-attachment {
 .app-dialog-field > span:first-child { color: var(--text-secondary); font-size: var(--text-xs); font-weight: 600; }
 .app-dialog-field input { padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); font: inherit; font-size: var(--text-sm); }
 .app-dialog-field input:focus-visible { border-color: var(--accent); }
+
+.modal-card.quick-capture { max-height: min(780px, calc(100vh - 32px)); }
+.quick-capture .modal-header .btn-icon { margin-left: auto; }
+.quick-capture form { display: flex; flex-direction: column; min-height: 0; }
+.quick-capture-fields { display: flex; flex-direction: column; gap: var(--space-3); overflow-y: auto; }
+.quick-capture-fields .input, .quick-capture-fields .textarea { width: 100%; box-sizing: border-box; }
+.quick-capture-fields p { margin: 0; }
+.quick-capture-fields .error-text, .project-review-panel .error-text { color: var(--danger); }
+
+.project-review-panel { margin-top: var(--space-4); padding: var(--space-4); border-top: 1px solid var(--border); }
+.project-review-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.project-review-heading h2 { margin: 0; font-size: var(--text-lg); }
+.project-review-tabs { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
+.project-review-tabs button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+.project-review-panel p { color: var(--text-secondary); line-height: 1.5; }
+.project-review-panel h3 { margin: var(--space-4) 0 var(--space-2); font-size: var(--text-sm); }
+.project-review-list { list-style: none; margin: 0; padding: 0; }
+.project-review-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
+.project-review-list li > span { min-width: 0; overflow-wrap: anywhere; }
+.project-review-list strong { font-size: var(--text-sm); font-weight: 600; }
+.project-review-list small { display: block; margin-top: var(--space-1); color: var(--text-tertiary); }
+.project-review-list button { flex-shrink: 0; }
+.project-review-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
+.project-review-day h3 { color: var(--text-secondary); }
+.project-review-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+.project-review-note { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.project-review-note .input { flex: 1; min-width: 0; }
+.project-review-footer { display: flex; justify-content: flex-end; margin-top: var(--space-3); }
+.project-review-source { display: inline-block; margin-right: var(--space-1); padding: 0 var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+/* FX-BE-159 AC6: who made a change. A tint under theme text, so contrast never rides on a hue; agent and outside changes differ by fill and border style, not colour alone. */
+.project-review-actor, .project-review-reason { display: inline-block; margin-right: var(--space-1); padding: 0 var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-weight: 600; }
+.project-review-actor--agent { background: var(--accent-soft); border-color: var(--accent-border); }
+.project-review-actor--external { border-style: dashed; }
+.project-review-filters > p { flex: 1 1 auto; margin: 0; align-self: center; }
 .app-dialog-error { color: var(--danger); font-size: var(--text-xs); }
 
 /* User-facing release history opened from the title bar. It deliberately
@@ -20641,7 +20689,8 @@ button.session-chat-attachment {
 
 /* Sessions scroll inside their own pane so the Runs section below stays on screen however long the list grows. */
 .easymode-sidebar-feed {
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
   padding-bottom: 8px;
   gap: 8px;
 }

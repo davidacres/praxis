@@ -403,6 +403,7 @@ const praxis: PraxisIpc = {
       state: TaskDesignerPersistedState
     ) => ipcRenderer.invoke('taskDesigner:generateMasterPlan', boardId, connectionId, state)
   },
+  activity: { list: (projectId: string) => ipcRenderer.invoke('activity:list', projectId) },
   assistant: {
     turn: (request: unknown) => ipcRenderer.invoke('assistant:turn', request),
     teamReview: (request: unknown) => ipcRenderer.invoke('assistant:teamReview', request),

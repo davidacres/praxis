@@ -169,6 +169,39 @@ test('delegate completes a session against a real ACP agent subprocess', async (
   );
 });
 
+test('ACP read-only permission denial survives neutral titles, missing kinds and allow-only wire options', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({
+      issueKey: 'APP-202',
+      provider: 'claude-code-cli',
+      toolMode: 'read-only',
+      permissionMode: 'auto',
+      autoApprovePermissions: true,
+      workingDirectory: '/private/tmp',
+      task: { goal: 'PERMISSION_KIND_MATRIX', maxSteps: 20, timeoutMs: 15000 }
+    });
+  });
+  await expect.poll(async () => (await readSession(win, 'APP-202'))?.state).toBe('completed');
+  const session = await readSession(win, 'APP-202');
+  expect(session?.toolMode).toBe('read-only');
+  const outcomes = JSON.parse(session?.responseText ?? '[]') as Array<{ kind: string; outcome: string; optionId?: string }>;
+  expect(outcomes).toHaveLength(8);
+  for (const result of outcomes) {
+    if (result.kind === 'read' || result.kind === 'search') {
+      expect(result).toMatchObject({ outcome: 'selected', optionId: 'allow' });
+    } else {
+      expect(result.outcome).toBe('cancelled');
+    }
+  }
+  await openSession(win, 'APP-202');
+  await win.locator('[data-testid="session-tab-activity"]').click();
+  await expect(win.getByText('Blocked by read-only tools: Project context').first()).toBeVisible();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed');
+});
+
 test('an Agent Hub ACP binding launches its declared host entry point', async () => {
   app = await launchTestApp();
   const win = app.window;

@@ -6,6 +6,47 @@ import { AcpClientWrapper, pickPermissionOptionId } from './acpClient';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { AgentEventSummary, AgentToolMode } from '../agentTypes';
+
+function permissionHost(toolMode: AgentToolMode, autoApprove = true) {
+  const events: AgentEventSummary[] = [];
+  const agentHost = new AcpAgentHost({
+    getAgentSession: () => ({ toolMode }),
+    appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added),
+    updateAgentState: () => {}
+  } as never, { appendLine: () => {} });
+  const active = { ...task('permission-test'), allowPermissionsForTask: autoApprove, autoAllowSafePermissions: true };
+  (agentHost as unknown as HostInternals).activeTasks.set('permission-test', active);
+  return { agentHost, events, active };
+}
+
+test('read-only ACP denies mutations and unclassified tools regardless of their title or auto-approval', async () => {
+  for (const autoApprove of [true, false]) {
+    for (const kind of ['edit', 'delete', 'move', 'execute', 'switch_mode', 'other', '', 'unknown']) {
+      const { agentHost, events, active } = permissionHost('read-only', autoApprove);
+      assert.equal(await agentHost.promptExternalPermission('permission-test', 'Read and list project context', kind), 'deny', kind);
+      assert.equal(active.pendingPermissions.length, 0);
+      assert.match(events[0]?.summary ?? '', /Blocked by read-only tools/);
+    }
+    const { agentHost } = permissionHost('read-only', autoApprove);
+    const internals = agentHost as unknown as { requestPermission(key: string, request: unknown): Promise<string> };
+    assert.equal(await internals.requestPermission('permission-test', { toolCallId: 'opaque', title: 'Read context', options: [] }), 'deny');
+  }
+});
+
+test('read-only ACP permits classified safe tools even with opaque or misleading titles', async () => {
+  for (const kind of ['read', 'search', 'think', 'fetch']) {
+    const { agentHost } = permissionHost('read-only');
+    assert.equal(await agentHost.promptExternalPermission('permission-test', 'Update context', kind), 'allow_always', kind);
+  }
+});
+
+test('full ACP retains explicit auto-approval and project-only denies every kind', async () => {
+  for (const kind of ['read', 'edit', 'move', 'execute', 'other', '', 'browser-navigate']) {
+    assert.equal(await permissionHost('full').agentHost.promptExternalPermission('permission-test', 'Context', kind), 'allow_always');
+    assert.equal(await permissionHost('project-only').agentHost.promptExternalPermission('permission-test', 'Context', kind), 'deny');
+  }
+});
 
 test('ACP model discovery preserves existing login and honors explicit authentication', async () => {
   const folder = await mkdtemp(join(tmpdir(), 'praxis-acp-auth-'));
@@ -301,6 +342,16 @@ test('pickPermissionOptionId matches hyphenated optionIds from Cursor ACP', () =
   ];
   assert.equal(pickPermissionOptionId('allow_once', rawCursorOptions), 'allow-once');
   assert.equal(pickPermissionOptionId('deny', rawCursorOptions), 'reject-once');
+});
+
+test('ACP denial cancels when there is no rejection option, including misleading option IDs', () => {
+  assert.equal(pickPermissionOptionId('deny', []), undefined);
+  assert.equal(pickPermissionOptionId('deny', [{ optionId: 'allow', kind: 'allow_once' }]), undefined);
+  assert.equal(pickPermissionOptionId('deny', [{ optionId: 'reject-once', kind: 'allow_always' }]), undefined);
+  assert.equal(pickPermissionOptionId('deny', [
+    { optionId: 'reject-once', kind: 'allow_once' },
+    { optionId: 'actual-denial', kind: 'reject_once' }
+  ]), 'actual-denial');
 });
 
 test('handleCursorCreatePlan records plan, sets task list, and returns accepted', async () => {

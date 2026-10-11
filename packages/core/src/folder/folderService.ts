@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import { readBoardConfigFile, writeBoardConfigFile, type BoardConfigFile } from './boardConfigFile';
-import { folderFs } from './folderFs';
+import { folderFs, isOwnFolderWrite } from './folderFs';
 import type { ProjectWorkflowStage } from '../projects/projectTypes';
 import { DEFAULT_WORKFLOW, normalizeWorkflowStages } from '../projects/projectWorkflow';
 import { folderWatch, type FolderWatcher } from './folderWatch';
@@ -152,7 +152,7 @@ function buildIssueMarkdown(
   createdAtIso: string,
   parentKey?: string,
   model?: string,
-  extras?: Pick<CreateIssueInput, 'priority' | 'severity' | 'sections'>
+  extras?: Pick<CreateIssueInput, 'priority' | 'severity' | 'sections' | 'origin'>
 ): string {
   const fieldValues = {
     ...(extras?.priority?.trim() ? { Priority: extras.priority.trim() } : {}),
@@ -165,7 +165,8 @@ function buildIssueMarkdown(
     parentKey,
     model,
     ...(Object.keys(fieldValues).length > 0 ? { fieldValues } : {}),
-    ...(extras?.sections ? { sectionBodies: extras.sections } : {})
+    ...(extras?.sections ? { sectionBodies: extras.sections } : {}),
+    ...(extras?.origin === 'capture' ? { origin: extras.origin } : {})
   });
 }
 
@@ -291,6 +292,10 @@ export class FolderService implements IssueTrackerService {
   /** Fired after a watcher-driven reload replaced the in-memory board model. */
   public readonly onDidReloadFromDisk: Event<void> = this._onDidReloadFromDisk.event;
 
+  private readonly _onDidChangePlanFile = new Emitter<string>();
+  /** A plan markdown file under a watched root was added, edited or removed by something other than this service. Absolute path. */
+  public readonly onDidChangePlanFile: Event<string> = this._onDidChangePlanFile.event;
+
   public constructor(private readonly configStore: FolderConfigProvider) {}
 
   /**
@@ -393,6 +398,7 @@ export class FolderService implements IssueTrackerService {
     this.watchers = [];
     this._onDidReceiveExternalComment.dispose();
     this._onDidReloadFromDisk.dispose();
+    this._onDidChangePlanFile.dispose();
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
@@ -1271,6 +1277,7 @@ export class FolderService implements IssueTrackerService {
         projectKey: pk,
         projectName: pn,
         priority: f.priority ?? 'Medium',
+        ...(f.origin ? { origin: f.origin } : {}),
         complexity: f.complexity,
         model: f.model,
         created: f.planningDates.created ?? now,
@@ -1308,6 +1315,7 @@ export class FolderService implements IssueTrackerService {
         projectName: pn,
         parentKey,
         priority: child.priority ?? 'Medium',
+        ...(child.origin ? { origin: child.origin } : {}),
         severity: child.severity,
         reportedBy: child.reportedBy,
         complexity: child.complexity,
@@ -1435,6 +1443,9 @@ export class FolderService implements IssueTrackerService {
       // but never drop the event: an external edit or delete landing inside the
       // self-write window would otherwise be lost for good and leave a stale
       // card. Reload once the window has lapsed instead.
+      void folderFs().readFile(absolutePath).then(content => content, () => undefined).then(content => {
+        if (!isOwnFolderWrite(absolutePath, content)) this._onDidChangePlanFile.fire(absolutePath);
+      });
       const delayMs = this.recentWrites.has(absolutePath) ? SELF_WRITE_WINDOW_MS + 500 : 500;
       // Debounce rapid changes
       if (this.debounceTimer) {

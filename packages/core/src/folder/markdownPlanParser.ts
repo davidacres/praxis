@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import type { ProjectWorkflowStage } from '../projects/projectTypes';
+import type { IssueOrigin } from '../types';
 import { DEFAULT_WORKFLOW, resolveStatus } from '../projects/projectWorkflow';
 import { folderFs } from './folderFs';
 import {
@@ -26,6 +27,7 @@ export interface ParsedFeatureFolder {
   depTokens: string[];
   planningDates: ParsedPlanningDates;
   priority?: string;
+  origin?: IssueOrigin;
   model?: string;
   complexity?: string;
 }
@@ -62,6 +64,7 @@ export interface ParsedChildFile {
   planningDates: ParsedPlanningDates;
   branch?: string;
   priority?: string;
+  origin?: IssueOrigin;
   severity?: string;
   reportedBy?: string;
   model?: string;
@@ -108,6 +111,11 @@ export function extractPriorityRaw(content: string): string | undefined {
 export function extractSeverityRaw(content: string): string | undefined {
   const m = content.match(/^\*\*Severity:\*\*\s*(.+)$/m);
   return m?.[1]?.trim() || undefined;
+}
+
+/** Only the literal `capture` is recognised; anything else reads as no origin. */
+export function extractOriginRaw(content: string): IssueOrigin | undefined {
+  return content.match(/^\*\*Origin:\*\*\s*(.+)$/m)?.[1]?.trim().toLowerCase() === 'capture' ? 'capture' : undefined;
 }
 
 export function extractReportedByRaw(content: string): string | undefined {
@@ -891,6 +899,7 @@ export async function parsePlanFolder(
       depTokens: collectDependencyTokens(content),
       planningDates: extractPlanningDates(content),
       priority: extractPriorityRaw(content),
+      origin: extractOriginRaw(content),
       model: extractModelRaw(content),
       complexity: extractComplexityRaw(content)
     });
@@ -965,6 +974,7 @@ export async function parsePlanFolder(
         planningDates: extractPlanningDates(scontent),
         branch: extractBranchRaw(scontent),
         priority: extractPriorityRaw(scontent),
+        origin: extractOriginRaw(scontent),
         model: extractModelRaw(scontent),
         complexity: extractComplexityRaw(scontent),
         severity: extractSeverityRaw(scontent),
@@ -1084,6 +1094,7 @@ export async function parsePlanFolder(
         planningDates: extractPlanningDates(scontent),
         branch: extractBranchRaw(scontent),
         priority: extractPriorityRaw(scontent),
+        origin: extractOriginRaw(scontent),
         model: extractModelRaw(scontent),
         complexity: extractComplexityRaw(scontent),
         severity: extractSeverityRaw(scontent),
@@ -1217,6 +1228,7 @@ async function parsePlanFolderRecursively(
       depTokens: collectDependencyTokens(file.content),
       planningDates: extractPlanningDates(file.content),
       priority: extractPriorityRaw(file.content),
+      origin: extractOriginRaw(file.content),
       model: extractModelRaw(file.content),
       complexity: extractComplexityRaw(file.content)
     });
@@ -1250,6 +1262,7 @@ async function parsePlanFolderRecursively(
       planningDates: extractPlanningDates(file.content),
       branch: extractBranchRaw(file.content),
       priority: extractPriorityRaw(file.content),
+      origin: extractOriginRaw(file.content),
       severity: extractSeverityRaw(file.content),
       reportedBy: extractReportedByRaw(file.content),
       model: extractModelRaw(file.content),

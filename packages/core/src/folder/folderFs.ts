@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 
 /**
  * The file-access surface the folder parser and writers need — reads and
@@ -23,12 +24,28 @@ export interface FolderFs {
   moveFile(sourcePath: string, targetPath: string): Promise<void>;
 }
 
+/**
+ * What this process last wrote to each file, and which files it moved away. A watcher uses
+ * this to tell its own echo from someone else's edit by content rather than by timing:
+ * an outside edit landing a moment after one of ours is still an outside edit.
+ */
+const lastWritten = new Map<string, string>();
+const movedAway = new Set<string>();
+
+/** True when `content` (undefined = the file is gone) is exactly what this process left at `filePath`. */
+export function isOwnFolderWrite(filePath: string, content: string | undefined): boolean {
+  const key = path.resolve(filePath);
+  return content === undefined ? movedAway.has(key) : lastWritten.get(key) === content;
+}
+
 const nodeFolderFs: FolderFs = {
   readFile(filePath) {
     return fs.readFile(filePath, 'utf-8');
   },
   async writeFile(filePath, content) {
     await fs.writeFile(filePath, content, 'utf-8');
+    lastWritten.set(path.resolve(filePath), content);
+    movedAway.delete(path.resolve(filePath));
   },
   async readDirectory(dirPath) {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -37,8 +54,14 @@ const nodeFolderFs: FolderFs = {
   async mkdir(dirPath) {
     await fs.mkdir(dirPath, { recursive: true });
   },
-  moveFile(sourcePath, targetPath) {
-    return fs.rename(sourcePath, targetPath);
+  async moveFile(sourcePath, targetPath) {
+    await fs.rename(sourcePath, targetPath);
+    const [source, target] = [path.resolve(sourcePath), path.resolve(targetPath)];
+    const content = lastWritten.get(source);
+    lastWritten.delete(source);
+    movedAway.add(source);
+    if (content !== undefined) lastWritten.set(target, content);
+    movedAway.delete(target);
   }
 };
 

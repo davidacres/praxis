@@ -1,3 +1,4 @@
+import { runAsAgent } from './projectActivityInstance';
 import { cancelWorkflowMap, runWorkflowMap } from './workflowMapRunner';
 import { WorkflowIssueWriteBack } from './workflowIssueWriteBack';
 import { broadcastToAllWindows } from './windowBroadcast';
@@ -121,7 +122,7 @@ const issueWriteBack = new WorkflowIssueWriteBack({
   get: runId => new WorkflowRunStore(getWorkflowBackingStore()).get(runId),
   send: async run => {
     const service = await getServiceForConnection(run.issueConnectionId);
-    await service.addComment(run.issueKey!, buildWriteBackComment(run));
+    await runAsAgent(() => service.addComment(run.issueKey!, buildWriteBackComment(run)));
   },
   mark: (runId, at) => getWorkflowOrchestrator().updateRun(runId, current => ({ ...current, issueWriteBackAt: at }))
 });

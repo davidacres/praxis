@@ -1,4 +1,5 @@
 import type { AgentToolMode } from '../ai/agentTypes';
+import type { IssueOrigin } from '../types';
 
 /**
  * The Praxis project descriptor written into a project's own folder.
@@ -56,6 +57,8 @@ export interface ProjectWorkItem {
    * itself has none. Absent on every item created before this field existed.
    */
   parentKey?: string;
+  /** Set only by Quick Capture; see `IssueOrigin`. */
+  origin?: IssueOrigin;
 }
 
 export interface ProjectBoardReference {

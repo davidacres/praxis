@@ -22,8 +22,9 @@ export interface EasyModeSessionsListProps {
 /** Finished sessions shown before the rest fold behind "Show more", so the Runs section below is never pushed off screen. */
 const COLLAPSED_SESSION_LIMIT = 5;
 
-function isAttentionState(state: AgentSessionRecord['state']): boolean {
-  return state === 'executing' || state === 'planning' || state === 'awaiting_approval' || state === 'awaiting_input';
+export function isAttentionState(state: AgentSessionRecord['state']): boolean {
+  return state === 'executing' || state === 'planning' || state === 'awaiting_approval' || state === 'awaiting_input'
+    || state === 'paused' || state === 'not_started';
 }
 
 export function EasyModeSessionsList({
@@ -49,7 +50,7 @@ export function EasyModeSessionsList({
   const rootSessions = useMemo(() => {
     let list = sessions.filter(s => !s.parentSessionKey && !s.workflowRunId);
     if (filterTab === 'live') {
-      list = list.filter(s => s.state === 'executing' || s.state === 'planning' || s.state === 'awaiting_approval' || s.state === 'awaiting_input');
+      list = list.filter(s => isAttentionState(s.state));
     } else if (filterTab === 'gates') {
       list = list.filter(s => s.state === 'awaiting_approval' || s.state === 'awaiting_input');
     }

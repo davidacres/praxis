@@ -1,3 +1,4 @@
+import { runAsAgent } from './projectActivityInstance';
 import { BrowserWindow, ipcMain } from 'electron';
 import { broadcastToAllWindows } from './windowBroadcast';
 import {
@@ -665,13 +666,13 @@ export function registerAiWorkflowIpc(): void {
         const availableWorkflows = await discoverWorkspaceAgentWorkflows(delivery.worktreePath);
         const subTasks: FeatureSubTaskRecord[] = [];
         for (const subTask of result.subTasks) {
-          const created = await service.createIssue({
+          const created = await runAsAgent(() => service.createIssue({
             projectKey: issueKey.split('-')[0] ?? issueKey,
             issueType: subTask.issueType || 'Task',
             summary: subTask.summary,
             description: subTask.description,
             parentKey: issueKey
-          });
+          }));
           const workflow = resolveWorkflowReference(subTask.suggestedWorkflow, availableWorkflows);
           if (workflow) {
             sessionManager.setIssueWorkflowAssignment(created.key, workflow, {

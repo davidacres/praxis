@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { AgentSessionRecord, ProjectRecord } from '@praxis/core';
 import { PROJECT_BRIEF_FIELDS } from './projectBriefFields';
 import { Icon } from '../ui/Icon';
@@ -24,7 +24,7 @@ function isComplete(status: string): boolean {
 
 const dismissedKey = (id: string) => `praxis-project-getstarted-dismissed:${id}`;
 
-export function ProjectWorkspace({ project, sessions, onStartSession, onStartTour }: { project: ProjectRecord; sessions: AgentSessionRecord[]; onStartSession: () => void; onStartTour: () => void }) {
+export function ProjectWorkspace({ project, sessions, onStartSession, onStartTour, reviewPanel }: { project: ProjectRecord; sessions: AgentSessionRecord[]; onStartSession: () => void; onStartTour: () => void; reviewPanel?: ReactNode }) {
   const [getStartedDismissed, setGetStartedDismissed] = useState(() => { try { return localStorage.getItem(dismissedKey(project.id)) === '1'; } catch { return false; } });
   const dismissGetStarted = () => { setGetStartedDismissed(true); try { localStorage.setItem(dismissedKey(project.id), '1'); } catch { /* private mode */ } };
   const projectKeys = new Set(project.workItems.map(item => item.key));
@@ -57,6 +57,8 @@ export function ProjectWorkspace({ project, sessions, onStartSession, onStartTou
       <div><span className="project-type-badge">{project.type}</span><h1>{project.name}</h1><p>{project.key} · {project.purpose || 'A focused project space for planning, delivery, and learning.'}</p></div>
       <div className="project-dashboard-updated"><span>LAST ACTIVITY</span><strong>{relativeDate(lastActivity)}</strong></div>
     </header>
+
+    {reviewPanel}
 
     {projectSessions.length === 0 && !getStartedDismissed && (
       <section className="project-getstarted" aria-label="Get started" data-testid="project-getstarted">
