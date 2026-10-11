@@ -6,7 +6,31 @@
 **Priority:** Highest
 
 ## Description
-Prioritised remediation of the 19 findings in the Security Review of Praxis at commit `ab05ede`. This plan is the work breakdown. The October 10 status review records the four P0 fixes and the gitleaks gate as shipped; 13 P1–P3 items remain open. This is recorded ticket evidence, not a fresh code verification.
+
+Prioritised remediation of the 19 findings in the Security Review of Praxis at commit `ab05ede`. This plan is the work breakdown. The October 10 status review records the four P0 fixes and the gitleaks gate as shipped. As of 2026-10-12, per child ticket statuses, six items are complete (107-1 to 107-4, 107-8 and task 107-3) and 13 P1–P3 items remain open (Proposed). This is recorded ticket evidence, not a fresh code verification.
+
+## Dependencies
+
+- 107-7 (local-only mobile access) depends on 107-6 (IP address classifier).
+- 107-9 (Antigravity permission gate) depends on Decision 3 (whether `agy` can emit permission prompts upstream).
+- 107-11 (workspace trust) is the L item; start its design during Phase 3.
+
+## Decisions needed (updated)
+
+1. **SEC-018 — GitHub Actions pinned to mutable tags (Info).** Open. Accept the first-party tag risk, or adopt SHA pinning? Owner: _unassigned_. Target: _TBD_.
+2. **SEC-003 — history rewrite.** Resolved 2026-09-24 (see 107-3): the exposed tokens were revoked, so no `git filter-repo` or force-push. Rotation alone was chosen.
+3. **SEC-004 — Antigravity's future.** Open. Confirm upstream `agy` capability to emit permission prompts under `--output-format stream-json`; this blocks 107-9. Owner: _unassigned_. Target: _TBD_.
+4. **SEC-007 — blanket auto-approval of reads.** Open. Keep auto-approving `read`/`list` once realpath containment holds? Product call. Owner: _unassigned_. Target: _TBD_.
+5. **Needs-verification items (a)–(e).** Open. Item (a), OAuth `state` handling in `@modelcontextprotocol/sdk`, may downgrade SEC-014 (107-13) to Info or change its fix. Owner: _unassigned_. Target: _TBD_.
+
+## Work order — superseded
+
+The 2026-10-11 work order is superseded. Its item 1 (107-8) is Done, and its other four tickets (PRX-B00-2, PRX-B00-5, PRX-F45, PRX-F52) belong to other features. Next F107 step: the Phase 2 quick wins 107-5, 107-6 and 107-10.
+
+## Reference notes
+
+- Bug and Task items share numbers 107.1–107.6 in the Items table. Refer to items by their file names or PRX ticket keys until the refs are made unique. Also remove the blank line under the Items table header so the table renders.
+- SEC-013 is merged into the 107-1 item (SEC-001), and SEC-015 into the 107-12 item (SEC-012).
 
 ## Summary
 
