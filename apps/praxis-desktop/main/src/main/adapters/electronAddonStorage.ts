@@ -119,7 +119,7 @@ function sanitizeSegment(value: string): string {
  * away the `package/addon/` prefix. `tar` rejects `..` and absolute paths by
  * default; the post-check is belt-and-braces.
  */
-async function extractAddonPayload(
+export async function extractAddonPayload(
   tarball: Uint8Array,
   destDir: string,
   scratchDir: string
@@ -130,13 +130,20 @@ async function extractAddonPayload(
   await fs.promises.writeFile(tmpFile, Buffer.from(tarball));
 
   let wrote = 0;
+  let rejected: string | undefined;
   try {
     await tar.x({
       file: tmpFile,
       cwd: destDir,
       strip: 2,
-      filter: (entryPath: string) =>
-        entryPath === 'package/addon' || entryPath.startsWith('package/addon/'),
+      strict: true,
+      filter: (entryPath: string, entry) => {
+        if (path.isAbsolute(entryPath) || entryPath.includes('\\') || entryPath.split('/').includes('..') || /^[A-Za-z]:/.test(entryPath) || !('type' in entry && ['File', 'Directory'].includes(entry.type))) {
+          rejected = `Unsafe add-on archive entry: ${entryPath}`;
+          return false;
+        }
+        return entryPath === 'package/addon' || entryPath.startsWith('package/addon/');
+      },
       onentry: () => {
         wrote += 1;
       }
@@ -145,15 +152,14 @@ async function extractAddonPayload(
     await fs.promises.rm(tmpFile, { force: true });
   }
 
+  if (rejected) throw new Error(rejected);
   if (wrote === 0) {
     throw new Error('The add-on tarball had no `package/addon/` payload.');
   }
 
-  const resolvedDest = path.resolve(destDir);
-  for (const relative of await walk(resolvedDest)) {
-    if (!path.resolve(resolvedDest, relative).startsWith(resolvedDest + path.sep)) {
-      throw new Error(`Add-on tarball tried to write outside its directory: ${relative}`);
-    }
+  for (const relative of await walk(destDir)) {
+    const stat = await fs.promises.lstat(path.join(destDir, relative));
+    if (stat.isSymbolicLink() || (stat.isFile() && stat.nlink > 1)) throw new Error(`Unsafe extracted add-on link: ${relative}`);
   }
 }
 

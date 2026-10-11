@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 597,
+  "testCount": 602,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -6546,6 +6546,86 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "each workspace resumes at its own last route, not the other one's",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-4BED3303D0",
+      "title": "unregistered renderers cannot read settings or emit privileged one-way messages",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/securityRemediation.spec.ts",
+        "line": 14,
+        "project": "functional"
+      },
+      "area": "security Remediation",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "unregistered renderers cannot read settings or emit privileged one-way messages",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-119034639B",
+      "title": "OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/securityRemediation.spec.ts",
+        "line": 26,
+        "project": "functional"
+      },
+      "area": "security Remediation",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-29ECE51EF8",
+      "title": "secret reads repair permissive file modes and encrypted values remain retrievable",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/securityRemediation.spec.ts",
+        "line": 49,
+        "project": "functional"
+      },
+      "area": "security Remediation",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "secret reads repair permissive file modes and encrypted values remain retrievable",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-440193CE0B",
+      "title": "repository workflows require command review, preserve trust on restart, and revoke it after changes",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/securityRemediation.spec.ts",
+        "line": 68,
+        "project": "functional"
+      },
+      "area": "security Remediation",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "repository workflows require command review, preserve trust on restart, and revoke it after changes",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-19BEAE532A",
+      "title": "Antigravity selection rejects restricted tool modes and displays unrestricted consent",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/securityRemediation.spec.ts",
+        "line": 108,
+        "project": "functional"
+      },
+      "area": "security Remediation",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "Antigravity selection rejects restricted tool modes and displays unrestricted consent",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

@@ -1,7 +1,8 @@
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
-import { app, ipcMain } from 'electron';
+import { app } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import {
   runAssistantTurn,
   runTeamReview,

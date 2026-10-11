@@ -32,7 +32,7 @@ export function spawnCheck(
       // while a local governed run can still use the Electron suite's normal four isolated workers.
       // Real CI remains serial, and an explicit worker choice always wins.
       env: {
-        ...process.env,
+        ...Object.fromEntries(['PATH', 'Path', 'HOME', 'USERPROFILE', 'TMPDIR', 'TMP', 'TEMP', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG', 'LC_ALL', 'PRAXIS_E2E_WORKERS'].flatMap(key => process.env[key] === undefined ? [] : [[key, process.env[key]]])),
         CI: inheritedCi ?? '1',
         ...(inheritedCi === undefined && process.env.PRAXIS_E2E_WORKERS === undefined
           ? { PRAXIS_E2E_WORKERS: '4' }

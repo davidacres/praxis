@@ -23,7 +23,7 @@ test:
     paths:
       - node_modules/
   script:
-    - npm ci || npm install
+    - npm ci
     - npm run build:core
     - npm run check-types
     # `npm test` also runs the desktop e2e suite, which needs an Electron

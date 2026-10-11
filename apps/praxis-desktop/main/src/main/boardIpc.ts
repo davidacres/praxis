@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import type { Board, BoardFilters } from '@praxis/core';
 import { getDemoService, isDemoModeEnabled } from './demoServiceInstance';
 import { getServiceForConnection, getSupportedConnections } from './serviceRegistry';

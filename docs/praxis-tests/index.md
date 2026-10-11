@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **597 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **602 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -413,6 +413,11 @@ This catalogue describes **597 Playwright tests** under `apps/praxis-desktop/mai
 | PT-6A873CE029 | saved Workspaces | closing the active workspace returns to the Open Workspace screen | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:58` |
 | PT-2907C48991 | saved Workspaces | New workspace opens the workspace creation dialog | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:69` |
 | PT-491CCAB290 | saved Workspaces | each workspace resumes at its own last route, not the other one's | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:79` |
+| PT-4BED3303D0 | security Remediation | unregistered renderers cannot read settings or emit privileged one-way messages | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:14` |
+| PT-119034639B | security Remediation | OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:26` |
+| PT-29ECE51EF8 | security Remediation | secret reads repair permissive file modes and encrypted values remain retrievable | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:49` |
+| PT-440193CE0B | security Remediation | repository workflows require command review, preserve trust on restart, and revoke it after changes | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:68` |
+| PT-19BEAE532A | security Remediation | Antigravity selection rejects restricted tool modes and displays unrestricted consent | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:108` |
 | PT-0933C80ACE | security Review Run | Security Review: findings, readable report, and an approved plan created on the board with its id | `apps/praxis-desktop/main/e2e/securityReviewRun.spec.ts:179` |
 | PT-2119B9F4E9 | security Review Run | Security Review: skipping the plan ends the run as succeeded with no plan created | `apps/praxis-desktop/main/e2e/securityReviewRun.spec.ts:265` |
 | PT-30FBAD1922 | security Review Self.live | Security Review on this repository with a real AI | `apps/praxis-desktop/main/e2e/securityReviewSelf.live.spec.ts:30` |

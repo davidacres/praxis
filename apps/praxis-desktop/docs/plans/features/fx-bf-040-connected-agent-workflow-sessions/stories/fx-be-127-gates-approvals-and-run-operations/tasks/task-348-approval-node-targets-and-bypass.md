@@ -1,13 +1,13 @@
 ---
-**Status:** 📋 Proposed
+**Status:** Done
 **Created:** 2026-09-17T21:33:43.733Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-348
 title: Implement explicit approval and bypass target handling and policy checks
-status: Planned
+status: Done
 story: FX-BE-127
-updated: 2026-09-17
+updated: 2026-10-11
 dependencies: [TASK-347]
 validation: [npm run test:core, npm run test:desktop]
 ---
@@ -40,3 +40,14 @@ the ledger, even when their effective requirement is combined.
 
 
 ## Comments
+
+### 2026-10-11 — approved backlog closeout
+
+Marked Done following the user-approved backlog review.
+
+`resolveApprovalTarget` refuses ambiguous approval targets. Workflow IPC and preload carry the selected node id; `approveStage` and `bypassGate` enforce policy and record the actor, reason and target. Core tests cover multiple approvals and explicit target selection.
+
+The preceding review passed root `npm run check-types` and 277 focused core tests
+(runtime/session manager and workflow gates, stage tasks, validation, run,
+orchestrator, store and summary). These are prior review results; no new build,
+desktop E2E run or visual verification was performed for this status-only change.

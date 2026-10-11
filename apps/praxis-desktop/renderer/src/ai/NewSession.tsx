@@ -927,7 +927,8 @@ export function NewSession({
                   )}
                   {configuredProviderStatuses.map(status => {
                     // Listed but not selectable: an endpoint whose test showed no tool calling.
-                    const blocked = !canRunAgentSessions(status);
+                    const unsafeMode = status.provider === 'antigravity-cli' && toolMode !== 'full';
+                    const blocked = !canRunAgentSessions(status) || unsafeMode;
                     return (
                       <button
                         key={status.provider}
@@ -938,7 +939,7 @@ export function NewSession({
                         aria-selected={selectedProvider === status.provider}
                         aria-disabled={blocked || undefined}
                         disabled={blocked}
-                        title={blocked ? NO_TOOLS_REASON : undefined}
+                        title={unsafeMode ? 'Antigravity cannot enforce restricted tools. Choose Full tools first.' : blocked ? NO_TOOLS_REASON : undefined}
                         onClick={() => {
                           setSelectedProvider(status.provider);
                           setProviderMenuPos(undefined);
@@ -947,7 +948,7 @@ export function NewSession({
                         <Icon name={providerIconName(status.provider)} size={14} />
                         <span className="composer-provider-option-text">
                           {status.label || providerLabel(status.provider)}
-                          {blocked && <span className="composer-provider-option-note">Chat only — no tool calling</span>}
+                          {blocked && <span className="composer-provider-option-note">{unsafeMode ? 'Requires Full tools' : 'Chat only — no tool calling'}</span>}
                         </span>
                       </button>
                     );
@@ -1167,7 +1168,7 @@ export function NewSession({
               className="composer-send"
               aria-label="Start session"
               data-testid="new-session-submit"
-              disabled={!sessionTitle.trim() || !goal.trim() || submitting}
+              disabled={!sessionTitle.trim() || !goal.trim() || submitting || (selectedProvider === 'antigravity-cli' && (toolMode !== 'full' || permissionMode !== 'autopilot'))}
               onClick={() => void submit()}
             >
               <Icon name="arrow-up" size={15} />
@@ -1175,6 +1176,7 @@ export function NewSession({
           </SessionComposerToolbar>
         </SessionComposerCard>
         <div className="session-composer-footer">
+          {selectedProvider === 'antigravity-cli' && <p className="hint" role="note">Antigravity requires Full tools and explicit Autopilot consent. No tool call will be prompted.</p>}
           <SessionPermissionModeControl value={permissionMode} onChange={setPermissionMode} testId="new-session" />
           <SessionGitBranchControl
             workingDirectory={workingDirectory}

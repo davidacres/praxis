@@ -5,7 +5,7 @@ import * as nodeOs from 'node:os';
 import type { GatewayToolDefinition } from '../gateway';
 import type { WireImageAttachment } from '../gateway/wire';
 import type { AgentToolEventData, AgentToolMode } from '../agentTypes';
-import { PathSandboxError, resolveSandboxedPath } from './pathSandbox';
+import { PathSandboxError, resolveSandboxedPath, readSandboxedFile, writeSandboxedFile, listSandboxedDirectory } from './pathSandbox';
 import { createUnifiedDiff } from './unifiedDiff';
 import { listeningPorts, processGroupMembers, runShellCommand, stopProcessGroup } from './processTree';
 
@@ -209,7 +209,7 @@ export class LocalToolExecutor {
     if (!inputPath.trim()) {
       return { ok: false, content: 'path is required' };
     }
-    const absolute = resolveSandboxedPath(this.ctx.workingDirectory, inputPath);
+    const absolute = await resolveSandboxedPath(this.ctx.workingDirectory, inputPath);
     const allowed = await ensurePermission(
       this.ctx,
       {
@@ -225,17 +225,7 @@ export class LocalToolExecutor {
       return { ok: false, content: 'Permission denied for read_file' };
     }
 
-    const stat = await nodeFs.stat(absolute);
-    if (!stat.isFile()) {
-      return { ok: false, content: `Not a file: ${inputPath}` };
-    }
-    if (stat.size > MAX_READ_BYTES) {
-      return {
-        ok: false,
-        content: `File too large (${stat.size} bytes). Max ${MAX_READ_BYTES} bytes.`
-      };
-    }
-    const content = await nodeFs.readFile(absolute, 'utf8');
+    const content = (await readSandboxedFile(this.ctx.workingDirectory, inputPath, MAX_READ_BYTES)).toString('utf8');
     return { ok: true, content };
   }
 
@@ -243,7 +233,7 @@ export class LocalToolExecutor {
     if (!inputPath.trim()) {
       return { ok: false, content: 'path is required' };
     }
-    const absolute = resolveSandboxedPath(this.ctx.workingDirectory, inputPath);
+    const absolute = await resolveSandboxedPath(this.ctx.workingDirectory, inputPath);
     const mediaType = IMAGE_MEDIA_TYPES[nodePath.extname(absolute).toLowerCase()];
     if (!mediaType) {
       return {
@@ -266,17 +256,11 @@ export class LocalToolExecutor {
       return { ok: false, content: 'Permission denied for read_image' };
     }
 
-    const stat = await nodeFs.stat(absolute);
-    if (!stat.isFile()) {
-      return { ok: false, content: `Not a file: ${inputPath}` };
-    }
-    if (stat.size > MAX_IMAGE_BYTES) {
-      return { ok: false, content: `Image too large (${stat.size} bytes). Max ${MAX_IMAGE_BYTES} bytes.` };
-    }
-    const base64 = (await nodeFs.readFile(absolute)).toString('base64');
+    const bytes = await readSandboxedFile(this.ctx.workingDirectory, inputPath, MAX_IMAGE_BYTES);
+    const base64 = bytes.toString('base64');
     return {
       ok: true,
-      content: `Image: ${inputPath} (${mediaType}, ${stat.size} bytes).`,
+      content: `Image: ${inputPath} (${mediaType}, ${bytes.length} bytes).`,
       images: [{ mimeType: mediaType, dataBase64: base64 }]
     };
   }
@@ -285,7 +269,7 @@ export class LocalToolExecutor {
     if (!inputPath.trim()) {
       return { ok: false, content: 'path is required' };
     }
-    const absolute = resolveSandboxedPath(this.ctx.workingDirectory, inputPath);
+    const absolute = await resolveSandboxedPath(this.ctx.workingDirectory, inputPath);
     const allowed = await ensurePermission(
       this.ctx,
       {
@@ -305,7 +289,7 @@ export class LocalToolExecutor {
     const gate = this.ctx.coordination;
     const decision = gate
       ? await gate.acquire({
-          items: [{ resource: { kind: 'file', worktree: gate.worktree, path: nodePath.relative(gate.worktree, absolute) }, mode: 'exclusive' }],
+          items: [{ resource: { kind: 'file', worktree: gate.worktree, path: nodePath.relative(await nodeFs.realpath(gate.worktree), absolute) }, mode: 'exclusive' }],
           reason: `write ${inputPath}`,
           lifetime: 'tool'
         })
@@ -314,9 +298,8 @@ export class LocalToolExecutor {
 
     let previous = '';
     try {
-      previous = await nodeFs.readFile(absolute, 'utf8').catch(() => '');
-      await nodeFs.mkdir(nodePath.dirname(absolute), { recursive: true });
-      await nodeFs.writeFile(absolute, content, 'utf8');
+      previous = await readSandboxedFile(this.ctx.workingDirectory, inputPath).then(bytes => bytes.toString('utf8')).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; return ''; });
+      await writeSandboxedFile(this.ctx.workingDirectory, inputPath, content);
     } finally {
       if (decision?.ok) await decision.release();
     }
@@ -342,10 +325,10 @@ export class LocalToolExecutor {
     const paths = Array.isArray(args.paths) ? args.paths.filter((value): value is string => typeof value === 'string' && value.trim().length > 0) : [];
     if (paths.length === 0) return { ok: false, content: 'Name at least one path.' };
     if (paths.length > 50) return { ok: false, content: 'Wait for at most 50 paths at once; name a folder instead.' };
-    const items = paths.map(entry => {
-      const absolute = resolveSandboxedPath(this.ctx.workingDirectory, entry);
-      return { resource: { kind: 'directory' as const, worktree: gate.worktree, path: nodePath.relative(gate.worktree, absolute) }, mode: 'exclusive' as const };
-    });
+    const items = await Promise.all(paths.map(async entry => {
+      const absolute = await resolveSandboxedPath(this.ctx.workingDirectory, entry);
+      return { resource: { kind: 'directory' as const, worktree: gate.worktree, path: nodePath.relative(await nodeFs.realpath(gate.worktree), absolute) }, mode: 'exclusive' as const };
+    }));
     const seconds = typeof args.seconds === 'number' && Number.isFinite(args.seconds) ? args.seconds : 60;
     const timeoutMs = Math.min(COORDINATION_MAX_WAIT_MS, Math.max(1000, Math.round(seconds * 1000)));
     const reason = asString(args.reason)?.trim().slice(0, 200) || 'waiting to edit';
@@ -355,7 +338,7 @@ export class LocalToolExecutor {
   }
 
   private async listDir(inputPath: string): Promise<ToolExecutionResult> {
-    const absolute = resolveSandboxedPath(this.ctx.workingDirectory, inputPath || '.');
+    const absolute = await resolveSandboxedPath(this.ctx.workingDirectory, inputPath || '.');
     const allowed = await ensurePermission(
       this.ctx,
       {
@@ -371,7 +354,7 @@ export class LocalToolExecutor {
       return { ok: false, content: 'Permission denied for list_dir' };
     }
 
-    const entries = await nodeFs.readdir(absolute, { withFileTypes: true });
+    const entries = listSandboxedDirectory(this.ctx.workingDirectory, inputPath || '.');
     const lines = entries.slice(0, MAX_LIST_ENTRIES).map(entry => {
       const suffix = entry.isDirectory() ? '/' : '';
       return `${entry.name}${suffix}`;

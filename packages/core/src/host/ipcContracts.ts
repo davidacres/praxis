@@ -1360,6 +1360,8 @@ export interface WorkflowsIpc {
    * (succeeded, failed, or cancelled) — see `WorkflowRun.issueKey`. Omit for
    * an ordinary project-scoped run with nothing to write back to.
    */
+  projectTrust(projectId: string, workflowId: string): Promise<{ trusted: boolean; fingerprint: string; commands: string[] }>;
+  approveProjectTrust(projectId: string, workflowId: string, fingerprint: string): Promise<void>;
   startRun(
     projectId: string,
     workflowId: string,

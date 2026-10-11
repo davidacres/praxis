@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { discoverPlanFolders } from '@praxis/core';
 import { getConnectionStore } from './connectionStoreInstance';
 import { ElectronFolderConfigProvider } from './adapters/electronFolderConfigProvider';

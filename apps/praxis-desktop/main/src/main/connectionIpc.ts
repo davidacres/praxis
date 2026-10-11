@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { FolderService, type Connection, type TrackedBoard } from '@praxis/core';
 import { getConnectionStore } from './connectionStoreInstance';
 import { getServiceForConnection, resetServiceForConnection } from './serviceRegistry';

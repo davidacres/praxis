@@ -119,7 +119,7 @@ async function applyMobileAccessFromSettings(): Promise<void> {
     setMobileBindError(undefined);
     if (change.unbind) {
       await lanServer.stop();
-    } else if (change.bind && change.listener.port !== undefined) {
+    } else if (change.listener.bound && change.listener.port !== undefined) {
       await lanServer.start(change.listener.port, policy);
       if (change.dropConnections) lanServer.applyPolicy(policy, true);
     } else {
@@ -154,7 +154,7 @@ async function refreshDiscoveryAdvertisement(): Promise<void> {
       displayName: settings.hostName.trim() || os.hostname() || 'Praxis desktop',
       fingerprint: fingerprintMobileHostKey(publicKeyHex),
       port: lanServer.port ?? configuredMobilePort(settings.listenPort) ?? 43100,
-      addresses: lanInterfaces().map(item => item.address),
+      addresses: lanServer.addresses.filter(address => address !== '127.0.0.1' && address !== '::1'),
     });
   } catch (error) {
     stopMobileDiscoveryAdvertisement();

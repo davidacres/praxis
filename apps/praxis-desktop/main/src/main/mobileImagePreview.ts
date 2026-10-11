@@ -9,6 +9,7 @@ import * as nodePath from 'node:path';
 import {
   PathSandboxError,
   resolveSandboxedPath,
+  readSandboxedFile,
   type AgentSessionRecord,
   type MobileImagePreview,
   type MobileReadParams,
@@ -80,7 +81,7 @@ export async function readMobileImagePreview(
 
     let absolute: string;
     try {
-      absolute = resolveSandboxedPath(workingDirectory, candidateInput);
+      absolute = await resolveSandboxedPath(workingDirectory, candidateInput);
     } catch (error) {
       if (error instanceof PathSandboxError) return undefined;
       throw error;
@@ -90,7 +91,7 @@ export async function readMobileImagePreview(
     try {
       const stat = await fsp.stat(absolute);
       if (!stat.isFile() || stat.size > MAX_MOBILE_IMAGE_PREVIEW_BYTES) return undefined;
-      contents = await fsp.readFile(absolute);
+      contents = await readSandboxedFile(workingDirectory, absolute, MAX_MOBILE_IMAGE_PREVIEW_BYTES);
       if (contents.length > MAX_MOBILE_IMAGE_PREVIEW_BYTES) return undefined;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;

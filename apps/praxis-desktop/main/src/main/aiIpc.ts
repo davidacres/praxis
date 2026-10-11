@@ -4,7 +4,8 @@ import { getLogBus } from './logBusInstance';
 import { randomUUID } from 'node:crypto';
 import * as fsp from 'node:fs/promises';
 import * as nodePath from 'node:path';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { openRestrictedHtmlPreview } from './htmlArtifactPreview';
 import { broadcastToAllWindows } from './windowBroadcast';
 import {
@@ -18,6 +19,8 @@ import {
   PathSandboxError,
   isLatestEditToPath,
   resolveSandboxedPath,
+  readSandboxedFile,
+  writeSandboxedFile,
   stageIssueAttachments,
   storeProviderApiKey,
   resetProviderApiKeys,
@@ -761,7 +764,7 @@ export function registerAiIpc(): void {
 
       let absolute: string;
       try {
-        absolute = resolveSandboxedPath(workingDirectory, candidateInput);
+        absolute = await resolveSandboxedPath(workingDirectory, candidateInput);
       } catch (error) {
         if (error instanceof PathSandboxError) return undefined;
         throw error;
@@ -770,7 +773,7 @@ export function registerAiIpc(): void {
       try {
         const stat = await fsp.stat(absolute);
         if (!stat.isFile() || stat.size > MAX_IMAGE_PREVIEW_BYTES) return undefined;
-        const contents = await fsp.readFile(absolute);
+        const contents = await readSandboxedFile(workingDirectory, absolute, MAX_IMAGE_PREVIEW_BYTES);
         return `data:${mediaType};base64,${contents.toString('base64')}`;
       } catch {
         // A response can arrive before an image is flushed, or refer to an
@@ -798,7 +801,7 @@ export function registerAiIpc(): void {
 
       let absolute: string;
       try {
-        absolute = resolveSandboxedPath(workingDirectory, input);
+        absolute = await resolveSandboxedPath(workingDirectory, input);
         const [realRoot, realFile] = await Promise.all([fsp.realpath(workingDirectory), fsp.realpath(absolute)]);
         const relative = nodePath.relative(realRoot, realFile);
         if (relative.startsWith('..') || nodePath.isAbsolute(relative)) {
@@ -815,7 +818,7 @@ export function registerAiIpc(): void {
         if (!stat.isFile() || stat.size > MAX_HTML_PREVIEW_BYTES) {
           throw new Error('HTML artifact must be a file no larger than 2 MB.');
         }
-        const html = await fsp.readFile(absolute, 'utf8');
+        const html = (await readSandboxedFile(workingDirectory, absolute, MAX_HTML_PREVIEW_BYTES)).toString('utf8');
         const parent = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined;
         await openRestrictedHtmlPreview(html, typeof title === 'string' ? title : nodePath.basename(input), parent);
       } catch (error) {
@@ -1425,14 +1428,14 @@ export function registerAiIpc(): void {
       }
       let absolute: string;
       try {
-        absolute = resolveSandboxedPath(workingDirectory, path);
+        absolute = await resolveSandboxedPath(workingDirectory, path);
       } catch (error) {
         throw error instanceof PathSandboxError ? new Error(`${path} is outside this session's working folder.`) : error;
       }
       // `oldText` defaults to '' both for "the file was empty before" and for
       // "the file did not exist before" — ACP's diff block does not distinguish
       // the two, so a file this edit created comes back empty rather than gone.
-      await fsp.writeFile(absolute, change.oldText ?? '', 'utf8');
+      await writeSandboxedFile(workingDirectory, path, change.oldText ?? '');
       sessionManager.appendAgentEvents(issueKey, [
         { timestamp: new Date().toISOString(), type: 'info', summary: `You undid the edit to ${path}.` }
       ]);

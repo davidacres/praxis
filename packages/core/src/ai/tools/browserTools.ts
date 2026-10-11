@@ -1,3 +1,6 @@
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
+import { isNonPublicNetworkAddress } from './networkAddress';
 import type { GatewayToolDefinition } from '../gateway';
 import type { PermissionDecision } from './localTools';
 
@@ -144,25 +147,29 @@ export interface BrowserBridge {
   captureScreenshot?(): Promise<BrowserScreenshotResult>;
 }
 
-const PRIVATE_IPV4 =
-  /^(127\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
-
-/**
- * Whether `host` (already lower-cased) names the loopback interface or a
- * private (RFC 1918 / link-local) IPv4 range — the vocabulary both the
- * AI-driven in-app browser (this file) and the Run preview origin policy
- * (`projects/previewAccess.ts`) gate on, kept in one place rather than two
- * copies of the same regex drifting apart.
- */
+/** Shared literal-host check; DNS destinations are checked separately at request time. */
 export function isPrivateOrLoopbackHost(host: string): boolean {
-  const normalized = host.toLowerCase().replace(/^\[|\]$/g, '');
-  return (
-    normalized === 'localhost' ||
-    normalized === '0.0.0.0' ||
-    normalized === '::1' ||
-    normalized.endsWith('.localhost') ||
-    PRIVATE_IPV4.test(normalized)
-  );
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  return normalized === 'localhost' || normalized.endsWith('.localhost') || isNonPublicNetworkAddress(normalized);
+}
+
+/** Fail closed on DNS failure; check every answer at every browser request/redirect. */
+export async function resolvedBrowserUrlBlockReason(
+  rawUrl: string,
+  options: { allowPrivateHosts?: boolean } = {},
+  resolve: (host: string) => Promise<Array<{ address: string }>> = host => lookup(host, { all: true, verbatim: true })
+): Promise<string | undefined> {
+  const blocked = blockedBrowserUrlReason(rawUrl, options);
+  if (blocked || options.allowPrivateHosts) return blocked;
+  const host = new URL(rawUrl).hostname.replace(/^\[|\]$/g, '');
+  if (isIP(host)) return undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const addresses = await Promise.race([resolve(host), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('DNS timed out')), 3000); })]);
+    if (!addresses.length || addresses.some(answer => !isIP(answer.address) || isNonPublicNetworkAddress(answer.address))) return 'Refusing a DNS destination on a private or reserved network.';
+    return undefined;
+  } catch { return 'Could not safely resolve browser destination.'; }
+  finally { if (timer) clearTimeout(timer); }
 }
 
 /**

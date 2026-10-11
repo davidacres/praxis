@@ -1,7 +1,9 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { projectWorkflowTrust } from './workflowProjectTrust';
 import {
   applyWorkflowRunCommand,
   approveStage,
@@ -382,6 +384,7 @@ export async function startWorkflowRun(input: {
   options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown; providerLimitPolicy?: unknown; parameters?: unknown };
 }): Promise<WorkflowRunSummary> {
   const { projectId, workflowId, taskTitle, issue, controller, planInput, options } = input;
+  let instantiated = false;
   let definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
   if (!definition) {
     const templates = await resolveTemplateLibrary(projectId);
@@ -393,7 +396,7 @@ export async function startWorkflowRun(input: {
         at: new Date().toISOString(),
         newId: template.definition.id
       });
-      await persistProjectWorkflow(projectId, definition);
+      instantiated = true;
     }
   }
   if (!definition) throw new Error(`Workflow ${workflowId} was not found for this project.`);
@@ -401,6 +404,13 @@ export async function startWorkflowRun(input: {
     throw new Error(`The ticket-owned workflow "${definition.name}" must be started from a ticket.`);
   }
 
+  const trust = await projectWorkflowTrust(getWorkflowBackingStore(), await projectFolder(projectId), workflowId, definition);
+  if (!trust.trusted) throw new Error('This project workflow needs local workspace trust. Review its commands and approve it on the desktop before starting it.');
+  if (instantiated) {
+    await persistProjectWorkflow(projectId, definition);
+    const createdTrust = await projectWorkflowTrust(getWorkflowBackingStore(), await projectFolder(projectId), workflowId, definition);
+    if (createdTrust.key) await getWorkflowBackingStore().update(createdTrust.key, createdTrust.fingerprint);
+  }
   const result = validateWorkflow(definition, policyFor(projectId));
   if (!result.valid) throw new Error(`Cannot start an invalid workflow: ${result.errors.map(item => item.message).join('; ')}`);
   const livePreflight = preflightWorkflow(definition.nodes, await catalogSnapshot(), policyFor(projectId));
@@ -463,6 +473,12 @@ export async function startWorkflowRun(input: {
     ...(providerLimitPolicy ? { providerLimitPolicy } : {}),
     ...(Object.keys(parameters).length > 0 ? { parameters } : {})
   });
+  // App-authored definitions and selected templates have no repository trust gate,
+  // but still record their snapshot grant so removing a file cannot bypass recovery.
+  if (!trust.key) {
+    const snapshotTrust = await projectWorkflowTrust(getWorkflowBackingStore(), await projectFolder(projectId), workflowId, definition, true);
+    if (snapshotTrust.key) await getWorkflowBackingStore().update(snapshotTrust.key, snapshotTrust.fingerprint);
+  }
   await saveRun(run);
   if (controller) {
     const sessions = getAiSessionManager();
@@ -482,6 +498,16 @@ export async function startWorkflowRun(input: {
 }
 
 export function registerWorkflowIpc(): void {
+  ipcMain.handle('workflows:projectTrust', async (_event, projectId: string, workflowId: string) => {
+    const { key, ...state } = await projectWorkflowTrust(getWorkflowBackingStore(), await projectFolder(projectId), workflowId, await runnableDefinition(projectId, workflowId));
+    return state;
+  });
+  ipcMain.handle('workflows:approveProjectTrust', async (_event, projectId: string, workflowId: string, fingerprint: string) => {
+    const state = await projectWorkflowTrust(getWorkflowBackingStore(), await projectFolder(projectId), workflowId, await runnableDefinition(projectId, workflowId));
+    if (!state.key || !fingerprint || state.fingerprint !== fingerprint) throw new Error('The workflow changed; review its commands again.');
+    await getWorkflowBackingStore().update(state.key, fingerprint);
+  });
+
   ipcMain.handle('workflows:listTemplates', async (_event, projectId: string): Promise<WorkflowTemplate[]> =>
     resolveTemplateLibrary(projectId)
   );
@@ -703,6 +729,8 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
 
       const next: WorkflowDefinition = { ...normalized, updatedAt: new Date().toISOString() };
       await persistProjectWorkflow(projectId, next);
+      const trust = await projectWorkflowTrust(getWorkflowBackingStore(), await projectFolder(projectId), next.id, next);
+      if (trust.key) await getWorkflowBackingStore().update(trust.key, trust.fingerprint);
       return next;
     }
   );

@@ -1,4 +1,4 @@
-import {ipcMain} from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import {handleMobileCommand, handleMobileRead, type MobileHostApplication} from '@praxis/core';
 
 export const MOBILE_IPC_CHANNELS = { read: 'mobile.read', command: 'mobile.command' } as const;

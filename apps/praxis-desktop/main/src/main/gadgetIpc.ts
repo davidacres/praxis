@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { broadcastToAllWindows } from './windowBroadcast';
 import {
   TICKET_REVIEW_APPLY_GATE,

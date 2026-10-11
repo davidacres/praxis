@@ -19,6 +19,7 @@ import type { Duplex } from 'node:stream';
 import { createHash } from 'node:crypto';
 import {
   evaluateMobileAccess,
+  isPrivateAddress,
   handleMobileCommand,
   handleMobileRead,
   type MobileAccessPolicy,
@@ -54,7 +55,7 @@ function interfaceNameFor(localAddress: string | undefined): string {
   if (!localAddress) return '';
   for (const [name, addresses] of Object.entries(os.networkInterfaces())) {
     for (const address of addresses ?? []) {
-      if (address.address === localAddress) return name;
+      if (address.address.split('%')[0] === localAddress.split('%')[0]) return name;
     }
   }
   return '';
@@ -69,6 +70,9 @@ export interface MobileLanAuthorizedPeer {
 export interface MobileLanServerDeps {
   app: MobileHostApplication;
   hostStaticKey: KeyPair;
+  handshakeTimeoutMs?: number;
+  maxPendingPeers?: number;
+  maxPeersPerAddress?: number;
   pairingCode?: string;
   authorizePeer?: (publicKeyHex: string) => MobileLanAuthorizedPeer | undefined;
   /**
@@ -107,13 +111,11 @@ function refusalFor(reason: string): MobileConnectionStatus {
 
 const toHex = (value: Uint8Array): string => [...value].map(byte => byte.toString(16).padStart(2, '0')).join('');
 
-function authenticatedCaller(publicKey: Uint8Array): MobileCaller {
-  const digest = createHash('sha256').update(publicKey).digest('hex').slice(0, 24);
-  return { deviceId: `device:${digest}`, capabilities: ['view', 'execute', 'approve'] };
-}
-
 export class MobileLanServer {
   private server?: net.Server;
+  private servers: net.Server[] = [];
+  private boundHosts: string[] = [];
+  get addresses(): readonly string[] { return this.boundHosts; }
   private policy: MobileAccessPolicy = { mode: 'off', allowedInterfaces: [], allowedSubnets: [] };
   private boundPort?: number;
   private lastError?: string;
@@ -138,28 +140,36 @@ export class MobileLanServer {
   }
 
   async start(port: number, policy: MobileAccessPolicy): Promise<void> {
-    if (this.server && port !== 0 && this.boundPort === port) {
-      this.policy = policy;
-      this.lastError = undefined;
-      return;
+    const hosts = Object.entries(os.networkInterfaces()).flatMap(([name, entries]) =>
+      policy.allowedInterfaces.length && !policy.allowedInterfaces.includes(name) ? [] :
+      (entries ?? []).filter(entry => isPrivateAddress(entry.address)).map(entry => entry.family === 'IPv6' && entry.address.startsWith('fe80:') ? `${entry.address}%${name}` : entry.address));
+    const uniqueHosts = [...new Set(hosts)];
+    if (!uniqueHosts.length) throw new Error('No local addresses match the selected mobile interfaces.');
+    if (this.server && port !== 0 && this.boundPort === port && JSON.stringify(this.boundHosts) === JSON.stringify(uniqueHosts)) {
+      this.policy = policy; this.lastError = undefined; return;
     }
     await this.stop();
     this.policy = policy;
-    const server = net.createServer(socket => this.accept(socket, false));
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', error => {
-        this.lastError = error instanceof Error ? error.message : String(error);
-        reject(error);
-      });
-      server.listen(port, () => {
-        server.off('error', reject);
-        this.lastError = undefined;
-        resolve();
-      });
-    });
-    this.server = server;
-    const address = server.address();
-    this.boundPort = typeof address === 'object' && address ? address.port : port;
+    let selectedPort = port;
+    try {
+      for (const host of uniqueHosts) {
+        const server = net.createServer(socket => this.accept(socket, false));
+        server.maxConnections = 128;
+        this.servers.push(server);
+        await new Promise<void>((resolve, reject) => {
+          const onError = (error: Error) => reject(error);
+          server.once('error', onError);
+          server.listen({ port: selectedPort, host, ipv6Only: true }, () => { server.off('error', onError); resolve(); });
+        });
+        const address = server.address();
+        selectedPort = typeof address === 'object' && address ? address.port : selectedPort;
+      }
+      this.server = this.servers[0]; this.boundPort = selectedPort; this.boundHosts = uniqueHosts; this.lastError = undefined;
+    } catch (error) {
+      await this.stop();
+      this.lastError = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
     this.deps.onLog?.(`[mobile] LAN listener bound on ${this.boundPort} (${policy.mode}).`);
   }
 
@@ -169,22 +179,9 @@ export class MobileLanServer {
       peer.socket.destroy();
     }
     this.peers.clear();
-    const server = this.server;
-    this.server = undefined;
-    this.boundPort = undefined;
-    if (server) {
-      (server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
-      await new Promise<void>(resolve => {
-        const timer = setTimeout(() => {
-          (server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
-          resolve();
-        }, 500);
-        server.close(() => {
-          clearTimeout(timer);
-          resolve();
-        });
-      });
-    }
+    const servers = this.servers;
+    this.servers = []; this.server = undefined; this.boundPort = undefined; this.boundHosts = [];
+    await Promise.all(servers.map(server => new Promise<void>(resolve => server.close(() => resolve()))));
   }
 
   applyPolicy(policy: MobileAccessPolicy, dropConnections: boolean): void {
@@ -249,6 +246,13 @@ export class MobileLanServer {
   }
 
   private accept(socket: MobileStream, relay: boolean): void {
+    const pending = [...this.peers].filter(peer => !peer.deviceId);
+    if (this.peers.size >= 128 || pending.length >= (this.deps.maxPendingPeers ?? 32) || pending.filter(peer => peer.socket.remoteAddress === socket.remoteAddress).length >= (this.deps.maxPeersPerAddress ?? 4)) {
+      this.deps.onLog?.('[mobile] pending peer limit reached.'); socket.destroy(); return;
+    }
+    const handshakeTimer = setTimeout(() => socket.destroy(), this.deps.handshakeTimeoutMs ?? 15000);
+    handshakeTimer.unref();
+    socket.once('close', () => clearTimeout(handshakeTimer));
     const channel = SecureChannel.responder({
       staticKeyPair: this.deps.hostStaticKey,
       ...(this.deps.pairingCode ? { prologue: new TextEncoder().encode(this.deps.pairingCode) } : {}),
@@ -288,6 +292,7 @@ export class MobileLanServer {
       attach: next => {
         peer = next;
         authorised = true;
+        clearTimeout(handshakeTimer);
         pairingHold = false;
         tracked.deviceId = next.caller.deviceId;
         // Live from here on; anything earlier is fetched with an explicit replay.
@@ -301,7 +306,7 @@ export class MobileLanServer {
     const peerContext = (): MobilePeerContext => ({
       interfaceName: interfaceNameFor(socket.localAddress),
       remoteAddress: socket.remoteAddress ?? '',
-      authenticated: true,
+      authenticated: channel.open,
       relayRoute: relay,
     });
 
@@ -400,6 +405,7 @@ export class MobileLanServer {
             return;
           }
           if (channel.open) {
+
             const decision = evaluateMobileAccess(this.policy, peerContext());
             if (!decision.allowed) {
               this.deps.onLog?.(`[mobile] peer refused (${decision.reason}).`);
@@ -415,14 +421,13 @@ export class MobileLanServer {
             const publicKeyHex = toHex(publicKey);
             tracked.publicKeyHex = publicKeyHex;
             const allowed = this.deps.authorizePeer?.(publicKeyHex);
-            if (this.deps.authorizePeer && !allowed) {
-              holdOrClose(this.deps.onUnpairedPeer?.(publicKeyHex) ?? mobileConnectionStatus('pairing-required'));
+            if (!allowed) {
+              if (!this.deps.onUnpairedPeer) { closeWith(mobileConnectionStatus('access-denied')); return; }
+              holdOrClose(this.deps.onUnpairedPeer(publicKeyHex));
               if (!pairingHold) return;
               continue;
             }
-            tracked.attach(allowed
-              ? { caller: { deviceId: allowed.deviceId, capabilities: allowed.capabilities }, ...(allowed.projectIds ? { projectIds: allowed.projectIds } : {}) }
-              : { caller: authenticatedCaller(publicKey) });
+            tracked.attach({ caller: { deviceId: allowed.deviceId, capabilities: allowed.capabilities }, ...(allowed.projectIds ? { projectIds: allowed.projectIds } : {}) });
           }
           continue;
         }

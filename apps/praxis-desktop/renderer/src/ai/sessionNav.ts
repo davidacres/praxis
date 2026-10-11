@@ -1021,38 +1021,64 @@ export function extractSubagents(session: AgentSessionRecord, allSessions?: Agen
     });
   }
 
-  // 2. Subagent tool invocations in events (e.g. from ACP Claude Code or multi-agent tools)
+  // 2. Subagent tool invocations in events (e.g. from ACP Claude Code or multi-agent tools).
+  // Completion updates may omit the tool name; match them to the initial call by ID.
   const subagentToolNames = new Set(['agent', 'task', 'invoke_subagent', 'subagent', 'delegate']);
+  const toolItems = new Map<string, SubagentItem>();
+  const nativeAgents = new Map<string, string>();
+  const nativeCalls = new Map<string, string>();
+  const spawnCalls = new Set<string>();
   for (const event of session.events ?? []) {
+    const originalCallId = event.data?.callId || event.timestamp;
+    if (seenIds.has(originalCallId)) continue;
+    // Native lifecycle actions describe one named agent, not separate agents for
+    // Start, Interact, Complete and Interrupt. Older adapters stored Complete as tool_start.
+    const native = /^(Start|Interact with|Complete|Interrupt) subagent (.+)$/i.exec(event.data?.toolName ?? '');
+    if (native && /^(Interact with|Interrupt)$/i.test(native[1])) continue;
+    let callId = nativeCalls.get(originalCallId) ?? originalCallId;
+    if (native) {
+      const name = native[2].trim();
+      callId = nativeAgents.get(name) ?? originalCallId;
+      nativeAgents.set(name, callId);
+      nativeCalls.set(originalCallId, callId);
+      if (native[1].toLowerCase() === 'start') spawnCalls.add(originalCallId);
+    }
+    const existing = toolItems.get(callId);
     const rawToolName = event.data?.toolName?.toLowerCase() ?? '';
-    const isSubagentTool = subagentToolNames.has(rawToolName) || rawToolName.includes('subagent');
-    if (!isSubagentTool) continue;
-    const callId = event.data?.callId || event.timestamp;
-    if (seenIds.has(callId)) continue;
-    seenIds.add(callId);
+    const isSubagentTool = subagentToolNames.has(rawToolName) || /^(?:(?:start|interact with|complete|interrupt|wait for|list) )?subagents?(?:\s|:|$)/.test(rawToolName);
+    if (!existing && !isSubagentTool) continue;
 
-    const status: AgentSessionRecord['state'] = event.data?.ok === false
-      ? 'failed'
-      : event.type === 'tool_complete'
-        ? 'completed'
-        : 'executing';
-
+    // A successful spawn call means the child started; only its lifecycle
+    // completion means it finished. Generic synchronous subagent tools still settle by call ID.
+    const terminal = native?.[1].toLowerCase() === 'complete'
+      || event.data?.ok === false
+      || (event.type === 'tool_complete' && !spawnCalls.has(originalCallId));
+    const status: AgentSessionRecord['state'] = terminal
+      ? event.data?.ok === false ? 'failed' : 'completed'
+      : existing?.status ?? 'executing';
     const eventTitle = event.data?.argsSummary
       || event.summary.replace(/^Running tool:\s*/i, '').replace(/^Tool\s*(completed|failed):\s*/i, '')
       || 'Subagent execution';
-
-    items.push({
+    const startedAt = existing?.startedAt ?? event.timestamp;
+    const completedAt = terminal ? event.timestamp : existing?.completedAt;
+    const item: SubagentItem = {
+      ...existing,
       id: callId,
-      title: eventTitle,
-      role: event.data?.toolName || 'Tool subagent',
+      title: existing?.title ?? native?.[2].trim() ?? eventTitle,
+      role: existing?.role ?? event.data?.toolName ?? 'Tool subagent',
       status,
-      model: event.modelId?.trim() || session.model?.trim() || (session.provider ? providerLabel(session.provider) : 'Default model'),
-      tokenUsage: event.tokenUsage,
-      cost: event.cost,
-      startedAt: event.timestamp,
-      elapsed: event.durationMs ? `${Math.round(event.durationMs / 1000)}s` : undefined
-    });
+      model: event.modelId?.trim() || existing?.model || session.model?.trim() || (session.provider ? providerLabel(session.provider) : 'Default model'),
+      tokenUsage: event.tokenUsage ?? existing?.tokenUsage,
+      cost: event.cost ?? existing?.cost,
+      startedAt,
+      completedAt,
+      elapsed: event.durationMs !== undefined
+        ? `${Math.round(event.durationMs / 1000)}s`
+        : terminal ? formatElapsed(startedAt, completedAt) : existing?.elapsed
+    };
+    toolItems.set(callId, item);
   }
+  items.push(...toolItems.values());
 
   return items;
 }

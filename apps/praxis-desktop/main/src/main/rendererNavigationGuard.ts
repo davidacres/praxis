@@ -33,7 +33,7 @@ export function isOwnRendererUrl(url: string, devServerUrl: string | undefined, 
     if (devServerUrl) return target.origin === new URL(devServerUrl).origin;
     if (target.protocol !== 'file:') return false;
     const relative = path.relative(dir, fileURLToPath(target));
-    return !relative.startsWith('..') && !path.isAbsolute(relative);
+    return relative === 'index.html';
   } catch {
     return false;
   }

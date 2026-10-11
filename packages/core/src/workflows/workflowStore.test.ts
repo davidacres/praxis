@@ -423,3 +423,15 @@ test('WorkflowRunStore.setArchived refuses to archive a running or awaiting run'
   await assert.rejects(() => store.setArchived('r-awaiting', true), /Wait for this run to finish before archiving it/);
 });
 
+
+
+test('project auto-permission state is stripped with a warning while an operator may still opt into auto at run start', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'praxis-workflow-auto-'));
+  const folder = path.join(root, PROJECT_WORKFLOWS_DIR);
+  await mkdir(folder, { recursive: true });
+  await writeFile(path.join(folder, 'auto.json'), JSON.stringify({ ...minimal('auto'), permissionMode: 'auto' }));
+  const loaded = await loadProjectWorkflows(root);
+  assert.equal(loaded.workflows.length, 1);
+  assert.equal((loaded.workflows[0].definition as unknown as { permissionMode?: string }).permissionMode, undefined);
+  assert.ok(loaded.invalid.some(entry => entry.issues.some(issue => issue.path === 'permissionMode')));
+});

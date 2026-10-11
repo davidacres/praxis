@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { app, shell } from 'electron';
@@ -39,6 +39,7 @@ export const OAUTH_SCHEME = 'praxis';
 const OAUTH_SCHEME_CALLBACK_URL = `${OAUTH_SCHEME}://oauth-callback`;
 
 type PendingAuthorization = {
+  state: string;
   promise: Promise<string>;
   resolve: (code: string) => void;
   reject: (error: Error) => void;
@@ -75,6 +76,8 @@ class DesktopMcpOAuthProvider implements OAuthClientProvider {
     private readonly serverUrl: string,
     private readonly oauthClient?: OAuthClientOverride
   ) {}
+
+  public state(): string { return this.manager.authorizationState(); }
 
   public get redirectUrl(): string {
     // A pre-registered app may require the exact redirect URI registered in
@@ -346,8 +349,8 @@ export class DesktopMcpOAuthManager implements McpOAuthProviderSource {
 
     const outcome = this.settlePending(url);
     res
-      .writeHead(200, { 'content-type': 'text/html' })
-      .end(outcome === 'rejected' ? CALLBACK_PAGE_ERROR : CALLBACK_PAGE_OK);
+      .writeHead(outcome === 'none' ? 400 : 200, { 'content-type': 'text/html' })
+      .end(outcome !== 'resolved' ? CALLBACK_PAGE_ERROR : CALLBACK_PAGE_OK);
   }
 
   /**
@@ -355,12 +358,17 @@ export class DesktopMcpOAuthManager implements McpOAuthProviderSource {
    * the `praxis://` protocol URL). Resolves or rejects the pending
    * authorization from the callback's query params.
    */
+  public authorizationState(): string { return this.ensurePendingAuthorization().state; }
+
   private settlePending(url: URL): 'resolved' | 'rejected' | 'none' {
     const pending = this.pendingAuthorization;
     if (!pending) {
       return 'none';
     }
 
+    const returned = Buffer.from(url.searchParams.get('state') ?? '');
+    const expected = Buffer.from(pending.state);
+    if (returned.length !== expected.length || !timingSafeEqual(returned, expected)) return 'none';
     clearTimeout(pending.timer);
     this.pendingAuthorization = undefined;
 
@@ -450,6 +458,7 @@ export class DesktopMcpOAuthManager implements McpOAuthProviderSource {
     }, AUTH_TIMEOUT_MS);
 
     this.pendingAuthorization = {
+      state: randomBytes(32).toString('hex'),
       promise,
       resolve: resolvePromise,
       reject: rejectPromise,

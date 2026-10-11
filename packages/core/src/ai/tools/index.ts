@@ -15,7 +15,7 @@ export {
 
 export type { WireImageAttachment } from '../gateway/wire';
 
-export { resolveSandboxedPath } from './pathSandbox';
+export { resolveSandboxedPath, openSandboxedFile, readSandboxedFile, writeSandboxedFile, listSandboxedDirectory } from './pathSandbox';
 export { createUnifiedDiff } from './unifiedDiff';
 
 export {
@@ -34,3 +34,6 @@ export {
   type BrowserToolContext,
   type BrowserToolExtensionOptions
 } from './browserTools';
+
+export { resolvedBrowserUrlBlockReason } from './browserTools';
+export { addressInSubnet, normalizeMobileSubnet, isLocalNetworkAddress, parseNetworkAddress } from './networkAddress';

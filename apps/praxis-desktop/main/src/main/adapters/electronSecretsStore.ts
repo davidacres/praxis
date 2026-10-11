@@ -30,7 +30,7 @@ export class ElectronSecretsStore implements SecretsStore {
   }
 
   public async store(key: string, value: string): Promise<void> {
-    if (!safeStorage.isEncryptionAvailable()) {
+    if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) {
       throw new Error('OS-backed secret encryption is not available on this machine.');
     }
     const all = this.readAll();
@@ -46,14 +46,17 @@ export class ElectronSecretsStore implements SecretsStore {
 
   private readAll(): Record<string, string> {
     try {
+      if (process.platform !== 'win32') fs.chmodSync(this.filePath, 0o600);
       return JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as Record<string, string>;
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
       return {};
     }
   }
 
   private async writeAll(all: Record<string, string>): Promise<void> {
-    await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.promises.writeFile(this.filePath, JSON.stringify(all, null, 2), 'utf8');
+    await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
+    await fs.promises.writeFile(this.filePath, JSON.stringify(all, null, 2), { encoding: 'utf8', mode: 0o600 });
+    if (process.platform !== 'win32') await fs.promises.chmod(this.filePath, 0o600);
   }
 }

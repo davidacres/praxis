@@ -11,7 +11,7 @@ import { Readable, Writable } from 'node:stream';
 // `import()` in `connect()` instead (Node's supported CJS→ESM interop path).
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
 import type { LogSink } from '../../host/logSink';
-import { resolveSandboxedPath } from '../tools/pathSandbox';
+import { resolveSandboxedPath, readSandboxedFile, writeSandboxedFile } from '../tools/pathSandbox';
 import type { PermissionDecision } from '../tools';
 import type { AgentToolMode } from '../agentTypes';
 import type { WireImageAttachment } from '../gateway/wire';
@@ -319,8 +319,8 @@ export class AcpClientWrapper {
       if (this.options.toolMode === 'project-only') {
         throw new Error('File reads are unavailable without a project workspace folder.');
       }
-      const path = resolveSandboxedPath(this.options.workingDirectory, ctx.params.path);
-      let content = await nodeFs.readFile(path, 'utf8');
+      const path = await resolveSandboxedPath(this.options.workingDirectory, ctx.params.path);
+      let content = (await readSandboxedFile(this.options.workingDirectory, ctx.params.path)).toString('utf8');
       const { line, limit } = ctx.params;
       if (typeof line === 'number' || typeof limit === 'number') {
         const lines = content.split('\n');
@@ -335,11 +335,11 @@ export class AcpClientWrapper {
       if (this.options.toolMode === 'read-only' || this.options.toolMode === 'project-only') {
         throw new Error('File writes are unavailable in read-only tool mode.');
       }
-      const path = resolveSandboxedPath(this.options.workingDirectory, ctx.params.path);
+      const path = await resolveSandboxedPath(this.options.workingDirectory, ctx.params.path);
       const gate = this.options.coordination;
       const decision = gate
         ? await gate.acquire({
-            items: [{ resource: { kind: 'file', worktree: gate.worktree, path: nodePath.relative(gate.worktree, path) }, mode: 'exclusive' }],
+            items: [{ resource: { kind: 'file', worktree: gate.worktree, path: nodePath.relative(await nodeFs.realpath(gate.worktree), path) }, mode: 'exclusive' }],
             reason: `write ${ctx.params.path}`,
             lifetime: 'tool'
           })
@@ -348,7 +348,7 @@ export class AcpClientWrapper {
       // reason, so the agent learns who holds the file instead of retrying blind.
       if (decision && !decision.ok) throw acpModule.RequestError.internalError({ reason: decision.reason }, refusalForAgent(decision.reason, gate?.wait ? 'coordination_wait' : undefined));
       try {
-        await nodeFs.writeFile(path, ctx.params.content, 'utf8');
+        await writeSandboxedFile(this.options.workingDirectory, ctx.params.path, ctx.params.content);
       } finally {
         if (decision?.ok) await decision.release();
       }

@@ -560,3 +560,14 @@ test('lazy session transcripts migrate on load and hydrate on demand', async () 
   assert.equal(deletedTranscript, undefined);
 });
 
+
+
+test('lazy session metadata retains unnamed subagent completions and excludes ordinary commands mentioning subagents', () => {
+  const events = [
+    { timestamp: '2026-10-11T00:00:00Z', type: 'tool_start', summary: 'Running subagent', data: { callId: 'child', toolName: 'Start subagent reviewer' } },
+    { timestamp: '2026-10-11T00:00:01Z', type: 'tool_complete', summary: 'Completed', data: { callId: 'child', ok: true } },
+    { timestamp: '2026-10-11T00:00:02Z', type: 'tool_start', summary: 'Searching', data: { callId: 'shell', toolName: "rg 'subagent' renderer/src" } }
+  ];
+  const manager = new AiSessionManager(storeWith({ 'SESSION-abc': { ...baseRecord('completed'), events } }), new InMemorySessionTranscriptStore());
+  assert.deepEqual(manager.getAgentSession('SESSION-abc')?.events.map(event => [event.type, event.data?.callId]), [['tool_start', 'child'], ['tool_complete', 'child']]);
+});

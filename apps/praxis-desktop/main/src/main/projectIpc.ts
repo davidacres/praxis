@@ -1,4 +1,5 @@
-import { app, ipcMain } from 'electron';
+import { app } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectRecord, UpdateProjectInput } from '@praxis/core';
 import { getProjectManager, getProjectStore } from './projectStoreInstance';
 import { getWorkspaceStore } from './workspaceStoreInstance';

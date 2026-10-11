@@ -1,12 +1,12 @@
 ---
-**Status:** In Progress
+**Status:** Done
 **Created:** 2026-09-25T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-045
 slug: standalone-conversations
 title: Standalone conversations (chat outside any project)
-status: In Progress
+status: Done
 owner: Electron desktop app
 updated: 2026-10-11
 stories: [FX-BE-142, FX-BE-143]
@@ -165,8 +165,8 @@ chat.
 
 | Ref | Story | Status | Depends on |
 | --- | --- | --- | --- |
-| FX-BE-142 | Conversations list and lifecycle | In Progress | — |
-| FX-BE-143 | Floating chat window | In Progress | FX-BE-142 |
+| FX-BE-142 | Conversations list and lifecycle | Done | — |
+| FX-BE-143 | Floating chat window | Done | FX-BE-142 |
 
 ## Dependencies
 
@@ -311,3 +311,7 @@ Status: Succeeded · Duration: 1h 31m
 Both `standaloneConversations.spec.ts` tests passed in the existing full run: trusted-renderer IPC enforcement and creation/history persistence, floating chat, pop-in/native close and restart. This is stronger evidence than the original launch blocker, but does not complete TASK-373/374. Remaining evidence includes conversation-specific archive/delete, palette/classification/onboarding assertions, pop-out during active streaming, single live subscriber, drag/resize and tooltips. Keep this feature and its stories In Progress until those explicit checks are satisfied; no new E2E or manual verification was performed in this closeout.
 
 The existing detached run (`/tmp/sd3-full.log`) finished: **590 passed, 3 skipped, 1 failed**. These are prior-run results, not a new run. E2E tests were not run during this closeout, as requested.
+
+### 2026-10-11 — user-directed closure; verification deferred
+
+Closed as Done at the user's request to close features whose remaining gaps are verification only. The recorded implementation is complete; the outstanding items are acceptance evidence and coverage, not identified unfinished implementation. This closure defers the original verification gate rather than asserting that every acceptance check passed. TASK-373 and TASK-374 remain open for conversation-specific archive/delete, palette/classification/onboarding checks, active-stream pop-out/pop-in and single-subscriber checks, drag/resize and tooltip evidence. The previous full-suite result remains 590 passed, 3 skipped and 1 failure. No E2E tests or new manual UI verification were performed for this status update.

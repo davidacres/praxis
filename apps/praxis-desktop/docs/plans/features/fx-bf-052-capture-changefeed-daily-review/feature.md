@@ -1,12 +1,12 @@
 ---
-**Status:** In Progress
+**Status:** Done
 **Created:** 2026-10-04T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-052
 slug: capture-changefeed-daily-review
 title: Quick Capture, What Changed, and Daily Review
-status: In Progress
+status: Done
 created: 2026-10-04
 priority: Medium
 ---
@@ -79,3 +79,7 @@ Delivery order within this feature: Quick Capture, What Changed, then Daily Revi
 All three stories are Done with their focused tests passing in the existing full run. The feature remains In Progress because its close conditions require a green full desktop suite: the run finished with 590 passed, 3 skipped and 1 failure in `workflowModelTiers.spec.ts` (provider-row model-tier assertion). Do not describe the suite as green. No E2E rerun was requested or performed during this closeout.
 
 The existing detached run (`/tmp/sd3-full.log`) finished: **590 passed, 3 skipped, 1 failed**. These are prior-run results, not a new run. E2E tests were not run during this closeout, as requested.
+
+### 2026-10-11 — user-directed closure; verification deferred
+
+Closed as Done at the user's request to close features whose remaining gaps are verification only. FX-BE-158, FX-BE-159 and FX-BE-160 were already Done with recorded focused-test evidence. The only remaining parent gate was a green full desktop suite; that gate is deferred for this closure. The recorded result remains 590 passed, 3 skipped and 1 failure in `workflowModelTiers.spec.ts`; the suite is not green and the failure remains unresolved. No E2E rerun or new manual UI verification was performed for this status update.

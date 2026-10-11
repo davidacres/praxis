@@ -1,5 +1,6 @@
 import * as os from 'node:os';
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { safeSend } from './windowBroadcast';
 

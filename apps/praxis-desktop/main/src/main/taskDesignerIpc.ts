@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
-import { ipcMain } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import {
   GENERATED_FEATURES_DIRECTORY_NAME,
   GENERATED_FEATURES_ROOT_SEGMENT,

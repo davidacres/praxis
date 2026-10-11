@@ -751,6 +751,12 @@ export class AcpAgentHost {
         break;
       }
       case 'tool_call': {
+        // Some ACP adapters publish a completed notification as the first tool_call.
+        // Preserve that terminal state instead of creating a permanently running tool.
+        if (update.status === 'completed' || update.status === 'failed') {
+          this.handleSessionUpdate(issueKey, { ...update, sessionUpdate: 'tool_call_update' }, task);
+          break;
+        }
         const toolName = update.title || update.name || update.toolCallId;
         this.appendEvent(
           issueKey,
@@ -839,6 +845,10 @@ export class AcpAgentHost {
 
     const workingDirectory = options.workingDirectory?.trim() || undefined;
     const toolMode = options.toolMode ?? (taskDefinition.kind === 'analysis' ? 'read-only' : 'full');
+    if (provider === 'antigravity-cli') {
+      if (toolMode !== 'full' || options.permissionMode !== 'autopilot') throw new Error('Antigravity has no permission relay. It requires Full tools and an explicit Autopilot choice; no tool call will be prompted.');
+      options = { ...options, env: { ...options.env, PRAXIS_ANTIGRAVITY_UNSAFE_AUTO_APPROVE: '1' } };
+    }
     const sessionId = randomUUID();
     const hasBrowser = options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false;
     const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\nTool mode: ${
@@ -1079,6 +1089,10 @@ export class AcpAgentHost {
     }
     const workingDirectory = record.workingDirectory?.trim() || options.workingDirectory?.trim() || undefined;
     const toolMode = record.toolMode ?? options.toolMode ?? 'full';
+    if (record.provider === 'antigravity-cli') {
+      if (toolMode !== 'full' || record.permissionMode !== 'autopilot') throw new Error('Antigravity requires Full tools and explicit Autopilot consent; start a new session to opt in.');
+      options = { ...options, env: { ...options.env, PRAXIS_ANTIGRAVITY_UNSAFE_AUTO_APPROVE: '1' } };
+    }
     const systemPrompt = `${buildSystemPrompt(record.taskDefinition, {
       key: issueKey,
       summary: record.taskDefinition.goal,

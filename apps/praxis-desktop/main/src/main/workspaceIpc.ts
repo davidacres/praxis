@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { app, dialog, ipcMain } from 'electron';
+import { app, dialog } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import {
   PRAXIS_WORKSPACE_FILE_EXTENSION,
   parseWorkspaceFile,

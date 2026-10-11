@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { app, ipcMain, type BrowserWindow } from 'electron';
+import { app, type BrowserWindow } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import type { LogSink, UpdateStatus } from '@praxis/core';
 import { safeSend } from './windowBroadcast';
 

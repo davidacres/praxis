@@ -21,22 +21,33 @@ export function frame(payload: Uint8Array): Uint8Array {
 
 /** Buffers stream bytes and emits whole records as they complete. */
 export class RecordAssembler {
-  private buffer = new Uint8Array(0);
+  private readonly header = new Uint8Array(4);
+  private headerBytes = 0;
+  private record: Uint8Array | undefined;
+  private recordBytes = 0;
 
   push(chunk: Uint8Array): Uint8Array[] {
-    const merged = new Uint8Array(this.buffer.length + chunk.length);
-    merged.set(this.buffer);
-    merged.set(chunk, this.buffer.length);
-    this.buffer = merged;
-
     const records: Uint8Array[] = [];
-    for (;;) {
-      if (this.buffer.length < 4) break;
-      const length = new DataView(this.buffer.buffer, this.buffer.byteOffset, 4).getUint32(0, false);
-      if (length > MAX_RECORD) throw new Error(`Framed record claims ${length} bytes, over the ${MAX_RECORD} limit.`);
-      if (this.buffer.length < 4 + length) break;
-      records.push(this.buffer.slice(4, 4 + length));
-      this.buffer = this.buffer.slice(4 + length);
+    let offset = 0;
+    while (offset < chunk.length) {
+      if (!this.record) {
+        const count = Math.min(4 - this.headerBytes, chunk.length - offset);
+        this.header.set(chunk.subarray(offset, offset + count), this.headerBytes);
+        this.headerBytes += count;
+        offset += count;
+        if (this.headerBytes < 4) break;
+        const length = new DataView(this.header.buffer).getUint32(0, false);
+        if (length > MAX_RECORD) throw new Error(`Framed record claims ${length} bytes, over the ${MAX_RECORD} limit.`);
+        this.headerBytes = 0;
+        this.record = new Uint8Array(length);
+        this.recordBytes = 0;
+        if (length === 0) { records.push(this.record); this.record = undefined; continue; }
+      }
+      const count = Math.min(this.record.length - this.recordBytes, chunk.length - offset);
+      this.record.set(chunk.subarray(offset, offset + count), this.recordBytes);
+      this.recordBytes += count;
+      offset += count;
+      if (this.recordBytes === this.record.length) { records.push(this.record); this.record = undefined; }
     }
     return records;
   }

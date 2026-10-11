@@ -230,3 +230,15 @@ test('browser_screenshot surfaces a capture failure as ok:false with the reason,
   assert.equal(res.ok, false);
   assert.equal(res.content, 'The preview window is not currently visible.');
 });
+
+
+import { resolvedBrowserUrlBlockReason } from './browserTools';
+test('browser denies IPv6 mappings, local IPv6, CGNAT and private DNS answers, retaining explicit test access', async () => {
+  for (const url of ['http://[::ffff:127.0.0.1]/', 'http://[::ffff:169.254.169.254]/', 'http://[fd00::1]/', 'http://[fe80::1]/', 'http://100.64.1.1/', 'http://[0:0:0:0:0:0:0:1]/', 'http://localhost./']) {
+    assert.ok(blockedBrowserUrlReason(url), url);
+    assert.equal(blockedBrowserUrlReason(url, { allowPrivateHosts: true }), undefined);
+  }
+  assert.equal(await resolvedBrowserUrlBlockReason('https://public.example', {}, async () => [{ address: '8.8.8.8' }]), undefined);
+  assert.ok(await resolvedBrowserUrlBlockReason('https://public.example', {}, async () => [{ address: '8.8.8.8' }, { address: '::ffff:7f00:1' }]));
+  assert.ok(await resolvedBrowserUrlBlockReason('https://public.example', {}, async () => { throw new Error('DNS failed'); }));
+});

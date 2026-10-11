@@ -1,14 +1,14 @@
 ---
-**Status:** In Progress
+**Status:** Done
 **Created:** 2026-09-25T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-142
 title: "Conversations list and lifecycle"
-status: In Progress
+status: Done
 feature: FX-BF-045
-updated: 2026-09-26
+updated: 2026-10-11
 dependencies: []
 ---
 
@@ -149,3 +149,7 @@ Conversations node itself.
 ### 2026-10-11 — verification reconciliation
 
 The prior full run passed both `standaloneConversations.spec.ts` tests. See the parent feature closeout note for the exact coverage and remaining TASK-373/374 evidence. This story remains In Progress; passing the lifecycle test alone does not prove every acceptance criterion. No E2E rerun was performed.
+
+### 2026-10-11 — user-directed closure; verification deferred
+
+Closed as Done with FX-BF-045 at the user's request: the recorded implementation is complete and the remaining gaps are verification only. The original acceptance-evidence gate is deferred for this closure. The parent feature lists the remaining checks; TASK-373 and TASK-374 remain open and are not claimed complete. No new E2E tests or manual UI verification were performed.

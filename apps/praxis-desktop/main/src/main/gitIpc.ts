@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { abortGitConflict, applyGitHunk, checkoutGit, cherryPickGit, cloneGitRepository, commitGit, createBranchGit, deleteBranchGit, discardGit, fetchGit, getGitBlame, getGitCommit, getGitComparison, getGitConflict, getGitDiff, getGitFileContent, getGitFileHistory, getGitStatus, loadGitRepository, mergeGit, popGitStash, pullGit, pushGit, rebaseGit, renameBranchGit, resolveGitConflict, revertGit, stageGit, stashGit, unstageGit, preflightGitRepository, initializeGitRepository } from './gitService';
 
 export function registerGitIpc(): void {

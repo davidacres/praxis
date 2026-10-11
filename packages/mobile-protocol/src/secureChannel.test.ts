@@ -64,3 +64,14 @@ test('an oversize frame is rejected by the assembler', () => {
   new DataView(header.buffer).setUint32(0, (1 << 20) + 1, false);
   assert.throws(() => asm.push(header), /over the/);
 });
+
+
+test('a maximally fragmented 1 MiB record uses bounded linear assembly', () => {
+  const assembler = new RecordAssembler();
+  const payload = new Uint8Array(1 << 20).fill(7);
+  const bytes = frame(payload);
+  const started = Date.now(); let completed: Uint8Array[] = [];
+  for (let i = 0; i < bytes.length; i++) { const result = assembler.push(bytes.subarray(i, i + 1)); if (result.length) completed = result; }
+  assert.deepEqual(completed, [payload]);
+  assert.ok(Date.now() - started < 5000, 'assembly must not recopy the pending record on each byte');
+});

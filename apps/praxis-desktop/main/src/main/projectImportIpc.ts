@@ -1,4 +1,5 @@
-import { app, ipcMain } from 'electron';
+import { app } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import {
   discoverPlanFolders,
   discoverRepositoryFolders,

@@ -111,3 +111,17 @@ test('a check timeout resolves only after the process has stopped', { timeout: 1
   assert.equal(result.timedOut, true);
   assert.equal(result.code, null);
 });
+
+test('checks receive a usable path but no app credential or Node injection environment', async () => {
+  const keys = ['PRAXIS_SECURITY_TEST_SECRET', 'NODE_OPTIONS', 'NODE_PATH', 'AWS_SECRET_ACCESS_KEY'];
+  const previous = keys.map(key => process.env[key]);
+  try {
+    process.env.PRAXIS_SECURITY_TEST_SECRET = 'fixture-credential';
+    process.env.NODE_OPTIONS = '--require=/nonexistent-security-probe';
+    process.env.NODE_PATH = '/nonexistent-security-modules';
+    process.env.AWS_SECRET_ACCESS_KEY = 'fixture-cloud-credential';
+    const result = await spawnCheck(check('process.stdout.write(JSON.stringify({secret:process.env.PRAXIS_SECURITY_TEST_SECRET,node:process.env.NODE_OPTIONS,cloud:process.env.AWS_SECRET_ACCESS_KEY,path:!!process.env.PATH}))'), tmpdir());
+    assert.equal(result.code, 0);
+    assert.deepEqual(JSON.parse(result.output), { path: true });
+  } finally { keys.forEach((key, i) => previous[i] === undefined ? delete process.env[key] : process.env[key] = previous[i]); }
+});

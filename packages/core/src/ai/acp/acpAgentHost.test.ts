@@ -449,3 +449,27 @@ test('handleCursorAskQuestion auto-answers when unattended/auto-approve, skips o
     answers: [{ questionId: 'q1', selectedOptionIds: ['opt1'] }]
   });
 });
+
+
+test('Antigravity rejects restricted tools and missing explicit unrestricted consent before spawning', async () => {
+  const host = new AcpAgentHost({} as never, { appendLine: () => {} });
+  for (const toolMode of ['read-only', 'project-only', 'full'] as const) {
+    for (const permissionMode of ['manual', 'autopilot'] as const) {
+      if (toolMode === 'full' && permissionMode === 'autopilot') continue;
+      await assert.rejects(host.startTask({ key: 'security-antigravity' } as never, { kind: 'coding' } as never, 'antigravity-cli', { command: '/must-not-spawn', toolMode, permissionMode }), /Antigravity.*Full tools.*Autopilot/);
+    }
+  }
+});
+
+
+test('an ACP tool published initially as completed or failed never emits a running event', () => {
+  for (const status of ['completed', 'failed'] as const) {
+    const events: AgentEventSummary[] = [];
+    const host = new AcpAgentHost({ appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added) } as never, { appendLine: () => {} });
+    const handler = host as unknown as { handleSessionUpdate(key: string, update: unknown, task: unknown): void };
+    handler.handleSessionUpdate('session', { sessionUpdate: 'tool_call', toolCallId: 'notification', title: 'Complete subagent reviewer', status, kind: 'other', content: [] }, task('session'));
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, 'tool_complete');
+    assert.equal(events[0].data?.ok, status === 'completed');
+  }
+});

@@ -1,3 +1,4 @@
+import { confirmProjectWorkflowTrust } from '../workflows/workflowProjectTrust';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentRuntimeSnapshot,
@@ -1725,6 +1726,7 @@ export function App() {
             throw new Error('Select a project before starting a governed workflow.');
           }
           try {
+            await confirmProjectWorkflowTrust(project.id, workflowId, confirm);
             await window.praxis.workflows.startRun(
               project.id,
               workflowId,
@@ -1822,6 +1824,7 @@ export function App() {
             throw new Error('This session is not associated with a project. Open it from a project workspace before adding a workflow.');
           }
           await assertRunBaseOrThrow(projectId, uncommittedChanges);
+          await confirmProjectWorkflowTrust(projectId, workflowId, confirm);
           await window.praxis.workflows.startRun(
             projectId,
             workflowId,

@@ -1,4 +1,5 @@
-import { ipcMain, shell } from 'electron';
+import { shell } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 
 /**
  * Outbound links (issue browse URLs, attachment content URLs) always open in

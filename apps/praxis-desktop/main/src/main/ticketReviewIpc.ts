@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import {
   getProviderDescriptor,
   providerNeedsApiKey,

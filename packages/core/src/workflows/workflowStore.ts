@@ -207,6 +207,9 @@ export async function loadProjectWorkflows(
         invalid.push({ source: 'project', path: filePath, issues: migration.errors });
         continue;
       }
+      if ((parsed as { permissionMode?: unknown }).permissionMode === 'auto') {
+        invalid.push({ source: 'project', path: filePath, issues: [{ path: 'permissionMode', message: 'Project workflows cannot auto-approve permissions; changed to ask.' }] });
+      }
       workflows.push({ definition: migration.definition, source: 'project', path: filePath });
     } catch (error) {
       invalid.push({

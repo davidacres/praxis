@@ -216,7 +216,11 @@ class Session:
             send_error(req_id, -32603, "agy not found on PATH")
             return
 
-        cmd = [agy_bin, "--output-format", "stream-json", "--dangerously-skip-permissions"]
+        if os.environ.get("PRAXIS_ANTIGRAVITY_UNSAFE_AUTO_APPROVE") != "1":
+            send_error(req_id, -32603, "Antigravity requires explicit unrestricted auto-approval consent; no tool call will be prompted.")
+            return
+        cmd = [agy_bin, "--output-format", "stream-json"]
+        cmd.append("--dangerously-skip-permissions")
         if self.model:
             cmd += ["--model", self.model]
         if self.conversation_id:

@@ -105,7 +105,7 @@ function callRead(port: number, hostPublicKey: Uint8Array, pairingCode?: string,
 
 test('serves an encrypted read once the peer completes the IK handshake', async () => {
   const hostKey = generateKeyPair();
-  const server = new MobileLanServer({ app: fixtureApp(), hostStaticKey: hostKey });
+  const server = new MobileLanServer({ app: fixtureApp(), authorizePeer: () => ({ deviceId: 'phone-1', capabilities: ['view', 'execute'] }), hostStaticKey: hostKey });
   const policy: MobileAccessPolicy = { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] };
   await server.start(0, policy);
   try {
@@ -136,14 +136,14 @@ test('filters project discovery to the authenticated device grant', async () => 
 test('binds requests to the Noise-authenticated device instead of trusting caller claims', async () => {
   const hostKey = generateKeyPair();
   let observed: MobileReadRequest | undefined;
-  const server = new MobileLanServer({ app: fixtureApp(request => { observed = request; }), hostStaticKey: hostKey });
+  const server = new MobileLanServer({ app: fixtureApp(request => { observed = request; }), authorizePeer: () => ({ deviceId: 'device:paired-phone', capabilities: ['view'] }), hostStaticKey: hostKey });
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   try {
     const reply = await callRead(server.port!, hostKey.publicKey);
     assert.equal(reply.ok, true);
     assert.notEqual(observed?.caller.deviceId, caller.deviceId);
     assert.match(observed?.caller.deviceId ?? '', /^device:/);
-    assert.deepEqual(observed?.caller.capabilities, ['view', 'execute', 'approve']);
+    assert.deepEqual(observed?.caller.capabilities, ['view']);
   } finally {
     await server.stop();
   }
@@ -151,7 +151,7 @@ test('binds requests to the Noise-authenticated device instead of trusting calle
 
 test('requires the out-of-band pairing code when the listener configures one', async () => {
   const hostKey = generateKeyPair();
-  const server = new MobileLanServer({ app: fixtureApp(), hostStaticKey: hostKey, pairingCode: 'pair-me' });
+  const server = new MobileLanServer({ app: fixtureApp(), authorizePeer: () => ({ deviceId: 'phone-1', capabilities: ['view', 'execute'] }), hostStaticKey: hostKey, pairingCode: 'pair-me' });
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   try {
     await assert.rejects(callRead(server.port!, hostKey.publicKey, 'wrong-code'), /timed out|ECONNRESET|socket hang up/);
@@ -165,7 +165,7 @@ test('requires the out-of-band pairing code when the listener configures one', a
 test('pushes newly appended session events without waiting for another phone request', async () => {
   const hostKey = generateKeyPair();
   const app = fixtureApp();
-  const server = new MobileLanServer({ app, hostStaticKey: hostKey });
+  const server = new MobileLanServer({ app, authorizePeer: () => ({ deviceId: 'phone-1', capabilities: ['view', 'execute'] }), hostStaticKey: hostKey });
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   try {
     const event = await new Promise<{ kind: string; envelope?: { sequence: number } }>((resolve, reject) => {
@@ -216,7 +216,7 @@ test('pushes newly appended session events without waiting for another phone req
 
 test('a peer that pins the wrong host key never gets served', async () => {
   const hostKey = generateKeyPair();
-  const server = new MobileLanServer({ app: fixtureApp(), hostStaticKey: hostKey });
+  const server = new MobileLanServer({ app: fixtureApp(), authorizePeer: () => ({ deviceId: 'phone-1', capabilities: ['view', 'execute'] }), hostStaticKey: hostKey });
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   try {
     await assert.rejects(callRead(server.port!, generateKeyPair().publicKey), /timed out|ECONNRESET|socket hang up/);
@@ -227,7 +227,7 @@ test('a peer that pins the wrong host key never gets served', async () => {
 
 test('an out-of-range subnet allowlist refuses a loopback peer', async () => {
   const hostKey = generateKeyPair();
-  const server = new MobileLanServer({ app: fixtureApp(), hostStaticKey: hostKey });
+  const server = new MobileLanServer({ app: fixtureApp(), authorizePeer: () => ({ deviceId: 'phone-1', capabilities: ['view', 'execute'] }), hostStaticKey: hostKey });
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: ['10.0.0.'] });
   try {
     await assert.rejects(callRead(server.port!, hostKey.publicKey), /timed out|ECONNRESET|socket hang up/);
@@ -237,7 +237,7 @@ test('an out-of-range subnet allowlist refuses a loopback peer', async () => {
 });
 
 test('stop() closes the listener and drops connections', async () => {
-  const server = new MobileLanServer({ app: fixtureApp(), hostStaticKey: generateKeyPair() });
+  const server = new MobileLanServer({ app: fixtureApp(), authorizePeer: () => ({ deviceId: 'phone-1', capabilities: ['view', 'execute'] }), hostStaticKey: generateKeyPair() });
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   assert.equal(server.listening, true);
   await server.stop();
@@ -247,7 +247,7 @@ test('stop() closes the listener and drops connections', async () => {
 
 test('applyPolicy(dropConnections) severs established peers', async () => {
   const hostKey = generateKeyPair();
-  const server = new MobileLanServer({ app: fixtureApp(), hostStaticKey: hostKey });
+  const server = new MobileLanServer({ app: fixtureApp(), authorizePeer: () => ({ deviceId: 'phone-1', capabilities: ['view', 'execute'] }), hostStaticKey: hostKey });
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   try {
     const channel = SecureChannel.initiator({ staticKeyPair: generateKeyPair(), remoteStaticPublicKey: hostKey.publicKey });
@@ -266,6 +266,7 @@ test('applyPolicy(dropConnections) severs established peers', async () => {
     await new Promise(resolve => setTimeout(resolve, 20));
     assert.equal(server.connectionCount(), 1);
     server.applyPolicy({ mode: 'off', allowedInterfaces: [], allowedSubnets: [] }, true);
+    for (let i = 0; i < 20 && server.connectionCount(); i++) await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(server.connectionCount(), 0);
     socket.destroy();
   } finally {
@@ -411,7 +412,7 @@ test('a new peer starts live, replays on request, and learns about unsupported r
   });
   append(1);
   append(2);
-  const server = new MobileLanServer({ app, hostStaticKey: hostKey });
+  const server = new MobileLanServer({ app, authorizePeer: () => ({ deviceId: 'phone-1', capabilities: ['view', 'execute'] }), hostStaticKey: hostKey });
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   const phone = phoneClient(server.port!, hostKey);
   const seen: number[] = [];
@@ -460,9 +461,38 @@ test('revoking a device closes its open socket', async () => {
     await new Promise(resolve => setTimeout(resolve, 20));
     assert.equal(server.connectionCount(), 1);
     assert.equal(server.dropDevice('phone-live'), 1);
+    for (let i = 0; i < 20 && server.connectionCount(); i++) await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(server.connectionCount(), 0);
     socket.destroy();
   } finally {
     await server.stop();
   }
+});
+
+test('a missing authorizer never grants read capabilities', async () => {
+  const key = generateKeyPair();
+  let reads = 0;
+  const server = new MobileLanServer({ app: fixtureApp(() => reads++), hostStaticKey: key });
+  await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
+  try { await assert.rejects(callRead(server.port!, key.publicKey)); assert.equal(reads, 0); }
+  finally { await server.stop(); }
+});
+
+test('silent peers expire and per-address pending caps release capacity', async () => {
+  const server = new MobileLanServer({ app: fixtureApp(), hostStaticKey: generateKeyPair(), handshakeTimeoutMs: 80, maxPeersPerAddress: 1 });
+  await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
+  const connect = () => net.createConnection({ host: '127.0.0.1', port: server.port! });
+  const first = connect();
+  await new Promise<void>(resolve => first.once('connect', resolve));
+  try {
+    const second = connect();
+    await new Promise<void>(resolve => second.once('close', () => resolve()));
+    assert.equal(server.connectionCount(), 1);
+    await new Promise<void>(resolve => first.once('close', () => resolve()));
+    for (let i = 0; i < 20 && server.connectionCount(); i++) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(server.connectionCount(), 0);
+    const third = connect();
+    await new Promise<void>(resolve => third.once('connect', resolve));
+    third.destroy();
+  } finally { first.destroy(); await server.stop(); }
 });

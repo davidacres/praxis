@@ -1,5 +1,6 @@
 import * as path from 'node:path';
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { attachRendererNavigationGuard, isOwnRendererSender, rendererDir } from './rendererNavigationGuard';
 import { broadcastToAllWindows } from './windowBroadcast';
 

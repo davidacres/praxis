@@ -420,6 +420,8 @@ const praxis: PraxisIpc = {
     }
   },
   workflows: {
+    projectTrust: (projectId: string, workflowId: string) => ipcRenderer.invoke('workflows:projectTrust', projectId, workflowId),
+    approveProjectTrust: (projectId: string, workflowId: string, fingerprint: string) => ipcRenderer.invoke('workflows:approveProjectTrust', projectId, workflowId, fingerprint),
     listTemplates: (projectId: string) => ipcRenderer.invoke('workflows:listTemplates', projectId),
     getRecommendedTemplate: (projectId: string) => ipcRenderer.invoke('workflows:getRecommendedTemplate', projectId),
     recommendTemplate: (projectId: string) => ipcRenderer.invoke('workflows:recommendTemplate', projectId),

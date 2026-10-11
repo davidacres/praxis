@@ -82,7 +82,7 @@ async function withRig(
   await relay.start();
   const url = `ws://127.0.0.1:${relay.port}`;
   const hostKey = generateKeyPair();
-  const lan = new MobileLanServer({ app: fixtureApp(), hostStaticKey: hostKey, ...(options.authorizePeer ? { authorizePeer: options.authorizePeer } : {}) });
+  const lan = new MobileLanServer({ app: fixtureApp(), hostStaticKey: hostKey, authorizePeer: options.authorizePeer ?? (() => ({ deviceId: 'paired-phone', capabilities: ['view'] })) });
   lan.applyPolicy(options.policy ?? internet, false);
   const identity = relayIdentity();
   const desktop = new MobileRelayClient({ relayUrl: url, identity, onStream: stream => lan.acceptRelayedStream(stream), minBackoffMs: 20, maxBackoffMs: 50 });

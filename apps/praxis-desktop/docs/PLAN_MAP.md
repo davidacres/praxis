@@ -464,7 +464,7 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | TASK-337 | Task | Persist and navigate controller, stage, run, and node attribution | Planned | TASK-335, TASK-336 |
 | FX-BE-124 | Story | Agent Hub host execution for interactive and stage sessions | Planned | FX-BF-011, FX-BF-013, FX-BF-038 |
 | TASK-338 | Task | Define and implement the runtime-host adapter launch contract | Planned | FX-BE-124 |
-| TASK-339 | Task | Route interactive delegation and workflow stages through one launch compiler | Planned | TASK-338 |
+| TASK-339 | Task | Route interactive delegation and workflow stages through one launch compiler | Done | TASK-338 |
 | TASK-340 | Task | Enforce host scope, trust, capability, sandbox, and tool-mode preflight | Planned | TASK-338, TASK-339 |
 | FX-BE-125 | Story | Workflow packs and skill activation inside governed stages | Planned | FX-BF-010, FX-BF-011, FX-BF-012, FX-BF-038 |
 | TASK-341 | Task | Resolve workflow packs into stage task context and provenance | Planned | FX-BE-125 |
@@ -475,8 +475,8 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | TASK-345 | Task | Add explicit Task Designer plan-to-workflow input and promotion flow | Planned | TASK-335, TASK-344 |
 | TASK-346 | Task | Add cross-surface navigation and run/session provenance | Planned | TASK-337, TASK-345 |
 | FX-BE-127 | Story | Gate evaluation, approvals, and run operations | Planned | FX-BF-012, FX-BF-013, FX-BF-014, FX-BF-034 |
-| TASK-347 | Task | Make gate outcomes and evidence node-specific and durable | Planned | TASK-341 |
-| TASK-348 | Task | Implement explicit approval and bypass target handling and policy checks | Planned | TASK-347 |
+| TASK-347 | Task | Make gate outcomes and evidence node-specific and durable | Done | TASK-341 |
+| TASK-348 | Task | Implement explicit approval and bypass target handling and policy checks | Done | TASK-347 |
 | TASK-349 | Task | Harden run monitor operations, recovery, retry, timeout, and audit events | Planned | TASK-337, TASK-348 |
 | FX-BE-128 | Story | Migration, observability, compatibility, and end-to-end proof | Planned | FX-BE-123, FX-BE-124, FX-BE-125, FX-BE-126, FX-BE-127 |
 | TASK-350 | Task | Define migrations and compatibility behavior for legacy records | Planned | TASK-335, TASK-343 |

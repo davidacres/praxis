@@ -1,3 +1,5 @@
+import { useDialogs } from '../ui/dialogs';
+import { confirmProjectWorkflowTrust } from '../workflows/workflowProjectTrust';
 import { useEffect, useRef, useState } from 'react';
 import type {
   AiProvider,
@@ -64,6 +66,7 @@ export function StartRunDialog({
   onClose,
   onStarted
 }: StartRunDialogProps) {
+  const { confirm } = useDialogs();
   const [taskTitle, setTaskTitle] = useState('');
   const [uncommittedFiles, setUncommittedFiles] = useState<UncommittedBaseError | undefined>();
   const [startWorkflowId, setStartWorkflowId] = useState(initialWorkflowId ?? '');
@@ -302,6 +305,7 @@ export function StartRunDialog({
       // this project's boards) starts an ordinary run rather than guessing at
       // a connection to write back to — same "no invented attribution"
       // discipline as the AI settings spend report.
+      await confirmProjectWorkflowTrust(project.id, startWorkflowId, confirm);
       const run = await window.praxis.workflows.startRun(
         project.id,
         startWorkflowId,

@@ -2,6 +2,7 @@ import { BrowserWindow, WebContentsView, session as electronSession } from 'elec
 import { safeSend } from './windowBroadcast';
 import {
   blockedBrowserUrlReason,
+  resolvedBrowserUrlBlockReason,
   BrowserDiagnosticsRecorder,
   writeScreenshot,
   type BrowserBridge,
@@ -113,6 +114,13 @@ class AiBrowserManager {
     view.setBorderRadius(8);
 
     const ses = electronSession.fromPartition(PARTITION);
+    ses.webRequest.onBeforeRequest((details, callback) => {
+      if (details.url === 'about:blank') { callback({ cancel: false }); return; }
+      void resolvedBrowserUrlBlockReason(details.url, { allowPrivateHosts: ALLOW_PRIVATE_HOSTS }, async host => {
+        const result = await ses.resolveHost(host);
+        return result.endpoints.map(endpoint => ({ address: endpoint.address }));
+      }).then(reason => callback({ cancel: !!reason }), () => callback({ cancel: true }));
+    });
     // An LLM must not be able to pull files down through the embedded browser.
     ses.on('will-download', event => event.preventDefault());
     // Deny every gated capability (geolocation, camera, notifications, …).

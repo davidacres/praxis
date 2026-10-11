@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { stopService } from '@praxis/core';
 import { getAcpAgentHost, getVercelAgentService, hasActiveTask } from './aiInstance';
 import { endCoordinatedTurn, getCoordination, onCoordinationChanged } from './coordinationInstance';

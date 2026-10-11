@@ -1,4 +1,5 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 
 /**
  * Native dialog IPC. Kept to the minimum the renderer needs — each method is a

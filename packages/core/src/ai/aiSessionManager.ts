@@ -1525,8 +1525,14 @@ export class AiSessionManager {
 function extractSubagentEvents(events: AgentEventSummary[]): AgentEventSummary[] {
   if (!events || events.length === 0) return [];
   const subagentToolNames = new Set(['agent', 'task', 'invoke_subagent', 'subagent', 'delegate']);
-  return events.filter(e => {
-    const raw = e.data?.toolName?.toLowerCase() ?? '';
-    return subagentToolNames.has(raw) || raw.includes('subagent');
+  const subagentCallIds = new Set(events.filter(event => {
+    const raw = event.data?.toolName?.toLowerCase() ?? '';
+    return subagentToolNames.has(raw) || /^(?:(?:start|interact with|complete|interrupt|wait for|list) )?subagents?(?:\s|:|$)/.test(raw);
+  }).flatMap(event => event.data?.callId ? [event.data.callId] : []));
+  return events.filter(event => {
+    const raw = event.data?.toolName?.toLowerCase() ?? '';
+    return subagentToolNames.has(raw)
+      || /^(?:(?:start|interact with|complete|interrupt|wait for|list) )?subagents?(?:\s|:|$)/.test(raw)
+      || (!!event.data?.callId && subagentCallIds.has(event.data.callId) && event.type === 'tool_complete');
   });
 }

@@ -1,3 +1,4 @@
+import { projectWorkflowTrust } from './workflowProjectTrust';
 import { runAsAgent } from './projectActivityInstance';
 import { cancelWorkflowMap, runWorkflowMap } from './workflowMapRunner';
 import { WorkflowIssueWriteBack } from './workflowIssueWriteBack';
@@ -137,6 +138,12 @@ export async function writeBackToIssue(run: WorkflowRun): Promise<void> {
   }
 }
 
+async function runTrustError(run: WorkflowRun): Promise<string | undefined> {
+  const trust = await projectWorkflowTrust(getWorkflowBackingStore(), projectFolderFor(run), run.workflowId, run.definition, true);
+  if (!trust.trusted) return 'This project workflow needs local workspace trust. Start a reviewed run on the desktop.';
+  return undefined;
+}
+
 const dispatcher: StageDispatcher = {
   canDispatch(node, run) {
     // Everything needs somewhere to run; agent stages additionally need a
@@ -145,16 +152,24 @@ const dispatcher: StageDispatcher = {
     if (!projectFolderFor(run)) return false;
     return isCheckNode(node) || isMergeNode(node) || canDispatchAgentStage();
   },
-  runMap(node, context) {
+  async runMap(node, context) {
+    const error = await runTrustError(context.run);
+    if (error) return { status: 'failed' as const, error };
     return runWorkflowMap(node, context);
   },
-  runCheck(node, context) {
+  async runCheck(node, context) {
+    const error = await runTrustError(context.run);
+    if (error) return { status: 'failed' as const, error };
     return runWorkflowCheck(node, context, projectFolderFor(context.run), evidenceStorageRoot());
   },
-  runMerge(node, context) {
+  async runMerge(node, context) {
+    const error = await runTrustError(context.run);
+    if (error) return { status: 'failed' as const, error };
     return runWorkflowMerge(node, context, projectFolderFor(context.run), evidenceStorageRoot());
   },
-  runAgentStage(node, context, onSession) {
+  async runAgentStage(node, context, onSession) {
+    const error = await runTrustError(context.run);
+    if (error) return { status: 'failed' as const, error };
     return runWorkflowAgentStage(node, context, onSession);
   },
   async cancelStage(nodeId, context) {

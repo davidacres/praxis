@@ -1,5 +1,6 @@
 import { runAsAgent } from './projectActivityInstance';
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { broadcastToAllWindows } from './windowBroadcast';
 import {
   GitLabApiService,

@@ -1,3 +1,4 @@
+import { confirmProjectWorkflowTrust } from '../workflows/workflowProjectTrust';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDialogs } from '../ui/dialogs';
 import type {
@@ -1116,6 +1117,7 @@ export function IssueDetail({
     });
     if (chosenWorkflowId) {
       try {
+        await confirmProjectWorkflowTrust(effectiveProjectId!, chosenWorkflowId, confirm);
         await window.praxis.workflows.startRun(
           effectiveProjectId!,
           chosenWorkflowId,

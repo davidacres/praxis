@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import type { CatalogScope, NewAgentInput, NewAgentProfileInput, NewSkillInput } from '@praxis/core';
 import { getAgentRuntimeManager, getAgentRuntimeRoots } from './agentRuntimeInstance';
 import { createAgent, createAgentProfile, createSkill, importItem, previewImport } from './agentRuntimeAuthoring';

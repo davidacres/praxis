@@ -1,13 +1,13 @@
 ---
-**Status:** 📋 Proposed
+**Status:** Done
 **Created:** 2026-09-17T21:33:43.729Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-339
 title: Route interactive delegation and workflow stages through one launch compiler
-status: Planned
+status: Done
 story: FX-BE-124
-updated: 2026-09-17
+updated: 2026-10-11
 dependencies: [TASK-338]
 validation: [npm run test:core, npm run test:desktop]
 ---
@@ -41,3 +41,14 @@ Electron details.
 
 
 ## Comments
+
+### 2026-10-11 — approved backlog closeout
+
+Marked Done following the user-approved backlog review.
+
+Interactive sessions (`main/src/main/aiIpc.ts`) and workflow stages (`main/src/main/workflowAgentStage.ts`) use `prepareAgentLaunch` and `launchAgentTask` from `agentSessionLauncher.ts`. The shared launcher distinguishes ACP, gateway, unsupported and scaffold adapters and preserves provider-only starts.
+
+The preceding review passed root `npm run check-types` and 277 focused core tests
+(runtime/session manager and workflow gates, stage tasks, validation, run,
+orchestrator, store and summary). These are prior review results; no new build,
+desktop E2E run or visual verification was performed for this status-only change.

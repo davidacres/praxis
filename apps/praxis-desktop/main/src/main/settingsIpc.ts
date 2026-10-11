@@ -1,8 +1,9 @@
-import { ipcMain, app } from 'electron';
+import { app } from 'electron';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { broadcastToAllWindows } from './windowBroadcast';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { AppSettingsPatch, MobileCapability } from '@praxis/core';
+import { normalizeMobileSubnet, type AppSettingsPatch, type MobileCapability } from '@praxis/core';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { abortActiveTask, getAllActiveTaskIssueKeys, resetAiStores } from './aiInstance';
 import { resetBoardPreferencesStore } from './boardPreferencesInstance';
@@ -35,9 +36,10 @@ async function removeUserDataFile(name: string): Promise<void> {
 export function registerSettingsIpc(): void {
   ipcMain.handle('settings:get', async () => getSettingsBackend().read());
 
-  ipcMain.handle('settings:set', async (_event, patch: AppSettingsPatch) =>
-    getSettingsBackend().write(patch)
-  );
+  ipcMain.handle('settings:set', async (_event, patch: AppSettingsPatch) => {
+    if (patch.mobileAccess?.allowedSubnets?.some(value => normalizeMobileSubnet(value) === undefined)) throw new Error('Allowed mobile subnets must be IP addresses or CIDRs, for example 192.168.1.0/24.');
+    return getSettingsBackend().write(patch);
+  });
 
   ipcMain.handle('settings:getMobileHostInfo', async () => snapshotMobilePairing());
   ipcMain.handle('settings:publishMobileAppearance', async (_event, appearance: unknown) => { setDesktopAppearance(appearance); });

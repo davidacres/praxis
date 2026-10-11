@@ -3282,12 +3282,12 @@ function MobileAccessSection({
           placeholder={listener?.interfaces.map(item => item.name).join(', ') || 'All local interfaces'}
         />
       </FieldRow>
-      <FieldRow label="Allowed subnets" description="Comma-separated prefixes such as 192.168.1. Empty allows every address on those interfaces." stacked>
+      <FieldRow label="Allowed subnets" description="Comma-separated IP addresses or CIDRs such as 192.168.1.0/24. Empty allows local-network addresses on the selected interfaces." stacked>
         <DebouncedTextField
           ariaLabel="Allowed mobile subnets"
           value={settings.mobileAccess.allowedSubnets.join(', ')}
           onCommit={value => update({ mobileAccess: { allowedSubnets: value.split(',').map(item => item.trim()).filter(Boolean) } })}
-          placeholder="e.g. 192.168.1."
+          placeholder="e.g. 192.168.1.0/24"
         />
       </FieldRow>
       <FieldRow label="Listener" description="Live bind state. Discovery advertises identity only — never a pairing grant." stacked>
