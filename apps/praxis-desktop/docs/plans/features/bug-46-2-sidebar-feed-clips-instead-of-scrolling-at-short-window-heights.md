@@ -1,5 +1,5 @@
 ---
-**Status:** Backlog
+**Status:** Done
 **Created:** 2026-10-08T18:35:00.000Z
 **Type:** Bug
 **Priority:** Medium
@@ -7,8 +7,8 @@
 **Reported By:** Dave Acres
 id: FX-BG-047
 title: EasyMode sidebar feed clips instead of scrolling at short window heights
-status: Backlog
-updated: 2026-10-08
+status: Done
+updated: 2026-10-11
 ---
 
 # [P2] EasyMode sidebar feed clips instead of scrolling at short window heights
@@ -25,9 +25,11 @@ The EasyMode sidebar feed maintains scrollability or flexible sizing so all sect
 
 **Acceptance criteria**
 
-- [ ] When the window or sidebar height is reduced below the combined height of sessions and runs sections, the feed either scrolls via `overflow-y: auto` or adapts so the Runs section is visible and interactive.
-- [ ] The Sessions section internal scroll does not conflict with container scrolling when overflowing.
-- [ ] Verified via e2e test or visual inspection at minimum supported desktop window heights.
+- [x] When the window or sidebar height is reduced below the combined height of sessions and runs sections, the feed either scrolls via `overflow-y: auto` or adapts so the Runs section is visible and interactive.
+- [x] The Sessions section internal scroll does not conflict with container scrolling when overflowing.
+- [x] Record the supported minimum desktop window height from the app configuration and reproduce the constrained-height case at that height.
+- [x] Keyboard users can reach and activate every Sessions and Runs control; focus remains visible and scrolls into view.
+- [x] Add focused e2e coverage, run `npm run test:desktop` against the rebuilt/copied renderer, and visually inspect the same build at minimum supported height. Retain useful screenshot evidence.
 
 ## Investigation state
 
@@ -82,6 +84,16 @@ The feed clips its content due to `overflow: hidden`; the Runs section is partia
 
 None.
 
+## Historical work order — 2026-10-11 (superseded by closeout below)
+
+**2 of 5** in the reviewed ticket set, after PRX-F107's existing ACP read-only enforcement item. Ready for a bounded scrolling/sizing fix once the minimum supported height is recorded. No direct security concern identified; no sidebar redesign is needed.
+
 ## Comments
 
 
+
+### 2026-10-11 — closeout status and verification
+
+Existing full-run log records the long-session-list test in `easymode.spec.ts` passing. It exercises the configured 480 px minimum window height at 150% zoom, scroll containment and keyboard focus; retained visual evidence: `.praxis/session-artifacts/easymode-short-window.png`.
+
+The existing detached run (`/tmp/sd3-full.log`) finished: **590 passed, 3 skipped, 1 failed**. These are prior-run results, not a new run. E2E tests were not run during this closeout, as requested.

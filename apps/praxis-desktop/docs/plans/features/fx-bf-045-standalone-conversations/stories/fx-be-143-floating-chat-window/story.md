@@ -157,3 +157,7 @@ Progress**, not **Done**, until someone runs
 `npm run desktop:copy-renderer && npm run test:desktop` on a normal
 dev machine, drives the pop-out/pop-in/native-close/quit-relaunch flow by
 hand at least once, and ideally adds the missing spec file.
+
+### 2026-10-11 — verification reconciliation
+
+The prior full run passed both `standaloneConversations.spec.ts` tests. See the parent feature closeout note for the exact coverage and remaining TASK-373/374 evidence. This story remains In Progress; passing the lifecycle test alone does not prove every acceptance criterion. No E2E rerun was performed.

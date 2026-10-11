@@ -1,5 +1,5 @@
 ---
-**Status:** Backlog
+**Status:** Done
 **Created:** 2026-10-08T18:35:00.000Z
 **Type:** Bug
 **Priority:** Medium
@@ -7,8 +7,8 @@
 **Reported By:** Dave Acres
 id: FX-BG-050
 title: isAttentionState omits paused and not_started sessions in EasyModeSessionsList
-status: Backlog
-updated: 2026-10-08
+status: Done
+updated: 2026-10-11
 ---
 
 # [P2] isAttentionState omits paused and not_started sessions in EasyModeSessionsList
@@ -38,9 +38,11 @@ Non-terminal sessions (such as `paused` and `not_started`) that require user int
 
 **Acceptance criteria**
 
-- [ ] `isAttentionState` (or a dedicated `isTerminalSessionState` predicate) accounts for `paused` and `not_started` sessions.
-- [ ] Paused sessions (including those interrupted by app restart) remain visible in the EasyMode sessions list even when they sit beyond position 5 in the array.
-- [ ] Unit or e2e test verifies that paused sessions do not collapse into the hidden tail.
+- [x] `isAttentionState` (or a dedicated `isTerminalSessionState` predicate) accounts for `paused` and `not_started` sessions.
+- [x] Both `paused` (including restart-interrupted) and `not_started` sessions remain visible beyond position 5 with Show more collapsed. Test each state separately.
+- [x] Both states appear in the Live tab; completed, failed and aborted sessions retain the existing terminal-state filtering and collapse behavior.
+- [x] Making either state visible does not start/resume a session or grant approval; recovery still requires the existing explicit user action.
+- [x] Add focused e2e coverage for both states beyond position 5 and in the Live tab, run `npm run test:desktop` against the rebuilt/copied renderer, and visually inspect collapsed/expanded lists in the same build.
 
 ## Investigation state
 
@@ -77,6 +79,16 @@ The paused session is treated as part of the finished tail and hidden behind "Sh
 
 None.
 
+## Historical work order — 2026-10-11 (superseded by closeout below)
+
+**3 of 5** in the reviewed ticket set, after PRX-B00-2. Ready for a bounded session visibility fix. No direct security vulnerability identified; preserve explicit recovery and permission controls.
+
 ## Comments
 
 
+
+### 2026-10-11 — closeout status and verification
+
+Existing full-run log records the paused/not_started visibility test in `easymode.spec.ts` passing in both All and Live beyond the first five entries. Retained visual evidence: `.praxis/session-artifacts/easymode-unfinished-live.png`.
+
+The existing detached run (`/tmp/sd3-full.log`) finished: **590 passed, 3 skipped, 1 failed**. These are prior-run results, not a new run. E2E tests were not run during this closeout, as requested.

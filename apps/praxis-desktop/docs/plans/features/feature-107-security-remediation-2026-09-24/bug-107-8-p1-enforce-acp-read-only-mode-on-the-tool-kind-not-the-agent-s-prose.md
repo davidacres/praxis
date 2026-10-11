@@ -1,6 +1,6 @@
 # [P1] Enforce ACP read-only mode on the tool kind, not the agent's prose
 
-**Status:** 📋 Proposed
+**Status:** Done
 **Created:** 2026-09-24T15:41:53.705Z
 **Type:** Bug
 **Priority:** High
@@ -28,6 +28,13 @@ The `read-only` guarantee is surfaced to users (Analysis and Review sessions) an
 
 Extend `packages/core/src/ai/acp/acpAgentHost.test.ts`: a request titled "Apply the suggested patch" with no `kind` under `toolMode: 'read-only'` resolves to `deny`; a `kind: 'read'` request is still permitted; `fs_write_text_file` is refused at the client boundary in read-only mode even when the title looks benign. `npm run test:core`. The `aiAcpModesAndCommands.spec.ts` e2e spec covers the mode end to end — run `npm run test:desktop` to confirm no regression there.
 
+Additional acceptance checks:
+
+- [x] Missing or unknown kinds and mutating kinds are denied in read-only mode, including under `permissionMode: 'auto'`; benign titles do not bypass denial.
+- [x] Client-boundary tests refuse filesystem writes and terminal operations in read-only mode even if the peer labels the request as a read. Explicitly supported read-safe kinds continue to work.
+- [x] The user sees a clear read-only refusal in the transcript and the agent receives a denial, with no silent stall and no secret/token content in the message.
+- [x] Existing project-only behavior and explicitly authorized write-capable sessions remain covered by regression tests.
+
 ## Effort
 
 S
@@ -52,5 +59,15 @@ An allowlist that is too narrow denies legitimate read-only work and the agent s
 ## Dependencies
 
 
+## Historical work order — 2026-10-11 (superseded by closeout below)
+
+**Next implementation item: order 1 of 5**, selected under PRX-F107. This is the existing SEC-009 permission-bypass remediation, with no new dependency or added subsystem. Verify the reported behavior in the current checkout before changing code; completion requires the denial and allowed-read evidence above.
+
 ## Comments
 
+
+### 2026-10-11 — closeout status and verification
+
+Existing full-run log records `aiCliAgentHost.spec.ts` read-only denial passing for neutral titles, missing kinds and allow-only wire options, and the workflow read-only auto-approval regression passing. Core coverage checks safe kinds, denied kinds and filesystem/terminal method boundaries. This closes SEC-009 only; other F107 findings remain open.
+
+The existing detached run (`/tmp/sd3-full.log`) finished: **590 passed, 3 skipped, 1 failed**. These are prior-run results, not a new run. E2E tests were not run during this closeout, as requested.

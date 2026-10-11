@@ -145,3 +145,7 @@ in a normal dev machine before marking this Done, particularly
 `overview.spec.ts`, `commandPalette.spec.ts`, `aiSessions.spec.ts` and
 `sidebarTreeAlignment.spec.ts` for regressions, plus new coverage for the
 Conversations node itself.
+
+### 2026-10-11 — verification reconciliation
+
+The prior full run passed both `standaloneConversations.spec.ts` tests. See the parent feature closeout note for the exact coverage and remaining TASK-373/374 evidence. This story remains In Progress; passing the lifecycle test alone does not prove every acceptance criterion. No E2E rerun was performed.

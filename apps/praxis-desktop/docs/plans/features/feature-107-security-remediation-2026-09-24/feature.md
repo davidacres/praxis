@@ -6,7 +6,7 @@
 **Priority:** Highest
 
 ## Description
-Prioritised remediation of the 19 findings in the Security Review of Praxis at commit `ab05ede`. No code has been changed; this plan is the work breakdown.
+Prioritised remediation of the 19 findings in the Security Review of Praxis at commit `ab05ede`. This plan is the work breakdown. The October 10 status review records the four P0 fixes and the gitleaks gate as shipped; 13 P1–P3 items remain open. This is recorded ticket evidence, not a fresh code verification.
 
 ## Summary
 
@@ -83,14 +83,14 @@ The following are scope calls on items that do exist, and should be settled befo
 | Ref | Type | Name | Status |
 | --- | --- | --- | --- |
 
-| 107.1 | Bug | [P0] Restrict marketplace tarball fetches to the configured registry origin | 📋 Proposed |
-| 107.2 | Bug | [P0] Block top-level navigation and window.open in the main window | 📋 Proposed |
-| 107.3 | Bug | [P0] Rotate the credentials exposed in git history and untrack .vscode/settings.json | 📋 Proposed |
-| 107.4 | Bug | [P0] Pass github.ref_name through the environment and scope the release workflow token | 📋 Proposed |
+| 107.1 | Bug | [P0] Restrict marketplace tarball fetches to the configured registry origin | ✅ Complete |
+| 107.2 | Bug | [P0] Block top-level navigation and window.open in the main window | ✅ Complete |
+| 107.3 | Bug | [P0] Rotate the credentials exposed in git history and untrack .vscode/settings.json | ✅ Complete |
+| 107.4 | Bug | [P0] Pass github.ref_name through the environment and scope the release workflow token | ✅ Complete |
 | 107.5 | Bug | [P1] Resolve symlinks in the agent path sandbox before reading | 📋 Proposed |
 | 107.6 | Bug | [P1] Classify IP addresses properly in the browser SSRF guard | 📋 Proposed |
 | 107.7 | Bug | [P1] Make local-only mobile access enforce locality and bind to the chosen interfaces | 📋 Proposed |
-| 107.8 | Bug | [P1] Enforce ACP read-only mode on the tool kind, not the agent's prose | 📋 Proposed |
+| 107.8 | Bug | [P1] Enforce ACP read-only mode on the tool kind, not the agent's prose | ✅ Complete |
 | 107.9 | Bug | [P1] Route Antigravity tool calls through the permission gate | 📋 Proposed |
 | 107.1 | Task | [P1] Validate the sender frame on every ipcMain handler | 📋 Proposed |
 | 107.10 | Bug | [P1] Refuse auto permission mode from project-sourced workflows and stop leaking the app environment to checks | 📋 Proposed |
@@ -98,13 +98,31 @@ The following are scope calls on items that do exist, and should be settled befo
 | 107.12 | Bug | [P2] Harden the mobile LAN listener: handshake timeout, connection caps, deny-by-default authorization | 📋 Proposed |
 | 107.13 | Bug | [P2] Validate the OAuth state parameter on the loopback callback | 📋 Proposed |
 | 107.2 | Task | [P2] Delete or rewrite the shell auto-allow list before it can be reconnected | 📋 Proposed |
-| 107.3 | Task | [P2] Gate commits and CI on gitleaks with fixture fingerprints suppressed | 📋 Proposed |
+| 107.3 | Task | [P2] Gate commits and CI on gitleaks with fixture fingerprints suppressed | ✅ Complete |
 | 107.4 | Task | [P3] Make the add-on extraction escape check real, or remove it | 📋 Proposed |
 | 107.5 | Task | [P3] Remove the npm install fallback from GitLab CI | 📋 Proposed |
 | 107.6 | Task | [P3] Write the secrets file with mode 0600 and repair permissive files on read | 📋 Proposed |
 ## Dependencies
 
 
+## Work order — 2026-10-11
+
+The recommended work queue is limited to the five reviewed tickets:
+
+| Order | Ticket | Next bounded action |
+| --- | --- | --- |
+| 1 | PRX-F107 | Implement and verify the existing [ACP read-only enforcement item](bug-107-8-p1-enforce-acp-read-only-mode-on-the-tool-kind-not-the-agent-s-prose.md) (SEC-009). |
+| 2 | PRX-B00-2 | Fix sidebar clipping; verify minimum-height scrolling and keyboard access. |
+| 3 | PRX-B00-5 | Keep both paused and not_started sessions visible beyond the collapse limit and in Live. |
+| 4 | PRX-F45 | Reconcile the successful delivery run with acceptance evidence; close or fix demonstrated gaps. |
+| 5 | PRX-F52 | Resolve existing story readiness questions, then deliver Capture → What Changed → Daily Review. |
+
+Order 1 selects the existing ACP child, not completion of the whole remediation feature. Other F107 findings remain open with their existing priorities. The P0/gitleaks rows above now match their child ticket statuses; no completed security fix was independently re-verified in this requirements update.
+
 ## Comments
 
 **2026-10-10:** Status corrected during backlog review: the four P0 items (107-1..107-4) and the gitleaks gate shipped; 13 P1-P3 items were re-checked against the code and are all still unfixed, so the feature stays open.
+
+### 2026-10-11 — SEC-009 closeout
+
+107-8 is Done with core coverage and the prior desktop read-only denial test passing. The earlier work queue and count of 13 open findings predate this fix; 12 P1–P3 items remain open. F107 remains open. The prior full desktop run had 590 passed, 3 skipped and 1 workflow-model-tier failure; no E2E rerun was performed.

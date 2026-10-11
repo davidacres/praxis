@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** In Progress
 **Created:** 2026-10-04T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-052
 slug: capture-changefeed-daily-review
 title: Quick Capture, What Changed, and Daily Review
-status: Backlog
+status: In Progress
 created: 2026-10-04
 priority: Medium
 ---
@@ -57,6 +57,25 @@ All three stories meet their acceptance criteria; the three surfaces are reachab
 ## Description
 
 
+## Work order and readiness — 2026-10-11
+
+**5 of 5** in the reviewed ticket set, after PRX-F45 evidence reconciliation. The following readiness work is complete; see the closeout below for the remaining full-suite gate. These clarify the three existing stories; they do not add a new feature.
+
+- [x] FX-BE-158: specify behavior with no active project and with a backend that cannot create tickets. Reuse existing creation permissions and validation; do not silently choose another project or backend. Preserve input and show an actionable error on failed submission; clear input only after successful creation. Treat captured text as untrusted content.
+- [x] FX-BE-159: document which existing sources retain history, the supported retention window and behavior when history is unavailable. Scope events and links to the active project; omit secrets and tokens from event payloads and displayed content.
+- [x] FX-BE-160: define the aging threshold/default, the timestamp it measures, timezone/date boundaries, excluded Done stages and behavior when dates are missing. Mutations must reuse existing workflow and permission checks.
+- [x] Carry these decisions into the existing story acceptance criteria and cover failure, permission, project-isolation and date-boundary cases in verification before implementation starts.
+
+Decisions taken 2026-10-11 (recorded in each story's Comments): history retained 30 days / 1,000 entries per project; inactive = 7 whole days since last recorded activity; undated items are never flagged; Done-category stages excluded.
+
+Delivery order within this feature: Quick Capture, What Changed, then Daily Review. Completing Quick Capture alone does not complete PRX-F52; all three stories remain required.
+
 ## Comments
 
 
+
+### 2026-10-11 — closeout status and verification
+
+All three stories are Done with their focused tests passing in the existing full run. The feature remains In Progress because its close conditions require a green full desktop suite: the run finished with 590 passed, 3 skipped and 1 failure in `workflowModelTiers.spec.ts` (provider-row model-tier assertion). Do not describe the suite as green. No E2E rerun was requested or performed during this closeout.
+
+The existing detached run (`/tmp/sd3-full.log`) finished: **590 passed, 3 skipped, 1 failed**. These are prior-run results, not a new run. E2E tests were not run during this closeout, as requested.

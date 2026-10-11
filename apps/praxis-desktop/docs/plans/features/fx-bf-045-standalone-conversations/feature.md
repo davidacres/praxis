@@ -8,7 +8,7 @@ slug: standalone-conversations
 title: Standalone conversations (chat outside any project)
 status: In Progress
 owner: Electron desktop app
-updated: 2026-09-26
+updated: 2026-10-11
 stories: [FX-BE-142, FX-BE-143]
 ---
 
@@ -213,6 +213,15 @@ strip after starting their first conversation.
 | --- | --- | --- | --- |
 
 
+## Work order and evidence reconciliation — 2026-10-11
+
+**4 of 5** in the reviewed ticket set, after PRX-B00-5. The first step is acceptance-evidence reconciliation, before further implementation. The September 26 comments include an early verification blocker and a later successful delivery run; neither is independent verification of the current checkout.
+
+- [ ] Locate the later run's build, QA, security and focused e2e artifacts and map them to FX-BE-142/143 acceptance criteria. Record the tested revision and any evidence still missing.
+- [ ] Verify persistence/reopening, archive/delete, streaming during pop-out/pop-in, native close, relaunch recovery and the zero-project onboarding strip. For gaps, run the existing desktop suite against a rebuilt/copied renderer and retain same-build visual evidence.
+- [ ] Verify the floating window has secure Electron settings, its own navigation/window-open guards and validated IPC senders. Free-form conversations must retain existing tool permissions; popping out must not expand access.
+- [ ] Mark the feature and stories Done only when the existing acceptance criteria have evidence; implement only demonstrated gaps. Keep In Progress until then.
+
 ## Comments
 
 **2026-09-26 — implementation (Claude):** Both stories (FX-BE-142, FX-BE-143)
@@ -296,3 +305,9 @@ Status: Succeeded · Duration: 1h 31m
 - ✅ Build: succeeded
 - ✅ QA: succeeded
 - ✅ Security scan: succeeded
+
+### 2026-10-11 — closeout status and verification
+
+Both `standaloneConversations.spec.ts` tests passed in the existing full run: trusted-renderer IPC enforcement and creation/history persistence, floating chat, pop-in/native close and restart. This is stronger evidence than the original launch blocker, but does not complete TASK-373/374. Remaining evidence includes conversation-specific archive/delete, palette/classification/onboarding assertions, pop-out during active streaming, single live subscriber, drag/resize and tooltips. Keep this feature and its stories In Progress until those explicit checks are satisfied; no new E2E or manual verification was performed in this closeout.
+
+The existing detached run (`/tmp/sd3-full.log`) finished: **590 passed, 3 skipped, 1 failed**. These are prior-run results, not a new run. E2E tests were not run during this closeout, as requested.
