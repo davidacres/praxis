@@ -33,7 +33,7 @@ import { gatewayOptionsFor, getProviderDescriptor, resolveProviderAdapter } from
 import { providerNeedsApiKey } from './providerSecrets';
 import { localToolDefinitionsForMode, LocalToolExecutor, type PermissionDecision } from './tools';
 import { shouldAutoAllowToolPermission } from './tools/shellAllowlist';
-import { isProviderLimitError, extractProviderLimitMessage } from './providerLimitError';
+import { isProviderLimitError, isLimitNoticeReply, extractProviderLimitMessage } from './providerLimitError';
 
 /** The ACP/gateway option carrying a session's coordination gate, when it has one. */
 const optionalCoordination = (gate: CoordinationGate | undefined): { coordination?: CoordinationGate } => (gate ? { coordination: gate } : {});
@@ -380,6 +380,12 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       case 'message': {
         task.messageBuffer = event.text || task.messageBuffer;
         this.sessionManager.updateAgentOutput(issueKey, { responseText: task.messageBuffer });
+        if (isLimitNoticeReply(task.messageBuffer)) {
+          const limitNotice = extractProviderLimitMessage(task.messageBuffer);
+          this.sessionManager.updateAgentState(issueKey, 'failed', limitNotice);
+          this.appendEvent(issueKey, evt('error', limitNotice));
+          break;
+        }
         const preview =
           task.messageBuffer.length > 200
             ? `${task.messageBuffer.slice(0, 200)}…`

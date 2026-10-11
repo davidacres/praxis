@@ -29,7 +29,7 @@ import { SessionComposerToolbar } from './SessionComposerToolbar';
 import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { SessionGitBranchControl } from './SessionGitBranchControl';
-import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, getKnownContextLength, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
+import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, getKnownContextLength, isLimitNoticeReply, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
 import { LiveTurnActivityIndicator, formatElapsedDuration } from './LiveTurnActivityIndicator';
@@ -737,7 +737,9 @@ export function SessionsPage({
   const conversationEvents = useMemo(
     () => selectedEvents?.filter(
       event =>
-        (event.type === 'message' || event.type === 'user_input_completed') && Boolean(event.detail || event.summary)
+        (event.type === 'message' || event.type === 'user_input_completed')
+        && Boolean(event.detail || event.summary)
+        && !(event.type === 'message' && isLimitNoticeReply(event.detail || event.summary))
     ) ?? [],
     [selectedEvents]
   );
@@ -802,28 +804,6 @@ export function SessionsPage({
     .find(event => event.type === 'message')?.detail;
   const visibleResponseText = selected?.responseText ? visibleMessageText(selected.responseText) : '';
   const lastConversationEvent = conversationEvents[conversationEvents.length - 1];
-  // Completed sessions have their assistant replies in the event history. A
-  // separate responseText fallback is only useful for an in-flight turn (or
-  // an older record with no message event); otherwise a stale live buffer can
-  // appear after a newer user follow-up when a session is reopened.
-  const staleTerminalResponse = Boolean(
-    selected
-      && isTerminalAgentState(selected.state)
-      && lastConversationEvent?.type === 'user_input_completed'
-  );
-  const shouldRenderResponseFallback = Boolean(
-    visibleResponseText
-      && selected?.responseText !== latestEventResponse
-      && (!isTerminalAgentState(selected.state) || conversationEvents.length === 0)
-      && !staleTerminalResponse
-      && !(
-        activeSubmittedTurn?.suppressPreviousResponse
-        && !submittedTurnAnswered
-        && selected?.responseText === activeSubmittedTurn.previousResponseText
-      )
-  );
-
-
   const isSelectedFailed = selected?.state === 'failed';
   const lastEvent = selected?.events[selected.events.length - 1];
   const lastErrorFromEvent = lastEvent?.type === 'error' ? (lastEvent.detail || lastEvent.summary) : undefined;
@@ -837,6 +817,29 @@ export function SessionsPage({
       || limitNotice
       || (rawActiveError && isProviderLimitMessage(rawActiveError))
   );
+  // Completed sessions have their assistant replies in the event history. A
+  // separate responseText fallback is only useful for an in-flight turn (or
+  // an older record with no message event); otherwise a stale live buffer can
+  // appear after a newer user follow-up when a session is reopened.
+  const staleTerminalResponse = Boolean(
+    selected
+      && isTerminalAgentState(selected.state)
+      && lastConversationEvent?.type === 'user_input_completed'
+  );
+  const shouldRenderResponseFallback = Boolean(
+    visibleResponseText
+      && !isLimitNoticeReply(visibleResponseText)
+      && !(isLimit && isProviderLimitMessage(visibleResponseText))
+      && selected?.responseText !== latestEventResponse
+      && (!isTerminalAgentState(selected.state) || conversationEvents.length === 0)
+      && !staleTerminalResponse
+      && !(
+        activeSubmittedTurn?.suppressPreviousResponse
+        && !submittedTurnAnswered
+        && selected?.responseText === activeSubmittedTurn.previousResponseText
+      )
+  );
+
   const isDismissed = Boolean(dismissedError && rawActiveError === dismissedError);
   const limitSwitchVisible = Boolean(
     selected

@@ -952,6 +952,19 @@ export class AcpAgentHost {
         return;
       }
       this.sessionManager.updateAgentOutput(issue.key, { responseText: active.messageBuffer });
+      // If the turn ended because of a provider limit (or returned a limit notice
+      // as its reply), fail the session immediately and record an error event.
+      // Do not append the limit notice as an assistant chat bubble.
+      const isLimitInBuffer = isLimitNoticeReply(active.messageBuffer);
+      const isLimitInStopReason = isProviderLimitError(response.stopReason);
+      if (isLimitInBuffer || isLimitInStopReason) {
+        const limitNotice = isLimitInBuffer
+          ? extractProviderLimitMessage(active.messageBuffer)
+          : extractProviderLimitMessage(response.stopReason);
+        this.sessionManager.updateAgentState(issue.key, 'failed', limitNotice);
+        this.appendEvent(issue.key, evt('error', limitNotice));
+        return;
+      }
       // Record the reply as a conversation event, the same as a follow-up turn
       // does. Without this the agent's closing summary lived only in
       // `responseText`: it never appeared in the transcript the user reads, and
@@ -960,13 +973,6 @@ export class AcpAgentHost {
       const telemetry = this.recordTurnTelemetry(issue.key, active, response, options.model);
       if (active.messageBuffer) {
         this.appendEvent(issue.key, assistantMessageEvent(active, telemetry));
-      }
-      const isLimitInBuffer = isLimitNoticeReply(active.messageBuffer);
-      if (isLimitInBuffer) {
-        const limitNotice = extractProviderLimitMessage(active.messageBuffer);
-        this.sessionManager.updateAgentState(issue.key, 'failed', limitNotice);
-        this.appendEvent(issue.key, evt('error', limitNotice));
-        return;
       }
       if (response.stopReason === 'end_turn' || response.stopReason === 'max_turn_requests') {
         this.sessionManager.updateAgentState(issue.key, 'completed');
@@ -1156,22 +1162,24 @@ export class AcpAgentHost {
       const active = this.activeTasks.get(issueKey);
       if (!active || active.ending) return;
       this.sessionManager.updateAgentOutput(issueKey, { responseText: active.messageBuffer });
-      const telemetry = this.recordTurnTelemetry(issueKey, active, response, record.model ?? options.model);
-      if (active.messageBuffer) this.appendEvent(issueKey, assistantMessageEvent(active, telemetry));
       const isLimitInBuffer = isLimitNoticeReply(active.messageBuffer);
-      if (isLimitInBuffer) {
-        const limitNotice = extractProviderLimitMessage(active.messageBuffer);
+      const isLimitInStopReason = isProviderLimitError(response.stopReason);
+      if (isLimitInBuffer || isLimitInStopReason) {
+        const limitNotice = isLimitInBuffer
+          ? extractProviderLimitMessage(active.messageBuffer)
+          : extractProviderLimitMessage(response.stopReason);
         this.sessionManager.updateAgentState(issueKey, 'failed', limitNotice);
         this.appendEvent(issueKey, evt('error', limitNotice));
         return;
       }
+      const telemetry = this.recordTurnTelemetry(issueKey, active, response, record.model ?? options.model);
+      if (active.messageBuffer) this.appendEvent(issueKey, assistantMessageEvent(active, telemetry));
       if (response.stopReason === 'end_turn' || response.stopReason === 'max_turn_requests') {
         this.sessionManager.updateAgentState(issueKey, 'completed');
         this.appendEvent(issueKey, evt('task_complete', 'Agent completed the follow-up'));
         void this.sessionManager.refreshHandoverBrief(issueKey);
       } else {
-        const isLimit = isProviderLimitError(response.stopReason);
-        const reason = isLimit ? extractProviderLimitMessage(response.stopReason) : `Agent stopped: ${response.stopReason}`;
+        const reason = `Agent stopped: ${response.stopReason}`;
         this.sessionManager.updateAgentState(issueKey, 'failed', reason);
         this.appendEvent(issueKey, evt('error', reason));
       }

@@ -73,3 +73,27 @@ test('a session whose AI ran out can be stopped instead', async () => {
   const provider = await win.evaluate(() => window.praxis.ai.listSessions().then(list => list[0]?.provider));
   expect(provider).toBe('vercel-gateway');
 });
+
+test('a CLI agent reporting a provider limit does not put the limit notice into the chat thread', async () => {
+  app = await launchTestApp({
+    ai: {
+      providers: {
+        'codex-cli': { cliPath: path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs') },
+        'claude-code-cli': { enabled: false },
+        'copilot-cli': { enabled: false },
+        'antigravity-cli': { enabled: false },
+        'cursor-cli': { enabled: false }
+      }
+    }
+  });
+  const win = app.window;
+  await win.evaluate(() => window.praxis.ai.delegate({
+    provider: 'codex-cli',
+    task: { goal: 'Execute LIMIT_NOTICE test' }
+  }));
+  await win.getByTestId('nav-conversations').click();
+  await expect(win.getByTestId('session-state-badge')).toHaveText('Failed', { timeout: 15000 });
+  await expect(win.getByTestId('session-error-banner')).toContainText('Provider Limit');
+  await expect(win.getByTestId('session-chat-thread')).not.toContainText('hit your session limit');
+});
+

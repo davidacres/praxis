@@ -859,6 +859,13 @@ export function isProviderLimitMessage(text?: string): boolean {
   return PROVIDER_LIMIT_REGEX.test(text);
 }
 
+export function isLimitNoticeReply(reply?: string): boolean {
+  const text = reply?.trim();
+  if (!text || text.length > 500) return false;
+  if (text.includes('```') || text.split(/\r?\n/).length > 4) return false;
+  return isProviderLimitMessage(text);
+}
+
 export function formatErrorMessage(raw?: string): string {
   if (!raw) return '';
   const trimmed = raw.trim();

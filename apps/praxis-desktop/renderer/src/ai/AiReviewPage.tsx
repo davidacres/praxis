@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentSessionRecord, AiProvider, IssueDetails } from '@praxis/core';
+import type { AgentSessionRecord, AiProvider, ChatBlock, IssueDetails } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
 import { isTerminalAgentState } from './aiSessionState';
+import { isLimitNoticeReply } from './sessionNav';
 import { TranscriptAttachments } from './SessionsPage';
 import { SessionComposer } from './SessionComposer';
-import { GadgetBlockList } from './gadgets';
+import { GadgetBlockList, GadgetSurface, isGadgetActionable } from './gadgets';
 import { gadgetMessageKey, visibleMessageText } from './gadgets/messageText';
 import { useSessionGadgets } from './gadgets/useSessionGadgets';
 
@@ -102,11 +103,55 @@ export function AiReviewPage({
 
   const conversationEvents = useMemo(
     () => session?.events.filter(
-      event => (event.type === 'message' || event.type === 'user_input_completed') && Boolean(event.detail || event.summary)
+      event =>
+        (event.type === 'message' || event.type === 'user_input_completed')
+        && Boolean(event.detail || event.summary)
+        && !(event.type === 'message' && isLimitNoticeReply(event.detail || event.summary))
     ) ?? [],
     [session?.events]
   );
   const { gadgetBlocks, gadgetResults, busyGadgetId, submitGadgetAction } = useSessionGadgets(session, conversationEvents, { retryUnrenderedGadgets: true });
+
+  // Once a review's apply form has written to the ticket, the ticket on screen
+  // and on the boards is stale — refetch, and tell the shell to do the same.
+  const applied = gadgetResults[APPLY_GADGET_ID]?.actionId === 'apply' && gadgetResults[APPLY_GADGET_ID]?.status === 'completed'
+    ? gadgetResults[APPLY_GADGET_ID].at
+    : undefined;
+  useEffect(() => {
+    if (!applied) return;
+    void window.praxis.issue.get(issueKey, connectionId).then(setIssue).catch(() => undefined);
+    onTicketChanged?.();
+    // `applied` is the timestamp of the completed apply; it is the trigger.
+  }, [applied]);
+
+  // Active gadget block: an actionable decision, an in-flight submission, or the newly completed apply form
+  const activeGadgetBlock = useMemo(() => {
+    const allGadgets: ChatBlock[] = [];
+    for (const blocks of Object.values(gadgetBlocks)) {
+      for (const block of blocks) {
+        if (block.type === 'gadget') allGadgets.push(block);
+      }
+    }
+    // Any currently actionable gadget (choice findings, questions, apply form)
+    const pending = allGadgets.find(b => b.type === 'gadget' && isGadgetActionable(b.gadget.state));
+    if (pending) return pending;
+
+    // A gadget currently in flight (submitting)
+    if (busyGadgetId) {
+      const busy = allGadgets.find(b => b.type === 'gadget' && b.gadget.gadgetId === busyGadgetId);
+      if (busy) return busy;
+    }
+
+    // The apply gadget if it was submitted and has a result in this view
+    if (gadgetResults[APPLY_GADGET_ID]) {
+      const applyBlock = allGadgets.find(b => b.type === 'gadget' && b.gadget.gadgetId === APPLY_GADGET_ID);
+      if (applyBlock) return applyBlock;
+    }
+
+    return undefined;
+  }, [gadgetBlocks, busyGadgetId, gadgetResults]);
+
+  const activeGadgetId = activeGadgetBlock?.type === 'gadget' ? activeGadgetBlock.gadget.gadgetId : undefined;
 
   // Keep the newest message, gadget or result in view: the apply form lands
   // below the fold of a long review, and its outcome appears under it.
@@ -115,7 +160,7 @@ export function AiReviewPage({
   useEffect(() => {
     const thread = threadRef.current;
     if (thread) thread.scrollTop = thread.scrollHeight;
-  }, [conversationEvents.length, session?.responseText, resultCount]);
+  }, [conversationEvents.length, session?.responseText, resultCount, activeGadgetId]);
 
   const running = Boolean(
     session && !isTerminalAgentState(session.state) && session.state !== 'awaiting_approval' && session.state !== 'awaiting_input'
@@ -134,17 +179,52 @@ export function AiReviewPage({
     ? visibleMessageText(session.responseText)
     : '';
 
-  // Once a review's apply form has written to the ticket, the ticket on screen
-  // and on the boards is stale — refetch, and tell the shell to do the same.
-  const applied = gadgetResults[APPLY_GADGET_ID]?.actionId === 'apply' && gadgetResults[APPLY_GADGET_ID]?.status === 'completed'
-    ? gadgetResults[APPLY_GADGET_ID].at
-    : undefined;
-  useEffect(() => {
-    if (!applied) return;
-    void window.praxis.issue.get(issueKey, connectionId).then(setIssue).catch(() => undefined);
-    onTicketChanged?.();
-    // `applied` is the timestamp of the completed apply; it is the trigger.
-  }, [applied]);
+  const isApplyReady = activeGadgetBlock?.type === 'gadget' && activeGadgetBlock.gadget.gadgetId === APPLY_GADGET_ID;
+  const isActionNeeded = activeGadgetBlock?.type === 'gadget' && isGadgetActionable(activeGadgetBlock.gadget.state);
+
+  const statusBadge = useMemo(() => {
+    if (applied) {
+      return (
+        <span className="badge badge-done" data-testid="review-status-badge">
+          <Icon name="check" size={12} />
+          Applied to ticket
+        </span>
+      );
+    }
+    if (isApplyReady) {
+      return (
+        <span className="badge review-status-badge-ready" data-testid="review-status-badge">
+          <Icon name="check-square" size={12} />
+          Ready to apply
+        </span>
+      );
+    }
+    if (isActionNeeded) {
+      return (
+        <span className="badge review-status-badge-action" data-testid="review-status-badge">
+          <Icon name="sparkles" size={12} />
+          Action required
+        </span>
+      );
+    }
+    if (running) {
+      return (
+        <span className="badge badge-progress" data-testid="review-status-badge">
+          <Icon name="robot" size={12} />
+          Reviewing…
+        </span>
+      );
+    }
+    if (attached) {
+      return (
+        <span className="badge badge-done" data-testid="review-status-badge">
+          <Icon name="check" size={12} />
+          Comment attached
+        </span>
+      );
+    }
+    return null;
+  }, [applied, isApplyReady, isActionNeeded, running, attached]);
 
   const runReview = async () => {
     setStarting(true);
@@ -184,6 +264,7 @@ export function AiReviewPage({
             {[session?.provider ?? provider, session?.model ?? model].filter(Boolean).join(' · ')}
           </span>
         )}
+        {statusBadge}
         <span style={{ flex: 1 }} />
         <button className="icon-btn icon-btn-sm" aria-label="Close review" onClick={onClose}>
           <Icon name="close" size={13} />
@@ -244,7 +325,9 @@ export function AiReviewPage({
               </div>
             ) : null;
           }
-          const blocks = gadgetBlocks[gadgetMessageKey(index)] ?? [];
+          const blocks = (gadgetBlocks[gadgetMessageKey(index)] ?? []).filter(
+            block => block.type !== 'gadget' || block.gadget.gadgetId !== activeGadgetId
+          );
           if (!text && blocks.length === 0) return null;
           return (
             <div className="ai-review-message" key={`${event.timestamp}-${index}`}>
@@ -266,6 +349,38 @@ export function AiReviewPage({
         )}
         {running && !liveText && session && <p className="placeholder-text">Reviewing…</p>}
       </div>
+
+      {activeGadgetBlock && activeGadgetBlock.type === 'gadget' && (
+        <div className="session-request-dock" data-testid="session-request-dock">
+          <div
+            className={`review-action-dock${
+              activeGadgetBlock.gadget.gadgetId === APPLY_GADGET_ID ? ' is-apply' : ' is-decision'
+            }`}
+            data-testid="review-action-dock"
+          >
+            <div className="review-action-dock-header">
+              <Icon
+                name={activeGadgetBlock.gadget.gadgetId === APPLY_GADGET_ID ? 'check-square' : 'shield'}
+                size={14}
+              />
+              <span>
+                {activeGadgetBlock.gadget.gadgetId === APPLY_GADGET_ID
+                  ? 'Ready to apply to ticket'
+                  : 'Action required: Review findings'}
+              </span>
+              <span className="review-action-dock-header-tag">
+                {activeGadgetBlock.gadget.gadgetId === APPLY_GADGET_ID ? 'Approval gate' : 'Decision needed'}
+              </span>
+            </div>
+            <GadgetSurface
+              gadget={activeGadgetBlock.gadget}
+              busy={busyGadgetId === activeGadgetBlock.gadget.gadgetId}
+              result={gadgetResults[activeGadgetBlock.gadget.gadgetId]}
+              onSubmit={(gadgetId, actionId, value) => void submitGadgetAction(gadgetId, actionId, value)}
+            />
+          </div>
+        </div>
+      )}
 
       {session && (
         <SessionComposer

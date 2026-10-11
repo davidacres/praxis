@@ -4,7 +4,7 @@ import { Icon } from '../../ui/Icon';
 import { Markdown } from '../../ui/Markdown';
 import { useDialogs } from '../../ui/dialogs';
 import { agentEventIcon, agentEventToneClass, isTerminalAgentState } from '../../ai/aiSessionState';
-import { formatCost, isLatestEditToPath, liveActivity } from '../../ai/sessionNav';
+import { formatCost, isLatestEditToPath, isLimitNoticeReply, liveActivity } from '../../ai/sessionNav';
 import { providerIconName, providerLabel } from '../../ai/modelProviders';
 import { ToolExecutionCard } from './ToolExecutionCard';
 import { SessionChatThread } from '../../ai/SessionChatThread';
@@ -221,7 +221,7 @@ export function AgentActivityFeed({
           });
         }
         const text = event.detail || event.summary;
-        if (text) {
+        if (text && !isLimitNoticeReply(text)) {
           items.push({
             type: 'message',
             text,

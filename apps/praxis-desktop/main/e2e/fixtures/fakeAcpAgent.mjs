@@ -170,6 +170,20 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     }
   }
 
+  if (promptText.includes('LIMIT_NOTICE')) {
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: "You've hit your session limit · resets 12:50pm (Europe/London)"
+        }
+      }
+    });
+    return { stopReason: 'end_turn' };
+  }
+
   await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
     sessionId: ctx.params.sessionId,
     update: {

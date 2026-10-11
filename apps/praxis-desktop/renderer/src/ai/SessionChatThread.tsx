@@ -14,7 +14,7 @@ import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
 import { useDialogs } from '../ui/dialogs';
 import { providerIconName, providerLabel } from './modelProviders';
-import { formatCost, liveActivity } from './sessionNav';
+import { formatCost, isLimitNoticeReply, liveActivity } from './sessionNav';
 import { LiveTurnActivityIndicator, formatElapsedDuration } from './LiveTurnActivityIndicator';
 import { GadgetBlockList } from './gadgets';
 import { useSessionGadgets } from './gadgets/useSessionGadgets';
@@ -179,7 +179,9 @@ export function SessionChatThread({
     if (propConversationEvents) return propConversationEvents;
     return rawEvents.filter(
       event =>
-        (event.type === 'message' || event.type === 'user_input_completed') && Boolean(event.detail || event.summary)
+        (event.type === 'message' || event.type === 'user_input_completed')
+        && Boolean(event.detail || event.summary)
+        && !(event.type === 'message' && isLimitNoticeReply(event.detail || event.summary))
     );
   }, [propConversationEvents, rawEvents]);
 
