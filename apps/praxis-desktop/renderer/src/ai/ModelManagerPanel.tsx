@@ -199,16 +199,17 @@ export function ModelManagerPanel({
             </>
           )}
         </p>
-        <input
-          type="text"
-          className="input"
-          placeholder="Filter models…"
-          value={filter}
-          onChange={event => setFilter(event.target.value)}
-          data-testid="model-manager-filter"
-          autoFocus={chipLayout}
-          style={{ marginBottom: 8 }}
-        />
+        <div className="model-manager-search-bar">
+          <input
+            type="text"
+            className="input"
+            placeholder="Filter models…"
+            value={filter}
+            onChange={event => setFilter(event.target.value)}
+            data-testid="model-manager-filter"
+            autoFocus={chipLayout}
+          />
+        </div>
         {loading && <p className="placeholder-text">Loading catalog…</p>}
         {!loading && catalog && (
           <div className="model-manager-list" data-testid="model-manager-list">

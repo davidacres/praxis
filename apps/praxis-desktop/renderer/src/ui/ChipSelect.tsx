@@ -177,9 +177,11 @@ export function ChipSelect({
     if (!open || activeIndex < 0 || !menu) return;
     const option = menu.querySelectorAll<HTMLElement>('[role="option"]')[activeIndex];
     if (!option) return;
+    const searchRow = menu.querySelector<HTMLElement>('.model-menu-search-row');
+    const searchHeight = searchRow ? searchRow.offsetHeight : 0;
     const top = option.offsetTop;
     const bottom = top + option.offsetHeight;
-    if (top < menu.scrollTop) menu.scrollTop = top;
+    if (top - searchHeight < menu.scrollTop) menu.scrollTop = Math.max(0, top - searchHeight);
     else if (bottom > menu.scrollTop + menu.clientHeight) menu.scrollTop = bottom - menu.clientHeight;
   }, [open, activeIndex, pos]);
 

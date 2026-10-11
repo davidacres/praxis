@@ -16,6 +16,7 @@ import type {
   AppSettings
 } from '@praxis/core';
 import { Icon, type IconName } from '../ui/Icon';
+import { ModelMenuColumns, ModelMenuDetails } from './ModelMenuDetails';
 import {
   allModelProviderIds,
   applyEnabledModelCuration,
@@ -25,7 +26,7 @@ import {
   providerSupportsTools,
   REASONING_EFFORT_LEVELS
 } from './modelProviders';
-import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing } from './sessionNav';
+import { formatContextLength, formatModelCost, formatStarted, getKnownContextLength, getModelPricing, modelPriceLabel, modelPriceTitle } from './sessionNav';
 import { isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
 import { isTerminalAgentState } from './aiSessionState';
 import { ChipSelect } from '../ui/ChipSelect';
@@ -546,6 +547,10 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
     ? session.model
     : undefined;
 
+  const defaultModelOption = options?.options.find(option => option.value === defaultModel);
+  const defaultContextSize = formatContextLength(defaultModelOption?.contextLength ?? getKnownContextLength(defaultModel, session.provider)) ?? defaultModelOption?.contextLabel;
+  const defaultCost = modelPriceLabel(defaultModelOption?.pricingLabel ?? formatModelCost(defaultModelOption?.pricing ?? getModelPricing(session.provider, defaultModel)));
+
   const filteredOptions = (options?.options ?? []).filter(option => {
     // The pinned Default row below represents this exact catalog choice.
     if (option.value === defaultModel) return false;
@@ -558,7 +563,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
   return createPortal(
     <div
       ref={menuRef}
-      className="composer-provider-menu session-runtime-popover"
+      className={`composer-provider-menu session-runtime-popover${open === 'model' ? ' composer-model-menu' : ''}`}
       role={pendingProvider ? 'dialog' : 'listbox'}
       aria-label={
         pendingProvider
@@ -584,7 +589,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
                 ? 'session-folder-menu'
                 : 'session-provider-menu'
       }
-      style={anchoredPopoverStyle(position, open === 'toolMode' ? 320 : 300)}
+      style={{ ...anchoredPopoverStyle(position, open === 'model' ? Math.min(640, window.innerWidth - 24) : open === 'toolMode' ? 320 : 300), ...(open === 'model' ? { maxHeight: Math.max(0, Math.min(480, window.innerHeight - position.bottom - 12)) } : {}) }}
     >
       {open === 'toolMode' ? (
         <>
@@ -698,38 +703,41 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
         </div>
       ) : open === 'model' ? (
         <>
-          <div className="model-menu-search-row">
-            <input
-              type="text"
-              className="input"
-              placeholder="Filter models…"
-              value={modelFilter}
-              onChange={event => setModelFilter(event.target.value)}
-              data-testid="session-model-filter"
-              autoFocus
-            />
-            <button
-              type="button"
-              className="model-menu-refresh"
-              aria-label="Configure models"
-              title="Configure models"
-              data-testid="session-model-settings"
-              disabled={!session.provider || busy}
-              onClick={() => setConfiguringModels(session.provider)}
-            >
-              <Icon name="gear" size={14} />
-            </button>
-            <button
-              type="button"
-              className="model-menu-refresh"
-              aria-label={`Refresh ${session.provider ? providerLabel(session.provider) : ''} models`}
-              title="Refresh model list"
-              data-testid="session-model-refresh"
-              disabled={loading || busy}
-              onClick={() => void refreshModels()}
-            >
-              <Icon name="refresh" size={14} />
-            </button>
+          <div className="composer-model-menu-header">
+            <div className="model-menu-search-row">
+              <input
+                type="text"
+                className="input"
+                placeholder="Filter models…"
+                value={modelFilter}
+                onChange={event => setModelFilter(event.target.value)}
+                data-testid="session-model-filter"
+                autoFocus
+              />
+              <button
+                type="button"
+                className="model-menu-refresh"
+                aria-label="Configure models"
+                title="Configure models"
+                data-testid="session-model-settings"
+                disabled={!session.provider || busy}
+                onClick={() => setConfiguringModels(session.provider)}
+              >
+                <Icon name="gear" size={14} />
+              </button>
+              <button
+                type="button"
+                className="model-menu-refresh"
+                aria-label={`Refresh ${session.provider ? providerLabel(session.provider) : ''} models`}
+                title="Refresh model list"
+                data-testid="session-model-refresh"
+                disabled={loading || busy}
+                onClick={() => void refreshModels()}
+              >
+                <Icon name="refresh" size={14} />
+              </button>
+            </div>
+            <ModelMenuColumns />
           </div>
           {loading && <div className="popover-label">Loading models…</div>}
           {!loading && filteredOptions.length === 0 && <div className="popover-label">No models available</div>}
@@ -744,11 +752,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
               disabled={busy}
               onClick={() => void changeModel(defaultModel)}
             >
-              <Icon name="sparkles" size={14} />
-              <span className="composer-model-option-name">Default</span>
-              <span className="composer-model-option-meta">
-                <span className="composer-model-badge">{options?.options.find(option => option.value === defaultModel)?.name ?? defaultModel}</span>
-              </span>
+              <ModelMenuDetails name={defaultModelOption?.name ?? defaultModel} tag="Default" context={defaultContextSize} price={defaultCost} priceTitle={modelPriceTitle(defaultModelOption?.pricingLabel)} />
             </button>
           )}
           {!loading && hiddenCurrentModel && (
@@ -762,18 +766,14 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
               disabled={busy}
               onClick={() => void changeModel(hiddenCurrentModel)}
             >
-              <Icon name="sparkles" size={14} />
-              <span className="composer-model-option-name">Current</span>
-              <span className="composer-model-option-meta">
-                <span className="composer-model-badge">{hiddenCurrentModel}</span>
-              </span>
+              <ModelMenuDetails name={hiddenCurrentModel} tag="Current" />
             </button>
           )}
           {filteredOptions.map(option => {
             const contextLimit = option.contextLength ?? getKnownContextLength(option.value, session.provider);
-            const contextSize = formatContextLength(contextLimit);
+            const contextSize = formatContextLength(contextLimit) ?? option.contextLabel;
             const pricing = option.pricing ?? getModelPricing(session.provider, option.value);
-            const cost = formatModelCost(pricing);
+            const cost = modelPriceLabel(option.pricingLabel ?? formatModelCost(pricing));
             return (
               <button
                 key={option.value}
@@ -786,14 +786,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
                 disabled={busy}
                 onClick={() => void changeModel(option.value)}
               >
-                <Icon name="sparkles" size={14} />
-                <span className="composer-model-option-name">{option.name || option.value}</span>
-                {(contextSize || cost) && (
-                  <span className="composer-model-option-meta">
-                    {contextSize && <span className="composer-model-badge is-context">{contextSize}</span>}
-                    {cost && <span className="composer-model-badge is-cost">{cost}</span>}
-                  </span>
-                )}
+                <ModelMenuDetails name={option.name || option.value} context={contextSize} price={cost} priceTitle={modelPriceTitle(option.pricingLabel)} />
               </button>
             );
           })}

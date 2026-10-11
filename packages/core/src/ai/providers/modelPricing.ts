@@ -1,6 +1,8 @@
 import type { AiProvider } from '../../types';
 import type { TokenUsage } from '../gateway/wire';
 
+const ACP_MODEL_PROVIDERS: ReadonlySet<AiProvider> = new Set(['claude-code-cli', 'codex-cli', 'copilot-cli', 'antigravity-cli', 'cursor-cli']);
+
 /**
  * Static USD-per-million-token rates for providers whose chat API reports
  * only token counts, never a monetary cost — unlike ACP CLI agents, which
@@ -121,10 +123,18 @@ export function normalizeModelName(raw: string): string {
 
 export function getKnownContextLength(
   model: string | undefined,
-  _provider?: AiProvider
+  provider?: AiProvider
 ): number | undefined {
   if (!model) {
     return undefined;
+  }
+  if (provider && ACP_MODEL_PROVIDERS.has(provider)) {
+    // Cursor exposes the selected context in its model id. Other CLI hosts
+    // need their own metadata; an API model window is not a CLI session limit.
+    const context = provider === 'cursor-cli' ? model.match(/\[(?:[^\]]*,)?context=(\d+(?:\.\d+)?)([km]?)(?:,|\])/i) : undefined;
+    if (!context) return undefined;
+    const size = Number(context[1]) * (context[2].toLowerCase() === 'm' ? 1_000_000 : context[2].toLowerCase() === 'k' ? 1000 : 1);
+    return Number.isSafeInteger(size) && size > 0 ? size : undefined;
   }
   const normalized = normalizeModelName(model);
 
@@ -189,6 +199,9 @@ export function getModelPricing(
   provider: AiProvider | undefined,
   model: string | undefined
 ): ModelPriceRates | undefined {
+  // CLI plans and API billing are different products. Only explicit adapter
+  // pricing may be displayed for CLI models, never an API-table fallback.
+  if (provider && ACP_MODEL_PROVIDERS.has(provider)) return undefined;
   if (!model) {
     return undefined;
   }

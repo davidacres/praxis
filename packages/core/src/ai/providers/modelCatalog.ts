@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { AiProvider } from '../../types';
 import { fetchModels, type GatewayOptions, type RawGatewayModel } from '../gateway/gatewayClient';
 import { fetchAnthropicModels } from './anthropicClient';
@@ -19,17 +22,38 @@ export interface ModelChoice {
   description?: string;
   /**
    * The model's context window, when the provider's model listing reports one.
-   * Used to tell a session how much room it has left; absent for CLI-hosted
-   * agents and for gateways that do not publish it.
+   * The host can enrich CLI selectors from their native catalogs. A running
+   * session can report a different effective limit through its usage updates.
    */
   contextLength?: number;
   /** Model rates per million tokens in USD, when known. */
   pricing?: ModelPriceRates;
+  /** Provider billing or explicitly labelled published reference rates. */
+  pricingLabel?: string;
+  /** Automatic routing has no single fixed context window. */
+  contextLabel?: string;
 }
 
 export interface ModelOptions {
   currentValue?: string;
   options: ModelChoice[];
+}
+
+/** Codex's own catalog records its default session windows, unlike ACP's model selector. */
+export async function readCodexContextLengths(codexHome = process.env.CODEX_HOME || join(homedir(), '.codex')): Promise<Map<string, number>> {
+  const contexts = new Map<string, number>();
+  try {
+    const cache = JSON.parse(await readFile(join(codexHome, 'models_cache.json'), 'utf8'));
+    if (!Array.isArray(cache.models)) return contexts;
+    for (const model of cache.models) {
+      if (typeof model?.slug === 'string' && Number.isSafeInteger(model.context_window) && model.context_window > 0) {
+        contexts.set(model.slug, model.context_window);
+      }
+    }
+  } catch {
+    // A missing/invalid optional cache must never prevent ACP discovery.
+  }
+  return contexts;
 }
 
 interface CacheEntry {

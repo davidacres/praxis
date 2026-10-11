@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import {
   compareLatestPeriod,
   dashboardUsageSummary,
@@ -20,6 +20,8 @@ import { getSettingsBackend } from './settingsBackendInstance';
 import { codexCliSnapshot } from './codexUsage';
 import { claudeCodeSnapshot } from './claudeUsage';
 import { isMiniMaxEndpoint, miniMaxUsageSnapshot } from './minimaxUsage';
+import { alibabaCodingPlanUsageSnapshot, isAlibabaCodingPlanEndpoint, regionForEndpoint } from './alibabaCodingPlanUsage';
+import { alibabaConsoleTransport, isAlibabaConsoleSignedIn, signInToAlibabaConsole, signOutOfAlibabaConsole } from './alibabaConsoleSession';
 import { enabledUsageProviders, readProviderSnapshots } from './providerUsageBatch';
 
 const USAGE_SECRET_PREFIX = 'ai-usage:';
@@ -137,10 +139,21 @@ export function registerProviderUsageAdapter(provider: AiProvider, adapter: Prov
  * resolve those from the saved endpoint, which still knows which preset it was
  * created from.
  */
+function customEndpointConfig(provider: AiProvider) {
+  return getSettingsBackend().read().ai.customProviders?.find(endpoint => endpoint.id === provider);
+}
+
 async function customEndpointSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot | undefined> {
-  const config = getSettingsBackend().read().ai.customProviders?.find(endpoint => endpoint.id === provider);
+  const config = customEndpointConfig(provider);
   if (isMiniMaxEndpoint(provider, config)) return miniMaxUsageSnapshot(config);
+  if (isAlibabaCodingPlanEndpoint(provider, config)) return alibabaCodingPlanUsageSnapshot(config, alibabaConsoleTransport);
   return undefined;
+}
+
+/** The console region a Coding Plan endpoint's quota lives in, or undefined for any other provider. */
+function alibabaConsoleRegion(provider: AiProvider) {
+  const config = customEndpointConfig(provider);
+  return isAlibabaCodingPlanEndpoint(provider, config) ? regionForEndpoint(config.baseUrl) : undefined;
 }
 
 async function providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot> {
@@ -175,8 +188,10 @@ export function registerAiUsageIpc(): void {
   registerProviderUsageAdapter('openai', openAiSnapshot);
   registerProviderUsageAdapter('codex-cli', codexCliSnapshot);
   registerProviderUsageAdapter('claude-code-cli', claudeCodeSnapshot);
-  ipcMain.handle('aiUsage:series', async (_event, granularity: UsageGranularity, periodsBack: number) =>
-    usageSeries(getAiUsageLog().list(), granularity, periodsBack)
+  // Optional provider scoping: the session usage bar shows the selected provider next to its
+  // account quota; omitting the filter keeps account-wide totals for the dashboards.
+  ipcMain.handle('aiUsage:series', async (_event, granularity: UsageGranularity, periodsBack: number, provider?: AiProvider) =>
+    usageSeries(getAiUsageLog().list(), granularity, periodsBack, new Date(), provider)
   );
   ipcMain.handle('aiUsage:compareLatestPeriod', async (_event, granularity: UsageGranularity) =>
     compareLatestPeriod(getAiUsageLog().list(), granularity)
@@ -199,6 +214,19 @@ export function registerAiUsageIpc(): void {
     const key = `${USAGE_SECRET_PREFIX}${provider}`;
     if (value.trim()) await getSecretsStore().store(key, value.trim());
     else await getSecretsStore().delete(key);
+  });
+  ipcMain.handle('aiUsage:alibabaConsoleStatus', async (_event, provider: AiProvider) => {
+    const region = alibabaConsoleRegion(provider);
+    return { signedIn: region ? await isAlibabaConsoleSignedIn(region) : false };
+  });
+  ipcMain.handle('aiUsage:alibabaConsoleSignIn', async (event, provider: AiProvider) => {
+    const region = alibabaConsoleRegion(provider);
+    if (!region) throw new Error('Console sign-in is only for an Alibaba Coding Plan endpoint.');
+    return { signedIn: await signInToAlibabaConsole(region, BrowserWindow.fromWebContents(event.sender) ?? undefined) };
+  });
+  ipcMain.handle('aiUsage:alibabaConsoleSignOut', async () => {
+    await signOutOfAlibabaConsole();
+    return { signedIn: false };
   });
 }
 

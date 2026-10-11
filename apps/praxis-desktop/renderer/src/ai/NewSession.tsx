@@ -14,6 +14,7 @@ import type {
 } from '@praxis/core';
 import { ChipSelect } from '../ui/ChipSelect';
 import { Icon } from '../ui/Icon';
+import { ModelMenuColumns, ModelMenuDetails } from './ModelMenuDetails';
 import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
 import {
   applyEnabledModelCuration,
@@ -31,7 +32,8 @@ import { SessionComposerToolbar } from './SessionComposerToolbar';
 import { SessionUsageSummary } from './SessionUsageSummary';
 import { workflowPreview } from './workflowPreview';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
-import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing } from './sessionNav';
+import { SessionGitBranchControl } from './SessionGitBranchControl';
+import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing, modelPriceLabel, modelPriceTitle } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
 import { canRunAgentSessions, isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
 
@@ -187,11 +189,12 @@ export function NewSession({
   const [toolMode, setToolMode] = useState<AgentToolMode>(defaultToolMode ?? (conversational ? 'project-only' : 'full'));
   const [mode, setMode] = useState<SessionMode>('chat');
   const [workingDirectory, setWorkingDirectory] = useState<string | undefined>(defaultWorkingDirectory);
+  const [runInWorktree, setRunInWorktree] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
   const workflowOptionsForPicker = workflowOptions ?? [];
   const [modelFilter, setModelFilter] = useState('');
   const [configuringModels, setConfiguringModels] = useState<AiProvider>();
-  const [modelMenuPos, setModelMenuPos] = useState<{ top: number; left: number } | undefined>();
+  const [modelMenuPos, setModelMenuPos] = useState<{ top?: number; bottom?: number; left: number; maxHeight: number } | undefined>();
   const modelChipRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const [workflowMenuPos, setWorkflowMenuPos] = useState<{ bottom: number; left: number } | undefined>();
@@ -466,6 +469,8 @@ export function NewSession({
 
   const defaultModel = pickDefaultModel(modelOptions, configuredDefaultModel);
   const defaultModelOption = modelOptions?.options.find(option => option.value === defaultModel);
+  const defaultContextSize = formatContextLength(defaultModelOption?.contextLength ?? getKnownContextLength(defaultModel, selectedProvider)) ?? defaultModelOption?.contextLabel;
+  const defaultModelCost = modelPriceLabel(defaultModelOption?.pricingLabel ?? formatModelCost(defaultModelOption?.pricing ?? getModelPricing(selectedProvider, defaultModel)));
   const filteredModelOptions = (modelOptions?.options ?? []).filter(option => {
     if (option.value === defaultModel) return false;
     const normalizedName = option.name.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -483,7 +488,16 @@ export function NewSession({
     }
     const rect = modelChipRef.current?.getBoundingClientRect();
     if (rect) {
-      setModelMenuPos({ top: rect.bottom + 4, left: rect.left });
+      const width = Math.min(640, window.innerWidth - 24);
+      const below = window.innerHeight - rect.bottom - 16;
+      const above = rect.top - 16;
+      const openAbove = below < 240 && above > below;
+      setModelMenuPos({
+        top: openAbove ? undefined : rect.bottom + 4,
+        bottom: openAbove ? window.innerHeight - rect.top + 4 : undefined,
+        left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
+        maxHeight: Math.max(0, Math.min(480, openAbove ? above : below))
+      });
     }
   };
 
@@ -551,6 +565,7 @@ export function NewSession({
         toolMode,
         mode,
         ...(workingDirectory ? { workingDirectory } : {}),
+        ...(runInWorktree ? { runInWorktree: true } : {}),
         ...(agentContext
           ? {
               agentId: agentContext.agentId,
@@ -942,8 +957,6 @@ export function NewSession({
               )}
             {selectedProvider && hasModelCatalog(selectedProvider) && (modelsLoading || modelOptions) && (() => {
               const selectedOption = modelOptions?.options.find(option => option.value === selectedModel);
-              const pricing = selectedOption?.pricing ?? getModelPricing(selectedProvider, selectedModel);
-              const cost = formatModelCost(pricing);
               return (
                 <button
                   ref={modelChipRef}
@@ -957,12 +970,7 @@ export function NewSession({
                   <Icon name="sparkles" size={14} />
                   {modelsLoading
                     ? 'Loading models…'
-                    : (
-                      <>
-                        <span className="session-model-chip-label">{selectedOption?.name ?? selectedModel ?? 'Model'}</span>
-                        {cost && <span className="composer-chip-meta">{cost}</span>}
-                      </>
-                    )}
+                    : <span className="session-model-chip-label">{selectedOption?.name ?? selectedModel ?? 'Model'}</span>}
                   <Icon name="chevron-down" size={12} />
                 </button>
               );
@@ -972,45 +980,48 @@ export function NewSession({
               createPortal(
                 <div
                   ref={modelMenuRef}
-                  className="composer-provider-menu"
+                  className="composer-provider-menu composer-model-menu"
                   role="listbox"
                   aria-label="Model"
-                  style={{ position: 'fixed', top: modelMenuPos.top, left: modelMenuPos.left }}
+                  style={{ position: 'fixed', ...modelMenuPos }}
                 >
-                  <div className="model-menu-search-row">
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="Filter models…"
-                      value={modelFilter}
-                      onChange={event => setModelFilter(event.target.value)}
-                      data-testid="new-session-model-filter"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn-sm"
-                      aria-label="Configure models"
-                      title="Configure models"
-                      data-testid="new-session-model-settings"
-                      disabled={!selectedProvider}
-                      onClick={() => {
-                        setModelMenuPos(undefined);
-                        setConfiguringModels(selectedProvider);
-                      }}
-                    >
-                      <Icon name="gear" size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn-sm"
-                      aria-label="Refresh models"
-                      data-testid="new-session-model-refresh"
-                      disabled={modelsLoading}
-                      onClick={() => refreshModels()}
-                    >
-                      <Icon name="refresh" size={13} />
-                    </button>
+                  <div className="composer-model-menu-header">
+                    <div className="model-menu-search-row">
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="Filter models…"
+                        value={modelFilter}
+                        onChange={event => setModelFilter(event.target.value)}
+                        data-testid="new-session-model-filter"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn-sm"
+                        aria-label="Configure models"
+                        title="Configure models"
+                        data-testid="new-session-model-settings"
+                        disabled={!selectedProvider}
+                        onClick={() => {
+                          setModelMenuPos(undefined);
+                          setConfiguringModels(selectedProvider);
+                        }}
+                      >
+                        <Icon name="gear" size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn-sm"
+                        aria-label="Refresh models"
+                        data-testid="new-session-model-refresh"
+                        disabled={modelsLoading}
+                        onClick={() => refreshModels()}
+                      >
+                        <Icon name="refresh" size={13} />
+                      </button>
+                    </div>
+                    <ModelMenuColumns />
                   </div>
                   <button
                     type="button"
@@ -1028,19 +1039,16 @@ export function NewSession({
                       setModelMenuPos(undefined);
                     }}
                   >
-                    <span className="composer-model-option-name">Default</span>
-                    <span className="composer-model-option-meta">
-                      <span className="composer-model-badge">{defaultModelOption?.name ?? defaultModel ?? 'Provider default'}</span>
-                    </span>
+                    <ModelMenuDetails name={defaultModelOption?.name ?? defaultModel ?? 'Provider default'} tag="Default" context={defaultContextSize} price={defaultModelCost} priceTitle={modelPriceTitle(defaultModelOption?.pricingLabel)} />
                   </button>
                   {filteredModelOptions.length === 0 && (
                     <div className="popover-label">No matching models</div>
                   )}
                   {filteredModelOptions.map(option => {
                     const contextLimit = option.contextLength ?? getKnownContextLength(option.value, selectedProvider);
-                    const contextSize = formatContextLength(contextLimit);
+                    const contextSize = formatContextLength(contextLimit) ?? option.contextLabel;
                     const pricing = option.pricing ?? getModelPricing(selectedProvider, option.value);
-                    const cost = formatModelCost(pricing);
+                    const cost = modelPriceLabel(option.pricingLabel ?? formatModelCost(pricing));
                     return (
                       <button
                         key={option.value}
@@ -1059,13 +1067,7 @@ export function NewSession({
                           setModelMenuPos(undefined);
                         }}
                       >
-                        <span className="composer-model-option-name">{option.name}</span>
-                        {(contextSize || cost) && (
-                          <span className="composer-model-option-meta">
-                            {contextSize && <span className="composer-model-badge is-context">{contextSize}</span>}
-                            {cost && <span className="composer-model-badge is-cost">{cost}</span>}
-                          </span>
-                        )}
+                        <ModelMenuDetails name={option.name} context={contextSize} price={cost} priceTitle={modelPriceTitle(option.pricingLabel)} />
                       </button>
                     );
                   })}
@@ -1174,6 +1176,13 @@ export function NewSession({
         </SessionComposerCard>
         <div className="session-composer-footer">
           <SessionPermissionModeControl value={permissionMode} onChange={setPermissionMode} testId="new-session" />
+          <SessionGitBranchControl
+            workingDirectory={workingDirectory}
+            runInWorktree={runInWorktree}
+            onToggleWorktree={setRunInWorktree}
+            testId="new-session"
+            disabled={submitting}
+          />
         </div>
 
       </div>

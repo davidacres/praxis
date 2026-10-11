@@ -3239,6 +3239,95 @@ textarea {
   margin-bottom: var(--space-1);
 }
 
+.composer-provider-menu .composer-model-menu-header,
+.composer-provider-menu > .model-menu-search-row {
+  position: sticky;
+  top: calc(-1 * var(--space-2));
+  z-index: 3;
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) var(--space-1) calc(-1 * var(--space-2));
+  padding: var(--space-2) var(--space-2) 0 var(--space-2);
+  background-color: var(--bg-elevated);
+  border-top-left-radius: calc(var(--radius-lg) + var(--surface-radius-boost));
+  border-top-right-radius: calc(var(--radius-lg) + var(--surface-radius-boost));
+}
+
+.composer-provider-menu > .model-menu-search-row {
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Model names and catalog metadata need more room than a provider name. */
+.composer-provider-menu.composer-model-menu {
+  width: min(640px, calc(100vw - 24px));
+  min-width: 0;
+  max-height: min(480px, calc(100vh - 24px));
+}
+
+.composer-model-menu .composer-provider-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 12px;
+  align-items: start;
+}
+
+.composer-model-option-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composer-model-menu .composer-model-option-name {
+  flex: 1;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.composer-model-menu .composer-model-option-meta {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  margin-left: 0;
+  align-items: start;
+}
+
+.composer-model-menu .is-context {
+  grid-column: 1;
+  justify-self: start;
+}
+
+.composer-model-menu .is-cost {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.composer-model-menu .composer-model-badge {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.composer-model-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 12px;
+  padding: 6px 8px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-1);
+}
+
+@media (max-width: 600px) {
+  .composer-model-menu .composer-provider-option,
+  .composer-model-columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}
+
 .model-menu-search-row .input {
   flex: 1;
   font-size: var(--text-md);
@@ -9600,6 +9689,52 @@ button.session-chat-attachment {
   border-top: 1px dashed color-mix(in srgb, var(--border) 30%, transparent);
 }
 
+/* The raw reasoning archive inside a Thought block: collapsed by default,
+   one expander under the tool timeline it belongs to. */
+.session-chat-thought-reasoning {
+  margin: 0;
+  border: 0;
+}
+
+.session-chat-thought-reasoning-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  user-select: none;
+  list-style: none;
+}
+
+.session-chat-thought-reasoning-summary::-webkit-details-marker { display: none; }
+
+.session-chat-thought-reasoning-summary:hover { color: var(--text-secondary); }
+
+.session-chat-thought-reasoning[open] .session-chat-thought-reasoning-summary { color: var(--text-secondary); }
+
+.session-chat-thought-reasoning-content {
+  max-height: 220px;
+  margin-top: var(--space-2);
+  padding: var(--space-2) 2px 0;
+  overflow-y: auto;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 30%, transparent);
+}
+
+.session-chat-thought-reasoning-content .markdown-body {
+  min-width: 0;
+  font-size: inherit;
+  white-space: normal;
+}
+.session-chat-thought-reasoning-content .markdown-body p { margin: 0; }
+.session-chat-thought-reasoning-content > *:first-child { margin-top: 0; }
+.session-chat-thought-reasoning-content > *:last-child { margin-bottom: 0; }
+.session-chat-thought-reasoning-content > * + * {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px dashed color-mix(in srgb, var(--border) 30%, transparent);
+}
+
 /* The turn's tool calls: what was actually done, one quiet row each. */
 .session-chat-thought-tools {
   display: flex;
@@ -12107,8 +12242,25 @@ button.session-chat-attachment {
   gap: var(--space-2);
 }
 .model-manager-chips .view-title { flex: 1 1 100%; }
-.model-manager-chips .input { width: 100%; }
+.model-manager-search-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  padding: var(--space-1) 0 var(--space-2);
+}
+
+.model-manager-search-bar .input {
+  width: 100%;
+}
+
 .model-manager-chips .conn-form-body { min-height: 0; overflow-y: auto; }
+.model-manager-chips .model-manager-search-bar {
+  top: calc(-1 * var(--space-3));
+  margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-4)) var(--space-2) calc(-1 * var(--space-4));
+  padding: var(--space-3) var(--space-4) var(--space-2) var(--space-4);
+  background: var(--bg-elevated);
+}
 .model-manager-chips .model-manager-list {
   flex-direction: row;
   flex-wrap: wrap;
@@ -16783,6 +16935,7 @@ button.session-chat-attachment {
 .session-usage-card { display: grid; gap: 3px; min-width: 0; padding: var(--space-2) var(--space-3); background: var(--bg-elevated); }
 .session-usage-card strong { color: var(--text); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .session-usage-card small { color: var(--text-tertiary); font-size: var(--text-xs); }
+.session-usage-card.is-empty strong, .session-usage-card.is-empty small { color: var(--text-tertiary); }
 .session-usage-label { color: var(--text-tertiary); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .03em; }
 .session-usage-warning-banner { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--bg-elevated)); font-size: var(--text-sm); }
 .session-usage-warning-banner.is-critical { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--bg-elevated)); }

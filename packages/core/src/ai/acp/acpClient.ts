@@ -127,7 +127,7 @@ export interface AcpClientOptions {
   command: string;
   args?: string[];
   env?: Record<string, string>;
-  /** Explicit authentication method ID (e.g. `cursor_login`). Defaults to first non-terminal method advertised by the agent. */
+  /** Explicit authentication method ID (e.g. `cursor_login`). Otherwise the agent uses its existing login. */
   authMethod?: string;
   /** Session cwd and the fs sandbox root for `fs/read_text_file`/`fs/write_text_file`. */
   workingDirectory: string;
@@ -403,9 +403,10 @@ export class AcpClientWrapper {
       clientInfo: { name: 'praxis', version: '0.0.0' }
     });
 
-    const authMethod =
-      this.options.authMethod ||
-      this.initializeResponse.authMethods?.find(m => !('type' in m) || (m as { type?: string }).type !== 'terminal')?.id;
+    // Advertised methods describe ways to log in, not a request to replace the
+    // agent's existing credentials. In particular, Codex advertises api-key
+    // first even when it already has a working ChatGPT login.
+    const authMethod = this.options.authMethod;
     if (authMethod) {
       try {
         await this.connection.agent.request(acpModule.AGENT_METHODS.authenticate, {

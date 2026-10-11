@@ -7,6 +7,10 @@ import {
   AiSessionManager,
   FileSessionTranscriptStore,
   listCatalogModels,
+  readCodexContextLengths,
+  readNativeCliModelMetadata,
+  publishedCliModelMetadata,
+  canonicalCliModelId,
   getKnownContextLength,
   getModelPricing,
   probeApiKeyAuth,
@@ -189,13 +193,29 @@ export async function listCliModelOptions(provider: AiProvider): Promise<ModelOp
   if (!raw) {
     return undefined;
   }
+  const codexContexts = provider === 'codex-cli' ? await readCodexContextLengths() : undefined;
+  let nativeMetadata = new Map<string, { contextLength?: number; pricingLabel?: string; contextLabel?: string }>();
+  // Custom ACP adapters keep their own identity/auth. Only probe the known
+  // native CLI behind a standard adapter, never an unrelated installed account.
+  if (path.basename(command).replace(/\.exe$/i, '') === descriptor.defaultCommand) {
+    try {
+      nativeMetadata = await readNativeCliModelMetadata(provider, provider === 'claude-code-cli' ? 'claude' : command);
+    } catch (error) {
+      getLogBus().appendLine(`[acp] model metadata for ${provider}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   return {
     ...raw,
     options: raw.options.map(opt => {
-      const contextLength = opt.contextLength ?? getKnownContextLength(opt.value, provider);
+      const published = publishedCliModelMetadata(provider, opt);
+      const native = nativeMetadata.get(opt.value) ?? nativeMetadata.get(canonicalCliModelId(opt.value));
+      const contextLength = opt.contextLength ?? codexContexts?.get(opt.value) ?? getKnownContextLength(opt.value, provider) ?? native?.contextLength ?? published.contextLength;
       const pricing = opt.pricing ?? getModelPricing(provider, opt.value);
       return {
+        ...published,
+        ...native,
         ...opt,
+        pricingLabel: native?.pricingLabel ?? opt.pricingLabel ?? published.pricingLabel,
         ...(typeof contextLength === 'number' && contextLength > 0 ? { contextLength } : {}),
         ...(pricing ? { pricing } : {})
       };

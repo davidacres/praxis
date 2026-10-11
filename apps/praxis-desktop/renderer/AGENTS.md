@@ -312,6 +312,14 @@ host needs a built-in — then `AI_PROVIDERS` here plus core's `PROVIDER_DESCRIP
   and "Clear" off the edge. `aiProviderCatalog.spec.ts` measures this and was proven against the
   broken layout.
 
+- **Plan usage for a preset endpoint is matched on `presetId`** in main's `aiUsageIpc.ts`
+  `customEndpointSnapshot` (MiniMax: `minimaxUsage.ts`, keyed by the chat key). **Alibaba
+  Coding Plan quota cannot be read with the `sk-sp-` key** — the console RPC answers
+  `ConsoleNeedLogin`. It is read through a console session Praxis hosts itself
+  (`alibabaConsoleSession.ts`: sandboxed sign-in window, `persist:alibaba-console` partition,
+  no preload) and `alibabaCodingPlanUsage.ts`. The API is undocumented console RPC; e2e
+  points it at a mock via `PRAXIS_ALIBABA_CONSOLE_ORIGIN` (`alibabaCodingPlanUsage.spec.ts`).
+
 `ai.providers[id].enabled` is stored only when set; **undefined means enabled**. A provider
 is *usable* only when it is also `configured` (key present / CLI found), so leaving it unset
 changes nothing for an existing setup, and only an explicit `false` turns one off. Every

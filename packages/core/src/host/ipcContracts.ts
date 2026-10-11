@@ -1055,8 +1055,12 @@ export interface CoordinationIpc {
 }
 
 export interface AiUsageIpc {
-  /** Bucketed totals for the `periodsBack` most recent periods at this granularity, oldest first, zero-filled. */
-  series(granularity: UsageGranularity, periodsBack: number): Promise<UsageBucket[]>;
+  /**
+   * Bucketed totals for the `periodsBack` most recent periods at this granularity, oldest first, zero-filled.
+   * Pass `provider` to scope the buckets to one provider (the session usage bar shows the selected
+   * provider's totals next to its account quota); omit it for account-wide totals.
+   */
+  series(granularity: UsageGranularity, periodsBack: number, provider?: AiProvider): Promise<UsageBucket[]>;
   /** The latest period vs. the one before it — "more or less AI than last week", generalised to day/week/month. */
   compareLatestPeriod(granularity: UsageGranularity): Promise<UsageComparison>;
   /** Today / week / month / all-time totals, per-model breakdowns and peaks in one read — the Overview panel and Settings model breakdown. */
@@ -1074,6 +1078,17 @@ export interface AiUsageIpc {
   providerSnapshots(): Promise<ProviderUsageSnapshotsResult>;
   /** Stores a provider's optional admin/usage credential in the OS keychain. */
   setProviderUsageKey(provider: AiProvider, value: string): Promise<void>;
+  /**
+   * Alibaba Coding Plan quota is read through a signed-in Alibaba Cloud
+   * console session that Praxis hosts in its own partition — the plan's API
+   * key cannot read it. Status and sign-in take the endpoint's id so the
+   * console region follows its base URL.
+   */
+  alibabaConsoleStatus(provider: AiProvider): Promise<{ signedIn: boolean }>;
+  /** Opens the console sign-in window; resolves once it is closed. */
+  alibabaConsoleSignIn(provider: AiProvider): Promise<{ signedIn: boolean }>;
+  /** Clears the console session (cookies and storage) Praxis holds. */
+  alibabaConsoleSignOut(): Promise<{ signedIn: boolean }>;
 }
 
 /**

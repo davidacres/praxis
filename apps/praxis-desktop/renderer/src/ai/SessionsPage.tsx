@@ -29,7 +29,7 @@ import { SessionComposerToolbar } from './SessionComposerToolbar';
 import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { SessionGitBranchControl } from './SessionGitBranchControl';
-import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, formatModelCost, getKnownContextLength, getModelPricing, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
+import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, getKnownContextLength, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
 import { LiveTurnActivityIndicator, formatElapsedDuration } from './LiveTurnActivityIndicator';
@@ -1991,10 +1991,8 @@ export function SessionsPage({
                         {providerLabel(selected.provider)}
                       </button>
                     ))}
-                    {!workflowOwnsRuntime && selected.provider && (() => {
-                      const pricing = getModelPricing(selected.provider, selected.model);
-                      const cost = formatModelCost(pricing);
-                      return selected.workflowRole === 'stage' ? (
+                    {!workflowOwnsRuntime && selected.provider && (
+                      selected.workflowRole === 'stage' ? (
                         <span
                           className="composer-chip session-runtime-chip is-readonly"
                           data-testid="session-model"
@@ -2002,7 +2000,6 @@ export function SessionsPage({
                         >
                           <Icon name="sparkles" size={14} />
                           <span>{selected.model ?? 'Provider default'}</span>
-                          {cost && <span className="composer-chip-meta">{cost}</span>}
                         </span>
                       ) : (
                         <button
@@ -2025,10 +2022,9 @@ export function SessionsPage({
                         >
                           <Icon name="sparkles" size={14} />
                           <span>{selected.model ?? 'Model'}</span>
-                          {cost && <span className="composer-chip-meta">{cost}</span>}
                         </button>
-                      );
-                    })()}
+                      )
+                    )}
                     {!workflowOwnsRuntime && selected.workflowRole !== 'stage' && supportsReasoningEffort(selected.provider, selected.model) && (
                       <ReasoningEffortSlider
                         value={selected.reasoningEffort ?? 'medium'}

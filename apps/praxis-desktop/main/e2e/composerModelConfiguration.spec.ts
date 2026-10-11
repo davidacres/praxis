@@ -29,7 +29,11 @@ test('composer model settings curate provider chips and preserve the conversatio
   await page.getByTestId('conversations-new-btn').click();
   const draft = page.getByTestId('new-session-view').locator('textarea');
   await draft.fill('Keep this conversation draft.');
-  await page.getByTestId('new-session-model-chip').click();
+  const modelChip = page.getByTestId('new-session-model-chip');
+  await expect(modelChip).toHaveText('Default model');
+  await expect(modelChip.locator('.composer-chip-meta')).toHaveCount(0);
+  await expect(page.getByTestId('new-session-git-branch-chip')).toBeVisible();
+  await modelChip.click();
   const filter = page.getByTestId('new-session-model-filter');
   const cog = page.getByTestId('new-session-model-settings');
   await expect(cog).toBeVisible();
@@ -99,8 +103,11 @@ test('an existing session configures its selected provider rather than the app d
   await openSession(page);
   await expect(page.getByTestId('session-state-badge')).toHaveText('Completed', { timeout: 15000 });
   await app.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(720, 800));
-  await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
-  await page.getByTestId('session-model').click();
+  const sessionModel = page.getByTestId('session-model');
+  await expect(sessionModel).toHaveText('gpt-4o-mini');
+  await expect(sessionModel.locator('.composer-chip-meta')).toHaveCount(0);
+  await expect(page.getByTestId('session-git-branch-chip')).toBeVisible();
+  await sessionModel.click();
   await page.getByTestId('session-model-settings').click();
   const dialog = page.getByRole('dialog', { name: 'OpenAI model configuration' });
   await expect(dialog.getByRole('switch')).toHaveCount(2);
@@ -116,3 +123,65 @@ test('an existing session configures its selected provider rather than the app d
   await expect(page.getByTestId('session-model-menu')).toBeVisible();
   await expect(page.getByTestId('session-model-option-mock/other')).toHaveCount(0);
 });
+
+test('model search stays fixed when scrolling models in the model menu and manager', async () => {
+  const models = Array.from({ length: 25 }, (_, i) => ({
+    id: `mock/model-${i.toString().padStart(2, '0')}`,
+    name: `Model Variant ${i.toString().padStart(2, '0')}`
+  }));
+  mock = await startMockGatewayServer({ mode: 'complete', models });
+  app = await launchTestApp({
+    ai: { activeProvider: 'vercel-gateway', defaultModel: 'mock/model-00' }
+  }, undefined, {
+    AI_GATEWAY_API_KEY: 'fixed-search-test',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const page = app.window;
+  await page.getByTestId('conversations-new-btn').click();
+  await page.getByTestId('new-session-model-chip').click();
+
+  const menu = page.getByRole('listbox', { name: 'Model', exact: true });
+  await expect(menu).toBeVisible();
+  const filter = page.getByTestId('new-session-model-filter');
+  await expect(filter).toBeVisible();
+
+  const initialFilterBox = await filter.boundingBox();
+  expect(initialFilterBox).not.toBeNull();
+
+  // Scroll down the menu to the bottom options
+  await menu.evaluate(el => { el.scrollTop = 400; });
+  await page.waitForTimeout(100);
+
+  // The search filter must still be visible and its Y position fixed
+  await expect(filter).toBeVisible();
+  const scrolledFilterBox = await filter.boundingBox();
+  expect(scrolledFilterBox).not.toBeNull();
+  expect(Math.abs(scrolledFilterBox!.y - initialFilterBox!.y)).toBeLessThan(2);
+
+  // Verify the fixed search still functions after scroll
+  await filter.fill('24');
+  await expect(page.getByTestId('new-session-model-option-mock/model-24')).toBeVisible();
+  await filter.fill('');
+
+  // Now test the model configuration manager
+  await page.getByTestId('new-session-model-settings').click();
+  const dialog = page.getByRole('dialog', { name: 'Vercel AI Gateway model configuration' });
+  await expect(dialog).toBeVisible();
+
+  const managerFilter = dialog.getByTestId('model-manager-filter');
+  await expect(managerFilter).toBeVisible();
+  const initialManagerBox = await managerFilter.boundingBox();
+  expect(initialManagerBox).not.toBeNull();
+
+  // Scroll the dialog body
+  const formBody = dialog.locator('.conn-form-body');
+  await formBody.evaluate(el => { el.scrollTop = 300; });
+  await page.waitForTimeout(100);
+
+  // Search filter must remain visible and fixed in place
+  await expect(managerFilter).toBeVisible();
+  const scrolledManagerBox = await managerFilter.boundingBox();
+  expect(scrolledManagerBox).not.toBeNull();
+  expect(Math.abs(scrolledManagerBox!.y - initialManagerBox!.y)).toBeLessThan(2);
+});
+

@@ -2,7 +2,60 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
 import { AcpAgentHost, acpTurnTelemetry, resolveAcpReasoningValue } from './acpAgentHost';
-import { pickPermissionOptionId } from './acpClient';
+import { AcpClientWrapper, pickPermissionOptionId } from './acpClient';
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+test('ACP model discovery preserves existing login and honors explicit authentication', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'praxis-acp-auth-'));
+  const fixture = join(folder, 'agent.mjs');
+  const calls = join(folder, 'calls.jsonl');
+  await writeFile(fixture, `
+import { createInterface } from 'node:readline';
+import { appendFileSync } from 'node:fs';
+for await (const line of createInterface({ input: process.stdin })) {
+  const request = JSON.parse(line);
+  appendFileSync(process.env.AUTH_PROBE_CALLS, JSON.stringify(request) + '\\n');
+  let result = {};
+  if (request.method === 'initialize') result = {
+    protocolVersion: 1, agentCapabilities: {},
+    authMethods: [{ id: 'api-key', name: 'API Key' }, { id: 'chat-gpt', name: 'ChatGPT' }]
+  };
+  if (request.method === 'session/new') result = {
+    sessionId: 'probe', configOptions: [{ id: 'model', category: 'model', name: 'Model',
+      type: 'select', currentValue: 'discovered-model',
+      options: [{ value: 'discovered-model', name: 'Discovered model', _meta: { copilotUsage: '14x' } }] }]
+  };
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n');
+}
+`);
+  try {
+    for (const authMethod of [undefined, 'chat-gpt']) {
+      await writeFile(calls, '');
+      const client = new AcpClientWrapper({
+        command: process.execPath, args: [fixture], workingDirectory: folder,
+        env: { AUTH_PROBE_CALLS: calls }, authMethod,
+        requestPermission: async () => 'deny', onSessionUpdate: () => {}
+      });
+      try {
+        await client.connect();
+        assert.equal((await client.getModelOption())?.currentValue, 'discovered-model');
+      } finally {
+        await client.shutdown();
+      }
+      const requests = (await readFile(calls, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+      const authentication = requests.filter(request => request.method === 'authenticate');
+      assert.deepEqual(authentication.map(request => request.params.methodId), authMethod ? [authMethod] : []);
+      assert.ok(requests.some(request => request.method === 'session/new'));
+    }
+    const agentHost = new AcpAgentHost({} as never, { appendLine: () => {} });
+    const choices = await agentHost.listAvailableModels({ command: process.execPath, args: [fixture], workingDirectory: folder, env: { AUTH_PROBE_CALLS: calls } });
+    assert.equal(choices?.options[0].pricingLabel, '14× premium requests', 'ACP billing metadata is retained when a native catalog has no matching row');
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+});
 
 /**
  * A workflow stage that hits a usage limit is retried on another AI under the same

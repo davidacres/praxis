@@ -79,7 +79,7 @@ const modelConfigOption = () => ({
   category: 'model',
   type: 'select',
   currentValue: currentModel,
-  options: [
+  options: process.env.PRAXIS_FAKE_ACP_MODEL_CHOICES ? JSON.parse(process.env.PRAXIS_FAKE_ACP_MODEL_CHOICES) : [
     { value: 'fake-default', name: 'Fake Default' },
     { value: 'fake-fast', name: 'Fake Fast' }
   ]

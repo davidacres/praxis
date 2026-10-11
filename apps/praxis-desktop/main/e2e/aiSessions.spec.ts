@@ -687,6 +687,9 @@ test('the session composer model picker honours the curated enabled models', asy
   await win.locator('[data-testid="session-model"]').click();
   const uncurated = win.locator('[data-testid="session-model-menu"]');
   await expect(uncurated).toBeVisible();
+  expect((await uncurated.boundingBox())!.width).toBeGreaterThanOrEqual(600);
+  await expect(uncurated.locator('.composer-model-columns')).toContainText('Context');
+  await expect(uncurated.locator('.composer-model-columns')).toContainText('Price');
   // `mock/model` renders as the pinned Default row and the session's own model
   // (absent from the catalog) as the Current row; both are expected extras.
   await expect.poll(() => optionIds(uncurated), { timeout: 15000 }).toEqual(

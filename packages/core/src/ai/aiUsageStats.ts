@@ -142,12 +142,17 @@ function addEventToBucket(bucket: UsageBucket, event: AiUsageEvent, costTotals: 
  * appears, zeroed — a chart with silently-skipped gaps reads as "no data
  * exists" instead of "nothing happened", and week-over-week comparison needs
  * the immediately preceding bucket to exist even when it's empty.
+ *
+ * Passing `provider` restricts the buckets to that provider's events — the
+ * single source of truth for provider-scoped rollups; omit it for account-wide
+ * totals across every provider.
  */
 export function usageSeries(
   events: readonly AiUsageEvent[],
   granularity: UsageGranularity,
   periodsBack: number,
-  referenceDate: Date = new Date()
+  referenceDate: Date = new Date(),
+  provider?: AiProvider
 ): UsageBucket[] {
   const latestStart = periodStart(referenceDate, granularity);
   const starts: Date[] = [latestStart];
@@ -164,6 +169,9 @@ export function usageSeries(
   const rangeEnd = nextPeriodStart(starts[starts.length - 1], granularity);
 
   for (const event of events) {
+    if (provider && event.provider !== provider) {
+      continue;
+    }
     const at = new Date(event.timestamp);
     if (Number.isNaN(at.getTime()) || at < rangeStart || at >= rangeEnd) {
       continue;

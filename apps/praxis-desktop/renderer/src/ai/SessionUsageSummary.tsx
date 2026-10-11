@@ -65,10 +65,10 @@ export function SessionUsageSummary({
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      window.praxis.aiUsage.series('hour', 1),
-      window.praxis.aiUsage.series('day', 1),
-      window.praxis.aiUsage.series('week', 1),
-      window.praxis.aiUsage.series('month', 1),
+      window.praxis.aiUsage.series('hour', 1, selectedProvider),
+      window.praxis.aiUsage.series('day', 1, selectedProvider),
+      window.praxis.aiUsage.series('week', 1, selectedProvider),
+      window.praxis.aiUsage.series('month', 1, selectedProvider),
       selectedProvider ? window.praxis.aiUsage.providerSnapshot(selectedProvider) : Promise.resolve(undefined)
     ]).then(([hour, day, week, month, snapshot]) => {
       if (cancelled) return;
@@ -175,13 +175,18 @@ export function SessionUsageSummary({
               </strong>
               <small>{isLimit ? (session?.lastError ?? 'Provider limit reached') : session?.cost ? formatCost(session.cost) : !session ? activityLabel ? 'Chat token and cost totals are not available' : 'No usage recorded for this session yet' : 'Cost not reported by provider'}</small>
             </div>
-            {(['hour', 'day', 'week', 'month'] as const).map(period => (
-              <div className="session-usage-card" key={period}>
-                <span className="session-usage-label">Last {period}</span>
-                <strong>{formatWindow(windows[period])}</strong>
-                <small>{windows[period]?.costByCurrency.map(cost => `${cost.amount.toFixed(2)} ${cost.currency}`).join(', ') || 'Cost unavailable'}</small>
-              </div>
-            ))}
+            {(['hour', 'day', 'week', 'month'] as const).map(period => {
+              const bucket = windows[period];
+              const isEmpty = !bucket || bucket.eventCount === 0;
+              const cost = bucket?.costByCurrency.map(c => `${c.amount.toFixed(2)} ${c.currency}`).join(', ');
+              return (
+                <div className={`session-usage-card${isEmpty ? ' is-empty' : ''}`} key={period}>
+                  <span className="session-usage-label">Last {period}</span>
+                  <strong>{formatWindow(bucket)}</strong>
+                  <small>{isEmpty ? 'No usage recorded' : cost || 'Cost unavailable'}</small>
+                </div>
+              );
+            })}
           </div>
           {spendRatio !== undefined && spendRatio >= 0.8 && (
             <div className={`session-usage-warning-banner${spendRatio >= 1 ? ' is-critical' : ''}`}>

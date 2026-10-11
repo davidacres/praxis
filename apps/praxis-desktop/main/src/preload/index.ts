@@ -361,15 +361,18 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:checkMergeRequestFeedback', issueKey, connectionId)
   },
   aiUsage: {
-    series: (granularity: UsageGranularity, periodsBack: number) =>
-      ipcRenderer.invoke('aiUsage:series', granularity, periodsBack),
+    series: (granularity: UsageGranularity, periodsBack: number, provider?: AiProvider) =>
+      ipcRenderer.invoke('aiUsage:series', granularity, periodsBack, provider),
     compareLatestPeriod: (granularity: UsageGranularity) =>
       ipcRenderer.invoke('aiUsage:compareLatestPeriod', granularity),
     dashboardSummary: () => ipcRenderer.invoke('aiUsage:dashboardSummary'),
     listEvents: () => ipcRenderer.invoke('aiUsage:listEvents'),
     providerSnapshot: (provider: AiProvider) => ipcRenderer.invoke('aiUsage:providerSnapshot', provider),
     providerSnapshots: () => ipcRenderer.invoke('aiUsage:providerSnapshots'),
-    setProviderUsageKey: (provider: AiProvider, value: string) => ipcRenderer.invoke('aiUsage:setProviderUsageKey', provider, value)
+    setProviderUsageKey: (provider: AiProvider, value: string) => ipcRenderer.invoke('aiUsage:setProviderUsageKey', provider, value),
+    alibabaConsoleStatus: (provider: AiProvider) => ipcRenderer.invoke('aiUsage:alibabaConsoleStatus', provider),
+    alibabaConsoleSignIn: (provider: AiProvider) => ipcRenderer.invoke('aiUsage:alibabaConsoleSignIn', provider),
+    alibabaConsoleSignOut: () => ipcRenderer.invoke('aiUsage:alibabaConsoleSignOut')
   },
   coordination: {
     state: () => ipcRenderer.invoke('coordination:state'),

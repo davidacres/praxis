@@ -501,6 +501,10 @@ test('the model manager panel curates which models the composer offers', async (
   await win.locator('[data-testid="ai-provider-row-vercel-gateway"]').click();
   await win.locator('[data-testid="ai-manage-models-btn"]').click();
   await win.locator('[data-testid="model-manager-list"]').waitFor({ timeout: 10000 });
+  const filterInput = win.locator('[data-testid="model-manager-filter"]');
+  await expect(filterInput).toBeVisible();
+  const searchBar = win.locator('.model-manager-search-bar');
+  await expect(searchBar).toHaveCSS('position', 'sticky');
 
   // Regression: two rapid clicks must both land, not race each other via a
   // stale settings prop (see ModelManagerPanel's local-optimistic-state fix).

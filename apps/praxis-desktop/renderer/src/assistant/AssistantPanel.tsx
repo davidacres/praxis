@@ -4,6 +4,7 @@ import { Icon } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
 import { ReasoningEffortSlider } from '../ai/ReasoningEffortSlider';
 import { SessionPermissionModeControl } from '../ai/SessionPermissionModeControl';
+import { SessionGitBranchControl } from '../ai/SessionGitBranchControl';
 import { SessionUsageSummary } from '../ai/SessionUsageSummary';
 import { useSettings } from '../settings/useSettings';
 import { applyEnabledModelCuration, fetchModelOptions, hasModelCatalog, providerIconName, providerLabel, supportsReasoningEffort } from '../ai/modelProviders';
@@ -254,6 +255,11 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
       />
       <div className="session-composer-footer" title="Virtual Team chat is read-only; permission mode is included as context for the assistant.">
         <SessionPermissionModeControl value={permissionMode} onChange={setPermissionMode} testId="assistant" disabled={a.busy} />
+        <SessionGitBranchControl
+          workingDirectory={workingDirectory || undefined}
+          testId="assistant"
+          disabled={a.busy}
+        />
       </div>
       </div>
     </section>

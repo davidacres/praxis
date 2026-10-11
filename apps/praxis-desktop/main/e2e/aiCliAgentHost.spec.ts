@@ -230,7 +230,7 @@ test('a CLI-hosted turn shows the agent\'s thought in a collapsed Thought block'
   await expect(thought).toHaveCount(1);
   // Collapsed by default, with the streamed chunks joined into one thought.
   await expect(thought).not.toHaveAttribute('open', '');
-  await thought.locator('summary').click();
+  await thought.getByTestId('session-thought-summary').click();
   await expect(thought.locator('[data-testid="session-thought-markdown"]')).toContainText('Checking the ACP thought path.');
   await expect(win.locator('[data-testid="session-chat-assistant"]')).toHaveCount(1);
 });
@@ -485,6 +485,72 @@ test('listCliModelOptions reads the real model list from session/new', async () 
   const options = await listCliModelOptions(win, 'claude-code-cli');
   expect(options?.currentValue).toBe('fake-default');
   expect(options?.options.map(o => o.value)).toEqual(['fake-default', 'fake-fast']);
+});
+
+test('ACP model menus show context sizes and published pricing for model aliases', async () => {
+  const codexHome = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'praxis-codex-menu-'));
+  fs.writeFileSync(path.join(codexHome, 'models_cache.json'), JSON.stringify({ models: [
+    { slug: 'fake-fast', context_window: 272000, max_context_window: 872000 },
+    { slug: 'fake-default', context_window: 272000 }
+  ] }));
+  try {
+    app = await launchTestApp(undefined, undefined, { CODEX_HOME: codexHome, PRAXIS_FAKE_ACP_MODEL_CHOICES: JSON.stringify([
+      { value: 'fake-default', name: 'Opus 5.5' }, { value: 'fake-fast', name: 'Sonnet 5.5' },
+      { value: 'claude-opus-5-5', name: 'Claude Opus 5.5 — extended reasoning and large repository work' }
+    ]) });
+    const win = app.window;
+    await configureCliProvider(win, 'codex-cli', FIXTURE_PATH);
+    await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+    await win.reload();
+    await win.getByTestId('new-session-provider-chip').click();
+    await win.getByTestId('new-session-provider-option-codex-cli').click();
+    await win.getByTestId('new-session-model-chip').click();
+    const fast = win.getByTestId('new-session-model-option-fake-fast');
+    await expect(fast).toContainText('272k');
+    await expect(fast).toContainText('$2.00 / $10.00 /1M');
+    await expect(fast).not.toContainText('API base');
+    await expect(fast.locator('.is-cost')).toHaveAttribute('title', /API reference rates/);
+    await expect(win.getByTestId('new-session-model-option-default')).toContainText('272k');
+    await expect(win.getByTestId('new-session-model-option-default')).toContainText('$4.00 / $20.00 /1M');
+    const menu = win.getByRole('listbox', { name: 'Model', exact: true });
+    expect((await menu.boundingBox())!.width).toBeGreaterThanOrEqual(600);
+    const longName = win.getByTestId('new-session-model-option-claude-opus-5-5').locator('.composer-model-option-name');
+    expect(await longName.evaluate(element => element.scrollWidth <= element.clientWidth && getComputedStyle(element).whiteSpace !== 'nowrap')).toBe(true);
+    const columns = await menu.locator('[role="option"]').evaluateAll(rows => rows.map(row => ({
+      context: row.querySelector('.is-context')?.getBoundingClientRect().left,
+      price: row.querySelector('.is-cost')?.getBoundingClientRect().left
+    })));
+    expect(columns.every(row => row.context === columns[0].context && row.price === columns[0].price)).toBe(true);
+    await win.screenshot({ path: test.info().outputPath('codex-model-metadata.png') });
+    await fast.click();
+    await win.getByTestId('new-session-provider-chip').click();
+    await win.getByTestId('new-session-provider-option-claude-code-cli').click();
+    await win.getByTestId('new-session-model-chip').click();
+    await expect(fast).toContainText('1M');
+    await expect(fast).toContainText('$2.00 / $10.00 /1M');
+    await expect(win.getByTestId('new-session-model-option-default')).toContainText('1M');
+    await fast.click();
+    await win.setViewportSize({ width: 800, height: 700 });
+    await win.getByTestId('new-session-model-chip').click();
+    const bounded = (await menu.boundingBox())!;
+    expect(bounded.x).toBeGreaterThanOrEqual(12);
+    expect(bounded.x + bounded.width).toBeLessThanOrEqual(788);
+    expect(bounded.y).toBeGreaterThanOrEqual(12);
+    expect(bounded.y + bounded.height).toBeLessThanOrEqual(688);
+    await win.screenshot({ path: test.info().outputPath('model-menu-window-boundaries.png') });
+    await fast.click();
+    await delegate(win, 'APP-203', 'claude-code-cli', 'Say hello', 'fake-fast');
+    await expect.poll(async () => (await readSession(win, 'APP-203'))?.state, { timeout: 15000 }).toBe('completed');
+    await openSession(win, 'APP-203');
+    await win.getByTestId('session-model').click();
+    const sessionMenu = win.getByTestId('session-model-menu');
+    expect((await sessionMenu.boundingBox())!.width).toBeGreaterThanOrEqual(600);
+    await expect(sessionMenu).not.toContainText('API base');
+    await expect(sessionMenu.getByTestId('session-model-option-fake-fast')).toContainText('$2.00 / $10.00 /1M');
+    await win.screenshot({ path: test.info().outputPath('existing-session-model-menu.png') });
+  } finally {
+    fs.rmSync(codexHome, { recursive: true, force: true });
+  }
 });
 
 test('delegating with a model override applies it via session/set_config_option', async () => {

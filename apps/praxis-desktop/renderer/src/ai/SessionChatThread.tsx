@@ -486,14 +486,27 @@ export function SessionChatThread({
                       ))}
                     </ul>
                   )}
-                  {thoughtSteps.map((step, stepIndex) => (
-                    <Markdown
-                      key={stepIndex}
-                      text={step}
-                      testId="session-thought-markdown"
-                      imageSessionId={session?.issueKey}
-                    />
-                  ))}
+                  {/* The tool timeline above is the index of the turn; the
+                      model's raw reasoning is the archive — one expander in,
+                      never streamed beside the timeline. */}
+                  {thoughtSteps.length > 0 && (
+                    <details className="session-chat-thought-reasoning" data-testid="session-thought-reasoning">
+                      <summary className="session-chat-thought-reasoning-summary">
+                        <Icon name="chats" size={11} />
+                        Show full reasoning
+                      </summary>
+                      <div className="session-chat-thought-reasoning-content">
+                        {thoughtSteps.map((step, stepIndex) => (
+                          <Markdown
+                            key={stepIndex}
+                            text={step}
+                            testId="session-thought-markdown"
+                            imageSessionId={session?.issueKey}
+                          />
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </div>
               </details>
             )}
@@ -668,6 +681,14 @@ export function SessionChatThread({
               <span>{session.model || (session.provider ? providerLabel(session.provider) : 'AI agent')}</span>
             </div>
           </div>
+          <LiveTurnActivityIndicator
+            startedAt={activeTurnStartedAt ?? session.events?.[session.events.length - 1]?.timestamp ?? session.startedAt}
+            statusText={liveActivityText ?? liveActivity(session) ?? 'Working…'}
+            provider={activityProvider ?? session.provider}
+            model={session.model}
+          />
+          {/* The indicator carries "what is it doing now"; the raw stream is
+              opt-in detail, collapsed, rendered after it. */}
           {session.reasoningText && (
             <details
               className="session-chat-thought session-chat-thought-streaming"
@@ -682,12 +703,6 @@ export function SessionChatThread({
               </div>
             </details>
           )}
-          <LiveTurnActivityIndicator
-            startedAt={activeTurnStartedAt ?? session.events?.[session.events.length - 1]?.timestamp ?? session.startedAt}
-            statusText={liveActivityText ?? liveActivity(session) ?? 'Working…'}
-            provider={activityProvider ?? session.provider}
-            model={session.model}
-          />
         </div>
       )}
 

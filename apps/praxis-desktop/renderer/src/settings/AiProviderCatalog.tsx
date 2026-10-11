@@ -259,6 +259,77 @@ function FormRow({ label, description, stacked, children }: { label: string; des
   );
 }
 
+/**
+ * Coding Plan quota comes from the Alibaba Cloud console, which only answers a
+ * signed-in console session — the plan's chat key is refused. Main hosts that
+ * sign-in in its own window and partition; this row only starts it and shows
+ * whether a session is held.
+ */
+function AlibabaConsoleSignIn({ providerId }: { providerId?: AiProvider }) {
+  const [signedIn, setSignedIn] = useState<boolean | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!providerId) return;
+    let live = true;
+    void window.praxis.aiUsage.alibabaConsoleStatus(providerId).then(result => {
+      if (live) setSignedIn(result.signedIn);
+    }).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [providerId]);
+
+  const run = async (action: () => Promise<{ signedIn: boolean }>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setSignedIn((await action()).signedIn);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <FormRow label="Plan usage" description="5-hour, weekly and monthly request quota, read from your Alibaba Cloud console sign-in." stacked>
+      <div className="ai-key-controls" data-testid="alibaba-console-signin">
+        {!providerId ? (
+          <span className="settings-hint">Save this endpoint, then sign in to Alibaba Cloud to show plan quota.</span>
+        ) : (
+          <>
+            <span className="settings-hint" data-testid="alibaba-console-status">
+              {signedIn === undefined ? 'Checking…' : signedIn ? 'Signed in to the Alibaba Cloud console' : 'Not signed in'}
+            </span>
+            <button
+              type="button"
+              className="btn"
+              data-testid="alibaba-console-signin-button"
+              disabled={busy}
+              onClick={() => void run(() => window.praxis.aiUsage.alibabaConsoleSignIn(providerId))}
+            >
+              {busy ? 'Waiting for sign-in…' : signedIn ? 'Sign in again' : 'Sign in to Alibaba Cloud'}
+            </button>
+            {signedIn && (
+              <button
+                type="button"
+                className="btn"
+                data-testid="alibaba-console-signout-button"
+                disabled={busy}
+                onClick={() => void run(() => window.praxis.aiUsage.alibabaConsoleSignOut())}
+              >
+                Sign out
+              </button>
+            )}
+          </>
+        )}
+        {error && <span className="settings-hint" role="alert">{error}</span>}
+      </div>
+    </FormRow>
+  );
+}
+
 type AuthChoice = 'bearer' | 'none' | 'header';
 
 /**
@@ -383,6 +454,8 @@ export function CustomEndpointForm({
   const selectedPresetId = initial?.presetId ?? preset?.id;
   const isMiniMax = selectedPresetId === 'minimax';
   const isOpenRouter = selectedPresetId === 'openrouter';
+  const isAlibabaCodingPlan = selectedPresetId === 'alibaba-coding-plan';
+  const isAlibaba = isAlibabaCodingPlan || selectedPresetId === 'alibaba-model-studio' || selectedPresetId === 'alibaba-token-plan';
 
   return (
     <div className="custom-endpoint-form" data-testid={testId}>
@@ -411,6 +484,19 @@ export function CustomEndpointForm({
             Use an OpenRouter model ID from the live catalog (for example, <code>provider/model</code>). OpenRouter’s model catalog includes per-model pricing, and supports streaming and tool use where the selected model supports them. Charges and routing follow your OpenRouter account settings.
             {' '}<a style={{ color: 'var(--accent)' }} href="https://openrouter.ai/docs/quickstart" target="_blank" rel="noreferrer">API guide</a>
             {' · '}<a style={{ color: 'var(--accent)' }} href="https://openrouter.ai/models" target="_blank" rel="noreferrer">Models and pricing</a>
+          </div>
+        </FormRow>
+      )}
+      {isAlibaba && (
+        <FormRow label="Alibaba Model Studio" stacked>
+          <div data-testid="alibaba-setup-help">
+            {isAlibabaCodingPlan
+              ? <>Uses your Coding Plan key (it starts with <code>sk-sp-</code>), shown on the console’s Coding Plan page. Plan quota is read through your Alibaba Cloud console sign-in, not the key.</>
+              : selectedPresetId === 'alibaba-token-plan'
+                ? <>Uses your Token Plan subscription key (it starts with <code>sk-sp-</code>), generated on the plan’s My Subscription page.</>
+                : <>Uses a pay-as-you-go Model Studio key (it starts with <code>sk-</code>).</>}
+            {' '}Keys and base URLs are paired: a plan key on the pay-as-you-go URL is rejected or billed pay-as-you-go, so keep this preset’s URL with its key. The URL shown is Singapore; if your key belongs to another region, use the API Host shown beside it in the console.
+            {' '}<a style={{ color: 'var(--accent)' }} href="https://docs.modelstudio.console.alibabacloud.com/en/model-studio/get-api-key" target="_blank" rel="noreferrer">Getting an API key</a>
           </div>
         </FormRow>
       )}
@@ -474,6 +560,7 @@ export function CustomEndpointForm({
           </div>
         </FormRow>
       )}
+      {isAlibabaCodingPlan && <AlibabaConsoleSignIn providerId={initial?.id} />}
       <FormRow label="Default model" description="Listed by the server’s /models once tested. No list? Type the id.">
         <ChipSelect
           block

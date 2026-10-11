@@ -1767,7 +1767,7 @@ export function App() {
       conversational
       defaultToolMode="project-only"
       autoFocusGoal
-      onSubmit={async ({ title, goal, provider, model, reasoningEffort, permissionMode, toolMode, mode, workingDirectory, agentId, profileId, hostId, skillNames }) => {
+      onSubmit={async ({ title, goal, provider, model, reasoningEffort, permissionMode, toolMode, mode, workingDirectory, runInWorktree, agentId, profileId, hostId, skillNames }) => {
         const record = await window.praxis.ai.delegate({
           mode,
           task: { goal },
@@ -1777,6 +1777,7 @@ export function App() {
           permissionMode,
           toolMode: workingDirectory ? toolMode : 'project-only',
           workingDirectory,
+          ...(runInWorktree ? { runInWorktree: true } : {}),
           ...(agentId ? { agentId } : {}),
           ...(profileId ? { profileId } : {}),
           ...(hostId ? { hostId } : {}),

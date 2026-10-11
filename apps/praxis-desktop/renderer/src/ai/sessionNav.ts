@@ -1,6 +1,6 @@
 import type { AgentEventSummary, AgentSessionRecord, AiProvider, Connection, ProjectRecord } from '@praxis/core';
 import { isTerminalAgentState } from './aiSessionState';
-import { providerLabel } from './modelProviders';
+import { ACP_PROVIDERS, providerLabel } from './modelProviders';
 
 /**
  * Naming and classification for an agent session, shared by the three surfaces
@@ -159,6 +159,21 @@ export function formatContextLength(tokens?: number): string | undefined {
   return `${tokens}`;
 }
 
+/** Keep reference-price provenance in the tooltip, rather than crowding the model name. */
+export function modelPriceLabel(label: string | undefined): string | undefined {
+  const formatted = label?.replace(/^API base /, '').replace(/\$(\d+(?:\.\d+)?)/g, (_match, amount: string) => {
+    const value = Number(amount);
+    return `$${value.toFixed(value > 0 && value < 0.01 ? 3 : 2)}`;
+  });
+  return formatted?.includes('$') && !formatted.includes('/1M') ? `${formatted} /1M` : formatted;
+}
+
+export function modelPriceTitle(label: string | undefined): string | undefined {
+  return label?.startsWith('API base ')
+    ? 'Published base API reference rates per 1M input / output tokens. CLI subscription billing can differ.'
+    : undefined;
+}
+
 /** Formatted cost rates for model menus and chips, e.g. "$1.40 / $4.40" or "Free". */
 export function formatModelCost(pricing?: { inputPerMillionUsd: number; outputPerMillionUsd: number }): string | undefined {
   if (!pricing) return undefined;
@@ -287,10 +302,18 @@ function normalizeModelName(raw: string): string {
 
 export function getKnownContextLength(
   model: string | undefined,
-  _provider?: AiProvider
+  provider?: AiProvider
 ): number | undefined {
   if (!model) {
     return undefined;
+  }
+  if (provider && ACP_PROVIDERS.has(provider)) {
+    // Cursor exposes the selected context in its model id. Other CLI hosts
+    // need their own metadata; an API model window is not a CLI session limit.
+    const context = provider === 'cursor-cli' ? model.match(/\[(?:[^\]]*,)?context=(\d+(?:\.\d+)?)([km]?)(?:,|\])/i) : undefined;
+    if (!context) return undefined;
+    const size = Number(context[1]) * (context[2].toLowerCase() === 'm' ? 1_000_000 : context[2].toLowerCase() === 'k' ? 1000 : 1);
+    return Number.isSafeInteger(size) && size > 0 ? size : undefined;
   }
   const normalized = normalizeModelName(model);
 
@@ -355,6 +378,9 @@ export function getModelPricing(
   provider: AiProvider | undefined,
   model: string | undefined
 ): ModelPriceRates | undefined {
+  // CLI plans and API billing are different products. Only explicit adapter
+  // pricing may be displayed for CLI models, never an API-table fallback.
+  if (provider && ACP_PROVIDERS.has(provider)) return undefined;
   if (!model) {
     return undefined;
   }
@@ -1128,6 +1154,9 @@ export function canonicalAiProvider(providerOrModel: string): string {
   }
   if (norm.includes('groq')) {
     return 'groq';
+  }
+  if (norm.includes('alibaba') || norm.includes('dashscope') || norm.includes('model-studio')) {
+    return 'alibaba';
   }
   if (norm.includes('ollama') || norm.includes('local') || norm.includes('llama') || norm.includes('qwen')) {
     return 'ollama';

@@ -477,11 +477,17 @@ export class AcpAgentHost {
       const flatChoices = modelOption.options.flatMap(entry => ('group' in entry ? entry.options : [entry]));
       return {
         currentValue: modelOption.currentValue,
-        options: flatChoices.map(choice => ({
-          value: choice.value,
-          name: choice.name,
-          description: choice.description ?? undefined
-        }))
+        options: flatChoices.map(choice => {
+          const usage = choice._meta?.copilotUsage;
+          const pricingLabel = typeof usage === 'string' && /^\d+(?:\.\d+)?x$/.test(usage)
+            ? `${usage.slice(0, -1)}× premium requests` : undefined;
+          return {
+            value: choice.value,
+            name: choice.name,
+            description: choice.description ?? undefined,
+            ...(pricingLabel ? { pricingLabel } : {})
+          };
+        })
       };
     } finally {
       await client.shutdown();

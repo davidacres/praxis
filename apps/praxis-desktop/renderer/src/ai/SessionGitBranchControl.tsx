@@ -5,7 +5,11 @@ import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 
 interface SessionGitBranchControlProps {
-  session: AgentSessionRecord;
+  session?: AgentSessionRecord;
+  workingDirectory?: string;
+  runInWorktree?: boolean;
+  onToggleWorktree?: (active: boolean) => void;
+  testId?: string;
   disabled?: boolean;
 }
 
@@ -16,25 +20,32 @@ function basename(pathStr?: string): string {
   return parts[parts.length - 1] || pathStr;
 }
 
-export function SessionGitBranchControl({ session, disabled = false }: SessionGitBranchControlProps) {
+export function SessionGitBranchControl({
+  session,
+  workingDirectory,
+  runInWorktree = false,
+  onToggleWorktree,
+  testId = 'session',
+  disabled = false
+}: SessionGitBranchControlProps) {
   const { confirm, prompt } = useDialogs();
   const [menuPosition, setMenuPosition] = useState<{ bottom: number; left: number }>();
   const chipRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const [currentBranch, setCurrentBranch] = useState<string | undefined>(session.worktreeBranch);
+  const [currentBranch, setCurrentBranch] = useState<string | undefined>(session?.worktreeBranch);
   const [branches, setBranches] = useState<string[]>([]);
   const [branchFilter, setBranchFilter] = useState('');
-  const [isGitRepo, setIsGitRepo] = useState<boolean>(Boolean(session.worktreeBranch));
+  const [isGitRepo, setIsGitRepo] = useState<boolean>(Boolean(session?.worktreeBranch));
   const [loading, setLoading] = useState<boolean>(false);
   const [busyAction, setBusyAction] = useState<string | undefined>();
 
-  const repositoryPath = session.worktreePath || session.workingDirectory;
-  const isWorktree = Boolean(session.worktreePath);
+  const repositoryPath = session?.worktreePath || session?.workingDirectory || workingDirectory;
+  const isWorktree = Boolean(session?.worktreePath || runInWorktree);
 
   const refreshGitInfo = useCallback(async () => {
     if (!repositoryPath) {
-      setCurrentBranch(session.worktreeBranch);
+      setCurrentBranch(session?.worktreeBranch);
       setIsGitRepo(false);
       setBranches([]);
       return;
@@ -43,14 +54,14 @@ export function SessionGitBranchControl({ session, disabled = false }: SessionGi
     try {
       const snapshot = await window.praxis.git.open(repositoryPath);
       setIsGitRepo(true);
-      setCurrentBranch(snapshot.currentBranch || session.worktreeBranch);
+      setCurrentBranch(snapshot.currentBranch || session?.worktreeBranch);
       setBranches(
         snapshot.branches
           .filter(b => !b.isRemote)
           .map(b => b.name)
       );
     } catch {
-      if (session.worktreeBranch) {
+      if (session?.worktreeBranch) {
         setIsGitRepo(true);
         setCurrentBranch(session.worktreeBranch);
       } else {
@@ -60,7 +71,7 @@ export function SessionGitBranchControl({ session, disabled = false }: SessionGi
     } finally {
       setLoading(false);
     }
-  }, [repositoryPath, session.worktreeBranch]);
+  }, [repositoryPath, session?.worktreeBranch]);
 
   useEffect(() => {
     void refreshGitInfo();
@@ -119,49 +130,57 @@ export function SessionGitBranchControl({ session, disabled = false }: SessionGi
   };
 
   const handleSetWorktree = async () => {
-    if (!repositoryPath) return;
-    setMenuPosition(undefined);
-    const defaultBranch = `session-${session.issueKey.toLowerCase()}`;
-    const branchName = await prompt({
-      title: 'Set up worktree for session',
-      message: 'Creates an isolated git worktree so the agent works in a separate directory without modifying your main checkout.',
-      label: 'Worktree branch name',
-      initialValue: defaultBranch,
-      confirmLabel: 'Create worktree',
-      validate: value => (/^[a-z0-9][a-z0-9._/-]*$/i.test(value.trim()) ? undefined : 'Letters, digits, and . _ / - only.')
-    });
-    if (!branchName) return;
+    if (session) {
+      if (!repositoryPath) return;
+      setMenuPosition(undefined);
+      const defaultBranch = `session-${session.issueKey.toLowerCase()}`;
+      const branchName = await prompt({
+        title: 'Set up worktree for session',
+        message: 'Creates an isolated git worktree so the agent works in a separate directory without modifying your main checkout.',
+        label: 'Worktree branch name',
+        initialValue: defaultBranch,
+        confirmLabel: 'Create worktree',
+        validate: value => (/^[a-z0-9][a-z0-9._/-]*$/i.test(value.trim()) ? undefined : 'Letters, digits, and . _ / - only.')
+      });
+      if (!branchName) return;
 
-    setBusyAction('Creating worktree…');
-    try {
-      await window.praxis.ai.setWorktree(session.issueKey, { branchName: branchName.trim() });
-      await refreshGitInfo();
-    } catch (err) {
-      console.error('Failed to create worktree:', err);
-    } finally {
-      setBusyAction(undefined);
+      setBusyAction('Creating worktree…');
+      try {
+        await window.praxis.ai.setWorktree(session.issueKey, { branchName: branchName.trim() });
+        await refreshGitInfo();
+      } catch (err) {
+        console.error('Failed to create worktree:', err);
+      } finally {
+        setBusyAction(undefined);
+      }
+    } else if (onToggleWorktree) {
+      onToggleWorktree(true);
     }
   };
 
   const handleRemoveWorktree = async () => {
-    if (!session.worktreePath) return;
-    setMenuPosition(undefined);
-    const ok = await confirm({
-      title: 'Remove session worktree?',
-      message: `${session.worktreePath}\n\nThe worktree checkout and branch ${session.worktreeBranch ?? ''} will be removed. The session will point back to the main checkout.`,
-      confirmLabel: 'Remove worktree',
-      danger: true
-    });
-    if (!ok) return;
+    if (session) {
+      if (!session.worktreePath) return;
+      setMenuPosition(undefined);
+      const ok = await confirm({
+        title: 'Remove session worktree?',
+        message: `${session.worktreePath}\n\nThe worktree checkout and branch ${session.worktreeBranch ?? ''} will be removed. The session will point back to the main checkout.`,
+        confirmLabel: 'Remove worktree',
+        danger: true
+      });
+      if (!ok) return;
 
-    setBusyAction('Removing worktree…');
-    try {
-      await window.praxis.ai.removeWorktree(session.issueKey);
-      await refreshGitInfo();
-    } catch (err) {
-      console.error('Failed to remove worktree:', err);
-    } finally {
-      setBusyAction(undefined);
+      setBusyAction('Removing worktree…');
+      try {
+        await window.praxis.ai.removeWorktree(session.issueKey);
+        await refreshGitInfo();
+      } catch (err) {
+        console.error('Failed to remove worktree:', err);
+      } finally {
+        setBusyAction(undefined);
+      }
+    } else if (onToggleWorktree) {
+      onToggleWorktree(false);
     }
   };
 
@@ -183,13 +202,15 @@ export function SessionGitBranchControl({ session, disabled = false }: SessionGi
         ref={chipRef}
         type="button"
         className={`composer-chip session-git-branch-chip${menuPosition ? ' active' : ''}${isWorktree ? ' is-worktree' : ''}`}
-        data-testid="session-git-branch-chip"
+        data-testid={testId === 'session' ? 'session-git-branch-chip' : `${testId}-git-branch-chip`}
         aria-haspopup="listbox"
         aria-expanded={Boolean(menuPosition)}
         disabled={disabled || !repositoryPath}
         title={
           isWorktree
-            ? `Branch: ${displayBranch ?? 'unknown'} (Worktree: ${session.worktreePath})`
+            ? session?.worktreePath
+              ? `Branch: ${displayBranch ?? 'unknown'} (Worktree: ${session.worktreePath})`
+              : `Branch: ${displayBranch ?? 'unknown'} (Isolated worktree)`
             : repositoryPath
               ? `Branch: ${displayBranch ?? 'none'} (${repositoryPath})`
               : 'Attach a working directory to view and manage git branches'
@@ -215,44 +236,49 @@ export function SessionGitBranchControl({ session, disabled = false }: SessionGi
           className="composer-provider-menu session-git-branch-menu"
           role="dialog"
           aria-label="Git branch management"
-          data-testid="session-git-branch-menu"
+          data-testid={testId === 'session' ? 'session-git-branch-menu' : `${testId}-git-branch-menu`}
           style={{ position: 'fixed', bottom: menuPosition.bottom, left: menuPosition.left }}
         >
           <div className="popover-label">Git & Workspace</div>
 
           {/* Worktree Toggle Row */}
-          <div className="session-git-worktree-toggle-row" data-testid="session-git-worktree-toggle-row">
-            <div className="session-git-worktree-toggle-info">
-              <div className="session-git-worktree-toggle-title">
-                <Icon name="folder" size={13} />
-                <strong>Isolated worktree</strong>
-                {isWorktree && <span className="session-git-worktree-tag">active</span>}
+          {(session || onToggleWorktree) && (
+            <>
+              <div className="session-git-worktree-toggle-row" data-testid={testId === 'session' ? 'session-git-worktree-toggle-row' : `${testId}-git-worktree-toggle-row`}>
+                <div className="session-git-worktree-toggle-info">
+                  <div className="session-git-worktree-toggle-title">
+                    <Icon name="folder" size={13} />
+                    <strong>Isolated worktree</strong>
+                    {isWorktree && <span className="session-git-worktree-tag">active</span>}
+                  </div>
+                  <div className="session-git-worktree-toggle-desc">
+                    {isWorktree
+                      ? session?.worktreePath
+                        ? `${basename(session.worktreePath)} (from ${session.worktreeBaseBranch || 'main'})`
+                        : 'Session will start in an isolated git worktree'
+                      : 'Isolate session changes from your main checkout'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isWorktree}
+                  aria-label="Isolated worktree"
+                  className="switch"
+                  data-testid={testId === 'session' ? 'session-git-worktree-toggle' : `${testId}-git-worktree-toggle`}
+                  disabled={busyAction !== undefined}
+                  onClick={() => {
+                    if (isWorktree) {
+                      void handleRemoveWorktree();
+                    } else {
+                      void handleSetWorktree();
+                    }
+                  }}
+                />
               </div>
-              <div className="session-git-worktree-toggle-desc">
-                {isWorktree
-                  ? `${basename(session.worktreePath)} (from ${session.worktreeBaseBranch || 'main'})`
-                  : 'Isolate session changes from your main checkout'}
-              </div>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isWorktree}
-              aria-label="Isolated worktree"
-              className="switch"
-              data-testid="session-git-worktree-toggle"
-              disabled={busyAction !== undefined}
-              onClick={() => {
-                if (isWorktree) {
-                  void handleRemoveWorktree();
-                } else {
-                  void handleSetWorktree();
-                }
-              }}
-            />
-          </div>
-
-          <div className="session-git-menu-divider" />
+              <div className="session-git-menu-divider" />
+            </>
+          )}
 
           {/* Branch Section Header & Inline Action */}
           <div className="session-git-branch-header">

@@ -75,6 +75,49 @@ test('usageSeries: cost is grouped by currency, never summed across currencies',
   assert.equal(eur!.amount, 2);
 });
 
+test("usageSeries: provider filter counts only that provider's events", () => {
+  const reference = new Date('2026-09-16T10:00:00.000Z');
+  const events: AiUsageEvent[] = [
+    event({ timestamp: '2026-09-16T09:00:00.000Z', totalTokens: 100, provider: 'claude-code-cli', cost: { amount: 1, currency: 'USD' } }),
+    event({ timestamp: '2026-09-16T09:30:00.000Z', totalTokens: 300, provider: 'openai' }),
+    // Different day, also claude - lands in its own bucket, still scoped.
+    event({ timestamp: '2026-09-15T09:00:00.000Z', totalTokens: 50, provider: 'claude-code-cli' })
+  ];
+
+  const [yesterday, today] = usageSeries(events, 'day', 2, reference, 'claude-code-cli');
+  assert.equal(today.totalTokens, 100);
+  assert.equal(today.eventCount, 1);
+  assert.deepEqual(today.costByCurrency, [{ currency: 'USD', amount: 1 }]);
+  assert.equal(yesterday.totalTokens, 50);
+});
+
+test('usageSeries: no provider filter sums across all providers', () => {
+  const reference = new Date('2026-09-16T10:00:00.000Z');
+  const events: AiUsageEvent[] = [
+    event({ timestamp: '2026-09-16T09:00:00.000Z', totalTokens: 100, provider: 'claude-code-cli' }),
+    event({ timestamp: '2026-09-16T09:30:00.000Z', totalTokens: 300, provider: 'openai' }),
+    // An event with no provider at all still counts when unscoped.
+    event({ timestamp: '2026-09-16T09:45:00.000Z', totalTokens: 25 })
+  ];
+  const [today] = usageSeries(events, 'day', 1, reference);
+  assert.equal(today.totalTokens, 425);
+  assert.equal(today.eventCount, 3);
+});
+
+test('usageSeries: a provider filter with no matching events yields zeroed buckets, not gaps', () => {
+  const reference = new Date('2026-09-16T10:00:00.000Z');
+  const events: AiUsageEvent[] = [
+    event({ timestamp: '2026-09-16T09:00:00.000Z', totalTokens: 100, provider: 'openai' })
+  ];
+  const series = usageSeries(events, 'day', 2, reference, 'claude-code-cli');
+  assert.equal(series.length, 2);
+  for (const bucket of series) {
+    assert.equal(bucket.totalTokens, 0);
+    assert.equal(bucket.eventCount, 0);
+    assert.deepEqual(bucket.costByCurrency, []);
+  }
+});
+
 test('usageSeries: source totals split correctly', () => {
   const reference = new Date('2026-09-16T10:00:00.000Z');
   const events: AiUsageEvent[] = [
