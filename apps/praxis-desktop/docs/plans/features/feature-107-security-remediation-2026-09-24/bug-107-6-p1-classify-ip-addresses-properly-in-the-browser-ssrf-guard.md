@@ -1,6 +1,6 @@
 # [P1] Classify IP addresses properly in the browser SSRF guard
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:53.009Z
 **Type:** Bug
 **Priority:** High

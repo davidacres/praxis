@@ -1,6 +1,6 @@
 # [P1] Resolve symlinks in the agent path sandbox before reading
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:52.649Z
 **Type:** Bug
 **Priority:** High

@@ -1,6 +1,6 @@
 # [P1] Refuse auto permission mode from project-sourced workflows and stop leaking the app environment to checks
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:54.775Z
 **Type:** Bug
 **Priority:** High

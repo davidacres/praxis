@@ -9,12 +9,14 @@ import { chooseOption } from './chipSelect';
 let app: TestApp | undefined;
 let window: Page;
 
-test.afterEach(async () => {
+async function closeApp(): Promise<void> {
   if (app) {
     await closeTestApp(app);
     app = undefined;
   }
-});
+}
+
+test.afterEach(closeApp);
 
 /** Same fixture shape as liveFolder.spec.ts: one feature with one task. */
 function writeFixturePlansFolder(root: string): void {
@@ -125,6 +127,8 @@ test('creating a live folder task under a feature writes the markdown file', asy
     expect(content).toContain(summary);
     expect(content).toMatch(/\*\*Priority:\*\*\s*High/);
   } finally {
+    // Stop the live folder watcher before deleting the tree it watches.
+    await closeApp();
     fs.rmSync(plansDir, { recursive: true, force: true });
   }
 });
@@ -140,6 +144,7 @@ test('live folder without allowIssueCreation shows a disabled create button with
     await expect(button).toBeDisabled();
     await expect(button).toHaveAttribute('title', /Allow issue creation/);
   } finally {
+    await closeApp();
     fs.rmSync(plansDir, { recursive: true, force: true });
   }
 });
@@ -232,6 +237,7 @@ test('creating a live folder idea writes the research transcript into the markdo
     expect(content).toContain('## Research Transcript');
     expect(content).toContain('Transcript: idea research log.');
   } finally {
+    await closeApp();
     fs.rmSync(plansDir, { recursive: true, force: true });
   }
 });

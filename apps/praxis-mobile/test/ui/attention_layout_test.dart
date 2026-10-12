@@ -229,4 +229,86 @@ void main() {
 
     store.dispose();
   });
+
+  testWidgets('AttentionBanner renders banner notification for approval with clickable link that takes you to the run', (tester) async {
+    final theme = ThemeController();
+    final store = AppStore(theme: theme);
+    addTearDown(store.dispose);
+
+    final item = AttentionItem(
+      id: 'approval:run-42',
+      kind: 'approval',
+      hostId: store.host.hostId,
+      projectId: store.project.projectId,
+      runId: 'run-42',
+      summary: 'Deployment Pipeline',
+      createdAt: '2026-09-26T20:00:00.000Z',
+    );
+    store.setAttentionForTesting([item]);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppStore>.value(
+        value: store,
+        child: MaterialApp(
+          home: PraxisTheme(
+            data: theme.data,
+            child: const Scaffold(
+              body: AttentionBanner(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('attention-banner')), findsOneWidget);
+    expect(find.text('Approval required: Deployment Pipeline'), findsOneWidget);
+    expect(find.text('Review'), findsOneWidget);
+
+    await tester.tap(find.text('Review'));
+    await tester.pump();
+
+    expect(store.openRunId, 'run-42');
+  });
+
+  testWidgets('AttentionBanner renders banner notification for failure with clickable link that takes you to the run', (tester) async {
+    final theme = ThemeController();
+    final store = AppStore(theme: theme);
+    addTearDown(store.dispose);
+
+    final item = AttentionItem(
+      id: 'failure:run-43:stage-1',
+      kind: 'failure',
+      hostId: store.host.hostId,
+      projectId: store.project.projectId,
+      runId: 'run-43',
+      summary: 'Test Suite — Stage 1',
+      createdAt: '2026-09-26T20:00:00.000Z',
+    );
+    store.setAttentionForTesting([item]);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppStore>.value(
+        value: store,
+        child: MaterialApp(
+          home: PraxisTheme(
+            data: theme.data,
+            child: const Scaffold(
+              body: AttentionBanner(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('attention-banner')), findsOneWidget);
+    expect(find.text('Step failed: Test Suite — Stage 1'), findsOneWidget);
+    expect(find.text('View run'), findsOneWidget);
+
+    await tester.tap(find.text('View run'));
+    await tester.pump();
+
+    expect(store.openRunId, 'run-43');
+  });
 }

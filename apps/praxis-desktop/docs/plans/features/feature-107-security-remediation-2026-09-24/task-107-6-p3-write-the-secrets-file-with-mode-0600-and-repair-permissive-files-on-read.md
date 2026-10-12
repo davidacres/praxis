@@ -1,6 +1,6 @@
 # [P3] Write the secrets file with mode 0600 and repair permissive files on read
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:57.642Z
 **Type:** Task
 **Priority:** Low

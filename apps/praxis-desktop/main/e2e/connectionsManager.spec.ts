@@ -9,12 +9,14 @@ import { chooseOption } from './chipSelect';
 let app: TestApp | undefined;
 let window: Page;
 
-test.afterEach(async () => {
+async function closeApp(): Promise<void> {
   if (app) {
     await closeTestApp(app);
     app = undefined;
   }
-});
+}
+
+test.afterEach(closeApp);
 
 /** Same fixture shape as liveFolder.spec.ts: one feature with one task. */
 function writeFixturePlansFolder(root: string): void {
@@ -115,6 +117,8 @@ test('saving a live folder connection auto-tracks its board', async () => {
       window.locator('[data-testid="board-nav-item"]', { hasText: 'E2E Live' })
     ).toBeVisible();
   } finally {
+    // Stop the live folder watcher before deleting the tree it watches.
+    await closeApp();
     fs.rmSync(plansDir, { recursive: true, force: true });
   }
 });

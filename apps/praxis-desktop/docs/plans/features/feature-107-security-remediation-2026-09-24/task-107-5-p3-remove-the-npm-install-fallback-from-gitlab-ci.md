@@ -1,6 +1,6 @@
 # [P3] Remove the npm install fallback from GitLab CI
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:57.273Z
 **Type:** Task
 **Priority:** Low

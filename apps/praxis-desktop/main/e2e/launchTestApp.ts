@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { ChildProcess } from 'node:child_process';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
 
 export interface TestApp {
@@ -137,6 +138,7 @@ export async function launchTestApp(
     cwd: path.join(__dirname, '..'),
     env
   });
+  testAppProcesses.set(electronApp, electronApp.process());
   const window = await electronApp.firstWindow();
   await window.waitForLoadState('domcontentloaded');
   if (!options?.keepSplash) {
@@ -233,7 +235,62 @@ export async function expandAllIssueStacks(window: Page): Promise<void> {
   }
 }
 
-export async function closeTestApp(app: TestApp): Promise<void> {
+async function withinDeadline<T>(operation: Promise<T>, timeoutMs: number, message: () => string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message())), timeoutMs);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const testAppProcesses = new WeakMap<ElectronApplication, ChildProcess>();
+
+/** A forced exit cleans up isolation, but still fails verification. */
+export async function closeTestApp(app: TestApp, options: { timeoutMs?: number } = {}): Promise<void> {
+  // Playwright releases the process handle when its application closes.
+  const child = testAppProcesses.get(app.electronApp) ?? app.electronApp.process();
+  testAppProcesses.set(app.electronApp, child);
+  const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+  // Subscribe before requesting shutdown so even an immediate exit is observed.
+  let onExit: () => void;
+  const exited = new Promise<void>(resolve => { onExit = resolve; });
+  child.once('exit', onExit!);
+  if (hasExited()) onExit!();
+  let stage = 'stopping test-owned work';
+  let shutdownError: unknown;
+  try {
+    await withinDeadline((async () => {
+      if (hasExited()) return;
+      await stopTestWork(app);
+      stage = 'closing Electron';
+      await app.electronApp.close();
+      stage = 'waiting for the Electron process to exit';
+      await exited;
+    })(), options.timeoutMs ?? 10000, () => `Test app shutdown timed out while ${stage} (pid ${child.pid})`);
+  } catch (error) {
+    shutdownError = error;
+    if (!hasExited()) {
+      // Only this launch's child process; never kill other Praxis instances.
+      child.kill('SIGKILL');
+      await withinDeadline(exited, 5000, () => `Test app process ${child.pid} did not exit after SIGKILL; profile retained at ${app.userDataDir}`);
+    }
+  } finally {
+    child.removeListener('exit', onExit!);
+    // Never remove files while Electron could still be using them.
+    if (hasExited()) fs.rmSync(app.userDataDir, { recursive: true, force: true });
+  }
+  if (shutdownError) {
+    throw new Error(`Test app cleanup failed while ${stage} (pid ${child.pid}); process exited and profile removed`, { cause: shutdownError });
+  }
+}
+
+async function stopTestWork(app: TestApp): Promise<void> {
   // Failed assertions can leave a task awaiting approval. End test-owned work
   // before closing, so the application's active-session close guard can settle.
   if (!app.window.isClosed()) {
@@ -252,8 +309,6 @@ export async function closeTestApp(app: TestApp): Promise<void> {
       }));
     });
   }
-  await app.electronApp.close();
-  fs.rmSync(app.userDataDir, { recursive: true, force: true });
 }
 
 /** Projects hide their board in the sidebar until the header toggle reveals it; reveals it (once) for the given scope. */

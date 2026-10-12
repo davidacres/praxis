@@ -53,8 +53,11 @@ void main() {
     expect(find.text('Live'), findsOneWidget);
     expect(find.text('Gates'), findsOneWidget);
     expect(find.text('SESSIONS'), findsOneWidget);
-    expect(find.text('NAVIGATION'), findsOneWidget);
+    expect(find.text('Activity'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is AppIcon && w.name == 'radio-tower'), findsOneWidget);
+    expect(find.text('NAVIGATION'), findsNothing);
     expect(find.text('SETTINGS'), findsOneWidget);
+    expect(find.text('Desktops'), findsOneWidget);
   });
 
   testWidgets('filter rail switches active filter tab', (tester) async {
@@ -129,5 +132,47 @@ void main() {
 
     // After collapsing, Plan Stage is only in the gauge segment
     expect(find.text('Plan Stage'), findsOneWidget);
+  });
+
+  testWidgets('activity at the top of sidebar shows icon, count and navigates to activity', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(430, 932));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    // Seed session activity
+    final work = const WorkItem(
+      workId: 'TEST-ACT-1',
+      title: 'Activity Session',
+      status: 'active',
+      sessionId: 'sess-act-1',
+    );
+    store.setWorkForTesting([work]);
+
+    await tester.pumpWidget(app());
+    await tester.pump();
+
+    // Verify Activity button at top
+    expect(find.text('Activity'), findsOneWidget);
+    expect(find.text('1'), findsAtLeastNWidgets(1)); // count badge
+    expect(find.byWidgetPredicate((w) => w is AppIcon && w.name == 'radio-tower'), findsOneWidget);
+
+    // Tap Activity
+    await tester.tap(find.text('Activity'));
+    await tester.pump();
+
+    expect(store.primaryRoute, 'activity');
+  });
+
+  testWidgets('desktops is accessible from settings in sidebar', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(430, 932));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(app());
+    await tester.pump();
+
+    expect(find.text('Desktops'), findsOneWidget);
+    await tester.tap(find.text('Desktops'));
+    await tester.pump();
+
+    expect(store.desktopsVisible, isTrue);
   });
 }
