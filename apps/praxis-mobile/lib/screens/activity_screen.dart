@@ -57,9 +57,15 @@ class ActivityScreen extends StatelessWidget {
                               style: ts(context, 14, scaled: false, weight: FontWeight.w700),
                             ),
                           ),
+                          if (entry.text.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              entry.text,
+                              style: ts(context, 12, scaled: false, color: p.textDim),
+                            ),
+                          ],
                         ],
                       ),
-                      Body(entry.text, dim: true),
                     ],
                   ),
                 ),

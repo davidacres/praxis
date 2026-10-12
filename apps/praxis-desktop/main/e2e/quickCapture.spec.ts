@@ -201,7 +201,12 @@ test('folder creation opt-in is enforced with an explanation and no discarded in
     await expect(page.getByTestId('quick-capture-unavailable')).toContainText('Allow issue creation');
     await expect(page.getByTestId('quick-capture-save')).toBeDisabled();
     await expect(page.getByTestId('quick-capture-title')).toHaveValue('Keep this capture');
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    // Stop the folder watcher before removing the fixture it watches.
+    if (app) await closeTestApp(app);
+    app = undefined;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('an enabled folder capture explicitly requires a feature for its task', async () => {
@@ -221,7 +226,12 @@ test('an enabled folder capture explicitly requires a feature for its task', asy
     await page.getByTestId('quick-capture-save').click();
     await expect(page.getByTestId('quick-capture-dialog')).toHaveCount(0);
     await expect.poll(() => fs.readdirSync(path.join(root, 'features', 'feature-01-demo')).filter(name => name.startsWith('task-')).length).toBe(1);
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    // Stop the folder watcher before removing the fixture it watches.
+    if (app) await closeTestApp(app);
+    app = undefined;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('a captured folder item is marked on disk and badged until it leaves the first column', async () => {
@@ -258,7 +268,12 @@ test('a captured folder item is marked on disk and badged until it leaves the fi
     await expect(page.getByTestId('issue-card').filter({ hasText: 'Captured stub' })).toHaveCount(1);
     await expect(page.getByTestId('issue-card-captured')).toHaveCount(0);
     expect(fs.readFileSync(path.join(featureDir, capturedFile()!), 'utf8')).toMatch(/^\*\*Origin:\*\* capture$/m);
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    // Stop the folder watcher before removing the fixture it watches.
+    if (app) await closeTestApp(app);
+    app = undefined;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('the capture dialog fits and stays readable across themes, surface packs and zoom', async () => {

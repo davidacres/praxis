@@ -13,7 +13,7 @@ import 'app_icon.dart';
 import 'kit.dart';
 import 'provider_brand_logo.dart';
 
-enum _SettingsPage { server, permissions, app }
+enum _SettingsPage { desktops, server, permissions, app }
 
 /// The desktop easy-mode filter rail: everything, what is moving, what is waiting on a person.
 enum _Filter { all, live, gates }
@@ -26,8 +26,8 @@ bool _workIsGate(WorkItem item) => !item.draft && item.status == 'awaiting-input
 bool _runIsLive(RunSnapshot run) => run.status == 'running' || run.status == 'awaiting-approval';
 bool _runIsGate(RunSnapshot run) => run.status == 'awaiting-approval' || run.stages.any((stage) => stage.lane == 'awaiting');
 
-const _routes = [('desktops', 'server', 'Desktops'), ('attention', 'warning', 'Attention'), ('activity', 'radio-tower', 'Activity')];
 const _settings = [
+  (_SettingsPage.desktops, 'server', 'Desktops', 'Switch or manage paired desktops'),
   (_SettingsPage.server, 'server', 'Desktop connection', 'Connection and host details'),
   (_SettingsPage.permissions, 'shield', 'Permissions', 'What the desktop allows this phone'),
   (_SettingsPage.app, 'gear', 'App settings', 'Appearance and notifications'),
@@ -128,7 +128,6 @@ class _AppSidebarState extends State<AppSidebar> {
         ? sessions
         : [for (final (index, item) in sessions.indexed) if (index < _collapsedSessionLimit || _workIsLive(item) || store.openWorkId == item.workId) item];
     final hiddenSessions = sessions.length - shownSessions.length;
-    final unresolved = store.attention.where((item) => !item.resolved).length;
 
     void navigate(String route) {
       store.setRoute(route);
@@ -244,6 +243,20 @@ class _AppSidebarState extends State<AppSidebar> {
                 ),
               ],
             ],
+          ),
+        ),
+
+        // Activity at top of sidebar
+        Padding(
+          padding: EdgeInsets.fromLTRB(t.s(8), t.s(6), t.s(8), t.s(4)),
+          child: _EasyNavRow(
+            icon: 'radio-tower',
+            label: 'Activity',
+            active: store.primaryRoute == 'activity' && store.openWorkId == null && store.openRunId == null,
+            badge: '${store.activity.length}',
+            onTap: () {
+              navigate('activity');
+            },
           ),
         ),
 
@@ -413,49 +426,7 @@ class _AppSidebarState extends State<AppSidebar> {
                     ),
               ],
 
-              // Navigation & Detail Sections
-              SizedBox(height: t.s(12)),
-              const _SectionLabel('NAVIGATION'),
-              for (final route in _routes)
-                _EasyNavRow(
-                  icon: route.$2,
-                  label: route.$3,
-                  active: store.primaryRoute == route.$1 && store.openWorkId == null && store.openRunId == null,
-                  badge: route.$1 == 'attention' && unresolved > 0 ? '$unresolved' : null,
-                  onTap: () {
-                    if (route.$1 == 'desktops') {
-                      store.showDesktops();
-                      widget.onClose();
-                    } else {
-                      navigate(route.$1);
-                    }
-                  },
-                ),
-
-              if (store.openWorkId != null) ...[
-                SizedBox(height: t.s(6)),
-                const _SectionLabel('THIS SESSION'),
-                Row(
-                  children: [
-                    for (final view in const ['chat', 'progress', 'changes']) ...[
-                      if (view != 'chat') SizedBox(width: t.s(4)),
-                      Expanded(
-                        child: _EasySubTab(
-                          label: '${view[0].toUpperCase()}${view.substring(1)}',
-                          active: store.detail == view,
-                          onTap: () {
-                            store.setRoute('work');
-                            store.setDetail(view);
-                            widget.onClose();
-                          },
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-
-              SizedBox(height: t.s(6)),
+              SizedBox(height: t.s(8)),
               const _SectionLabel('SETTINGS'),
               for (final item in _settings)
                 _EasyNavRow(
@@ -463,7 +434,14 @@ class _AppSidebarState extends State<AppSidebar> {
                   label: item.$3,
                   caption: item.$4,
                   drillsIn: true,
-                  onTap: () => setState(() => _page = item.$1),
+                  onTap: () {
+                    if (item.$1 == _SettingsPage.desktops) {
+                      store.showDesktops();
+                      widget.onClose();
+                    } else {
+                      setState(() => _page = item.$1);
+                    }
+                  },
                 ),
             ],
           ),
@@ -1442,43 +1420,6 @@ class _EasyNavRow extends StatelessWidget {
   }
 }
 
-/// Compact sub-tab for session details (chat, progress, changes).
-class _EasySubTab extends StatelessWidget {
-  const _EasySubTab({required this.label, required this.active, required this.onTap});
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.t;
-    final p = t.palette;
-
-    return Pressable(
-      label: label,
-      selected: active,
-      onTap: onTap,
-      excludeChildSemantics: true,
-      builder: (context, pressed) => Container(
-        height: t.s(28),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: active
-              ? p.surfaceRaised
-              : pressed
-              ? p.surface
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(t.s(4)),
-          border: Border.all(color: active ? p.accent.withValues(alpha: 0.5) : p.border),
-        ),
-        child: Text(
-          label,
-          style: ts(context, 11, weight: active ? FontWeight.w600 : FontWeight.w500, color: active ? p.text : p.textDim),
-        ),
-      ),
-    );
-  }
-}
 
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
@@ -1667,6 +1608,16 @@ class _SettingsDetail extends StatelessWidget {
           const _Note(
             'Approving a run, rejecting one, allowing an agent to act, or answering a question that changes something asks you to confirm it is you. One check covers a minute of decisions.',
           ),
+          const _SectionLabel('DESKTOPS'),
+          _DetailCard([
+            _DetailRow('Active desktop', store.desktopLabel),
+            _DetailRow('Saved desktops', '${store.desktops.entries.length} paired'),
+          ]),
+          const SizedBox(height: 8),
+          _SmallButton('Manage desktops', () {
+            store.showDesktops();
+            onBack();
+          }),
           const _SectionLabel('DIAGNOSTICS'),
           _DetailCard([
             if (diagnostics.isEmpty) const _DetailRow('Recent problems', 'None', tone: Tone.ok),
@@ -1675,6 +1626,15 @@ class _SettingsDetail extends StatelessWidget {
           ]),
           if (diagnostics.isNotEmpty) ...[const SizedBox(height: 8), _SmallButton('Clear', Diagnostics.instance.clear)],
           const _Note('Background refreshes and screens that fail are listed here, newest first. Nothing is sent anywhere.'),
+        ];
+      case _SettingsPage.desktops:
+        content = [
+          const _Note('Switch, rename or forget paired desktops.'),
+          const SizedBox(height: 12),
+          _SmallButton('Open Desktops', () {
+            store.showDesktops();
+            onBack();
+          }),
         ];
       case _SettingsPage.server:
         final config = store.hostConfig;
@@ -1748,6 +1708,11 @@ class _SettingsDetail extends StatelessWidget {
           Row(
             children: [
               if (store.connection != ShellConnection.ready) ...[_SmallButton('Reconnect now', store.retryConnection), const SizedBox(width: 8)],
+              _SmallButton('Switch desktop', () {
+                store.showDesktops();
+                onBack();
+              }),
+              const SizedBox(width: 8),
               _SmallButton('Disconnect', () => store.disconnect()),
             ],
           ),

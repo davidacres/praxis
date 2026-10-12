@@ -125,7 +125,7 @@ class _RootState extends State<_Root> {
       body = Column(
         children: [
           const StaleBanner(),
-          const PermissionBanner(),
+          const AttentionBanner(),
           Expanded(
             child: switch (store.primaryRoute) {
               'attention' => AttentionScreen(key: ValueKey(store.contextKey), onOpenSidebar: _open),

@@ -487,6 +487,18 @@ class AppStore extends ChangeNotifier {
     _changed();
   }
 
+  @visibleForTesting
+  void setAttentionForTesting(List<AttentionItem> items) {
+    _polledAttention = items;
+    _changed();
+  }
+
+  @visibleForTesting
+  void setSnapshotForTesting(SessionSnapshot snapshot) {
+    _snapshots = {..._snapshots, snapshot.sessionId: snapshot};
+    _changed();
+  }
+
   // ---------------------------------------------------------------- derived
 
   SessionSnapshot? sessionFor(String sessionId) => _snapshots[sessionId];
@@ -537,17 +549,8 @@ class AppStore extends ChangeNotifier {
       final last = messages.isEmpty ? null : messages.last;
       final at = last?.at ?? snapshot?.completedAt ?? snapshot?.startedAt ?? '';
       if (at.isEmpty) continue;
-      final lastText = last == null ? '' : (last.text.isNotEmpty ? last.text : (last.gadgets.isNotEmpty ? '[${last.gadgets.first.gadget.kind}]' : ''));
-      final who = last == null
-          ? ''
-          : last.role == 'user'
-          ? 'You'
-          : last.role == 'system'
-          ? 'Desktop'
-          : 'Agent';
-      final text =
-          '${_lifecycleText[item.status] ?? item.status}${last != null ? ' — $who: ${lastText.length > 120 ? lastText.substring(0, 120) : lastText}' : ''}';
-      entries.add(ActivityEntry(id: item.sessionId, at: at, workId: item.workId, title: item.title, text: text));
+      final status = _lifecycleText[item.status] ?? item.status;
+      entries.add(ActivityEntry(id: item.sessionId, at: at, workId: item.workId, title: item.title, text: status));
     }
     entries.sort((left, right) => right.at.compareTo(left.at));
     return entries

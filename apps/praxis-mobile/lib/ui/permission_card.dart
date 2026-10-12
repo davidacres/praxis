@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../app/diagnostics.dart';
 import '../app/store.dart';
 import '../app/theme.dart';
+import '../core/attention.dart';
 import '../core/models.dart';
+import 'app_icon.dart';
 import 'kit.dart';
 
 /// An agent asking to use a tool, answered here or on the desktop. Shown in the
@@ -171,50 +173,152 @@ class _PermissionCardState extends State<PermissionCard> {
   }
 }
 
-/// A request waiting on the person that they cannot see from where they are:
-/// shown above every screen except the chat that already shows the request.
-class PermissionBanner extends StatelessWidget {
-  const PermissionBanner({super.key});
+/// A notification banner shown when attention is required:
+/// approvals, failed stages, and agent permissions.
+/// Includes a clickable link that takes the user directly to the session or run.
+class AttentionBanner extends StatelessWidget {
+  const AttentionBanner({super.key});
 
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
-    final openChat = store.primaryRoute == 'work' && store.openRunId == null && store.detail == 'chat'
+    final openChat = store.primaryRoute == 'work' && store.openRunId == null
         ? store.work.where((entry) => entry.workId == store.openWorkId).firstOrNull?.sessionId
         : null;
-    final waiting = store.openAttention.where((item) => item.kind == 'permission' && item.sessionId != openChat).toList();
-    // The Attention screen lists every request already.
-    if (waiting.isEmpty || store.primaryRoute == 'attention') return const SizedBox.shrink();
+    final openRun = store.primaryRoute == 'work' ? store.openRunId : null;
+
+    final waiting = store.openAttention.where((item) {
+      if (item.kind == 'permission' && item.sessionId != null && item.sessionId == openChat) {
+        return false;
+      }
+      if ((item.kind == 'approval' || item.kind == 'failure') && item.runId != null && item.runId == openRun) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    if (waiting.isEmpty) return const SizedBox.shrink();
+
     waiting.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final first = waiting.first;
-    final sessions = waiting.map((item) => item.sessionId).toSet();
-    final chat = sessions.length == 1 ? store.work.where((entry) => entry.sessionId == first.sessionId && !entry.draft).firstOrNull : null;
+    final isDanger = first.kind == 'failure';
     final more = waiting.length > 1 ? ' (+${waiting.length - 1} more)' : '';
-    final text = sessions.length == 1
-        ? '${chat?.title ?? 'An agent'} is asking: ${first.summary ?? 'permission to act'}$more. Tap to review.'
-        : '${sessions.length} chats are asking for permission. Tap to review.';
-    final t = context.t;
-    return Pressable(
-      label: text,
-      excludeChildSemantics: true,
-      onTap: () {
+
+    final String message;
+    final String actionText;
+    final VoidCallback onTap;
+
+    if (first.kind == 'permission') {
+      final chat = first.sessionId != null
+          ? store.work.where((entry) => entry.sessionId == first.sessionId && !entry.draft).firstOrNull
+          : null;
+      message = '${chat?.title ?? 'An agent'} is asking: ${first.summary ?? 'permission to act'}$more';
+      actionText = 'Review';
+      onTap = () {
         if (chat != null) {
           store.openWork(chat.workId);
           store.setRoute('work');
-        } else {
-          store.setRoute('attention');
+        } else if (first.runId != null) {
+          store.openRun(first.runId);
         }
-      },
-      builder: (context, _) => Container(
-        key: const ValueKey('permission-banner'),
+      };
+    } else if (first.kind == 'approval') {
+      final run = first.runId != null
+          ? store.workflowRuns.where((r) => r.runId == first.runId).firstOrNull
+          : null;
+      message = 'Approval required: ${first.summary ?? run?.workflowName ?? 'Workflow run'}$more';
+      actionText = 'Review';
+      onTap = () {
+        if (first.runId != null) {
+          store.openRun(first.runId);
+        }
+      };
+    } else if (first.kind == 'failure') {
+      final run = first.runId != null
+          ? store.workflowRuns.where((r) => r.runId == first.runId).firstOrNull
+          : null;
+      message = 'Step failed: ${first.summary ?? run?.workflowName ?? 'Workflow run'}$more';
+      actionText = 'View run';
+      onTap = () {
+        if (first.runId != null) {
+          store.openRun(first.runId);
+        }
+      };
+    } else {
+      message = '${first.summary ?? attentionTypeTitle(first.kind)}$more';
+      actionText = 'View';
+      onTap = () {
+        if (first.sessionId != null) {
+          final chat = store.work.where((entry) => entry.sessionId == first.sessionId && !entry.draft).firstOrNull;
+          if (chat != null) {
+            store.openWork(chat.workId);
+            store.setRoute('work');
+            return;
+          }
+        }
+        if (first.runId != null) {
+          store.openRun(first.runId);
+        }
+      };
+    }
+
+    final t = context.t;
+    final p = t.palette;
+    final toneBg = isDanger ? p.dangerSoft : p.warnSoft;
+    final toneBorder = isDanger ? p.danger : p.warn;
+    final toneText = isDanger ? p.danger : p.text;
+    final linkColor = isDanger ? p.danger : p.accent;
+
+    return Pressable(
+      label: '$message. $actionText.',
+      excludeChildSemantics: true,
+      onTap: onTap,
+      builder: (context, pressed) => Container(
+        key: const ValueKey('attention-banner'),
         width: double.infinity,
         padding: EdgeInsets.symmetric(horizontal: t.s(12), vertical: t.s(8)),
         decoration: BoxDecoration(
-          color: t.palette.warnSoft,
-          border: Border(bottom: BorderSide(color: t.palette.warn)),
+          color: pressed ? toneBg.withValues(alpha: 0.8) : toneBg,
+          border: Border(bottom: BorderSide(color: toneBorder)),
         ),
-        child: Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: ts(context, 12.5, lineHeight: 18, weight: FontWeight.w600)),
+        child: Row(
+          children: [
+            AppIcon('warning', size: 14, color: isDanger ? p.danger : p.warn),
+            SizedBox(width: t.s(8)),
+            Expanded(
+              child: Text(
+                message,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ts(context, 12.5, lineHeight: 18, weight: FontWeight.w600, color: toneText),
+              ),
+            ),
+            SizedBox(width: t.s(8)),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  actionText,
+                  style: ts(context, 12, weight: FontWeight.w700, color: linkColor, decoration: TextDecoration.underline),
+                ),
+                SizedBox(width: t.s(2)),
+                Text(
+                  '›',
+                  style: ts(context, 13, weight: FontWeight.w700, color: linkColor),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// Backwards compatibility alias for PermissionBanner.
+class PermissionBanner extends StatelessWidget {
+  const PermissionBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) => const AttentionBanner();
 }

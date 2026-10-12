@@ -152,3 +152,91 @@ Order 1 selects the existing ACP child, not completion of the whole remediation 
 107-8 is Done with core coverage and the prior desktop read-only denial test passing. The earlier work queue and count of 13 open findings predate this fix; 12 P1–P3 items remain open. F107 remains open. The prior full desktop run had 590 passed, 3 skipped and 1 workflow-model-tier failure; no E2E rerun was performed.
 
 **2026-10-12 backlog re-review:** against current main (5c2ded9f) 107-5, 107-6, 107-7, 107-10, 107-13 and tasks 107-1, 107-2, 107-4, 107-5, 107-6 are implemented and now Complete. 107-9 and 107-12 are partly done (In Progress); 107-11 is still open. F107 stays In Progress. Earlier counts of 13 open items are out of date.
+
+
+**PRX-F107** — 2026-10-11T23:57:02.658Z
+Kickoff plan. Ticket already In Progress; P0s, 107-8 and gitleaks gate are recorded complete, so no rework. Next per feature.md: Phase 2 quick wins 107-5 (symlink sandbox), 107-6 (SSRF IP classifier), 107-10 (auto permission mode/env leak). First I'll verify against code (commit c66dec2b may already cover some items), then implement only what is missing, with unit tests, and update the item statuses.
+
+**PRX-F107** — 2026-10-11T23:57:48.858Z
+Progress summary (verified against code, not just ticket text).
+Verified already implemented in the tree (commit c66dec2b and earlier): 107-5 (realpath sandbox + pathSandbox.test), 107-6 (non-public IP classifier + DNS check), 107-10 (project 'auto' downgraded to ask with warning; check env allowlist), task 107-5 (no npm install fallback), task 107-6 (secrets file 0600). Only gap found: no test for the check-process env allowlist — added one in apps/praxis-desktop/main/src/main/workflowCheckProcess.test.ts.
+Verification: npm run test:core 1529/1529 pass; npm run test:workflows 61/61 pass. Plan statuses for those five items set to Complete.
+NOT verified/left open: 107-7, 107-9 (blocked on Decision 3: can agy emit permission prompts), 107-11, 107-12, 107-13, task 107-1, 107-2, 107-4. Commit c66dec2b claims some of these (IPC senders, mobile hardening, OAuth state, trust) but I did not review them, so the ticket stays In Progress. Nothing committed.
+
+**PRX-F107** — 2026-10-12T00:15:23.679Z
+**Workflow run failed: Governed delivery — Security remediation — 2026-09-24**
+
+Status: Failed · Duration: 18m 23s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ⏳ Review: running
+- ⏳ Install dependencies: running
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ❌ Security scan: failed
+
+Required stage "security" failed.
+
+**PRX-F107** — 2026-10-12T06:47:53.284Z
+**Workflow run failed: Run - Security remediation — 2026-09-24**
+
+Status: Failed · Duration: 6h 50m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.
+
+**PRX-F107** — 2026-10-12T07:11:21.025Z
+**Workflow run failed: Run - Security remediation — 2026-09-24**
+
+Status: Failed · Duration: 7h 14m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.
+
+**PRX-F107** — 2026-10-12T09:00:28.186Z
+**Workflow run failed: Run - Security remediation — 2026-09-24**
+
+Status: Failed · Duration: 9h 3m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.
+
+**PRX-F107** — 2026-10-12T10:08:12.758Z
+**Workflow run succeeded: Run - Security remediation — 2026-09-24**
+
+Status: Succeeded · Duration: 10h 11m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ✅ QA: succeeded
+- ✅ Security scan: succeeded

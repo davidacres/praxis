@@ -125,3 +125,14 @@ test('checks receive a usable path but no app credential or Node injection envir
     assert.deepEqual(JSON.parse(result.output), { path: true });
   } finally { keys.forEach((key, i) => previous[i] === undefined ? delete process.env[key] : process.env[key] = previous[i]); }
 });
+
+test('workflow checks do not inherit secret-shaped variables from the app environment', async () => {
+  process.env.PRAXIS_TEST_API_KEY = 'sk-should-not-leak';
+  try {
+    const result = await spawnCheck(check("process.stdout.write(JSON.stringify({ key: process.env.PRAXIS_TEST_API_KEY ?? null, hasPath: Boolean(process.env.PATH || process.env.Path), ci: Boolean(process.env.CI) }))"), tmpdir());
+    assert.equal(result.code, 0);
+    assert.deepEqual(JSON.parse(result.output), { key: null, hasPath: true, ci: true });
+  } finally {
+    delete process.env.PRAXIS_TEST_API_KEY;
+  }
+});

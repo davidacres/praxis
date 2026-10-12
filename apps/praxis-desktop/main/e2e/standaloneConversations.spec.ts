@@ -20,7 +20,7 @@ test('detached-chat IPC refuses a window outside the trusted renderer', async ()
       await expect(untrusted.evaluate(async operation => {
         if (operation === 'list') return window.praxis.detachedChat.list();
         return window.praxis.detachedChat[operation]('SESSION-untrusted');
-      }, operation)).rejects.toThrow('Detached chat requires a trusted renderer');
+      }, operation)).rejects.toThrow('IPC sender is not a trusted application renderer.');
     }
   }
   expect(await app.window.evaluate(() => window.praxis.detachedChat.list())).toEqual([]);
