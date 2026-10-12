@@ -403,9 +403,9 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-9A577BE2F0 | quick Capture | successive captures each create their own item | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:135` |
 | PT-30F6F66DDC | quick Capture | failed capture retains title, body and destination after dismiss and reopen | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:167` |
 | PT-4580B168D4 | quick Capture | folder creation opt-in is enforced with an explanation and no discarded input | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:191` |
-| PT-B0971395E1 | quick Capture | an enabled folder capture explicitly requires a feature for its task | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:207` |
-| PT-7D99970CA9 | quick Capture | a captured folder item is marked on disk and badged until it leaves the first column | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:227` |
-| PT-668B1806B5 | quick Capture | the capture dialog fits and stays readable across themes, surface packs and zoom | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:264` |
+| PT-B0971395E1 | quick Capture | an enabled folder capture explicitly requires a feature for its task | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:212` |
+| PT-7D99970CA9 | quick Capture | a captured folder item is marked on disk and badged until it leaves the first column | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:237` |
+| PT-668B1806B5 | quick Capture | the capture dialog fits and stays readable across themes, surface packs and zoom | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:279` |
 | PT-E65F2B46F5 | quick Session | the title-bar quick session opens the composer scoped to the current project with quick-change ready | `apps/praxis-desktop/main/e2e/quickSession.spec.ts:61` |
 | PT-515B50E6B1 | quick Session | a project session action scopes the composer to that project | `apps/praxis-desktop/main/e2e/quickSession.spec.ts:102` |
 | PT-4B8B596B62 | quick Session | draft and existing sessions share the composer frame and input layout | `apps/praxis-desktop/main/e2e/quickSession.spec.ts:119` |
@@ -549,8 +549,8 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-693476E991 | workflow Designer | clicking and dragging on the designer surface pans the canvas without changing zoom | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:615` |
 | PT-7AF3949BE5 | workflow Designer | floating toolbar provides agent and skill submenus with scrolling list, icon, and text | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:650` |
 | PT-44E72F938B | workflow Designer | submenu displays search box when items exceed 10, filters real-time, and clears on escape or button click | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:773` |
-| PT-2CA87FB459 | workflow Environment Pause | a registry that cannot audit pauses the run instead of failing it; siblings finish and Resume completes it | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:127` |
-| PT-4B8D3275C8 | workflow Environment Pause | a genuine audit finding still fails the run, and the sibling it left running is stopped and recorded | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:176` |
+| PT-2CA87FB459 | workflow Environment Pause | a registry that cannot audit pauses the run instead of failing it; siblings finish and Resume completes it | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:126` |
+| PT-4B8D3275C8 | workflow Environment Pause | a genuine audit finding still fails the run, and the sibling it left running is stopped and recorded | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:175` |
 | PT-F5764CCA2F | workflow Install Deps | without an install stage a fresh run worktree cannot load the dependency, so QA fails — however good the change is | `apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts:111` |
 | PT-C525D5E06F | workflow Install Deps | an install stage gives the worktree its own dependencies, QA passes, and the main checkout is left untouched | `apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts:124` |
 | PT-311E757F0F | workflow Loops | a loop edge is drawn distinctly, edited in the inspector, and survives save and reload | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:85` |

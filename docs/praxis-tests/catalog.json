@@ -6395,7 +6395,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/quickCapture.spec.ts",
-        "line": 207,
+        "line": 212,
         "project": "functional"
       },
       "area": "quick Capture",
@@ -6411,7 +6411,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/quickCapture.spec.ts",
-        "line": 227,
+        "line": 237,
         "project": "functional"
       },
       "area": "quick Capture",
@@ -6427,7 +6427,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/quickCapture.spec.ts",
-        "line": 264,
+        "line": 279,
         "project": "functional"
       },
       "area": "quick Capture",
@@ -8731,7 +8731,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts",
-        "line": 127,
+        "line": 126,
         "project": "functional"
       },
       "area": "workflow Environment Pause",
@@ -8747,7 +8747,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts",
-        "line": 176,
+        "line": 175,
         "project": "functional"
       },
       "area": "workflow Environment Pause",

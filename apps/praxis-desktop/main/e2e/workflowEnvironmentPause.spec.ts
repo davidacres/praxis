@@ -29,7 +29,7 @@ test.afterEach(async () => {
 });
 
 const FAKE_NPM = `#!/bin/sh
-mode=$(cat "$FAKE_NPM_MODE_FILE" 2>/dev/null || echo unsupported)
+mode=$(cat "$(dirname "$0")/mode" 2>/dev/null || echo unsupported)
 case "$mode" in
   unsupported)
     printf 'npm warn audit 404 Not Found - POST https://npm.pkg.github.com/-/npm/v1/security/advisories/bulk\\n404 page not found\\n\\nnpm error audit endpoint returned an error\\n' >&2
@@ -65,8 +65,7 @@ async function launch(mode: 'unsupported' | 'vulnerable'): Promise<{ page: Page;
   const repo = createRepository();
 
   app = await launchTestApp(undefined, undefined, {
-    PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
-    FAKE_NPM_MODE_FILE: modeFile
+    PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`
   }, { openNewSession: false });
   const page = app.window;
 
