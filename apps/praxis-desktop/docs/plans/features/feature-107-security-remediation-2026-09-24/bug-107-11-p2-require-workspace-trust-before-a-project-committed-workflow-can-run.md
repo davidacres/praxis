@@ -55,3 +55,4 @@ A prompt that appears too often trains people to click through it — scope it p
 
 ## Comments
 
+**2026-10-10:** Re-review 2026-10-12: still open and valid. Project workflows load and display, and project 'auto' mode is rejected (107-10), but I found no workspace-trust gate on starting a project-committed workflow in the orchestrator or the mobile start path.

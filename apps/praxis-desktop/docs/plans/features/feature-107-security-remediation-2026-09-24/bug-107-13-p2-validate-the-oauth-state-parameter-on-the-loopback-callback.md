@@ -1,6 +1,6 @@
 # [P2] Validate the OAuth state parameter on the loopback callback
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:55.806Z
 **Type:** Bug
 **Priority:** Medium
@@ -54,3 +54,4 @@ If the SDK already generates its own `state`, adding a second produces a mismatc
 
 ## Comments
 
+**2026-10-10:** Closed: mcpOAuthManager.ts generates a 32-byte random state per authorization and compares the callback's state before accepting the code.

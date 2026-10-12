@@ -1,6 +1,6 @@
 # [P1] Make local-only mobile access enforce locality and bind to the chosen interfaces
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:53.371Z
 **Type:** Bug
 **Priority:** High
@@ -56,3 +56,4 @@ This is the finding most likely to break working setups, and its failure mode is
 
 ## Comments
 
+**2026-10-10:** Closed: evaluateMobileAccess requires a private address for both direct modes, and mobileLanServer listens on explicit per-interface hosts instead of all interfaces.

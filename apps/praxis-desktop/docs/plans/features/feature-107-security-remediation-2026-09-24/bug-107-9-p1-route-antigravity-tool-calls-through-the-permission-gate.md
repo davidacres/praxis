@@ -1,6 +1,6 @@
 # [P1] Route Antigravity tool calls through the permission gate
 
-**Status:** 📋 Proposed
+**Status:** In Progress
 **Created:** 2026-09-24T15:41:54.068Z
 **Type:** Bug
 **Priority:** High
@@ -54,3 +54,4 @@ Removing the flag without a working relay makes `agy` prompt on its own stdin an
 
 ## Comments
 
+**2026-10-10:** Re-review 2026-10-12: partly done. antigravity_acp/server.py now refuses to start without explicit PRAXIS_ANTIGRAVITY_UNSAFE_AUTO_APPROVE=1 consent, but still passes --dangerously-skip-permissions, so tool calls are still not routed through the permission gate. Remaining work is blocked on whether agy can emit permission prompts (Decision 3).

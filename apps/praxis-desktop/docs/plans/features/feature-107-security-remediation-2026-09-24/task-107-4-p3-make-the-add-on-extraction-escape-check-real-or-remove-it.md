@@ -1,6 +1,6 @@
 # [P3] Make the add-on extraction escape check real, or remove it
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:56.900Z
 **Type:** Task
 **Priority:** Low
@@ -45,3 +45,4 @@ Option (b) adds an `lstat` pass proportional to archive size on every add-on ins
 
 ## Comments
 
+**2026-10-10:** Closed: electronAddonStorage.ts now lstat-checks the extracted tree and rejects symlinks and multiply-linked files, so the check is real.

@@ -1,6 +1,6 @@
 # [P2] Harden the mobile LAN listener: handshake timeout, connection caps, deny-by-default authorization
 
-**Status:** 📋 Proposed
+**Status:** In Progress
 **Created:** 2026-09-24T15:41:55.444Z
 **Type:** Bug
 **Priority:** Medium
@@ -56,3 +56,4 @@ A handshake timeout that is too tight drops real phones on congested Wi-Fi — m
 
 ## Comments
 
+**2026-10-10:** Re-review 2026-10-12: handshake timeout (15s), a 128-connection cap and a 1 MiB record limit are in place. Not confirmed: the deny-by-default authorization half (SEC-015); verify before closing.

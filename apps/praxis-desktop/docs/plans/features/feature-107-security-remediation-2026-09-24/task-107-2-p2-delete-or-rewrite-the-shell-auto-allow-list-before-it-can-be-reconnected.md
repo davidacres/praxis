@@ -1,6 +1,6 @@
 # [P2] Delete or rewrite the shell auto-allow list before it can be reconnected
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:56.172Z
 **Type:** Task
 **Priority:** Medium
@@ -44,3 +44,4 @@ If the team chooses to fix the wiring instead, a rewrite that is anything short 
 
 ## Comments
 
+**2026-10-10:** Closed: the shell auto-allow list was removed from shellAllowlist.ts (no isSafe*Segment helpers remain).

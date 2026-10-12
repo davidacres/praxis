@@ -1,6 +1,6 @@
 # [P1] Validate the sender frame on every ipcMain handler
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:54.431Z
 **Type:** Task
 **Priority:** High
@@ -45,3 +45,4 @@ A mechanical edit across 299 call sites is where regressions hide. An over-stric
 
 ## Comments
 
+**2026-10-10:** Closed: IPC handlers go through trustedIpcMain.ts, and npm run check-ipc-senders (scripts/checkTrustedIpc.cjs) fails any direct ipcMain import under main/src/main, so new channels are covered by construction.

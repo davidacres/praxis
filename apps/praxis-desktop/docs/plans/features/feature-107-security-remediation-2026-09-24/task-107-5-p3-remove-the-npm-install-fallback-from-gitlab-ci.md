@@ -1,6 +1,6 @@
 # [P3] Remove the npm install fallback from GitLab CI
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:57.273Z
 **Type:** Task
 **Priority:** Low
@@ -42,3 +42,4 @@ Builds that were quietly surviving on the fallback start failing. That is the in
 
 ## Comments
 
+**2026-10-10:** Closed: .gitlab-ci.yml runs npm ci only; the npm install fallback is gone.

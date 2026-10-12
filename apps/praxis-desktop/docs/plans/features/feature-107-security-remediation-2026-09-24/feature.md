@@ -150,3 +150,5 @@ Order 1 selects the existing ACP child, not completion of the whole remediation 
 ### 2026-10-11 — SEC-009 closeout
 
 107-8 is Done with core coverage and the prior desktop read-only denial test passing. The earlier work queue and count of 13 open findings predate this fix; 12 P1–P3 items remain open. F107 remains open. The prior full desktop run had 590 passed, 3 skipped and 1 workflow-model-tier failure; no E2E rerun was performed.
+
+**2026-10-12 backlog re-review:** against current main (5c2ded9f) 107-5, 107-6, 107-7, 107-10, 107-13 and tasks 107-1, 107-2, 107-4, 107-5, 107-6 are implemented and now Complete. 107-9 and 107-12 are partly done (In Progress); 107-11 is still open. F107 stays In Progress. Earlier counts of 13 open items are out of date.

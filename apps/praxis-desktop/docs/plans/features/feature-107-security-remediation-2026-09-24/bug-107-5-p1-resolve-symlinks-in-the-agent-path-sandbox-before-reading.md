@@ -1,6 +1,6 @@
 # [P1] Resolve symlinks in the agent path sandbox before reading
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:52.649Z
 **Type:** Bug
 **Priority:** High
@@ -54,3 +54,4 @@ None.
 
 ## Comments
 
+**2026-10-10:** Closed during backlog re-review (2026-10-10 review superseded): verified in the code after c66dec2b and earlier — realpath resolution in packages/core/src/ai/tools/pathSandbox.ts with symlink tests.

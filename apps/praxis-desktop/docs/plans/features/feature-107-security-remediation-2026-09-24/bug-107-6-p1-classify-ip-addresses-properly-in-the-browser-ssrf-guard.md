@@ -1,6 +1,6 @@
 # [P1] Classify IP addresses properly in the browser SSRF guard
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:53.009Z
 **Type:** Bug
 **Priority:** High
@@ -55,3 +55,4 @@ Over-blocking. Some users legitimately browse an intranet host by name, so the h
 
 ## Comments
 
+**2026-10-10:** Closed: browserTools.ts now classifies addresses through networkAddress.ts (isNonPublicNetworkAddress, IPv6 and mapped-IPv4 normalised) and checks DNS-resolved addresses; the PRIVATE_IPV4 regex is gone.

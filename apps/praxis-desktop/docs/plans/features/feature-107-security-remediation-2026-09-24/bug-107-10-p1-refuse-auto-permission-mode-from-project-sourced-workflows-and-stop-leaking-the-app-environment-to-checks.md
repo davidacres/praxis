@@ -1,6 +1,6 @@
 # [P1] Refuse auto permission mode from project-sourced workflows and stop leaking the app environment to checks
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:54.775Z
 **Type:** Bug
 **Priority:** High
@@ -56,3 +56,4 @@ Check commands that quietly relied on an inherited variable (`NODE_OPTIONS`, npm
 
 ## Comments
 
+**2026-10-10:** Closed: workflowStore.ts rejects project-sourced permissionMode 'auto' with an issue, and workflowCheckProcess.ts passes checks an allowlisted environment (test added).

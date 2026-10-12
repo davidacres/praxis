@@ -1,6 +1,6 @@
 # [P3] Write the secrets file with mode 0600 and repair permissive files on read
 
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-24T15:41:57.642Z
 **Type:** Task
 **Priority:** Low
@@ -48,3 +48,4 @@ Minimal. Windows does not honour POSIX modes, so the test must be platform-gated
 
 ## Comments
 
+**2026-10-10:** Closed: electronSecretsStore.ts writes the secrets file with mode 0600 (dir 0700) and chmods permissive files on read.
