@@ -1,3 +1,4 @@
+import { LiveTurnActivityIndicator } from '../ai/LiveTurnActivityIndicator';
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react';
 import type { WireImageAttachment } from '@praxis/core';
 import { Icon } from '../ui/Icon';
@@ -11,6 +12,8 @@ interface AssistantComposerProps {
   value: string;
   onChange: (value: string) => void;
   busy: boolean;
+  activeTurnStartedAt?: number;
+  tokenCount?: number;
   onSend: (images: WireImageAttachment[]) => void;
   sendLabel: string;
   /** Bumped by the shell to pull focus into the box (on open). */
@@ -19,7 +22,7 @@ interface AssistantComposerProps {
   headerOptions: ReactNode;
 }
 
-export function AssistantComposer({ value, onChange, busy, onSend, sendLabel, focusSignal, composerOptions, headerOptions }: AssistantComposerProps) {
+export function AssistantComposer({ value, onChange, busy, activeTurnStartedAt, tokenCount, onSend, sendLabel, focusSignal, composerOptions, headerOptions }: AssistantComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
   const mention = useAssistantMention(value, caret);
@@ -144,7 +147,7 @@ export function AssistantComposer({ value, onChange, busy, onSend, sendLabel, fo
         }}
       />
       <SessionComposerToolbar>
-        {busy ? <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid="assistant-composer-activity-chip"><Icon name="sparkles" size={13} /> The team is thinking…</span> : composerOptions}
+        {busy ? <LiveTurnActivityIndicator variant="composer" testId="assistant-composer-activity-chip" startedAt={activeTurnStartedAt} tokenCount={tokenCount} statusText="The team is thinking…" /> : composerOptions}
         <span className="spacer" />
         {!busy && <span className="session-context-chip" data-testid="assistant-context-indicator" title="Context usage is not reported for Virtual Team chat" role="img" aria-label="Context usage unavailable">
           <SessionContextRing percent={0} />

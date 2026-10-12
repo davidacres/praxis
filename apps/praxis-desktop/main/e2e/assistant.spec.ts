@@ -204,7 +204,7 @@ test('assistant composer selects provider, model, reasoning, and permission mode
 });
 
 test('assistant composer collapses and animates its border while the team replies', async () => {
-  const win = await launch(1800);
+  const win = await launch(4000);
   await win.getByTestId('titlebar-assistant').click();
   const composer = win.getByTestId('assistant-composer');
   const expandedHeight = (await composer.boundingBox())!.height;
@@ -217,6 +217,16 @@ test('assistant composer collapses and animates its border while the team replie
   const initialTransform = await capsule.getAttribute('transform');
   await expect.poll(() => capsule.getAttribute('transform')).not.toBe(initialTransform);
   await expect(win.getByTestId('assistant-composer-activity-chip')).toContainText('The team is thinking');
+  await expect(composer.getByTestId('session-composer-token-count')).toHaveText('— tokens');
+  await expect(composer.getByTestId('session-composer-token-count')).toHaveAttribute('title', 'Token usage not reported');
+  const timer = composer.getByTestId('session-composer-activity-timer');
+  const initialTime = await timer.innerText();
+  await expect.poll(() => timer.innerText()).not.toBe(initialTime);
+  await expect(win.getByTestId('session-activity-status')).toHaveCount(0);
+  const timeBeforePin = parseFloat(await timer.innerText());
+  await win.getByTestId('assistant-pin').click();
+  await expect(win.getByTestId('assistant-docked')).toBeVisible();
+  expect(parseFloat(await timer.innerText())).toBeGreaterThanOrEqual(timeBeforePin);
   await expect(win.getByTestId('assistant-send')).toHaveCount(0);
   await expect.poll(async () => (await composer.boundingBox())!.height).toBeLessThan(expandedHeight - 12);
   await composer.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-composer-running.png') });

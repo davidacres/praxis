@@ -44,6 +44,7 @@ export interface AssistantController {
   setDocked: (docked: boolean) => void;
   messages: AssistantMessage[];
   busy: boolean;
+  activeTurnStartedAt?: number;
   activeToolSession?: AgentSessionRecord;
   lastToolSession?: AgentSessionRecord;
   error?: string;
@@ -88,6 +89,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [docked, setDockedState] = useState(() => readBool(DOCKED_KEY, false));
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [busy, setBusy] = useState(false);
+  const [activeTurnStartedAt, setActiveTurnStartedAt] = useState<number>();
   const [activeToolSession, setActiveToolSession] = useState<AgentSessionRecord>();
   const [lastToolSession, setLastToolSession] = useState<AgentSessionRecord>();
   const activeToolPrefix = useRef<string>();
@@ -217,6 +219,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     const history = messagesRef.current;
     persist([...history, userMessage]);
     setError(undefined);
+    setActiveTurnStartedAt(Date.now());
     setBusy(true);
     const toolSessionPrefix = runtime?.toolMode && runtime.toolMode !== 'project-only' ? `ASSISTANT-${crypto.randomUUID()}` : undefined;
     activeToolPrefix.current = toolSessionPrefix;
@@ -305,11 +308,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }), [reset]);
 
   const value = useMemo<AssistantController>(() => ({
-    open, setOpen, toggle, docked, setDocked, messages, busy, activeToolSession, lastToolSession, error, draft, setDraft, teamMembers, toggleTeamMember,
+    open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, error, draft, setDraft, teamMembers, toggleTeamMember,
     pageContext, availableContext, contextDetached, setContextDetached,
     projectId, setProjectId, chatId, send, newChat: reset, loadChat, chatDeleted,
     applyAction, appliedActions, register, unregister, setSessionDelegate
-  }), [open, setOpen, toggle, docked, setDocked, messages, busy, activeToolSession, lastToolSession, error, draft, pageContext, availableContext, contextDetached,
+  }), [open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, error, draft, pageContext, availableContext, contextDetached,
     setContextDetached, projectId, setProjectId, chatId, send, reset, loadChat, chatDeleted, applyAction,
     teamMembers, toggleTeamMember,
     appliedActions, register, unregister, setSessionDelegate]);

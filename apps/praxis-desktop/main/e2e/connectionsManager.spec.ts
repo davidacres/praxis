@@ -1,3 +1,4 @@
+import { openConnections } from './connectionNavigation';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -34,7 +35,7 @@ function writeFixturePlansFolder(root: string): void {
 async function openNewConnectionForm(): Promise<void> {
   app = await launchTestApp();
   window = app.window;
-  await window.locator('[data-testid="nav-connections"]').click();
+  await openConnections(window);
   await window.locator('[data-testid="add-connection-btn"]').click();
   await expect(window.locator('[data-testid="conn-form"]')).toBeVisible();
 }
@@ -212,7 +213,7 @@ test('saving a Jira Cloud connection in API-token mode writes the expected on-di
   app = await launchTestApp();
   window = app.window;
   const settingsPath = app.settingsPath;
-  await window.locator('[data-testid="nav-connections"]').click();
+  await openConnections(window);
   await window.locator('[data-testid="add-connection-btn"]').click();
   await expect(window.locator('[data-testid="conn-form"]')).toBeVisible();
 
@@ -263,7 +264,7 @@ test('saving a Jira Cloud connection with a BYO OAuth app writes the client id',
   app = await launchTestApp();
   window = app.window;
   const settingsPath = app.settingsPath;
-  await window.locator('[data-testid="nav-connections"]').click();
+  await openConnections(window);
   await window.locator('[data-testid="add-connection-btn"]').click();
   await expect(window.locator('[data-testid="conn-form"]')).toBeVisible();
 

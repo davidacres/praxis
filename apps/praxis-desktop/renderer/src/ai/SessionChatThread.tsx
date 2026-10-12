@@ -4,7 +4,6 @@ import { createPortal } from 'react-dom';
 import type {
   AgentEventSummary,
   AgentSessionRecord,
-  AiProvider,
   ChatBlock,
   GadgetActionResult,
   GadgetActionValue,
@@ -14,12 +13,12 @@ import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
 import { useDialogs } from '../ui/dialogs';
 import { providerIconName, providerLabel } from './modelProviders';
-import { formatCost, isLimitNoticeReply, liveActivity } from './sessionNav';
-import { LiveTurnActivityIndicator, formatElapsedDuration } from './LiveTurnActivityIndicator';
+import { formatCost, isLimitNoticeReply } from './sessionNav';
+import { formatElapsedDuration } from './LiveTurnActivityIndicator';
 import { GadgetBlockList } from './gadgets';
 import { useSessionGadgets } from './gadgets/useSessionGadgets';
 import { gadgetMessageKey, stripGadgetFences, visibleMessageText } from './gadgets/messageText';
-import { captionText, collectThoughtRuns, thoughtCaption, thoughtRunStartingAt } from './chatThought';
+import { captionText, collectThoughtRuns, mergeReasoningStep, thoughtCaption, thoughtRunStartingAt } from './chatThought';
 import { collectTurnTools } from './chatToolCalls';
 import { collectMessageRuns, messageRunCovering, messageRunStartingAt } from './chatTurns';
 
@@ -127,9 +126,6 @@ export interface SessionChatThreadProps {
   visibleResponseText?: string;
   shouldRenderResponseFallback?: boolean;
   livePendingConversationMessages?: Array<{ participantId?: string; message: string }>;
-  activeTurnStartedAt?: number;
-  liveActivityText?: string;
-  activityProvider?: AiProvider;
   scrollRef?: Ref<HTMLDivElement>;
   className?: string;
   testId?: string;
@@ -152,9 +148,6 @@ export function SessionChatThread({
   visibleResponseText,
   shouldRenderResponseFallback,
   livePendingConversationMessages = [],
-  activeTurnStartedAt,
-  liveActivityText,
-  activityProvider,
   scrollRef,
   className = '',
   testId = 'session-chat-thread',
@@ -358,7 +351,15 @@ export function SessionChatThread({
         const thoughtRun = thoughtRunStartingAt(thoughtRuns, index);
         const messageRun = messageRunStartingAt(messageRuns, index);
         const narration = messageRun?.narration ?? [];
-        const thoughtSteps = [...(thoughtRun?.steps ?? []), ...narration];
+        // The visible card starts at the first message; later members can introduce reasoning.
+        // Fold every member's reasoning here, since those members do not render separate cards.
+        const reasoningSteps = messageRun
+          ? messageRun.memberIndices.reduce<string[]>((steps, member) => {
+              const reasoning = conversationEvents[member].reasoning?.trim();
+              return reasoning ? mergeReasoningStep(steps, reasoning) : steps;
+            }, [])
+          : thoughtRun?.steps ?? [];
+        const thoughtSteps = [...reasoningSteps, ...narration];
         const caption = thoughtRun
           ? thoughtCaption(thoughtRun, conversationEvents, toolCallsAt)
           : captionText(messageRun?.durationMs, messageRun?.toolCalls);
@@ -366,7 +367,7 @@ export function SessionChatThread({
           ? conversationEvents[messageRun.memberIndices[messageRun.memberIndices.length - 1]]
           : event;
         const turnToolCalls = (lastMember && turnTools.get(lastMember)?.calls) ?? [];
-        const hasThought = Boolean(thoughtRun) || narration.length > 0;
+        const hasThought = reasoningSteps.length > 0 || narration.length > 0;
         const captionShown = hasThought && Boolean(caption);
         const telemetrySource = messageRun ?? event;
         const toolNames = messageRun ? messageRun.toolNames : event.toolNames;
@@ -672,7 +673,7 @@ export function SessionChatThread({
       ))}
 
       {/* In-Progress Active Turn / Streaming Turn Indicator */}
-      {isExecuting && (
+      {isExecuting && session.reasoningText?.trim() && (
         <div
           className={`session-chat-message is-assistant is-running${session.provider ? ` session-chat-provider-${session.provider}` : ''}`}
           data-testid="session-chat-live-turn"
@@ -683,22 +684,16 @@ export function SessionChatThread({
               <span>{session.model || (session.provider ? providerLabel(session.provider) : 'AI agent')}</span>
             </div>
           </div>
-          <LiveTurnActivityIndicator
-            startedAt={activeTurnStartedAt ?? session.events?.[session.events.length - 1]?.timestamp ?? session.startedAt}
-            statusText={liveActivityText ?? liveActivity(session) ?? 'Working…'}
-            provider={activityProvider ?? session.provider}
-            model={session.model}
-          />
-          {/* The indicator carries "what is it doing now"; the raw stream is
-              opt-in detail, collapsed, rendered after it. */}
+          {/* Actual streamed thoughts stay in the transcript; live activity lives in the composer. */}
           {session.reasoningText && (
             <details
+              open
               className="session-chat-thought session-chat-thought-streaming"
               data-testid="session-thought-disclosure"
             >
               <summary className="session-chat-thought-summary" data-testid="session-thought-summary">
                 <Icon name="sparkles" size={11} />
-                <span className="session-chat-thought-label">Thinking process</span>
+                <span className="session-chat-thought-label">Thoughts</span>
               </summary>
               <div className="session-chat-thought-content session-chat-streaming-text" data-testid="session-chat-streaming-text">
                 <Markdown text={session.reasoningText} testId="session-chat-markdown-streaming" imageSessionId={session?.issueKey} />

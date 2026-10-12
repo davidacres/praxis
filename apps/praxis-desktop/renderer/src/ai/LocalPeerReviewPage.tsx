@@ -1,3 +1,5 @@
+import { LiveTurnActivityIndicator } from './LiveTurnActivityIndicator';
+import { SessionComposerCard } from './SessionComposerFrame';
 import { useCallback, useEffect, useState } from 'react';
 import type { AiProvider, IssueDetails, LprResult } from '@praxis/core';
 import { Icon } from '../ui/Icon';
@@ -30,6 +32,7 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
   const [followUp, setFollowUp] = useState('');
   const [followUps, setFollowUps] = useState<LprMessage[]>([]);
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
+  const [followUpStartedAt, setFollowUpStartedAt] = useState<number>();
   const [followUpError, setFollowUpError] = useState<string>();
 
   useEffect(() => {
@@ -56,6 +59,7 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
   const sendFollowUp = async () => {
     const message = followUp.trim();
     if (!message || state.phase !== 'done' || sendingFollowUp) return;
+    setFollowUpStartedAt(Date.now());
     setSendingFollowUp(true);
     setFollowUpError(undefined);
     setFollowUps(current => [...current, { role: 'user', text: message }]);
@@ -170,10 +174,11 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
             </div>
           ))}
           {followUpError && <div className="error-banner" data-testid="lpr-follow-up-error">{followUpError}</div>}
-          <div className="composer lpr-follow-up-composer">
+          <SessionComposerCard className={`lpr-follow-up-composer${sendingFollowUp ? ' is-collapsed is-running' : ''}`}>
             <textarea
-              className="composer-input"
+              className={`composer-input${sendingFollowUp ? ' session-follow-up-input is-collapsed' : ''}`}
               rows={2}
+              style={sendingFollowUp ? { height: 0 } : undefined}
               data-testid="lpr-follow-up-input"
               value={followUp}
               disabled={sendingFollowUp}
@@ -187,6 +192,7 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
               }}
             />
             <div className="composer-controls">
+              {sendingFollowUp && <LiveTurnActivityIndicator variant="composer" testId="lpr-composer-activity-chip" startedAt={followUpStartedAt} statusText="Thinking…" provider={provider} />}
               <span className="spacer" />
               <button
                 className="composer-send"
@@ -200,7 +206,7 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
                 <Icon name="arrow-up" size={15} />
               </button>
             </div>
-          </div>
+          </SessionComposerCard>
         </div>
       )}
     </div>

@@ -345,7 +345,19 @@ test('the review composer pastes and drops images, removes one and sends the ret
 });
 
 test('review exposes shared runtime controls while preserving its review boundaries', async () => {
-  const { win, issueKey } = await openReview();
+  const { win, issueKey } = await openReview({ TICKET_REVIEW_FIXTURE_MODE: 'slow' });
+  const liveComposer = win.getByTestId('ai-review-followup-composer');
+  await expect(liveComposer.getByTestId('ai-review-activity')).toBeVisible();
+  await expect(liveComposer.getByTestId('session-composer-activity-timer')).toBeVisible();
+  await expect(win.getByTestId('session-activity-status')).toHaveCount(0);
+  const activeReview = await win.evaluate(async () => (await window.praxis.ai.listSessions()).find(session => session.issueKey.startsWith('review~'))!);
+  await app!.electronApp.evaluate(({ BrowserWindow }, record) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', { ...record, reasoningText: 'Checking the acceptance criteria' });
+  }, activeReview);
+  await expect(win.getByTestId('review-thought-content')).toBeVisible();
+  await expect(win.getByTestId('review-thought-content')).toContainText('Checking the acceptance criteria');
+
+  await win.getByTestId('ai-review-page').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/review-thoughts-preserved.png') });
   await expect(win.getByTestId('ai-review-content')).toContainText('Verdict: Needs work', { timeout: 20000 });
   const composer = win.getByTestId('ai-review-followup-composer');
   await expect(composer.getByTestId('session-provider')).toContainText('Claude');

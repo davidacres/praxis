@@ -232,6 +232,20 @@ test('a controller session starts a project run and its stage session fills the 
   // Centre: the session doing the work. Right pane: the pipeline, vertically.
   await expect(page.getByTestId('wf-run-session')).toBeVisible();
   await expect(page.getByTestId('wf-run-session').locator('.session-console')).toBeVisible();
+  const displayedSession = await page.evaluate(async key => (await window.praxis.ai.listSessions()).find(session => session.issueKey === key)!, stageSession!.key);
+  await app!.electronApp.evaluate(({ BrowserWindow }, record) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', { ...record, state: 'executing', completedAt: undefined, reasoningText: 'Inspecting the workflow stage' });
+  }, displayedSession);
+  const workflowComposer = page.getByTestId('wf-run-session').locator('.session-follow-up-composer');
+  await expect(workflowComposer.getByTestId('session-composer-activity-timer')).toBeVisible();
+  await expect(page.getByTestId('session-activity-status')).toHaveCount(0);
+  await expect(page.getByTestId('session-chat-markdown-streaming')).toContainText('Inspecting the workflow stage');
+  await expect(workflowComposer.getByTestId('session-follow-up-input')).toHaveCSS('opacity', '0');
+  await page.getByTestId('wf-run-session').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/workflow-composer-thinking.png') });
+  await app!.electronApp.evaluate(({ BrowserWindow }, record) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', record);
+  }, displayedSession);
+
   const pipeline = page.getByTestId('wf-run-panel').getByTestId('wf-vpipe');
   await expect(pipeline).toBeVisible();
   const review = pipeline.getByTestId('wf-vpipe-step-review');

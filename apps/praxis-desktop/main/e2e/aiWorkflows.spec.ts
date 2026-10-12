@@ -469,7 +469,7 @@ test('feature decomposition creates the sub-task issues and lists them', async (
 });
 
 test('local peer review runs the three sections against the gateway', async () => {
-  mock = await startMockGatewayServer({ mode: 'complete' });
+  mock = await startMockGatewayServer({ mode: 'complete', responseDelayMs: 1200 });
   app = await launchTestApp(undefined, undefined, gatewayEnv(mock.baseUrl));
   const win = app.window;
 
@@ -506,6 +506,19 @@ test('local peer review runs the three sections against the gateway', async () =
   expect(peerReviewRequests[0].body).toContain('senior software engineer');
   expect(peerReviewRequests[1].body).toContain('security engineer');
   expect(peerReviewRequests[2].body).toContain('technical lead');
+
+  await win.getByTestId('lpr-follow-up-input').fill('Explain the verdict');
+  await win.getByTestId('lpr-follow-up-send').click();
+  await expect(win.locator('.lpr-follow-up-composer')).toHaveClass(/is-collapsed/);
+  await expect(win.getByTestId('lpr-follow-up-input')).toHaveCSS('height', '0px');
+  await expect(win.getByTestId('lpr-follow-up-input')).toHaveCSS('opacity', '0');
+  await expect(win.getByTestId('lpr-composer-activity-chip')).toContainText('Thinking');
+  await expect(win.getByTestId('lpr-composer-activity-chip').getByTestId('session-composer-token-count')).toHaveText('— tokens');
+  await expect(win.getByTestId('session-composer-activity-timer')).toBeVisible();
+  await win.getByTestId('lpr-chat-composer').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/peer-review-composer-thinking.png') });
+  await expect(win.locator('.lpr-follow-up-message.assistant')).toContainText('Mock gateway reply');
+  await expect(win.getByTestId('lpr-composer-activity-chip')).toHaveCount(0);
+
 });
 
 test('merge requests list empty, then create after a delivery recorded a branch', async () => {

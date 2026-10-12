@@ -61,6 +61,23 @@ test('standalone conversation persists and resumes across floating-window pop-in
   expect(security).toEqual({ alwaysOnTop: true, contextIsolation: true, nodeIntegration: false, sandbox: true });
   expect(await floating.evaluate(() => window.open('data:text/html,<h1>Unexpected window</h1>'))).toBeNull();
   expect(app.electronApp.windows()).toHaveLength(2);
+  // A long-running follow-up retains its turn clock even as newer tool events arrive.
+  await app.electronApp.evaluate(({ BrowserWindow }, record) => {
+    const now = new Date().toISOString();
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', {
+      ...record, state: 'executing', reasoningText: 'Checking the next step',
+      events: [...record.events, { type: 'user_input_completed', timestamp: new Date(Date.now() - 65000).toISOString(), summary: 'Follow-up' },
+        { type: 'tool_start', timestamp: now, summary: 'Running tool: inspect', data: { toolName: 'inspect' } }]
+    });
+  }, record);
+  const composerClock = floating.getByTestId('session-composer-activity-timer');
+  await expect(composerClock).toHaveText(/1m \d+s/);
+  await expect(floating.getByTestId('session-activity-status')).toHaveCount(0);
+  await expect(floating.getByTestId('session-chat-markdown-streaming')).toContainText('Checking the next step');
+  await floating.locator('.session-follow-up-composer').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/detached-composer-thinking.png') });
+  await app.electronApp.evaluate(({ BrowserWindow }, record) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', record);
+  }, record);
   await floating.getByTestId('session-follow-up-input').fill('Continue in floating chat');
   await floating.getByTestId('session-follow-up-send').click();
   await expect.poll(() => win.evaluate(async key => {

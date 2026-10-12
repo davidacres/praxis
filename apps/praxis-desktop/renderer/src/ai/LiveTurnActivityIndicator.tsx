@@ -9,6 +9,9 @@ export interface LiveTurnActivityIndicatorProps {
   statusText: string;
   provider?: AiProvider;
   model?: string;
+  tokenCount?: number;
+  variant?: 'chat' | 'composer';
+  testId?: string;
 }
 
 function parseStartTime(startedAt?: number | string): number {
@@ -42,7 +45,10 @@ export function LiveTurnActivityIndicator({
   startedAt,
   statusText,
   provider,
-  model
+  model,
+  tokenCount,
+  variant = 'chat',
+  testId = variant === 'composer' ? 'session-composer-activity-chip' : 'session-activity-status'
 }: LiveTurnActivityIndicatorProps) {
   const [startTime, setStartTime] = useState<number>(() => parseStartTime(startedAt));
 
@@ -62,14 +68,16 @@ export function LiveTurnActivityIndicator({
     return () => clearInterval(interval);
   }, [startTime]);
 
+  const reportedTokens = typeof tokenCount === 'number' && Number.isFinite(tokenCount) && tokenCount >= 0
+    ? Math.round(tokenCount).toLocaleString() : undefined;
   const formattedTime = formatElapsedDuration(elapsedMs);
 
   return (
     <div
-      className="session-activity-status"
-      data-testid="session-activity-status"
+      className={variant === 'composer' ? 'composer-chip session-runtime-chip is-readonly session-activity-chip session-composer-live-activity' : 'session-activity-status'}
+      data-testid={testId}
       role="status"
-      aria-live="polite"
+      aria-live={variant === 'composer' ? 'off' : 'polite'}
     >
       {provider ? (
         <Icon
@@ -81,9 +89,15 @@ export function LiveTurnActivityIndicator({
         <StatusGlyph status="running" size="sm" ariaLabel="Active turn running" />
       )}
       <span className="session-activity-label">{statusText}</span>
-      <span className="session-activity-timer" data-testid="session-activity-timer" aria-label={`Elapsed time: ${formattedTime}`}>
+      <span className="session-activity-timer" data-testid={variant === 'composer' ? 'session-composer-activity-timer' : 'session-activity-timer'} aria-label={`Elapsed time: ${formattedTime}`}>
         {formattedTime}
       </span>
+      {variant === 'composer' && <span
+        className="session-activity-tokens"
+        data-testid="session-composer-token-count"
+        title={reportedTokens === undefined ? 'Token usage not reported' : 'Reported session token total'}
+        aria-label={reportedTokens === undefined ? 'Token usage not reported' : `${reportedTokens} reported tokens for this session`}
+      >{reportedTokens ?? '—'} tokens</span>}
     </div>
   );
 }

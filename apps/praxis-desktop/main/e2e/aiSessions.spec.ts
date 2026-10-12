@@ -134,7 +134,7 @@ test('closing Praxis warns before interrupting an active AI session', async () =
 });
 
 test('composer selects a board and open ticket, names the session, and streams to completion', async () => {
-  mock = await startMockGatewayServer({ mode: 'complete', responseDelayMs: 1500 });
+  mock = await startMockGatewayServer({ mode: 'complete', responseDelayMs: 4000 });
   app = await launchTestApp(undefined, undefined, {
     ...NO_GATEWAY_ENV,
     AI_GATEWAY_API_KEY: 'e2e-gateway-key',
@@ -180,6 +180,14 @@ test('composer selects a board and open ticket, names the session, and streams t
   await expect.poll(() => win.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.projectId))
     .toBe(ticketProject.id);
   await expect(win.getByTestId('nav-sessions')).toHaveCount(0);
+  const thinking = win.getByTestId('session-composer-activity-chip');
+  await expect(thinking).toBeVisible();
+  await expect(thinking).toContainText(/Working|Thinking|Planning|Running/);
+  await expect(win.getByTestId('session-activity-status')).toHaveCount(0);
+  const timer = thinking.getByTestId('session-composer-activity-timer');
+  await expect(timer).toHaveText(/\d+(?:\.\d+)?s/);
+  const firstTime = await timer.innerText();
+  await expect.poll(() => timer.innerText()).not.toBe(firstTime);
   const activityOrbit = win.locator('[data-testid="session-composer-activity-orbit"]');
   await expect(activityOrbit).toBeVisible();
   await expect(activityOrbit).toHaveAttribute('data-activity-duration', '7000');
@@ -211,7 +219,7 @@ test('composer selects a board and open ticket, names the session, and streams t
   expect(Math.abs((orbitBox?.height ?? 0) - (composerBox?.height ?? 0))).toBeLessThanOrEqual(2);
   expect(firstTransform).not.toBe(secondTransform);
   await win.locator('.session-follow-up-composer').screenshot({
-    path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'session-composer-activity-orbit.png')
+    path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'session-composer-thinking.png')
   });
   await expect(win.getByTestId('session-console-title')).toContainText('Operations follow-up');
   await expect(win.getByTestId('session-console-title')).toContainText(selectedTicket);

@@ -1,3 +1,4 @@
+import { openConnections } from './connectionNavigation';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import * as path from 'node:path';
@@ -201,15 +202,17 @@ test('closing the issue detail panel hides it', async () => {
   await expect(window.getByRole('button', { name: 'Close', exact: true })).not.toBeVisible();
 });
 
-test('navigating to Connections shows the connection management screen', async () => {
-  await window.locator('[data-testid="nav-connections"]').click();
+test('Connections is absent from the sidebar and opens through the command palette', async () => {
+  await expect(window.getByTestId('nav-connections')).toHaveCount(0);
+  await window.getByRole('navigation', { name: 'Workspace' }).screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/sidebar-without-connections.png') });
+  await openConnections(window);
   await expect(window.locator('[data-testid="connections-page"]')).toBeVisible();
   await expect(window.locator('[data-testid="add-connection-btn"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-empty"]')).toBeVisible();
 });
 
 test('adding and removing a connection updates the list', async () => {
-  await window.locator('[data-testid="nav-connections"]').click();
+  await openConnections(window);
   await window.locator('[data-testid="add-connection-btn"]').click();
 
   const name = `e2e-connection-${Date.now()}`;

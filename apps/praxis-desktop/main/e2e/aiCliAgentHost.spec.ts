@@ -469,7 +469,8 @@ test('an in-flight turn shows one live status line, not streamed tool blocks', a
   await delegate(win, 'APP-206', 'claude-code-cli', 'HANG_UNTIL_CANCELLED please');
   await openSession(win, 'APP-206');
 
-  const status = win.locator('[data-testid="session-activity-status"]');
+  const status = win.getByTestId('session-composer-activity-chip');
+  await expect(win.getByTestId('session-activity-status')).toHaveCount(0);
   await expect(status).toBeVisible({ timeout: 10000 });
   await expect(status).toContainText(/Working…|Thinking…|Planning…|Running/);
 

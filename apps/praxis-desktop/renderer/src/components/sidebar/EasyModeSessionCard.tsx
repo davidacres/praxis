@@ -4,6 +4,7 @@ import { Icon } from '../../ui/Icon';
 import { StatusGlyph } from '../../ui/StatusGlyph';
 import { useDialogs } from '../../ui/dialogs';
 import { sessionTitle, extractSubagents, formatStarted, extractSessionAiProviders } from '../../ai/sessionNav';
+import { SessionCardActivity } from './SessionCardActivity';
 import { SessionAiIcons } from '../../ai/SessionAiIcons';
 
 export interface EasyModeSessionCardProps {
@@ -61,11 +62,6 @@ export function EasyModeSessionCard({
   const timeFormatted = session.startedAt ? formatStarted(session.startedAt) : '';
 
   const isRunning = session.state === 'executing' || session.state === 'planning' || session.state === 'awaiting_approval' || session.state === 'awaiting_input';
-  const latestEvent = session.events && session.events.length > 0 ? session.events[session.events.length - 1] : undefined;
-  const tickerText = isRunning
-    ? (latestEvent?.summary || (session.state === 'planning' ? 'Planning next steps…' : 'Agent working…'))
-    : null;
-
   // Extract subagents using sessionNav helper
   const subagents = React.useMemo(() => {
     return extractSubagents(session, allSessions);
@@ -355,19 +351,7 @@ export function EasyModeSessionCard({
         </div>
       </div>
 
-      {(session.state === 'awaiting_approval' || session.state === 'awaiting_input') && (
-        <div className="action-gate-callout" data-testid={`easymode-session-gate-${session.issueKey}`}>
-          <Icon name="warning" size={12} />
-          <span>Action Gate: {session.state === 'awaiting_approval' ? 'Approval required' : 'Input required'}</span>
-        </div>
-      )}
-
-      {tickerText && (
-        <div className="easymode-session-card__ticker" title={tickerText}>
-          <span className="easymode-ticker-dot" />
-          <span className="easymode-ticker-text">{tickerText}</span>
-        </div>
-      )}
+      <SessionCardActivity session={session} gateTestId={`easymode-session-gate-${session.issueKey}`} />
 
       {agentItems.length > 1 && (
       <div className="easymode-subagents-list" data-testid={`easymode-subagents-${session.issueKey}`}>

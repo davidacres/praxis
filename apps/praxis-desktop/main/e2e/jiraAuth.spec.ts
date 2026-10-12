@@ -1,3 +1,4 @@
+import { openConnections } from './connectionNavigation';
 // SPDX-License-Identifier: MIT
 //
 // Phase E e2e tests for the desktop Jira MCP connection's auth paths.
@@ -124,7 +125,7 @@ async function runTestConnection(
   connectionId: string,
   connectionName: string
 ): Promise<{ status: string; message: string }> {
-  await page.locator('[data-testid="nav-connections"]').click();
+  await openConnections(page);
   const row = page.locator('[data-testid="connection-row"]', {
     hasText: connectionName
   });

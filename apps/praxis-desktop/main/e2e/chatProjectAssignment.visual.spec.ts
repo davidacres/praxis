@@ -70,7 +70,7 @@ test('assign chat picker and project session placement', async () => {
   await expect(generalSessions).toContainText('1');
   const generalSession = projectTree.getByTestId('project-session-nav-item').filter({ hasText: 'Research notes' });
   await expect(generalSession).toBeVisible();
-  await expect(generalSession.locator('.tree-icon')).toHaveAttribute('title', 'General chat session');
+  await expect(generalSession.locator('.easymode-session-card__type-icon')).toHaveAttribute('title', 'General chat session');
   await generalSession.click();
   await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/chat-project-assigned-general.png') });
 
@@ -94,7 +94,7 @@ test('assign chat picker and project session placement', async () => {
   const ticketSession = projectTree.getByTestId('project-session-nav-item').filter({ hasText: 'Ticket research notes' });
   await expect(ticketSession).toBeVisible();
   await expect(ticketSession).toContainText(ticketKey);
-  await expect(ticketSession.locator('.tree-icon')).toHaveAttribute('title', `Linked to ${ticketKey}`);
+  await expect(ticketSession.locator('.easymode-session-card__type-icon')).toHaveAttribute('title', `Linked to ${ticketKey}`);
   await ticketSession.click();
   await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/chat-project-assigned-ticket.png') });
 });

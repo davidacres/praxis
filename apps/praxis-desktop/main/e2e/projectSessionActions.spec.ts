@@ -96,7 +96,19 @@ test('General and Ticket project sessions expose rename, archive, and delete act
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'project-session-action-row.png')
   });
 
+  await standalone.hover();
+  await page.waitForTimeout(180);
+  await standalone.screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'real-classic-standalone-row-hover.png')
+  });
   await general.hover();
+  await page.waitForTimeout(180);
+  await page.locator('nav.sidebar').screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'real-classic-session-hover.png'),
+  });
+  await general.screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'real-classic-session-row-hover.png')
+  });
   await general.getByTestId('session-rename-btn').click();
   const titleInput = page.getByTestId('session-title-input');
   await titleInput.fill('Renamed general session');

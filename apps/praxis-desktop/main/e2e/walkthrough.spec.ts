@@ -83,9 +83,6 @@ test('walks the shell, rings each control, and remembers it was seen', async () 
   await page.getByTestId('walkthrough-next').click();
   await expect(callout).toContainText('Hand a ticket to an agent');
   await expectRingWraps(page, '[data-testid="project-getstarted-start"]');
-  await page.getByTestId('walkthrough-next').click();
-  await expect(callout).toContainText('Bring in your real tickets');
-  await expectRingWraps(page, '[data-testid="nav-connections"]');
 
   // Last stop offers a close, not another Next.
   await expect(page.getByTestId('walkthrough-next')).toHaveCount(0);
@@ -183,9 +180,8 @@ test('a stop whose target disappears mid-tour is skipped, not shown empty', asyn
   await page.getByTestId('project-getstarted').getByRole('button', { name: 'Dismiss' }).click();
   await expect(page.getByTestId('project-getstarted')).toHaveCount(0);
 
-  // Next must land on stop 4, not on an empty stop 3.
+  // With the final target gone, Next finishes the tour without an empty stop.
   await page.getByTestId('walkthrough-next').click();
-  await expect(callout).toContainText('Bring in your real tickets');
-  await expect(callout).not.toContainText('Hand a ticket to an agent');
-  await expect(page.locator('.walkthrough-ring')).toHaveCount(1);
+  await expect(callout).toHaveCount(0);
+  await expect(page.locator('.walkthrough-ring')).toHaveCount(0);
 });

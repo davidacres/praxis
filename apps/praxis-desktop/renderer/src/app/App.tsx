@@ -1,4 +1,3 @@
-import { confirmProjectWorkflowTrust } from '../workflows/workflowProjectTrust';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentRuntimeSnapshot,
@@ -1726,7 +1725,6 @@ export function App() {
             throw new Error('Select a project before starting a governed workflow.');
           }
           try {
-            await confirmProjectWorkflowTrust(project.id, workflowId, confirm);
             await window.praxis.workflows.startRun(
               project.id,
               workflowId,
@@ -1824,7 +1822,6 @@ export function App() {
             throw new Error('This session is not associated with a project. Open it from a project workspace before adding a workflow.');
           }
           await assertRunBaseOrThrow(projectId, uncommittedChanges);
-          await confirmProjectWorkflowTrust(projectId, workflowId, confirm);
           await window.praxis.workflows.startRun(
             projectId,
             workflowId,
@@ -2461,6 +2458,7 @@ export function App() {
               }
             : undefined
         }
+        onOpenPalette={() => setPaletteOpen(true)}
         sidebarVisible={sidebarVisible}
         onToggleSidebar={() => setSidebarVisible(visible => !visible)}
         auxVisible={auxVisible}
@@ -2671,9 +2669,7 @@ export function App() {
                   onModeChange={setMode}
                   activeFeature={route.feature}
                   sessions={activeSessions}
-                  {...((route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey
-                    ? { activeSessionKey: route.sessionKey }
-                    : {})}
+                  activeSessionKey={(route.feature === 'sessions' || route.feature === 'conversations') ? route.sessionKey : undefined}
                   onSelectSession={issueKey => {
                     const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
                     navigate(session && isConversationSession(session)

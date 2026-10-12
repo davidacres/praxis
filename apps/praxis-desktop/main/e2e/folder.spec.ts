@@ -1,3 +1,4 @@
+import { openConnections } from './connectionNavigation';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -51,7 +52,7 @@ test.afterEach(async () => {
 });
 
 async function addFolderConnection(name: string): Promise<void> {
-  await window.locator('[data-testid="nav-connections"]').click();
+  await openConnections(window);
   await window.locator('[data-testid="add-connection-btn"]').click();
   await window.locator('[data-testid="conn-field-name"]').fill(name);
   await chooseOption(window.locator('[data-testid="conn-field-mode"]'), 'folder');

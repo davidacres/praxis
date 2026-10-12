@@ -31,6 +31,8 @@ import { ChipSelect } from '../ui/ChipSelect';
 import { SessionOrganizer } from './SessionOrganizer';
 import { TeamChatsSection } from '../assistant/TeamChatsSection';
 import { AssignSessionDialog } from '../components/sidebar/AssignSessionDialog';
+import { StatusGlyph } from '../ui/StatusGlyph';
+import { SessionCardActivity } from '../components/sidebar/SessionCardActivity';
 
 export type SidebarMode = 'classic' | 'work';
 
@@ -255,7 +257,7 @@ function ProjectSessionRow({
   return (
     <div className="project-session-entry">
       <div
-        className={`tree-row session-nav-row session-nav-card${active ? ' active' : ''}`}
+        className={`tree-row session-nav-row session-nav-card easymode-session-card${active ? ' is-selected active' : ''}`}
         data-testid="project-session-nav-item"
         title={title}
         role="button"
@@ -268,54 +270,64 @@ function ProjectSessionRow({
           }
         }}
       >
-        <span className="tree-icon" title={session.linkedIssueKey ? `Linked to ${session.linkedIssueKey}` : kind === 'ticket' ? 'Ticket session' : 'General chat session'}>
-          {providers.length > 0 ? (
-            <SessionAiIcons providers={providers} size={14} />
-          ) : (
+        <div className="easymode-session-card__head">
+          <span className="tree-icon easymode-session-card__type-icon" title={session.linkedIssueKey ? `Linked to ${session.linkedIssueKey}` : kind === 'ticket' ? 'Ticket session' : 'General chat session'}>
             <Icon name={kind === 'ticket' ? 'ticket' : 'chats'} size={13} />
-          )}
-        </span>
-        <span className="session-nav-card-main">
-          <span className="session-nav-card-title-row">
-            {editing ? (
-              <input
-                className="session-title-input"
-                data-testid="session-title-input"
-                aria-label={`Session title for ${title}`}
-                value={draft}
-                disabled={mutating}
-                autoFocus
-                onClick={event => event.stopPropagation()}
-                onChange={event => setDraft(event.target.value)}
-                onBlur={() => void commitRename()}
-                onKeyDown={event => {
-                  event.stopPropagation();
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    event.currentTarget.blur();
-                  } else if (event.key === 'Escape') {
-                    event.preventDefault();
-                    setEditing(false);
-                  }
-                }}
-              />
-            ) : (
-              <span className="tree-label" data-testid="session-title">{title}</span>
-            )}
-            <span className={`session-nav-card-status ${agentStateLaneClass(session.state)}`}>{agentStateLabel(session.state)}</span>
           </span>
-          {!editing && <span className="session-nav-card-meta" data-testid="project-session-agent-summary" title={`${agentDisplay} · ${runtimeLabel} · ${elapsed ?? 'Time not available'} · ${tokens ?? 'Tokens not reported'}`}>
-            <span className="session-nav-card-runtime">{runtimeLabel}</span>
-            {ticketKey && <span>{ticketKey}</span>}
-            {elapsed && <span>{elapsed}</span>}
-            {tokens && <span>{tokens}</span>}
-          </span>}
-        </span>
-        {!editing && (
-          <>
-            <span className="session-nav-actions">
+          <div className="easymode-session-card__content session-nav-card-main">
+            <div className="easymode-session-card__title-row session-nav-card-title-row">
+              {editing ? (
+                <input
+                  className="session-title-input"
+                  data-testid="session-title-input"
+                  aria-label={`Session title for ${title}`}
+                  value={draft}
+                  disabled={mutating}
+                  autoFocus
+                  onClick={event => event.stopPropagation()}
+                  onChange={event => setDraft(event.target.value)}
+                  onBlur={() => void commitRename()}
+                  onKeyDown={event => {
+                    event.stopPropagation();
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    } else if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setEditing(false);
+                    }
+                  }}
+                />
+              ) : (
+                <span className="easymode-session-card__title tree-label" data-testid="session-title">{title}</span>
+              )}
+              {elapsed && <span className="easymode-session-card__time">{elapsed}</span>}
+            </div>
+            {!editing && (
+              <div className="easymode-session-card__subtitle session-nav-card-meta" data-testid="project-session-agent-summary" title={`${agentDisplay} · ${runtimeLabel} · ${elapsed ?? 'Time not available'} · ${tokens ?? 'Tokens not reported'}`}>
+                {providers.length > 0 && (
+                  <SessionAiIcons providers={providers} size={11} className="easymode-session-ai-icons" />
+                )}
+                <span className="easymode-session-card__model-tag session-nav-card-runtime">{runtimeLabel}</span>
+                {ticketKey && <span className="session-item-key">{ticketKey}</span>}
+                {tokens && <span>{tokens}</span>}
+              </div>
+            )}
+          </div>
+          <div className="easymode-session-card__status-col">
+            <span className={`session-nav-card-status ${agentStateLaneClass(session.state)}`} data-testid="session-nav-state">
+              <StatusGlyph
+                status={session.state}
+                size="md"
+                title={agentStateLabel(session.state)}
+              />
+            </span>
+          </div>
+          {!editing && (
+            <div className="easymode-card-actions session-nav-actions">
               <button
-                className="icon-btn icon-btn-sm"
+                type="button"
+                className="easymode-card-action-btn icon-btn"
                 aria-label={`Assign session ${title} to ticket`}
                 title="Assign to ticket"
                 data-testid="session-assign-btn"
@@ -324,9 +336,10 @@ function ProjectSessionRow({
                   event.stopPropagation();
                   onAssignSession?.(session);
                 }}
-              ><Icon name="ticket" size={12} /></button>
+              ><Icon name="ticket" size={11} /></button>
               <button
-                className="icon-btn icon-btn-sm"
+                type="button"
+                className="easymode-card-action-btn icon-btn"
                 aria-label={`Rename session ${title}`}
                 title="Rename session"
                 data-testid="session-rename-btn"
@@ -336,9 +349,10 @@ function ProjectSessionRow({
                   setEditing(true);
                   setDraft(title);
                 }}
-              ><Icon name="pencil" size={12} /></button>
+              ><Icon name="pencil" size={11} /></button>
               <button
-                className="icon-btn icon-btn-sm"
+                type="button"
+                className="easymode-card-action-btn icon-btn"
                 aria-label={`Archive session ${title}`}
                 title="Archive session"
                 data-testid="session-archive-btn"
@@ -347,9 +361,10 @@ function ProjectSessionRow({
                   event.stopPropagation();
                   void archive();
                 }}
-              ><Icon name="archive" size={12} /></button>
+              ><Icon name="archive" size={11} /></button>
               <button
-                className="icon-btn icon-btn-sm"
+                type="button"
+                className="easymode-card-action-btn easymode-card-action-btn--delete icon-btn"
                 aria-label={`Delete session ${title}`}
                 title="Delete session"
                 data-testid="session-delete-btn"
@@ -358,10 +373,11 @@ function ProjectSessionRow({
                   event.stopPropagation();
                   void remove();
                 }}
-              ><Icon name="trash" size={12} /></button>
-            </span>
-          </>
-        )}
+              ><Icon name="trash" size={11} /></button>
+            </div>
+          )}
+        </div>
+        <SessionCardActivity session={session} />
       </div>
       {error && <div className="error-banner session-list-error" data-testid="project-session-row-error">{error}</div>}
     </div>
@@ -1827,7 +1843,7 @@ function SessionsNav({
       return (
         <Fragment key={session.issueKey}>
         <div
-          className={`tree-row session-nav-row session-nav-card${depth > 0 ? ' session-nav-row--child' : ''}${active && activeSessionKey === session.issueKey ? ' active' : ''}`}
+          className={`tree-row session-nav-row session-nav-card easymode-session-card${depth > 0 ? ' session-nav-row--child' : ''}${activeSessionKey === session.issueKey ? ' is-selected active' : ''}`}
           data-parent-session={session.parentSessionKey || undefined}
           data-testid="session-list-row"
           draggable={draggable}
@@ -1843,152 +1859,174 @@ function SessionsNav({
             }
           }}
         >
-          <span className="tree-icon">
-            {providers.length > 0 ? (
-              <SessionAiIcons providers={providers} size={14} />
-            ) : (
-              <Icon name="robot" size={14} />
-            )}
-          </span>
-          <span className="session-nav-card-main">
-            <span className="session-nav-card-title-row">
-              {editing ? (
-                <input
-                  className="session-title-input"
-                  data-testid="session-title-input"
-                  aria-label={`Session title for ${title}`}
-                  value={draft}
-                  disabled={mutating}
-                  autoFocus
-                  onClick={event => event.stopPropagation()}
-                  onChange={event => setDraft(event.target.value)}
-                  onBlur={() => void commitRename(session)}
-                  onKeyDown={event => {
-                    event.stopPropagation();
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      event.currentTarget.blur();
-                    } else if (event.key === 'Escape') {
-                      event.preventDefault();
-                      setEditingKey(undefined);
-                    }
-                  }}
-                />
-              ) : (
-                <span className="tree-label" title={title} data-testid="session-title">{title}</span>
-              )}
-              {kids.length > 0 && (
-                <button
-                  className="icon-btn icon-btn-sm session-nav-toggle"
-                  aria-label={`${childrenCollapsed ? 'Expand' : 'Collapse'} ${title}'s child sessions`}
-                  aria-expanded={!childrenCollapsed}
-                  data-testid="session-children-toggle"
-                  onClick={event => {
-                    event.stopPropagation();
-                    setCollapsedParents(current => ({ ...current, [session.issueKey]: !childrenCollapsed }));
-                  }}
-                >
-                  <Icon name={childrenCollapsed ? 'chevron-right' : 'chevron-down'} size={11} />
-                </button>
-              )}
-              {!editing && <span className={`session-nav-card-status ${agentStateLaneClass(session.state)}`} data-testid="session-nav-state">{agentStateLabel(session.state)}</span>}
+          <div className="easymode-session-card__head">
+            <span className="tree-icon easymode-session-card__type-icon">
+              <Icon name="chats" size={13} />
             </span>
-            {!editing && <span className="session-nav-card-meta" data-testid="session-nav-card-meta">
-              {!isWorkflowStageSession(session) && visibleSessionKey && <span>{visibleSessionKey}</span>}
-              <span className="session-nav-card-runtime">{runtimeLabel}</span>
-              {projectName && <span>{projectName}</span>}
-              {elapsed && <span>{elapsed}</span>}
-              {tokens && <span>{tokens}</span>}
-            </span>}
-          </span>
-          {!editing && (
-            <>
-              {childrenCollapsed && liveChildCount > 0 && (
-                <span className="session-nav-childcount" title={`${liveChildCount} child session${liveChildCount === 1 ? '' : 's'} still working`} data-testid="session-children-live">
-                  {liveChildCount}
-                </span>
-              )}
-              <span className="session-nav-actions">
-                {isConversationSession(session) && <>
-                <button
-                  className="icon-btn icon-btn-sm"
-                  aria-label={`More actions for ${title}`}
-                  title="More actions"
-                  aria-haspopup="menu"
-                  aria-expanded={sessionMenuKey === session.issueKey}
-                  data-testid="session-actions-menu"
-                  disabled={mutating}
-                  onClick={event => {
-                    event.stopPropagation();
-                    setSessionMenuKey(current => current === session.issueKey ? undefined : session.issueKey);
-                  }}
-                ><Icon name="ellipsis" size={12} /></button>
-                {sessionMenuKey === session.issueKey && <div className="session-row-menu" role="menu" data-testid="session-actions-menu-popover">
-                  <button type="button" role="menuitem" data-testid="session-assign-project-menu-item" onClick={event => {
-                    event.stopPropagation();
-                    setSessionMenuKey(undefined);
-                    setError(undefined);
-                    setAssignSession(session);
-                  }}><Icon name="folder" size={13} />Assign to project</button>
-                </div>}
-                </>}
-                <button
-                  className="icon-btn icon-btn-sm"
-                  aria-label={`Assign session ${title} to ticket`}
-                  title="Assign to ticket"
-                  data-testid="session-assign-btn"
-                  disabled={mutating}
-                  onClick={event => {
-                    event.stopPropagation();
-                    setSessionMenuKey(undefined);
-                    setError(undefined);
-                    setAssignSession(session);
-                  }}
-                >
-                  <Icon name="ticket" size={12} />
-                </button>
-                <button
-                  className="icon-btn icon-btn-sm"
-                  aria-label={`Rename session ${title}`}
-                  title="Rename session"
-                  data-testid="session-rename-btn"
-                  disabled={mutating}
-                  onClick={event => {
-                    event.stopPropagation();
-                    beginRename(session);
-                  }}
-                >
-                  <Icon name="pencil" size={12} />
-                </button>
-                <button
-                  className="icon-btn icon-btn-sm"
-                  aria-label={`Archive session ${title}`}
-                  title="Archive session"
-                  data-testid="session-archive-btn"
-                  disabled={mutating}
-                  onClick={event => {
-                    event.stopPropagation();
-                    void archive(session, true);
-                  }}
-                >
-                  <Icon name="archive" size={12} />
-                </button>
-                <button
-                  className="icon-btn icon-btn-sm"
-                  aria-label={`Delete session ${title}`}
-                  title="Delete session"
-                  data-testid="session-delete-btn"
-                  disabled={mutating}
-                  onClick={event => {
-                    event.stopPropagation();
-                    void remove(session);
-                  }}
-                >
-                  <Icon name="trash" size={12} />
-                </button>
+            <div className="easymode-session-card__content session-nav-card-main">
+              <div className="easymode-session-card__title-row session-nav-card-title-row">
+                {editing ? (
+                  <input
+                    className="session-title-input"
+                    data-testid="session-title-input"
+                    aria-label={`Session title for ${title}`}
+                    value={draft}
+                    disabled={mutating}
+                    autoFocus
+                    onClick={event => event.stopPropagation()}
+                    onChange={event => setDraft(event.target.value)}
+                    onBlur={() => void commitRename(session)}
+                    onKeyDown={event => {
+                      event.stopPropagation();
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      } else if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setEditingKey(undefined);
+                      }
+                    }}
+                  />
+                ) : (
+                  <span
+                    className="easymode-session-card__title tree-label"
+                    title={title}
+                    data-testid="session-title"
+                    onClick={() => !editing && onSelectSession(session.issueKey)}
+                  >
+                    {title}
+                  </span>
+                )}
+                {kids.length > 0 && (
+                  <button
+                    className="icon-btn icon-btn-sm session-nav-toggle"
+                    aria-label={`${childrenCollapsed ? 'Expand' : 'Collapse'} ${title}'s child sessions`}
+                    aria-expanded={!childrenCollapsed}
+                    data-testid="session-children-toggle"
+                    onClick={event => {
+                      event.stopPropagation();
+                      setCollapsedParents(current => ({ ...current, [session.issueKey]: !childrenCollapsed }));
+                    }}
+                  >
+                    <Icon name={childrenCollapsed ? 'chevron-right' : 'chevron-down'} size={11} />
+                  </button>
+                )}
+                {elapsed && <span className="easymode-session-card__time">{elapsed}</span>}
+              </div>
+              {!editing && <div className="easymode-session-card__subtitle session-nav-card-meta" data-testid="session-nav-card-meta">
+                {providers.length > 0 && (
+                  <SessionAiIcons providers={providers} size={11} className="easymode-session-ai-icons" />
+                )}
+                <span className="easymode-session-card__model-tag session-nav-card-runtime">{runtimeLabel}</span>
+                {!isWorkflowStageSession(session) && visibleSessionKey && <span className="session-item-key">{visibleSessionKey}</span>}
+                {projectName && <span>{projectName}</span>}
+                {tokens && <span>{tokens}</span>}
+              </div>}
+            </div>
+            <div className="easymode-session-card__status-col">
+              <span className={`session-nav-card-status ${agentStateLaneClass(session.state)}`} data-testid="session-nav-state">
+                <StatusGlyph
+                  status={session.state}
+                  size="md"
+                  title={agentStateLabel(session.state)}
+                />
               </span>
-            </>
-          )}
+            </div>
+            {!editing && (
+              <>
+                {childrenCollapsed && liveChildCount > 0 && (
+                  <span className="session-nav-childcount" title={`${liveChildCount} child session${liveChildCount === 1 ? '' : 's'} still working`} data-testid="session-children-live">
+                    {liveChildCount}
+                  </span>
+                )}
+                <div className="easymode-card-actions session-nav-actions">
+                  {isConversationSession(session) && <>
+                  <button
+                    type="button"
+                    className="easymode-card-action-btn icon-btn"
+                    aria-label={`More actions for ${title}`}
+                    title="More actions"
+                    aria-haspopup="menu"
+                    aria-expanded={sessionMenuKey === session.issueKey}
+                    data-testid="session-actions-menu"
+                    disabled={mutating}
+                    onClick={event => {
+                      event.stopPropagation();
+                      setSessionMenuKey(current => current === session.issueKey ? undefined : session.issueKey);
+                    }}
+                  ><Icon name="ellipsis" size={11} /></button>
+                  {sessionMenuKey === session.issueKey && <div className="session-row-menu" role="menu" data-testid="session-actions-menu-popover">
+                    <button type="button" role="menuitem" data-testid="session-assign-project-menu-item" onClick={event => {
+                      event.stopPropagation();
+                      setSessionMenuKey(undefined);
+                      setError(undefined);
+                      setAssignSession(session);
+                    }}><Icon name="folder" size={13} />Assign to project</button>
+                  </div>}
+                  </>}
+                  <button
+                    type="button"
+                    className="easymode-card-action-btn icon-btn"
+                    aria-label={`Assign session ${title} to ticket`}
+                    title="Assign to ticket"
+                    data-testid="session-assign-btn"
+                    disabled={mutating}
+                    onClick={event => {
+                      event.stopPropagation();
+                      setSessionMenuKey(undefined);
+                      setError(undefined);
+                      setAssignSession(session);
+                    }}
+                  >
+                    <Icon name="ticket" size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="easymode-card-action-btn icon-btn"
+                    aria-label={`Rename session ${title}`}
+                    title="Rename session"
+                    data-testid="session-rename-btn"
+                    disabled={mutating}
+                    onClick={event => {
+                      event.stopPropagation();
+                      beginRename(session);
+                    }}
+                  >
+                    <Icon name="pencil" size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="easymode-card-action-btn icon-btn"
+                    aria-label={`Archive session ${title}`}
+                    title="Archive session"
+                    data-testid="session-archive-btn"
+                    disabled={mutating}
+                    onClick={event => {
+                      event.stopPropagation();
+                      void archive(session, true);
+                    }}
+                  >
+                    <Icon name="archive" size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="easymode-card-action-btn easymode-card-action-btn--delete icon-btn"
+                    aria-label={`Delete session ${title}`}
+                    title="Delete session"
+                    data-testid="session-delete-btn"
+                    disabled={mutating}
+                    onClick={event => {
+                      event.stopPropagation();
+                      void remove(session);
+                    }}
+                  >
+                    <Icon name="trash" size={11} />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          <SessionCardActivity session={session} />
         </div>
         {!childrenCollapsed && kids.map(child => renderNode(child, depth + 1))}
         </Fragment>

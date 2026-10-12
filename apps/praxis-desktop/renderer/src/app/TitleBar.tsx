@@ -63,6 +63,8 @@ export interface TitleBarProps {
   canGoForward: boolean;
   onForward: () => void;
   boardFilter?: TitleBarBoardFilter;
+  /** Opens the command palette (search issues, projects, sessions, navigation). */
+  onOpenPalette?: () => void;
   onOpenWhatsNew: () => void;
   settingsOpen: boolean;
   onOpenSettings: () => void;
@@ -120,6 +122,7 @@ export function TitleBar({
   canGoForward,
   onForward,
   boardFilter,
+  onOpenPalette,
   onOpenWhatsNew,
   settingsOpen,
   onOpenSettings,
@@ -525,6 +528,34 @@ export function TitleBar({
               />
             </div>
           </div>
+        ) : onOpenPalette ? (
+          <div
+            className={`titlebar-context titlebar-context-button${projectSegment ? ' titlebar-context-with-project' : ''}`}
+            data-testid="titlebar-context"
+            role="button"
+            tabIndex={0}
+            title={`${contextLabel} · Search (⌘K)`}
+            aria-label={`${contextLabel} · Search (⌘K)`}
+            onClick={event => {
+              // Ignore clicks originating inside the project picker dropdown/button
+              if (projectMenuRef.current?.contains(event.target as Node)) return;
+              onOpenPalette();
+            }}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                if (projectMenuRef.current?.contains(event.target as Node)) return;
+                event.preventDefault();
+                onOpenPalette();
+              }
+            }}
+          >
+            {projectSegment}
+            <Icon name={contextIcon ?? 'ticket'} size={13} />
+            <span className="titlebar-context-label">{contextLabel}</span>
+            <span className="titlebar-context-search-hint" aria-hidden="true">
+              <Icon name="search" size={11} />
+            </span>
+          </div>
         ) : (
           <div
             className={`titlebar-context${projectSegment ? ' titlebar-context-with-project' : ''}`}
@@ -537,12 +568,6 @@ export function TitleBar({
           </div>
         )}
 
-        <button className="icon-btn" aria-label="Run">
-          <Icon name="play" size={13} />
-        </button>
-        <button className="icon-btn icon-btn-sm" aria-label="Run options">
-          <Icon name="chevron-down" size={13} />
-        </button>
         <span className="titlebar-logo">
           <PraxisWordmark className="praxis-wordmark" />
         </span>

@@ -29,7 +29,7 @@ import { SessionComposerToolbar } from './SessionComposerToolbar';
 import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { SessionGitBranchControl } from './SessionGitBranchControl';
-import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, getKnownContextLength, isLimitNoticeReply, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
+import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, getKnownContextLength, isLimitNoticeReply, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionTurnStartedAt, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
 import { LiveTurnActivityIndicator, formatElapsedDuration } from './LiveTurnActivityIndicator';
@@ -777,18 +777,7 @@ export function SessionsPage({
     if (activeSubmittedTurn?.submittedAt) {
       return activeSubmittedTurn.submittedAt;
     }
-    if (selected) {
-      for (let i = selected.events.length - 1; i >= 0; i--) {
-        const ev = selected.events[i];
-        if (ev.type === 'user_input_completed') {
-          const t = Date.parse(ev.timestamp);
-          if (!Number.isNaN(t)) return t;
-        }
-      }
-      const started = Date.parse(selected.startedAt);
-      if (!Number.isNaN(started)) return started;
-    }
-    return undefined;
+    return selected ? sessionTurnStartedAt(selected) : undefined;
   }, [activeSubmittedTurn?.submittedAt, selected?.events, selected?.startedAt]);
   const optimisticFollowUp = activeSubmittedTurn && !submittedTurnRecorded && !submittedTurnQueued
     ? activeSubmittedTurn
@@ -1740,23 +1729,25 @@ export function SessionsPage({
                   }}
                 />
               <SessionComposerToolbar>
+                {isTurnActive && !isSingleAgentRunning && <LiveTurnActivityIndicator
+                  variant="composer"
+                  testId={composerOptions.activityTestId}
+                  startedAt={activeTurnStartedAt}
+                  statusText={liveActivityText ?? 'Working…'}
+                  provider={activityProvider}
+                  tokenCount={selected.tokenUsage?.totalTokens}
+                />}
                 {isSingleAgentRunning ? (
                   followUpCollapsed ? (
                     <>
-                      {composerOptions.activityTestId && liveActivityText && (
-                        <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid={composerOptions.activityTestId}>
-                          {activityProvider ? (
-                            <Icon
-                              name={providerIconName(activityProvider)}
-                              size={13}
-                              className={`session-activity-icon session-activity-icon-${activityProvider}`}
-                            />
-                          ) : (
-                            <span className="session-activity-dot" aria-hidden="true" />
-                          )}
-                          {liveActivityText}
-                        </span>
-                      )}
+                      {isTurnActive && <LiveTurnActivityIndicator
+                        variant="composer"
+                        testId={composerOptions.activityTestId}
+                        startedAt={activeTurnStartedAt}
+                        statusText={liveActivityText ?? 'Working…'}
+                        provider={activityProvider}
+                        tokenCount={selected.tokenUsage?.totalTokens}
+                      />}
                       <span className="spacer" />
                       {activeQueuedMessage ? (
                         <span
@@ -1832,20 +1823,14 @@ export function SessionsPage({
                     </>
                   ) : (
                     <>
-                      {liveActivityText && (
-                        <span className="composer-chip session-runtime-chip is-readonly session-activity-chip" data-testid={composerOptions.activityTestId ?? "session-composer-activity-chip"}>
-                          {activityProvider ? (
-                            <Icon
-                              name={providerIconName(activityProvider)}
-                              size={13}
-                              className={`session-activity-icon session-activity-icon-${activityProvider}`}
-                            />
-                          ) : (
-                            <span className="session-activity-dot" aria-hidden="true" />
-                          )}
-                          {liveActivityText}
-                        </span>
-                      )}
+                      {liveActivityText && <LiveTurnActivityIndicator
+                        variant="composer"
+                        testId={composerOptions.activityTestId}
+                        startedAt={activeTurnStartedAt}
+                        statusText={liveActivityText}
+                        provider={activityProvider}
+                        tokenCount={selected.tokenUsage?.totalTokens}
+                      />}
                       {composerOptions.allowModeChange !== false && selected.acpAvailableModes && selected.acpAvailableModes.length > 0 && (
                         <button
                           ref={acpModeChipRef}
@@ -2480,9 +2465,6 @@ export function SessionsPage({
               visibleResponseText={visibleResponseText}
               shouldRenderResponseFallback={shouldRenderResponseFallback}
               livePendingConversationMessages={livePendingConversationMessages}
-              activeTurnStartedAt={activeTurnStartedAt}
-              liveActivityText={liveActivityText}
-              activityProvider={activityProvider}
               scrollRef={eventsRef}
               gadgetBlocks={gadgetBlocks}
               gadgetResults={gadgetResults}

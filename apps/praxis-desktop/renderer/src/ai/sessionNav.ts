@@ -583,6 +583,19 @@ function truncate(text: string, max = 140): string {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1).trimEnd()}…` : trimmed;
 }
 
+/** Start of the current turn, shared by chat and composer activity timers. */
+export function sessionTurnStartedAt(session: AgentSessionRecord): number | undefined {
+  for (let index = session.events.length - 1; index >= 0; index--) {
+    const event = session.events[index];
+    if (event.type === 'user_input_completed') {
+      const started = Date.parse(event.timestamp);
+      if (!Number.isNaN(started)) return started;
+    }
+  }
+  const started = Date.parse(session.startedAt);
+  return Number.isNaN(started) ? undefined : started;
+}
+
 /**
  * One line describing what the agent is doing right now — shown only while a
  * turn is in flight. Shared by the console's live-status line (which sits at

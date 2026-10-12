@@ -328,9 +328,13 @@ export function AiReviewPage({
           const blocks = (gadgetBlocks[gadgetMessageKey(index)] ?? []).filter(
             block => block.type !== 'gadget' || block.gadget.gadgetId !== activeGadgetId
           );
-          if (!text && blocks.length === 0) return null;
+          if (!text && !event.reasoning?.trim() && blocks.length === 0) return null;
           return (
             <div className="ai-review-message" key={`${event.timestamp}-${index}`}>
+              {event.reasoning?.trim() && <details className="session-chat-thought" data-testid="review-thought-disclosure">
+                <summary className="session-chat-thought-summary">Thoughts</summary>
+                <Markdown text={event.reasoning} testId="review-thought-content" />
+              </details>}
               {text && <Markdown text={text} testId={index === firstReviewIndex ? 'ai-review-content' : 'ai-review-message'} />}
               <GadgetBlockList
                 blocks={blocks}
@@ -347,7 +351,10 @@ export function AiReviewPage({
             <Markdown text={liveText} />
           </div>
         )}
-        {running && !liveText && session && <p className="placeholder-text">Reviewing…</p>}
+        {running && session?.reasoningText?.trim() && <details open className="session-chat-thought session-chat-thought-streaming" data-testid="review-live-thoughts">
+          <summary className="session-chat-thought-summary">Thoughts</summary>
+          <Markdown text={session.reasoningText} testId="review-thought-content" />
+        </details>}
       </div>
 
       {activeGadgetBlock && activeGadgetBlock.type === 'gadget' && (

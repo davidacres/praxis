@@ -1,3 +1,4 @@
+import { openConnections } from './connectionNavigation';
 // SPDX-License-Identifier: MIT
 //
 // e2e spec for the GitHub REST connection flow on the desktop app (FX-BE-035).
@@ -72,7 +73,7 @@ async function launchWithGitHubConnection(options?: { allowIssueCreation?: boole
 }
 
 async function openSeededConnection(): Promise<void> {
-  await window.locator('[data-testid="nav-connections"]').click();
+  await openConnections(window);
   const row = window.locator('[data-testid="connection-row"]', { hasText: 'Mock GitHub' });
   await expect(row).toBeVisible();
   await row.click();

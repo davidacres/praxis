@@ -240,20 +240,70 @@ test('EasyMode sidebar renders Sessions and Automations with + buttons and handl
   await expect(win.locator('[data-testid="agent-details-title"]')).toContainText('Live Worker Subagent');
   await expect(win.locator('[data-testid="agent-details-status"]')).toContainText('Executing');
   await expect(win.locator('[data-testid="agent-details-stop-btn"]')).toBeVisible();
-  await expect(win.locator('[data-testid="session-chat-live-turn"]')).toBeVisible();
-  await expect(win.locator('[data-testid="session-activity-status"]')).toBeVisible();
+  await expect(win.getByTestId('session-activity-status')).toHaveCount(0);
 
   // 6. Navigate to primary agent using the subagents bar
   const primaryNavBtn = win.locator('[data-testid="subagent-nav-primary"]');
   await expect(primaryNavBtn).toBeVisible();
   await primaryNavBtn.click();
 
+  const parentRecord = await win.evaluate(async () => (await window.praxis.ai.listSessions()).find(session => session.issueKey === 'SESSION-101')!);
+  await app.electronApp.evaluate(({ BrowserWindow }, record) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', { ...record, state: 'executing', reasoningText: 'Checking authentication', completedAt: undefined });
+  }, parentRecord);
+  await expect(win.locator('.session-composer-live-activity')).toBeVisible();
+  await expect(win.getByTestId('session-activity-status')).toHaveCount(0);
+  await expect(win.getByTestId('session-chat-markdown-streaming')).toBeVisible();
+  await expect(win.getByTestId('session-chat-markdown-streaming')).toContainText('Checking authentication');
+  await expect(win.getByTestId('session-composer-activity-timer')).toHaveText(/\d+(?:\.\d+)?s|\d+m \d+s/);
+  const tokens = win.getByTestId('session-composer-token-count');
+  await expect(tokens).toHaveText('2,000 tokens');
+  await app.electronApp.evaluate(({ BrowserWindow }, record) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', {
+      ...record, state: 'executing', completedAt: undefined, reasoningText: 'Checking authentication',
+      tokenUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+    });
+  }, parentRecord);
+  await expect(tokens).toHaveText('0 tokens');
+
+  await app.electronApp.evaluate(({ BrowserWindow }, record) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', {
+      ...record, state: 'executing', completedAt: undefined, reasoningText: 'Checking authentication',
+      tokenUsage: { inputTokens: 3000, outputTokens: 250, totalTokens: 3250 }
+    });
+  }, parentRecord);
+  await expect(tokens).toHaveText('3,250 tokens');
+  await expect(tokens).toHaveAttribute('title', 'Reported session token total');
+  const bounds = await tokens.evaluate(element => ({
+    right: element.getBoundingClientRect().right,
+    composerRight: element.closest('.session-follow-up-composer')!.getBoundingClientRect().right
+  }));
+  expect(bounds.right).toBeLessThanOrEqual(bounds.composerRight);
+  await expect(win.getByTestId('session-follow-up-input')).toHaveCSS('opacity', '0');
+  await agentDetailsPage.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/compact-composer-live-tokens.png'), animations: 'disabled' });
+  await app.electronApp.evaluate(({ BrowserWindow }, record) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', {
+      ...record, reasoningText: undefined,
+      events: [...record.events,
+        { type: 'user_input_completed', timestamp: new Date().toISOString(), summary: 'Check authentication again' },
+        { type: 'message', timestamp: new Date().toISOString(), summary: 'Checking the result', detail: 'Checking the result' },
+        { type: 'message', timestamp: new Date().toISOString(), summary: 'Authentication check complete', detail: 'Authentication check complete', reasoning: 'Checking authentication' }]
+
+    });
+  }, parentRecord);
+  const savedThought = win.getByTestId('session-thought-disclosure').filter({ has: win.getByTestId('session-thought-reasoning') }).last();
+  await savedThought.getByTestId('session-thought-summary').click();
+  await savedThought.locator('summary.session-chat-thought-reasoning-summary').click();
+  await expect(savedThought.getByTestId('session-thought-markdown').filter({ hasText: 'Checking authentication' })).toBeVisible();
+  await expect(savedThought.getByTestId('session-thought-markdown').filter({ hasText: 'Checking authentication' })).toContainText('Checking authentication');
+  await expect(win.getByTestId('session-composer-activity-timer')).toHaveCount(0);
+  await agentDetailsPage.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easy-completed-thoughts-preserved.png') });
   await expect(win.locator('[data-testid="agent-details-title"]')).toContainText('Auth Refactor Feature');
   await expect(win.locator('[data-testid="agent-details-role-badge"]')).toContainText('Primary Agent');
   await expect(win.locator('[data-testid="agent-details-status"]')).toContainText('Completed');
 
-  // Check activity timeline in conversation mode: prompt is visible, tools and thoughts are filtered out
-  await expect(win.locator('[data-testid="agent-timeline-prompt"]')).toBeVisible();
+  // Raw legacy timeline thought rows are replaced by the shared thought disclosures.
+  await expect(win.locator('[data-testid="agent-timeline-prompt"]').first()).toBeVisible();
   await expect(win.locator('[data-testid="agent-timeline-thought"]')).not.toBeVisible();
   await expect(win.locator('[data-testid="tool-execution-card"]')).not.toBeVisible();
 
@@ -558,6 +608,17 @@ test('EasyMode session card displays live ticker, hover actions, and automations
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-session-assign-dialog.png') });
   await win.getByRole('button', { name: 'Cancel' }).click();
   await expect(win.getByTestId('assign-chat-dialog')).toHaveCount(0);
+
+  await win.getByRole('button', { name: /Switch to.*mode/i }).click();
+  const standardRunningCard = win.getByTestId('session-list-row').filter({ hasText: 'Active Code Analysis' });
+  await expect(standardRunningCard.locator('.easymode-ticker-text')).toHaveText('Indexing project files…');
+  await expect(standardRunningCard.locator('.status-glyph')).toBeVisible();
+  await app.electronApp.evaluate(({ BrowserWindow }, record) => {
+    for (const electronWin of BrowserWindow.getAllWindows()) electronWin.webContents.send('ai:sessionChanged', record);
+  }, { ...seededSessions['SESSION-RUNNING'] as object, state: 'awaiting_input' });
+  await expect(standardRunningCard.locator('.action-gate-callout')).toContainText('Input required');
+  await win.mouse.move(900, 120);
+  await win.locator('nav.sidebar').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-cards-live.png') });
 });
 
 test('opening a folder in EasyMode scopes sessions to that folder and excludes unrelated sessions', async () => {

@@ -1,3 +1,4 @@
+import { openConnections } from './connectionNavigation';
 // SPDX-License-Identifier: MIT
 //
 // e2e spec for the GitLab REST connection flow on the desktop app.
@@ -83,7 +84,7 @@ function seededSettings(url: string, projectPath: string): Record<string, unknow
 
 /** Open the connections panel and select the seeded gitlab connection. */
 async function openSeededConnection(): Promise<void> {
-  await window.locator('[data-testid="nav-connections"]').click();
+  await openConnections(window);
   const row = window.locator('[data-testid="connection-row"]', {
     hasText: 'Mock GitLab'
   });

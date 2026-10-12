@@ -175,7 +175,6 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
             message={message}
           />
         ))}
-        {a.busy && <div className="assistant-message is-persona"><span className="placeholder-text">The team is thinking…</span></div>}
       </div>
 
       {a.error && <div className="error-banner assistant-error" role="alert">{a.error}</div>}
@@ -210,6 +209,8 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
         value={a.draft}
         onChange={a.setDraft}
         busy={a.busy}
+        activeTurnStartedAt={a.activeTurnStartedAt}
+        tokenCount={a.activeToolSession?.tokenUsage?.totalTokens}
         focusSignal={focusSignal}
         sendLabel={sendLabel}
         onSend={images => send(a.draft, images)}

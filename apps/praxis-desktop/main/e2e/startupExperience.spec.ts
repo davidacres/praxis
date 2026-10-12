@@ -1,3 +1,4 @@
+import { openConnections } from './connectionNavigation';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -277,7 +278,7 @@ test('reopens a validated workspace and its last durable route', async () => {
   });
   await firstWindow.reload();
   await expect(firstWindow.getByRole('button', { name: 'Select workspace' })).toContainText('Client Delivery');
-  await firstWindow.getByTestId('nav-connections').click();
+  await openConnections(firstWindow);
   await expect(firstWindow.getByTestId('connections-page')).toBeVisible();
 
   await app.electronApp.close();
