@@ -6,6 +6,7 @@ import { sanitizeMcpServers, type McpServerConfig } from '../ai/mcp/mcpServerCon
 import { REASONING_EFFORT_LEVELS, type ReasoningEffort } from '../ai/providers/reasoningSupport';
 import type { MobileAccessMode } from '../host/mobileAccessPolicy';
 import type { MobileAccessSettings } from '../host/mobileAccessAdministration';
+import { normalizeMobileSubnet } from '../ai/tools/networkAddress';
 
 /**
  * Typed settings shape shared between the Electron desktop app and the VS Code
@@ -785,6 +786,15 @@ function readStringList(value: unknown, fallback: readonly string[]): string[] {
     : [...fallback];
 }
 
+/**
+ * Subnets reach the access policy as written, so an entry that is not an address or CIDR is
+ * dropped here rather than kept as a silently-ignored string. A legacy octet prefix
+ * (`192.168.1.`) migrates to its CIDR. Dropping an entry narrows access, never widens it.
+ */
+function readMobileSubnets(value: unknown, fallback: readonly string[]): string[] {
+  return [...new Set(readStringList(value, fallback).flatMap(item => normalizeMobileSubnet(item) ?? []))];
+}
+
 function readThemeIds(value: unknown, fallback: string[]): string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string')
     ? [...new Set(value as string[])]
@@ -1354,7 +1364,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         mode: readMobileAccessMode(raw.mobileAccess.mode, DEFAULT_APP_SETTINGS.mobileAccess.mode),
         hostName: readString(raw.mobileAccess.hostName, DEFAULT_APP_SETTINGS.mobileAccess.hostName),
         allowedInterfaces: readStringList(raw.mobileAccess.allowedInterfaces, DEFAULT_APP_SETTINGS.mobileAccess.allowedInterfaces),
-        allowedSubnets: readStringList(raw.mobileAccess.allowedSubnets, DEFAULT_APP_SETTINGS.mobileAccess.allowedSubnets),
+        allowedSubnets: readMobileSubnets(raw.mobileAccess.allowedSubnets, DEFAULT_APP_SETTINGS.mobileAccess.allowedSubnets),
         listenPort: clampNumber(raw.mobileAccess.listenPort, 1024, 65535, DEFAULT_APP_SETTINGS.mobileAccess.listenPort),
         remoteSignInRequired: readBoolean(raw.mobileAccess.remoteSignInRequired, DEFAULT_APP_SETTINGS.mobileAccess.remoteSignInRequired)
       }

@@ -19,6 +19,7 @@ import {
   type MobileSocketConnector,
 } from '@praxis/mobile-protocol';
 import * as net from 'node:net';
+import * as os from 'node:os';
 import { MobileLanServer } from './mobileLanServer';
 
 const caller: MobileCaller = { deviceId: 'phone-1', subject: 'dave', capabilities: ['view', 'execute'] };
@@ -234,6 +235,33 @@ test('an out-of-range subnet allowlist refuses a loopback peer', async () => {
   } finally {
     await server.stop();
   }
+});
+
+// SEC-006 (107-7): the listener binds each selected interface's own address, never a wildcard,
+// and a selection that matches nothing refuses to start rather than falling back to every interface.
+test('the listener binds explicit local addresses and never the wildcard', async () => {
+  const server = new MobileLanServer({ app: fixtureApp(), authorizePeer: () => ({ deviceId: 'phone-1', capabilities: ['view', 'execute'] }), hostStaticKey: generateKeyPair() });
+  await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
+  try {
+    assert.ok(server.addresses.length > 0);
+    for (const host of server.addresses) {
+      assert.notEqual(net.isIP(host.replace(/%.*$/, '')), 0, `${host} is an explicit address`);
+      assert.ok(!['0.0.0.0', '::', '::0'].includes(host), `${host} is not a wildcard`);
+    }
+  } finally {
+    await server.stop();
+  }
+  const loopback = Object.entries(os.networkInterfaces()).find(([, entries]) => entries?.some(entry => entry.internal))?.[0];
+  assert.ok(loopback, 'the test host has a loopback interface');
+  await server.start(0, { mode: 'local-only', allowedInterfaces: [loopback], allowedSubnets: [] });
+  try {
+    assert.ok(server.addresses.length > 0);
+    for (const host of server.addresses) assert.ok(host === '127.0.0.1' || host === '::1' || host.startsWith('fe80::1%') || host.startsWith('127.'), `${host} belongs to ${loopback}`);
+  } finally {
+    await server.stop();
+  }
+  await assert.rejects(server.start(0, { mode: 'local-only', allowedInterfaces: ['no-such-interface'], allowedSubnets: [] }), /No local addresses match/);
+  assert.equal(server.listening, false);
 });
 
 test('stop() closes the listener and drops connections', async () => {

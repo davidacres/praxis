@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  InMemoryMobileCommandLedger,
   MOBILE_PROTOCOL_VERSION,
+  handleMobileCommand,
   type AnyGadgetEnvelope,
   type MobileCaller,
   type MobileCommand,
@@ -310,6 +312,19 @@ test('commands reject a missing or malformed payload', async () => {
   await assert.rejects(handlers['workflowRuns.start'](command('workflowRuns.start', { hostId: 'host-mac', projectId: 'p1' }, {})), /payload\.workflowId/);
   await assert.rejects(handlers['permissions.respond'](command('permissions.respond', { hostId: 'host-mac', projectId: 'p1', requestId: 'q1' }, { decision: 'maybe' })), /'allow', 'allow_always', or 'deny'/);
   await assert.rejects(handlers['permissions.respond'](command('permissions.respond', { hostId: 'host-mac', projectId: 'p1' }, { decision: 'allow' })), /requires target\.requestId/);
+});
+
+// SEC-011 (107-11): a phone cannot grant workspace trust, so a run it starts on an untrusted
+// project workflow must fail with the desktop's reason rather than a bare rejected command.
+test('a phone-started run on an untrusted project workflow reports the workspace-trust reason', async () => {
+  const refusal = 'This project workflow needs local workspace trust. Review its commands and approve it on the desktop before starting it.';
+  const { deps } = recorder({ startRun: async () => { throw new Error(refusal); } });
+  const commands = createMobileHostExecutionHandlers(deps);
+  const app = { reads: {}, commands, ledger: new InMemoryMobileCommandLedger(), payloadDigest: (command: MobileCommand) => JSON.stringify(command.payload ?? null) };
+  await assert.rejects(
+    handleMobileCommand(app, command('workflowRuns.start', { hostId: 'host-mac', projectId: 'p1' }, { workflowId: 'repo-check', task: 'From the phone' })),
+    (error: unknown) => error instanceof Error && error.message === refusal,
+  );
 });
 
 function readWith(operation: MobileReadRequest['operation'], target: MobileReadRequest['target'], params: MobileReadRequest['params']): MobileReadRequest {

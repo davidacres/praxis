@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 602,
+  "testCount": 603,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -5586,6 +5586,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "resetting the host key asks for confirmation in-app",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-112E148947",
+      "title": "an allowed-subnet entry the policy cannot match is rejected inline, and a legacy prefix migrates",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/mobileAccess.spec.ts",
+        "line": 57,
+        "project": "functional"
+      },
+      "area": "mobile Access",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an allowed-subnet entry the policy cannot match is rejected inline, and a legacy prefix migrates",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

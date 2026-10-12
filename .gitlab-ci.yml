@@ -29,6 +29,7 @@ test:
     # `npm test` also runs the desktop e2e suite, which needs an Electron
     # display this image does not have. Run the parts that can.
     - npm run test:core
+    - npm run test:antigravity-consent
     - npm run build:renderer
     - npm run desktop:copy-renderer
     - npm run build:desktop

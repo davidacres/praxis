@@ -30,6 +30,9 @@ test('mobile access is off by default and mode is validated to the known set', (
   assert.deepEqual([...trimmed], ['en0']);
   const rejected = sanitizeAppSettings({ mobileAccess: { allowedSubnets: ['10.0.0.', 42] } }).mobileAccess.allowedSubnets;
   assert.deepEqual([...rejected], []);
+  // An entry the policy cannot match is dropped, not stored; a legacy octet prefix migrates.
+  const subnets = sanitizeAppSettings({ mobileAccess: { allowedSubnets: ['192.168.1', '192.168.1.', '192.168.1.0/24', '10.0.0.0/33', 'fd00::/8', 'lan'] } }).mobileAccess.allowedSubnets;
+  assert.deepEqual([...subnets], ['192.168.1.0/24', 'fd00::/8']);
   assert.equal(sanitizeAppSettings({}).mobileAccess.listenPort, 43100);
   assert.equal(sanitizeAppSettings({ mobileAccess: { listenPort: 80 } }).mobileAccess.listenPort, 1024);
   assert.equal(sanitizeAppSettings({ mobileAccess: { listenPort: 43101 } }).mobileAccess.listenPort, 43101);

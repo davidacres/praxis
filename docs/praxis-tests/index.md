@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **602 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -353,6 +353,7 @@ This catalogue describes **602 Playwright tests** under `apps/praxis-desktop/mai
 | PT-4EE82C7277 | mobile Access | mobile access pairing controls stay off until the listener is enabled | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:24` |
 | PT-95E35930BA | mobile Access | creating a pairing code shows a single-use token and never a private key | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:33` |
 | PT-C909B8DB44 | mobile Access | resetting the host key asks for confirmation in-app | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:48` |
+| PT-112E148947 | mobile Access | an allowed-subnet entry the policy cannot match is rejected inline, and a legacy prefix migrates | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:57` |
 | PT-372C7E1F65 | native Sources | other AI tools’ agents, skills and instructions are discovered, approved, copied, and used in a session | `apps/praxis-desktop/main/e2e/nativeSources.spec.ts:49` |
 | PT-7EA609AC58 | native Sources | an agent from another AI tool can be placed on a workflow stage and bound to its skill | `apps/praxis-desktop/main/e2e/nativeSources.spec.ts:160` |
 | PT-F027143814 | new Issue | creating a demo issue with the full field set shows it on the board | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:67` |

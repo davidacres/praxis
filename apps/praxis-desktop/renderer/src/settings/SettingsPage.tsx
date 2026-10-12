@@ -3199,6 +3199,7 @@ function MobileAccessSection({
   const [copied, setCopied] = useState(false);
   const [grantApprove, setGrantApprove] = useState(false);
   const [grantProjects, setGrantProjects] = useState<string[]>([]);
+  const [subnetError, setSubnetError] = useState<string>();
 
   useEffect(() => {
     void window.praxis.settings.getMobileHostInfo().then(setSnapshot);
@@ -3283,12 +3284,18 @@ function MobileAccessSection({
         />
       </FieldRow>
       <FieldRow label="Allowed subnets" description="Comma-separated IP addresses or CIDRs such as 192.168.1.0/24. Empty allows local-network addresses on the selected interfaces." stacked>
-        <DebouncedTextField
-          ariaLabel="Allowed mobile subnets"
-          value={settings.mobileAccess.allowedSubnets.join(', ')}
-          onCommit={value => update({ mobileAccess: { allowedSubnets: value.split(',').map(item => item.trim()).filter(Boolean) } })}
-          placeholder="e.g. 192.168.1.0/24"
-        />
+        <div className="settings-list">
+          <DebouncedTextField
+            ariaLabel="Allowed mobile subnets"
+            value={settings.mobileAccess.allowedSubnets.join(', ')}
+            onCommit={value => void update({ mobileAccess: { allowedSubnets: value.split(',').map(item => item.trim()).filter(Boolean) } }).then(
+              () => setSubnetError(undefined),
+              (cause: unknown) => setSubnetError((cause instanceof Error ? cause.message : String(cause)).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
+            )}
+            placeholder="e.g. 192.168.1.0/24"
+          />
+          {subnetError && <div className="error-banner" role="alert" data-testid="mobile-subnets-error">{subnetError} The saved list is unchanged.</div>}
+        </div>
       </FieldRow>
       <FieldRow label="Listener" description="Live bind state. Discovery advertises identity only — never a pairing grant." stacked>
         <div className="settings-list" data-testid="mobile-listener-status">

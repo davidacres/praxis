@@ -53,3 +53,17 @@ test('resetting the host key asks for confirmation in-app', async () => {
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
 });
+
+test('an allowed-subnet entry the policy cannot match is rejected inline, and a legacy prefix migrates', async () => {
+  await openMobileAccess();
+  const subnets = window.getByRole('textbox', { name: 'Allowed mobile subnets' });
+  const error = window.locator('[data-testid="mobile-subnets-error"]');
+  await subnets.fill('192.168.1');
+  await expect(error).toContainText('IP addresses or CIDRs');
+  await expect(error).not.toContainText('Error invoking remote method');
+  expect((await window.evaluate(() => window.praxis.settings.get())).mobileAccess.allowedSubnets).toEqual([]);
+  await window.locator('.settings-field-row', { has: subnets }).screenshot({ path: 'output/playwright/mobile-subnet-rejected.png' });
+  await subnets.fill('192.168.1.');
+  await expect(error).toHaveCount(0);
+  await expect(subnets).toHaveValue('192.168.1.0/24');
+});
