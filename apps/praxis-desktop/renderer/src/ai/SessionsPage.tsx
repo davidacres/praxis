@@ -15,13 +15,14 @@ import type {
   WorkflowRunSummary
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { Markdown } from '../ui/Markdown';
 import { isTerminalAgentState } from './aiSessionState';
 import { useDialogs } from '../ui/dialogs';
 import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
-import { providerIconName, providerLabel, supportsReasoningEffort } from './modelProviders';
+import { providerLabel, supportsReasoningEffort } from './modelProviders';
 import { ReasoningEffortSlider } from './ReasoningEffortSlider';
 import { workflowPreview } from './workflowPreview';
 import { SessionUsageSummary } from './SessionUsageSummary';
@@ -1933,7 +1934,7 @@ export function SessionsPage({
                         data-testid="session-provider"
                         title="The workflow controls the active stage runtime; this is the session's selected provider"
                       >
-                        <Icon name={providerIconName(selected.provider)} size={14} />
+                        <ProviderBrandLogo provider={selected.provider} size={14} decorative />
                         {providerLabel(selected.provider)}
                       </span>
                     )}
@@ -1953,7 +1954,7 @@ export function SessionsPage({
                         data-testid="session-provider"
                         title="This workflow stage's AI provider is fixed"
                       >
-                        <Icon name={providerIconName(selected.provider)} size={14} />
+                        <ProviderBrandLogo provider={selected.provider} size={14} decorative />
                         {providerLabel(selected.provider)}
                       </span>
                     ) : (
@@ -1975,7 +1976,7 @@ export function SessionsPage({
                           setTransitionPopover({ open: 'handover', position: { bottom: window.innerHeight - rect.top + 6, left: rect.left } });
                         }}
                       >
-                        <Icon name={providerIconName(selected.provider)} size={14} />
+                        <ProviderBrandLogo provider={selected.provider} size={14} decorative />
                         {providerLabel(selected.provider)}
                       </button>
                     ))}

@@ -16,6 +16,7 @@ import type {
   UpdateIssueInput
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { Markdown } from '../ui/Markdown';
 import { WorkflowPicker } from '../ai/WorkflowPicker';
 import type { SessionWorkflowOption } from '../ai/NewSession';
@@ -31,7 +32,7 @@ import {
   SEVERITY_OPTIONS
 } from './issueDraftFields';
 import { resolveBackendMode } from '../board/boardMeta';
-import { fetchModelOptions, hasModelCatalog, providerIconName, providerLabel } from '../ai/modelProviders';
+import { fetchModelOptions, hasModelCatalog, providerLabel } from '../ai/modelProviders';
 import { isProviderUsableForSessions } from '../ai/providerAvailability';
 import { ChipSelect } from '../ui/ChipSelect';
 import { useRegisterPageAssistantContext } from '../assistant/AssistantProvider';
@@ -247,7 +248,7 @@ function StartAiSessionDialog({
                 placeholder="No configured provider"
                 disabled={starting || configuredProviders.length === 0}
                 onChange={value => onProviderChange(value as AiProvider)}
-                options={configuredProviders.map(status => ({ value: status.provider, label: providerLabel(status.provider), icon: providerIconName(status.provider) }))}
+                options={configuredProviders.map(status => ({ value: status.provider, label: providerLabel(status.provider), icon: <ProviderBrandLogo provider={status.provider} size={13} decorative /> }))}
               />
             </label>
             <label className="session-setup-field">
@@ -319,7 +320,7 @@ function StartAiSessionDialog({
 
           {selectedProvider && (
             <p className="detail-ai-provider-hint">
-              <Icon name={providerIconName(selectedProvider)} size={12} />
+              <ProviderBrandLogo provider={selectedProvider} size={12} decorative />
               {selectedStatus?.configured
                 ? `The shared Praxis execution prompt will run with ${providerLabel(selectedProvider)}${selectedModel ? ` · ${selectedModel}` : ''}.`
                 : `${providerLabel(selectedProvider)} is not configured. Open Settings → AI Provider.`}
@@ -1705,7 +1706,7 @@ export function IssueDetail({
                       placeholder="No configured provider"
                       disabled={configuredProviders.length === 0}
                       onChange={value => setSelectedProvider(value as AiProvider)}
-                      options={configuredProviders.map(status => ({ value: status.provider, label: providerLabel(status.provider), icon: providerIconName(status.provider) }))}
+                      options={configuredProviders.map(status => ({ value: status.provider, label: providerLabel(status.provider), icon: <ProviderBrandLogo provider={status.provider} size={13} decorative /> }))}
                     />
                   </label>
                   <label className="detail-ai-runtime-field">

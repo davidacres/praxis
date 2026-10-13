@@ -16,9 +16,10 @@ import type {
 } from '@praxis/core';
 import { isIssueDone } from '../board/boardMeta';
 import { Icon } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { ChipSelect } from '../ui/ChipSelect';
 import { assertRunBaseOrThrow, UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from './UncommittedBaseNotice';
-import { fetchModelOptions, hasModelCatalog, providerIconName, providerLabel } from '../ai/modelProviders';
+import { fetchModelOptions, hasModelCatalog, providerLabel } from '../ai/modelProviders';
 import { isProviderUsableForSessions } from '../ai/providerAvailability';
 
 /** "KEY — Summary", the same picker convention IssueDetail's parent-issue field uses. */
@@ -510,7 +511,7 @@ export function StartRunDialog({
                   options={availableProviderOptions.map(status => ({
                     value: status.provider,
                     label: providerLabel(status.provider) ?? status.provider,
-                    icon: providerIconName(status.provider)
+                    icon: <ProviderBrandLogo provider={status.provider} size={13} decorative />
                   }))}
                 />
               </label>

@@ -14,6 +14,7 @@ import type {
 } from '@praxis/core';
 import { ChipSelect } from '../ui/ChipSelect';
 import { Icon } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { ModelMenuColumns, ModelMenuDetails } from './ModelMenuDetails';
 import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
 import {
@@ -21,7 +22,6 @@ import {
   fetchModelOptions,
   hasModelCatalog,
   NO_TOOLS_REASON,
-  providerIconName,
   providerLabel,
   supportsReasoningEffort
 } from './modelProviders';
@@ -909,7 +909,9 @@ export function NewSession({
               aria-expanded={Boolean(providerMenuPos)}
               onClick={toggleProviderMenu}
             >
-              <Icon name={selectedProvider ? providerIconName(selectedProvider) : 'robot'} size={14} />
+              {selectedProvider
+                ? <ProviderBrandLogo provider={selectedProvider} size={14} decorative />
+                : <Icon name="robot" size={14} />}
               {selectedProvider ? providerLabel(selectedProvider) : 'Provider'}
               <Icon name="chevron-down" size={12} />
             </button>
@@ -945,7 +947,7 @@ export function NewSession({
                           setProviderMenuPos(undefined);
                         }}
                       >
-                        <Icon name={providerIconName(status.provider)} size={14} />
+                        <ProviderBrandLogo provider={status.provider} size={14} decorative />
                         <span className="composer-provider-option-text">
                           {status.label || providerLabel(status.provider)}
                           {blocked && <span className="composer-provider-option-note">{unsafeMode ? 'Requires Full tools' : 'Chat only — no tool calling'}</span>}

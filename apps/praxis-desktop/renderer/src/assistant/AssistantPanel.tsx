@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WireImageAttachment, AgentPermissionMode, AgentToolMode, AiProvider, AiProviderStatus, ModelOptions, ReasoningEffort } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { ChipSelect } from '../ui/ChipSelect';
 import { ReasoningEffortSlider } from '../ai/ReasoningEffortSlider';
 import { SessionPermissionModeControl } from '../ai/SessionPermissionModeControl';
 import { SessionGitBranchControl } from '../ai/SessionGitBranchControl';
 import { SessionUsageSummary } from '../ai/SessionUsageSummary';
 import { useSettings } from '../settings/useSettings';
-import { applyEnabledModelCuration, fetchModelOptions, hasModelCatalog, providerIconName, providerLabel, supportsReasoningEffort } from '../ai/modelProviders';
+import { applyEnabledModelCuration, fetchModelOptions, hasModelCatalog, providerLabel, supportsReasoningEffort } from '../ai/modelProviders';
 import { isProviderUsable } from '../ai/providerAvailability';
 import { AssistantComposer } from './AssistantComposer';
 import { AssistantContextBanner } from './AssistantContextBanner';
@@ -248,7 +249,7 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
         )}
         composerOptions={(
           <div className="assistant-composer-options" data-testid="assistant-composer-options">
-            <ChipSelect variant="plain" ariaLabel="AI provider" data-testid="assistant-provider" value={provider ?? ''} placeholder="Provider" icon={provider ? providerIconName(provider) : 'globe'} disabled={a.busy} onChange={value => setProvider(value as AiProvider)} options={providerStatuses.filter(isProviderUsable).map(status => ({ value: status.provider, label: status.label, icon: providerIconName(status.provider) }))} />
+            <ChipSelect variant="plain" ariaLabel="AI provider" data-testid="assistant-provider" value={provider ?? ''} placeholder="Provider" icon={provider ? <ProviderBrandLogo provider={provider} size={13} decorative /> : 'globe'} disabled={a.busy} onChange={value => setProvider(value as AiProvider)} options={providerStatuses.filter(isProviderUsable).map(status => ({ value: status.provider, label: status.label, icon: <ProviderBrandLogo provider={status.provider} size={13} decorative /> }))} />
             <ChipSelect variant="plain" ariaLabel="AI model" data-testid="assistant-model" value={model} placeholder={provider && hasModelCatalog(provider) ? 'Choose model…' : 'Default model'} icon="sparkles" disabled={a.busy || !provider || !modelOptions?.options.length} onChange={setModel} options={modelOptions?.options.map(option => ({ value: option.value, label: option.name || option.value, description: option.description })) ?? []} />
             {supportsReasoningEffort(provider, model) && <ReasoningEffortSlider value={reasoningEffort} onChange={setReasoningEffort} disabled={a.busy} testId="assistant-reasoning" />}
           </div>

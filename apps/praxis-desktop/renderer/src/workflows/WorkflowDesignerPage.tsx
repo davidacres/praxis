@@ -17,9 +17,10 @@ import type {
   WorkflowPolicyProfile
 } from '@praxis/core';
 import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
-import { fetchModelOptions, hasModelCatalog, isApiModelProvider, providerIconName, providerLabel } from '../ai/modelProviders';
+import { fetchModelOptions, hasModelCatalog, isApiModelProvider, providerLabel } from '../ai/modelProviders';
 import { ChipSelect, type ChipSelectOption } from '../ui/ChipSelect';
 import { Icon, type IconName } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { NODE_KINDS, WorkflowCanvas, type WorkflowPaletteItem } from './WorkflowCanvas';
 import { WorkflowValidationPane } from './WorkflowValidationPane';
 import { useRegisterPageAssistantContext } from '../assistant/AssistantProvider';
@@ -1069,7 +1070,7 @@ function AgentStageFields({
     ...[...new Set([...usableAis, ...(stageAi ? [stageAi] : [])])].map(id => ({
       value: id,
       label: providerLabel(id as AiProvider) ?? id,
-      icon: providerIconName(id as AiProvider),
+      icon: <ProviderBrandLogo provider={id} size={13} decorative />,
       meta: usableAis.includes(id) ? undefined : 'not set up'
     }))
   ];

@@ -3,8 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from 'react-dom';
 import type { AiProvider, WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { StageArtifacts } from './StageArtifacts';
-import { fetchModelOptions, hasModelCatalog, providerIconName, providerLabel } from '../ai/modelProviders';
+import { fetchModelOptions, hasModelCatalog, providerLabel } from '../ai/modelProviders';
 import { isProviderUsableForSessions } from '../ai/providerAvailability';
 import { useDeleteRun } from './useDeleteRun';
 import { WorkflowPipelineVertical } from './WorkflowPipelineVertical';
@@ -531,7 +532,7 @@ export function WorkflowRunPage({
                         : `Configured with model ${run.aiModel}`
                     }
                   >
-                    <Icon name={run.aiProvider ? providerIconName(run.aiProvider) : 'robot'} size={12} />
+                    {run.aiProvider ? <ProviderBrandLogo provider={run.aiProvider} size={12} decorative /> : <Icon name="robot" size={12} />}
                     {run.aiProvider ? (providerLabel(run.aiProvider) ?? run.aiProvider) : 'AI'}
                     {run.aiModel ? ` · ${run.aiModel}` : ''}
                   </p>
@@ -1099,7 +1100,7 @@ function ProviderLimitNotice({
                 data-testid="wf-limit-switch-to"
                 value={selected}
                 onChange={setChoice}
-                options={choices.map(id => ({ value: id, label: aiName(id), icon: providerIconName(id as AiProvider) }))}
+                options={choices.map(id => ({ value: id, label: aiName(id), icon: <ProviderBrandLogo provider={id} size={13} decorative /> }))}
               />
             </label>
             {hasModelCatalog(selected as AiProvider) && (modelOptions.length > 0 || modelsLoading) && (

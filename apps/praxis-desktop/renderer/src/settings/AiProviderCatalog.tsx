@@ -9,7 +9,7 @@ import type {
 } from '@praxis/core';
 import { ChipSelect } from '../ui/ChipSelect';
 import { Icon, type IconName } from '../ui/Icon';
-import { ProviderBrandLogo } from '../ai/ProviderBrandLogo';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 
 /**
  * Settings → AI Provider → Add provider (FX-BF-044): the catalog dialog, and

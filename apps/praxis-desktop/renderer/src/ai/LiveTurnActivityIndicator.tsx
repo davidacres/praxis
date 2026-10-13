@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AiProvider } from '@praxis/core';
-import { Icon } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { StatusGlyph } from '../ui/StatusGlyph';
-import { providerIconName } from './modelProviders';
 
 export interface LiveTurnActivityIndicatorProps {
   startedAt?: number | string;
@@ -80,8 +79,8 @@ export function LiveTurnActivityIndicator({
       aria-live={variant === 'composer' ? 'off' : 'polite'}
     >
       {provider ? (
-        <Icon
-          name={providerIconName(provider)}
+        <ProviderBrandLogo
+          provider={provider}
           size={13}
           className={`session-activity-icon session-activity-icon-${provider}`}
         />

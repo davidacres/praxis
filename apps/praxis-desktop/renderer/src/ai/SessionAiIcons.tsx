@@ -1,5 +1,5 @@
 import type { AiProvider } from '@praxis/core';
-import { ProviderBrandLogo } from './ProviderBrandLogo';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { providerLabel } from './modelProviders';
 
 export interface SessionAiIconsProps {

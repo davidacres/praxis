@@ -19,7 +19,8 @@ export interface ChipSelectOption {
   description?: string;
   /** Short trailing text such as "project" or "untrusted". */
   meta?: string;
-  icon?: IconName;
+  /** A codicon glyph, or brand artwork such as `<ProviderBrandLogo>`. */
+  icon?: IconName | ReactNode;
   disabled?: boolean;
 }
 
@@ -31,7 +32,8 @@ export interface ChipSelectProps {
   ariaLabel: string;
   /** Chip text when `value` matches no option (and is empty). */
   placeholder?: string;
-  icon?: IconName;
+  /** A codicon glyph, or brand artwork such as `<ProviderBrandLogo>`. */
+  icon?: IconName | ReactNode;
   /** Show the filter row. Defaults to on once there are more than 7 options. */
   searchable?: boolean;
   /** Offer the typed filter text as a value when no option matches it exactly. */
@@ -48,6 +50,19 @@ export interface ChipSelectProps {
   variant?: 'field' | 'plain';
   id?: string;
   'aria-describedby'?: string;
+}
+
+/**
+ * Icons in this chip idiom are either a codicon `IconName` (a string) or
+ * already-rendered artwork — a provider's `<ProviderBrandLogo>`, which callers
+ * pass as the element. This primitive stays presentational and must not import
+ * from `ai/`, so it renders whatever it is handed rather than resolving a
+ * provider itself.
+ */
+function ChipIcon({ icon, size }: { icon: IconName | ReactNode; size: number }) {
+  // `ReactNode` already admits `string`, so the check narrows too wide for
+  // `Icon`; within this union a string is only ever a glyph name.
+  return typeof icon === 'string' ? <Icon name={icon as IconName} size={size} /> : <>{icon}</>;
 }
 
 const MENU_GAP = 4;
@@ -242,7 +257,7 @@ export function ChipSelect({
           }
         }}
       >
-        {(selected?.icon ?? icon) && <Icon name={(selected?.icon ?? icon)!} size={13} />}
+        {(selected?.icon ?? icon) && <ChipIcon icon={(selected?.icon ?? icon)!} size={13} />}
         <span className={`chip-select-label${selected || value ? '' : ' is-placeholder'}`}>{chipLabel}</span>
         {selected?.meta && <span className="composer-chip-meta">{selected.meta}</span>}
         <Icon name="chevron-down" size={11} />
@@ -297,7 +312,7 @@ export function ChipSelect({
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => choose(option)}
               >
-                {option.icon && <Icon name={option.icon} size={13} />}
+                {option.icon && <ChipIcon icon={option.icon} size={13} />}
                 <span className="chip-select-option-text">
                   <span className="chip-select-option-label">{option.label}</span>
                   {option.description && <span className="chip-select-option-desc">{option.description}</span>}

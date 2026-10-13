@@ -1,6 +1,6 @@
 import type { ProviderUsageSnapshot, ProviderUsageWindow } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { ProviderBrandLogo } from './ProviderBrandLogo';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { providerLabel } from './modelProviders';
 import { formatTokenCompact } from './sessionNav';
 

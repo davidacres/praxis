@@ -140,6 +140,17 @@
    instead of sitting shrunken inside a control that did. (scale 1 = the attribute.) */
 :where(.ui-icon) { width: calc(var(--icon-size, 16px) * var(--ui-scale)); height: calc(var(--icon-size, 16px) * var(--ui-scale)); }
 
+/* Provider brand artwork (`ui/ProviderBrandLogo`) carries its requested size as
+   --brand-logo-size, for the same reason and with the same zero specificity as
+   --icon-size above, so the AI logo in a composer chip grows with the Large
+   display size like the glyph it replaced instead of staying at raw pixels.
+   Marks keep their own brand color as an inline style, which is why the
+   `color: var(--text-tertiary)` on `.composer-provider-option svg` does not
+   flatten them; the unavailable/disabled rows dim explicitly below. */
+:where(.provider-brand-logo) { width: calc(var(--brand-logo-size, 16px) * var(--ui-scale)); height: calc(var(--brand-logo-size, 16px) * var(--ui-scale)); flex: 0 0 auto; }
+.composer-provider-option.is-unavailable .provider-brand-logo,
+.composer-provider-option:disabled .provider-brand-logo { opacity: 0.45; }
+
 :root[data-mode='light'] {
   --bg: #f6f6f6;
   --bg-elevated: #ffffff;

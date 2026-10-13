@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import type { AiProvider, AiProviderStatus } from '@praxis/core';
-import { ProviderBrandLogo } from '../ai/ProviderBrandLogo';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { isProviderUsable } from '../ai/providerAvailability';
 
 /** Set once the wizard has been completed (or an existing profile already had a usable provider). */

@@ -10,9 +10,10 @@ import type {
   WireImageAttachment
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { Markdown } from '../ui/Markdown';
 import { useDialogs } from '../ui/dialogs';
-import { providerIconName, providerLabel } from './modelProviders';
+import { providerLabel } from './modelProviders';
 import { formatCost, isLimitNoticeReply } from './sessionNav';
 import { formatElapsedDuration } from './LiveTurnActivityIndicator';
 import { GadgetBlockList } from './gadgets';
@@ -407,12 +408,12 @@ export function SessionChatThread({
                 {isAssistant ? (
                   event.speaker ? (
                     <>
-                      <Icon name={providerIconName(event.speaker.provider)} size={13} />
+                      <ProviderBrandLogo provider={event.speaker.provider} size={13} decorative />
                       {`${providerLabel(event.speaker.provider)}${event.speaker.model ? ` · ${event.speaker.model}` : ''}`}
                     </>
                   ) : (
                     <>
-                      <Icon name={session.provider ? providerIconName(session.provider) : 'robot'} size={13} />
+                      {session.provider ? <ProviderBrandLogo provider={session.provider} size={13} /> : <Icon name="robot" size={13} />}
                       <span>{event.modelId || (session.provider ? providerLabel(session.provider) : 'AI agent')}</span>
                     </>
                   )
@@ -640,7 +641,7 @@ export function SessionChatThread({
           <div className="session-chat-header">
             <div className="session-chat-author">
               {session?.conversation?.state === 'running'
-                ? (() => { const speaker = session.conversation.participants.find(participant => participant.id === session.conversation?.currentSpeakerId); return speaker ? <><Icon name={providerIconName(speaker.provider)} size={13} />{`${providerLabel(speaker.provider)}${speaker.model ? ` · ${speaker.model}` : ''}`}</> : 'AI agent'; })()
+                ? (() => { const speaker = session.conversation.participants.find(participant => participant.id === session.conversation?.currentSpeakerId); return speaker ? <><ProviderBrandLogo provider={speaker.provider} size={13} decorative />{`${providerLabel(speaker.provider)}${speaker.model ? ` · ${speaker.model}` : ''}`}</> : 'AI agent'; })()
                 : 'AI agent'}
             </div>
             <div className="session-chat-header-actions">
@@ -680,7 +681,7 @@ export function SessionChatThread({
         >
           <div className="session-chat-header">
             <div className="session-chat-author">
-              <Icon name={session.provider ? providerIconName(session.provider) : 'robot'} size={13} />
+              {session.provider ? <ProviderBrandLogo provider={session.provider} size={13} /> : <Icon name="robot" size={13} />}
               <span>{session.model || (session.provider ? providerLabel(session.provider) : 'AI agent')}</span>
             </div>
           </div>

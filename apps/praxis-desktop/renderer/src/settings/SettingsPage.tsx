@@ -40,7 +40,7 @@ import { ChipSelect } from '../ui/ChipSelect';
 import { ModelManagerPanel } from '../ai/ModelManagerPanel';
 import { AiUsageStatsSection } from './AiUsageStatsSection';
 import { fetchModelOptions, hasModelCatalog, providerIconName } from '../ai/modelProviders';
-import { ProviderBrandLogo } from '../ai/ProviderBrandLogo';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { AddProviderDialog, CustomEndpointForm, endpointDisplayUrl, type BuiltInCatalogEntry } from './AiProviderCatalog';
 import { RemoveProviderDialog } from './RemoveProviderDialog';
 import { McpServersPanel } from './McpServersPanel';

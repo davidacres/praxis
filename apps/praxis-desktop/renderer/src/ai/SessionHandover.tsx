@@ -21,7 +21,6 @@ import {
   allModelProviderIds,
   applyEnabledModelCuration,
   fetchModelOptions,
-  providerIconName,
   providerLabel,
   providerSupportsTools,
   REASONING_EFFORT_LEVELS
@@ -30,6 +29,7 @@ import { formatContextLength, formatModelCost, formatStarted, getKnownContextLen
 import { isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
 import { isTerminalAgentState } from './aiSessionState';
 import { ChipSelect } from '../ui/ChipSelect';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 
 function purposeOf(session: AgentSessionRecord) {
   return session.purpose ?? {
@@ -834,7 +834,7 @@ export function SessionTransitionDialogs({ session, open, position, onClose, onA
                 }
               }}
             >
-              <Icon name={providerIconName(provider)} size={14} />
+              <ProviderBrandLogo provider={provider} size={14} decorative />
               <span>{providerLabel(provider)}</span>
               {onAddProvider && <button
                 type="button"
@@ -975,7 +975,7 @@ export function SessionConversationDialog({ session, open, position, onClose, in
             disabled={!providerStatuses || configuredProviders.length === 0}
             placeholder={!providerStatuses ? 'Loading providers…' : 'No providers configured'}
             onChange={value => setProvider(value as AiProvider)}
-            options={configuredProviders.map(id => ({ value: id, label: providerLabel(id), icon: providerIconName(id) }))}
+            options={configuredProviders.map(id => ({ value: id, label: providerLabel(id), icon: <ProviderBrandLogo provider={id} size={13} decorative /> }))}
           />
         </label>
         <label className="session-brief-field"><span className="rail-sub">Model</span>
@@ -1025,7 +1025,7 @@ export function SessionConversationActions({ session, onStop, onToolOwner, targe
         options={conversation.participants.map(participant => ({
           value: participant.id,
           label: `Ask ${participant.displayLabel}`,
-          icon: providerIconName(participant.provider)
+          icon: <ProviderBrandLogo provider={participant.provider} size={13} decorative />
         }))}
       />
       <span className="composer-chip session-runtime-chip is-readonly" data-testid="session-conversation-status">{conversation.mode} · {conversation.turnsUsed}/{conversation.turnCap} · {current?.displayLabel}</span>
@@ -1163,7 +1163,7 @@ export function SessionLimitSwitch({ session, onStop }: { session: AgentSessionR
       <div className="session-limit-switch-actions">
         {choices.length > 0 && (
           <>
-            <ChipSelect ariaLabel="Replacement provider" data-testid="session-limit-provider" value={selected ?? ''} disabled={busy} icon={selected ? providerIconName(selected) : 'sparkles'} onChange={value => setChoice(value as AiProvider)} options={choices.map(provider => ({ value: provider, label: aiName(provider), icon: providerIconName(provider) }))} />
+            <ChipSelect ariaLabel="Replacement provider" data-testid="session-limit-provider" value={selected ?? ''} disabled={busy} icon={selected ? <ProviderBrandLogo provider={selected} size={13} decorative /> : 'sparkles'} onChange={value => setChoice(value as AiProvider)} options={choices.map(provider => ({ value: provider, label: aiName(provider), icon: <ProviderBrandLogo provider={provider} size={13} decorative /> }))} />
             <ChipSelect ariaLabel="Replacement model" data-testid="session-limit-model" value={loadedProvider === selected ? model : ''} disabled={busy || loadedProvider !== selected || modelOptions.length === 0} placeholder={catalogError ? 'Models unavailable' : loadedProvider === selected ? 'No models enabled' : 'Loading models…'} icon="sparkles" onChange={setModel} options={modelOptions} />
           </>
         )}

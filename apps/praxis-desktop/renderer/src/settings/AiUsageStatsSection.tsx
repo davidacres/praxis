@@ -14,7 +14,7 @@ import type {
   UsageGranularity
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { ProviderBrandLogo } from '../ai/ProviderBrandLogo';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { providerLabel } from '../ai/modelProviders';
 import {
   formatCost,

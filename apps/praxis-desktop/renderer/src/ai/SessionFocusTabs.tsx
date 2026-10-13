@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { AgentSessionRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { providerIconName } from './modelProviders';
+import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { sessionLabel, sessionTitle } from './sessionNav';
 
 export interface SessionFocusTabsProps {
@@ -69,7 +69,7 @@ export function SessionFocusTabs({
                 tabs[nextIndex]?.click();
               }}
             >
-              <Icon name={provider ? providerIconName(provider) : 'robot'} size={13} />
+              {provider ? <ProviderBrandLogo provider={provider} size={13} /> : <Icon name="robot" size={13} />}
               <span data-testid={active ? 'session-console-title' : undefined}>{title}</span>
             </button>
           );
