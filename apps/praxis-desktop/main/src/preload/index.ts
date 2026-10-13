@@ -368,6 +368,7 @@ const praxis: PraxisIpc = {
     dashboardSummary: () => ipcRenderer.invoke('aiUsage:dashboardSummary'),
     listEvents: () => ipcRenderer.invoke('aiUsage:listEvents'),
     providerSnapshot: (provider: AiProvider) => ipcRenderer.invoke('aiUsage:providerSnapshot', provider),
+    providerHistory: (provider: AiProvider) => ipcRenderer.invoke('aiUsage:providerHistory', provider),
     providerSnapshots: () => ipcRenderer.invoke('aiUsage:providerSnapshots'),
     setProviderUsageKey: (provider: AiProvider, value: string) => ipcRenderer.invoke('aiUsage:setProviderUsageKey', provider, value),
     alibabaConsoleStatus: (provider: AiProvider) => ipcRenderer.invoke('aiUsage:alibabaConsoleStatus', provider),

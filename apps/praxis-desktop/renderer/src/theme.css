@@ -6230,6 +6230,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 /* An input with its buttons: the input takes the room, the buttons keep their labels on one
    line, and the whole cluster wraps rather than pushing a button past the row's edge. */
+.ai-usage-admin-key { width: 100%; min-width: 0; }
 .ai-key-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); width: 100%; }
 .ai-key-controls > .input { flex: 1 1 calc(200px * var(--ui-scale)); min-width: 0; }
 .ai-key-controls > .btn { flex: 0 0 auto; white-space: nowrap; }
@@ -20938,3 +20939,12 @@ button.session-chat-attachment {
   cursor: pointer;
 }
 .easymode-show-more:hover { color: var(--text-secondary); background: var(--bg-hover, transparent); }
+
+/* Historical provider totals have a separate scope from the local usage ledger. */
+.provider-history-section { margin-block: 16px; }
+.provider-history-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; }
+.provider-history-row { border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-width: 0; overflow-wrap: anywhere; }
+.provider-history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.provider-history-heading h4 { margin: 0; }
+
+.provider-history-row .btn { max-width: 100%; white-space: normal; height: auto; min-height: var(--field-chip-height); }

@@ -73,3 +73,17 @@ export interface ProviderUsageSnapshotsResult {
   /** When this batch was read — for the panel's "last checked" line. */
   checkedAt: string;
 }
+
+/** Historical usage is separate from the Praxis ledger and must never be added to it. */
+export interface ProviderUsageHistory {
+  provider: AiProvider;
+  fetchedAt: string;
+  source: 'provider-api' | 'local-cli' | 'provider-summary';
+  /** Requested interval, not a guarantee of provider retention or account age. */
+  requestedFrom?: string;
+  requestedTo?: string;
+  firstUsageAt?: string;
+  totalTokens?: number;
+  note: string;
+  unavailableReason?: string;
+}

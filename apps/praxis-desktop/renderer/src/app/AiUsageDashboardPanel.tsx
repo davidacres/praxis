@@ -85,7 +85,7 @@ export function AiUsageDashboardPanel({ onOpenDetails, onNewConversation }: AiUs
             <UsageTile id="today" label="Today" window={summary.today} />
             <UsageTile id="week" label="This week" window={summary.week} />
             <UsageTile id="month" label="This month" window={summary.month} />
-            <UsageTile id="all" label={since ? `All time (since ${since})` : 'All time'} window={summary.allTime} />
+            <UsageTile id="all" label={since ? `Praxis usage (since ${since})` : 'Praxis usage'} window={summary.allTime} />
           </div>
           <UsageModelBreakdown summary={summary} limit={TOP_MODELS} testIdPrefix="overview-usage" />
           {noCost && <p className="overview-usage-note" data-testid="overview-usage-no-cost">Cost is not reported for these models — only ACP agents such as Claude Code and Codex report it.</p>}

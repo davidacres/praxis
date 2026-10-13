@@ -58,25 +58,9 @@ function readPlanWindows(): Promise<ProviderUsageWindow[]> {
 
 export async function claudeCodeSnapshot(): Promise<ProviderUsageSnapshot> {
   const fetchedAt = new Date().toISOString();
-  let lifetimeTokens: number | undefined;
   const planWindows = await readPlanWindows();
 
-  try {
-    const statsPath = path.join(os.homedir(), '.claude', 'stats-cache.json');
-    const raw = await readFile(statsPath, 'utf8');
-    const data = JSON.parse(raw) as ClaudeStatsCache;
-    if (data.modelUsage && typeof data.modelUsage === 'object') {
-      let total = 0;
-      for (const usage of Object.values(data.modelUsage)) {
-        total += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
-      }
-      if (total > 0) {
-        lifetimeTokens = total;
-      }
-    }
-  } catch {
-    // Reading local stats cache is optional.
-  }
+  const lifetimeTokens = await readClaudeLocalTokens();
 
   // Check if any active or recent Claude Code session recorded a limit error.
   const sessions = getAiSessionManager().getAllAgentSessions();
@@ -119,4 +103,30 @@ export async function claudeCodeSnapshot(): Promise<ProviderUsageSnapshot> {
     windows: [],
     totalTokens: lifetimeTokens
   };
+}
+
+/** Local cache only; does not invoke the agent or read login credentials. */
+export async function readClaudeLocalTokens(): Promise<number | undefined> {
+  let lifetimeTokens: number | undefined;
+  try {
+    const statsPath = path.join(os.homedir(), '.claude', 'stats-cache.json');
+    const raw = await readFile(statsPath, 'utf8');
+    const data = JSON.parse(raw) as ClaudeStatsCache;
+    if (data.modelUsage && typeof data.modelUsage === 'object') {
+      let total = 0;
+      for (const usage of Object.values(data.modelUsage)) {
+        const input = usage.inputTokens ?? 0;
+        const output = usage.outputTokens ?? 0;
+        if (typeof input !== 'number' || typeof output !== 'number' || !Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return undefined;
+        total += input + output;
+      }
+      if (total > 0) {
+        lifetimeTokens = total;
+      }
+    }
+  } catch {
+    // Reading local stats cache is optional.
+  }
+
+  return lifetimeTokens;
 }

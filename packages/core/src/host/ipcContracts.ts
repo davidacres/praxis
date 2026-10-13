@@ -9,7 +9,7 @@ import type {
 import type { AiUsageEvent } from '../ai/aiUsageLog';
 import type { CoordinationState } from '../ai/coordination/coordinationTypes';
 import type { UsageBucket, UsageComparison, UsageDashboardSummary, UsageGranularity } from '../ai/aiUsageStats';
-import type { ProviderUsageSnapshot, ProviderUsageSnapshotsResult } from '../ai/providerUsage';
+import type { ProviderUsageHistory, ProviderUsageSnapshot, ProviderUsageSnapshotsResult } from '../ai/providerUsage';
 import type { AgentRecommendationCandidate, AgentRecommendationResult } from '../ai/workflowAgentRecommendation';
 import type { StoredAgentRecommendation } from '../ai/workflowRecommendationCache';
 import type { TemplateRecommendationResult } from '../ai/workflowTemplateRecommendation';
@@ -1076,6 +1076,8 @@ export interface AiUsageIpc {
    * spawns per page load. One provider failing never fails the batch.
    */
   providerSnapshots(): Promise<ProviderUsageSnapshotsResult>;
+  /** On-demand historical account usage; never writes to the local ledger. */
+  providerHistory(provider: AiProvider): Promise<ProviderUsageHistory>;
   /** Stores a provider's optional admin/usage credential in the OS keychain. */
   setProviderUsageKey(provider: AiProvider, value: string): Promise<void>;
   /**

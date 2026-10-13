@@ -2160,36 +2160,48 @@ const AI_PROVIDERS: AiProviderMeta[] = [
 
 
 function UsageAdminKeyField({ provider }: { provider: AiProvider }) {
+  const [error, setError] = useState<string>();
   const [draft, setDraft] = useState('');
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const save = async (value: string) => {
     setBusy(true);
+    setError(undefined);
     try {
       await window.praxis.aiUsage.setProviderUsageKey(provider, value);
       setDraft('');
       setSaved(Boolean(value.trim()));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the usage Admin API key.');
     } finally {
       setBusy(false);
     }
   };
   return (
-    <div className="ai-key-controls">
-      <input
-        type="password"
-        className="input"
-        data-testid="ai-usage-admin-key-input"
-        aria-label="Usage Admin API key"
-        placeholder={saved ? '••••••••  (saved)' : 'Optional admin key'}
-        value={draft}
-        onChange={event => setDraft(event.target.value)}
-      />
-      <button type="button" className="btn btn-primary" data-testid="ai-usage-admin-key-save" disabled={busy || !draft.trim()} onClick={() => void save(draft)}>
-        Save
-      </button>
-      <button type="button" className="btn" data-testid="ai-usage-admin-key-clear" disabled={busy || !saved} onClick={() => void save('')}>
-        Clear
-      </button>
+    <div className="ai-usage-admin-key">
+      <div className="ai-key-controls">
+        <input
+          type="password"
+          autoComplete="off"
+          disabled={busy}
+          className="input"
+          data-testid="ai-usage-admin-key-input"
+          aria-label="Usage Admin API key"
+          placeholder={saved ? '••••••••  (saved)' : 'Optional admin key'}
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
+        />
+        <button type="button" className="btn btn-primary" data-testid="ai-usage-admin-key-save" disabled={busy || !draft.trim()} onClick={() => void save(draft)}>
+          Save
+        </button>
+        <button type="button" className="btn" data-testid="ai-usage-admin-key-clear" disabled={busy} onClick={() => void save('')}>
+          Clear
+        </button>
+      </div>
+      <div aria-live="polite">
+        {error && <p className="error-banner">{error}</p>}
+        {!error && saved && <p className="settings-hint">Usage Admin API key saved.</p>}
+      </div>
     </div>
   );
 }
@@ -2927,13 +2939,13 @@ function AiSection({
                       />
                     </FieldRow>
                   )}
-                  {selectedProviderId === 'openai' && (
+                  {(selectedProviderId === 'openai' || selectedProviderId === 'anthropic') && (
                     <FieldRow
                       label="Usage Admin API key"
                       stacked
-                      description="Optional OpenAI Admin API key for account usage, limits, and cost reporting. Stored encrypted in the OS keychain; it is never used for model requests."
+                      description={`Optional organization Admin API key for ${selectedMeta.label} account history in AI Usage. Separate from the model API key above. Stored encrypted in the OS keychain; it is never used for model requests.`}
                     >
-                      <UsageAdminKeyField provider={selectedProviderId} />
+                      <UsageAdminKeyField key={selectedProviderId} provider={selectedProviderId} />
                     </FieldRow>
                   )}
                   <FieldRow

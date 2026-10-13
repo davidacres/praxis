@@ -96,3 +96,10 @@ export async function codexCliSnapshot(): Promise<ProviderUsageSnapshot> {
     return { provider: 'codex-cli', fetchedAt, windows: [], unavailableReason: error instanceof Error ? error.message : 'Codex account usage is unavailable.', unavailableReasonCode: 'cli-unavailable' };
   }
 }
+
+/** Best-effort summary; availability and coverage depend on the installed CLI. */
+export async function readCodexHistoricalTokens(): Promise<number | undefined> {
+  const usage = await requestCodex('account/usage/read', {}) as CodexTokenUsage;
+  const total = usage.summary?.lifetimeTokens;
+  return typeof total === 'number' && Number.isFinite(total) && total >= 0 ? total : undefined;
+}

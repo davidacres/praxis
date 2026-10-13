@@ -69,7 +69,7 @@ test('shows exact period totals, peaks, cost and ranked models from a seeded led
   }
   await expect(page.getByTestId('overview-usage-tokens-all')).toHaveText('10k tokens');
   await expect(page.getByTestId('overview-usage-cost-all')).toHaveText(/\$1\.75$/);
-  await expect(page.getByTestId('overview-usage-tile-all')).toContainText('All time (since');
+  await expect(page.getByTestId('overview-usage-tile-all')).toContainText('Praxis usage (since');
 
   await expect(page.getByTestId('overview-usage-peak-today')).toContainText('peak 4.0k');
   await expect(page.getByTestId('overview-usage-peak-week')).toContainText('peak 4.0k');

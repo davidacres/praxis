@@ -11,6 +11,7 @@ import {
   type UsageDashboardSummary,
   type UsageGranularity,
   type AiProvider,
+  type ProviderUsageHistory,
   type ProviderUsageSnapshot,
   type ProviderUsageWindow
 } from '@praxis/core';
@@ -18,12 +19,14 @@ import { getAiUsageLog } from './aiUsageLogInstance';
 import { getAiSessionManager, listAiProviderStatuses } from './aiInstance';
 import { getSecretsStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
-import { codexCliSnapshot } from './codexUsage';
-import { claudeCodeSnapshot } from './claudeUsage';
+import { codexCliSnapshot, readCodexHistoricalTokens } from './codexUsage';
+import { claudeCodeSnapshot, readClaudeLocalTokens } from './claudeUsage';
+import { antigravitySnapshot } from './antigravityUsage';
 import { isMiniMaxEndpoint, miniMaxUsageSnapshot } from './minimaxUsage';
 import { alibabaCodingPlanUsageSnapshot, isAlibabaCodingPlanEndpoint, regionForEndpoint } from './alibabaCodingPlanUsage';
 import { alibabaConsoleTransport, isAlibabaConsoleSignedIn, signInToAlibabaConsole, signOutOfAlibabaConsole } from './alibabaConsoleSession';
 import { enabledUsageProviders, readProviderSnapshots } from './providerUsageBatch';
+import { fetchApiUsageHistory } from './providerUsageHistory';
 
 const USAGE_SECRET_PREFIX = 'ai-usage:';
 
@@ -40,12 +43,6 @@ function periodStart(period: 'hour' | 'day' | 'week' | 'month'): number {
     now.setUTCHours(0, 0, 0, 0);
   }
   return Math.floor(now.getTime() / 1000);
-}
-
-function apiRoot(provider: AiProvider): string {
-  const settings = getSettingsBackend().read();
-  const config = provider === 'vercel-gateway' ? undefined : settings.ai.providers[provider];
-  return (provider === 'openai' ? config?.baseUrl : undefined)?.replace(/\/$/, '') || 'https://api.openai.com';
 }
 
 function numberAt(value: unknown, keys: string[]): number | undefined {
@@ -79,7 +76,8 @@ async function openAiSnapshot(): Promise<ProviderUsageSnapshot> {
   const fetchedAt = new Date().toISOString();
   const key = process.env.OPENAI_ADMIN_KEY || await getSecretsStore().get(`${USAGE_SECRET_PREFIX}openai`);
   if (!key) return { provider: 'openai', fetchedAt, windows: [], unavailableReason: 'Add an OpenAI Admin API key to view account usage.', unavailableReasonCode: 'not-configured' };
-  const root = apiRoot('openai');
+  // Admin credentials belong to OpenAI, never a configured inference proxy.
+  const root = 'https://api.openai.com';
   const headers = { Authorization: `Bearer ${key}` };
   const periods: Array<'hour' | 'day' | 'week' | 'month'> = ['hour', 'day', 'week', 'month'];
   try {
@@ -165,6 +163,31 @@ async function providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnap
   return { provider, fetchedAt: new Date().toISOString(), windows: [], unavailableReason: 'This provider does not expose an account usage API to Praxis yet.', unavailableReasonCode: 'not-supported' };
 }
 
+async function providerHistory(provider: AiProvider): Promise<ProviderUsageHistory> {
+  const source: ProviderUsageHistory['source'] = provider === 'claude-code-cli' ? 'local-cli' : provider === 'codex-cli' ? 'provider-summary' : 'provider-api';
+  const note = provider === 'claude-code-cli'
+    ? 'Local Claude Code statistics on this device only; input and output tokens, excluding cache tokens. Not complete account history.'
+    : provider === 'codex-cli'
+      ? 'CLI-reported cumulative summary. The CLI does not establish the date range or coverage across devices.'
+      : 'Provider account history is separate from usage recorded by Praxis.';
+  const base: ProviderUsageHistory = { provider, fetchedAt: new Date().toISOString(), source, note };
+  try {
+    if (provider === 'openai' || provider === 'anthropic') {
+      const key = (provider === 'openai' ? process.env.OPENAI_ADMIN_KEY : process.env.ANTHROPIC_ADMIN_KEY)
+        || await getSecretsStore().get(`${USAGE_SECRET_PREFIX}${provider}`);
+      if (!key) return { ...base, unavailableReason: 'Add an organization Admin API key to retrieve historical usage.' };
+      return await fetchApiUsageHistory(provider, key);
+    }
+    if (provider === 'claude-code-cli' || provider === 'codex-cli') {
+      const totalTokens = provider === 'claude-code-cli' ? await readClaudeLocalTokens() : await readCodexHistoricalTokens();
+      return { ...base, totalTokens, unavailableReason: totalTokens === undefined ? 'No cumulative token summary is available from this CLI.' : undefined };
+    }
+    return { ...base, unavailableReason: 'Historical account usage is not supported for this provider.' };
+  } catch (error) {
+    return { ...base, unavailableReason: error instanceof Error ? error.message : 'Historical usage is unavailable.' };
+  }
+}
+
 let dashboardMemo: { key: string; summary: UsageDashboardSummary } | undefined;
 
 /**
@@ -189,6 +212,7 @@ export function registerAiUsageIpc(): void {
   registerProviderUsageAdapter('openai', openAiSnapshot);
   registerProviderUsageAdapter('codex-cli', codexCliSnapshot);
   registerProviderUsageAdapter('claude-code-cli', claudeCodeSnapshot);
+  registerProviderUsageAdapter('antigravity-cli', antigravitySnapshot);
   // Optional provider scoping: the session usage bar shows the selected provider next to its
   // account quota; omitting the filter keeps account-wide totals for the dashboards.
   ipcMain.handle('aiUsage:series', async (_event, granularity: UsageGranularity, periodsBack: number, provider?: AiProvider) =>
@@ -199,6 +223,7 @@ export function registerAiUsageIpc(): void {
   );
   ipcMain.handle('aiUsage:dashboardSummary', async () => dashboardSummary());
   ipcMain.handle('aiUsage:listEvents', async () => getAiUsageLog().list());
+  ipcMain.handle('aiUsage:providerHistory', async (_event, provider: AiProvider) => providerHistory(provider));
   ipcMain.handle('aiUsage:providerSnapshot', async (_event, provider: AiProvider) => providerSnapshot(provider));
   ipcMain.handle('aiUsage:providerSnapshots', async () => {
     const settings = getSettingsBackend().read().ai;

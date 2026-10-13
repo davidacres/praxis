@@ -1,3 +1,5 @@
+import { formatLargeTokenCount } from '../ai/usageTokenFormat';
+import { ProviderUsageHistorySection } from './ProviderUsageHistorySection';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentSessionRecord,
@@ -29,11 +31,11 @@ import {
 } from '../ai/sessionNav';
 import { UsageModelBreakdown, formatUsageCost } from '../ai/UsageModelBreakdown';
 
-/** Exact, grouped counts for the chart and table; the compact k/M form lives in `ai/sessionNav`. */
+/** Smaller chart/table counts stay exact; large usage totals carry Mtok/Btok/Ttok units. */
 const numberFormatter = new Intl.NumberFormat(undefined);
 
 function formatTokens(value: number): string {
-  return numberFormatter.format(Math.round(value));
+  return formatLargeTokenCount(value) ?? numberFormatter.format(Math.round(value));
 }
 
 const GRANULARITIES: { value: UsageGranularity; label: string }[] = [
@@ -124,7 +126,7 @@ function UsageBarChart({ buckets, granularity }: UsageBarChartProps) {
       {hoverIndex !== undefined && (
         <div className="ai-usage-tooltip" data-testid="ai-usage-tooltip">
           <strong>{formatPeriodLabel(buckets[hoverIndex].periodStart, granularity)}</strong>
-          <span>{formatTokens(buckets[hoverIndex].totalTokens)} tokens</span>
+          <span>{formatLargeTokenCount(buckets[hoverIndex].totalTokens) ?? `${formatTokens(buckets[hoverIndex].totalTokens)} tokens`}</span>
           <span>{formatUsageCost(buckets[hoverIndex].costByCurrency)}</span>
           {buckets[hoverIndex].byModel.length > 0 && (
             <span className="ai-usage-tooltip-models">
@@ -175,7 +177,7 @@ function spendGroupMeta(row: SpendGroupRow): string {
     .map(({ currency, amount }) => formatCost({ amount, currency }))
     .filter((value): value is string => Boolean(value));
   if (cost.length > 0) parts.push(cost.join(' + '));
-  if (typeof row.totalTokens === 'number') parts.push(formatTokenCount(row.totalTokens));
+  if (typeof row.totalTokens === 'number') parts.push(formatLargeTokenCount(row.totalTokens) ?? formatTokenCount(row.totalTokens));
   return parts.join(' · ');
 }
 
@@ -618,6 +620,8 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
 
       {error && <div className="error-banner">{error}</div>}
 
+      <ProviderUsageHistorySection />
+
       {/* Executive Metric Highlights Strip */}
       <div className="ai-usage-stats-grid">
         <div className="ai-usage-stat-card">
@@ -655,8 +659,8 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
         </div>
 
         <div className="ai-usage-stat-card">
-          <small>All-time tokens</small>
-          <strong>{summary ? formatTokenCompact(summary.allTime.totalTokens) : '48.2k'}</strong>
+          <small>Tokens recorded by Praxis</small>
+          <strong>{summary ? (formatLargeTokenCount(summary.allTime.totalTokens) ?? formatTokenCompact(summary.allTime.totalTokens)) : '48.2k'}</strong>
           <span className="stat-subtitle">
             {summary?.allTime.firstEventAt
               ? `Since ${new Date(summary.allTime.firstEventAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}`

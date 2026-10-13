@@ -1564,7 +1564,7 @@ export function App() {
     return entries;
   }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestAddProject, openExistingFolder, updateSettings, settings?.preview?.enableEasyMode, toggleFocusMode, inSession, toggleAssistant, openProjectReview]);
 
-  /** Four stops over controls the shell already renders — see Walkthrough. */
+  /** Three stops over controls the shell already renders — see Walkthrough. */
   const walkthroughStops = useMemo<WalkthroughStop[]>(() => [
     {
       id: 'project',
@@ -1583,12 +1583,6 @@ export function App() {
       selector: '[data-testid="project-getstarted-start"]',
       title: 'Hand a ticket to an agent',
       body: 'A session turns a ticket into visible progress: the agent plans, asks before it uses a tool, and reports what it changed.'
-    },
-    {
-      id: 'connections',
-      selector: '[data-testid="nav-connections"]',
-      title: 'Bring in your real tickets',
-      body: 'Connect Jira, GitLab, GitHub, or a folder of markdown plans, and its boards appear alongside this project.'
     }
   ], []);
 

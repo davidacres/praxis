@@ -261,7 +261,7 @@ test('advanced project setup remains available without forcing a board', async (
   await expect(win.locator('.review-summary-list > div')).toHaveCount(4);
   await expect(win.getByText('6 brief sections drafted')).toBeVisible();
   await win.screenshot({ path: 'output/playwright/full-onboarding-08-review.png', fullPage: true });
-  await win.getByRole('button', { name: 'Create project' }).click();
+  await win.getByTestId('new-project-wizard').getByRole('button', { name: 'Create project', exact: true }).click();
 
   await expect(win.getByTestId('project-home')).toContainText('Customer Hub');
   await expect(win.getByText('File structure', { exact: true })).toBeVisible();

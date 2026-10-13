@@ -1,3 +1,4 @@
+import { formatLargeTokenCount } from './usageTokenFormat';
 import { useState } from 'react';
 import type { UsageDashboardSummary, UsageWindowSummary } from '@praxis/core';
 import { formatCost, formatTokenCount } from './sessionNav';
@@ -66,7 +67,7 @@ export function UsageModelBreakdown({ summary, limit, testIdPrefix }: UsageModel
                 {entry.model}
               </span>
               <span className="usage-model-bar" aria-hidden="true"><i style={{ width: `${Math.max(entry.tokenShare * 100, entry.totalTokens > 0 ? 2 : 0)}%` }} /></span>
-              <span className="usage-model-tokens">{formatTokenCount(entry.totalTokens)}</span>
+              <span className="usage-model-tokens">{formatLargeTokenCount(entry.totalTokens) ?? formatTokenCount(entry.totalTokens)}</span>
               <span className="usage-model-share">{Math.round(entry.tokenShare * 100)}%</span>
               <span className={`usage-model-cost${entry.costByCurrency.length === 0 ? ' usage-model-cost-absent' : ''}`}>
                 {formatUsageCost(entry.costByCurrency)}

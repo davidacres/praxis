@@ -89,8 +89,10 @@ test('chat and project session groups reorder, rename inline, and persist', asyn
   page = app.window;
   await expect(page.getByTestId('session-custom-group')).toHaveCount(3);
   await expect(page.getByTestId('session-custom-group').filter({ hasText: 'chat research' })).toBeVisible();
-  await page.locator('[data-scope="nav-conversations"] [data-session-order-id="SESSION-aaaaa1"] [data-testid="session-list-row"]').click();
+  // Hover actions cover the right of the title span; click the visible text at its start.
+  await page.locator('[data-scope="nav-conversations"] [data-session-order-id="SESSION-aaaaa1"]').getByTestId('session-title').click({ position: { x: 5, y: 8 } });
   await expect(page.getByTestId('sessions-view')).toBeVisible();
+  await expect(page.getByTestId('session-console-title')).toHaveText('chat 1');
   fs.mkdirSync(path.resolve(__dirname, '../../.praxis/session-artifacts'), { recursive: true });
   await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-groups.png') });
   const chatList = page.locator('[data-scope="nav-conversations"]');

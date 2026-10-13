@@ -69,7 +69,6 @@ interface FeatureDef {
 const FEATURES: FeatureDef[] = [
   { id: 'overview', label: 'Overview', icon: 'home' },
   { id: 'conversations', label: 'Conversations', icon: 'chats' },
-  { id: 'connections', label: 'Connections', icon: 'plug' },
 ];
 
 export interface SidebarProps {
