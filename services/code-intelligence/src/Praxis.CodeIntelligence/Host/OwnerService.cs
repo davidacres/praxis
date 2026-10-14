@@ -19,7 +19,7 @@ public static class OwnerService
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         using var ownerLock = new FileStream(Path.Combine(directory, "owner.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var endpoint = Endpoint(directory); if (!OperatingSystem.IsWindows()) File.Delete(endpoint);
-        var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32)); var runtime = new ServiceRuntime(directory);
+        var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32)); using var runtime = new ServiceRuntime(directory);
         using var writer = new SemaphoreSlim(1, 1); using var clients = new SemaphoreSlim(16, 16);
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var admissions = new ConcurrentDictionary<string, Admission>(StringComparer.Ordinal);
