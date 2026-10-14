@@ -36,7 +36,10 @@ try
         "search" when arguments.Count == 3 => new() { ["action"] = "query", ["tool"] = "search_code", ["arguments"] = new JsonObject { ["repositoryId"] = arguments[1], ["query"] = arguments[2] } },
         "query" when arguments.Count == 3 => new() { ["action"] = "query", ["tool"] = arguments[1], ["arguments"] = JsonNode.Parse(arguments[2])!.AsObject() },
         "backup" when arguments.Count == 2 => new() { ["action"] = "backup", ["destination"] = arguments[1] },
+        "model-install" when arguments.Count == 2 => new() { ["action"] = "model-install", ["bundle"] = arguments[1] },
+        "model-activate" when arguments.Count == 3 => new() { ["action"] = "model-activate", ["repositoryId"] = arguments[1], ["fingerprint"] = arguments[2] },
         "rpc" when arguments.Count == 1 && client is not null => await ReadRpc(client),
+        "local-rpc" when arguments.Count == 1 => await ReadRpc(null),
         _ => throw new ArgumentException("Invalid command or arguments; run help.")
     };
     var result = await OwnerService.SendAsync(directory, request, cancellation.Token); Console.WriteLine(result.ToJsonString()); return result.ContainsKey("error") ? 5 : 0;
@@ -45,7 +48,7 @@ catch (OperationCanceledException) { Console.Error.WriteLine("CANCELLED"); retur
 catch (Exception ex) when (ex is ArgumentException or System.Text.Json.JsonException) { Console.Error.WriteLine("INVALID_ARGUMENT: " + ex.Message); return 2; }
 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException) { Console.Error.WriteLine("OPERATION_FAILED: " + ex.Message); return 5; }
 
-static async Task<JsonObject> ReadRpc(string client)
+static async Task<JsonObject> ReadRpc(string? client)
 {
     using var input = Console.OpenStandardInput(); using var buffer = new MemoryStream(); var chunk = new byte[8192]; int count;
     while ((count = await input.ReadAsync(chunk)) > 0)
