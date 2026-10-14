@@ -3,6 +3,7 @@ import {
   createMcpToolExtension,
   describeMcpServerProblem,
   enabledMcpServers,
+  mcpServerAppliesToProvider,
   mcpServerSlug,
   sanitizeMcpServers,
   type AcpMcpServer,
@@ -27,14 +28,14 @@ import { getSettingsBackend } from './settingsBackendInstance';
 
 const pool = new McpClientPool(line => console.warn(line));
 
-function activeServers(toolMode: string | undefined): McpServerConfig[] {
+function activeServers(toolMode: string | undefined, provider?: string): McpServerConfig[] {
   if (toolMode !== 'full') return [];
-  return enabledMcpServers(getSettingsBackend().read().ai.mcpServers);
+  return enabledMcpServers(getSettingsBackend().read().ai.mcpServers).filter(server => mcpServerAppliesToProvider(server, provider));
 }
 
 /** The `mcpServers` entries for an ACP session. */
-export function userMcpAcpServers(toolMode: string | undefined): AcpMcpServer[] {
-  return activeServers(toolMode).map((server): AcpMcpServer =>
+export function userMcpAcpServers(toolMode: string | undefined, provider?: string): AcpMcpServer[] {
+  return activeServers(toolMode, provider).map((server): AcpMcpServer =>
     server.transport === 'http'
       ? { name: mcpServerSlug(server.name), url: server.url ?? '', headers: server.headers }
       : { name: mcpServerSlug(server.name), command: server.command ?? '', args: server.args, env: server.env }
@@ -42,10 +43,10 @@ export function userMcpAcpServers(toolMode: string | undefined): AcpMcpServer[] 
 }
 
 /** The tool extension for an API-provider session, or `undefined` when no server contributes a tool. */
-export async function userMcpToolExtension(toolMode: string | undefined): Promise<McpToolExtension | undefined> {
-  const servers = activeServers(toolMode);
+export async function userMcpToolExtension(toolMode: string | undefined, provider?: string): Promise<McpToolExtension | undefined> {
+  const servers = activeServers(toolMode, provider);
   // A server the user removed or switched off should not keep a process alive.
-  const keep = new Set(servers.map(server => server.id));
+  const keep = new Set(enabledMcpServers(getSettingsBackend().read().ai.mcpServers).map(server => server.id));
   for (const server of getSettingsBackend().read().ai.mcpServers ?? []) {
     if (!keep.has(server.id)) void pool.close(server.id);
   }
