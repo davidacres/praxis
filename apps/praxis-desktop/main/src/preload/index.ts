@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
+  CodeIntelligenceRequest,
   CheckFindings,
   AgentSessionRecord,
   AgentPermissionMode,
@@ -240,6 +241,7 @@ const praxis: PraxisIpc = {
     listProviderStatuses: () => ipcRenderer.invoke('ai:listProviderStatuses'),
     probeProviderCapability: (provider: AiProvider) => ipcRenderer.invoke('ai:probeProviderCapability', provider),
     testMcpServer: (config: McpServerConfig) => ipcRenderer.invoke('ai:testMcpServer', config),
+    codeIntelligence: (request: CodeIntelligenceRequest) => ipcRenderer.invoke('ai:codeIntelligence', request),
     installCliProvider: (provider: AiProvider) => ipcRenderer.invoke('ai:installCliProvider', provider),
     getLatestCliProviderVersion: (provider: AiProvider) => ipcRenderer.invoke('ai:getLatestCliProviderVersion', provider) as Promise<{ version: string }>,
     listCliModelOptions: (provider: AiProvider) => ipcRenderer.invoke('ai:listCliModelOptions', provider),
