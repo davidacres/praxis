@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/Praxis.CodeIntelligence/Praxis.CodeIntelligence.csproj" />
+  <Project Path="tests/Praxis.CodeIntelligence.Tests/Praxis.CodeIntelligence.Tests.csproj" />
+</Solution>
