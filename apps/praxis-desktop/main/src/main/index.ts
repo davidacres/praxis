@@ -1,4 +1,5 @@
 import { registerProjectActivityIpc } from './projectActivityInstance';
+import { registerCodeIntelligenceIpc } from './codeIntelligenceIpc';
 import { registerCoordinationIpc } from './coordinationIpc';
 import { disposeCoordination } from './coordinationInstance';
 import * as fs from 'node:fs';
@@ -362,6 +363,7 @@ void app.whenReady().then(async () => {
   registerBrowserIpc();
   registerBoardPrefsIpc();
   registerAiIpc();
+  registerCodeIntelligenceIpc();
   registerCoordinationIpc();
   registerTicketReviewIpc();
   registerAiUsageIpc();
