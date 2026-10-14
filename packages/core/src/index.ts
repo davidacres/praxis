@@ -189,3 +189,4 @@ export * from './host/mobileHostListener';
 export * from './workflows/checkEnvironmentFailure';
 
 export * from './projects/projectActivity';
+export * from './codeIntelligence/runtimePaths';
