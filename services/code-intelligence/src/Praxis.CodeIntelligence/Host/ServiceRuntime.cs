@@ -2,20 +2,23 @@ using System.Text.Json.Nodes;
 using Praxis.CodeIntelligence.Indexing;
 using Praxis.CodeIntelligence.Queries;
 using Praxis.CodeIntelligence.Storage;
+using Praxis.CodeIntelligence.Embeddings;
 
 namespace Praxis.CodeIntelligence.Host;
 
-public sealed class ServiceRuntime
+public sealed class ServiceRuntime : IDisposable
 {
     public IndexDatabase Database { get; }
     public RepositoryIndexer Indexer { get; }
     private readonly QueryService queries;
+    private readonly ModelStore models;
     private readonly string grantsDirectory;
     public ServiceRuntime(string dataDirectory)
     {
         Directory.CreateDirectory(dataDirectory);
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dataDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        Database = new(Path.Combine(dataDirectory, "index.db")); Database.Initialize(); Indexer = new(Database); queries = new(Database);
+        Database = new(Path.Combine(dataDirectory, "index.db")); Database.Initialize(); Indexer = new(Database);
+        models = new(Database, Path.Combine(dataDirectory, "models")); queries = new(Database, models);
         grantsDirectory = Path.Combine(dataDirectory, "grants"); Directory.CreateDirectory(grantsDirectory);
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(grantsDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
@@ -49,6 +52,8 @@ public sealed class ServiceRuntime
                     return queries.Execute(request["tool"]!.GetValue<string>(), arguments, allowed ? new HashSet<string> { id } : new HashSet<string>(), cancellationToken);
                 }
                 case "doctor": return Result(new { checks = Database.Check() });
+                case "model-install": return Result(new { fingerprint = models.Install(request["bundle"]!.GetValue<string>()) });
+                case "model-activate": models.Activate(repositoryId!, request["fingerprint"]!.GetValue<string>(), cancellationToken); return Result(new { activated = true });
                 case "backup": Database.Backup(request["destination"]!.GetValue<string>()); return Result(new { backedUp = true });
                 default: throw new ArgumentException("Unknown action.");
             }
@@ -82,4 +87,5 @@ public sealed class ServiceRuntime
     }
     public static JsonObject Result<T>(T data) => new() { ["data"] = System.Text.Json.JsonSerializer.SerializeToNode(data, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }) };
     public static JsonObject Error(string code, string message) => new() { ["error"] = new JsonObject { ["code"] = code, ["message"] = message, ["retryable"] = false } };
+    public void Dispose() => models.Dispose();
 }
