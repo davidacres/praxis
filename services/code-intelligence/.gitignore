@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+artifacts/
+*.db
+*.db-shm
+*.db-wal
