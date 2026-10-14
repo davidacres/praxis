@@ -53,7 +53,7 @@ public static class SourceFiles
     public static SourceInput Read(string root, string relativePath, CancellationToken cancellationToken = default)
     {
         var path = Resolve(root, relativePath);
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var stream = SafeSourceHandle.Read(root, relativePath, path);
         if (stream.Length > MaximumBytes) throw new IOException("INPUT_TOO_LARGE: source exceeds the byte limit.");
         using var buffer = new MemoryStream();
         var chunk = new byte[16 * 1024];
