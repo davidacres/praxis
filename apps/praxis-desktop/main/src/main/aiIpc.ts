@@ -336,13 +336,14 @@ function mcpServersOption(
   browserMcp: Awaited<ReturnType<typeof browserMcpServerForSession>>,
   trackerMcp: Awaited<ReturnType<typeof trackerMcpServerForSession>>,
   toolMode: string | undefined,
-  coordinationMcp?: Awaited<ReturnType<typeof coordinationMcpServerForSession>>
+  coordinationMcp?: Awaited<ReturnType<typeof coordinationMcpServerForSession>>,
+  provider?: string
 ): { mcpServers?: AcpMcpServer[] } {
   const servers: AcpMcpServer[] = [
     ...(browserMcp ? [browserMcp] : []),
     ...(trackerMcp ? [trackerMcp] : []),
     ...(coordinationMcp ? [coordinationMcp] : []),
-    ...userMcpAcpServers(toolMode)
+    ...userMcpAcpServers(toolMode, provider)
   ];
   return servers.length > 0 ? { mcpServers: servers } : {};
 }
@@ -535,9 +536,9 @@ export function registerAiIpc(): void {
       internalConversationTurn: options?.internalConversationTurn,
       conversationContext: options?.conversationContext,
       gadgetAnswer: options?.gadgetAnswer,
-      ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp) : {}),
+      ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp, prepared.provider) : {}),
       ...(prepared.plan.state === 'gateway'
-        ? { toolExtension: mergeToolExtensions(trackerToolExtension(trackerService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode)) }
+        ? { toolExtension: mergeToolExtensions(trackerToolExtension(trackerService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode, prepared.provider)) }
         : {})
     });
   }
@@ -1118,9 +1119,9 @@ export function registerAiIpc(): void {
         reasoningEffort,
         permissionMode: input.permissionMode ?? 'manual',
         ...((input.permissionMode === 'bypass' || input.permissionMode === 'autopilot') ? { autoApprovePermissions: true } : {}),
-        ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp) : {}),
+        ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp, prepared.provider) : {}),
         ...(prepared.plan.state === 'gateway'
-          ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode)) }
+          ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode, prepared.provider)) }
           : {})
       });
       const record = sessionManager.getAgentSession(issue.key);
