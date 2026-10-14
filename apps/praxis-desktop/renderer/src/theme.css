@@ -533,10 +533,28 @@ textarea {
   cursor: pointer;
 }
 
-.titlebar-context-button.active {
+.titlebar-context-button.active,
+.titlebar-context-filter-pill.active {
   border-color: var(--border-strong);
   background: var(--bg-active);
   color: var(--text);
+}
+
+/* On a board the pill holds the project picker and, beside it, the issue-filter trigger. */
+.titlebar-context-filter-trigger {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
 }
 
 .titlebar-context-search-hint {
@@ -8211,41 +8229,40 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-nav-row[draggable="true"] { cursor: grab; }
 .session-nav-row[draggable="true"]:active { cursor: grabbing; }
 .session-nav-card:not(.session-nav-run) {
+  /* E6 ledger: a session is a flat row on the sidebar's own surface — no box,
+     no shadow. Hover and selection are a quiet fill; selection adds the accent
+     bar on the leading edge. The fade behind the hover actions tracks the fill
+     so the actions never sit on a visible band. */
   --session-card-fade: var(--bg-elevated);
   --easymode-row-fade: var(--bg-elevated);
   display: flex;
   flex-direction: column;
   width: auto;
   height: auto;
-  min-height: 50px;
-  margin: 3px 6px 4px var(--tree-indent-2);
-  padding: 6px 8px;
-  border: 1px solid var(--border);
+  min-height: 44px;
+  margin: 0 6px 1px var(--tree-indent-2);
+  padding: 5px 8px;
+  border: 0;
   border-radius: var(--radius-sm, 6px);
-  background: var(--bg-elevated);
+  background: transparent;
   position: relative;
   cursor: pointer;
   box-sizing: border-box;
-  transition:
-    background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.12s ease;
 }
 .session-nav-card:not(.session-nav-run)::before { display: none; }
 .session-nav-card:not(.session-nav-run):hover {
-  --session-card-fade: color-mix(in srgb, var(--text) 8%, var(--bg-elevated));
-  --easymode-row-fade: color-mix(in srgb, var(--text) 8%, var(--bg-elevated));
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
+  --session-card-fade: color-mix(in srgb, var(--text) 5%, var(--bg-elevated));
+  --easymode-row-fade: color-mix(in srgb, var(--text) 5%, var(--bg-elevated));
+  background: var(--session-card-fade);
 }
 .session-nav-card:not(.session-nav-run).active,
 .session-nav-card:not(.session-nav-run).is-selected {
-  --session-card-fade: color-mix(in srgb, #ffffff 20%, var(--bg-elevated));
-  --easymode-row-fade: color-mix(in srgb, #ffffff 20%, var(--bg-elevated));
-  border: 1px solid var(--accent-border, rgba(255, 255, 255, 0.40));
-  border-radius: var(--radius-sm, 6px);
-  background: color-mix(in srgb, #ffffff 20%, transparent);
-  box-shadow: 0 0 0 1px var(--accent-soft, rgba(255, 255, 255, 0.08)), 0 2px 10px rgba(0, 0, 0, 0.35);
+  --session-card-fade: color-mix(in srgb, var(--text) 8%, var(--bg-elevated));
+  --easymode-row-fade: color-mix(in srgb, var(--text) 8%, var(--bg-elevated));
+  border: 0;
+  background: var(--session-card-fade);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 .session-nav-card:not(.session-nav-run)[draggable="true"] { cursor: grab; }
 .session-nav-card:not(.session-nav-run)[draggable="true"]:active { cursor: grabbing; }
@@ -8310,6 +8327,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   color: var(--text-tertiary);
   flex-shrink: 0;
   margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .session-nav-card .session-nav-card-meta {
@@ -13048,16 +13066,28 @@ button.session-chat-attachment {
 .project-session-entry { min-width: 0; padding-bottom: 0; }
 .automation-run-item { position: relative; min-width: 0; min-height: 36px; margin: 0 4px 2px; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; transition: background 140ms ease; }
 .automation-run-item::before { content: ''; position: absolute; z-index: 0; inset: 0 auto 0 0; width: 2px; border-radius: 2px; background: transparent; }
-.automation-run-item:hover { background: var(--bg-hover); }
-.automation-run-item.active { background: var(--bg-active); color: var(--text); }
+.automation-run-item { --automation-row-fade: var(--bg-elevated); }
+.automation-run-item:hover { --automation-row-fade: color-mix(in srgb, var(--text) 5%, var(--bg-elevated)); background: var(--automation-row-fade); }
+.automation-run-item.active { --automation-row-fade: color-mix(in srgb, var(--text) 8%, var(--bg-elevated)); background: var(--automation-row-fade); color: var(--text); }
 .automation-run-item.active::before { background: var(--accent); }
 .automation-run-title-row { position: relative; z-index: 3; display: flex; height: 36px; align-items: center; gap: 4px; min-width: 0; padding: 0 4px 0 calc(var(--tree-indent-3) - 4px); }
 .automation-run-expand { flex: 0 0 20px; width: 20px; height: 24px; opacity: .6; }
 .automation-run-expand:hover, .automation-run-expand[aria-expanded='true'] { opacity: 1; }
-.automation-run-main { display: flex; min-width: 0; flex: 1; align-items: center; gap: 7px; height: 100%; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.automation-run-main { display: flex; min-width: 40px; flex: 1; align-items: center; gap: 7px; height: 100%; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .automation-run-title-input { flex: 1; min-width: 0; }
 .automation-run-title { overflow: hidden; min-width: 64px; flex: 1 1 auto; font-size: var(--text-sm); font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
-.automation-run-inline-meta { overflow: hidden; min-width: 0; max-width: 74px; flex: 0 1 74px; color: var(--text-tertiary); font-size: 9px; font-variant-numeric: tabular-nums; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+/* The inline Approve: the only action a collapsed run row takes on the spot. Quiet outline in the
+   awaiting tone, filled on hover — a decision, not a call to action. */
+.automation-run-approve { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border: 1px solid color-mix(in srgb, var(--lane-awaiting) 55%, transparent); border-radius: 999px; color: var(--lane-awaiting); background: transparent; font: inherit; font-size: 10px; font-weight: 600; cursor: pointer; transition: background 120ms ease, color 120ms ease; }
+.automation-run-approve:hover:not(:disabled) { color: var(--bg-elevated); background: var(--lane-awaiting); }
+.automation-run-approve:disabled { opacity: .55; cursor: default; }
+/* In a narrow sidebar the pill drops its word and keeps the check (its aria-label still says Approve),
+   so the run's own title never gets squeezed out. */
+.automation-run-item { container-type: inline-size; }
+@container (max-width: 220px) {
+  .automation-run-approve { padding: 0 5px; }
+  .automation-run-approve-label { display: none; }
+}
 .automation-run-progress-count { flex-shrink: 0; color: var(--text-tertiary); font-size: 10px; font-variant-numeric: tabular-nums; }
 .automation-state-mark { position: relative; display: inline-block; flex: 0 0 10px; width: 8px; height: 8px; box-sizing: border-box; border: 1.5px solid currentColor; border-radius: 50%; color: var(--text-tertiary); }
 .automation-state-mark.lane--running { border-width: 2px; color: var(--lane-running); }
@@ -13066,7 +13096,9 @@ button.session-chat-attachment {
 .automation-state-mark.lane--done { border-color: var(--lane-done); background: var(--lane-done); }
 .automation-state-mark.lane--failed { border-radius: 1px; color: var(--lane-failed); transform: rotate(45deg); }
 .automation-state-mark.lane--skipped { width: 8px; height: 2px; border: 0; border-radius: 1px; background: var(--lane-skipped); }
-.automation-run-actions { z-index: 4; }
+/* Like a session row's, a run's actions are an overlay revealed on hover or keyboard focus, fading in
+   over the row's own fill — at rest they would squeeze the run's title in a narrow sidebar. */
+.automation-run-actions { position: absolute; z-index: 4; top: 50%; right: 4px; display: inline-flex; align-items: center; gap: 1px; padding-left: 12px; transform: translateY(-50%); background: linear-gradient(90deg, transparent 0, var(--automation-row-fade) 12px, var(--automation-row-fade) 100%); opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
 .automation-run-item:hover .automation-run-actions,
 .automation-run-item:focus-within .automation-run-actions { opacity: 1; pointer-events: auto; }
 .automation-run-error { display: block; padding: 0 10px 4px; color: var(--danger); font-size: var(--text-xs); }
@@ -20868,11 +20900,10 @@ button.session-chat-attachment {
 .team-chat-row { display: flex; align-items: center; min-width: 0; height: 30px; margin: 0 4px 1px; border-radius: var(--radius-sm); color: var(--text-secondary); }
 .team-chat-row:hover { background: var(--bg-hover); }
 .team-chat-row.active { background: var(--bg-active); color: var(--text); }
-.team-chat-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 6px 0 calc(var(--tree-indent-2) - 4px); border: none; background: transparent; color: inherit; font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.team-chat-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 100%; padding: 0 6px 0 calc(var(--tree-indent-2) + 4px); border: none; background: transparent; color: inherit; font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; }
 .team-chat-main .tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team-chat-issue { flex-shrink: 0; padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-tertiary); font-size: 10px; line-height: 16px; }
 .team-chat-personas { display: inline-flex; gap: 2px; flex-shrink: 0; }
-.team-chat-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--badge-tone); }
 .team-chat-delete { opacity: 0; flex-shrink: 0; margin-right: 4px; }
 .team-chat-row:hover .team-chat-delete, .team-chat-delete:focus-visible { opacity: 1; }
 
@@ -20948,3 +20979,147 @@ button.session-chat-attachment {
 .provider-history-heading h4 { margin: 0; }
 
 .provider-history-row .btn { max-width: 100%; white-space: normal; height: auto; min-height: var(--field-chip-height); }
+
+/* ── E6 sidebar ledger ─────────────────────────────────────────────────────
+   A project's Workflows, Automations and its Today / This week / Last week
+   feed read as one flat ledger: small uppercase section labels with no band,
+   flat rows, one status dot per row, and a "New session" bar pinned to the
+   bottom. Section headers stay sticky: like the tree's other sticky headers
+   they are transparent at rest and only fill while stuck, so no band shows
+   between sections. */
+.project-tree-children:has(> .ledger-section)::before { display: none; }
+.feature-section-toggle.ledger-section-header {
+  min-height: 28px;
+  margin: 0;
+  padding: 10px 8px 2px var(--tree-indent-1);
+  border-bottom: 0;
+  background: transparent;
+  container-type: scroll-state;
+}
+.feature-section-toggle.ledger-section-header::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+@container scroll-state(stuck: top) {
+  .feature-section-toggle.ledger-section-header::after { background-color: var(--bg); background-image: var(--surface-panel-tint-layer); background-attachment: fixed; }
+}
+.ledger-section-header .tree-section-icon,
+.ledger-section-header .tree-section-icon.open { color: var(--text-tertiary); }
+.team-chat-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--badge-tone); }
+.ledger-section-header .feature-section-title { gap: 6px; padding-left: 0; }
+.ledger-section-label { color: var(--text-tertiary); font-size: 10.5px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.ledger-section-count { margin-left: 0; color: var(--text-tertiary); font-size: 10.5px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.ledger-section-header .feature-section-action { width: 20px; height: 20px; opacity: .7; }
+.ledger-section-header .feature-section-action:hover { opacity: 1; }
+.ledger-section + .ledger-section { margin-top: 6px; }
+
+/* Shared row parts. */
+.ledger-lead { display: inline-flex; flex: 0 0 16px; align-items: center; justify-content: center; width: 16px; height: 16px; color: var(--text-tertiary); }
+.ledger-time { flex-shrink: 0; margin-left: auto; padding-left: 6px; color: var(--text-tertiary); font-size: 10.5px; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ledger-chip { flex-shrink: 0; padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 4px; color: var(--text-secondary); font-size: 10px; font-weight: 600; line-height: 15px; }
+.ledger-dot { display: inline-block; flex: 0 0 6px; width: 6px; height: 6px; box-sizing: border-box; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--text-tertiary) 55%, transparent); transform: none; animation: none; }
+.ledger-dot::after { display: none !important; }
+.ledger-dot--done { background: var(--lane-done); }
+.ledger-dot--active { background: var(--lane-awaiting); }
+.ledger-dot--failed { background: var(--lane-failed); }
+
+/* One left geometry for every ledger row (workflows, runs, the run card, sessions, team chats):
+   flush to the sidebar's left edge with square left corners, icon at --tree-indent-1, a 14px icon
+   column, an 8px gap, so every title starts at --tree-indent-1 + 22px. A selected row is marked by
+   one straight 2px accent line on that left edge — never a bar bent round a rounded corner. */
+.ledger-section .project-workflow-row,
+.ledger-section .project-workflow-child,
+.ledger-section .project-workflow-empty { height: 28px; margin: 0; padding-left: calc(var(--tree-indent-1) - 2px); border-radius: 0; }
+.ledger-section .project-workflow-row::before,
+.ledger-section .project-workflow-child::before { display: none; }
+.ledger-section .project-workflow-row .board-tree-main { flex: 1; min-width: 0; gap: 8px; }
+.ledger-section .project-workflow-row .tree-icon,
+.ledger-section .project-workflow-child .tree-icon { color: var(--text-tertiary); }
+.ledger-row-count { flex-shrink: 0; margin-left: auto; padding-left: 8px; color: var(--text-tertiary); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ledger-section .project-workflow-row:hover .ledger-row-count { display: none; }
+
+/* Automations: collapsed, a two-line row — title and time, then stepper · n/total · stage · ticket · dot. */
+.ledger-section .automation-run-item { min-height: 0; margin: 0 4px 2px 0; padding: 4px 0 6px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.ledger-section .automation-run-item::before { width: 2px; border-radius: 0; }
+.ledger-section .automation-run-title-row { height: 24px; gap: 8px; padding: 0 8px 0 var(--tree-indent-1); }
+/* A 14px lead, like a workflow row's icon, so a collapsed run's zap and title sit on the workflows' columns. */
+.ledger-section .automation-run-item .ledger-lead { flex-basis: 14px; width: 14px; }
+.ledger-section .automation-run-main { gap: 8px; }
+.ledger-section .automation-run-title { min-width: 0; color: var(--text); font-size: 13px; font-weight: 600; }
+.automation-run-meta { position: relative; z-index: 3; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0 10px 0 calc(var(--tree-indent-1) + 22px); color: var(--text-tertiary); font-size: 10.5px; }
+.automation-run-meta .automation-progress-rail { display: inline-flex; flex-shrink: 0; gap: 3px; height: 12px; margin: 0; }
+.automation-run-meta .automation-progress-rail::before { display: none; }
+.automation-run-meta .automation-rail-step,
+.automation-run-meta .automation-rail-overflow { width: 6px; height: 12px; background: transparent; font-size: 9px; }
+.automation-run-meta .automation-rail-step > span,
+.automation-run-meta .automation-rail-step:hover > span,
+.automation-run-meta .automation-rail-step:focus-visible > span { width: 6px; height: 6px; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--text-tertiary) 45%, transparent); box-shadow: none; transform: none; }
+.automation-run-meta .automation-rail-step--done > span { background: var(--lane-done); }
+.automation-run-meta .automation-rail-step--running > span,
+.automation-run-meta .automation-rail-step--awaiting > span,
+.automation-run-meta .automation-rail-step--paused > span { background: var(--lane-awaiting); }
+.automation-run-meta .automation-rail-step--failed > span { background: var(--lane-failed); }
+.automation-run-meta .automation-run-progress-count { color: var(--text-secondary); font-size: 10.5px; }
+.automation-run-stage-name,
+.automation-run-ai { overflow: hidden; min-width: 0; flex: 0 1 auto; text-overflow: ellipsis; white-space: nowrap; }
+.automation-run-meta > .automation-run-approve { margin-left: auto; }
+.automation-run-meta > .ledger-dot { margin-left: auto; }
+.automation-run-meta > .automation-run-approve + .ledger-dot { margin-left: 0; }
+
+/* Expanded, the run becomes a card: a full stage list, In parallel boxed, the approval as an amber row. */
+.ledger-section .automation-run-item.is-expanded { margin: 4px 4px 6px 0; padding: 8px 0 8px; border: 1px solid var(--border); border-left: 0; border-radius: 0 8px 8px 0; }
+.automation-run-card-body { padding: 6px 12px 0 var(--tree-indent-1); }
+.ledger-section .automation-run-stages-list { display: flex; flex-direction: column; gap: 0; padding: 0; }
+.ledger-section .automation-run-stage-row { gap: 8px; min-height: 26px; padding: 0 6px 0 0; font-size: 12px; color: var(--text); }
+.ledger-section .automation-run-stage-row.is-current .automation-stage-name { font-weight: 600; }
+.automation-stage-type-icon { display: inline-flex; flex-shrink: 0; color: var(--text-tertiary); }
+.ledger-section .automation-stage-name { flex: 0 1 auto; min-width: 0; }
+.automation-stage-type { overflow: hidden; flex: 1 1 auto; min-width: 0; color: var(--text-tertiary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.ledger-section .automation-stage-status { margin-left: auto; color: var(--text-tertiary); font-size: 11px; }
+.automation-run-parallel { margin: 4px 0; padding: 4px 4px 2px; border: 1px dashed var(--border-strong); border-radius: 6px; }
+.automation-run-parallel-label { display: block; padding: 0 6px 2px; color: var(--text-tertiary); font-size: 9.5px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.ledger-section .automation-run-stage-row--approve { width: 100%; margin-top: 6px; min-height: 32px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--lane-awaiting) 50%, transparent); border-radius: 6px; color: var(--lane-awaiting); background: color-mix(in srgb, var(--lane-awaiting) 10%, transparent); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.ledger-section .automation-run-stage-row--approve:hover:not(:disabled) { background: color-mix(in srgb, var(--lane-awaiting) 18%, transparent); }
+.ledger-section .automation-run-stage-row--approve .automation-stage-name { font-weight: 650; }
+.ledger-section .automation-run-stage-row--approve .automation-stage-status { color: color-mix(in srgb, var(--lane-awaiting) 80%, var(--text-tertiary)); }
+.ledger-section .automation-run-detail-actions { gap: 16px; padding: 8px 0 0; }
+.ledger-section .automation-run-detail-actions button { color: var(--text-secondary); font-size: 11.5px; font-weight: 500; }
+.ledger-section .automation-run-detail-actions button:hover { color: var(--text); text-decoration: none; }
+
+/* Sessions and team chats: the same two-line row, the provider's mark (or the chat's participants) leading. */
+.session-nav-card .session-nav-card-meta .session-nav-card-runtime { overflow: hidden; flex: 1 1 auto; min-width: 0; color: var(--text-tertiary); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.session-nav-card .session-nav-card-meta .session-nav-card-status { flex-shrink: 0; margin-left: auto; }
+/* The status wrapper keeps its lane class (specs read it); the dot inside is the only mark it paints. */
+.session-nav-card .session-nav-card-meta .session-nav-card-status::after { display: none; }
+.session-nav-card .tree-label { font-weight: 600; }
+.team-chat-row.ledger-row { height: auto; min-height: 44px; margin: 0 4px 1px 0; padding: 0; border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0; }
+.team-chat-row.ledger-row:hover { background: color-mix(in srgb, var(--text) 5%, var(--bg-elevated)); }
+.team-chat-row.ledger-row.active { background: color-mix(in srgb, var(--text) 8%, var(--bg-elevated)); box-shadow: inset 2px 0 0 var(--accent); }
+.team-chat-row.ledger-row .team-chat-main { align-items: flex-start; gap: 8px; padding: 6px 8px 6px var(--tree-indent-1); }
+/* Up to five 6px participant dots overlap to fit the same 14px icon column a provider mark uses. */
+.team-chat-row.ledger-row .team-chat-personas { flex: 0 0 14px; width: 14px; min-width: 14px; height: 16px; margin-top: 1px; gap: 0; overflow: visible; }
+.team-chat-row.ledger-row .team-chat-dot { flex-shrink: 0; width: 6px; height: 6px; }
+.team-chat-row.ledger-row .team-chat-dot + .team-chat-dot { margin-left: -4px; }
+.ledger-body { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.ledger-title-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; line-height: 18px; }
+.ledger-title { overflow: hidden; flex: 1 1 auto; min-width: 0; color: var(--text); font-size: var(--text-sm, 13px); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ledger-meta { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-tertiary); font-size: 10px; line-height: 14px; }
+.ledger-meta > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-chat-row.ledger-row .team-chat-delete { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+.team-chat-row.ledger-row { position: relative; }
+.team-chat-row.ledger-row:hover .ledger-time { visibility: hidden; }
+
+/* The project's "New session" bar: sticky to the bottom of the sidebar while the project is in view. */
+.ledger-footer { position: sticky; z-index: 6; bottom: 0; display: flex; gap: 8px; margin-top: 10px; padding: 10px 10px; border-top: 1px solid var(--border); background: var(--bg-elevated); }
+.ledger-new-session { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 6px; height: 32px; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text); background: transparent; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.ledger-new-chat { display: inline-flex; flex: 0 0 32px; align-items: center; justify-content: center; height: 32px; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-secondary); background: transparent; cursor: pointer; }
+.ledger-new-session:hover,
+.ledger-new-chat:hover { color: var(--text); background: var(--bg-hover); }
+/* With no Sessions header above them any more, a recency bucket's header sticks straight under the project row. */
+.project-session-bucket > .project-session-category-header { top: var(--sidebar-sticky-2); }
+.ledger-section .project-workflow-child { gap: 8px; }
+/* Sessions in the recency feed share the ledger's left geometry (see the ledger block above). */
+.project-session-bucket .session-nav-card:not(.session-nav-run) { margin: 0 4px 1px 0; padding: 5px 8px 5px var(--tree-indent-1); border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0; }
+.project-session-bucket .session-nav-card .easymode-session-card__head { gap: 8px; }
+.project-session-bucket .session-nav-card .tree-icon { width: 14px; min-width: 14px; }
+.project-session-bucket .session-organizer-group { padding-left: var(--tree-indent-1); }
+.ledger-section .project-runs-empty,
+.project-recency-empty,
+[data-testid="project-sessions-empty"] { padding-left: var(--tree-indent-1); }

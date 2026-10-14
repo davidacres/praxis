@@ -75,10 +75,15 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
   useEffect(() => {
     let cancelled = false;
     window.praxis.ai.listSessions()
-      .then(s => { if (!cancelled) setSessions(s); })
+      .then(s => {
+        if (!cancelled) {
+          setSessions(s.map(({ events: _ev, ...rest }) => ({ ...rest, events: [] })));
+        }
+      })
       .catch(() => undefined);
     const unsub = window.praxis.ai.onSessionChanged(record => {
-      setSessions(curr => [record, ...curr.filter(s => s.issueKey !== record.issueKey)]);
+      const { events: _ev, ...rest } = record;
+      setSessions(curr => [{ ...rest, events: [] }, ...curr.filter(s => s.issueKey !== record.issueKey)]);
     });
     return () => {
       cancelled = true;

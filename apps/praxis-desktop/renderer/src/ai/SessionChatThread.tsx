@@ -206,7 +206,7 @@ export function SessionChatThread({
   );
 
   // Fallback to internal session gadgets if parent doesn't provide them
-  const internalGadgets = useSessionGadgets(session, rawEvents);
+  const internalGadgets = useSessionGadgets(session, rawEvents, { enabled: !propGadgetBlocks });
   const gadgetBlocks = propGadgetBlocks ?? internalGadgets.gadgetBlocks;
   const gadgetResults = propGadgetResults ?? internalGadgets.gadgetResults;
   const busyGadgetId = propBusyGadgetId ?? internalGadgets.busyGadgetId;

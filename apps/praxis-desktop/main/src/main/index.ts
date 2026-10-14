@@ -56,8 +56,8 @@ import { initMemoryManager } from './memoryManager';
 
 const isMac = process.platform === 'darwin';
 
-// Instruct V8 to prioritize low memory footprint and expose GC for idle compaction
-app.commandLine.appendSwitch('js-flags', '--optimize_for_size --expose-gc');
+// Instruct V8 to expose GC for idle compaction and allow sufficient heap headroom
+app.commandLine.appendSwitch('js-flags', '--expose-gc --max-old-space-size=4096');
 
 // Ensure child processes inherit the user's interactive login shell PATH on macOS and Linux
 ensureEnvironmentPath();

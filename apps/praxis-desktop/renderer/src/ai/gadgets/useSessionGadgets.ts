@@ -77,6 +77,11 @@ export function describeGadgetAnswer(
 
 export interface SessionGadgetOptions {
   /**
+   * When false, the hook is disabled and does not register IPC listeners or publish blocks.
+   * Useful when gadget blocks and results are provided directly by a parent component.
+   */
+  enabled?: boolean;
+  /**
    * When the agent's latest message asked for a gadget that could not be shown
    * (invalid JSON the parser could not repair, or a schema refusal), send it one
    * follow-up asking for that gadget again, up to twice per session. For a
@@ -121,13 +126,15 @@ export function useSessionGadgets(
   // How many conversation events the host has finished publishing gadgets for.
   const [publishedLength, setPublishedLength] = useState(-1);
 
+  const enabled = options.enabled ?? true;
+
   /**
    * Publishing is idempotent — the same message mints the same gadget IDs, and
    * the host replaces in place — so re-running this on every new event is safe
    * and is what lets a streaming progress gadget update rather than stack up.
    */
   useEffect(() => {
-    if (!sessionId) {
+    if (!enabled || !sessionId) {
       setGadgetBlocks({});
       return;
     }
@@ -161,7 +168,7 @@ export function useSessionGadgets(
     };
     // `conversationEvents` is rebuilt every render; its length is what actually
     // changes when the agent says something new.
-  }, [sessionId, conversationEvents.length]);
+  }, [enabled, sessionId, conversationEvents.length]);
 
   // Results belong to one session's gadgets; carrying them over would show
   // "Applied" on a fresh review whose gadget happens to reuse an id.
@@ -176,7 +183,7 @@ export function useSessionGadgets(
   // Bumped to re-run the retry effect after a send that the host was not ready for.
   const [retryTick, setRetryTick] = useState(0);
   useEffect(() => {
-    if (!options.retryUnrenderedGadgets || !session || !sessionId) return;
+    if (!enabled || !options.retryUnrenderedGadgets || !session || !sessionId) return;
     if (session.state === 'failed' || !isTerminalAgentState(session.state)) return;
     // Only once the host has published this many events' worth of blocks.
     if (publishedLength !== conversationEvents.length) return;

@@ -1018,7 +1018,13 @@ export function App() {
     const unsubscribeChanged = window.praxis.ai.onSessionChanged(record => {
       setAgentSessions(current => {
         const rest = current.filter(session => session.issueKey !== record.issueKey);
-        return [record, ...rest].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+        const targetKey = activeTargetSessionKeyRef.current;
+        const isSelected = targetKey === record.issueKey || targetKey === record.sessionId;
+        const isTerminal = record.state === 'completed' || record.state === 'failed' || record.state === 'aborted';
+        const recordToStore = (!isSelected && isTerminal)
+          ? { ...record, events: [], eventsLoaded: false }
+          : record;
+        return [recordToStore, ...rest].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
       });
     });
     const unsubscribeDeleted = window.praxis.ai.onSessionDeleted(issueKey => {
@@ -1031,6 +1037,7 @@ export function App() {
     };
   }, []);
 
+  const activeTargetSessionKeyRef = useRef<string>();
   const activeTargetSessionKey = route.sessionKey || (
     route.feature === 'sessions'
       ? (agentSessions.find(s => !isConversationSession(s))?.issueKey)
@@ -1038,6 +1045,7 @@ export function App() {
       ? (agentSessions.find(isConversationSession)?.issueKey)
       : undefined
   );
+  activeTargetSessionKeyRef.current = activeTargetSessionKey;
 
   useEffect(() => {
     const targetKey = activeTargetSessionKey;
@@ -1199,15 +1207,28 @@ export function App() {
       cancelled = true;
     };
   }, [workspaceProjectIds, workflowsNonce]);
-  // The project a workspace-level "New session" belongs to: the one on screen,
-  // else the workspace's default project, else its only project. When one is
-  // resolved the composer scopes to it (its folder, no board/ticket picker).
+  // Keep workspace-level composition available when no project is routed.
   const composerProject = selectedProject
     ?? workspaceProjects.find(project => project.id === activeWorkspace?.defaultProjectId)
     ?? (workspaceProjects.length === 1 ? workspaceProjects[0] : undefined);
+  // Both sidebars and the title chip share the project in view. Routes to
+  // sessions/boards can omit projectId; global pages retain the last choice.
+  const sessionProject = route.sessionKey
+    ? workspaceProjects.find(project => {
+        const session = agentSessions.find(candidate => candidate.issueKey === route.sessionKey);
+        return session && isSessionForProject(session, project, agentSessions);
+      })
+    : undefined;
+  const boardProjectId = selectedBoard?.connectionId
+    ? projectIdForConnection(selectedBoard.connectionId, connections)
+    : undefined;
   const easyModeProject = selectedProject
+    ?? sessionProject
+    ?? workspaceProjects.find(project => project.id === boardProjectId)
+    ?? workspaceProjects.find(project => project.id === lastProjectIdRef.current)
     ?? workspaceProjects.find(project => project.id === activeWorkspace?.defaultProjectId)
     ?? (workspaceProjects.length > 0 ? workspaceProjects[0] : undefined);
+  if (easyModeProject) lastProjectIdRef.current = easyModeProject.id;
 
   // In EasyMode, scope sessions and automations to the active folder/project.
   // Exclude internal automation stage sessions so SESSIONS only lists user-initiated sessions.
@@ -2434,7 +2455,7 @@ export function App() {
         onModeChange={setMode}
         easyMode={Boolean(settings?.preview?.enableEasyMode)}
         onToggleEasyMode={() => void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } })}
-        projects={settings?.preview?.enableEasyMode ? workspaceProjects : undefined}
+        projects={workspaceProjects}
         activeProjectId={easyModeProject?.id}
         onSelectProject={projectId => navigate({ projectId })}
         onOpenFolder={openExistingFolder}
@@ -2643,6 +2664,7 @@ export function App() {
                 <Sidebar
                   boards={workspaceBoards}
                   projects={workspaceProjects}
+                  focusedProjectId={easyModeProject?.id}
                   assignableProjects={workspaceProjects}
                   workspaces={workspaces}
                   activeWorkspaceId={activeWorkspaceId}

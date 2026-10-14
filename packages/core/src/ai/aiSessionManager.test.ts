@@ -544,6 +544,14 @@ test('lazy session transcripts migrate on load and hydrate on demand', async () 
   assert.equal(hydrated.events.length, 2);
   assert.equal(hydrated.events[1].summary, 'hello world');
 
+  // listAgentSessionSummaries still leaves idle session events empty even when hydrated in memory
+  const summariesAfterHydration = manager.listAgentSessionSummaries();
+  const hydratedSummary = summariesAfterHydration.find(s => s.issueKey === 'SESSION-lazy');
+  assert.ok(hydratedSummary);
+  assert.equal(hydratedSummary.events.length, 0);
+  assert.equal(hydratedSummary.eventsLoaded, false);
+  assert.equal(hydratedSummary.conversationHistory, undefined);
+
   // Appending an event updates and persists both index and transcript store
   manager.appendAgentEvents('SESSION-lazy', [
     { timestamp: '2026-01-01T00:00:02.000Z', type: 'message', summary: 'third event' }

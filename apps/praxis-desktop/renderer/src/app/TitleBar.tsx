@@ -42,7 +42,7 @@ export interface TitleBarProps {
   onModeChange?: (mode: SidebarMode) => void;
   easyMode?: boolean;
   onToggleEasyMode?: () => void;
-  /** EasyMode's project selector: the workspace's projects and the one on screen. */
+  /** Shared project selector: the workspace's projects and the one on screen. */
   projects?: ProjectRecord[];
   activeProjectId?: string;
   onSelectProject?: (projectId: string) => void;
@@ -269,10 +269,10 @@ export function TitleBar({
     void window.praxis.window.setZoomFactor(1).then(setZoomFactor);
   };
 
-  // EasyMode: the project picker sits inside the centre pill, left of the
-  // context label. It only renders against the plain (non-filter) pill, so the
-  // filter variant never ends up nesting a button inside a button.
-  const projectSegment = easyMode && projects && projects.length > 0 ? (
+  // The project picker sits inside the centre pill, left of the context label, in both modes — the
+  // classic sidebar shows one project at a time, so this is where the project is chosen. It only renders
+  // beside the context/filter control, so neither control nests a button inside a button.
+  const projectSegment = projects && projects.length > 0 ? (
     <div className="titlebar-context-project" ref={projectMenuRef}>
       <button
         type="button"
@@ -485,26 +485,38 @@ export function TitleBar({
 
         {boardFilter ? (
           <div className="titlebar-context-wrap" ref={filterRef}>
-            <button
-              ref={contextButtonRef}
-              type="button"
-              className={`titlebar-context titlebar-context-button${filterOpen ? ' active' : ''}`}
-              data-testid="titlebar-context"
-              title={`Filter issues on ${contextLabel}`}
-              aria-label={`Filter issues on ${contextLabel}`}
-              aria-haspopup="dialog"
-              aria-expanded={filterOpen}
-              onClick={() => setFilterOpen(open => !open)}
-            >
-              <Icon name={contextIcon ?? 'ticket'} size={13} />
-              <span className="titlebar-context-label">{contextLabel}</span>
-              {activeFilterCount > 0 && (
-                <span className="titlebar-filter-badge" data-testid="titlebar-filter-count">
-                  {activeFilterCount}
-                </span>
-              )}
-              <Icon name={filterOpen ? 'chevron-up' : 'chevron-down'} size={11} />
-            </button>
+            {(() => {
+              const filterTrigger = (className: string) => (
+                <button
+                  ref={contextButtonRef}
+                  type="button"
+                  className={className}
+                  data-testid="titlebar-context"
+                  title={`Filter issues on ${contextLabel}`}
+                  aria-label={`Filter issues on ${contextLabel}`}
+                  aria-haspopup="dialog"
+                  aria-expanded={filterOpen}
+                  onClick={() => setFilterOpen(open => !open)}
+                >
+                  <Icon name={contextIcon ?? 'ticket'} size={13} />
+                  <span className="titlebar-context-label">{contextLabel}</span>
+                  {activeFilterCount > 0 && (
+                    <span className="titlebar-filter-badge" data-testid="titlebar-filter-count">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                  <Icon name={filterOpen ? 'chevron-up' : 'chevron-down'} size={11} />
+                </button>
+              );
+              // With a project picker the pill holds two sibling controls, the picker and the filter
+              // trigger, rather than nesting a button inside the filter button.
+              return projectSegment ? (
+                <div className={`titlebar-context titlebar-context-with-project titlebar-context-filter-pill${filterOpen ? ' active' : ''}`}>
+                  {projectSegment}
+                  {filterTrigger('titlebar-context-filter-trigger')}
+                </div>
+              ) : filterTrigger(`titlebar-context titlebar-context-button${filterOpen ? ' active' : ''}`);
+            })()}
             <div
               className="titlebar-filter-popover"
               data-testid="titlebar-filter-popover"

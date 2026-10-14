@@ -17,10 +17,18 @@ export function compactMemoryNow(): void {
 
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
-      win.webContents
+      const wc = win.webContents;
+      if (!wc || wc.isDestroyed() || (typeof wc.isCrashed === 'function' && wc.isCrashed())) {
+        continue;
+      }
+      const frame = wc.mainFrame;
+      if (!frame || frame.isDestroyed()) {
+        continue;
+      }
+      wc
         .executeJavaScript('if (typeof window.gc === "function") window.gc();', true)
         .catch(() => {
-          // Window may be closing or navigating
+          // Window may be closing, navigating, or disposed
         });
     }
   }

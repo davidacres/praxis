@@ -331,11 +331,14 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
     let cancelled = false;
     window.praxis.ai.listSessions()
       .then(sessions => {
-        if (!cancelled) setSpendSessions(sessions);
+        if (!cancelled) {
+          setSpendSessions(sessions.map(({ events: _ev, ...rest }) => ({ ...rest, events: [] })));
+        }
       })
       .catch(() => undefined);
     const unsubscribeChanged = window.praxis.ai.onSessionChanged(record => {
-      setSpendSessions(current => [record, ...current.filter(session => session.issueKey !== record.issueKey)]);
+      const { events: _ev, ...rest } = record;
+      setSpendSessions(current => [{ ...rest, events: [] }, ...current.filter(session => session.issueKey !== record.issueKey)]);
     });
     const unsubscribeDeleted = window.praxis.ai.onSessionDeleted(issueKey => {
       setSpendSessions(current => current.filter(session => session.issueKey !== issueKey));

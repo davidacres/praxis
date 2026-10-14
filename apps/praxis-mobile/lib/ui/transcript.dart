@@ -11,6 +11,7 @@ import '../core/models.dart';
 import '../core/transcript_follow.dart';
 import '../core/usage.dart';
 import 'gadget_view.dart';
+import 'image_lightbox.dart';
 import 'kit.dart';
 import 'markdown_view.dart';
 
@@ -187,58 +188,149 @@ class _AttachedImage extends StatefulWidget {
 }
 
 class _AttachedImageState extends State<_AttachedImage> {
-  late Future<String?> _preview = _load();
+  Future<String?>? _preview;
+  Uint8List? _bytes;
+  String? _loadedKey;
 
-  Future<String?> _load() {
+  void _ensureLoaded() {
     final sessionId = widget.sessionId;
-    return sessionId == null ? Future.value(null) : context.read<AppStore>().imageAttachmentPreview(sessionId, widget.attachment);
+    final key = '$sessionId:${widget.attachment.eventIndex}:${widget.attachment.attachmentIndex}';
+    if (_loadedKey == key && _bytes != null) return;
+    _loadedKey = key;
+
+    if (sessionId == null) {
+      _bytes = null;
+      _preview = Future.value(null);
+      return;
+    }
+
+    final store = context.read<AppStore>();
+    final cachedBytes = store.cachedImageBytes(key);
+    if (cachedBytes != null) {
+      _bytes = cachedBytes;
+      _preview = null;
+      return;
+    }
+
+    final cachedDataUrl = store.cachedImageAttachmentPreview(sessionId, widget.attachment);
+    if (cachedDataUrl != null) {
+      final decoded = _decode(cachedDataUrl);
+      if (decoded != null) {
+        _bytes = decoded;
+        store.cacheImageBytes(key, decoded);
+        _preview = null;
+        return;
+      }
+    }
+
+    _bytes = null;
+    _preview = store.imageAttachmentPreview(sessionId, widget.attachment);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ensureLoaded();
   }
 
   @override
   void didUpdateWidget(_AttachedImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.sessionId != widget.sessionId || oldWidget.attachment.eventIndex != widget.attachment.eventIndex || oldWidget.attachment.attachmentIndex != widget.attachment.attachmentIndex) {
-      _preview = _load();
+    if (oldWidget.sessionId != widget.sessionId ||
+        oldWidget.attachment.eventIndex != widget.attachment.eventIndex ||
+        oldWidget.attachment.attachmentIndex != widget.attachment.attachmentIndex) {
+      _ensureLoaded();
+    }
+  }
+
+  Uint8List? _decode(String? dataUrl) {
+    if (dataUrl == null) return null;
+    final separator = dataUrl.indexOf(',');
+    if (separator < 0) return null;
+    try {
+      return base64Decode(dataUrl.substring(separator + 1));
+    } catch (_) {
+      return null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final t = context.t;
+    if (_bytes != null) {
+      return _buildImage(context, _bytes!);
+    }
+
+    final future = _preview;
+    if (future == null) {
+      return _buildUnavailable(context);
+    }
+
     return FutureBuilder<String?>(
-      future: _preview,
+      future: future,
       builder: (context, snapshot) {
-        final dataUrl = snapshot.data;
-        final separator = dataUrl?.indexOf(',') ?? -1;
-        Uint8List? bytes;
-        if (separator >= 0) {
-          try {
-            bytes = base64Decode(dataUrl!.substring(separator + 1));
-          } catch (_) {
-            bytes = null;
+        if (snapshot.connectionState == ConnectionState.done) {
+          final decoded = _decode(snapshot.data);
+          if (decoded != null) {
+            _bytes = decoded;
+            if (_loadedKey != null) {
+              context.read<AppStore>().cacheImageBytes(_loadedKey!, decoded);
+            }
+            return _buildImage(context, decoded);
           }
+          return _buildUnavailable(context);
         }
-        if (bytes == null) {
-          return Container(
-            width: t.s(150),
-            height: t.s(84),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: t.palette.bgSunken,
-              borderRadius: BorderRadius.circular(t.s(7)),
-              border: Border.all(color: t.palette.border),
-            ),
-            child: Text('Image unavailable', style: ts(context, 11, color: t.palette.textDim)),
-          );
-        }
-        return ConstrainedBox(
+        return Container(
+          width: t.s(150),
+          height: t.s(84),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: t.palette.bgSunken,
+            borderRadius: BorderRadius.circular(t.s(7)),
+            border: Border.all(color: t.palette.border),
+          ),
+          child: const Spinner(small: true),
+        );
+      },
+    );
+  }
+
+  Widget _buildUnavailable(BuildContext context) {
+    final t = context.t;
+    return Container(
+      width: t.s(150),
+      height: t.s(84),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: t.palette.bgSunken,
+        borderRadius: BorderRadius.circular(t.s(7)),
+        border: Border.all(color: t.palette.border),
+      ),
+      child: Text('Image unavailable', style: ts(context, 11, color: t.palette.textDim)),
+    );
+  }
+
+  Widget _buildImage(BuildContext context, Uint8List imageBytes) {
+    final t = context.t;
+    return Pressable(
+      label: 'Expand attached image',
+      onTap: () => showImageLightbox(
+        context,
+        bytes: imageBytes,
+        caption: 'Attached image',
+        semanticLabel: 'Image attached to your message',
+      ),
+      builder: (context, pressed) => Opacity(
+        opacity: pressed ? 0.8 : 1.0,
+        child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: t.s(260), maxHeight: t.s(260)),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(t.s(7)),
             child: Image.memory(
-              bytes,
+              imageBytes,
               fit: BoxFit.contain,
               semanticLabel: 'Image attached to your message',
+              gaplessPlayback: true,
               errorBuilder: (context, error, stackTrace) => SizedBox(
                 width: t.s(150),
                 height: t.s(84),
@@ -248,8 +340,8 @@ class _AttachedImageState extends State<_AttachedImage> {
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

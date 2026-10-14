@@ -37,7 +37,15 @@ export function Connections({ onChanged }: ConnectionsProps) {
     window.praxis.connection.list()
       .then(list => {
         if (sequence !== reloadSequence.current) return;
-        setConnections(list);
+        setConnections(current => {
+          if (
+            current.length === list.length &&
+            current.every((item, i) => item.id === list[i]?.id && item.name === list[i]?.name && item.mode === list[i]?.mode)
+          ) {
+            return current;
+          }
+          return list;
+        });
         // A removed connection must not stay selected.
         setSelectedId(current => (current && !list.some(c => c.id === current) ? undefined : current));
       })
@@ -51,7 +59,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
   // list truthful even when the originating form has been unmounted before
   // its async remove callback completes.
   useEffect(() => {
-    const timer = window.setInterval(reload, 500);
+    const timer = window.setInterval(reload, 2000);
     return () => window.clearInterval(timer);
   }, [reload]);
 

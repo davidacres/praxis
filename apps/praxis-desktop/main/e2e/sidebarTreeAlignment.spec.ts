@@ -72,19 +72,27 @@ test('rows at the same depth of the project tree share an icon column and a labe
       return { icon: Math.round(i.left), label: Math.round(l.left), gap: Math.round(l.left - i.right) };
     }, iconSelector);
 
-  // Depth 2 (--tree-indent-2): a board, a workflow and Policies. Workflows and
-  // Automations are project-level peer sections beside Sessions.
+  // Depth 2 (--tree-indent-2): a board. Workflows and Automations are E6 ledger sections, measured below.
   await showProjectBoard(page);
   const depth2 = {
-    board: await measure('.project-board-row', '.tree-icon'),
+    board: await measure('.project-board-row', '.tree-icon')
+  };
+  // The E6 ledger: a workflow, Policies and a collapsed run share one icon column and one label column.
+  const ledger = {
     workflow: await measure('.project-workflow-row', '.tree-icon'),
-    policies: await measure('.project-workflow-child', '.tree-icon')
+    policies: await measure('.project-workflow-child', '.tree-icon'),
+    // A collapsed run (an expanded one is a card and drops its lead icon).
+    run: await page.locator('[data-testid="project-workflow-run-row"]:not(.is-expanded)').first().evaluate(row => {
+      const i = (row.querySelector('.ledger-lead') as HTMLElement).getBoundingClientRect();
+      const l = (row.querySelector('.automation-run-title') as HTMLElement).getBoundingClientRect();
+      return { icon: Math.round(i.left), label: Math.round(l.left), gap: Math.round(l.left - i.right) };
+    })
   };
   // Depth 1 (--tree-indent-1): flat leaves with no children (deployments).
   const depth1 = {
     deployments: await measure('[data-testid=project-deployments-nav-item]', '.tree-icon')
   };
-  // Depth 3 (--tree-indent-3): workflow run rows under the Sessions subgroup.
+  // Each run's status dot ends its meta line, at the same right-hand edge.
   const runNodes = [
     await page.getByTestId('project-workflow-run-row').nth(0).evaluate(row => {
       const icon = row.querySelector('.automation-state-mark') as HTMLElement;
@@ -95,18 +103,20 @@ test('rows at the same depth of the project tree share an icon column and a labe
       return Math.round(icon.getBoundingClientRect().left);
     })
   ];
-  const [sessionsHeader, automationsHeader] = await Promise.all([
-    page.getByTestId('project-sessions-nav-item').boundingBox(),
+  const [workflowsHeader, automationsHeader] = await Promise.all([
+    page.getByTestId('project-workflows-nav-item').boundingBox(),
     page.getByTestId('project-workflow-runs-nav-item').boundingBox()
   ]);
   await expect(page.locator('.project-workflows-header')).toBeVisible();
   await expect(page.locator('.project-automations-header')).toBeVisible();
   await expect(page.locator('.project-workflow-row')).toHaveCount(1);
-  expect(Math.abs(sessionsHeader!.x - automationsHeader!.x)).toBeLessThan(2);
+  expect(Math.abs(workflowsHeader!.x - automationsHeader!.x)).toBeLessThan(2);
   await expect(page.getByTestId('project-workflow-run-row').first().locator('.automation-state-mark')).toBeVisible();
-  await expect(page.getByTestId('project-general-sessions-nav-item')).toContainText('General');
-  await expect(page.getByTestId('project-ticket-sessions-nav-item')).toContainText('Ticket');
   await expect(page.getByTestId('project-workflow-runs-nav-item')).toContainText('Automations');
+  // E6 order: what the project runs (Workflows, Automations) above the conversations about it.
+  const sectionTops = await Promise.all(['project-workflows-nav-item', 'project-workflow-runs-nav-item', 'project-session-new']
+    .map(async id => (await page.getByTestId(id).boundingBox())!.y));
+  expect(sectionTops, 'Workflows → Automations → the recency feed and its New session bar').toEqual([...sectionTops].sort((a, b) => a - b));
 
   // Verify header action buttons (Graph, Changes, Run) are visible on the project node header
   await expect(page.getByTestId('project-git-nav-item')).toBeVisible();
@@ -121,9 +131,11 @@ test('rows at the same depth of the project tree share an icon column and a labe
   expect(labelCols(depth1), `depth-1 labels should share one column: ${JSON.stringify(depth1)}`).toHaveLength(1);
   // Every icon is the same distance from its label (.tree-row's 6px gap) — none touching, none floating.
   for (const [name, row] of Object.entries({ ...depth2, ...depth1 })) expect(row.gap, `${name} icon→label gap`).toBe(6);
+  expect(iconCols(ledger), `ledger icons should share one column: ${JSON.stringify(ledger)}`).toHaveLength(1);
+  expect(labelCols(ledger), `ledger labels should share one column: ${JSON.stringify(ledger)}`).toHaveLength(1);
+  for (const [name, row] of Object.entries(ledger)) expect(row.gap, `${name} icon→label gap`).toBe(8);
   // Deeper levels step in, and never the other way round.
   expect(depth1.deployments.icon).toBeLessThan(depth2.board.icon);
-  expect(runNodes[0]).toBeGreaterThan(depth2.board.icon);
   expect(runNodes[0]).toBe(runNodes[1]);
 
   await page.screenshot({ path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'sidebar-tree-alignment.png'), clip: { x: 0, y: 40, width: 270, height: 700 } });

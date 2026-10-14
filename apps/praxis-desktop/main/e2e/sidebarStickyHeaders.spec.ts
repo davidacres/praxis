@@ -124,15 +124,24 @@ test('tree headers stick nested beneath their parents as the top sidebar panel s
   // Sticking changes nothing horizontal: rows keep their indent.
   expect((await box(tree.getByTestId('project-document-nav-item').last())).left).toBe(docLeftBefore);
 
-  // Session categories used to inherit top: 0 / z-index: 5 from the footer
-  // chrome, covering Projects instead of stacking below Sessions.
+  // Section headers in the lower half of the project (Sessions' recency buckets, Team Chats) used to
+  // inherit top: 0 / z-index: 5 from the footer chrome, covering Projects instead of stacking below
+  // it. This project has no sessions, so no buckets render; the last section header stands in (the
+  // bucket headers themselves are measured by the next test).
   await page.setViewportSize({ width: 1280, height: 500 });
   await scroll.evaluate(el => { el.scrollTop = el.scrollHeight; });
   await page.waitForTimeout(200);
-  const category = tree.locator('.project-session-category-header').last();
+  const category = tree.locator('.project-sidebar-section > .feature-section-header').last();
   const categoryBox = await box(category);
-  // Once Sessions ends, its category may be pushed completely out of view.
-  expect(categoryBox.bottom <= (await box(scroll)).top || categoryBox.top >= (await box(projectRow)).bottom).toBe(true);
+  // Once its section ends, the header is pushed up: out of view, or sliding away *beneath* the stuck
+  // project row — never over it.
+  const rowBox = await box(projectRow);
+  if (categoryBox.top < rowBox.bottom && categoryBox.bottom > (await box(scroll)).top) {
+    expect(await projectRow.evaluate(el => {
+      const r = el.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(r.left + r.width / 2, r.bottom - 2));
+    }), 'a header handing over must slide beneath the project row').toBe(true);
+  }
   expect(await projectsHeading.evaluate(el => {
     const r = el.getBoundingClientRect();
     return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
@@ -149,7 +158,7 @@ test('tree headers stick nested beneath their parents as the top sidebar panel s
   await page.locator('.sidebar').screenshot({ path: test.info().outputPath('sticky-after-collapse.png') });
 });
 
-test('session categories stack below Sessions and hand over within their own lists', async () => {
+test('recency buckets stack below the project row and hand over within their own lists', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const projectId = await app.window.evaluate(async () => {
     const workspace = (await window.praxis.workspaces.list())[0];
@@ -163,12 +172,16 @@ test('session categories stack below Sessions and hand over within their own lis
   });
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
   await app.electronApp.close();
+  // Sessions group by recency (Today / This week / Last week): half today, half three days ago,
+  // so there are two long buckets to stick and hand over between.
   const now = new Date().toISOString();
+  const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000).toISOString();
   const records: Record<string, unknown> = {};
   for (let i = 0; i < 80; i += 1) {
     const issueKey = i < 40 ? `SESSION-${i.toString(16).padStart(6, '0')}` : `STACK-${i}`;
+    const at = i < 40 ? now : threeDaysAgo;
     records[issueKey] = { issueKey, sessionId: `stack-${i}`, projectId, title: `Sticky session ${i}`,
-      state: 'completed', provider: 'claude', model: 'test', startedAt: now, completedAt: now,
+      state: 'completed', provider: 'claude', model: 'test', startedAt: at, completedAt: at,
       taskDefinition: { goal: `Session ${i}` }, events: [] };
   }
   fs.writeFileSync(path.join(profile.userDataDir, 'ai-sessions.json'), JSON.stringify({ 'praxis.agentSessions': records }));
@@ -178,7 +191,6 @@ test('session categories stack below Sessions and hand over within their own lis
   const tree = page.getByTestId('project-tree').filter({ hasText: 'Session Stack' });
   const projects = page.locator('.projects-section-header');
   const project = tree.locator('.project-tree-parent');
-  const sessions = tree.locator('.project-sessions-header');
   const categories = tree.locator('.project-session-category');
   await expect(categories.first().locator('.session-nav-row')).toHaveCount(40);
   const bottom = (el: Element) => el.getBoundingClientRect().bottom;
@@ -188,9 +200,9 @@ test('session categories stack below Sessions and hand over within their own lis
     await page.waitForTimeout(200);
     const header = group.locator('.project-session-category-header');
     expect(Math.round(await project.evaluate(el => el.getBoundingClientRect().top))).toBe(Math.round(await projects.evaluate(bottom)));
-    expect(Math.round(await sessions.evaluate(el => el.getBoundingClientRect().top))).toBe(Math.round(await project.evaluate(bottom)));
-    expect(Math.round(await header.evaluate(el => el.getBoundingClientRect().top))).toBe(Math.round(await sessions.evaluate(bottom)));
-    for (const ancestor of [projects, project, sessions, header]) {
+    // A recency bucket's header sticks straight under the project row (there is no Sessions header between).
+    expect(Math.round(await header.evaluate(el => el.getBoundingClientRect().top))).toBe(Math.round(await project.evaluate(bottom)));
+    for (const ancestor of [projects, project, header]) {
       const hitState = await ancestor.evaluate(el => {
         const r = el.getBoundingClientRect();
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
@@ -201,8 +213,8 @@ test('session categories stack below Sessions and hand over within their own lis
     if (index === 1) {
       expect(await categories.first().evaluate(bottom)).toBeLessThanOrEqual(await header.evaluate(el => el.getBoundingClientRect().top));
       await page.locator('.sidebar').screenshot({ path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'sidebar-sticky-sessions.png') });
-      await header.getByTestId('project-ticket-sessions-nav-item').click();
-      await expect(header.getByTestId('project-ticket-sessions-nav-item')).toHaveAttribute('aria-expanded', 'false');
+      await header.getByTestId('project-session-bucket-this-week').click();
+      await expect(header.getByTestId('project-session-bucket-this-week')).toHaveAttribute('aria-expanded', 'false');
     }
   }
 });

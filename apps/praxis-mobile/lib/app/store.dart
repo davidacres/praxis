@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 
@@ -1042,6 +1043,8 @@ class AppStore extends ChangeNotifier {
     openRunId = null;
     providers = const Remote(RemoteStatus.idle);
     models.clear();
+    _imagePreviewCache.clear();
+    _decodedImageBytesCache.clear();
     access = const Remote(RemoteStatus.idle);
     openWorkId = null;
     connectionIssue = null;
@@ -1466,12 +1469,38 @@ class AppStore extends ChangeNotifier {
   Future<FileDiff> fileDiff(String sessionId, String path) async =>
       FileDiff(await _requireConnection().read(readRequest('changes.get', _target({'sessionId': sessionId}), {'path': path})) as Map<String, dynamic>);
 
+  final Map<String, String> _imagePreviewCache = {};
+  final Map<String, Uint8List> _decodedImageBytesCache = {};
+
+  String? cachedImagePreview(String sessionId, String path) =>
+      _imagePreviewCache['$sessionId:path:$path'];
+
+  String? cachedImageAttachmentPreview(String sessionId, SessionImageAttachment attachment) =>
+      _imagePreviewCache['$sessionId:attachment:${attachment.eventIndex}:${attachment.attachmentIndex}'];
+
+  Uint8List? cachedImageBytes(String key) => _decodedImageBytesCache[key];
+
+  void cacheImageBytes(String key, Uint8List bytes) => _decodedImageBytesCache[key] = bytes;
+
   /// Bytes for a reply/gadget image or user attachment. Reads bounded chunks
   /// because a full image is larger than the mobile protocol's record limit.
-  Future<String?> imagePreview(String sessionId, String path) => _readImagePreview(sessionId, {'path': path});
+  Future<String?> imagePreview(String sessionId, String path) async {
+    final key = '$sessionId:path:$path';
+    final cached = _imagePreviewCache[key];
+    if (cached != null) return cached;
+    final result = await _readImagePreview(sessionId, {'path': path});
+    if (result != null) _imagePreviewCache[key] = result;
+    return result;
+  }
 
-  Future<String?> imageAttachmentPreview(String sessionId, SessionImageAttachment attachment) =>
-      _readImagePreview(sessionId, {'eventIndex': attachment.eventIndex, 'attachmentIndex': attachment.attachmentIndex});
+  Future<String?> imageAttachmentPreview(String sessionId, SessionImageAttachment attachment) async {
+    final key = '$sessionId:attachment:${attachment.eventIndex}:${attachment.attachmentIndex}';
+    final cached = _imagePreviewCache[key];
+    if (cached != null) return cached;
+    final result = await _readImagePreview(sessionId, {'eventIndex': attachment.eventIndex, 'attachmentIndex': attachment.attachmentIndex});
+    if (result != null) _imagePreviewCache[key] = result;
+    return result;
+  }
 
   Future<String?> _readImagePreview(String sessionId, Map<String, Object?> source) async {
     if (!_supports('sessions.imagePreview')) {

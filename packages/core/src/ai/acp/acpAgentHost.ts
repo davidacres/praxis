@@ -821,7 +821,7 @@ export class AcpAgentHost {
                 kind: fileChanges.length > 0 ? 'write' : mapAcpToolKind(update.kind ?? undefined),
                 ok,
                 ...(fileChanges.length > 0 ? { fileChanges, diff: fileChanges[0]?.diff } : {}),
-                ...(rawOutput ? { output: rawOutput } : {})
+                ...(rawOutput ? { output: rawOutput.length > 20_000 ? `${rawOutput.slice(0, 20_000)}\n… [output truncated]` : rawOutput } : {})
               }
             ),
             1

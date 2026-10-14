@@ -402,7 +402,20 @@ export class AiSessionManager {
     }
 
     if (transcript) {
-      record.events = transcript.events ?? [];
+      const rawEvents = transcript.events ?? [];
+      record.events = rawEvents.map(event => {
+        const output = event.data?.output;
+        if (typeof output === 'string' && output.length > 20_000) {
+          return {
+            ...event,
+            data: {
+              ...event.data,
+              output: `${output.slice(0, 20_000)}\n… [output truncated]`
+            }
+          };
+        }
+        return event;
+      });
       record.conversationHistory = transcript.conversationHistory;
       if (transcript.planText !== undefined) record.planText = transcript.planText;
       if (transcript.reasoningText !== undefined) record.reasoningText = transcript.reasoningText;
@@ -428,7 +441,18 @@ export class AiSessionManager {
    * Completed/idle sessions have heavy event arrays stripped so they don't bloat IPC or UI heap.
    */
   public listAgentSessionSummaries(): AgentSessionRecord[] {
-    return [...this.agentSessions.values()];
+    return [...this.agentSessions.values()].map(record => {
+      if (!this.isSessionActive(record)) {
+        return {
+          ...record,
+          events: [],
+          conversationHistory: undefined,
+          eventsLoaded: false
+        };
+      }
+      const { conversationHistory, ...activeSummary } = record;
+      return activeSummary;
+    });
   }
 
   private saveTranscriptForSession(record: AgentSessionRecord): void {

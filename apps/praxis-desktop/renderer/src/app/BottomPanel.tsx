@@ -229,7 +229,11 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
     });
     const unsubscribeOutput = window.praxis.terminal.onOutput(event => {
       if (event.sessionId === activeId) terminal.write(event.data);
-      setSessions(current => current.map(item => item.id === event.sessionId ? { ...item, hasContext: true } : item));
+      setSessions(current => {
+        const target = current.find(item => item.id === event.sessionId);
+        if (target && target.hasContext) return current;
+        return current.map(item => item.id === event.sessionId ? { ...item, hasContext: true } : item);
+      });
     });
     const unsubscribeExit = window.praxis.terminal.onExit(event => {
       setSessions(current => current.map(item => item.id === event.sessionId ? { ...item, exited: true } : item));

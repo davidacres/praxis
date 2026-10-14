@@ -100,18 +100,67 @@ test('the title-bar quick session opens the composer scoped to the current proje
 });
 
 test('a project session action scopes the composer to that project', async ({ page: _page }) => {
-  app = await launchTestApp();
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, {
+    AI_GATEWAY_API_KEY: 'project-picker-e2e-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
   const page = app.window;
 
   await seedProjects(page);
   await page.reload();
-  await expect(page.getByTestId('project-nav-item')).toHaveCount(2);
+  // Classic mode shows one project at a time; the title chip's project picker switches between them.
+  await expect(page.getByTestId('project-tree')).toHaveCount(1);
+  const picker = page.getByTestId('titlebar-project-select');
+  await picker.click();
+  const menu = page.locator('.titlebar-context-project-menu');
+  await expect(menu.getByRole('menuitem')).toHaveCount(2);
+  await menu.getByRole('menuitem', { name: 'Target project' }).click();
+  await expect(picker).toContainText('Target project');
+  await expect(page.getByTestId('project-tree')).toHaveCount(1);
+  await expect(page.getByTestId('project-tree')).toContainText('Target project');
+  await expect(page.getByTestId('board-nav-item').filter({ hasText: 'First project Board' })).toHaveCount(0);
 
-  await page.getByTestId('project-tree').nth(1).getByTestId('project-session-new').click();
+  // Global navigation must retain the chosen project instead of reverting
+  // to the workspace's first/default project.
+  await page.getByTestId('nav-overview').click();
+  await expect(picker).toContainText('Target project');
+  await expect(page.getByTestId('project-tree')).toHaveCount(1);
+  await expect(page.getByTestId('project-tree')).toContainText('Target project');
+  await picker.click();
+  await page.screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'classic-project-picker.png'),
+    fullPage: true
+  });
+  await menu.getByRole('menuitem', { name: 'First project' }).click();
+  await expect(page.getByTestId('project-tree')).toContainText('First project');
+  await expect(page.getByTestId('project-tree')).toHaveCount(1);
+  await picker.click();
+  await menu.getByRole('menuitem', { name: 'Target project' }).click();
+  await page.reload();
+  await expect(picker).toContainText('Target project');
+  await expect(page.getByTestId('project-tree')).toHaveCount(1);
+
+  await page.getByTestId('project-tree').getByTestId('project-session-new').click();
 
   await expect(page.getByTestId('new-session-scope-heading')).toContainText('Target project');
   await page.screenshot({
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'project-session-scope.png'),
+    fullPage: true
+  });
+
+  await page.locator('.composer-input').fill('Keep the target project selected.');
+  await page.getByTestId('new-session-submit').click();
+  await expect(page.getByTestId('session-console')).toBeVisible();
+  await expect(picker).toContainText('Target project');
+  await expect(page.getByTestId('project-tree')).toHaveCount(1);
+  await expect(page.getByTestId('project-tree').getByTestId('project-session-nav-item')).toHaveCount(1);
+  await page.reload();
+  await expect(picker).toContainText('Target project');
+  await expect(page.getByTestId('project-tree')).toHaveCount(1);
+  await picker.click();
+  await page.screenshot({
+    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'classic-project-session.png'),
     fullPage: true
   });
 });

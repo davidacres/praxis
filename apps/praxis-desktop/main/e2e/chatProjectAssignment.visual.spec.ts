@@ -66,8 +66,10 @@ test('assign chat picker and project session placement', async () => {
   await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/chat-project-assignment-dialog.png') });
   await page.getByTestId('assign-chat-confirm').click();
   const projectTree = page.getByTestId('project-tree').filter({ hasText: project.name });
-  const generalSessions = projectTree.getByTestId('project-general-sessions-nav-item');
-  await expect(generalSessions).toContainText('1');
+  // Sessions read as one recency feed (E6): both chats were active today, so they land under Today.
+  const todaySessions = projectTree.getByTestId('project-session-bucket-today');
+  await expect(todaySessions).toContainText('Today');
+  await expect(todaySessions).toContainText('1');
   const generalSession = projectTree.getByTestId('project-session-nav-item').filter({ hasText: 'Research notes' });
   await expect(generalSession).toBeVisible();
   await expect(generalSession.locator('.easymode-session-card__type-icon')).toHaveAttribute('title', 'General chat session');
@@ -90,7 +92,7 @@ test('assign chat picker and project session placement', async () => {
   await expect(ticketSelector).toContainText(ticketKey);
   await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/chat-project-assignment-ticket-selected.png') });
   await page.getByTestId('assign-chat-confirm').click();
-  await expect(projectTree.getByTestId('project-ticket-sessions-nav-item')).toContainText('1');
+  await expect(todaySessions).toContainText('2');
   const ticketSession = projectTree.getByTestId('project-session-nav-item').filter({ hasText: 'Ticket research notes' });
   await expect(ticketSession).toBeVisible();
   await expect(ticketSession).toContainText(ticketKey);

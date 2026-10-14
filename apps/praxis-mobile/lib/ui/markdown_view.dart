@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../app/store.dart';
 import '../app/theme.dart';
 import '../core/markdown.dart';
+import 'image_lightbox.dart';
 import 'kit.dart';
 
 /// Agent text as formatted blocks. Port of `app/Markdown.tsx`.
@@ -71,7 +72,16 @@ List<InlineSpan> inlineSpans(BuildContext context, List<MdInline> spans, TextSty
       case MdImage(:final href, :final alt):
         return imageSessionId == null
             ? TextSpan(text: alt.isNotEmpty ? alt : href, style: base.copyWith(fontStyle: FontStyle.italic, color: p.textDim))
-            : WidgetSpan(alignment: PlaceholderAlignment.middle, child: _InlineImage(href, alt, imageSessionId, base));
+            : WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: _InlineImage(
+                  href,
+                  alt,
+                  imageSessionId,
+                  base,
+                  key: ValueKey<String>('$imageSessionId:$href'),
+                ),
+              );
     }
   }).toList();
 }
@@ -80,7 +90,7 @@ List<InlineSpan> inlineSpans(BuildContext context, List<MdInline> spans, TextSty
 /// to session-local bytes — and shows it, or falls back to the alt text if
 /// the host has nothing to offer (unsupported, missing, or out of bounds).
 class _InlineImage extends StatefulWidget {
-  const _InlineImage(this.href, this.alt, this.sessionId, this.style);
+  const _InlineImage(this.href, this.alt, this.sessionId, this.style, {super.key});
   final String href;
   final String alt;
   final String sessionId;
@@ -91,19 +101,49 @@ class _InlineImage extends StatefulWidget {
 }
 
 class _InlineImageState extends State<_InlineImage> {
-  late Future<String?> _dataUrl;
+  Future<String?>? _dataUrl;
+  Uint8List? _bytes;
+  String? _loadedKey;
+
+  void _ensureLoaded() {
+    final store = context.read<AppStore>();
+    final key = '${widget.sessionId}:${widget.href}';
+    if (_loadedKey == key && _bytes != null) return;
+    _loadedKey = key;
+
+    final cachedBytes = store.cachedImageBytes(key);
+    if (cachedBytes != null) {
+      _bytes = cachedBytes;
+      _dataUrl = null;
+      return;
+    }
+
+    final cachedDataUrl = store.cachedImagePreview(widget.sessionId, widget.href);
+    if (cachedDataUrl != null) {
+      final decoded = _decode(cachedDataUrl);
+      if (decoded != null) {
+        _bytes = decoded;
+        store.cacheImageBytes(key, decoded);
+        _dataUrl = null;
+        return;
+      }
+    }
+
+    _bytes = null;
+    _dataUrl = store.imagePreview(widget.sessionId, widget.href);
+  }
 
   @override
-  void initState() {
-    super.initState();
-    _dataUrl = context.read<AppStore>().imagePreview(widget.sessionId, widget.href);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ensureLoaded();
   }
 
   @override
   void didUpdateWidget(_InlineImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.href != widget.href || oldWidget.sessionId != widget.sessionId) {
-      _dataUrl = context.read<AppStore>().imagePreview(widget.sessionId, widget.href);
+      _ensureLoaded();
     }
   }
 
@@ -120,23 +160,65 @@ class _InlineImageState extends State<_InlineImage> {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.t;
+    if (_bytes != null) {
+      return _buildImage(context, _bytes!);
+    }
+
+    final future = _dataUrl;
+    if (future == null) {
+      final label = widget.alt.isNotEmpty ? widget.alt : widget.href;
+      return Text(label, style: widget.style.copyWith(fontStyle: FontStyle.italic, color: context.p.textDim));
+    }
+
     return FutureBuilder<String?>(
-      future: _dataUrl,
+      future: future,
       builder: (context, snapshot) {
-        final bytes = snapshot.connectionState == ConnectionState.done ? _decode(snapshot.data) : null;
-        if (bytes == null) {
+        if (snapshot.connectionState == ConnectionState.done) {
+          final decoded = _decode(snapshot.data);
+          if (decoded != null) {
+            _bytes = decoded;
+            if (_loadedKey != null) {
+              context.read<AppStore>().cacheImageBytes(_loadedKey!, decoded);
+            }
+            return _buildImage(context, decoded);
+          }
           final label = widget.alt.isNotEmpty ? widget.alt : widget.href;
           return Text(label, style: widget.style.copyWith(fontStyle: FontStyle.italic, color: context.p.textDim));
         }
-        return ConstrainedBox(
+
+        final label = widget.alt.isNotEmpty ? widget.alt : widget.href;
+        return Text(label, style: widget.style.copyWith(fontStyle: FontStyle.italic, color: context.p.textDim));
+      },
+    );
+  }
+
+  Widget _buildImage(BuildContext context, Uint8List imageBytes) {
+    final t = context.t;
+    final altText = widget.alt.isNotEmpty ? widget.alt : null;
+    final expandLabel = altText != null ? 'Expand image: $altText' : 'Expand image';
+    return Pressable(
+      label: expandLabel,
+      onTap: () => showImageLightbox(
+        context,
+        bytes: imageBytes,
+        caption: altText,
+        semanticLabel: altText,
+      ),
+      builder: (context, pressed) => Opacity(
+        opacity: pressed ? 0.8 : 1.0,
+        child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: t.s(320), maxHeight: t.s(320)),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(t.s(8)),
-            child: Image.memory(bytes, fit: BoxFit.contain, semanticLabel: widget.alt),
+            child: Image.memory(
+              imageBytes,
+              fit: BoxFit.contain,
+              semanticLabel: widget.alt,
+              gaplessPlayback: true,
+            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

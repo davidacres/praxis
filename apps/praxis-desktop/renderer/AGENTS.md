@@ -170,7 +170,7 @@ the dock width is `tm-assistant-width` via `useResizable`.
 - **Detaching the context pill lasts one message**: `send` clears it, so a later turn can't silently lose its page.
 - **Only the workflow page may apply a workflow edit** — the engine drops an `update-workflow` proposal on any other
   page, and the designer re-validates over IPC and only marks the canvas dirty (the user still saves).
-- The Team Chats tree node is `TeamChatsSection` (own row classes on `--tree-indent-2`, per the indentation rule).
+- Team chats have no tree node of their own: `TeamChatRow` puts each one into its project's recency feed (Today / This week / Last week) beside the sessions, with `useProjectTeamChats` supplying the list. New team chats start from the sidebar's pinned footer.
 - Specs: `e2e/assistant.spec.ts` drives it against `mockOpenAiCompatibleServer` as the active provider (its `reply` may be a function, so a test can change the model's answer mid-run). It also holds the theme × surface-pack contrast guard: every assistant text part must be no worse than the theme's own text-on-panel ratio (so a palette like solarized-light, whose own text is 4.13:1, is judged against itself), and the persona badge / user bubble are tints under `var(--text)` rather than accent-on-contrast.
 
 ## Command palette

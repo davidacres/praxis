@@ -31,10 +31,14 @@ test('chat and project session groups reorder, rename inline, and persist', asyn
   await app.window.evaluate(() => localStorage.setItem('tm-pane-sidebar-praxis', '550'));
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
   await app.electronApp.close();
+  // Project sessions are one recency feed split into buckets, each its own organizer: the ticket
+  // sessions are three days old so they fill "This week" while the general ones fill "Today".
   const now = new Date().toISOString();
+  const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000).toISOString();
   const records = Object.fromEntries(['chat', 'general', 'ticket'].flatMap(kind => [1, 2, 3].map(index => {
     const issueKey = sessionKey(kind, index);
-    return [issueKey, { issueKey, sessionId: issueKey, title: `${kind} ${index}`, state: 'completed', startedAt: now, completedAt: now,
+    const at = kind === 'ticket' ? threeDaysAgo : now;
+    return [issueKey, { issueKey, sessionId: issueKey, title: `${kind} ${index}`, state: 'completed', startedAt: at, completedAt: at,
       provider: 'claude', projectId: kind === 'chat' ? undefined : projectId, linkedIssueKey: kind === 'ticket' ? `GRP-${index}` : undefined,
       taskDefinition: { goal: `${kind} ${index}`, sessionMode: kind === 'chat' ? 'chat' : 'task' }, events: [] }];
   })));
@@ -51,7 +55,7 @@ test('chat and project session groups reorder, rename inline, and persist', asyn
     if (kind === 'general') {
       await page.getByTestId('toggle-features').click();
     }
-    const scope = kind === 'chat' ? 'nav-conversations' : `project:${projectId}:${kind}`;
+    const scope = kind === 'chat' ? 'nav-conversations' : `project:${projectId}:recency:${kind === 'general' ? 'today' : 'this-week'}`;
     const list = page.locator(`[data-testid="session-organizer"][data-scope="${scope}"]`);
     await expect(list).toHaveAttribute('data-scope', scope);
     await list.scrollIntoViewIfNeeded();

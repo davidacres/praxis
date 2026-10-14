@@ -3,7 +3,7 @@
   "id": "governed-delivery-project-1788215224012-rap082",
   "name": "Governed delivery",
   "scope": "project",
-  "version": 1,
+  "version": 2,
   "nodes": [
     {
       "id": "plan",
@@ -48,7 +48,7 @@
         "scope": "global",
         "toolMode": "full"
       },
-      "instructions": "Implement the plan. Commit the change and report the ref.",
+      "instructions": "Implement the plan. Commit the change and report the ref. On a recovery pass, diagnose the failure or structured findings supplied in the iteration context, apply a targeted fix, and report how each issue was addressed. Preserve the plan and required gates; do not weaken checks to make them pass. Commit the repaired change and report its ref so all downstream verification runs against the new revision.",
       "outputs": [
         {
           "id": "change-diff",
@@ -110,12 +110,18 @@
         "scope": "global",
         "toolMode": "read-only"
       },
-      "instructions": "Review the implementation snapshot for correctness and quality using the change-diff input artifact and read-only file access. Do not run shell commands.",
+      "instructions": "Review the implementation snapshot for correctness and quality using the change-diff input artifact and read-only file access. Do not run shell commands. Deliver actionable correctness and quality issues in the required structured findings output, with severity, file, line, and a concrete suggested fix. Use info only for non-actionable observations. On re-review, verify whether the earlier findings are fixed and report any that remain.",
       "outputs": [
         {
           "id": "review-report",
           "kind": "report",
           "required": true
+        },
+        {
+          "id": "review-findings",
+          "kind": "findings",
+          "required": true,
+          "description": "Structured actionable review findings for the implementation repair loop."
         }
       ],
       "mutatesWorktree": false,
@@ -249,7 +255,8 @@
         "review-report",
         "test-contracts",
         "qa-results",
-        "security-report"
+        "security-report",
+        "review-findings"
       ],
       "type": "approval",
       "prompt": "Review, QA, and security have passed. Approve this change for delivery?",
@@ -258,7 +265,16 @@
         "qa",
         "security"
       ],
-      "allowBypass": false
+      "allowBypass": false,
+      "gateThresholds": {
+        "review": [
+          {
+            "type": "severity",
+            "severityLevel": "low",
+            "maxCount": 0
+          }
+        ]
+      }
     }
   ],
   "edges": [
@@ -338,11 +354,94 @@
       "to": "approve",
       "on": "success",
       "required": true
+    },
+    {
+      "id": "e-test-contracts-repair",
+      "from": "test-contracts",
+      "to": "implement",
+      "on": "failure",
+      "required": true,
+      "loop": {
+        "maxIterations": 2
+      }
+    },
+    {
+      "id": "e-review-repair",
+      "from": "review",
+      "to": "implement",
+      "on": "failure",
+      "required": true,
+      "loop": {
+        "maxIterations": 2
+      }
+    },
+    {
+      "id": "e-install-repair",
+      "from": "install",
+      "to": "implement",
+      "on": "failure",
+      "required": true,
+      "loop": {
+        "maxIterations": 2
+      }
+    },
+    {
+      "id": "e-build-repair",
+      "from": "build",
+      "to": "implement",
+      "on": "failure",
+      "required": true,
+      "loop": {
+        "maxIterations": 2
+      }
+    },
+    {
+      "id": "e-qa-repair",
+      "from": "qa",
+      "to": "implement",
+      "on": "failure",
+      "required": true,
+      "loop": {
+        "maxIterations": 2
+      }
+    },
+    {
+      "id": "e-security-repair",
+      "from": "security",
+      "to": "implement",
+      "on": "failure",
+      "required": true,
+      "loop": {
+        "maxIterations": 2
+      }
+    },
+    {
+      "id": "e-approve-repair",
+      "from": "approve",
+      "to": "implement",
+      "on": "failure",
+      "required": true,
+      "loop": {
+        "maxIterations": 2
+      }
+    },
+    {
+      "id": "e-review-findings-repair",
+      "from": "review",
+      "to": "implement",
+      "on": "findings",
+      "required": true,
+      "when": {
+        "severity": "low"
+      },
+      "loop": {
+        "maxIterations": 2
+      }
     }
   ],
   "entryNodeId": "plan",
   "createdAt": "2026-09-23T23:26:52.387Z",
-  "updatedAt": "2026-09-26T16:10:38.751Z",
-  "description": "Plan, implement, then converge review, QA, and security before a human approves.",
+  "updatedAt": "2026-10-14T00:00:14.642Z",
+  "description": "Plan and implement, then converge test contracts, review, build, QA, and security before human approval. Failures and actionable review findings return to Implement with two automatic repair iterations per route; all downstream evidence is regenerated after repair.",
   "projectId": "project-1788215224012-rap082"
 }

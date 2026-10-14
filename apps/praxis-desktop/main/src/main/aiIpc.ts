@@ -731,7 +731,10 @@ export function registerAiIpc(): void {
   });
 
   ipcMain.handle('ai:getSession', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
-    return sessionManager.ensureSessionTranscript(issueKey);
+    const record = await sessionManager.ensureSessionTranscript(issueKey);
+    if (!record) return undefined;
+    const { conversationHistory, ...safeRecord } = record;
+    return safeRecord;
   });
 
   ipcMain.handle(
@@ -1558,7 +1561,8 @@ export function registerAiIpc(): void {
   getAcpAgentHost().onDidChangeActiveTask(scheduleWhenTaskSettles);
 
   sessionManager.onDidChangeAgentSession((record: AgentSessionRecord) => {
-    broadcastToAllWindows('ai:sessionChanged', record);
+    const { conversationHistory, ...broadcastRecord } = record;
+    broadcastToAllWindows('ai:sessionChanged', broadcastRecord);
     // A terminal state is published before each host removes its task. The
     // active-task listeners above schedule the next speaker only after that
     // cleanup, preserving the one-runtime-at-a-time invariant.

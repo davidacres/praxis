@@ -1,12 +1,22 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { chooseOption, chipOptionValues } from './chipSelect';
 
 let app: TestApp;
 test.afterEach(async () => { if (app) await closeTestApp(app); });
+
+// The classic sidebar shows one project at a time: pick the project in the title chip, then open its home.
+async function openProjectHome(page: Page, name: string): Promise<void> {
+  const tree = page.getByTestId('project-tree').filter({ hasText: name });
+  if (!(await tree.isVisible())) {
+    await page.getByTestId('titlebar-project-select').click();
+    await page.locator('.titlebar-context-project-menu').getByRole('menuitem', { name }).click();
+  }
+  await tree.getByTestId('project-nav-item').click();
+}
 
 test('project review scopes history, surfaces blocked and stale work, and acts through the board rules', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
@@ -35,7 +45,7 @@ test('project review scopes history, surfaces blocked and stale work, and acts t
   expect(secondHistory.entries.map(entry => entry.summary)).toEqual(['Private beta research']);
   await page.clock.install({ time: new Date(Date.now() + 8 * 86_400_000) });
   await page.reload();
-  await page.getByTestId('project-tree').filter({ hasText: 'Review Alpha' }).getByTestId('project-nav-item').click();
+  await openProjectHome(page, 'Review Alpha');
   const review = page.getByTestId('project-review-panel');
   await expect(review).toContainText('1 blocked · 2 inactive for at least 7 days');
   await expect(review).not.toContainText('Private beta research');
@@ -83,13 +93,13 @@ test('project review scopes history, surfaces blocked and stale work, and acts t
   await review.getByRole('button', { name: 'Done reviewing', exact: true }).click();
   await expect(review.getByTestId('project-review-reviewed')).toBeVisible();
   await page.reload();
-  await page.getByTestId('project-tree').filter({ hasText: 'Review Alpha' }).getByTestId('project-nav-item').click();
+  await openProjectHome(page, 'Review Alpha');
   await expect(review.getByTestId('project-review-reviewed')).toBeVisible();
   await review.getByRole('button', { name: 'Show 1 item', exact: true }).click();
   await rows.first().getByRole('button', { name: 'Open item', exact: true }).click();
   await expect(page.getByText('Waiting on data', { exact: true }).first()).toBeVisible();
 
-  await page.getByTestId('project-tree').filter({ hasText: 'Review Gamma' }).getByTestId('project-nav-item').click();
+  await openProjectHome(page, 'Review Gamma');
   await expect(review).toContainText('Nothing overdue or blocked.');
   // The empty state's link really leaves for the board.
   await review.getByRole('button', { name: 'Open board', exact: true }).click();
@@ -119,7 +129,7 @@ test('daily review: a configurable aging rule, a re-opened review for new blocke
   const connectionId = `project:${project.id}`;
   await page.clock.install({ time: new Date(Date.now() + 8 * 86_400_000) });
   await page.reload();
-  const openProject = () => page.getByTestId('project-tree').filter({ hasText: 'Review Ten' }).getByTestId('project-nav-item').click();
+  const openProject = () => openProjectHome(page, 'Review Ten');
   await openProject();
   const review = page.getByTestId('project-review-panel');
   const rows = review.getByTestId('project-review-item');
@@ -196,7 +206,7 @@ test('moving an item to Blocked from the review asks why, and the reason is kept
     }, root);
     await page.clock.install({ time: new Date(Date.now() + 8 * 86_400_000) });
     await page.reload();
-    const openProject = () => page.getByTestId('project-tree').filter({ hasText: 'Review Blocker' }).getByTestId('project-nav-item').click();
+    const openProject = () => openProjectHome(page, 'Review Blocker');
     await openProject();
     const review = page.getByTestId('project-review-panel');
     const task = review.getByTestId('project-review-item').filter({ hasText: 'Wire the form' });

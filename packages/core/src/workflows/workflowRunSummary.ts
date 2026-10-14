@@ -142,6 +142,8 @@ export interface WorkflowRunSummary {
   runId: string;
   /** The project the run belongs to — what access checks (e.g. the phone's) scope it by. */
   projectId: string;
+  /** The saved workflow this run was started from — what a workflow row counts its runs by. */
+  workflowId?: string;
   workflowName: string;
   status: WorkflowRun['status'];
   /** One sentence: why this run is where it is. */
@@ -409,6 +411,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
   return {
     runId: run.runId,
     projectId: run.projectId,
+    workflowId: run.workflowId,
     workflowName: run.displayName ?? run.definition.name,
     status,
     explanation: explainRun(run, status, schedule.blocked),
