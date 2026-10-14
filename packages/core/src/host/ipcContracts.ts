@@ -790,7 +790,29 @@ export interface AiSessionModelInput {
  * renderer only learns whether one is configured. Session updates stream back
  * over the `ai:sessionChanged` push channel.
  */
+export interface CodeIntelligenceRequest {
+  action: 'list' | 'register' | 'index' | 'pause' | 'resume' | 'unregister' | 'query' | 'connect' | 'revoke' | 'model-install' | 'model-activate';
+  repositoryId?: string;
+  root?: string;
+  manifest?: string;
+  excludes?: string[];
+  tool?: string;
+  arguments?: Record<string, unknown>;
+  provider?: string;
+  bundle?: string;
+  fingerprint?: string;
+}
+export interface CodeIntelligenceResponse {
+  data?: unknown;
+  error?: { code: string; message: string; retryable?: boolean };
+  mcpServer?: McpServerConfig;
+  evidence?: unknown[];
+  warnings?: Array<{ code: string; message: string }>;
+  freshness?: { state: string };
+}
+
 export interface AiIpc {
+  codeIntelligence(request: CodeIntelligenceRequest): Promise<CodeIntelligenceResponse>;
   /** Active provider's configuration snapshot — kept for back-compat callers. */
   getStatus(): Promise<AiProviderStatus>;
   /** Stores the active provider's API key encrypted; empty string clears it. */
