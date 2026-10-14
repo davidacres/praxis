@@ -4,10 +4,11 @@ using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Praxis.CodeIntelligence.Indexing;
 using Praxis.CodeIntelligence.Storage;
+using Praxis.CodeIntelligence.Embeddings;
 
 namespace Praxis.CodeIntelligence.Queries;
 
-public sealed class QueryService(IndexDatabase database)
+public sealed class QueryService(IndexDatabase database, ModelStore? models = null)
 {
     private readonly CursorCodec cursors = new();
     private static readonly JsonSerializerOptions Camel = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -21,6 +22,8 @@ public sealed class QueryService(IndexDatabase database)
             JsonContract.Validate(tool, arguments);
             if (!allowedRepositories.Contains(repositoryId)) throw new QueryException("ACCESS_DENIED", "Repository access has not been granted.");
             cancellationToken.ThrowIfCancellationRequested();
+            var embedded = tool == "search_code" && Text(arguments, "mode") != "lexical" && models is not null
+                ? models.QueryEmbedding(repositoryId, Text(arguments, "query")!, cancellationToken) : null;
             using var connection = database.Open(readOnly: true); using var transaction = connection.BeginTransaction(deferred: true);
             var repository = Rows(connection, transaction, "SELECT * FROM repositories WHERE repository_id=$0", repositoryId).SingleOrDefault()
                 ?? throw new QueryException("REPOSITORY_NOT_FOUND", "Repository is not registered.");
@@ -99,9 +102,12 @@ public sealed class QueryService(IndexDatabase database)
                 case "search_code":
                 {
                     var mode = Text(arguments, "mode") ?? "hybrid";
-                    if (mode == "vector") throw new QueryException("MODEL_UNAVAILABLE", "Install and activate a local embedding model before vector search.");
-                    if (mode == "hybrid") warnings.Add(new JsonObject { ["code"] = "MODEL_UNAVAILABLE", ["message"] = "Local embedding search is unavailable; lexical results returned." });
+                    if (mode == "vector" && embedded is null) throw new QueryException("MODEL_UNAVAILABLE", "Install and activate a local embedding model before vector search.");
+                    if (mode == "hybrid" && embedded is null) warnings.Add(new JsonObject { ["code"] = "MODEL_UNAVAILABLE", ["message"] = "Local embedding search is unavailable; lexical results returned." });
+                    if (embedded is not null && connection.Scalar(transaction, "SELECT model_fingerprint FROM repository_models WHERE repository_id=$0 AND state='active'", repositoryId) as string != embedded.Fingerprint)
+                        throw new QueryException("INDEX_STALE", "Active model changed during query inference; restart the query.");
                     var query = Text(arguments, "query")!;
+                    if (string.IsNullOrWhiteSpace(query)) throw new QueryException("INVALID_ARGUMENT", "Search query cannot be blank.");
                     var tokens = query.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Take(32).Select(t => "\"" + t.Replace("\"", "\"\"") + "\"");
                     var fts = string.Join(" OR ", tokens);
                     var rows = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(SELECT d.symbol_id,bm25(symbol_fts,10.0,3.0,2.0,1.0) AS score FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0) SELECT s.*,r.score FROM ranked r JOIN symbols s ON s.symbol_id=r.symbol_id WHERE s.repository_id=$1 AND ($2 IS NULL OR s.defining_context_id=$2) ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 300", fts, repositoryId, contextId, query);
@@ -117,18 +123,57 @@ public sealed class QueryService(IndexDatabase database)
                         }
                         return true;
                     }
-                    rows = rows.Where(Eligible).ToList(); more = rows.Count > offset + limit;
-                    var matches = new JsonArray(); var rank = offset;
-                    foreach (var row in rows.Skip(offset).Take(limit))
+                    rows = mode == "vector" ? [] : rows.Where(Eligible).Take(100).ToList();
+                    var candidates = new Dictionary<string, (JsonObject Row, JsonObject Ranks, JsonArray Reasons, double Score)>(StringComparer.Ordinal);
+                    void Add(JsonObject row, string channel, int position)
                     {
-                        cancellationToken.ThrowIfCancellationRequested(); var symbol = Symbol(Text(row, "symbol_id")!); rank++;
-                        var exact = Text(row, "name") == query;
-                        matches.Add(new JsonObject { ["symbol"] = symbol, ["reasons"] = exact ? new JsonArray("exact", "lexical") : new JsonArray("lexical"),
-                            ["evidenceIds"] = symbol["declarations"]!.DeepClone(), ["ranks"] = new JsonObject { ["lexical"] = rank },
-                            ["score"] = 1.0 / (60 + rank), ["freshness"] = state == "ready" ? "current" : "stale" });
+                        var candidateId = Text(row, "symbol_id")!;
+                        if (!candidates.TryGetValue(candidateId, out var candidate)) candidate = (row, new(), new(), 0);
+                        candidate.Ranks[channel] = position; candidate.Reasons.Add(channel); candidate.Score += 1.0 / (60 + position); candidates[candidateId] = candidate;
                     }
-                    data = new() { ["matches"] = matches, ["channelsUsed"] = new JsonArray("lexical"),
-                        ["eligibleSymbolCount"] = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM symbols WHERE repository_id=$0 AND external=0", repositoryId)), ["vectorCoveredSymbolCount"] = 0 }; break;
+                    for (var index = 0; index < rows.Count; index++) { Add(rows[index], "lexical", index + 1); if (Text(rows[index], "name") == query) Add(rows[index], "exact", 1); }
+                    var channels = new JsonArray(); if (mode != "vector") channels.Add("lexical");
+                    if (embedded is not null)
+                    {
+                        var filters = arguments["filters"] as JsonObject;
+                        var kinds = filters?["kinds"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
+                        var projects = filters?["projectIds"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
+                        var languages = filters?["languages"]?.AsArray();
+                        var vectors = languages is not null && !languages.Any(x => x!.GetValue<string>() == "csharp") ? []
+                            : ModelStore.Candidates(connection, transaction, repositoryId, embedded, contextId, kinds, projects);
+                        var position = 0;
+                        foreach (var vector in vectors)
+                        {
+                            var row = Rows(connection, transaction, "SELECT * FROM symbols WHERE symbol_id=$0", vector.SymbolId).Single(); Add(row, "vector", ++position);
+                        }
+                        channels.Add("vector");
+                    }
+                    if (mode != "vector")
+                    {
+                        var aliases = Rows(connection, transaction, "SELECT s.* FROM aliases a JOIN symbols s ON s.symbol_id=a.symbol_id WHERE a.repository_id=$0 AND a.enabled=1 AND a.phrase_key=$1 AND ($2 IS NULL OR s.defining_context_id=$2) ORDER BY s.symbol_id LIMIT 100", repositoryId, query.Trim().ToLowerInvariant(), contextId).Where(Eligible).ToArray();
+                        for (var index = 0; index < aliases.Length; index++) Add(aliases[index], "alias", index + 1);
+                        if (aliases.Length > 0) channels.Add("alias");
+                    }
+                    var ordered = candidates.Values.OrderByDescending(c => c.Score).ThenBy(c => Text(c.Row, "symbol_id"), StringComparer.Ordinal).ToArray();
+                    more = ordered.Length > offset + limit; var matches = new JsonArray();
+                    foreach (var candidate in ordered.Skip(offset).Take(limit))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested(); var symbol = Symbol(Text(candidate.Row, "symbol_id")!);
+                        matches.Add(new JsonObject { ["symbol"] = symbol, ["reasons"] = candidate.Reasons,
+                            ["evidenceIds"] = symbol["declarations"]!.DeepClone(), ["ranks"] = candidate.Ranks,
+                            ["score"] = candidate.Score, ["freshness"] = state == "ready" ? "current" : "stale" });
+                    }
+                    var kindsJson = (arguments["filters"] as JsonObject)?["kinds"]?.ToJsonString();
+                    var projectsJson = (arguments["filters"] as JsonObject)?["projectIds"]?.ToJsonString();
+                    var languageFilter = (arguments["filters"] as JsonObject)?["languages"]?.AsArray();
+                    var hasLanguage = languageFilter is null || languageFilter.Any(x => x!.GetValue<string>() == "csharp");
+                    const string scope = "s.repository_id=$0 AND s.external=0 AND ($1 IS NULL OR s.defining_context_id=$1) AND ($2 IS NULL OR s.kind IN(SELECT value FROM json_each($2))) AND ($3 IS NULL OR c.project_id IN(SELECT value FROM json_each($3)))";
+                    var eligible = hasLanguage ? Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE " + scope, repositoryId, contextId, kindsJson, projectsJson)) : 0L;
+                    var covered = embedded is null || !hasLanguage ? 0L : Convert.ToInt64(connection.Scalar(transaction,
+                        "SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id JOIN contexts c ON c.context_id=s.defining_context_id JOIN representation_targets r ON r.symbol_id=s.symbol_id AND r.model_fingerprint=e.model_fingerprint WHERE " + scope
+                        + " AND e.model_fingerprint=$4 AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND (SELECT count(*) FROM vectors v WHERE v.set_id=e.set_id)=e.expected_chunks", repositoryId, contextId, kindsJson, projectsJson, embedded.Fingerprint));
+                    if (embedded is not null && covered < eligible) warnings.Add(new JsonObject { ["code"] = "INDEX_STALE", ["message"] = "Vector coverage is incomplete; only complete current vector sets are eligible." });
+                    data = new() { ["matches"] = matches, ["channelsUsed"] = channels, ["eligibleSymbolCount"] = eligible, ["vectorCoveredSymbolCount"] = covered }; break;
                 }
                 case "get_symbol":
                 {
@@ -186,7 +231,9 @@ public sealed class QueryService(IndexDatabase database)
                     var provenance = Text(symbol, "resolution") == "syntaxOnly" ? "syntax" : "compiler";
                     data = new() { ["facts"] = new JsonArray(new JsonObject { ["kind"] = "declaration", ["text"] = symbol["signature"]!.DeepClone(),
                             ["evidenceIds"] = declarations.DeepClone(), ["provenance"] = provenance, ["resolution"] = symbol["resolution"]!.DeepClone(), ["sourceRevision"] = symbol["symbolRevision"]!.DeepClone() }),
-                        ["description"] = null, ["provenance"] = provenance, ["uncertainties"] = new JsonArray("Structural facts do not prove runtime behavior."), ["coverage"] = Coverage(1, 1) }; break;
+                        ["description"] = new JsonObject { ["text"] = "Declared " + Text(symbol, "kind") + " " + Text(symbol, "qualifiedName") + ". " + Text(symbol, "signature"),
+                            ["provenance"] = provenance, ["inputRevision"] = symbol["symbolRevision"]!.DeepClone(), ["evidenceIds"] = declarations.DeepClone(), ["state"] = "ready" },
+                        ["provenance"] = provenance, ["uncertainties"] = new JsonArray("Structural facts do not prove runtime behavior."), ["coverage"] = Coverage(1, 1) }; break;
                 }
                 case "get_callers": case "get_callees":
                 {
@@ -247,10 +294,16 @@ public sealed class QueryService(IndexDatabase database)
                     var diagnostics = Rows(connection, transaction, "SELECT * FROM diagnostics WHERE repository_id=$0 ORDER BY diagnostic_id LIMIT 1000", repositoryId);
                     var jobs = new JsonObject(); foreach (var jobState in new[] { "pending", "leased", "succeeded", "failed", "obsolete" })
                         jobs[jobState] = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM jobs WHERE repository_id=$0 AND state=$1", repositoryId, jobState));
+                    var profiles = Rows(connection, transaction, "SELECT r.model_fingerprint,r.state,m.dimensions FROM repository_models r JOIN model_profiles m ON m.fingerprint=r.model_fingerprint WHERE r.repository_id=$0 LIMIT 10", repositoryId);
+                    var eligible = Convert.ToInt32(connection.Scalar(transaction, "SELECT count(*) FROM symbols WHERE repository_id=$0 AND external=0", repositoryId));
+                    var modelStatuses = Array(profiles.Select(profile => (JsonNode?)new JsonObject {
+                        ["fingerprint"] = profile["model_fingerprint"]!.DeepClone(), ["state"] = profile["state"]!.DeepClone(), ["dimensions"] = profile["dimensions"]!.DeepClone(),
+                        ["coverage"] = Coverage(eligible, Convert.ToInt32(connection.Scalar(transaction,
+                            "SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.repository_id=$0 AND e.model_fingerprint=$1 AND e.state='ready' AND e.input_revision=s.revision", repositoryId, Text(profile, "model_fingerprint")))) }));
                     data = new() { ["desiredRevision"] = repository["desired_revision"]!.DeepClone(), ["contexts"] = Array(contexts.Select(row => (JsonNode?)new JsonObject
                         { ["contextId"] = row["context_id"]!.DeepClone(), ["state"] = row["state"]!.DeepClone(), ["resolution"] = row["resolution"]!.DeepClone(),
                           ["desiredRevision"] = row["desired_revision"]!.DeepClone(), ["publishedRevision"] = row["published_revision"]!.DeepClone(), ["capabilities"] = JsonNode.Parse(Text(row, "capabilities_json")!) })),
-                        ["jobsByState"] = jobs, ["models"] = new JsonArray(), ["lastReconciledUtc"] = repository["last_reconciled_utc"]?.DeepClone(),
+                        ["jobsByState"] = jobs, ["models"] = modelStatuses, ["lastReconciledUtc"] = repository["last_reconciled_utc"]?.DeepClone(),
                         ["diagnostics"] = Array(diagnostics.Select(row => { var d = new JsonObject { ["id"] = row["diagnostic_id"]!.DeepClone(), ["code"] = row["code"]!.DeepClone(),
                             ["severity"] = row["severity"]!.DeepClone(), ["message"] = row["message"]!.DeepClone() }; if (row["context_id"] is not null) d["contextId"] = row["context_id"]!.DeepClone();
                             if (row["file_id"] is not null) d["fileId"] = row["file_id"]!.DeepClone(); return (JsonNode?)d; })), ["ownerState"] = "directLocalSession" }; break;
