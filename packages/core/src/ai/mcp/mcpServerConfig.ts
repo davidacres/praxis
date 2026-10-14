@@ -142,6 +142,14 @@ export function enabledMcpServers(servers: readonly McpServerConfig[] | undefine
   return (servers ?? []).filter(server => server.enabled);
 }
 
+/** Explicit egress consent follows the destination provider, including after handover. */
+export function mcpServerAppliesToProvider(server: McpServerConfig, provider: string | undefined): boolean {
+  const destination = server.env?.PRAXIS_CODE_INTELLIGENCE_PROVIDER;
+  if (destination) return provider === destination;
+  if (server.id.startsWith('praxis-code-intelligence-') || server.args?.some(arg => /codeIntelligence[/\\]mcpBridge\.js$/.test(arg))) return false;
+  return true;
+}
+
 /** What the settings "Test" button shows: the server's tools, or why it could not be reached. */
 export type McpTestResult =
   | { ok: true; serverName?: string; tools: Array<{ name: string; description?: string }> }
