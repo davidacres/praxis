@@ -44,6 +44,7 @@ import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { AddProviderDialog, CustomEndpointForm, endpointDisplayUrl, type BuiltInCatalogEntry } from './AiProviderCatalog';
 import { RemoveProviderDialog } from './RemoveProviderDialog';
 import { McpServersPanel } from './McpServersPanel';
+import { CodeIntelligencePanel } from './CodeIntelligencePanel';
 import { useSettings } from './useSettings';
 import { useKindAddons } from './marketplaceAddons';
 import { isHostShimProfile, NATIVE_TOOL_LABELS, nativeReaders, nativeSourceLabel, skillTitle } from '../agents/agentCatalog';
@@ -793,5127 +794,1479 @@ function AgentRuntimeSection({
   // AGENT.md. Only the curated ones are agents; a binding whose only profile
   // is that placeholder is a custom launch binding.
   const profiles = (snapshot?.profiles ?? []).filter(profile => !isHostShimProfile(profile));
-  const launchBindings = snapshot?.runtimeHosts ?? snapshot?.agents ?? [];
-  const launchBindingsById = new Map(launchBindings.map(binding => [binding.manifest.id, binding]));
-  const standaloneBindings = launchBindings.filter(binding => !profiles.some(profile => profile.profile.id === binding.manifest.id));
-  const skills = snapshot?.skills ?? [];
-  const agentAddonIds = new Set(agentAddons.installed.map(addon => addon.manifest.id));
-  const skillAddonIds = new Set(skillAddons.installed.map(addon => addon.manifest.id));
+  const launchBindin…69955 tokens truncated…e<boolean>;
+}
 
-  const refreshedAt = snapshot?.refreshedAt ? new Date(snapshot.refreshedAt).toLocaleString() : 'not yet';
+/** Live state of the in-app AI browser, pushed on `browser:didNavigate`. */
+export interface BrowserNavigationState {
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  loading: boolean;
+}
 
-  const tabs: Array<{ id: AgentRuntimeTab; label: string; count?: number }> = [
-    { id: 'agents', label: 'Agents', count: profiles.length },
-    { id: 'skills', label: 'Skills', count: skills.length },
-    { id: 'instructions', label: 'Instructions', count: (snapshot?.instructions ?? []).length },
-    { id: 'runtimes', label: 'Runtimes', count: runtimeProviders.length },
-    { id: 'advanced', label: 'Advanced' }
-  ];
-
-  return (
-    <section data-testid="settings-agent-runtime">
-      <CategoryHeader
-        category={CATEGORIES.find(category => category.id === 'agent-runtime')!}
-        actions={
-          <button className="btn" type="button" onClick={() => void refresh()} disabled={busy} data-testid="agent-runtime-refresh">
-            {busy ? 'Refreshing…' : 'Refresh'}
-          </button>
-        }
-      />
-
-      <div className="settings-tabs" role="tablist" aria-label="Agent runtime sections" data-testid="agent-runtime-tabs">
-        {tabs.map(item => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            id={`agent-runtime-tab-${item.id}`}
-            aria-selected={tab === item.id}
-            aria-controls={`agent-runtime-tabpanel-${item.id}`}
-            className={tab === item.id ? 'active' : ''}
-            data-testid={`agent-runtime-tab-${item.id}`}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-            {item.count !== undefined && snapshot ? ` (${item.count})` : ''}
-          </button>
-        ))}
-      </div>
-
-      <div
-        className="settings-list"
-        role="tabpanel"
-        id={`agent-runtime-tabpanel-${tab}`}
-        aria-labelledby={`agent-runtime-tab-${tab}`}
-        data-testid={`agent-runtime-tabpanel-${tab}`}
-      >
-        {error && <div className="error-banner">{error}</div>}
-        {!snapshot && !error && <div className="placeholder-text">Loading agent runtime…</div>}
-
-        {nativeError && <div className="error-banner">{nativeError}</div>}
-        {snapshot?.nativeProject && !snapshot.nativeProject.approved && snapshot.nativeProject.itemCount > 0 && ['agents', 'skills', 'instructions'].includes(tab) && (
-          <div className="settings-field-row" data-testid="native-project-approval">
-            <span className="runtime-item-icon" aria-hidden="true">
-              <Icon name="shield" size={16} />
-            </span>
-            <div className="settings-field-label">
-              <strong>This project has files for other AI tools</strong>
-              <div className="settings-field-help">
-                {snapshot.nativeProject.itemCount} agent, skill or instruction file{snapshot.nativeProject.itemCount === 1 ? '' : 's'} in{' '}
-                <code>{snapshot.nativeProject.root}</code>. They arrive with the repository, so Praxis will not use them until you allow this project.
-              </div>
-            </div>
-            <div className="settings-field-control">
-              <button
-                className="btn"
-                type="button"
-                disabled={nativeBusy === 'approve'}
-                onClick={() => void runNative('approve', () => window.praxis.agentRuntime.approveNativeProject(snapshot.nativeProject!.root, true))}
-              >
-                Allow this project
-              </button>
-            </div>
-          </div>
-        )}
-
-        {snapshot && tab === 'agents' && (
-          <>
-            {onNewAgentItem && (
-              <div className="settings-section-actions" data-testid="agent-runtime-agent-actions">
-                <button className="btn" type="button" onClick={() => onNewAgentItem('profile')} data-testid="agent-runtime-new-profile">
-                  New agent profile
-                </button>
-                <button className="btn btn-quiet" type="button" onClick={() => onNewAgentItem('import')} data-testid="agent-runtime-import-profile">
-                  Import…
-                </button>
-              </div>
-            )}
-            {[
-              { heading: 'Built-in', items: profiles.filter(profile => profile.builtIn && !profile.source) },
-              { heading: 'Your own', items: profiles.filter(profile => !profile.builtIn && !profile.source && !agentAddonIds.has(profile.profile.id)) },
-              { heading: 'From other AI tools', items: profiles.filter(profile => profile.source) }
-            ]
-              .filter(group => group.heading === 'Built-in' || group.items.length > 0)
-              .map(group => (
-                <div key={group.heading}>
-                  <h4 className="settings-subsection-title">{group.heading}</h4>
-                  {group.items.map(profile => {
-                    const binding = launchBindingsById.get(profile.profile.id);
-                    // Every agent runs on the session's runtime through the built-in
-                    // gateway unless it says otherwise; only the exceptions get a line.
-                    const notes = [
-                      binding && binding.manifest.type !== 'gateway' && binding.manifest.entry !== 'session' && !binding.followsSessionRuntime
-                        ? `${binding.manifest.type.toUpperCase()} launch binding`
-                        : undefined,
-                      profile.legacy ? 'legacy brief.md' : undefined,
-                      profile.error,
-                      binding?.errors.length ? binding.errors.map(item => item.message).join('; ') : undefined
-                    ].filter(Boolean);
-                    return (
-                      <RuntimeItem
-                        key={profile.profile.id}
-                        testId={`agent-runtime-profile-${profile.profile.id}`}
-                        icon="robot"
-                        title={profile.profile.name}
-                        badges={[
-                          ...(profile.builtIn ? ['Built-in'] : []),
-                          ...(profile.source ? [nativeSourceLabel(profile.source)] : profile.scope === 'project' ? ['Project'] : []),
-                          ...(profile.profile.toolMode === 'read-only' ? ['Read-only'] : []),
-                          ...(!profile.trusted ? ['Needs approval'] : [])
-                        ]}
-                        description={profile.profile.description}
-                        meta={[
-                          ...notes,
-                          ...(profile.source ? [nativeReaders(profile.source.readBy) ?? 'Runs on any runtime through Praxis'] : []),
-                          ...(profile.alsoIn?.length ? [`Also in ${profile.alsoIn.join(', ')}`] : [])
-                        ].join(' · ') || undefined}
-                        action={(profile.source || onOpenAgentProfile) ? (
-                          <>
-                            {profile.source && nativeActions('agent', profile.profile.id, profile.source.path, profile.trusted)}
-                            {onOpenAgentProfile && (
-                              <button className="btn btn-compact" type="button" onClick={() => onOpenAgentProfile(profile.profile.id)}>
-                                Open
-                              </button>
-                            )}
-                          </>
-                        ) : undefined}
-                      />
-                    );
-                  })}
-                  {group.items.length === 0 && <div className="placeholder-text">No built-in agents found. Use Refresh, or restart Praxis.</div>}
-                </div>
-              ))}
-            <RuntimeMarketplace addons={agentAddons} kind="agent" />
-          </>
-        )}
-
-        {snapshot && tab === 'skills' && (
-          <>
-            {onNewAgentItem && (
-              <div className="settings-section-actions" data-testid="agent-runtime-skill-actions">
-                <button className="btn" type="button" onClick={() => onNewAgentItem('skill')} data-testid="agent-runtime-new-skill">
-                  New skill
-                </button>
-                <button className="btn btn-quiet" type="button" onClick={() => onNewAgentItem('import')} data-testid="agent-runtime-import-skill">
-                  Import…
-                </button>
-              </div>
-            )}
-            {[
-              { heading: 'Built-in', items: skills.filter(skill => skill.builtIn && !skill.source && !skillAddonIds.has(skill.metadata.name)) },
-              { heading: 'Your own', items: skills.filter(skill => !skill.builtIn && !skill.source && !skillAddonIds.has(skill.metadata.name)) },
-              { heading: 'From other AI tools', items: skills.filter(skill => skill.source) }
-            ]
-              .filter(group => group.items.length > 0)
-              .map(group => (
-                <div key={group.heading}>
-                  <h4 className="settings-subsection-title">{group.heading}</h4>
-                  {group.items.map(skill => (
-                    <RuntimeItem
-                      key={skill.metadata.name}
-                      testId={`agent-runtime-skill-${skill.metadata.name}`}
-                      icon="sparkles"
-                      title={skillTitle(skill.metadata)}
-                      badges={[
-                        ...(skill.builtIn ? ['Built-in'] : []),
-                        ...(skill.source ? [nativeSourceLabel(skill.source)] : skill.scope === 'project' ? ['Project'] : []),
-                        ...(!skill.trusted ? ['Needs approval'] : [])
-                      ]}
-                      description={skill.error ? `Invalid: ${skill.error}` : skill.metadata.description}
-                      meta={[
-                        ...(skill.metadata.version ? [`v${skill.metadata.version}`] : []),
-                        ...(skill.source ? [nativeReaders(skill.source.readBy) ?? 'Used on any runtime through Praxis'] : []),
-                        ...(skill.alsoIn?.length ? [`Also in ${skill.alsoIn.join(', ')}`] : [])
-                      ].join(' · ') || undefined}
-                      action={(skill.source || onOpenSkill) ? (
-                        <>
-                          {skill.source && nativeActions('skill', skill.metadata.name, skill.source.path, skill.trusted)}
-                          {onOpenSkill && (
-                            <button className="btn btn-compact" type="button" onClick={() => onOpenSkill(skill.metadata.name)}>
-                              Open
-                            </button>
-                          )}
-                        </>
-                      ) : undefined}
-                    />
-                  ))}
-                </div>
-              ))}
-            {skills.every(skill => skillAddonIds.has(skill.metadata.name)) && (
-              <p className="settings-field-help">
-                Skills give agents a tested procedure for a job. Built-in skills are added when a workflow needs them; install others from the marketplace.
-              </p>
-            )}
-            <RuntimeMarketplace addons={skillAddons} kind="skill" />
-          </>
-        )}
-
-        {snapshot && tab === 'instructions' && (
-          <>
-            <p className="settings-field-help">
-              Always-on instructions other AI tools keep for this project and for you. A runtime that reads a file itself gets it from that tool; Praxis
-              adds the project’s files to sessions on every other runtime, so each session follows the same conventions whichever AI runs it.
-            </p>
-            <Toggle
-              label="Add project instruction files to sessions on other runtimes"
-              description="Off: each runtime only sees the files it reads itself."
-              checked={settings.ai.nativeSources.injectInstructions}
-              testId="native-inject-toggle"
-              onChange={next => void update({ ai: { nativeSources: { injectInstructions: next } } })}
-            />
-            <div className="settings-field-row">
-              <div className="settings-field-label">
-                <strong>Instructions for every AI</strong>
-                <div className="settings-field-help">
-                  Use one tool’s files as the project’s instructions on every AI, or add every tool’s. A runtime still reads its own files itself.
-                </div>
-              </div>
-              <div className="settings-field-control">
-                <ChipSelect
-                  block
-                  value={settings.ai.nativeSources.instructionSource}
-                  ariaLabel="Instructions for every AI"
-                  data-testid="native-instruction-source"
-                  disabled={!settings.ai.nativeSources.injectInstructions}
-                  onChange={value => void update({ ai: { nativeSources: { instructionSource: value as typeof settings.ai.nativeSources.instructionSource } } })}
-                  options={[
-                    { value: 'all', label: 'Every tool’s files' },
-                    { value: 'claude', label: 'Claude Code’s (CLAUDE.md)' },
-                    { value: 'codex', label: 'AGENTS.md (Codex and shared)' },
-                    { value: 'copilot', label: 'GitHub Copilot’s' },
-                    { value: 'gemini', label: 'Gemini’s (GEMINI.md)' },
-                    { value: 'cursor', label: 'Cursor’s rules' }
-                  ]}
-                />
-              </div>
-            </div>
-            {(['project', 'user'] as const).map(scope => {
-              // AGENTS.md first — the file most tools share — then the rest by path.
-              const files = (snapshot.instructions ?? [])
-                .filter(file => file.scope === scope)
-                .sort((a, b) => Number(b.displayPath.endsWith('AGENTS.md')) - Number(a.displayPath.endsWith('AGENTS.md')) || a.displayPath.localeCompare(b.displayPath));
-              if (files.length === 0) return null;
-              return (
-                <div key={scope}>
-                  <h4 className="settings-subsection-title">{scope === 'project' ? 'This project' : 'Your user folder'}</h4>
-                  {files.map(file => {
-                    const readers = nativeReaders(file.readBy);
-                    const approved = snapshot.nativeProject?.approved === true;
-                    const use = scope === 'user'
-                      ? 'Personal files stay with their own tool; Praxis does not add them to other runtimes.'
-                      : !file.alwaysApplies
-                        ? `Only applies to ${file.appliesTo ?? 'some files'}, so it is not added to sessions.`
-                        : !settings.ai.nativeSources.injectInstructions
-                          ? 'Not added to other runtimes (turned off above).'
-                          : settings.ai.nativeSources.instructionSource !== 'all' && settings.ai.nativeSources.instructionSource !== file.ecosystem
-                            ? `Not added — every AI gets ${NATIVE_TOOL_LABELS[settings.ai.nativeSources.instructionSource] ?? settings.ai.nativeSources.instructionSource}’s files instead.`
-                          : file.tooLargeForSessions
-                            ? 'Too large for Praxis to add to sessions on other runtimes — only the runtimes that read it get it.'
-                          : approved
-                            ? 'Added to sessions on the other runtimes.'
-                            : 'Added to sessions on the other runtimes once you allow this project.';
-                    return (
-                      <RuntimeItem
-                        key={file.path}
-                        testId={`native-instruction-${file.displayPath}`}
-                        icon="file"
-                        title={file.displayPath}
-                        badges={[NATIVE_TOOL_LABELS[file.ecosystem] ?? file.ecosystem, ...(file.alwaysApplies ? [] : ['Path-specific'])]}
-                        description={[readers ? `${readers}.` : undefined, use].filter(Boolean).join(' ')}
-                        meta={file.bytes < 1024 ? `${file.bytes} bytes` : `${(file.bytes / 1024).toFixed(1)} KB`}
-                        action={nativeActions('instruction', file.path, file.path, true)}
-                      />
-                    );
-                  })}
-                </div>
-              );
-            })}
-            {(snapshot.instructions ?? []).length === 0 && (
-              <div className="placeholder-text">No instruction files from other AI tools (AGENTS.md, CLAUDE.md, GEMINI.md, …) were found.</div>
-            )}
-            <h4 className="settings-subsection-title">Working style</h4>
-            <Toggle
-              label="Ask every AI to work the same way"
-              description="Adds these habits to every session, whichever AI runs it, so sessions feel the same on Claude, Codex or any other runtime."
-              checked={settings.ai.workingStyle.enabled}
-              testId="working-style-toggle"
-              onChange={next => void update({ ai: { workingStyle: { enabled: next } } })}
-            />
-            {settings.ai.workingStyle.enabled && (
-              <FieldRow
-                label="Habits"
-                description={settings.ai.workingStyle.text.trim() ? 'Your own wording.' : 'Praxis’s working style. Edit it to make it yours.'}
-                stacked
-              >
-                <div className="working-style-editor">
-                  <DebouncedTextArea
-                    ariaLabel="Working style"
-                    value={settings.ai.workingStyle.text.trim() || DEFAULT_WORKING_STYLE}
-                    onCommit={value =>
-                      void update({ ai: { workingStyle: { text: value.trim() === DEFAULT_WORKING_STYLE ? '' : value } } })
-                    }
-                  />
-                  {settings.ai.workingStyle.text.trim() && (
-                    <button
-                      className="btn btn-quiet"
-                      type="button"
-                      data-testid="working-style-reset"
-                      onClick={() => void update({ ai: { workingStyle: { text: '' } } })}
-                    >
-                      Use Praxis’s working style
-                    </button>
-                  )}
-                </div>
-              </FieldRow>
-            )}
-          </>
-        )}
-
-        {snapshot && tab === 'runtimes' && (
-          <>
-            <p className="settings-field-help">
-              The local AI programs that execute sessions — {availableRuntimes} of {runtimeProviders.length} available on this Mac. Configure them in{' '}
-              <strong>AI Provider</strong>; any agent can run on any available runtime.
-            </p>
-            {runtimeProviders.map(runtime => {
-              const status = providerStatuses.find(candidate => candidate.provider === runtime.id);
-              const isActive = settings.ai.activeProvider === runtime.id;
-              return (
-                <div className="settings-field-row" key={runtime.id} data-testid={`agent-runtime-provider-${runtime.id}`}>
-                  <div className="settings-field-label">
-                    <strong>{runtime.label}</strong>{' '}
-                    {isActive && <span className="chip">Default for new sessions</span>}
-                    <div className="settings-field-help">{status ? (status.configured ? 'Available' : 'Not installed or not found on this Mac') : 'Checking availability…'}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </>
-        )}
-
-        {snapshot && tab === 'advanced' && (
-          <>
-            <h4 className="settings-subsection-title">Other AI tools</h4>
-            <p className="settings-field-help">
-              Praxis reads agents, skills and instructions these tools keep in the project (the folder with <code>.git</code>) and in your user folder,
-              in place — nothing is copied.
-            </p>
-            {Object.entries(NATIVE_TOOL_LABELS).map(([ecosystem, label]) => (
-              <Toggle
-                key={ecosystem}
-                label={`Read ${label} files`}
-                checked={settings.ai.nativeSources.ecosystems[ecosystem as keyof typeof settings.ai.nativeSources.ecosystems] !== false}
-                testId={`native-ecosystem-${ecosystem}`}
-                onChange={next =>
-                  void update({ ai: { nativeSources: { ecosystems: { [ecosystem]: next } } } }).then(() => refresh())
-                }
-              />
-            ))}
-            <FieldRow label="Extra skill folders" description="One folder per line; each holds skill folders with a SKILL.md." stacked>
-              <DebouncedTextArea
-                ariaLabel="Extra skill folders"
-                value={settings.ai.nativeSources.extraSkillPaths.join('\n')}
-                placeholder="/path/to/skills"
-                onCommit={value =>
-                  void update({ ai: { nativeSources: { extraSkillPaths: value.split('\n').map(line => line.trim()).filter(Boolean) } } }).then(() => refresh())
-                }
-              />
-            </FieldRow>
-            <FieldRow label="Extra agent folders" description="One folder per line; each holds agent .md files (Claude, Gemini or Copilot format)." stacked>
-              <DebouncedTextArea
-                ariaLabel="Extra agent folders"
-                value={settings.ai.nativeSources.extraAgentPaths.join('\n')}
-                placeholder="/path/to/agents"
-                onCommit={value =>
-                  void update({ ai: { nativeSources: { extraAgentPaths: value.split('\n').map(line => line.trim()).filter(Boolean) } } }).then(() => refresh())
-                }
-              />
-            </FieldRow>
-            {settings.ai.nativeSources.approvedProjects.map(root => (
-              <div className="settings-field-row" key={root} data-testid="native-approved-project">
-                <div className="settings-field-label">
-                  <strong>Allowed project</strong>
-                  <div className="settings-field-help">
-                    <code>{root}</code>
-                  </div>
-                </div>
-                <div className="settings-field-control">
-                  <button className="btn btn-quiet" type="button" onClick={() => void runNative(`revoke:${root}`, () => window.praxis.agentRuntime.approveNativeProject(root, false))}>
-                    Stop using its files
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            <div className="settings-field-row">
-              <div className="settings-field-label">
-                <strong>Custom launch bindings</strong>
-                <div className="settings-field-help">
-                  A transport manifest for an agent that is not just an AGENT.md profile running on a runtime. Create or import one here.
-                </div>
-              </div>
-              {onNewAgentItem && (
-                <div className="settings-field-control">
-                  <button className="btn" type="button" onClick={() => onNewAgentItem('agent')} data-testid="agent-runtime-new-binding">
-                    New launch binding
-                  </button>
-                  <button className="btn" type="button" onClick={() => onNewAgentItem('import-binding')} data-testid="agent-runtime-import-binding">
-                    Import…
-                  </button>
-                </div>
-              )}
-            </div>
-            {standaloneBindings.map(binding => (
-              <div className="settings-field-row" key={binding.manifest.id} data-testid={`agent-runtime-binding-${binding.manifest.id}`}>
-                <div className="settings-field-label">
-                  <strong>{binding.manifest.name}</strong>
-                  <div className="settings-field-help">launch binding · {binding.manifest.type} · {binding.scope} · {binding.trusted ? 'trusted' : 'approval required'}{binding.errors.length ? ` · ${binding.errors.map(item => item.message).join('; ')}` : ''}</div>
-                </div>
-                {onOpenAgent && (
-                  <div className="settings-field-control">
-                    <button className="btn btn-compact" type="button" onClick={() => onOpenAgent(binding.manifest.id)}>
-                      Manage
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-            {standaloneBindings.length === 0 && <div className="placeholder-text">No custom launch bindings.</div>}
-
-            {roots && (
-              <div className="settings-field-row" data-testid="agent-runtime-paths">
-                <div className="settings-field-label">
-                  <strong>Discovery paths</strong>
-                  <div className="settings-field-help">
-                    Global profiles: <code>{roots.profiles?.global ?? roots.agents.global}</code>
-                    <br />
-                    Global launch bindings: <code>{roots.runtimeHosts?.global ?? roots.agents.global}</code>
-                    <br />
-                    Global skills: <code>{roots.skills.global}</code>
-                    <br />
-                    Project profiles: <code>{roots.profiles?.project ?? roots.agents.project}</code>
-                    <br />
-                    Project launch bindings: <code>{roots.runtimeHosts?.project ?? roots.agents.project}</code>
-                    <br />
-                    Project skills: <code>{roots.skills.project}</code>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="settings-field-help">Last refreshed {refreshedAt}.</div>
-          </>
-        )}
-      </div>
-    </section>
-  );
+/** Result of a page-level browser action returned to the renderer toolbar. */
+export interface BrowserPageResult {
+  url: string;
+  title: string;
+  text: string;
 }
 
 /**
- * A `workflow-template` add-on is declarative — it activates on install, no
- * trust step, the same as a theme or surface pack (see marketplaceInstance.ts'
- * `globalTemplateDefinitions`, which reads every installed-and-enabled one
- * straight onto the "New workflow" dialog's global tier). This panel is the
- * only place that install can happen — nothing else in the app browses this
- * kind's catalogue.
+ * The in-app browser surface: a `WebContentsView` the AI drives (via the gateway
+ * browser tools) and the user watches. The renderer owns its on-screen position
+ * — it draws a placeholder and reports the rect through `setBounds`.
  */
-function WorkflowTemplatesSection() {
-  const templateAddons = useKindAddons('workflow-template');
-  useEffect(() => {
-    if (templateAddons.ready && templateAddons.catalog === undefined && !templateAddons.busy) {
-      void templateAddons.browse();
-    }
-  }, [templateAddons.ready, templateAddons.catalog, templateAddons.busy, templateAddons.browse]);
-  const installedTemplateIds = new Set(templateAddons.installed.map(addon => addon.manifest.id));
-
-  return (
-    <section data-testid="settings-workflow-templates">
-      <CategoryHeader category={CATEGORIES.find(category => category.id === 'workflow-templates')!} />
-      <div className="settings-list">
-        <div className="settings-field-row">
-          <div className="settings-field-label">
-            <div className="settings-field-help">
-              An installed template appears alongside <strong>Governed delivery</strong> and{' '}
-              <strong>Quick change</strong> in every project's New Workflow dialog. Its agent stages
-              still need matching agents installed and trusted in <strong>Agent Runtime</strong> before a run can start.
-            </div>
-          </div>
-        </div>
-
-        <div data-testid="workflow-template-marketplace">
-          <h4 className="settings-subsection-title">Marketplace</h4>
-          {templateAddons.error && <div className="error-banner">{templateAddons.error}</div>}
-          {!templateAddons.ready && (
-            <p className="settings-field-help">Set up the add-on catalogue in Settings › Add-ons to install workflow templates from GitHub Packages.</p>
-          )}
-          {templateAddons.installed.map(addon => (
-            <div className="settings-field-row" key={addon.manifest.id} data-testid={`workflow-template-installed-${addon.manifest.id}`}>
-              <div className="settings-field-label">
-                <strong>{addon.manifest.name}</strong>
-                <div className="settings-field-help">v{addon.version}{addon.manifest.summary ? ` — ${addon.manifest.summary}` : ''}</div>
-              </div>
-              <div className="settings-field-control">
-                <button
-                  className="btn btn-quiet"
-                  type="button"
-                  disabled={templateAddons.busy === `remove:${addon.manifest.id}`}
-                  onClick={() => void templateAddons.remove(addon.manifest.id)}
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          ))}
-          {templateAddons.ready && templateAddons.catalog === undefined && <div className="placeholder-text">Loading the catalogue…</div>}
-          {(templateAddons.catalog ?? [])
-            .filter(entry => !installedTemplateIds.has(entry.manifest.id))
-            .map(entry => (
-              <div className="settings-field-row" key={entry.packageName} data-testid={`workflow-template-marketplace-${entry.manifest.id}`}>
-                <div className="settings-field-label">
-                  <strong>{entry.manifest.name}</strong>
-                  <div className="settings-field-help">
-                    v{entry.latestVersion}
-                    {entry.manifest.author ? ` · ${entry.manifest.author}` : ''}
-                    {entry.manifest.summary ? ` — ${entry.manifest.summary}` : ''}
-                    {entry.incompatible ? ' · needs a newer Praxis' : ''}
-                  </div>
-                </div>
-                <div className="settings-field-control">
-                  <button
-                    className="btn"
-                    type="button"
-                    disabled={entry.incompatible || templateAddons.busy === `install:${entry.packageName}`}
-                    onClick={() => void templateAddons.install(entry.packageName)}
-                  >
-                    Install
-                  </button>
-                </div>
-              </div>
-            ))}
-          {templateAddons.ready &&
-            templateAddons.catalog?.filter(entry => !installedTemplateIds.has(entry.manifest.id)).length === 0 &&
-            templateAddons.installed.length === 0 && (
-              <div className="placeholder-text">No workflow templates in the catalogue.</div>
-            )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-export const ADDON_KIND_LABELS: Record<AddonKind, string> = {
-  theme: 'Theme',
-  'surface-pack': 'Surface pack',
-  agent: 'Agent',
-  skill: 'Skill',
-  'workflow-template': 'Workflow template'
-};
-
-/**
- * Central marketplace *configuration* only — the GitHub Packages owner, token,
- * and endpoints. Browsing and installing add-ons happens in each kind's own
- * panel (Themes, Surfaces, Agent Runtime — Skills too, right alongside Agents),
- * so a user sees the add-ons for a thing where they already are.
- */
-function MarketplaceSection() {
-  const [status, setStatus] = useState<MarketplaceStatus>();
-  const [installed, setInstalled] = useState<InstalledAddon[]>([]);
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState<string>();
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [testCounts, setTestCounts] = useState<Record<AddonKind, number>>();
-  const [testError, setTestError] = useState<string>();
-
-  // Local edit buffer for the config form, seeded from status.
-  const [ownerDraft, setOwnerDraft] = useState('');
-  const [ownerTypeDraft, setOwnerTypeDraft] = useState<'user' | 'org'>('user');
-  const [prefixDraft, setPrefixDraft] = useState('');
-  const [apiUrlDraft, setApiUrlDraft] = useState('');
-  const [registryUrlDraft, setRegistryUrlDraft] = useState('');
-  const [tokenDraft, setTokenDraft] = useState('');
-
-  const refreshStatus = async () => {
-    const next = await window.praxis.marketplace.getStatus();
-    setStatus(next);
-    setOwnerDraft(next.owner);
-    setOwnerTypeDraft(next.ownerType);
-    setPrefixDraft(next.packageNamePrefix);
-    setApiUrlDraft(next.apiBaseUrl);
-    setRegistryUrlDraft(next.registryBaseUrl);
-    return next;
-  };
-
-  useEffect(() => {
-    void refreshStatus().catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
-    void window.praxis.marketplace.listInstalled().then(setInstalled).catch(() => {});
-    return window.praxis.marketplace.onChanged(() => {
-      void window.praxis.marketplace.listInstalled().then(setInstalled).catch(() => {});
-    });
-  }, []);
-
-  const run = async (key: string, task: () => Promise<void>) => {
-    setBusy(key);
-    setError(undefined);
-    try {
-      await task();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(undefined);
-    }
-  };
-
-  const saveConfig = () =>
-    run('config', async () => {
-      await window.praxis.marketplace.configure({
-        owner: ownerDraft.trim(),
-        ownerType: ownerTypeDraft,
-        packageNamePrefix: prefixDraft.trim() || 'praxis-addon-',
-        apiBaseUrl: apiUrlDraft.trim() || 'https://api.github.com',
-        registryBaseUrl: registryUrlDraft.trim() || 'https://npm.pkg.github.com'
-      });
-      await refreshStatus();
-    });
-
-  const saveToken = () =>
-    run('token', async () => {
-      await window.praxis.marketplace.setToken(tokenDraft.trim() || null);
-      setTokenDraft('');
-      // Update status to show token is stored, but preserve unsaved config drafts
-      setStatus(s => (s ? { ...s, hasToken: true } : undefined));
-    });
-
-  const toggleEnabled = (enabled: boolean) =>
-    run('enabled', async () => {
-      await window.praxis.marketplace.configure({ enabled });
-      await refreshStatus();
-    });
-
-  // Hits the real GitHub Packages catalogue directly — the same call every
-  // kind's own panel makes — and counts entries per kind, so a config change
-  // can be checked right here instead of hopping to Themes/Surfaces/Agent
-  // Runtime and reading "N available" in each one separately.
-  const testCatalog = async () => {
-    setBusy('test');
-    setTestError(undefined);
-    setTestCounts(undefined);
-    try {
-      const entries = await window.praxis.marketplace.listCatalog();
-      const counts: Record<AddonKind, number> = {
-        theme: 0,
-        'surface-pack': 0,
-        agent: 0,
-        skill: 0,
-        'workflow-template': 0
-      };
-      for (const entry of entries) {
-        counts[entry.manifest.kind] += 1;
-      }
-      setTestCounts(counts);
-    } catch (cause) {
-      setTestError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(undefined);
-    }
-  };
-
-  const byKind = new Map<AddonKind, number>();
-  for (const addon of installed) {
-    byKind.set(addon.manifest.kind, (byKind.get(addon.manifest.kind) ?? 0) + 1);
-  }
-  const installedSummary = [...byKind.entries()]
-    .map(([kind, count]) => `${count} ${ADDON_KIND_LABELS[kind].toLowerCase()}${count === 1 ? '' : 's'}`)
-    .join(' · ');
-
-  const category = CATEGORIES.find(item => item.id === 'marketplace')!;
-
-  return (
-    <section data-testid="settings-marketplace">
-      <CategoryHeader category={category} />
-      <div className="settings-list">
-        <FieldRow
-          label="Enable the marketplace"
-          description="When off, nothing is fetched and installed add-ons stay inactive."
-        >
-          <Toggle
-            checked={status?.enabled ?? false}
-            onChange={value => void toggleEnabled(value)}
-            label={status?.enabled ? 'On' : 'Off'}
-          />
-        </FieldRow>
-
-        <FieldRow
-          label="Catalogue owner"
-          description="The GitHub user or organisation that publishes the add-on packages."
-        >
-          <div className="settings-inline-controls">
-            <input
-              className="input"
-              value={ownerDraft}
-              placeholder="e.g. your-org"
-              onChange={event => setOwnerDraft(event.target.value)}
-              data-testid="marketplace-owner"
-            />
-            <ChipSelect
-              value={ownerTypeDraft}
-              ariaLabel="Owner type"
-              onChange={value => setOwnerTypeDraft(value === 'org' ? 'org' : 'user')}
-              data-testid="marketplace-owner-type"
-              options={[{ value: 'user', label: 'User' }, { value: 'org', label: 'Organisation' }]}
-            />
-          </div>
-        </FieldRow>
-
-        <FieldRow
-          label="GitHub token"
-          description={
-            status?.hasToken
-              ? 'A token is stored. Enter a new one to replace it, or clear it below.'
-              : 'A personal access token with `read:packages`. Stored with OS-backed encryption.'
-          }
-        >
-          <div className="settings-inline-controls">
-            <input
-              className="input"
-              type="password"
-              value={tokenDraft}
-              placeholder={status?.hasToken ? '•••••••• (stored)' : 'ghp_…'}
-              onChange={event => setTokenDraft(event.target.value)}
-              data-testid="marketplace-token"
-            />
-            <button
-              className="btn"
-              type="button"
-              disabled={busy === 'token' || tokenDraft.trim().length === 0}
-              onClick={() => void saveToken()}
-            >
-              Save token
-            </button>
-            {status?.hasToken && (
-              <button
-                className="btn btn-quiet"
-                type="button"
-                disabled={busy === 'token'}
-                onClick={() =>
-                  void run('token', async () => {
-                    await window.praxis.marketplace.setToken(null);
-                    await refreshStatus();
-                  })
-                }
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </FieldRow>
-
-        <div className="settings-field-row">
-          <div className="settings-field-label">
-            <button className="btn btn-quiet" type="button" onClick={() => setShowAdvanced(value => !value)}>
-              {showAdvanced ? 'Hide' : 'Show'} advanced endpoints
-            </button>
-          </div>
-        </div>
-        {showAdvanced && (
-          <>
-            <FieldRow label="Package name prefix" description="Only packages whose name starts with this are treated as add-ons.">
-              <input className="input" value={prefixDraft} onChange={event => setPrefixDraft(event.target.value)} />
-            </FieldRow>
-            <FieldRow label="GitHub API base URL" description="Override for GitHub Enterprise Server.">
-              <input className="input" value={apiUrlDraft} onChange={event => setApiUrlDraft(event.target.value)} />
-            </FieldRow>
-            <FieldRow label="npm registry base URL" description="Where packuments and tarballs are fetched from.">
-              <input className="input" value={registryUrlDraft} onChange={event => setRegistryUrlDraft(event.target.value)} />
-            </FieldRow>
-          </>
-        )}
-
-        <div className="settings-field-row">
-          <div className="settings-field-control">
-            <button className="btn" type="button" disabled={busy === 'config'} onClick={() => void saveConfig()} data-testid="marketplace-save">
-              {busy === 'config' ? 'Saving…' : 'Save configuration'}
-            </button>
-          </div>
-        </div>
-
-        {error && <div className="error-banner" data-testid="marketplace-error">{error}</div>}
-        <div className="settings-section-description" data-testid="marketplace-status">
-          {status?.ready
-            ? 'Marketplace is configured and ready. Browse and install add-ons from the Themes, Surfaces, and Agent Runtime panels.'
-            : 'Set an owner, add a token, and enable the marketplace, then browse add-ons from the Themes, Surfaces, and Agent Runtime panels.'}
-        </div>
-        {installed.length > 0 && (
-          <div className="settings-section-description">Installed: {installedSummary}.</div>
-        )}
-
-        <div className="settings-field-row">
-          <div className="settings-field-label">
-            <strong>Test connection</strong>
-            <p>Fetch the real catalogue right now and count what's in it per kind, without leaving this page.</p>
-          </div>
-          <div className="settings-field-control">
-            <button
-              className="btn"
-              type="button"
-              disabled={busy === 'test' || !status?.ready}
-              onClick={() => void testCatalog()}
-              data-testid="marketplace-test"
-            >
-              {busy === 'test' ? 'Testing…' : 'Test connection'}
-            </button>
-          </div>
-        </div>
-        {!status?.ready && (
-          <div className="settings-field-help">Enable the marketplace with an owner and token first.</div>
-        )}
-        {testError && (
-          <div className="error-banner" data-testid="marketplace-test-error">
-            <div>{testError}</div>
-            {testError.includes('Bad credentials') && (
-              <p style={{ marginTop: 8, fontSize: '0.85em', opacity: 0.9, lineHeight: 1.4 }}>
-                GitHub rejected the stored token (expired, revoked, or incorrect). Even for public repositories, GitHub Packages mandates authentication. Generate a new <strong>Personal Access Token (classic)</strong> with the <code>read:packages</code> scope on GitHub (Settings → Developer settings → Personal access tokens → Tokens classic) and save it above.
-              </p>
-            )}
-          </div>
-        )}
-        {testCounts && (
-          <div className="settings-section-description" data-testid="marketplace-test-results">
-            {(Object.keys(ADDON_KIND_LABELS) as AddonKind[]).map((kind, index) => (
-              <span key={kind}>
-                {index > 0 && ' · '}
-                {ADDON_KIND_LABELS[kind]}s: <strong>{testCounts[kind]}</strong>
-              </span>
-            ))}
-            {' · '}Total: <strong>{Object.values(testCounts).reduce((sum, count) => sum + count, 0)}</strong>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function GadgetsSection() {
-  return (
-    <section data-testid="settings-gadgets">
-      <CategoryHeader category={CATEGORIES.find(category => category.id === 'gadgets')!} />
-      <div className="settings-list">
-        <div className="settings-section-description">
-          These browser-safe surfaces keep structured agent results readable and make decisions explicit. Tool completions are host-generated; the other gadgets are requested by an agent and validated by Praxis before rendering.
-        </div>
-        {BUILT_IN_GADGET_CATALOG.map(gadget => (
-          <div className="settings-field-row" key={gadget.id} data-testid={`settings-gadget-${gadget.id}`}>
-            <div className="settings-field-label">
-              <strong className="settings-gadget-name">
-                <Icon name={gadget.icon} size={14} />
-                {gadget.name}
-              </strong>
-              <div className="settings-field-help">{gadget.purpose}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function CategoryHeader({ category, children, actions }: { category: CategoryDef; children?: React.ReactNode; actions?: React.ReactNode }) {
-  return (
-    <div className="settings-category-header">
-      <div>
-        <h3 className="settings-section-title">{category.label}</h3>
-        <p className="settings-section-description">
-          {category.description}
-          {children}
-        </p>
-      </div>
-      {actions && <div className="settings-category-actions">{actions}</div>}
-    </div>
-  );
-}
-
-function FieldRow({
-  label,
-  description,
-  children,
-  stacked
-}: {
-  label: string;
-  description?: string;
-  children: React.ReactNode;
-  /** Label and help above, control below at full width — for a control that needs room (several inputs). */
-  stacked?: boolean;
-}) {
-  return (
-    <div className={`settings-field-row${stacked ? ' settings-field-row--stacked' : ''}`}>
-      <div className="settings-field-label">
-        <strong>{label}</strong>
-        {description && <div className="settings-field-help">{description}</div>}
-      </div>
-      <div className="settings-field-control settings-field-control--field">{children}</div>
-    </div>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-  label,
-  description,
-  disabled,
-  testId
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  label: string;
-  description?: string;
-  disabled?: boolean;
-  testId?: string;
-}) {
-  return (
-    <div className={`settings-toggle-row${disabled ? ' disabled' : ''}`}>
-      <div className="settings-toggle-text">
-        <strong>{label}</strong>
-        {description && <div className="settings-field-help">{description}</div>}
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        className="switch"
-        disabled={disabled}
-        data-testid={testId}
-        onClick={() => onChange(!checked)}
-      />
-    </div>
-  );
-}
-
-function OverviewSection({
-  settings,
-  onReset,
-  onResetAppearance,
-  onClearProjectWorkspaceBoardData,
-  clearingProjectWorkspaceBoardData
-}: {
-  settings: AppSettings;
-  onReset: () => void;
-  onResetAppearance: () => void;
-  onClearProjectWorkspaceBoardData: () => void;
-  clearingProjectWorkspaceBoardData: boolean;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'overview')!;
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <div className="settings-list">
-        <div className="list-row">
-          <div>
-            <div className="list-row-title">Settings file</div>
-            <div className="list-row-meta">
-              A single JSON document shared with the VS Code extension so changes in either place sync.
-            </div>
-          </div>
-        </div>
-        <div className="list-row">
-          <div>
-            <div className="list-row-title">Jira site</div>
-            <div className="list-row-meta">
-              {settings.jira.siteUrl.trim() ? settings.jira.siteUrl : 'not configured'}
-            </div>
-          </div>
-        </div>
-        <div className="list-row">
-          <div>
-            <div className="list-row-title">Default page size</div>
-            <div className="list-row-meta">{settings.performance.defaultPageSize} issues per page</div>
-          </div>
-        </div>
-        <div className="list-row">
-          <div>
-            <div className="list-row-title">Boards sidebar mode</div>
-            <div className="list-row-meta">{settings.preview.boardsSidebarMode}</div>
-          </div>
-        </div>
-      </div>
-      <div className="section-divider">
-        <strong>Reset to defaults</strong>
-        <div className="settings-field-help">
-          Replaces every category below with the shipped defaults. Connections are unaffected.
-        </div>
-        <button className="btn" style={{ marginTop: 8 }} onClick={onReset}>
-          Reset to defaults
-        </button>
-      </div>
-      <div className="section-divider">
-        <strong>Clear project data</strong>
-        <div className="settings-field-help">
-          Removes app-owned projects, workspaces, board layouts, and task canvases. Portable workspace files, connections, and credentials are kept.
-        </div>
-        <button
-          className="btn danger"
-          style={{ marginTop: 8 }}
-          onClick={onClearProjectWorkspaceBoardData}
-          disabled={clearingProjectWorkspaceBoardData}
-          data-testid="clear-project-workspace-board-data"
-        >
-          {clearingProjectWorkspaceBoardData ? 'Clearing…' : 'Clear project/workspace/board data'}
-        </button>
-      </div>
-      <div className="section-divider">
-        <strong>Reset appearance</strong>
-        <div className="settings-field-help">
-          Restores the factory theme, built-in Looks, surface, motifs, priority colours, and appearance libraries.
-        </div>
-        <button
-          className="btn"
-          style={{ marginTop: 8 }}
-          onClick={onResetAppearance}
-          data-testid="reset-appearance-factory"
-        >
-          Reset appearance to factory defaults
-        </button>
-      </div>
-    </>
-  );
-}
-
-function StartupSection({
-  settings,
-  update
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'startup')!;
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <Toggle
-        label="Reopen last workspace"
-        description="Restore the last valid workspace, project, board, ticket, AI session, and browser state. Turn this off to choose a workspace from Getting Started."
-        checked={settings.startup.reopenLastWorkspace}
-        testId="startup-reopen-last-workspace"
-        onChange={next => void update({ startup: { reopenLastWorkspace: next } })}
-      />
-    </>
-  );
-}
-
-function describeUpdateStatus(status: UpdateStatus | undefined): string {
-  switch (status?.state) {
-    case undefined: return 'Reading update status…';
-    case 'unsupported': return status.reason;
-    case 'checking': return 'Checking for updates…';
-    case 'current': return `You're on the latest version (${status.version}).`;
-    case 'available': return status.canInstall
-      ? `Version ${status.version} is available.`
-      : `Version ${status.version} is available, but this build can't install updates itself. Download it from the release page.`;
-    case 'downloading': return `Downloading version ${status.version}… ${status.percent}%`;
-    case 'ready': return `Version ${status.version} is downloaded. Restart to install it, or it installs the next time you quit.`;
-    case 'error': return `The last update check failed: ${status.message}`;
-  }
-}
-
-function UpdatesSection() {
-  const category = CATEGORIES.find(c => c.id === 'updates')!;
-  const status = useUpdateStatus();
-  const [version, setVersion] = useState<string>();
-  useEffect(() => {
-    void window.praxis.app.getVersion().then(setVersion).catch(() => undefined);
-  }, []);
-  const busy = status?.state === 'checking' || status?.state === 'downloading';
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <div className="settings-list">
-        <div className="list-row">
-          <div>
-            <div className="list-row-title">Installed version</div>
-            <div className="list-row-meta">{version ?? '…'}</div>
-          </div>
-        </div>
-        <div className="list-row">
-          <div>
-            <div className="list-row-title">Status</div>
-            <div className="list-row-meta" data-testid="settings-update-status">{describeUpdateStatus(status)}</div>
-          </div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        {status?.state === 'ready' ? (
-          <button className="btn btn-primary" data-testid="settings-update-restart" onClick={() => void window.praxis.app.update.installNow()}>
-            Restart to update
-          </button>
-        ) : status?.state === 'available' && !status.canInstall && status.releaseUrl ? (
-          <button className="btn btn-primary" data-testid="settings-update-release" onClick={() => void window.praxis.shell.openExternal(status.releaseUrl!)}>
-            Open release page
-          </button>
-        ) : null}
-        <button
-          className="btn"
-          data-testid="settings-update-check"
-          disabled={busy || status?.state === 'unsupported' || status?.state === 'ready'}
-          onClick={() => void window.praxis.app.update.check()}
-        >
-          Check for updates
-        </button>
-      </div>
-    </>
-  );
-}
-
-function ConnectionsSection({
-  connections,
-  onOpenConnections
-}: {
-  connections: Connection[];
-  onOpenConnections: () => void;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'connections')!;
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <div className="settings-list">
-        {connections.length === 0 && (
-          <div className="list-row">
-            <div>
-              <div className="list-row-title">No connections yet</div>
-              <div className="list-row-meta">Use Manage connections to add one.</div>
-            </div>
-          </div>
-        )}
-        {connections.map(connection => (
-          <div key={connection.id} className="list-row">
-            <div>
-              <div className="list-row-title">{connection.name}</div>
-              <div className="list-row-meta">{connection.mode}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="section-divider">
-        <button className="btn btn-primary" onClick={onOpenConnections}>
-          Manage connections
-        </button>
-      </div>
-    </>
-  );
-}
-
-function JiraSection({
-  settings,
-  update
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'jira')!;
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <FieldRow
-        label="Site URL"
-        description="Base URL of the Jira instance that MCP tools connect to."
-      >
-        <DebouncedTextField
-          ariaLabel="Jira site URL"
-          value={settings.jira.siteUrl}
-          onCommit={value => update({ jira: { siteUrl: value } })}
-          placeholder="https://example.atlassian.net"
-        />
-      </FieldRow>
-      <FieldRow label="Default project key" description="Used when creating a new issue and the form does not specify one.">
-        <DebouncedTextField
-          ariaLabel="Jira default project key"
-          value={settings.jira.defaultProjectKey}
-          onCommit={value => update({ jira: { defaultProjectKey: value } })}
-          placeholder="e.g. ENG"
-        />
-      </FieldRow>
-      <FieldRow label="Epic key" description="Boards follow this epic and Jira issue creation uses it as the default parent.">
-        <DebouncedTextField
-          ariaLabel="Jira epic key"
-          value={settings.jira.epicKey}
-          onCommit={value => update({ jira: { epicKey: value } })}
-          placeholder="e.g. EPIC-123"
-        />
-      </FieldRow>
-      <FieldRow label="Epic board name">
-        <DebouncedTextField
-          ariaLabel="Jira epic board display name"
-          value={settings.jira.epicBoardName}
-          onCommit={value => update({ jira: { epicBoardName: value } })}
-          placeholder="Optional display name"
-        />
-      </FieldRow>
-      <FieldRow label="Board JQL">
-        <DebouncedTextField
-          ariaLabel="Jira board JQL query"
-          value={settings.jira.boardJql}
-          onCommit={value => update({ jira: { boardJql: value } })}
-          placeholder="Optional Jira JQL query"
-        />
-      </FieldRow>
-      <FieldRow label="Board name">
-        <DebouncedTextField
-          ariaLabel="Jira board display name"
-          value={settings.jira.boardName}
-          onCommit={value => update({ jira: { boardName: value } })}
-          placeholder="Optional display name"
-        />
-      </FieldRow>
-    </>
-  );
+export interface BrowserIpc {
+  /** Parents the view to this window (idempotent). */
+  attach(): Promise<void>;
+  /** Positions the native view over the renderer's placeholder, in CSS px. */
+  setBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
+  /** Shows or hides the view without detaching it. */
+  setVisible(visible: boolean): Promise<void>;
+  navigate(url: string): Promise<BrowserPageResult>;
+  back(): Promise<void>;
+  forward(): Promise<void>;
+  reload(): Promise<void>;
+  getState(): Promise<BrowserNavigationState | undefined>;
+  /** Subscribes to navigation updates; returns an unsubscribe function. */
+  onDidNavigate(listener: (state: BrowserNavigationState) => void): () => void;
 }
 
 /**
- * AI Provider section: Vercel AI Gateway setup. The API key is write-only —
- * it goes straight to the OS-keychain secrets store via `ai:setApiKey` and is
- * never read back over IPC; the status snapshot only reports the key source.
+ * Run lifecycle control (FX-BE-055 / TASK-146): start/stop the whole run,
+ * start/stop/restart one service, live status/log push events, and
+ * conservative post-restart reconciliation for whatever a previous session
+ * left running when Praxis itself was closed.
  */
-type AiTab = 'providers' | 'defaults' | 'tools';
-
-interface AiProviderMeta {
-  id: AiProvider;
-  kind: 'api' | 'cli-agent';
-  label: string;
-  keyLabel: string;
-  urlPlaceholder: string;
-  modelPlaceholder: string;
-  /** `kind: 'cli-agent'` only — default PATH-resolved executable name. Absent for the Copilot SDK's own bundled runtime. */
-  defaultCommand?: string;
-  /** `kind: 'cli-agent'` only — overrides the generic "CLI path" field's description. */
-  cliPathDescription?: string;
-  /** `kind: 'cli-agent'` only — shown when the real, free PATH-resolution check finds nothing to spawn. */
-  notInstalledHint?: string;
-  /** `kind: 'cli-agent'` only — fixed package Praxis may install after confirmation. */
-  installPackage?: string;
+export interface RunsIpc {
+  /** Starts the project's saved Run profile. Rejects if none exists, the profile is invalid, or a run is already active. */
+  start(projectId: string): Promise<void>;
+  /** Stops every service in the project's active run and revokes its preview grants. A no-op if nothing is running. */
+  stop(projectId: string): Promise<void>;
+  stopService(projectId: string, serviceId: string): Promise<void>;
+  startService(projectId: string, serviceId: string): Promise<void>;
+  restartService(projectId: string, serviceId: string): Promise<void>;
+  /** A snapshot of every tracked service's current status — empty when nothing is running for this project this session. */
+  status(projectId: string): Promise<RunServiceStatus[]>;
+  /**
+   * Conservative reconciliation against whatever this project's last run
+   * persisted (TASK-146's "after app restart" half). Empty when this
+   * session's own manager already owns the project's run, or nothing was
+   * ever persisted — only meaningful right after launch, before `start` has
+   * been called for this project in this session.
+   */
+  reconcile(projectId: string): Promise<ReconciledService[]>;
+  /** The granted preview origin for a ready service, or undefined if it isn't ready (yet) or declares no port. */
+  previewUrl(projectId: string, serviceId: string): Promise<string | undefined>;
+  /** Fires on every service status transition for any project's active run. */
+  onStatusChanged(listener: (projectId: string, status: RunServiceStatus) => void): () => void;
+  /** Fires on every stdout/stderr line from any project's active run. */
+  onLog(listener: (projectId: string, line: RunLogLine) => void): () => void;
+  /**
+   * Runs one preview verification check against a ready service (FX-BE-056
+   * / TASK-149): opens its granted origin, runs the check's interactions,
+   * and evaluates its assertions. Rejects if the service has no active
+   * preview grant (its run must be started and the service `ready` first).
+   */
+  runVerification(projectId: string, check: PreviewVerificationCheck): Promise<PreviewVerificationOutcome>;
+  /**
+   * Starts a diagnosis session from a failed verification outcome. Refuses
+   * (without opening a session) when `outcome.passed` is true or the
+   * project has no working folder — the same "never open a session with
+   * nothing to work from" discipline as `WorkflowsIpc.startDiagnosis`.
+   */
+  diagnoseVerificationFailure(
+    projectId: string,
+    check: PreviewVerificationCheck,
+    outcome: PreviewVerificationOutcome
+  ): Promise<CreateDiagnosisSessionResult>;
 }
 
-/** Short names for a custom endpoint's tested capabilities, as its row shows them. */
-const CAPABILITY_LABELS = {
-  models: 'Models',
-  chat: 'Chat',
-  streamUsage: 'Streaming usage',
-  tools: 'Tool calling'
-} as const;
-
-/** Display metadata for the settings UI — mirrors core's `PROVIDER_DESCRIPTORS`
- *  (kept as a local literal, not imported: core drags in Node built-ins that
- *  can't bundle into the renderer, same reason `settingsDefaults.ts` exists). */
-const AI_PROVIDERS: AiProviderMeta[] = [
-  {
-    id: 'vercel-gateway',
-    kind: 'api',
-    label: 'Vercel AI Gateway',
-    keyLabel: 'Vercel AI Gateway API key',
-    urlPlaceholder: 'https://ai-gateway.vercel.sh',
-    modelPlaceholder: 'e.g. anthropic/claude-sonnet-4.6'
-  },
-  {
-    id: 'openai',
-    kind: 'api',
-    label: 'OpenAI',
-    keyLabel: 'OpenAI API key',
-    urlPlaceholder: 'https://api.openai.com',
-    modelPlaceholder: 'e.g. gpt-4o-mini'
-  },
-  {
-    id: 'anthropic',
-    kind: 'api',
-    label: 'Anthropic',
-    keyLabel: 'Anthropic API key',
-    urlPlaceholder: 'https://api.anthropic.com',
-    modelPlaceholder: 'e.g. claude-sonnet-4-6'
-  },
-  {
-    id: 'gemini',
-    kind: 'api',
-    label: 'Google Gemini',
-    keyLabel: 'Gemini API key',
-    urlPlaceholder: 'https://generativelanguage.googleapis.com',
-    modelPlaceholder: 'e.g. gemini-2.5-flash'
-  },
-  {
-    id: 'z-ai',
-    kind: 'api',
-    label: 'Z.ai',
-    keyLabel: 'Z.ai API key',
-    urlPlaceholder: 'https://api.z.ai/api/coding/paas/v4',
-    modelPlaceholder: 'e.g. glm-5.3'
-  },
-  {
-    id: 'claude-code-cli',
-    kind: 'cli-agent',
-    label: 'Claude Code (local)',
-    keyLabel: '',
-    urlPlaceholder: '',
-    modelPlaceholder: '',
-    defaultCommand: 'claude-agent-acp',
-    notInstalledHint: 'Not found on PATH — install the ACP package or set the executable path below.',
-    installPackage: '@agentclientprotocol/claude-agent-acp'
-  },
-  {
-    id: 'codex-cli',
-    kind: 'cli-agent',
-    label: 'OpenAI Codex (local)',
-    keyLabel: '',
-    urlPlaceholder: '',
-    modelPlaceholder: '',
-    defaultCommand: 'codex-acp',
-    notInstalledHint: 'Not found on PATH — install the ACP package or set the executable path below.',
-    installPackage: '@agentclientprotocol/codex-acp'
-  },
-  {
-    id: 'copilot-cli',
-    kind: 'cli-agent',
-    label: 'GitHub Copilot (local)',
-    keyLabel: '',
-    urlPlaceholder: '',
-    modelPlaceholder: '',
-    cliPathDescription:
-      'Runs the bundled @github/copilot runtime automatically — auth comes from GITHUB_TOKEN/gh CLI login, not a stored key. Override with an absolute path only if you need a different runtime executable.',
-    notInstalledHint: 'The custom runtime path above was not found.'
-  },
-  {
-    id: 'antigravity-cli',
-    kind: 'cli-agent',
-    label: 'Antigravity',
-    keyLabel: '',
-    urlPlaceholder: '',
-    modelPlaceholder: '',
-    defaultCommand: 'agy',
-    notInstalledHint: 'Not found on PATH — install the ACP package or set the executable path below.',
-    installPackage: 'agy'
-  },
-  {
-    id: 'cursor-cli',
-    kind: 'cli-agent',
-    label: 'Cursor (local)',
-    keyLabel: '',
-    urlPlaceholder: '',
-    modelPlaceholder: '',
-    defaultCommand: 'agent',
-    notInstalledHint: 'Not found on PATH — install the Cursor CLI (agent) or set the executable path below.'
-  }
-];
-
-
-function UsageAdminKeyField({ provider }: { provider: AiProvider }) {
-  const [error, setError] = useState<string>();
-  const [draft, setDraft] = useState('');
-  const [saved, setSaved] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const save = async (value: string) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await window.praxis.aiUsage.setProviderUsageKey(provider, value);
-      setDraft('');
-      setSaved(Boolean(value.trim()));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the usage Admin API key.');
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="ai-usage-admin-key">
-      <div className="ai-key-controls">
-        <input
-          type="password"
-          autoComplete="off"
-          disabled={busy}
-          className="input"
-          data-testid="ai-usage-admin-key-input"
-          aria-label="Usage Admin API key"
-          placeholder={saved ? '••••••••  (saved)' : 'Optional admin key'}
-          value={draft}
-          onChange={event => setDraft(event.target.value)}
-        />
-        <button type="button" className="btn btn-primary" data-testid="ai-usage-admin-key-save" disabled={busy || !draft.trim()} onClick={() => void save(draft)}>
-          Save
-        </button>
-        <button type="button" className="btn" data-testid="ai-usage-admin-key-clear" disabled={busy} onClick={() => void save('')}>
-          Clear
-        </button>
-      </div>
-      <div aria-live="polite">
-        {error && <p className="error-banner">{error}</p>}
-        {!error && saved && <p className="settings-hint">Usage Admin API key saved.</p>}
-      </div>
-    </div>
-  );
+/**
+ * The Run preview surface (FX-BE-055 / TASK-146) — a passive viewer onto a
+ * granted preview origin, structurally the same `WebContentsView` control
+ * channel as `BrowserIpc` but with no navigation/action methods: a preview
+ * only ever opens the one URL its owning service was granted. Hiding it
+ * (`setVisible(false)`, what closing the preview tab does) never touches
+ * the underlying run — see `previewBrowser.ts`'s module comment.
+ */
+export interface PreviewIpc {
+  attach(): Promise<void>;
+  setBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
+  setVisible(visible: boolean): Promise<void>;
+  /** Rejects with the same reason `previewAccessBlockedReason` would give if the URL's origin has no active grant. */
+  open(url: string): Promise<void>;
+  /**
+   * Screenshots the currently open page, folds it into the console/network
+   * evidence captured since the last `open()`, persists the bundle, and
+   * returns it (FX-BE-056 / TASK-147). `undefined` when nothing is
+   * currently open with a resolvable grant to attribute the capture to.
+   */
+  captureDiagnostics(): Promise<BrowserDiagnosticsBundle | undefined>;
 }
 
-function AiSection({
-  settings,
-  update,
-  connections
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-  connections: Connection[];
-}) {
-  const category = CATEGORIES.find(c => c.id === 'ai')!;
-  const { confirm } = useDialogs();
-  const [statuses, setStatuses] = useState<AiProviderStatus[]>([]);
-  const [tab, setTab] = useState<AiTab>('providers');
-  /** Set when a switch was pressed on a provider that is not set up yet: focus its first setup field once it opens. */
-  const [setupFocus, setSetupFocus] = useState<AiProvider>();
-  const [selectedProviderId, setSelectedProviderId] = useState<AiProvider>(settings.ai.activeProvider);
-  const [expandedProviderId, setExpandedProviderId] = useState<AiProvider | undefined>(settings.ai.activeProvider);
-  const [keyDraft, setKeyDraft] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [installingCli, setInstallingCli] = useState(false);
-  const [latestCliVersion, setLatestCliVersion] = useState<{ provider: AiProvider; version?: string; loading: boolean }>({ provider: settings.ai.activeProvider, loading: false });
-  const [resettingKeys, setResettingKeys] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const [testSuccess, setTestSuccess] = useState<string | undefined>();
-  const [testingKey, setTestingKey] = useState(false);
-  const [managingModels, setManagingModels] = useState(false);
-  const [addingProvider, setAddingProvider] = useState(false);
-  const [removingProvider, setRemovingProvider] = useState<AiProviderMeta>();
-  const [removing, setRemoving] = useState(false);
-  const [removalError, setRemovalError] = useState<string>();
-  const [presets, setPresets] = useState<ProviderPreset[]>([]);
-  /** A new endpoint being set up from a preset — shown as its own open row until saved or cancelled. */
-  const [newEndpointPreset, setNewEndpointPreset] = useState<ProviderPreset>();
-  const customProviders = settings.ai.customProviders ?? [];
+/**
+ * Update state as the main process sees it. `unsupported` is the ordinary case
+ * in development and in a build published without a feed — not an error.
+ * `available` carries `canInstall: false` when the build can find an update but
+ * cannot apply one (an unsigned macOS bundle; Squirrel.Mac refuses those); the
+ * renderer then points at `releaseUrl` for a manual download instead.
+ */
+export type UpdateStatus =
+  | { state: 'unsupported'; reason: string }
+  | { state: 'checking' }
+  | { state: 'current'; version: string }
+  | { state: 'available'; version: string; canInstall: boolean; releaseUrl?: string }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'ready'; version: string }
+  | { state: 'error'; message: string };
 
-  useEffect(() => {
-    window.praxis.ai.listProviderPresets().then(setPresets).catch(() => setPresets([]));
-  }, []);
+export interface UpdateIpc {
+  getStatus(): Promise<UpdateStatus>;
+  check(): Promise<UpdateStatus>;
+  download(): Promise<UpdateStatus>;
+  /** Quits and relaunches into the downloaded version. */
+  installNow(): Promise<UpdateStatus>;
+  onStatus(listener: (status: UpdateStatus) => void): () => void;
+}
 
-  const reloadStatuses = () => {
-    window.praxis.ai
-      .listProviderStatuses()
-      .then(setStatuses)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  };
+export interface AppIpc {
+  getVersion(): Promise<string>;
+  update: UpdateIpc;
+}
 
-  useEffect(reloadStatuses, []);
+/** Marketplace configuration state, safe to show in the renderer (no token value). */
+export interface MarketplaceStatus {
+  /** `enabled`, an `owner`, and a stored token are all present. */
+  ready: boolean;
+  enabled: boolean;
+  owner: string;
+  ownerType: 'user' | 'org';
+  packageNamePrefix: string;
+  apiBaseUrl: string;
+  registryBaseUrl: string;
+  checkOnLaunch: boolean;
+  hasToken: boolean;
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!AI_PROVIDERS.some(provider => provider.id === selectedProviderId && provider.kind === 'cli-agent' && provider.installPackage)) {
-      setLatestCliVersion({ provider: selectedProviderId, loading: false });
-      return;
-    }
-    setLatestCliVersion({ provider: selectedProviderId, loading: true });
-    window.praxis.ai.getLatestCliProviderVersion(selectedProviderId)
-      .then(result => { if (!cancelled) setLatestCliVersion({ provider: selectedProviderId, version: result.version, loading: false }); })
-      .catch(() => { if (!cancelled) setLatestCliVersion({ provider: selectedProviderId, loading: false }); });
-    return () => { cancelled = true; };
-  }, [selectedProviderId]);
+/** Config the renderer may change — everything in {@link MarketplaceStatus} bar the token. */
+export type MarketplaceConfigPatch = Partial<
+  Pick<
+    MarketplaceSettings,
+    | 'enabled'
+    | 'owner'
+    | 'ownerType'
+    | 'packageNamePrefix'
+    | 'apiBaseUrl'
+    | 'registryBaseUrl'
+    | 'checkOnLaunch'
+  >
+>;
 
-  useEffect(() => {
-    setKeyDraft('');
-    setManagingModels(false);
-    setError(undefined);
-    setTestSuccess(undefined);
-  }, [selectedProviderId]);
+export interface MarketplaceInstallOptions {
+  /** Pin a published version instead of `latest`. */
+  version?: string;
+  /** Grant a non-declarative (`agent`, `skill`) add-on execution trust as part of installing it. */
+  trust?: boolean;
+}
 
-  useEffect(() => {
-    if (!setupFocus || setupFocus !== selectedProviderId || tab !== 'providers') return;
-    if (expandedProviderId !== setupFocus) {
-      setExpandedProviderId(setupFocus);
-      return;
-    }
-    const field = document.querySelector<HTMLElement>(`[data-testid="ai-provider-body-${setupFocus}"] input`);
-    if (field) {
-      field.focus();
-      setSetupFocus(undefined);
-    }
-  }, [setupFocus, selectedProviderId, tab, statuses, expandedProviderId]);
+export interface MarketplaceIpc {
+  getStatus(): Promise<MarketplaceStatus>;
+  /** Persists marketplace config (not the token) and returns the new status. */
+  configure(patch: MarketplaceConfigPatch): Promise<MarketplaceStatus>;
+  /** Stores or (with `null`) clears the GitHub token in the OS-encrypted secret store. */
+  setToken(token: string | null): Promise<MarketplaceStatus>;
+  /** The browsable catalogue — every publishable add-on, resolved to its latest version. */
+  listCatalog(): Promise<CatalogEntry[]>;
+  listInstalled(): Promise<InstalledAddon[]>;
+  /** Enabled declarative appearance content, for the renderer to register over the user's own. */
+  listActiveAppearance(): Promise<ActiveAppearanceAddons>;
+  install(packageName: string, options?: MarketplaceInstallOptions): Promise<InstalledAddon>;
+  update(kind: AddonKind, id: string): Promise<InstalledAddon>;
+  remove(kind: AddonKind, id: string): Promise<void>;
+  checkForUpdates(): Promise<AddonUpdate[]>;
+  /** Grants or revokes execution trust for an installed non-declarative (`agent`, `skill`) add-on. */
+  setTrust(kind: AddonKind, id: string, enabled: boolean): Promise<void>;
+  /** Fires after any install/remove/update/trust change. */
+  onChanged(listener: () => void): () => void;
+}
 
-  const selectedCustom = customProviders.find(provider => provider.id === selectedProviderId);
-  const selectedMeta: AiProviderMeta = AI_PROVIDERS.find(p => p.id === selectedProviderId) ?? {
-    id: selectedProviderId,
-    kind: 'api',
-    label: selectedCustom?.label ?? selectedProviderId,
-    keyLabel: `${selectedCustom?.label ?? 'Endpoint'} API key`,
-    urlPlaceholder: '',
-    modelPlaceholder: ''
-  };
-  const selectedStatus = statuses.find(s => s.provider === selectedProviderId);
-  const selectedConfig = settings.ai.providers[selectedProviderId] ?? {};
-  const isVercel = selectedProviderId === 'vercel-gateway';
-  const isApi = selectedMeta.kind === 'api';
-
-  const applyKey = async (value: string) => {
-    setBusy(true);
-    setError(undefined);
-    setTestSuccess(undefined);
-    try {
-      await window.praxis.ai.setProviderApiKey(selectedProviderId, value);
-      reloadStatuses();
-      setKeyDraft('');
-      if (value.trim()) {
-        try {
-          const res = await window.praxis.ai.testProviderApiKey(selectedProviderId);
-          setTestSuccess(`Key saved. ${res.message}`);
-        } catch (testErr) {
-          setError(`Key saved, but connection test failed: ${testErr instanceof Error ? testErr.message : String(testErr)}`);
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const testKey = async () => {
-    setTestingKey(true);
-    setError(undefined);
-    setTestSuccess(undefined);
-    try {
-      if (keyDraft.trim()) {
-        await window.praxis.ai.setProviderApiKey(selectedProviderId, keyDraft.trim());
-        reloadStatuses();
-        setKeyDraft('');
-      }
-      const res = await window.praxis.ai.testProviderApiKey(selectedProviderId);
-      setTestSuccess(res.message);
-    } catch (err) {
-      setError(`Connection test failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setTestingKey(false);
-    }
-  };
-
-  const installCli = async (updating = false) => {
-    if (!selectedMeta.installPackage) return;
-    if (!(await confirm({
-      title: `${updating ? 'Update' : 'Install'} ${selectedMeta.label} ACP?`,
-      message: `Praxis will use an available package manager to ${updating ? 'update' : 'install'} ${selectedMeta.installPackage} globally. The package is fixed by this provider and is not editable here.`,
-      confirmLabel: updating ? 'Update ACP' : 'Install ACP'
-    }))) return;
-    setInstallingCli(true);
-    setError(undefined);
-    setTestSuccess(undefined);
-    try {
-      const result = await window.praxis.ai.installCliProvider(selectedProviderId);
-      setTestSuccess(result.message);
-      reloadStatuses();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setInstallingCli(false);
-    }
-  };
-
-  const resetProviderKeys = async () => {
-    if (!(await confirm({ title: 'Reset saved AI provider keys?', message: 'You will need to enter them again.', confirmLabel: 'Reset keys', danger: true }))) return;
-    setResettingKeys(true);
-    setError(undefined);
-    try {
-      await window.praxis.ai.resetProviderApiKeys();
-      setStatuses([]);
-      reloadStatuses();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setResettingKeys(false);
-    }
-  };
-
-  const statusText = (status: AiProviderStatus | undefined, meta: AiProviderMeta): string => {
-    if (!status) {
-      return 'Checking…';
-    }
-    if (meta.kind === 'cli-agent') {
-      // No API key concept — `configured` here is a real, free check that
-      // the command actually resolves to a spawnable executable (no ACP
-      // handshake, no LLM call).
-      return status.configured
-        ? `Runs "${status.gatewayUrl}" — sign in with the CLI's own auth if it asks.`
-        : (meta.notInstalledHint ?? `Not found: "${status.gatewayUrl}".`);
-    }
-    if (status.custom) {
-      const config = customProviders.find(provider => provider.id === status.provider);
-      const where = config ? endpointDisplayUrl(config) : status.gatewayUrl;
-      const key = status.needsKey === false ? 'no key' : status.configured ? 'key saved' : 'add an API key';
-      const tested = status.capabilities
-        ? status.capabilities.tools ? '' : ' · chat only — not offered for agent sessions or workflows'
-        : ' · not tested yet';
-      return `${where} · ${key}${tested}`;
-    }
-    return status.configured
-      ? status.keySource === 'secret'
-        ? 'Configured — API key stored in the OS keychain.'
-        : 'Configured — API key resolved from the environment.'
-      : 'Not configured — add an API key to enable AI sessions.';
-  };
+/** Durable app-managed projects and their default local boards. */
+export interface ProjectsIpc {
+  list(): Promise<ProjectRecord[]>;
+  get(projectId: string): Promise<ProjectRecord | undefined>;
+  /** Creates a project and assigns it to an existing workspace atomically. */
+  create(input: CreateProjectInput, workspaceId: string): Promise<ProjectRecord>;
+  useExisting(projectId: string, workspaceId: string): Promise<ProjectRecord>;
+  /** Removes a project record; its generated project board is removed with it. */
+  remove(projectId: string): Promise<void>;
+  update(projectId: string, patch: UpdateProjectInput): Promise<ProjectRecord>;
+  inspectFolder(folderPath: string): Promise<FolderInspection>;
+  attachFolder(projectId: string, input: AttachProjectFolderInput): Promise<AttachProjectFolderResult>;
+  linkBoard(projectId: string, board: ProjectBoardReference): Promise<ProjectRecord>;
+  unlinkBoard(projectId: string, connectionId: string, boardId: string): Promise<ProjectRecord>;
+  listDocuments(projectId: string): Promise<ProjectDocumentsResult>;
+  readDocument(projectId: string, relativePath: string): Promise<ProjectDocument>;
 
   /**
-   * The Providers tab lists the providers in use: configured (key saved / CLI
-   * found), the default, explicitly added from the catalog, or a custom
-   * endpoint. Everything else waits in Add provider.
+   * Scans a picked parent folder for plans folders to import as projects —
+   * step 1 of the import wizard. Merges two scans (plans roots and Git
+   * repository roots); a repository with no discoverable plans is skipped
+   * rather than guessed at.
    */
-  const isListed = (id: AiProvider): boolean => {
-    if (settings.ai.activeProvider === id) return true;
-    if (settings.ai.providers[id]?.added === false) return false;
-    if (settings.ai.providers[id]?.added) return true;
-    if (id.startsWith('custom:')) return true;
-    return statuses.find(status => status.provider === id)?.configured === true;
-  };
-  const listedMetas: AiProviderMeta[] = [
-    ...AI_PROVIDERS.filter(meta => isListed(meta.id)),
-    ...customProviders.map(config => ({
-      id: config.id,
-      kind: 'api' as const,
-      label: config.label,
-      keyLabel: `${config.label} API key`,
-      urlPlaceholder: '',
-      modelPlaceholder: ''
-    }))
-  ];
-  const listedIds = new Set<string>(listedMetas.map(meta => meta.id));
-  const catalogBuiltIns: BuiltInCatalogEntry[] = AI_PROVIDERS.map(meta => ({ id: meta.id, kind: meta.kind, label: meta.label }));
-  const unlistedBuiltIns = AI_PROVIDERS.filter(meta => !listedIds.has(meta.id)).length;
+  discoverImports(folderPath: string): Promise<ProjectImportRow[]>;
+  /** Re-validates edited rows (unique, well-formed project keys) before creation. */
+  validateImports(rows: ProjectImportRow[]): Promise<string | undefined>;
+  /** Creates a folder-backed project per selected row and adds them to the workspace. */
+  createFromImports(rows: ProjectImportRow[], workspaceId: string): Promise<ProjectRecord[]>;
 
-  const openRow = (id: AiProvider) => {
-    setSelectedProviderId(id);
-    setExpandedProviderId(id);
-  };
-
-  const addBuiltIn = async (id: AiProvider) => {
-    setAddingProvider(false);
-    await update({ ai: { providers: { [id]: { ...(settings.ai.providers[id] ?? {}), added: true, enabled: true } } } });
-    openRow(id);
-    if (statuses.find(status => status.provider === id)?.configured !== true) setSetupFocus(id);
-  };
-
-  const startEndpoint = (preset: ProviderPreset) => {
-    setAddingProvider(false);
-    setNewEndpointPreset(preset);
-    setExpandedProviderId(undefined);
-  };
-
-  const requestRemoval = (meta: AiProviderMeta) => {
-    if (listedMetas.length <= 1) return;
-    setRemovalError(undefined);
-    setRemovingProvider(meta);
-  };
-
-  const removeProvider = async (replacement?: AiProvider) => {
-    if (!removingProvider || removing || listedMetas.length <= 1) return;
-    const id = removingProvider.id;
-    const isDefault = settings.ai.activeProvider === id;
-    if (isDefault && (!replacement || !listedMetas.some(meta => meta.id === replacement && meta.id !== id))) return;
-    setRemoving(true);
-    setRemovalError(undefined);
-    try {
-      await update({ ai: {
-        ...(isDefault ? { activeProvider: replacement } : {}),
-        ...(settings.ai.recommendationProvider === id ? { recommendationProvider: undefined } : {}),
-        providers: {
-          [id]: { ...(settings.ai.providers[id] ?? {}), added: false, enabled: false },
-          ...(isDefault && replacement ? { [replacement]: { ...(settings.ai.providers[replacement] ?? {}), enabled: true } } : {})
-        }
-      } });
-      if (id.startsWith('custom:')) await window.praxis.ai.removeCustomProvider(id);
-      setExpandedProviderId(undefined);
-      setSelectedProviderId(replacement ?? settings.ai.activeProvider);
-      setRemovingProvider(undefined);
-      reloadStatuses();
-    } catch (err) {
-      setRemovalError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRemoving(false);
-    }
-  };
-
-  const urlValue = isVercel ? settings.ai.gatewayUrl : selectedConfig.baseUrl ?? '';
-  const modelValue = isVercel ? settings.ai.defaultModel : selectedConfig.defaultModel ?? '';
-
-  const commitUrl = (value: string) =>
-    isVercel
-      ? update({ ai: { gatewayUrl: value } })
-      : update({
-          ai: {
-            providers: { [selectedProviderId]: { ...selectedConfig, baseUrl: value || undefined } }
-          }
-        });
-
-  const commitModel = (value: string) =>
-    isVercel
-      ? update({ ai: { defaultModel: value } })
-      : update({
-          ai: {
-            providers: {
-              [selectedProviderId]: { ...selectedConfig, defaultModel: value || undefined }
-            }
-          }
-        });
-
-  const saveProviderTiers = (entry: { fast?: string; standard?: string; strong?: string }) => {
-    const next = { ...(settings.ai.modelTiers ?? {}) };
-    if (Object.keys(entry).length > 0) next[selectedProviderId] = entry;
-    else delete next[selectedProviderId];
-    void update({ ai: { modelTiers: next } });
-  };
-
-  if (managingModels) {
-    return (
-      <ModelManagerPanel
-        providerId={selectedProviderId}
-        providerLabel={selectedMeta.label}
-        enabledModelIds={selectedConfig.enabledModelIds}
-        providerConfig={selectedConfig}
-        tiers={settings.ai.modelTiers?.[selectedProviderId] ?? {}}
-        onTiersChange={saveProviderTiers}
-        onBack={() => setManagingModels(false)}
-        update={update}
-      />
-    );
-  }
-
-  const tabs: Array<{ id: AiTab; label: string }> = [
-    { id: 'providers', label: 'Providers' },
-    { id: 'defaults', label: 'Defaults' },
-    { id: 'tools', label: 'Tools' }
-  ];
-
-  return (
-    <>
-      {removingProvider && <RemoveProviderDialog provider={removingProvider}
-        isDefault={settings.ai.activeProvider === removingProvider.id}
-        remaining={listedMetas.filter(meta => meta.id !== removingProvider.id)} busy={removing} error={removalError}
-        onClose={() => setRemovingProvider(undefined)} onRemove={replacement => void removeProvider(replacement)} />}
-      <CategoryHeader category={category} />
-      {error && (
-        <div className="error-banner">
-          <span>{error}</span>
-          {error.includes('safeStorage.decryptString') && (
-            <button
-              type="button"
-              className="btn"
-              data-testid="ai-reset-provider-keys"
-              disabled={resettingKeys}
-              onClick={() => void resetProviderKeys()}
-            >
-              {resettingKeys ? 'Resetting…' : 'Reset encrypted provider keys'}
-            </button>
-          )}
-        </div>
-      )}
-
-
-      <div className="settings-tabs" role="tablist" aria-label="AI provider settings" data-testid="ai-tabs">
-        {tabs.map(entry => (
-          <button
-            key={entry.id}
-            type="button"
-            role="tab"
-            id={`ai-tab-${entry.id}`}
-            aria-selected={tab === entry.id}
-            aria-controls={`ai-tabpanel-${entry.id}`}
-            className={tab === entry.id ? 'active' : ''}
-            data-testid={`ai-tab-${entry.id}`}
-            onClick={() => setTab(entry.id)}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </div>
-
-      <div role="tabpanel" id={`ai-tabpanel-${tab}`} aria-labelledby={`ai-tab-${tab}`} data-testid={`ai-tabpanel-${tab}`}>
-        {tab === 'providers' && (
-          <>
-            <div className="ai-providers-toolbar">
-              <p className="settings-hint">
-                The providers you use. The default one is used for new sessions; each provider&rsquo;s connection details open
-                under its row.
-              </p>
-              <button type="button" className="btn btn-primary" data-testid="ai-add-provider" onClick={() => setAddingProvider(true)}>
-                <Icon name="plus" size={13} />
-                Add provider
-              </button>
-            </div>
-            <div className="ai-provider-list" data-testid="ai-provider-list">
-              {newEndpointPreset && (
-                <div className="ai-provider-row is-open" data-testid="ai-provider-row-new">
-                  <div className="ai-provider-head is-static">
-                    <span className="ai-provider-chevron" aria-hidden>
-                      <Icon name="chevron-down" size={13} />
-                    </span>
-                    <div className="ai-provider-text">
-                      <div className="ai-provider-name">
-                        New endpoint
-                        <span className="ai-provider-kind">{newEndpointPreset.id === 'custom' ? 'OpenAI-compatible' : newEndpointPreset.label}</span>
-                      </div>
-                      <div className="ai-provider-meta">Not saved yet — test it, then save.</div>
-                    </div>
-                  </div>
-                  <div className="ai-provider-body" data-testid="ai-provider-body-new">
-                    <CustomEndpointForm
-                      key={newEndpointPreset.id}
-                      preset={newEndpointPreset}
-                      onCancel={() => setNewEndpointPreset(undefined)}
-                      onSaved={config => {
-                        setNewEndpointPreset(undefined);
-                        reloadStatuses();
-                        openRow(config.id);
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-              {listedMetas.map(meta => {
-                const rowStatus = statuses.find(s => s.provider === meta.id);
-                const isDefault = settings.ai.activeProvider === meta.id;
-                const isOpen = expandedProviderId === meta.id;
-                const configured = rowStatus?.configured === true;
-                const enabled = settings.ai.providers[meta.id]?.enabled !== false;
-                const on = configured && enabled;
-                const custom = customProviders.find(provider => provider.id === meta.id);
-                const kindTag = custom
-                  ? presets.find(preset => preset.id === custom.presetId)?.group === 'local' ? 'Local' : 'OpenAI-compatible'
-                  : meta.kind === 'cli-agent' ? 'CLI' : 'API';
-                const switchTitle = !rowStatus
-                  ? 'Checking…'
-                  : !configured
-                    ? meta.kind === 'cli-agent'
-                      ? 'Not installed yet — opens its setup (install the CLI or set its path)'
-                      : 'Not set up yet — opens its setup (add an API key)'
-                    : isDefault
-                      ? 'This is the default provider — choose another default to turn it off'
-                      : on
-                        ? 'Turn off'
-                        : 'Turn on';
-                return (
-                  <div
-                    key={meta.id}
-                    className={`ai-provider-row${isOpen ? ' is-open' : ''}${on ? '' : ' is-off'}`}
-                    data-testid={`ai-provider-row-${meta.id}`}
-                  >
-                    <div
-                      className="ai-provider-head"
-                      role="button"
-                      tabIndex={0}
-                      aria-expanded={isOpen}
-                      onClick={() => {
-                        setSelectedProviderId(meta.id);
-                        setExpandedProviderId(current => current === meta.id ? undefined : meta.id);
-                      }}
-                      onKeyDown={event => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          setSelectedProviderId(meta.id);
-                          setExpandedProviderId(current => current === meta.id ? undefined : meta.id);
-                        }
-                      }}
-                    >
-                      <div className="ai-provider-card-identity">
-                        <div className="ai-provider-card-logo">
-                          <ProviderBrandLogo provider={meta.id} size={32} />
-                        </div>
-                        <div className="ai-provider-card-names">
-                          <div className="ai-provider-name">
-                            <span>{meta.label}</span>
-                            <span className="ai-provider-kind">{kindTag}</span>
-                            {isDefault && <span className="chip ai-provider-default" data-testid={`ai-provider-default-${meta.id}`}>Default</span>}
-                          </div>
-                          <div className="ai-provider-meta" data-testid={isOpen ? 'ai-provider-status' : undefined}>
-                            {enabled ? '' : 'Turned off. '}
-                            {statusText(rowStatus, meta)}
-                          </div>
-                          {custom?.capabilities && (
-                            <div className="ai-provider-caps" data-testid={`ai-provider-caps-${meta.id}`}>
-                              {(['models', 'chat', 'streamUsage', 'tools'] as const).map(capability => (
-                                <span
-                                  key={capability}
-                                  className={`ai-provider-cap${custom.capabilities![capability] ? '' : ' is-missing'}`}
-                                  data-capability={capability}
-                                  data-ok={custom.capabilities![capability] ? 'true' : 'false'}
-                                >
-                                  <Icon name={custom.capabilities![capability] ? 'check' : 'close'} size={10} />
-                                  {CAPABILITY_LABELS[capability]}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="ai-provider-card-actions">
-                        <span className={`ai-provider-card-status ${!configured ? 'is-warn' : !on ? 'is-offline' : ''}`}>
-                          <span className="ai-provider-status-dot" />
-                          <span>{!configured ? (meta.kind === 'cli-agent' ? 'Not on PATH' : 'Setup') : on ? 'Active' : 'Off'}</span>
-                        </span>
-                        {!isDefault && enabled && (
-                          <button
-                            type="button"
-                            className="btn btn-compact"
-                            data-testid={`ai-provider-set-active-${meta.id}`}
-                            aria-label={`Use ${meta.label} for new sessions`}
-                            onClick={event => {
-                              event.stopPropagation();
-                              void update({ ai: { activeProvider: meta.id } });
-                            }}
-                          >
-                            Make default
-                          </button>
-                        )}
-                        <button type="button" className="btn btn-compact" data-testid={`ai-provider-remove-${meta.id}`}
-                          aria-label={`Remove ${meta.label}`} disabled={listedMetas.length <= 1 || removing}
-                          title={listedMetas.length <= 1 ? 'Keep at least one AI provider' : `Remove ${meta.label}`}
-                          onKeyDown={event => event.stopPropagation()}
-                          onClick={event => { event.stopPropagation(); requestRemoval(meta); }}>
-                          Remove
-                        </button>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={on}
-                          aria-label={`${meta.label} enabled`}
-                          title={switchTitle}
-                          className="switch"
-                          data-testid={`ai-provider-enabled-${meta.id}`}
-                          disabled={!rowStatus || (configured && isDefault)}
-                          onClick={event => {
-                            event.stopPropagation();
-                            if (!configured) {
-                              setSelectedProviderId(meta.id);
-                              setSetupFocus(meta.id);
-                              return;
-                            }
-                            void update({
-                              ai: { providers: { [meta.id]: { ...(settings.ai.providers[meta.id] ?? {}), enabled: !on } } }
-                            });
-                          }}
-                        />
-                        <span className="ai-provider-chevron" aria-hidden>
-                          <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={13} />
-                        </span>
-                      </div>
-                    </div>
-                    {isOpen && custom && (
-                      <div className="ai-provider-body" data-testid={`ai-provider-body-${meta.id}`}>
-                        <CustomEndpointForm
-                          key={custom.id}
-                          initial={custom}
-                          defaultModel={settings.ai.providers[custom.id]?.defaultModel ?? ''}
-                          keySaved={rowStatus?.keySource === 'secret'}
-                          onSaved={() => reloadStatuses()}
-                          onRemove={listedMetas.length > 1 ? () => requestRemoval(meta) : undefined}
-                        />
-                        <FieldRow
-                          label="Models"
-                          description={
-                            selectedConfig.enabledModelIds
-                              ? `${selectedConfig.enabledModelIds.length} of the fetched catalog selected for the composer's Model picker.`
-                              : "Every fetched model is offered in the composer's Model picker (no curation set)."
-                          }
-                        >
-                          <button type="button" className="btn" data-testid="ai-manage-models-btn" onClick={() => setManagingModels(true)}>
-                            Manage models…
-                          </button>
-                        </FieldRow>
-                        <FieldRow
-                          label="Model tiers"
-                          stacked
-                          description={`What fast, standard and strong mean on ${meta.label}. A workflow stage names a tier, so the same workflow runs on whichever provider is used; a tier left unset uses the run's model.`}
-                        >
-                          <ProviderModelTiers
-                            key={meta.id}
-                            provider={meta.id}
-                            tiers={settings.ai.modelTiers?.[meta.id] ?? {}}
-                            onChange={saveProviderTiers}
-                          />
-                        </FieldRow>
-                      </div>
-                    )}
-                    {isOpen && !custom && (
-                      <div className="ai-provider-body" data-testid={`ai-provider-body-${meta.id}`}>
-                        {!configured && rowStatus && (
-                          <>
-                            <p className="settings-hint ai-provider-setup-hint" data-testid={`ai-provider-setup-hint-${meta.id}`}>
-                              {meta.kind === 'cli-agent'
-                                ? 'Install the CLI, or set its path below, to turn this provider on. It switches on as soon as it is found.'
-                                : 'Add an API key below to turn this provider on. It switches on as soon as the key is saved.'}
-                            </p>
-                            {meta.installPackage && !selectedConfig.cliPath?.trim() && (
-                              <div className="ai-provider-body-actions">
-                                <button
-                                  type="button"
-                                  className="btn btn-primary btn-compact"
-                                  data-testid={`ai-provider-install-${meta.id}`}
-                                  disabled={installingCli}
-                                  onClick={() => void installCli()}
-                                >
-                                  {installingCli ? 'Installing…' : 'Install ACP'}
-                                </button>
-                                <span className="settings-field-help">Uses npm, pnpm, yarn, or bun when available.</span>
-              </div>
-                            )}
-                          </>
-                        )}
-                        {meta.kind === 'cli-agent' && meta.installPackage && rowStatus?.configured && !selectedConfig.cliPath?.trim() && (
-                          <section className="ai-acp-version" aria-label={`${meta.label} ACP versions`} data-testid={`ai-provider-acp-versions-${meta.id}`}>
-                            <div className="ai-acp-version-heading">ACP package version</div>
-                            <dl className="ai-acp-version-list">
-                              <div className="ai-acp-version-item">
-                                <dt>Installed</dt>
-                                <dd data-testid={`ai-provider-acp-current-${meta.id}`}>
-                                  {rowStatus?.preflight?.providerVersion ? `v${rowStatus.preflight.providerVersion}` : rowStatus?.configured ? 'Version unavailable' : 'Not installed'}
-                                </dd>
-                              </div>
-                              <div className="ai-acp-version-item">
-                                <dt>Latest</dt>
-                                <dd data-testid={`ai-provider-acp-latest-${meta.id}`}>
-                                  {latestCliVersion.provider !== meta.id || latestCliVersion.loading ? 'Checking…' : latestCliVersion.version ? `v${latestCliVersion.version}` : 'Could not check'}
-                                </dd>
-                              </div>
-                            </dl>
-                            <div className="ai-provider-body-actions">
-                              <button
-                                type="button"
-                                className="btn btn-compact"
-                                data-testid={`ai-provider-update-${meta.id}`}
-                                disabled={installingCli || !latestCliVersion.version || (rowStatus?.preflight?.providerVersion === latestCliVersion.version)}
-                                onClick={() => void installCli(true)}
-                              >
-                                {installingCli ? 'Updating…' : rowStatus?.preflight?.providerVersion && latestCliVersion.version === rowStatus.preflight.providerVersion ? 'Up to date' : 'Update ACP'}
-                              </button>
-                            </div>
-                          </section>
-                        )}
-              {isApi && (
-                <>
-                  <FieldRow
-                    label="API key"
-                    stacked
-                    description={`${selectedMeta.keyLabel}. Stored encrypted in the OS keychain; it is never shown again after saving.`}
-                  >
-                    {/* Wraps instead of squeezing: in a narrow row the buttons used to wrap their own
-                        labels and push Test/Clear past the edge. */}
-                    <div className="ai-key-controls">
-                      <input
-                        type="password"
-                        className="input"
-                        data-testid="ai-api-key-input"
-                        aria-label={selectedMeta.keyLabel}
-                        placeholder={selectedStatus?.configured ? '••••••••  (saved)' : 'Paste API key'}
-                        value={keyDraft}
-                        onChange={event => setKeyDraft(event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        data-testid="ai-api-key-save"
-                        disabled={busy || testingKey || !keyDraft.trim()}
-                        onClick={() => void applyKey(keyDraft)}
-                      >
-                        Save key
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        data-testid="ai-api-key-test"
-                        disabled={busy || testingKey || (!selectedStatus?.configured && !keyDraft.trim())}
-                        onClick={() => void testKey()}
-                      >
-                        {testingKey ? 'Testing…' : 'Test key'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        data-testid="ai-api-key-clear"
-                        disabled={busy || testingKey || !selectedStatus || selectedStatus.keySource !== 'secret'}
-                        onClick={() => void applyKey('')}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                    {testSuccess && (
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          marginTop: 8,
-                          padding: '7px 11px',
-                          borderRadius: 'var(--radius)',
-                          background: 'color-mix(in srgb, var(--success) 12%, var(--bg))',
-                          color: 'var(--success)',
-                          fontSize: 'var(--text-xs)'
-                        }}
-                        data-testid="ai-api-key-success"
-                      >
-                        <Icon name="check" size={13} />
-                        <span>{testSuccess}</span>
-                      </div>
-                    )}
-                  </FieldRow>
-                  {selectedProviderId === 'z-ai' && (
-                    <FieldRow
-                      label="Z.ai plan type"
-                      description="GLM Coding Plan subscribers must use the coding endpoint. Pay-as-you-go subscribers use the general API endpoint."
-                    >
-                      <ChipSelect
-                        block
-                        ariaLabel="Z.ai plan type"
-                        data-testid="ai-z-ai-plan-select"
-                        value={
-                          selectedConfig.baseUrl === 'https://api.z.ai/api/paas/v4'
-                            ? 'general'
-                            : selectedConfig.baseUrl === 'https://api.z.ai/api/coding/paas/v4' || !selectedConfig.baseUrl
-                              ? 'coding'
-                              : 'custom'
-                        }
-                        onChange={val => {
-                          if (val === 'coding') {
-                            void commitUrl('https://api.z.ai/api/coding/paas/v4');
-                          } else if (val === 'general') {
-                            void commitUrl('https://api.z.ai/api/paas/v4');
-                          }
-                        }}
-                        options={[
-                          { value: 'coding', label: 'GLM Coding Plan', description: 'https://api.z.ai/api/coding/paas/v4', meta: 'Recommended' },
-                          { value: 'general', label: 'General API / Pay-as-you-go', description: 'https://api.z.ai/api/paas/v4' },
-                          { value: 'custom', label: 'Custom base URL', description: 'Configured below' }
-                        ]}
-                      />
-                    </FieldRow>
-                  )}
-                  {(selectedProviderId === 'openai' || selectedProviderId === 'anthropic') && (
-                    <FieldRow
-                      label="Usage Admin API key"
-                      stacked
-                      description={`Optional organization Admin API key for ${selectedMeta.label} account history in AI Usage. Separate from the model API key above. Stored encrypted in the OS keychain; it is never used for model requests.`}
-                    >
-                      <UsageAdminKeyField key={selectedProviderId} provider={selectedProviderId} />
-                    </FieldRow>
-                  )}
-                  <FieldRow
-                    label={isVercel ? 'Gateway URL' : `${selectedMeta.label} base URL`}
-                    description="Leave empty to use the default endpoint."
-                  >
-                    <DebouncedTextField
-                      ariaLabel={isVercel ? 'AI gateway URL' : `${selectedMeta.label} base URL`}
-                      value={urlValue}
-                      onCommit={commitUrl}
-                      placeholder={selectedStatus?.gatewayUrl ?? selectedMeta.urlPlaceholder}
-                    />
-                  </FieldRow>
-                  <FieldRow
-                    label={isVercel ? 'Default model' : `${selectedMeta.label} default model`}
-                    description="Model id used for new agent sessions on this provider. Empty means the service default."
-                  >
-                    <DebouncedTextField
-                      ariaLabel={isVercel ? 'AI default model' : `${selectedMeta.label} default model`}
-                      value={modelValue}
-                      onCommit={commitModel}
-                      placeholder={selectedMeta.modelPlaceholder}
-                    />
-                  </FieldRow>
-                </>
-              )}
-              {!isApi && (
-                <FieldRow
-                  label="CLI path"
-                  description={
-                    selectedMeta.cliPathDescription ??
-                    `Executable to spawn — defaults to "${selectedMeta.defaultCommand}" on PATH. Override with an absolute path if it isn't on PATH.`
-                  }
-                >
-                  <DebouncedTextField
-                    ariaLabel={`${selectedMeta.label} CLI path`}
-                    value={selectedConfig.cliPath ?? ''}
-                    onCommit={value =>
-                      update({
-                        ai: { providers: { [selectedProviderId]: { ...selectedConfig, cliPath: value || undefined } } }
-                      })
-                    }
-                    placeholder={selectedMeta.defaultCommand}
-                  />
-                </FieldRow>
-              )}
-              {hasModelCatalog(selectedProviderId) && (
-                <FieldRow
-                  label="Models"
-                  description={
-                    selectedConfig.enabledModelIds
-                      ? `${selectedConfig.enabledModelIds.length} of the fetched catalog selected for the composer's Model picker.`
-                      : "Every fetched model is offered in the composer's Model picker (no curation set)."
-                  }
-                >
-                  <button
-                    type="button"
-                    className="btn"
-                    data-testid="ai-manage-models-btn"
-                    onClick={() => setManagingModels(true)}
-                  >
-                    Manage models…
-                  </button>
-                </FieldRow>
-              )}
-              <FieldRow
-                label="Model tiers"
-                stacked
-                description={`What fast, standard and strong mean on ${selectedMeta.label}. A workflow stage names a tier, so the same workflow runs on whichever provider is used; a tier left unset uses the run's model. Retrying a stage moves it up a tier.`}
-              >
-                <ProviderModelTiers
-                  key={selectedProviderId}
-                  provider={selectedProviderId}
-                  tiers={settings.ai.modelTiers?.[selectedProviderId] ?? {}}
-                  onChange={saveProviderTiers}
-                />
-              </FieldRow>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <p className="settings-hint ai-providers-footnote" data-testid="ai-providers-footnote">
-              {unlistedBuiltIns > 0 ? `${unlistedBuiltIns} more built-in provider${unlistedBuiltIns === 1 ? '' : 's'}, ` : ''}
-              {presets.filter(preset => preset.group !== 'custom').length} OpenAI-compatible presets and custom endpoints are in{' '}
-              <button type="button" className="link-button" onClick={() => setAddingProvider(true)}>
-                Add provider
-              </button>
-              .{listedMetas.length === 1 && ' Keep at least one AI provider.'}
-            </p>
-            {addingProvider && (
-              <AddProviderDialog
-                builtIns={catalogBuiltIns}
-                listed={listedIds}
-                statuses={statuses}
-                presets={presets}
-                customProviders={customProviders}
-                onClose={() => setAddingProvider(false)}
-                onPickBuiltIn={id => void addBuiltIn(id)}
-                onPickPreset={startEndpoint}
-              />
-            )}
-          </>
-        )}
-
-        {tab === 'defaults' && (
-          <>
-            <FieldRow
-              label="Recommendations provider"
-              description="Which provider lightweight AI recommendations (workflow template pick, workflow agent-for-stage pick) use. Auto prefers the active provider above when configured, else the first configured API provider or available ACP host."
-            >
-              <ChipSelect
-                block
-                ariaLabel="Recommendations provider"
-                data-testid="ai-recommendation-provider-select"
-                value={settings.ai.recommendationProvider ?? ''}
-                onChange={value => void update({ ai: { recommendationProvider: value ? (value as AiProvider) : undefined } })}
-                options={[
-                  { value: '', label: 'Auto (first configured provider)' },
-                  ...[...AI_PROVIDERS, ...customProviders.map(config => ({ id: config.id, kind: 'api' as const, label: config.label }))].filter(
-                    meta =>
-                      (meta.kind === 'api' || meta.kind === 'cli-agent') &&
-                      // A provider that is off is not offered; one that is already chosen stays listed (marked) so the
-                      // picker never shows a blank for a value that is really stored.
-                      (settings.ai.providers[meta.id]?.enabled !== false || settings.ai.recommendationProvider === meta.id)
-                  ).map(meta => ({
-                    value: meta.id,
-                    label: meta.label,
-                    icon: providerIconName(meta.id),
-                    meta: settings.ai.providers[meta.id]?.enabled === false ? 'turned off' : undefined
-                  }))
-                ]}
-              />
-            </FieldRow>
-
-            <FieldRow
-              label="Agent display name"
-              description="Used for agent attribution in comments and commits."
-            >
-              <DebouncedTextField
-                ariaLabel="AI agent display name"
-                value={settings.ai.agentName}
-                onCommit={value => update({ ai: { agentName: value } })}
-                placeholder="e.g. Ticket Agent"
-              />
-            </FieldRow>
-            <FieldRow
-              label="Working directory"
-              description="Default working directory for agent sessions and delivery runs; workflow packs are discovered under its .github/skills folder. Empty means the app's own directory."
-            >
-              <DebouncedTextField
-                ariaLabel="AI working directory"
-                value={settings.ai.workingDirectory}
-                onCommit={value => update({ ai: { workingDirectory: value } })}
-                placeholder="e.g. C:\\dev\\my-repo"
-              />
-            </FieldRow>
-            <FieldRow
-              label="Analysis system prompt"
-              description="System prompt used by the issue analysis chat. Empty disables the analysis action."
-            >
-              <DebouncedTextArea
-                ariaLabel="AI analysis system prompt"
-                value={settings.ai.analysisPrompt}
-                onCommit={value => update({ ai: { analysisPrompt: value } })}
-                placeholder="e.g. You are a senior engineer assessing implementation readiness…"
-              />
-            </FieldRow>
-            <Toggle
-              label="Require confirmed analysis"
-              description="When on, an issue must have a confirmed analysis before it can be delegated or delivered."
-              checked={settings.ai.analysisGateEnabled}
-              testId="ai-analysis-gate-toggle"
-              onChange={next => void update({ ai: { analysisGateEnabled: next } })}
-            />
-          </>
-        )}
-
-
-        {tab === 'tools' && (
-          <>
-            <Toggle
-              label="Let the AI use the in-app browser"
-              description="Full-tools sessions get browser_navigate / browser_read / browser_click / browser_type against a browser docked in the session view. Each navigation to a new host asks first. Loopback and private-network addresses are always blocked."
-              checked={settings.ai.browserTools.enabled}
-              testId="ai-browser-tools-toggle"
-              onChange={next => void update({ ai: { browserTools: { enabled: next } } })}
-            />
-            {settings.ai.browserTools.allowedHosts.length > 0 && (
-              <FieldRow
-                label="Allowed browser hosts"
-                description="Hosts the agent may open without asking (added when you choose “Always allow”). Edit the settings file to remove one."
-              >
-                <div className="ai-allowed-hosts" data-testid="ai-browser-allowed-hosts">
-                  {settings.ai.browserTools.allowedHosts.map(host => (
-                    <span key={host} className="chip">{host}</span>
-                  ))}
-                </div>
-              </FieldRow>
-            )}
-            <McpServersPanel
-              servers={settings.ai.mcpServers ?? []}
-              onChange={next => update({ ai: { mcpServers: next } })}
-            />
-          </>
-        )}
-      </div>
-    </>
-  );
+  /**
+   * Reads the project's `run.praxis.json` (FX-BE-054 / TASK-143). No profile
+   * yet — including a project with no working folder — is `{ issues: [] }`,
+   * not an error; a hand-edited malformed file comes back with `issues`
+   * describing why, per `readRunProfile`'s contract.
+   */
+  getRunProfile(projectId: string): Promise<{ profile?: RunProfile; issues: RunProfileIssue[] }>;
+  /** Validates then writes the project's Run profile; rejects (no write) when invalid. */
+  saveRunProfile(projectId: string, profile: RunProfile): Promise<void>;
+  /**
+   * Runs `validateRunProfile` without writing anything — live feedback while
+   * editing. `saveRunProfile` re-validates independently before it writes;
+   * this is a convenience for the editor, not the enforcement point.
+   */
+  validateRunProfile(profile: RunProfile): Promise<RunProfileValidationResult>;
+  /**
+   * Proposes Run services from a shallow scan of the project's working
+   * folder (root plus immediate subdirectories) — reads `package.json` and
+   * `Properties/launchSettings.json` only, never writes anything.
+   */
+  discoverRunServices(projectId: string): Promise<Array<ProposedRunService & { relativeDir: string }>>;
 }
 
-function PerformanceSection({
-  settings,
-  update
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'performance')!;
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <FieldRow label="Request timeout (ms)" description="Min 1000. Applies to MCP requests.">
-        <DebouncedNumberField
-          ariaLabel="Request timeout in milliseconds"
-          value={settings.performance.requestTimeoutMs}
-          min={1000}
-          onCommit={value => update({ performance: { requestTimeoutMs: value } })}
-        />
-      </FieldRow>
-      <FieldRow label="Default page size" description="Between 5 and 100 issues per page.">
-        <DebouncedNumberField
-          ariaLabel="Default page size"
-          value={settings.performance.defaultPageSize}
-          min={5}
-          max={100}
-          onCommit={value => update({ performance: { defaultPageSize: value } })}
-        />
-      </FieldRow>
-    </>
-  );
+/** Saved workspaces — named groupings of projects/connections the user can switch between and export to a file. */
+export interface WorkspacesIpc {
+  list(): Promise<WorkspaceRecord[]>;
+  get(workspaceId: string): Promise<WorkspaceRecord | undefined>;
+  create(input: CreateWorkspaceInput): Promise<WorkspaceRecord>;
+  setActive(workspaceId: string | undefined): Promise<void>;
+  update(workspaceId: string, patch: UpdateWorkspaceInput): Promise<WorkspaceRecord>;
+  remove(workspaceId: string): Promise<void>;
+  saveToFile(workspaceId: string): Promise<string | undefined>;
+  openFromFile(): Promise<WorkspaceRecord | undefined>;
+  openFolder(folderPath: string): Promise<WorkspaceRecord | undefined>;
 }
 
-function compactMobilePairingPayload(invitation: MobilePairingInvitation): string {
-  const endpoint = invitation.endpoints[0];
-  const host = endpoint ? `${endpoint.address}:${endpoint.port}` : '';
-  // Trailing and optional (FX-BE-079); mirrors core's compactMobilePairingPayload.
-  const relay = invitation.relay ? [invitation.relay.url, invitation.relay.channel] : [];
-  return [`P${invitation.version}`, invitation.hostId, invitation.publicKeyHex, host, invitation.tokenId, invitation.expiresAt, ...relay].join('|');
+/** Starts (or restarts) the interactive review of one ticket. */
+export interface AiTicketReviewInput {
+  issueKey: string;
+  connectionId?: string;
+  /** Provider override; defaults to `settings.ai.activeProvider`. */
+  provider?: AiProvider;
+  model?: string;
 }
 
-function MobileAccessSection({
-  settings,
-  update
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'mobile')!;
-  const { confirm } = useDialogs();
-  const [snapshot, setSnapshot] = useState<MobilePairingSnapshot>();
-  const [copied, setCopied] = useState(false);
-  const [grantApprove, setGrantApprove] = useState(false);
-  const [grantProjects, setGrantProjects] = useState<string[]>([]);
-  const [subnetError, setSubnetError] = useState<string>();
-
-  useEffect(() => {
-    void window.praxis.settings.getMobileHostInfo().then(setSnapshot);
-    return window.praxis.settings.onMobilePairingChanged(setSnapshot);
-  }, []);
-
-  useEffect(() => {
-    void window.praxis.settings.getMobileHostInfo().then(setSnapshot);
-  }, [settings.mobileAccess.mode, settings.mobileAccess.hostName, settings.mobileAccess.listenPort, settings.mobileAccess.allowedInterfaces, settings.mobileAccess.allowedSubnets]);
-
-  const pending = snapshot?.pending[0];
-  const invitation = snapshot?.invitation;
-  const payload = invitation ? compactMobilePairingPayload(invitation) : '';
-  const listener = snapshot?.listener;
-  const internet = settings.mobileAccess.mode === 'internet';
-
-  const copyInvitation = async () => {
-    if (!invitation) return;
-    await navigator.clipboard.writeText(JSON.stringify(invitation));
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
-
-  const confirmPending = async () => {
-    if (!pending) return;
-    const projectIds = grantProjects.length ? grantProjects : snapshot?.projects.map(project => project.id) ?? [];
-    const capabilities: MobileCapability[] = grantApprove ? ['view', 'execute', 'approve'] : ['view', 'execute'];
-    setSnapshot(await window.praxis.settings.confirmMobilePairing(pending.requestId, { capabilities, projectIds }));
-  };
-
-  const resetKey = async () => {
-    if (!(await confirm({
-      title: 'Reset host key?',
-      message: 'Every paired phone will distrust this desktop and must pair again. The private key never leaves this machine.',
-      danger: true,
-      confirmLabel: 'Reset host key',
-    }))) return;
-    setSnapshot(await window.praxis.settings.rotateMobileHostKey());
-  };
-
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <FieldRow label="Access mode" description="Off binds no listener. Local network accepts direct connections on the selected interfaces and subnets.">
-        <ChipSelect
-          ariaLabel="Mobile access mode"
-          data-testid="mobile-access-mode"
-          value={settings.mobileAccess.mode}
-          onChange={value => void update({ mobileAccess: { mode: value as 'off' | 'local-only' | 'internet' } })}
-          options={[
-            { value: 'off', label: 'Off' },
-            { value: 'local-only', label: 'Local network' },
-            { value: 'internet', label: 'Internet relay' }
-          ]}
-        />
-      </FieldRow>
-      <FieldRow label="Host name" description="The friendly desktop name shown on the phone.">
-        <DebouncedTextField
-          ariaLabel="Mobile host name"
-          value={settings.mobileAccess.hostName}
-          onCommit={value => update({ mobileAccess: { hostName: value } })}
-          placeholder={snapshot?.hostName ?? 'Praxis desktop'}
-        />
-      </FieldRow>
-      <FieldRow label="Listen port" description="TCP port for the local listener. Changing it drops current phone connections.">
-        <input
-          type="number"
-          min={1024}
-          max={65535}
-          aria-label="Mobile listen port"
-          data-testid="mobile-listen-port"
-          value={settings.mobileAccess.listenPort}
-          onChange={event => void update({ mobileAccess: { listenPort: Number(event.target.value) } })}
-        />
-      </FieldRow>
-      <FieldRow label="Allowed interfaces" description="Comma-separated OS interface names (en0, eth0). Empty allows every local interface." stacked>
-        <DebouncedTextField
-          ariaLabel="Allowed mobile interfaces"
-          value={settings.mobileAccess.allowedInterfaces.join(', ')}
-          onCommit={value => update({ mobileAccess: { allowedInterfaces: value.split(',').map(item => item.trim()).filter(Boolean) } })}
-          placeholder={listener?.interfaces.map(item => item.name).join(', ') || 'All local interfaces'}
-        />
-      </FieldRow>
-      <FieldRow label="Allowed subnets" description="Comma-separated IP addresses or CIDRs such as 192.168.1.0/24. Empty allows local-network addresses on the selected interfaces." stacked>
-        <div className="settings-list">
-          <DebouncedTextField
-            ariaLabel="Allowed mobile subnets"
-            value={settings.mobileAccess.allowedSubnets.join(', ')}
-            onCommit={value => void update({ mobileAccess: { allowedSubnets: value.split(',').map(item => item.trim()).filter(Boolean) } }).then(
-              () => setSubnetError(undefined),
-              (cause: unknown) => setSubnetError((cause instanceof Error ? cause.message : String(cause)).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
-            )}
-            placeholder="e.g. 192.168.1.0/24"
-          />
-          {subnetError && <div className="error-banner" role="alert" data-testid="mobile-subnets-error">{subnetError} The saved list is unchanged.</div>}
-        </div>
-      </FieldRow>
-      <FieldRow label="Listener" description="Live bind state. Discovery advertises identity only — never a pairing grant." stacked>
-        <div className="settings-list" data-testid="mobile-listener-status">
-          <div className="settings-field-help">
-            {listener?.listening ? 'Listening' : 'Not listening'}
-            {listener?.port != null ? ` · port ${listener.port}` : ''}
-            {` · ${listener?.connectionCount ?? 0} connection${listener?.connectionCount === 1 ? '' : 's'}`}
-          </div>
-          <div className="settings-field-help">Addresses: {listener?.addresses.join(', ') || 'No LAN address'}</div>
-          <div className="settings-field-help" data-testid="mobile-discovery-status">
-            Discovery: {listener?.discovery.advertised ? `advertised as ${listener.discovery.displayName}` : 'not advertised'}
-            {listener ? ` · fingerprint ${listener.discovery.fingerprint}` : ''}
-          </div>
-          {listener?.lastError ? <div className="settings-field-help">Bind failed: {listener.lastError}</div> : null}
-        </div>
-      </FieldRow>
-      <FieldRow label="Host identity" description="Phones pin this public key. Resetting it revokes every device." stacked>
-        <div className="settings-list">
-          <div className="settings-field-help">Host ID: {snapshot?.hostId ?? 'Loading…'}</div>
-          <code data-testid="mobile-host-fingerprint">{snapshot?.fingerprint ?? '…'}</code>
-          <button type="button" className="btn" data-testid="mobile-reset-host-key" onClick={() => void resetKey()}>Reset host key</button>
-        </div>
-      </FieldRow>
-      <FieldRow label="Pair a phone" description="Creates a single-use code that expires in 10 minutes. The private host key is never shown." stacked>
-        <div className="settings-list">
-          <button
-            type="button"
-            className="btn"
-            data-testid="mobile-create-pairing"
-            disabled={settings.mobileAccess.mode === 'off'}
-            onClick={() => void window.praxis.settings.createMobilePairingInvitation().then(setSnapshot)}
-          >
-            Create pairing code
-          </button>
-          {invitation ? (
-            <>
-              <div className="mobile-pairing-code" data-testid="mobile-pairing-code">{invitation.tokenId}</div>
-              <div className="settings-field-help">Expires {new Date(invitation.expiresAt).toLocaleTimeString()}</div>
-              {payload ? <QrCodeSvg payload={payload} title="Mobile pairing QR code" /> : null}
-              <button type="button" className="btn" data-testid="mobile-copy-invitation" onClick={() => void copyInvitation()}>
-                {copied ? 'Copied' : 'Copy pairing invitation'}
-              </button>
-            </>
-          ) : (
-            <div className="settings-field-help">No active pairing code.</div>
-          )}
-        </div>
-      </FieldRow>
-      {pending ? (
-        <FieldRow label="Confirm device" description="This phone completed the handshake and is waiting for access." stacked>
-          <div className="settings-list" data-testid="mobile-pending-device">
-            <div className="settings-field-help">{pending.deviceLabel} · {pending.deviceId}</div>
-            <label className="settings-check">
-              <input type="checkbox" checked={grantApprove} onChange={event => setGrantApprove(event.target.checked)} />
-              Allow approvals
-            </label>
-            {snapshot?.projects.map(project => (
-              <label key={project.id} className="settings-check">
-                <input
-                  type="checkbox"
-                  checked={grantProjects.includes(project.id)}
-                  onChange={event => setGrantProjects(current => event.target.checked ? [...current, project.id] : current.filter(id => id !== project.id))}
-                />
-                {project.name}
-              </label>
-            ))}
-            <div>
-              <button type="button" className="btn" data-testid="mobile-confirm-device" onClick={() => void confirmPending()}>Confirm</button>
-              {' '}
-              <button type="button" className="btn" onClick={() => void window.praxis.settings.denyMobilePairing(pending.requestId).then(setSnapshot)}>Deny</button>
-            </div>
-          </div>
-        </FieldRow>
-      ) : null}
-      <FieldRow label="Paired devices" description="Revoking a phone closes its open connection immediately." stacked>
-        <div className="settings-list" data-testid="mobile-paired-devices">
-          {(snapshot?.devices.length ?? 0) === 0 ? <div className="settings-field-help">No paired phones yet.</div> : null}
-          {snapshot?.devices.map(device => (
-            <div key={device.deviceId} className="settings-list-row">
-              <div>
-                <strong>{device.label}</strong>
-                <div className="settings-field-help">
-                  {device.revokedAt ? 'Revoked' : 'Trusted'}
-                  {device.projectIds?.length ? ` · ${device.projectIds.length} project${device.projectIds.length === 1 ? '' : 's'}` : ''}
-                </div>
-              </div>
-              {!device.revokedAt ? (
-                <button type="button" className="btn" onClick={() => void window.praxis.settings.revokeMobilePairedDevice(device.deviceId).then(setSnapshot)}>
-                  Revoke
-                </button>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </FieldRow>
-      <Toggle
-        label="Require sign-in for internet access"
-        description={internet
-          ? 'Internet relay is not available yet. Local pairing still uses the device-to-host encrypted channel.'
-          : 'Local network connections continue to use the device-to-host encrypted channel.'}
-        checked={settings.mobileAccess.remoteSignInRequired}
-        disabled={!internet}
-        onChange={next => void update({ mobileAccess: { remoteSignInRequired: next } })}
-      />
-    </>
-  );
-}
-
-function DeliverySection({
-  settings,
-  update
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'delivery')!;
-  return (
-    <>
-      <CategoryHeader category={category} />
-
-      <Toggle
-        label="Enable delivery workflow"
-        description="Master switch for the AI delivery run action. Requires the publish command and artifact pattern below."
-        checked={settings.delivery.enabled}
-        testId="delivery-enabled-toggle"
-        onChange={next => void update({ delivery: { enabled: next } })}
-      />
-      <FieldRow
-        label="Publish command"
-        description="Repo-specific publish command the delivery agent must run (e.g. the MSI publish script). Wrapped to run against the working directory."
-      >
-        <DebouncedTextField
-          ariaLabel="Delivery publish command"
-          value={settings.delivery.publishCommand}
-          onCommit={value => update({ delivery: { publishCommand: value } })}
-          placeholder="e.g. .\\scripts\\publish-msi.ps1"
-        />
-      </FieldRow>
-      <FieldRow
-        label="Artifact pattern"
-        description="Artifact path or glob the delivery agent must identify after publishing."
-      >
-        <DebouncedTextField
-          ariaLabel="Delivery artifact pattern"
-          value={settings.delivery.artifactPattern}
-          onCommit={value => update({ delivery: { artifactPattern: value } })}
-          placeholder="e.g. dist\\*.msi"
-        />
-      </FieldRow>
-      <FieldRow
-        label="Confirm large workflow runs"
-        description="A run that could start more than this many agent sessions at worst — every loop spent, every retry used — asks before it starts."
-      >
-        <DebouncedNumberField
-          ariaLabel="Confirm runs above this many agent sessions"
-          value={settings.delivery.runConfirmAgentSessions}
-          min={1}
-          max={1000}
-          onCommit={value => update({ delivery: { runConfirmAgentSessions: value } })}
-        />
-      </FieldRow>
-      <FieldRow
-        label="Default base branch"
-        description="Used when a ticket does not specify one. Empty means the agent will ask."
-      >
-        <DebouncedTextField
-          ariaLabel="Default base branch"
-          value={settings.delivery.defaultBaseBranch}
-          onCommit={value => update({ delivery: { defaultBaseBranch: value } })}
-          placeholder="e.g. main"
-        />
-      </FieldRow>
-      <Toggle
-        label="Auto-merge sub tasks"
-        description="When on (default), completed sub-task branches merge into the feature branch automatically."
-        checked={settings.delivery.autoMergeSubTasks}
-        onChange={next => void update({ delivery: { autoMergeSubTasks: next } })}
-      />
-    </>
-  );
-}
-
-function McpSection({
-  settings,
-  update
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'mcp')!;
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <FieldRow label="Workspace MCP server name" description="Used from .vscode/mcp.json when Jira via MCP mode isn't manually configured.">
-        <DebouncedTextField
-          ariaLabel="Workspace MCP server name"
-          value={settings.mcpServer.workspaceServerName}
-          onCommit={value => update({ mcpServer: { workspaceServerName: value } })}
-          placeholder="Optional"
-        />
-      </FieldRow>
-      <FieldRow label="User MCP server reference" description="Used when no workspace MCP server is selected.">
-        <DebouncedTextField
-          ariaLabel="User MCP server reference"
-          value={settings.mcpServer.userServerRef}
-          onCommit={value => update({ mcpServer: { userServerRef: value } })}
-          placeholder="Optional"
-        />
-      </FieldRow>
-    </>
-  );
-}
-
-function PreviewSection({
-  settings,
-  update
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'preview')!;
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <Toggle
-        label="Enable Create Idea"
-        description="Show the Create Idea command and button."
-        checked={settings.preview.enableCreateIdea}
-        onChange={next => void update({ preview: { enableCreateIdea: next } })}
-      />
-      <Toggle
-        label="Enable New Project"
-        description="Show the New Project wizard."
-        checked={settings.preview.enableNewProject}
-        onChange={next => void update({ preview: { enableNewProject: next } })}
-      />
-      <SidebarModeToggle
-        mode={settings.preview.boardsSidebarMode}
-        onChange={next => void update({ preview: { boardsSidebarMode: next } })}
-      />
-      <Toggle
-        label="EasyMode sidebar (experimental)"
-        description="Replaces standard sidebar trees with a simplified Sessions and Automations workspace."
-        checked={settings.preview.enableEasyMode ?? false}
-        onChange={next => void update({ preview: { enableEasyMode: next } })}
-        testId="toggle-enable-easymode"
-      />
-      <Toggle
-        label="Deployments (experimental)"
-        description="Enable deployment profiles, targets, and delivery runs for projects."
-        checked={settings.preview.enableDeployments ?? false}
-        onChange={next => void update({ preview: { enableDeployments: next } })}
-        testId="toggle-enable-deployments"
-      />
-    </>
-  );
-}
-
-function SidebarModeToggle({
-  mode,
-  onChange
-}: {
-  mode: BoardsSidebarMode;
-  onChange: (next: BoardsSidebarMode) => void;
-}) {
-  const isWork = mode === 'work';
-  return (
-    <Toggle
-      label="Boards sidebar — Work Mode"
-      description="Off is Classic (separate views); on is Work Mode (board-centric cards with nested sessions)."
-      checked={isWork}
-      onChange={next => onChange(next ? 'work' : 'classic')}
-    />
-  );
-}
-
-const ADDON_THEME_FALLBACK_PREVIEW: ThemePreviewColors = {
-  canvas: '#1c1c1c', panel: '#242424', raised: '#181818', border: '#3d3d3d',
-  text: '#e4e4e4', muted: '#8a8a8a', accent: '#7c5cff',
-  success: '#3fb950', warning: '#d29922', danger: '#f47067'
-};
-
-/** Builds a gallery-card shape for an uninstalled marketplace theme from its manifest display hints. */
-function addonThemePreview(entry: CatalogEntry): ThemeDefinition {
-  const hint = entry.manifest.display;
-  return {
-    id: entry.manifest.id,
-    name: entry.manifest.name,
-    family: 'Inspired palettes',
-    section: 'Recent',
-    source: 'marketplace',
-    mode: hint?.mode ?? 'dark',
-    description:
-      entry.manifest.summary ??
-      (entry.manifest.author ? `From ${entry.manifest.author}` : 'From your add-on catalogue') +
-        (entry.incompatible ? ' — needs a newer Praxis' : ''),
-    preview: { ...ADDON_THEME_FALLBACK_PREVIEW, ...(hint?.preview ?? {}) } as ThemePreviewColors
-  };
-}
-
-function ThemePreviewCard({
-  theme,
-  active,
-  onSelect,
-  installed = true,
-  onInstall,
-  onEdit
-}: {
-  theme: ThemeDefinition;
-  active: boolean;
-  onSelect: () => void;
-  installed?: boolean;
-  onInstall?: () => void;
-  onEdit?: () => void;
-}) {
-  const colors = theme.preview;
-  const previewStyle = {
-    '--preview-canvas': colors.canvas,
-    '--preview-panel': colors.panel,
-    '--preview-raised': colors.raised,
-    '--preview-border': colors.border,
-    '--preview-text': colors.text,
-    '--preview-muted': colors.muted,
-    '--preview-accent': colors.accent,
-    '--preview-success': colors.success,
-    '--preview-warning': colors.warning,
-    '--preview-danger': colors.danger
-  } as CSSProperties;
-
-  return (
-    <button
-      type="button"
-      className={`theme-gallery-card${active ? ' active' : ''}${!installed ? ' marketplace' : ''}`}
-      style={previewStyle}
-      aria-pressed={active}
-      aria-label={`${theme.name}, ${theme.mode} theme${active ? ', active' : installed ? '' : ', available in marketplace'}`}
-      data-testid={`theme-card-${theme.id}`}
-      onClick={installed ? onSelect : onInstall}
-      onDoubleClick={onEdit}
-      title={onEdit ? 'Double-click to edit custom theme' : undefined}
-    >
-      <span className="theme-card-preview" aria-hidden="true">
-        {installed && <span className="theme-card-installed">Installed</span>}
-        <PraxisPreviewScene />
-      </span>
-      <span className="theme-card-meta">
-        <span><strong>{theme.name}</strong><small>{theme.mode}</small></span>
-        {active && <span className="theme-card-active">Active</span>}
-        {!installed && <span className="theme-card-install">Install</span>}
-      </span>
-      <span className="theme-card-description">{theme.description}</span>
-    </button>
-  );
-}
-
-function PraxisPreviewScene() {
-  return (
-    <>
-      <span className="praxis-preview-titlebar">
-        <span className="praxis-preview-window-dots"><i /><i /><i /></span>
-        <span className="praxis-preview-brand"><b>P</b><strong>PRAXIS</strong></span>
-        <span className="praxis-preview-titlebar-actions"><i /><i /></span>
-      </span>
-      <span className="praxis-preview-layout">
-        <span className="praxis-preview-sidebar">
-          <span className="praxis-preview-workspace"><b>W</b><strong>Workspace</strong><i /></span>
-          <span className="praxis-preview-nav active"><b>◈</b><span>Overview</span></span>
-          <span className="praxis-preview-nav"><b>▦</b><span>Projects</span></span>
-          <span className="praxis-preview-nav"><b>◌</b><span>Sessions</span></span>
-          <span className="praxis-preview-sidebar-rule" />
-          <span className="praxis-preview-project"><i />Product launch</span>
-        </span>
-        <span className="praxis-preview-main">
-          <span className="praxis-preview-breadcrumb">WORKSPACE <b>/</b> PRODUCT LAUNCH</span>
-          <span className="praxis-preview-heading"><strong>Product board</strong><i>3 active</i></span>
-          <span className="praxis-preview-toolbar"><i>All work</i><i>Assigned to me</i><b>＋</b></span>
-          <span className="praxis-preview-board">
-            <span className="praxis-preview-column"><strong>Todo</strong><i>2</i><b><em /><span>Prepare brief</span><small>PRX-24</small></b><b><em /><span>Map milestones</span><small>PRX-27</small></b></span>
-            <span className="praxis-preview-column"><strong>Doing</strong><i>1</i><b><em /><span>Build workspace</span><small>PRX-22</small></b></span>
-            <span className="praxis-preview-column"><strong>Done</strong><i>3</i><b><em /><span>Research</span><small>PRX-18</small></b></span>
-          </span>
-          <span className="praxis-preview-activity"><b /><span>AI session ready</span><i>●</i></span>
-        </span>
-      </span>
-    </>
-  );
+/** One chat turn in the per-issue analysis conversation. */
+export interface AiAnalysisMessage {
+  role: 'user' | 'assistant';
+  text: string;
+  createdAt: string;
 }
 
 /**
- * A surface-pack card. The swatch renders the pack's material *over the live
- * theme tokens*, so the preview is the real pack × theme combination rather
- * than a generic mock.
+ * Per-issue analysis state. Messages/confirmed/confirmedAt/model persist;
+ * `busy` is runtime-only (an analysis run is streaming right now).
  */
-function SurfacePackCard({
-  pack,
-  active,
-  onSelect
-}: {
-  pack: SurfacePackDefinition;
-  active: boolean;
-  onSelect: () => void;
-}) {
-  // The swatch is rendered from the pack's *own* pattern data rather than a
-  // hand-written preview string, so the gallery can never drift from what the
-  // pack actually does. The tile is shrunk and its opacity lifted, because a
-  // strength tuned for a full window is invisible in a 58px thumbnail — but the
-  // lift runs through the same perceptual scale the app uses, otherwise a
-  // high-contrast ink (Graphite's, against its panel) previews far harsher in
-  // the gallery than it ever looks in the app.
-  const previewInk = pack.pattern ? resolvePatternInk(pack.pattern.ink, pack.pattern.inkColor) : '';
-  const preview = pack.pattern
-    ? resolveSurfacePattern(
-        {
-          ...pack.pattern,
-          // Always tile the swatch: a corner motif's fade is meaningless at
-          // thumbnail size, and the card is showing what the material *is*.
-          placement: 'tile',
-          scale: Math.max(16, pack.pattern.scale * 0.42),
-          opacity: Math.min(
-            0.7,
-            pack.pattern.opacity
-              * 4
-              * perceptualOpacityScale(previewInk, getComputedStyle(document.documentElement).getPropertyValue('--bg-elevated').trim())
-          )
-        },
-        previewInk
-      )
-    : undefined;
-  return (
-    <button
-      type="button"
-      className={`surface-pack-card${active ? ' active' : ''}`}
-      aria-pressed={active}
-      aria-label={`${pack.name} surface${active ? ', active' : ''}`}
-      data-testid={`surface-card-${pack.id}`}
-      onClick={onSelect}
-    >
-      <span className="surface-pack-swatch" aria-hidden="true">
-        <span className="surface-pack-swatch-canvas" style={{ background: pack.swatch.canvas ?? 'var(--bg)' }} />
-        <span
-          className="surface-pack-swatch-panel"
-          style={{
-            backgroundColor: 'var(--bg-elevated)',
-            backgroundImage: pack.swatch.panel ?? 'none',
-            mixBlendMode: (pack.swatch.blend as CSSProperties['mixBlendMode']) ?? 'normal'
-          }}
-        />
-        {preview && (
-          <span
-            className="surface-pack-swatch-pattern"
-            data-testid={`surface-swatch-pattern-${pack.id}`}
-            style={{ backgroundImage: preview.image, backgroundSize: preview.size, opacity: Number(preview.opacity) }}
-          />
-        )}
-      </span>
-      <span className="surface-pack-meta">
-        <strong>{pack.name}</strong>
-        {active && <span className="surface-pack-active">Active</span>}
-      </span>
-      <span className="surface-pack-description">{pack.description}</span>
-    </button>
-  );
+export interface AiAnalysisState {
+  issueKey: string;
+  messages: AiAnalysisMessage[];
+  /** Gate flag: delegation/delivery can require a confirmed analysis first. */
+  confirmed: boolean;
+  confirmedAt?: string;
+  /** True while an analysis run is streaming. */
+  busy: boolean;
+  /** Provider used by the latest analysis run. */
+  provider?: AiProvider;
+  model?: string;
 }
 
-const CUSTOM_COLOR_FIELDS = [
-  ['canvas', 'Canvas'], ['panel', 'Panel'], ['raised', 'Raised'], ['border', 'Border'], ['text', 'Text'],
-  ['muted', 'Muted text'], ['accent', 'Accent'], ['success', 'Success'], ['warning', 'Warning'], ['danger', 'Danger']
-] as const;
+/** Where the effective Vercel gateway API key came from. */
+export type AiKeySource = 'secret' | 'env' | 'none';
 
-function CustomThemeEditor({
-  theme, onChange, onSave, onDelete, onCancel, onDuplicate, onExport
-}: {
-  theme: ThemeDefinition & { source: 'custom' };
-  onChange: (theme: ThemeDefinition & { source: 'custom' }) => void;
-  onSave: () => void;
-  onDelete?: () => void;
-  onCancel: () => void;
-  onDuplicate?: () => void;
-  onExport?: () => void;
-}) {
-  const update = (patch: Partial<ThemeDefinition>) => onChange({ ...theme, ...patch, source: 'custom' });
-  const updateColor = (key: string, value: string) => onChange({ ...theme, source: 'custom', preview: { ...theme.preview, [key]: value } });
-  return <div className="custom-theme-editor" role="region" aria-label="Custom theme editor">
-    <div className="custom-theme-editor-heading"><div><strong>{theme.id.startsWith('custom-') ? 'Custom theme' : 'Edit custom theme'}</strong><span>Changes preview live after saving.</span></div><button type="button" className="icon-btn icon-btn-sm" aria-label="Close custom theme editor" onClick={onCancel}>×</button></div>
-    <div className="custom-theme-editor-grid">
-      <label>Name<input value={theme.name} onChange={event => update({ name: event.target.value })} maxLength={80} /></label>
-      <label>Mode<ChipSelect block ariaLabel="Mode" value={theme.mode} onChange={value => update({ mode: value as 'light' | 'dark' })} options={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} /></label>
-      <label className="wide">Description<input value={theme.description} onChange={event => update({ description: event.target.value })} maxLength={240} /></label>
-    </div>
-    <div className="custom-theme-color-grid">{CUSTOM_COLOR_FIELDS.map(([key, label]) => <label key={key}>{label}<span><input type="color" value={/^#[0-9a-f]{6}$/i.test(theme.preview[key]) ? theme.preview[key] : '#7c5cff'} onChange={event => updateColor(key, event.target.value)} /><input value={theme.preview[key]} onChange={event => updateColor(key, event.target.value)} /></span></label>)}</div>
-    <div className="custom-theme-editor-actions"><button type="button" onClick={onCancel}>Cancel</button>{onExport && <button type="button" onClick={onExport}>Export</button>}{onDuplicate && <button type="button" onClick={onDuplicate}>Duplicate</button>}{onDelete && <button type="button" className="danger" onClick={onDelete}>Delete</button>}<button type="button" className="primary" onClick={onSave} disabled={!theme.name.trim()}>Save theme</button></div>
-  </div>;
+/** What a workflow run has left in the repository (see `inspectRunWork`). */
+export interface WorkflowRunWorkInfo {
+  /** The run's branch, when it exists. */
+  branch?: string;
+  /** Commits on it that exist on no other branch — what deleting the branch would lose. */
+  commitCount: number;
+  /** Newest first, at most five. */
+  commits: Array<{ sha: string; subject: string }>;
+  /** The run's live worktree, when it still exists on disk. */
+  worktreePath?: string;
+  /** Files with uncommitted changes in that worktree. */
+  uncommittedFiles: number;
+  /** Anything a person would want warning about: commits only on the branch, or uncommitted files. */
+  hasWork: boolean;
 }
 
-type CustomSurfacePack = AppSettings['appearance']['customSurfacePacks'][number];
-
-const SURFACE_BLEND_MODES = ['soft-light', 'overlay', 'normal', 'multiply', 'screen'] as const;
-
-/** The editor works in friendly dial units; these map 1:1 to a `--surface-*` token map. */
-interface SurfaceDials {
-  panelOpacity: number; // 40..100  → --surface-panel-opacity
-  blur: number;         // 0..40 px → --surface-panel-blur (+ derived backdrop)
-  glow: number;         // 0..40 px → --surface-accent-glow
-  texture: number;      // 0..30    → --surface-texture-opacity (÷100)
-  radius: number;       // 0..8 px  → --surface-radius-boost
-  blend: string;        //          → --surface-texture-blend
-  grain: boolean;       //          → --surface-texture-image on/off
-}
-
-const DEFAULT_SURFACE_DIALS: SurfaceDials = {
-  panelOpacity: 100, blur: 0, glow: 0, texture: 12, radius: 1, blend: 'soft-light', grain: true
-};
-
-function dialsToTokens(d: SurfaceDials): Record<string, string> {
-  const tokens: Record<string, string> = {
-    '--surface-panel-opacity': (d.panelOpacity / 100).toFixed(2),
-    '--surface-radius-boost': `${Math.round(d.radius)}px`,
-    '--surface-texture-blend': SURFACE_BLEND_MODES.includes(d.blend as never) ? d.blend : 'soft-light'
-  };
-  if (d.blur > 0) {
-    tokens['--surface-panel-blur'] = `${Math.round(d.blur)}px`;
-    tokens['--surface-panel-saturate'] = '1.4';
-  }
-  if (d.grain) {
-    tokens['--surface-texture-image'] = 'var(--surface-swatch-grain)';
-    tokens['--surface-texture-size'] = '160px 160px';
-    tokens['--surface-texture-opacity'] = (Math.max(0, Math.min(30, d.texture)) / 100).toFixed(3);
-  } else {
-    tokens['--surface-texture-opacity'] = '0';
-  }
-  if (d.glow > 0) {
-    tokens['--surface-accent-glow'] =
-      `0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 0 ${Math.round(d.glow)}px color-mix(in srgb, var(--accent) 24%, transparent)`;
-  }
-  return tokens;
-}
-
-function tokensToDials(tokens: Record<string, string>): SurfaceDials {
-  const num = (value: string | undefined, fallback: number) => {
-    const parsed = parseFloat(value ?? '');
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-  const grainOn = (tokens['--surface-texture-image'] ?? 'none') !== 'none'
-    && num(tokens['--surface-texture-opacity'], 0) > 0;
-  return {
-    panelOpacity: Math.round(num(tokens['--surface-panel-opacity'], 1) * 100),
-    blur: num(tokens['--surface-panel-blur'], 0),
-    glow: tokens['--surface-accent-glow']
-      ? num((/0 0 (\d+(?:\.\d+)?)px/.exec(tokens['--surface-accent-glow']) ?? [])[1], 16)
-      : 0,
-    texture: Math.round(num(tokens['--surface-texture-opacity'], 0.12) * 100),
-    radius: num(tokens['--surface-radius-boost'], 0),
-    blend: tokens['--surface-texture-blend'] ?? 'soft-light',
-    grain: grainOn
-  };
-}
-
-/** Keep only whitelisted `--surface-*` string keys — mirrors core's validator for imports. */
-function sanitizeSurfaceTokens(raw: unknown): Record<string, string> {
-  if (!raw || typeof raw !== 'object') return {};
-  return Object.fromEntries(
-    Object.entries(raw as Record<string, unknown>)
-      .filter(([key, value]) => SURFACE_TOKEN_KEYS.includes(key) && typeof value === 'string')
-  ) as Record<string, string>;
-}
-
-/**
- * Custom surface editor — the material-layer parallel of `CustomThemeEditor`.
- * Dials write straight to a validated `--surface-*` token map; Export / Import
- * round-trips that map as JSON.
- */
-function CustomSurfaceEditor({
-  pack, onChange, onSave, onDelete, onCancel, onExport
-}: {
-  pack: CustomSurfacePack;
-  onChange: (pack: CustomSurfacePack) => void;
-  onSave: () => void;
-  onDelete?: () => void;
-  onCancel: () => void;
-  onExport: () => void;
-}) {
-  const dials = tokensToDials(pack.tokens);
-  const setDials = (patch: Partial<SurfaceDials>) =>
-    onChange({ ...pack, tokens: dialsToTokens({ ...dials, ...patch }) });
-  const importRef = useRef<HTMLInputElement>(null);
-
-  // The pattern is picked from the shared library, never authored — this is what
-  // lets a user build a new material (honeycomb, drafting grid, weave) without
-  // any code. See surfacePatterns.ts.
-  const pattern: SurfacePatternSpec = pack.pattern ?? { id: 'none', scale: 120, opacity: 0.08, ink: 'accent' };
-  const setPattern = (patch: Partial<SurfacePatternSpec>) =>
-    onChange({ ...pack, pattern: { ...pattern, ...patch } });
-
-  const runImport = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result)) as Partial<CustomSurfacePack>;
-        onChange({
-          ...pack,
-          name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim().slice(0, 80) : pack.name,
-          description: typeof parsed.description === 'string' ? parsed.description.slice(0, 240) : pack.description,
-          basePackId: typeof parsed.basePackId === 'string' ? parsed.basePackId : pack.basePackId,
-          pattern: findSurfacePattern((parsed.pattern as SurfacePatternSpec | undefined)?.id)
-            ? (parsed.pattern as SurfacePatternSpec)
-            : pack.pattern,
-          tokens: { ...dialsToTokens(DEFAULT_SURFACE_DIALS), ...sanitizeSurfaceTokens(parsed.tokens) }
-        });
-      } catch {
-        // A malformed file leaves the editor untouched.
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  return <div className="custom-theme-editor" role="region" aria-label="Custom surface editor">
-    <div className="custom-theme-editor-heading"><div><strong>{pack.name || 'Custom surface'}</strong><span>Changes preview live.</span></div><button type="button" className="icon-btn icon-btn-sm" aria-label="Close custom surface editor" onClick={onCancel}>×</button></div>
-    <div className="custom-theme-editor-grid">
-      <label>Name<input value={pack.name} onChange={event => onChange({ ...pack, name: event.target.value })} maxLength={80} data-testid="custom-surface-name" /></label>
-      <label>Base
-        <ChipSelect
-          block
-          ariaLabel="Base"
-          value={pack.basePackId ?? ''}
-          onChange={value => onChange({ ...pack, basePackId: value || undefined })}
-          options={[{ value: '', label: 'None' }, ...SURFACE_PACKS.filter(base => base.id !== 'flat').map(base => ({ value: base.id, label: base.name }))]}
-        />
-      </label>
-      <label className="wide">Description<input value={pack.description} onChange={event => onChange({ ...pack, description: event.target.value })} maxLength={240} /></label>
-    </div>
-    <div className="surface-dials">
-      <label className="surface-dial"><span className="surface-dial-label">Panel opacity <em>{dials.panelOpacity}%</em></span>
-        <input type="range" min={40} max={100} step={2} value={dials.panelOpacity} data-testid="custom-surface-opacity" onChange={event => setDials({ panelOpacity: Number(event.target.value) })} /></label>
-      <label className="surface-dial"><span className="surface-dial-label">Backdrop blur <em>{Math.round(dials.blur)}px</em></span>
-        <input type="range" min={0} max={40} step={1} value={dials.blur} onChange={event => setDials({ blur: Number(event.target.value) })} /></label>
-      <label className="surface-dial"><span className="surface-dial-label">Accent glow <em>{Math.round(dials.glow)}px</em></span>
-        <input type="range" min={0} max={40} step={1} value={dials.glow} onChange={event => setDials({ glow: Number(event.target.value) })} /></label>
-      <label className="surface-dial"><span className="surface-dial-label">Texture <em>{dials.texture}%</em></span>
-        <input type="range" min={0} max={30} step={1} value={dials.texture} disabled={!dials.grain} onChange={event => setDials({ texture: Number(event.target.value) })} /></label>
-      <label className="surface-dial"><span className="surface-dial-label">Corner boost <em>{Math.round(dials.radius)}px</em></span>
-        <input type="range" min={0} max={8} step={1} value={dials.radius} onChange={event => setDials({ radius: Number(event.target.value) })} /></label>
-      <label className="surface-dial"><span className="surface-dial-label">Blend</span>
-        <ChipSelect block ariaLabel="Blend" value={dials.blend} onChange={value => setDials({ blend: value })} options={SURFACE_BLEND_MODES.map(mode => ({ value: mode, label: mode }))} /></label>
-    </div>
-    <div className="surface-dials surface-pattern-dials">
-      <label className="surface-dial"><span className="surface-dial-label">Pattern</span>
-        <ChipSelect
-          block
-          ariaLabel="Pattern"
-          value={pattern.id}
-          data-testid="custom-surface-pattern"
-          onChange={value => setPattern({ id: value })}
-          options={SURFACE_PATTERNS.map(entry => ({ value: entry.id, label: entry.name }))}
-        /></label>
-      <label className="surface-dial"><span className="surface-dial-label">Pattern scale <em>{Math.round(pattern.scale)}px</em></span>
-        <input type="range" min={16} max={260} step={4} value={Math.round(pattern.scale)} disabled={pattern.id === 'none'}
-          data-testid="custom-surface-pattern-scale"
-          onChange={event => setPattern({ scale: Number(event.target.value) })} /></label>
-      <label className="surface-dial"><span className="surface-dial-label">Pattern strength <em>{Math.round(pattern.opacity * 100)}%</em></span>
-        <input type="range" min={0} max={40} step={1} value={Math.round(pattern.opacity * 100)} disabled={pattern.id === 'none'}
-          onChange={event => setPattern({ opacity: Number(event.target.value) / 100 })} /></label>
-      <label className="surface-dial"><span className="surface-dial-label">Pattern ink</span>
-        <ChipSelect
-          block
-          ariaLabel="Pattern ink"
-          value={pattern.ink ?? 'accent'}
-          disabled={pattern.id === 'none'}
-          onChange={value => setPattern({ ink: value as SurfacePatternInk })}
-          options={[{ value: 'accent', label: 'Accent' }, { value: 'text', label: 'Text' }]}
-        /></label>
-    </div>
-    <Toggle label="Grain texture" checked={dials.grain} onChange={next => setDials({ grain: next })} testId="custom-surface-grain" />
-    <input ref={importRef} type="file" accept="application/json" hidden onChange={event => { const file = event.target.files?.[0]; if (file) runImport(file); event.target.value = ''; }} />
-    <div className="custom-theme-editor-actions">
-      <button type="button" onClick={onCancel}>Cancel</button>
-      <button type="button" onClick={() => importRef.current?.click()}>Import</button>
-      <button type="button" onClick={onExport}>Export</button>
-      {onDelete && <button type="button" className="danger" onClick={onDelete}>Delete</button>}
-      <button type="button" className="primary" onClick={onSave} disabled={!pack.name.trim()}>Save surface</button>
-    </div>
-  </div>;
-}
-
-const MOTIF_ANCHORS: Array<[SurfacePatternAnchor, string]> = [
-  ['top-left', 'Top left'], ['top-right', 'Top right'],
-  ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']
-];
-
-/**
- * The Motif panel — the material's figurative layer, promoted out of the custom
- * editor so it applies over *any* pack and *any* theme. Every control writes a
- * partial override; unset fields keep whatever the active pack chose, and Reset
- * clears the override entirely.
- */
-function MotifPanel({
-  pack, motif, disabled, animationsEnabled, onChange
-}: {
-  pack?: SurfacePackDefinition;
-  motif?: SurfaceMotifSettings;
-  disabled?: boolean;
-  /** The master gate. False greys the motion controls and says why. */
-  animationsEnabled: boolean;
-  onChange: (motif: SurfaceMotifSettings | undefined) => Promise<void>;
-}) {
-  const base = pack?.pattern;
-  // Keep edits composable until persistence echoes them back. A second dial
-  // must not rebuild its patch from props that still describe the first edit's
-  // predecessor, or it restores that predecessor's placement/colour/etc.
-  const [pending, setPending] = useState<{ value: SurfaceMotifSettings | undefined }>();
-  const currentMotif = pending ? pending.value : motif;
-  const change = (value: SurfaceMotifSettings | undefined) => {
-    const edit = { value };
-    setPending(edit);
-    void onChange(value)
-      .finally(() => setPending(current => current === edit ? undefined : current))
-      .catch(() => undefined); // useSettings presents persistence failures.
-  };
-  const effective: SurfacePatternSpec = {
-    id: 'none', scale: 62, opacity: 0.3, ink: 'accent',
-    placement: 'tile', anchor: 'top-right', spread: DEFAULT_MOTIF_SPREAD, fade: DEFAULT_MOTIF_FADE,
-    fill: 0, outline: 0, animation: 'none', animationSpeed: 1, animationRepeat: false,
-    ...(base ?? {}),
-    ...(currentMotif ?? {})
-  };
-  const set = (patch: Partial<SurfacePatternSpec>) =>
-    change({ ...effective, ...patch } as SurfaceMotifSettings);
-  const isCorner = effective.placement === 'corner';
-  const overridden = currentMotif !== undefined;
-  const definition = findSurfacePattern(effective.id);
-  const style = effective.animation ?? 'none';
-  // Motion controls are dead while the master gate is off, the pattern is None,
-  // or the panel itself is disabled — one condition, so they never disagree.
-  const motionOff = Boolean(disabled) || !animationsEnabled || effective.id === 'none';
-  const isReveal = isRevealAnimation(style);
-  // The plural `anchors` supersedes the legacy single `anchor`; fall back to it,
-  // then to the default corner, so a pack that only sets `anchor` still lights up.
-  const corners: SurfacePatternAnchor[] = effective.anchors?.length
-    ? effective.anchors
-    : effective.anchor
-      ? [effective.anchor]
-      : ['top-right'];
-  const toggleCorner = (value: SurfacePatternAnchor) => {
-    const next = corners.includes(value)
-      ? corners.filter(corner => corner !== value)
-      : [...corners, value];
-    // Always keep at least one corner lit — deselecting the last is a no-op.
-    set({ anchors: next.length ? next : corners });
-  };
-
-  return (
-    <section className={`surface-motif${disabled ? ' disabled' : ''}`} data-testid="motif-panel">
-      <div className="surface-motif-head">
-        <div>
-          <strong>Motif</strong>
-          <span>
-            The mark laid on the material. Independent of the pack, so it rides over any theme.
-            {!animationsEnabled && ' Motion is off — turn on Animate motifs below.'}
-          </span>
-        </div>
-        {overridden && (
-          <button type="button" className="surface-motif-reset" data-testid="motif-reset" onClick={() => change(undefined)}>
-            Use surface default
-          </button>
-        )}
-      </div>
-      <div className="surface-dials surface-motif-dials">
-        <label className="surface-dial"><span className="surface-dial-label">Pattern</span>
-          <ChipSelect
-            block
-            ariaLabel="Pattern"
-            value={effective.id}
-            disabled={disabled}
-            data-testid="motif-pattern"
-            onChange={value => {
-              // Adopt the incoming pattern's own line weight. The library spans
-              // an order of magnitude — 0.012 for the Mandelbrot emblem against
-              // 0.1 for weave — because a mark drawn once at the full spread
-              // needs a far finer line than a lattice cell. Carrying the old
-              // value across renders the new motif unusably heavy or invisible.
-              const next = findSurfacePattern(value);
-              set({ id: value, ...(next ? { weight: next.weight } : {}) });
-            }}
-            options={SURFACE_PATTERNS.map(p => ({ value: p.id, label: p.name }))}
-          /></label>
-
-        <label className="surface-dial"><span className="surface-dial-label">Placement</span>
-          <ChipSelect
-            block
-            ariaLabel="Placement"
-            value={effective.placement ?? 'tile'}
-            disabled={disabled || effective.id === 'none'}
-            data-testid="motif-placement"
-            onChange={value => set({ placement: value as SurfacePatternPlacement })}
-            options={[
-              { value: 'tile', label: 'Tile', description: 'Repeats everywhere' },
-              { value: 'corner', label: 'Corner', description: 'One fading mark' }
-            ]}
-          /></label>
-
-        {isCorner && (
-          <div className="surface-dial surface-motif-corners-field">
-            <span className="surface-dial-label">Corners <em>{corners.length} of 4</em></span>
-            <div className="surface-motif-corners" role="group" aria-label="Motif corners" data-testid="motif-corners">
-              {MOTIF_ANCHORS.map(([value, label]) => {
-                const on = corners.includes(value);
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`surface-corner${on ? ' on' : ''}`}
-                    data-corner={value}
-                    data-testid={`motif-corner-${value}`}
-                    aria-pressed={on}
-                    aria-label={label}
-                    title={label}
-                    disabled={disabled}
-                    onClick={() => toggleCorner(value)}
-                  >
-                    <span className="surface-corner-dot" />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <label className="surface-dial"><span className="surface-dial-label">Cell size <em>{Math.round(effective.scale)}px</em></span>
-          <input type="range" min={16} max={220} step={2} value={Math.round(effective.scale)}
-            disabled={disabled || effective.id === 'none'} data-testid="motif-scale"
-            onChange={e => set({ scale: Number(e.target.value) })} /></label>
-
-        {isCorner && (
-          <>
-            <label className="surface-dial"><span className="surface-dial-label">Spread <em>{Math.round(effective.spread ?? 0)}px</em></span>
-              <input type="range" min={200} max={1600} step={20} value={Math.round(effective.spread ?? DEFAULT_MOTIF_SPREAD)}
-                disabled={disabled} data-testid="motif-spread"
-                onChange={e => set({ spread: Number(e.target.value) })} /></label>
-            <label className="surface-dial"><span className="surface-dial-label">Fade <em>{Math.round((effective.fade ?? 0) * 100)}%</em></span>
-              <input type="range" min={10} max={100} step={2} value={Math.round((effective.fade ?? DEFAULT_MOTIF_FADE) * 100)}
-                disabled={disabled} data-testid="motif-fade"
-                onChange={e => set({ fade: Number(e.target.value) / 100 })} /></label>
-          </>
-        )}
-
-        <label className="surface-dial"><span className="surface-dial-label">Solid cells <em>{Math.round((effective.fill ?? 0) * 100)}%</em></span>
-          <input type="range" min={0} max={100} step={17} value={Math.round((effective.fill ?? 0) * 100)}
-            disabled={disabled || !definition?.fillable} data-testid="motif-fill"
-            onChange={e => set({ fill: Number(e.target.value) / 100 })} /></label>
-
-        <label className="surface-dial">
-          <span className="surface-dial-label">Outline <em>{effective.outline ? `${Math.round(effective.outline * 100)}%` : 'off'}</em></span>
-          <input type="range" min={0} max={100} step={5} value={Math.round((effective.outline ?? 0) * 100)}
-            disabled={disabled || effective.id === 'none'} data-testid="motif-outline"
-            onChange={e => set({ outline: Number(e.target.value) / 100 })} /></label>
-
-        <label className="surface-dial"><span className="surface-dial-label">Strength <em>{Math.round(effective.opacity * 100)}%</em></span>
-          <input type="range" min={0} max={60} step={1} value={Math.round(effective.opacity * 100)}
-            disabled={disabled || effective.id === 'none'} data-testid="motif-strength"
-            onChange={e => set({ opacity: Number(e.target.value) / 100 })} /></label>
-
-        <label className="surface-dial"><span className="surface-dial-label">Line weight <em>{(effective.weight ?? 0.055).toFixed(3)}</em></span>
-          <input type="range" min={5} max={200} step={5} value={Math.round((effective.weight ?? 0.055) * 1000)}
-            disabled={disabled || effective.id === 'none'} data-testid="motif-weight"
-            onChange={e => set({ weight: Number(e.target.value) / 1000 })} /></label>
-
-        <label className="surface-dial"><span className="surface-dial-label">Animation</span>
-          <ChipSelect
-            block
-            ariaLabel="Animation"
-            value={style}
-            disabled={motionOff}
-            data-testid="motif-animation"
-            onChange={value => set({ animation: value as SurfaceMotifAnimation })}
-            options={SURFACE_MOTIF_ANIMATIONS.map(entry => ({
-              value: entry.id,
-              label: entry.name,
-              // Plot walks a head along one continuous line, and only a
-              // pattern that declares a route has one to walk.
-              disabled: entry.id === 'plot' && !definition?.route
-            }))}
-          /></label>
-
-        {style !== 'none' && (
-          <label className="surface-dial">
-            <span className="surface-dial-label">Speed <em>{(effective.animationSpeed ?? 1).toFixed(2)}×</em></span>
-            <input type="range" min={25} max={400} step={5} value={Math.round((effective.animationSpeed ?? 1) * 100)}
-              disabled={motionOff} data-testid="motif-speed"
-              onChange={e => set({ animationSpeed: Number(e.target.value) / 100 })} /></label>
-        )}
-
-        {isReveal && (
-          <label className="surface-dial surface-motif-repeat">
-            <span className="surface-dial-label">Repeat</span>
-            <span>
-              <input type="checkbox" checked={effective.animationRepeat ?? false}
-                disabled={motionOff} data-testid="motif-repeat"
-                onChange={e => set({ animationRepeat: e.target.checked })} />
-              <em>{effective.animationRepeat ? 'Loops' : 'Draws once, then rests complete'}</em>
-            </span></label>
-        )}
-
-        <label className="surface-dial"><span className="surface-dial-label">Colour</span>
-          <ChipSelect
-            block
-            ariaLabel="Colour"
-            value={effective.ink ?? 'accent'}
-            disabled={disabled || effective.id === 'none'}
-            data-testid="motif-ink"
-            onChange={value => set({ ink: value as SurfacePatternInk })}
-            options={[
-              { value: 'accent', label: 'Theme accent' },
-              { value: 'text', label: 'Theme text' },
-              { value: 'custom', label: 'Custom…' }
-            ]}
-          /></label>
-
-        {effective.ink === 'custom' && (
-          <label className="surface-dial"><span className="surface-dial-label">Custom colour</span>
-            <span className="surface-motif-colour">
-              <input type="color" value={/^#[0-9a-f]{6}$/i.test(effective.inkColor ?? '') ? effective.inkColor! : '#c6431f'}
-                disabled={disabled} data-testid="motif-ink-color"
-                onChange={e => set({ inkColor: e.target.value })} />
-              <input value={effective.inkColor ?? ''} placeholder="#c6431f" disabled={disabled} maxLength={9}
-                onChange={e => set({ inkColor: e.target.value })} />
-            </span></label>
-        )}
-      </div>
-    </section>
-  );
-}
-
-/** The look-scoped slice of the live appearance — everything a Look captures bar its id/name. */
-function currentLookFields(settings: AppSettings): Omit<AppearanceLook, 'id' | 'name'> {
-  const a = settings.appearance;
-  return {
-    themeId: a.themeId,
-    themeMode: a.themeMode,
-    surfacePackId: a.surfacePackId,
-    surface: a.surface,
-    priorityColors: a.priorityColors,
-    showBrandArtwork: a.showBrandArtwork
-  };
-}
-
-/** Merge incoming library records into the profile's, keeping the profile's copy on an id clash. */
-function mergeById<T extends { id: string }>(existing: T[], incoming: unknown[]): T[] {
-  const seen = new Set(existing.map(item => item.id));
-  const extra = incoming.filter(
-    (item): item is T => Boolean(item) && typeof (item as T).id === 'string' && !seen.has((item as T).id)
-  );
-  return [...existing, ...extra];
-}
-
-/** Neutral palette used when a Look references a custom theme that has since been deleted. */
-const FALLBACK_LOOK_PREVIEW: ThemePreviewColors = {
-  canvas: '#1c1c1c', panel: '#242424', raised: '#161616', border: '#3d3d3d',
-  text: '#e4e4e4', muted: '#8a8a8a', accent: '#7c5cff',
-  success: '#3fb950', warning: '#d29922', danger: '#f47067'
-};
-
-const LOOK_IDS = new Set(BUILT_IN_LOOKS.map(look => look.id));
-
-/**
- * The surface material a Look card should paint over its palette mock. Renders
- * the Look's pack pattern (with any motif override) from the shared library —
- * tinted for *that Look's* theme, not the live one — shrunk and lifted so it
- * reads at thumbnail size. Returns `undefined` for Flat / a pattern-less pack.
- */
-function lookSurfacePreview(
-  look: AppearanceLook,
-  themePreview: ThemePreviewColors
-): { image?: string; size?: string; opacity: number; blend: string; glass: boolean } | undefined {
-  const pack = allSurfacePacks().find(entry => entry.id === look.surfacePackId);
-  const motif = look.surface.motif;
-  const base = pack?.pattern;
-  const spec = motif && Object.keys(motif).length
-    ? { ...(base ?? { id: 'none', scale: 96, opacity: 0.08 }), ...motif }
-    : base;
-  const glass = Boolean(pack?.glass);
-  if (!spec || spec.id === 'none' || (spec.opacity ?? 0) <= 0) {
-    return glass ? { opacity: 0, blend: 'normal', glass } : undefined;
-  }
-  const ink = spec.ink === 'text'
-    ? themePreview.text
-    : spec.ink === 'custom' && spec.inkColor
-      ? spec.inkColor
-      : themePreview.accent;
-  const resolved = resolveSurfacePattern(
-    {
-      ...spec,
-      placement: 'tile',
-      scale: Math.max(13, (spec.scale ?? 96) * 0.46),
-      opacity: Math.min(
-        0.34,
-        (spec.opacity ?? 0.1) * 2.6 * perceptualOpacityScale(ink, themePreview.panel)
-      )
-    },
-    ink
-  );
-  if (!resolved) {
-    return glass ? { opacity: 0, blend: 'normal', glass } : undefined;
-  }
-  return { image: resolved.image, size: resolved.size, opacity: Number(resolved.opacity), blend: resolved.blend, glass };
-}
-
-/**
- * A Look card — the theme gallery's app-chrome mock painted in the Look's
- * palette, with its surface material layered over it, so theme + colours +
- * surface all read at a glance. Hover reveals rename / duplicate / export /
- * delete.
- */
-function LookPreviewCard({
-  look, active, packName, canDelete, renaming,
-  onApply, onStartRename, onCommitRename, onCancelRename, onDuplicate, onExport, onDelete
-}: {
-  look: AppearanceLook;
-  active: boolean;
-  packName: string;
-  canDelete: boolean;
-  renaming: { value: string; set: (value: string) => void } | undefined;
-  onApply: () => void;
-  onStartRename: () => void;
-  onCommitRename: () => void;
-  onCancelRename: () => void;
-  onDuplicate: () => void;
-  onExport: () => void;
-  onDelete: () => void;
-}) {
-  const themePreview = allThemes().find(theme => theme.id === look.themeId)?.preview ?? FALLBACK_LOOK_PREVIEW;
-  const previewStyle = {
-    '--preview-canvas': themePreview.canvas,
-    '--preview-panel': themePreview.panel,
-    '--preview-raised': themePreview.raised,
-    '--preview-border': themePreview.border,
-    '--preview-text': themePreview.text,
-    '--preview-muted': themePreview.muted,
-    '--preview-accent': themePreview.accent,
-    '--preview-success': themePreview.success,
-    '--preview-warning': themePreview.warning,
-    '--preview-danger': themePreview.danger
-  } as CSSProperties;
-  const surface = lookSurfacePreview(look, themePreview);
-
-  return (
-    <div
-      className={`theme-gallery-card look-card${active ? ' active' : ''}`}
-      style={previewStyle}
-      data-testid={`look-card-${look.id}`}
-    >
-      <button
-        type="button"
-        className="look-card-apply"
-        aria-pressed={active}
-        aria-label={`Apply the ${look.name} Look`}
-        onClick={onApply}
-      >
-        <span className="theme-card-preview" aria-hidden="true">
-          <PraxisPreviewScene />
-          {surface?.image && (
-            <span
-              className="look-card-surface"
-              style={{
-                backgroundImage: surface.image,
-                backgroundSize: surface.size,
-                opacity: surface.opacity,
-                mixBlendMode: surface.blend as CSSProperties['mixBlendMode']
-              }}
-            />
-          )}
-          {surface?.glass && <span className="look-card-glass" />}
-        </span>
-      </button>
-      <div className="theme-card-meta">
-        <span>
-          {renaming ? (
-            <input
-              autoFocus
-              className="look-card-rename"
-              value={renaming.value}
-              maxLength={80}
-              aria-label={`Rename ${look.name}`}
-              onChange={event => renaming.set(event.target.value)}
-              onBlur={onCommitRename}
-              onKeyDown={event => {
-                if (event.key === 'Enter') onCommitRename();
-                if (event.key === 'Escape') onCancelRename();
-              }}
-            />
-          ) : (
-            <strong>{look.name}</strong>
-          )}
-          <small>{packName}</small>
-        </span>
-        {active && <span className="theme-card-active">Active</span>}
-      </div>
-      <div className="look-card-actions">
-        {!LOOK_IDS.has(look.id) && <button type="button" title="Rename" aria-label={`Rename ${look.name}`} data-testid={`look-rename-${look.id}`} onClick={onStartRename}>✎</button>}
-        <button type="button" title="Duplicate" aria-label={`Duplicate ${look.name}`} onClick={onDuplicate}>⧉</button>
-        <button type="button" title="Export" aria-label={`Export ${look.name}`} onClick={onExport}>↧</button>
-        {!LOOK_IDS.has(look.id) && <button type="button" title="Delete" aria-label={`Delete ${look.name}`} className="danger" disabled={!canDelete} data-testid={`look-delete-${look.id}`} onClick={onDelete}>✕</button>}
-      </div>
-    </div>
-  );
-}
-
-/**
- * The Looks gallery — switchable presets that bundle the whole appearance stack
- * (theme, mode, surface pack, dials/motif, priority colours, brand artwork),
- * grouped into Built in / Custom exactly like the theme gallery. Selecting a
- * Look applies it in one shot; while a Look is selected every edit anywhere in
- * Appearance is folded back into it by core's `mirrorActiveLook`, so this only
- * handles select / save / rename / duplicate / delete / export / import.
- */
-function LooksStrip({
-  settings,
-  update
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-}) {
-  const looks = settings.appearance.looks;
-  const activeLookId = settings.appearance.activeLookId;
-  const [naming, setNaming] = useState(false);
-  const [draftName, setDraftName] = useState('');
-  const [renamingId, setRenamingId] = useState<string>();
-  const [renameDraft, setRenameDraft] = useState('');
-  const importRef = useRef<HTMLInputElement>(null);
-
-  const applyLook = (look: AppearanceLook) => {
-    applyThemePreference(look.themeId, look.themeMode as ThemeModePreference);
-    applySurfacePack(look.surfacePackId, {
-      intensity: look.surface.intensity,
-      texture: look.surface.texture,
-      translucency: look.surface.translucency,
-      windowVibrancy: look.surface.windowVibrancy,
-      animateMotifs: look.surface.animateMotifs,
-      motif: look.surface.motif
-    });
-    void update({
-      appearance: {
-        themeId: look.themeId,
-        themeMode: look.themeMode,
-        surfacePackId: look.surfacePackId,
-        surface: look.surface,
-        priorityColors: look.priorityColors,
-        showBrandArtwork: look.showBrandArtwork,
-        activeLookId: look.id
-      }
-    });
-  };
-
-  const saveCurrent = () => {
-    const name = draftName.trim();
-    if (!name) return;
-    const look: AppearanceLook = { id: `look-${Date.now().toString(36)}`, name, ...currentLookFields(settings) };
-    void update({ appearance: { looks: [...looks, look], activeLookId: look.id } });
-    setNaming(false);
-    setDraftName('');
-  };
-
-  const commitRename = (id: string) => {
-    const name = renameDraft.trim();
-    setRenamingId(undefined);
-    if (!name) return;
-    void update({ appearance: { looks: looks.map(look => (look.id === id ? { ...look, name } : look)) } });
-  };
-
-  const duplicate = (look: AppearanceLook) => {
-    const copy: AppearanceLook = { ...look, id: `look-${Date.now().toString(36)}`, name: `${look.name} copy` };
-    void update({ appearance: { looks: [...looks, copy] } });
-  };
-
-  const remove = (id: string) => {
-    void update({
-      appearance: {
-        looks: looks.filter(look => look.id !== id),
-        ...(activeLookId === id ? { activeLookId: '' } : {})
-      }
-    });
-  };
-
-  const exportLook = (look: AppearanceLook) => {
-    const customThemes = (settings.appearance.customThemes ?? []).filter(theme => theme.id === look.themeId);
-    const customSurfacePacks = (settings.appearance.customSurfacePacks ?? []).filter(pack => pack.id === look.surfacePackId);
-    const blob = new Blob([JSON.stringify({ look, customThemes, customSurfacePacks }, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${look.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'look'}.look.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const importLook = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    try {
-      const parsed = JSON.parse(await file.text()) as {
-        look?: Partial<AppearanceLook>;
-        customThemes?: unknown[];
-        customSurfacePacks?: unknown[];
-      };
-      const raw = parsed.look;
-      if (!raw || typeof raw.themeId !== 'string' || typeof raw.surfacePackId !== 'string') {
-        throw new Error('Not a Look file');
-      }
-      const nextThemes = mergeById(
-        settings.appearance.customThemes ?? [],
-        Array.isArray(parsed.customThemes) ? parsed.customThemes : []
-      );
-      const nextPacks = mergeById(
-        settings.appearance.customSurfacePacks ?? [],
-        Array.isArray(parsed.customSurfacePacks) ? parsed.customSurfacePacks : []
-      );
-      const look: AppearanceLook = {
-        id: `look-${Date.now().toString(36)}`,
-        name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : 'Imported look',
-        themeId: raw.themeId,
-        themeMode: raw.themeMode === 'light' || raw.themeMode === 'system' ? raw.themeMode : 'dark',
-        surfacePackId: raw.surfacePackId,
-        surface:
-          raw.surface && typeof raw.surface === 'object'
-            ? (raw.surface as AppearanceLook['surface'])
-            : settings.appearance.surface,
-        priorityColors:
-          raw.priorityColors && typeof raw.priorityColors === 'object'
-            ? (raw.priorityColors as Record<string, string>)
-            : settings.appearance.priorityColors,
-        showBrandArtwork: typeof raw.showBrandArtwork === 'boolean' ? raw.showBrandArtwork : true
-      };
-      registerCustomThemes(nextThemes);
-      registerCustomSurfacePacks(nextPacks);
-      // The settings backend re-sanitises this write, so a hand-edited file can
-      // only ever land a well-formed Look / library record.
-      await update({ appearance: { customThemes: nextThemes, customSurfacePacks: nextPacks, looks: [...looks, look] } });
-      applyLook(look);
-    } catch {
-      /* A malformed file is ignored without disturbing the current Looks. */
-    }
-  };
-
-  const builtInLooks = looks.filter(look => LOOK_IDS.has(look.id));
-  const customLooks = looks.filter(look => !LOOK_IDS.has(look.id));
-  const packNameOf = (look: AppearanceLook) =>
-    allSurfacePacks().find(pack => pack.id === look.surfacePackId)?.name ?? look.surfacePackId;
-
-  const renderCard = (look: AppearanceLook) => (
-    <LookPreviewCard
-      key={look.id}
-      look={look}
-      active={look.id === activeLookId}
-      packName={packNameOf(look)}
-      canDelete={!LOOK_IDS.has(look.id) && looks.length > 1}
-      renaming={!LOOK_IDS.has(look.id) && renamingId === look.id ? { value: renameDraft, set: setRenameDraft } : undefined}
-      onApply={() => applyLook(look)}
-      onStartRename={() => { if (!LOOK_IDS.has(look.id)) { setRenamingId(look.id); setRenameDraft(look.name); } }}
-      onCommitRename={() => commitRename(look.id)}
-      onCancelRename={() => setRenamingId(undefined)}
-      onDuplicate={() => duplicate(look)}
-      onExport={() => exportLook(look)}
-      onDelete={() => { if (!LOOK_IDS.has(look.id)) remove(look.id); }}
-    />
-  );
-
-  return (
-    <section className="looks-strip" data-testid="looks-strip">
-      <div className="looks-gallery-toolbar">
-        {naming ? (
-          <span className="looks-name-field">
-            <input
-              autoFocus
-              value={draftName}
-              maxLength={80}
-              placeholder="Look name"
-              aria-label="New Look name"
-              data-testid="look-name-input"
-              onChange={event => setDraftName(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter') saveCurrent();
-                if (event.key === 'Escape') {
-                  setNaming(false);
-                  setDraftName('');
-                }
-              }}
-            />
-            <button type="button" className="primary" disabled={!draftName.trim()} onClick={saveCurrent} data-testid="look-save-confirm">
-              Save
-            </button>
-            <button type="button" onClick={() => { setNaming(false); setDraftName(''); }}>Cancel</button>
-          </span>
-        ) : (
-          <button type="button" className="btn btn-secondary" data-testid="look-save" onClick={() => setNaming(true)}>
-            ＋ Save current as Look
-          </button>
-        )}
-        <label className="btn btn-secondary">
-          Import Look
-          <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={event => void importLook(event)} />
-        </label>
-        <span>
-          {activeLookId
-            ? 'Editing any appearance setting updates the selected Look.'
-            : 'Pick a Look to apply it everywhere.'}
-        </span>
-      </div>
-
-      <section className="theme-gallery-section">
-        <h4>Built in</h4>
-        <div className="theme-gallery-grid">{builtInLooks.map(renderCard)}</div>
-      </section>
-
-      {customLooks.length > 0 && (
-        <section className="theme-gallery-section">
-          <h4>Custom</h4>
-          <div className="theme-gallery-grid">{customLooks.map(renderCard)}</div>
-        </section>
-      )}
-    </section>
-  );
-}
-
-function ThemesGallerySection({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
-  const category = CATEGORIES.find(c => c.id === 'appearance-themes')!;
-  const [selectedTheme, setSelectedTheme] = useState(() => settings.appearance.themeId || getInitialThemeId());
-  const [query, setQuery] = useState('');
-  const [editing, setEditing] = useState<ThemeDefinition & { source: 'custom' }>();
-  const [, refreshCustomThemes] = useState(0);
-  const [marketplaceFilter, setMarketplaceFilter] = useState<'all' | 'installed'>('all');
-  const installedIds = settings.appearance.installedThemeIds ?? [];
-  const custom = settings.appearance.customThemes ?? [];
-
-  // The add-on marketplace, scoped to themes. Auto-browses once configured so
-  // the Marketplace section fills in without an extra click.
-  const themeAddons = useKindAddons('theme');
-  useEffect(() => {
-    if (themeAddons.ready && themeAddons.catalog === undefined && !themeAddons.busy) {
-      void themeAddons.browse();
-    }
-  }, [themeAddons.ready, themeAddons.catalog, themeAddons.busy, themeAddons.browse]);
-  useEffect(() => {
-    const bump = () => refreshCustomThemes(value => value + 1);
-    window.addEventListener('praxis-marketplace-appearance', bump);
-    return () => window.removeEventListener('praxis-marketplace-appearance', bump);
-  }, []);
-  const installedAddonThemeIds = new Set(themeAddons.installed.map(addon => addon.manifest.id));
-
-  useEffect(() => {
-    registerCustomThemes(custom);
-    refreshCustomThemes(value => value + 1);
-  }, [custom]);
-
-  useEffect(() => {
-    if (!editing) return;
-    const draft = { id: editing.id, name: editing.name, mode: editing.mode, description: editing.description, preview: { ...editing.preview } as Record<string, string> };
-    registerCustomThemes([...custom.filter(theme => theme.id !== draft.id), draft]);
-    applyThemePreference(editing.id, editing.mode);
-  }, [editing]);
-
-  const createCustom = () => setEditing({
-    id: `custom-${Date.now().toString(36)}`, name: 'My Theme', family: 'Praxis', section: 'Recent', source: 'custom', mode: 'dark',
-    description: 'A custom Praxis theme.',
-    preview: { canvas: '#1c1c1c', panel: '#202020', raised: '#181818', border: '#3d3d3d', text: '#e4e4e4', muted: '#858585', accent: '#7c5cff', success: '#3fb950', warning: '#d29922', danger: '#f47067' }
-  });
-
-  const saveCustom = async () => {
-    if (!editing) return;
-    const draft = editing;
-    if (!draft.name.trim()) return;
-    const record = { id: draft.id, name: draft.name.trim(), mode: draft.mode, description: draft.description.trim(), preview: { ...draft.preview } as Record<string, string> };
-    const next = [...custom.filter(theme => theme.id !== record.id), record];
-    await update({ appearance: { customThemes: next, installedThemeIds: [...new Set([...installedIds, record.id])], themeId: record.id, themeMode: record.mode } });
-    registerCustomThemes(next);
-    applyThemePreference(record.id, record.mode);
-    setSelectedTheme(record.id);
-    setEditing(undefined);
-  };
-
-  const importCustom = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    try {
-      const raw = JSON.parse(await file.text()) as Partial<ThemeDefinition>;
-      if (typeof raw.name !== 'string' || !raw.preview || typeof raw.preview !== 'object') throw new Error('Invalid theme file');
-      setEditing({ id: `custom-${Date.now().toString(36)}`, name: raw.name, family: 'Praxis', section: 'Recent', source: 'custom', mode: raw.mode === 'light' ? 'light' : 'dark', description: typeof raw.description === 'string' ? raw.description : 'Imported custom theme.', preview: raw.preview as ThemeDefinition['preview'] });
-    } catch { /* Invalid files are ignored without changing the current editor. */ }
-  };
-
-  const exportCustom = () => {
-    if (!editing) return;
-    const blob = new Blob([JSON.stringify({ name: editing.name, mode: editing.mode, description: editing.description, preview: editing.preview }, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${editing.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'custom-theme'}.json`; anchor.click(); URL.revokeObjectURL(url);
-  };
-
-  const deleteCustom = async () => {
-    if (!editing) return;
-    const next = custom.filter(theme => theme.id !== editing.id);
-    const fallback = selectedTheme === editing.id ? DEFAULT_THEME_ID : selectedTheme;
-    await update({ appearance: { customThemes: next, installedThemeIds: installedIds.filter(id => id !== editing.id), ...(selectedTheme === editing.id ? { themeId: fallback, themeMode: 'light' } : {}) } });
-    registerCustomThemes(next);
-    if (selectedTheme === editing.id) { setSelectedTheme(fallback); applyThemePreference(fallback, 'light'); }
-    setEditing(undefined);
-  };
-
-  const themes = allThemes();
-  useEffect(() => {
-    const syncTheme = (event: Event) => setSelectedTheme((event as CustomEvent<string>).detail);
-    window.addEventListener('tm-theme-changed', syncTheme);
-    return () => window.removeEventListener('tm-theme-changed', syncTheme);
-  }, []);
-
-  const visible = themes.filter(theme => {
-    const needle = query.trim().toLowerCase();
-    return !needle || `${theme.name} ${theme.family} ${theme.mode} ${theme.description}`.toLowerCase().includes(needle);
-  });
-
-  return (
-    <>
-      <CategoryHeader
-        category={category}
-        actions={
-          <>
-            <button type="button" className="icon-btn icon-btn-sm" aria-label="Create custom theme" title="Create custom theme" data-testid="theme-create-custom" onClick={createCustom}>
-              <Icon name="plus" size={14} />
-            </button>
-            <label className="icon-btn icon-btn-sm" aria-label="Import theme" title="Import theme" data-testid="theme-import">
-              <Icon name="folder-open" size={14} />
-              <input type="file" accept="application/json,.json" hidden onChange={event => void importCustom(event)} />
-            </label>
-          </>
-        }
-      />
-      <p className="theme-gallery-helper">Design your own palette with a live preview.</p>
-      {editing && <CustomThemeEditor theme={editing} onChange={setEditing} onSave={() => void saveCustom()} onDelete={custom.some(theme => theme.id === editing.id) ? () => void deleteCustom() : undefined} onDuplicate={() => setEditing({ ...editing, id: `custom-${Date.now().toString(36)}`, name: `${editing.name} Copy` })} onExport={exportCustom} onCancel={() => { setEditing(undefined); applyThemePreference(selectedTheme, settings.appearance.themeMode as ThemeModePreference); }} />}
-      <div className="theme-mode-toolbar" role="group" aria-label="Theme appearance mode">
-        <span>Appearance</span>
-        {(['system', 'light', 'dark'] as const).map(mode => (
-          <button key={mode} type="button" className={settings.appearance.themeMode === mode ? 'active' : ''}
-            onClick={() => {
-              applyThemePreference(selectedTheme, mode);
-              void update({ appearance: { themeMode: mode } });
-            }}>{mode === 'system' ? 'System' : mode[0]!.toUpperCase() + mode.slice(1)}</button>
-        ))}
-      </div>
-      <div className="theme-gallery-toolbar">
-        <label className="theme-gallery-search">
-          <Icon name="search" size={13} />
-          <input type="search" value={query} aria-label="Search themes" placeholder={`Search ${themes.length} themes…`} onChange={event => setQuery(event.target.value)} />
-        </label>
-        <span>{visible.length} themes</span>
-      </div>
-      {(['Recent', 'Staff picks'] as const).map(section => {
-        const sectionThemes = visible.filter(theme => theme.section === section && (!theme.source || installedIds.includes(theme.id) || installedAddonThemeIds.has(theme.id)));
-        if (sectionThemes.length === 0) return null;
-        return (
-          <section className="theme-gallery-section" key={section}>
-            <h4>{section}</h4>
-            <div className="theme-gallery-grid">
-              {sectionThemes.map(theme => (
-                <ThemePreviewCard key={theme.id} theme={theme} installed={theme.source !== 'marketplace' || installedIds.includes(theme.id) || installedAddonThemeIds.has(theme.id)} active={selectedTheme === theme.id} onSelect={() => {
-                  setSelectedTheme(theme.id);
-                  applyThemePreference(theme.id, theme.mode);
-                  void update({ appearance: { themeId: theme.id, themeMode: theme.mode } });
-                }} onEdit={theme.source === 'custom' ? () => setEditing(theme as ThemeDefinition & { source: 'custom' }) : undefined} />
-              ))}
-            </div>
-          </section>
-        );
-      })}
-      {(() => {
-        const bundled = visible.filter(
-          theme =>
-            theme.source === 'marketplace'
-        );
-        const needle = query.trim().toLowerCase();
-        const fromCatalogue = (themeAddons.catalog ?? []).filter(
-          entry =>
-            !needle ||
-            `${entry.manifest.name} ${entry.manifest.summary ?? ''} ${entry.manifest.author ?? ''}`
-              .toLowerCase()
-              .includes(needle)
-        );
-
-        const availableBundled = bundled.filter(
-          theme => !installedIds.includes(theme.id) && !installedAddonThemeIds.has(theme.id)
-        );
-        const availableCatalogue = fromCatalogue.filter(
-          entry => !installedAddonThemeIds.has(entry.manifest.id)
-        );
-        // Installing a bundled marketplace card only flips `installedThemeIds` (see
-        // onInstall below) — it never calls the real add-on API, so these never land in
-        // `themeAddons.installed`. Excluded from totalInstalled, they used to vanish from
-        // the total entirely once installed, hiding this whole section (`total === 0`)
-        // even though every marketplace theme was in active use. `!installedAddonThemeIds`
-        // avoids double-counting a bundled id that also happens to be a real install.
-        const installedBundled = bundled.filter(
-          theme => installedIds.includes(theme.id) && !installedAddonThemeIds.has(theme.id)
-        );
-
-        const totalAvailable = availableBundled.length + availableCatalogue.length;
-        const totalInstalled = installedBundled.length + themeAddons.installed.length;
-        const total = totalAvailable + totalInstalled;
-
-        const removeBundledTheme = (theme: ThemeDefinition) => {
-          const nextIds = installedIds.filter(id => id !== theme.id);
-          const fallbackActive = selectedTheme === theme.id;
-          void update({
-            appearance: {
-              installedThemeIds: nextIds,
-              ...(fallbackActive ? { themeId: DEFAULT_THEME_ID, themeMode: 'light' } : {})
-            }
-          }).then(() => {
-            if (fallbackActive) {
-              setSelectedTheme(DEFAULT_THEME_ID);
-              applyThemePreference(DEFAULT_THEME_ID, 'light');
-            }
-          });
-        };
-
-        if (total === 0 && themeAddons.ready && themeAddons.catalog !== undefined) {
-          return null;
-        }
-        return (
-          <section className="theme-gallery-section theme-marketplace-section" data-testid="theme-marketplace">
-            <div className="theme-marketplace-heading">
-              <div>
-                <h4>Marketplace</h4>
-                <p>Install curated and community palettes into this workspace.</p>
-              </div>
-              {total > 0 && (
-                <div className="theme-marketplace-filter">
-                  <span className="theme-marketplace-count">
-                    {marketplaceFilter === 'all' ? totalAvailable : totalInstalled} {marketplaceFilter === 'all' ? 'available' : 'installed'}
-                  </span>
-                  <div className="filter-toggle" role="group" aria-label="Marketplace filter">
-                    <button
-                      type="button"
-                      className={marketplaceFilter === 'all' ? 'active' : ''}
-                      onClick={() => setMarketplaceFilter('all')}
-                      data-testid="theme-marketplace-filter-all"
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      className={marketplaceFilter === 'installed' ? 'active' : ''}
-                      onClick={() => setMarketplaceFilter('installed')}
-                      disabled={totalInstalled === 0}
-                      data-testid="theme-marketplace-filter-installed"
-                    >
-                      Installed {totalInstalled > 0 && `(${totalInstalled})`}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-            {themeAddons.error && <div className="error-banner">{themeAddons.error}</div>}
-            {!themeAddons.ready && (
-              <p className="settings-field-help">
-                Set up the add-on catalogue in Settings › Add-ons to install themes from GitHub Packages.
-              </p>
-            )}
-            {themeAddons.ready && themeAddons.catalog === undefined && (
-              <p className="settings-field-help">Loading the catalogue…</p>
-            )}
-            {marketplaceFilter === 'all' && (
-              // A marketplace card stays here once installed — it doesn't move away to
-              // Recent/Staff picks and disappear from this grid. Browsing the catalogue
-              // should always show the full catalogue, installed state included.
-              <div className="theme-gallery-grid">
-                {bundled.map(theme => {
-                  const isInstalled = installedIds.includes(theme.id) || installedAddonThemeIds.has(theme.id);
-                  return (
-                    <ThemePreviewCard
-                      key={theme.id}
-                      theme={theme}
-                      active={selectedTheme === theme.id}
-                      installed={isInstalled}
-                      onSelect={() => {
-                        setSelectedTheme(theme.id);
-                        applyThemePreference(theme.id, theme.mode);
-                        void update({ appearance: { themeId: theme.id, themeMode: theme.mode } });
-                      }}
-                      onInstall={
-                        isInstalled
-                          ? undefined
-                          : () =>
-                              void update({
-                                appearance: {
-                                  installedThemeIds: [...installedIds, theme.id],
-                                  themeId: theme.id,
-                                  themeMode: theme.mode
-                                }
-                              }).then(() => {
-                                setSelectedTheme(theme.id);
-                                applyThemePreference(theme.id, theme.mode);
-                              })
-                      }
-                    />
-                  );
-                })}
-                {fromCatalogue.map(entry => {
-                  const isInstalled = installedAddonThemeIds.has(entry.manifest.id);
-                  const previewTheme = addonThemePreview(entry);
-                  return (
-                    <ThemePreviewCard
-                      key={entry.packageName}
-                      theme={previewTheme}
-                      active={selectedTheme === entry.manifest.id}
-                      installed={isInstalled}
-                      onSelect={() => {
-                        setSelectedTheme(entry.manifest.id);
-                        applyThemePreference(entry.manifest.id, previewTheme.mode);
-                        void update({ appearance: { themeId: entry.manifest.id, themeMode: previewTheme.mode } });
-                      }}
-                      onInstall={
-                        isInstalled || entry.incompatible
-                          ? undefined
-                          : () => void themeAddons.install(entry.packageName)
-                      }
-                    />
-                  );
-                })}
-              </div>
-            )}
-            {marketplaceFilter === 'installed' && (installedBundled.length > 0 || themeAddons.installed.length > 0) && (
-              <div className="theme-marketplace-installed-list">
-                {installedBundled.map((theme, index) => (
-                  <div key={theme.id} className="theme-marketplace-installed-item" data-testid="theme-marketplace-installed-item">
-                    {index > 0 && ' · '}
-                    <span>{theme.name}</span>
-                    <button type="button" className="linklike" onClick={() => removeBundledTheme(theme)}>
-                      Remove
-                    </button>
-                  </div>
-                ))}
-                {themeAddons.installed.map((addon, index) => (
-                  <div key={addon.manifest.id} className="theme-marketplace-installed-item" data-testid="theme-marketplace-installed-item">
-                    {(installedBundled.length > 0 || index > 0) && ' · '}
-                    <span>{addon.manifest.name}</span>
-                    <button
-                      type="button"
-                      className="linklike"
-                      disabled={themeAddons.busy === `remove:${addon.manifest.id}`}
-                      onClick={() => void themeAddons.remove(addon.manifest.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        );
-      })()}
-      {visible.length === 0 && <div className="placeholder-text">No themes match “{query}”.</div>}
-    </>
-  );
-}
-
-function LooksSection({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
-  const category = CATEGORIES.find(c => c.id === 'appearance-looks')!;
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <LooksStrip settings={settings} update={update} />
-    </>
-  );
-}
-
-function SurfacesSection({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
-  const category = CATEGORIES.find(c => c.id === 'appearance-surfaces')!;
-  const surfaceId = settings.appearance.surfacePackId;
-  const surfaceOpts = settings.appearance.surface;
-  const customSurfacePacks = settings.appearance.customSurfacePacks ?? [];
-  const applySurface = (id: string, opts: typeof surfaceOpts) =>
-    applySurfacePack(id, {
-      intensity: opts.intensity,
-      texture: opts.texture,
-      translucency: opts.translucency,
-      windowVibrancy: opts.windowVibrancy,
-      animateMotifs: opts.animateMotifs,
-      motif: opts.motif
-    });
-  const selectSurface = (id: string) => {
-    // Selecting a material starts from that material's own motif. A motif is
-    // still independently customisable afterwards; clearing the override here
-    // is what makes the surface cards behave like complete presets.
-    const nextOpts = { ...surfaceOpts, motif: undefined };
-    applySurface(id, nextOpts);
-    void update({ appearance: { surfacePackId: id, surface: { motif: undefined } } });
-  };
-  const currentMode = ((document.documentElement.getAttribute('data-mode') as SurfaceMode | null) ?? 'dark');
-  const visibleSurfacePacks = allSurfacePacks().filter(pack => pack.supports.includes(currentMode));
-  const activeSurfacePack = allSurfacePacks().find(pack => pack.id === surfaceId);
-  const [editingSurface, setEditingSurface] = useState<CustomSurfacePack>();
-  const [vibrancySupported, setVibrancySupported] = useState(false);
-  const [, bumpPacks] = useState(0);
-  useEffect(() => {
-    void window.praxis.window.supportsVibrancy?.().then(setVibrancySupported).catch(() => setVibrancySupported(false));
-  }, []);
-  useEffect(() => {
-    registerCustomSurfacePacks(customSurfacePacks);
-  }, [customSurfacePacks]);
-
-  // The add-on marketplace, scoped to surface packs.
-  const packAddons = useKindAddons('surface-pack');
-  useEffect(() => {
-    if (packAddons.ready && packAddons.catalog === undefined && !packAddons.busy) {
-      void packAddons.browse();
-    }
-  }, [packAddons.ready, packAddons.catalog, packAddons.busy, packAddons.browse]);
-  useEffect(() => {
-    const bump = () => bumpPacks(value => value + 1);
-    window.addEventListener('praxis-marketplace-appearance', bump);
-    return () => window.removeEventListener('praxis-marketplace-appearance', bump);
-  }, []);
-  const installedAddonPackIds = new Set(packAddons.installed.map(addon => addon.manifest.id));
-
-  const persistSurfacePacks = (packs: CustomSurfacePack[], nextActiveId?: string) => {
-    registerCustomSurfacePacks(packs);
-    if (nextActiveId) {
-      applySurface(nextActiveId, { ...surfaceOpts, motif: undefined });
-    }
-    return update({ appearance: {
-      customSurfacePacks: packs,
-      ...(nextActiveId ? { surfacePackId: nextActiveId, surface: { motif: undefined } } : {})
-    } });
-  };
-  const newCustomSurface = (): CustomSurfacePack => ({
-    id: `custom-${Date.now().toString(36)}`,
-    name: 'My surface',
-    description: '',
-    basePackId: 'parchment',
-    pattern: { id: 'hexagon', scale: 124, opacity: 0.08, ink: 'accent', weight: 0.8 },
-    tokens: dialsToTokens(DEFAULT_SURFACE_DIALS)
-  });
-  const exportSurface = (pack: CustomSurfacePack) => {
-    const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${pack.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'surface'}.surface.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <section className="theme-gallery-section surface-section" data-testid="surface-section">
-        <div className="theme-gallery-grid surface-pack-grid">
-          {visibleSurfacePacks.map(pack => (
-            <div className="surface-pack-card-wrap" key={pack.id}>
-              <SurfacePackCard
-                pack={pack}
-                active={surfaceId === pack.id}
-                onSelect={() => selectSurface(pack.id)}
-              />
-              {pack.source === 'custom' && (
-                <button
-                  type="button"
-                  className="surface-pack-edit"
-                  aria-label={`Edit ${pack.name}`}
-                  data-testid={`surface-edit-${pack.id}`}
-                  onClick={() => setEditingSurface(customSurfacePacks.find(record => record.id === pack.id))}
-                >Edit</button>
-              )}
-              {pack.source === 'marketplace' && installedAddonPackIds.has(pack.id) && (
-                <button
-                  type="button"
-                  className="surface-pack-edit"
-                  aria-label={`Remove ${pack.name}`}
-                  data-testid={`surface-remove-${pack.id}`}
-                  onClick={() => void packAddons.remove(pack.id)}
-                >Remove</button>
-              )}
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="surface-new-btn"
-          data-testid="surface-new"
-          onClick={() => setEditingSurface(newCustomSurface())}
-        >+ New custom surface</button>
-        <div className="theme-marketplace-heading" data-testid="surface-marketplace">
-          <div>
-            <h4>Marketplace</h4>
-            <p>Install material packs from your add-on catalogue.</p>
-          </div>
-          {(packAddons.catalog?.filter(entry => !installedAddonPackIds.has(entry.manifest.id)).length ?? 0) > 0 && (
-            <span className="theme-marketplace-count">
-              {packAddons.catalog!.filter(entry => !installedAddonPackIds.has(entry.manifest.id)).length} available
-            </span>
-          )}
-        </div>
-        {packAddons.error && <div className="error-banner">{packAddons.error}</div>}
-        {!packAddons.ready && (
-          <p className="settings-field-help">Set up the add-on catalogue in Settings › Add-ons to install surface packs.</p>
-        )}
-        {packAddons.ready && packAddons.catalog === undefined && <p className="settings-field-help">Loading the catalogue…</p>}
-        {packAddons.ready && packAddons.catalog?.filter(entry => !installedAddonPackIds.has(entry.manifest.id)).length === 0 && (
-          <p className="settings-field-help">No new surface packs in the catalogue.</p>
-        )}
-        <div className="surface-marketplace-grid">
-          {(packAddons.catalog ?? [])
-            .filter(entry => !installedAddonPackIds.has(entry.manifest.id))
-            .map(entry => (
-              <div className="surface-marketplace-card" key={entry.packageName} data-testid={`surface-marketplace-${entry.manifest.id}`}>
-                {entry.manifest.display?.preview && (
-                  <span className="surface-marketplace-swatch" aria-hidden="true">
-                    {['canvas', 'panel', 'accent', 'text'].map(token => (
-                      <i key={token} style={{ background: entry.manifest.display!.preview![token] ?? 'transparent' }} />
-                    ))}
-                  </span>
-                )}
-                <span className="surface-marketplace-meta">
-                  <strong>{entry.manifest.name}</strong>
-                  <small>
-                    v{entry.latestVersion}
-                    {entry.manifest.author ? ` · ${entry.manifest.author}` : ''}
-                    {entry.manifest.summary ? ` — ${entry.manifest.summary}` : ''}
-                    {entry.incompatible ? ' · needs a newer Praxis' : ''}
-                  </small>
-                </span>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={entry.incompatible || packAddons.busy === `install:${entry.packageName}`}
-                  onClick={() => void packAddons.install(entry.packageName)}
-                >
-                  Install
-                </button>
-              </div>
-            ))}
-        </div>
-        {editingSurface && (
-          <CustomSurfaceEditor
-            pack={editingSurface}
-            onChange={setEditingSurface}
-            onCancel={() => setEditingSurface(undefined)}
-            onExport={() => exportSurface(editingSurface)}
-            onDelete={customSurfacePacks.some(record => record.id === editingSurface.id)
-              ? () => {
-                  const remaining = customSurfacePacks.filter(record => record.id !== editingSurface.id);
-                  setEditingSurface(undefined);
-                  void persistSurfacePacks(remaining, surfaceId === editingSurface.id ? 'parchment' : undefined);
-                }
-              : undefined}
-            onSave={() => {
-              const others = customSurfacePacks.filter(record => record.id !== editingSurface.id);
-              const nextPacks = [...others, editingSurface];
-              setEditingSurface(undefined);
-              void persistSurfacePacks(nextPacks, editingSurface.id);
-            }}
-          />
-        )}
-        <MotifPanel
-          animationsEnabled={surfaceOpts.animateMotifs}
-          pack={activeSurfacePack}
-          motif={surfaceOpts.motif}
-          disabled={surfaceId === 'flat'}
-          onChange={async next => {
-            const updated = { ...surfaceOpts, motif: next };
-            applySurface(surfaceId, updated);
-            await update({ appearance: { surface: { motif: next } } });
-          }}
-        />
-        <div className="surface-dials">
-          <label className="surface-dial">
-            <span className="surface-dial-label">Intensity <em>{Math.round(surfaceOpts.intensity * 100)}%</em></span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={Math.round(surfaceOpts.intensity * 100)}
-              aria-label="Surface intensity"
-              data-testid="surface-intensity"
-              disabled={surfaceId === 'flat'}
-              onChange={event => {
-                const next = { ...surfaceOpts, intensity: Number(event.target.value) / 100 };
-                applySurface(surfaceId, next);
-                void update({ appearance: { surface: { intensity: next.intensity } } });
-              }}
-            />
-          </label>
-        </div>
-        <Toggle
-          label="Texture"
-          description="Paper fibre, brushed metal, and other grain layers. Turn off for flat panels while keeping the pack's depth and edges."
-          checked={surfaceOpts.texture}
-          disabled={surfaceId === 'flat'}
-          testId="surface-texture-toggle"
-          onChange={next => {
-            const updated = { ...surfaceOpts, texture: next };
-            applySurface(surfaceId, updated);
-            void update({ appearance: { surface: { texture: next } } });
-          }}
-        />
-        <Toggle
-          label="Animate motifs"
-          description="Let the motif move — draw itself, shimmer, glow, and the rest. The style is chosen per motif below. Always off when the OS asks for reduced motion."
-          checked={surfaceOpts.animateMotifs}
-          testId="surface-animate-toggle"
-          onChange={next => {
-            const updated = { ...surfaceOpts, animateMotifs: next };
-            applySurface(surfaceId, updated);
-            void update({ appearance: { surface: { animateMotifs: next } } });
-          }}
-        />
-        <Toggle
-          label="Plain chat background"
-          description="Drop the surface material behind the AI session view — its list and console — so long transcripts stay legible. The colour theme still applies. Each session can override this from its header."
-          checked={surfaceOpts.plainChatSurface}
-          testId="surface-plain-chat-toggle"
-          onChange={next => {
-            void update({ appearance: { surface: { plainChatSurface: next } } });
-          }}
-        />
-        <Toggle
-          label="Translucency"
-          description="Frosted, see-through panels for glass packs like Aurora Glass. Ignored by opaque packs; forced off when the OS asks for reduced transparency."
-          checked={surfaceOpts.translucency}
-          disabled={!activeSurfacePack?.glass}
-          testId="surface-translucency-toggle"
-          onChange={next => {
-            const updated = { ...surfaceOpts, translucency: next };
-            applySurface(surfaceId, updated);
-            void update({ appearance: { surface: { translucency: next } } });
-          }}
-        />
-        {vibrancySupported && (
-          <Toggle
-            label="Window blur"
-            description="Let the desktop behind the app show through frosted panels, using the OS's native vibrancy. Takes full effect after the next relaunch."
-            checked={surfaceOpts.windowVibrancy}
-            disabled={!activeSurfacePack?.glass || !surfaceOpts.translucency}
-            testId="surface-vibrancy-toggle"
-            onChange={next => {
-              const updated = { ...surfaceOpts, windowVibrancy: next };
-              applySurface(surfaceId, updated);
-              void update({ appearance: { surface: { windowVibrancy: next } } });
-            }}
-          />
-        )}
-      </section>
-    </>
-  );
-}
-
-function AppearanceSection({
-  settings,
-  update
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'appearance')!;
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <div className="settings-list">
-        <div className="theme-mode-toolbar" role="group" aria-label="Display size">
-          <span>Display size</span>
-          {(['compact', 'large'] as const).map(mode => (
-            <button
-              key={mode}
-              type="button"
-              className={settings.appearance.displayMode === mode ? 'active' : ''}
-              aria-pressed={settings.appearance.displayMode === mode}
-              onClick={() => void update({ appearance: { displayMode: mode } })}
-            >
-              {mode === 'compact' ? 'Compact' : 'Large'}
-            </button>
-          ))}
-        </div>
-        <p className="settings-help">Large mode increases readable text, spacing, and control sizes throughout Praxis. Compact keeps the current density.</p>
-        <Toggle
-          label="Brand artwork in board list"
-          description="Show each backend's logo (Jira, GitHub, GitLab) as the board icon. When off, boards use the generic board-type icons."
-          checked={settings.appearance.showBrandArtwork}
-          onChange={next => void update({ appearance: { showBrandArtwork: next } })}
-        />
-      </div>
-      <div className="priority-color-list">
-        {PRIORITY_NAMES.map(priority => (
-          <PriorityColorRow
-            key={priority}
-            priority={priority}
-            value={settings.appearance.priorityColors[priority] ?? ''}
-            onCommit={next =>
-              update({ appearance: { priorityColors: { [priority]: next } } })
-            }
-          />
-        ))}
-      </div>
-    </>
-  );
-}
-
-function TerminalSection({
-  settings,
-  update
-}: {
-  settings: AppSettings;
-  update: (patch: AppSettingsPatch) => Promise<void>;
-}) {
-  const category = CATEGORIES.find(c => c.id === 'terminal')!;
-  const [profiles, setProfiles] = useState<Array<{ id: string; name: string; shell: string; isDefault: boolean }>>([]);
-
-  useEffect(() => {
-    let active = true;
-    void window.praxis.terminal.listProfiles().then(next => {
-      if (active) setProfiles(next);
-    });
-    return () => { active = false; };
-  }, []);
-
-  const updateTerminal = (patch: Partial<AppSettings['terminal']>) => void update({ terminal: patch });
-  const profileId = settings.terminal.defaultProfileId || profiles.find(profile => profile.isDefault)?.id || '';
-
-  return (
-    <>
-      <CategoryHeader category={category} />
-      <div className="settings-subsection-title">Profiles</div>
-      <FieldRow
-        label="Default profile"
-        description="Used when you click New terminal without choosing a profile."
-      >
-        <ChipSelect
-          ariaLabel="Terminal default profile"
-          icon="terminal"
-          value={profileId}
-          placeholder="Detecting profiles…"
-          onChange={value => updateTerminal({ defaultProfileId: value })}
-          options={profiles.map(profile => ({ value: profile.id, label: profile.name, meta: profile.shell }))}
-        />
-      </FieldRow>
-      <div className="settings-subsection-title">Appearance</div>
-      <FieldRow label="Font family" description="A comma-separated CSS font stack used by terminal sessions.">
-        <DebouncedTextField
-          ariaLabel="Terminal font family"
-          value={settings.terminal.fontFamily}
-          onCommit={value => updateTerminal({ fontFamily: value })}
-          placeholder="Menlo, Monaco, monospace"
-        />
-      </FieldRow>
-      <FieldRow label="Font size" description="Terminal text size in pixels.">
-        <input
-          className="input settings-number-input"
-          aria-label="Terminal font size"
-          type="number"
-          min={9}
-          max={32}
-          value={settings.terminal.fontSize}
-          onChange={event => updateTerminal({ fontSize: Number(event.target.value) })}
-        />
-      </FieldRow>
-      <FieldRow label="Line height" description="Multiplier applied to each terminal row.">
-        <input
-          className="input settings-number-input"
-          aria-label="Terminal line height"
-          type="number"
-          min={0.9}
-          max={2}
-          step={0.05}
-          value={settings.terminal.lineHeight}
-          onChange={event => updateTerminal({ lineHeight: Number(event.target.value) })}
-        />
-      </FieldRow>
-      <FieldRow label="Cursor" description="Choose the cursor shape used in terminal sessions.">
-        <ChipSelect
-          ariaLabel="Terminal cursor style"
-          value={settings.terminal.cursorStyle}
-          onChange={value => updateTerminal({ cursorStyle: value as AppSettings['terminal']['cursorStyle'] })}
-          options={[
-            { value: 'block', label: 'Block' },
-            { value: 'bar', label: 'Line' },
-            { value: 'underline', label: 'Underline' }
-          ]}
-        />
-      </FieldRow>
-      <Toggle
-        label="Blinking cursor"
-        description="Animate the cursor while the terminal is focused."
-        checked={settings.terminal.cursorBlink}
-        onChange={next => updateTerminal({ cursorBlink: next })}
-      />
-      <Toggle
-        label="GPU acceleration"
-        description="Use WebGL rendering when available for smoother terminal output."
-        checked={settings.terminal.gpuAcceleration}
-        onChange={next => updateTerminal({ gpuAcceleration: next })}
-      />
-      <div className="settings-subsection-title">Behaviour</div>
-      <FieldRow label="Scrollback" description="Number of terminal lines retained for scrolling and chat context.">
-        <input
-          className="input settings-number-input"
-          aria-label="Terminal scrollback"
-          type="number"
-          min={100}
-          max={100000}
-          step={100}
-          value={settings.terminal.scrollback}
-          onChange={event => updateTerminal({ scrollback: Number(event.target.value) })}
-        />
-      </FieldRow>
-      <Toggle
-        label="Copy on selection"
-        description="Copy selected terminal text immediately, like a native terminal."
-        checked={settings.terminal.copyOnSelection}
-        onChange={next => updateTerminal({ copyOnSelection: next })}
-      />
-      <Toggle
-        label="Confirm paste"
-        description="Ask before pasting multi-line text into a shell."
-        checked={settings.terminal.confirmPaste}
-        onChange={next => updateTerminal({ confirmPaste: next })}
-      />
-      <Toggle
-        label="Terminal bell"
-        description="Play a subtle sound when a shell emits a bell."
-        checked={settings.terminal.bellSound}
-        onChange={next => updateTerminal({ bellSound: next })}
-      />
-      <Toggle
-        label="Shell integration"
-        description="Advertise terminal capabilities to shells that support integration sequences."
-        checked={settings.terminal.shellIntegration}
-        onChange={next => updateTerminal({ shellIntegration: next })}
-      />
-    </>
-  );
-}
-
-const HEX6 = /^#[0-9a-fA-F]{6}$/;
-
-/** A `linear-gradient(...)` broken into the parts the row can edit with color pickers. */
-interface GradientParts {
-  /** Everything before the first color stop, e.g. `to bottom` or `90deg`. */
-  direction: string;
-  /** Two or more `#rrggbb` stops, in source order. */
-  stops: string[];
-}
-
-/**
- * Parses the subset of `linear-gradient(...)` the editor can offer pickers for:
- * an optional direction followed by two or more bare `#rrggbb` stops. Anything
- * richer (named colors, `rgb()`, percentage positions, nested functions) parses
- * to `undefined` and stays text-only — it is still a valid stored value.
- */
-function parseLinearGradient(value: string): GradientParts | undefined {
-  const match = /^\s*linear-gradient\s*\(([\s\S]*)\)\s*$/i.exec(value);
-  if (!match) {
-    return undefined;
-  }
-  const parts = match[1].split(',').map(part => part.trim()).filter(Boolean);
-  if (parts.length < 2) {
-    return undefined;
-  }
-  const hasDirection = !HEX6.test(parts[0]!);
-  const direction = hasDirection ? parts[0]! : 'to bottom';
-  const stops = hasDirection ? parts.slice(1) : parts;
-  if (stops.length < 2 || !stops.every(stop => HEX6.test(stop))) {
-    return undefined;
-  }
-  return { direction, stops };
-}
-
-function formatLinearGradient({ direction, stops }: GradientParts): string {
-  return `linear-gradient(${direction}, ${stops.join(', ')})`;
-}
-
-/** Directions offered in the row's dropdown. A value using anything else keeps its
- *  own direction as an extra option so switching stops never rewrites it. */
-const GRADIENT_DIRECTIONS = ['to bottom', 'to top', 'to right', 'to left', 'to bottom right'];
-
-/** Scales a `#rrggbb` toward black (positive ratio) or white (negative). Used to
- *  seed the second stop when a solid color is switched to a gradient, so the new
- *  gradient is visibly a gradient instead of two identical stops. */
-function shiftHex(hex: string, ratio: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const channels = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(c => {
-    const next = ratio >= 0 ? c * (1 - ratio) : c + (255 - c) * -ratio;
-    return Math.max(0, Math.min(255, Math.round(next)));
-  });
-  return `#${channels.map(c => c.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
-}
-
-/** Inline style that paints `value` — gradients need `background-image`, hex needs `background-color`. */
-function colorStyle(value: string): React.CSSProperties {
-  return /^\s*linear-gradient/i.test(value)
-    ? { backgroundImage: value, backgroundColor: 'transparent' }
-    : { backgroundImage: 'none', backgroundColor: value };
-}
-
-/**
- * One priority's color, edited entirely with pickers: a Solid/Gradient toggle, a
- * direction dropdown, and one `<input type="color">` per stop (two for the
- * shipped gradients). Values that the parser cannot represent as pickers — named
- * colors, `rgb()`, percentage stops — fall back to a raw CSS text field so an
- * existing setting is never silently dropped or rewritten.
- */
-function PriorityColorRow({
-  priority,
-  value,
-  onCommit
-}: {
-  priority: string;
-  value: string;
-  onCommit: (next: string) => void;
-}) {
-  const gradient = useMemo(() => parseLinearGradient(value), [value]);
-  const hex = useMemo(() => (HEX6.test(value.trim()) ? value.trim().toUpperCase() : undefined), [value]);
-
-  const setStop = (index: number, next: string) => {
-    if (!gradient) {
-      return;
-    }
-    const stops = gradient.stops.slice();
-    stops[index] = next.toUpperCase();
-    onCommit(formatLinearGradient({ ...gradient, stops }));
-  };
-
-  const toGradient = () => {
-    const start = hex ?? '#808080';
-    onCommit(formatLinearGradient({ direction: 'to bottom', stops: [start, shiftHex(start, 0.35)] }));
-  };
-
-  const toSolid = () => {
-    onCommit(gradient?.stops[0] ?? '#808080');
-  };
-
-  const directions = gradient && !GRADIENT_DIRECTIONS.includes(gradient.direction)
-    ? [gradient.direction, ...GRADIENT_DIRECTIONS]
-    : GRADIENT_DIRECTIONS;
-
-  return (
-    <div className="priority-color-row">
-      <span className="priority-swatch" style={colorStyle(value)} aria-hidden />
-      <div className="priority-color-name">{priority}</div>
-
-      {hex || gradient ? (
-        <>
-          <div className="priority-mode-toggle" role="group" aria-label={`${priority} color style`}>
-            <button
-              type="button"
-              className={`priority-mode-btn${hex ? ' active' : ''}`}
-              aria-pressed={Boolean(hex)}
-              onClick={toSolid}
-            >
-              Solid
-            </button>
-            <button
-              type="button"
-              className={`priority-mode-btn${gradient ? ' active' : ''}`}
-              aria-pressed={Boolean(gradient)}
-              onClick={toGradient}
-            >
-              Gradient
-            </button>
-          </div>
-
-          <div className="priority-color-pickers">
-            {hex && (
-              <input
-                type="color"
-                className="priority-color-picker"
-                value={hex}
-                aria-label={`${priority} priority color`}
-                onChange={event => onCommit(event.target.value.toUpperCase())}
-              />
-            )}
-            {gradient?.stops.map((stop, index) => (
-              <input
-                /* Index is a stable identity: the stop count only changes when the
-                   whole value is replaced, which re-renders this list wholesale. */
-                key={index}
-                type="color"
-                className="priority-color-picker"
-                value={stop}
-                aria-label={
-                  index === 0
-                    ? `${priority} gradient start color`
-                    : index === gradient.stops.length - 1
-                      ? `${priority} gradient end color`
-                      : `${priority} gradient stop ${index + 1}`
-                }
-                onChange={event => setStop(index, event.target.value)}
-              />
-            ))}
-          </div>
-
-          {gradient ? (
-            <ChipSelect
-              className="priority-gradient-direction"
-              value={gradient.direction}
-              ariaLabel={`${priority} gradient direction`}
-              onChange={value => onCommit(formatLinearGradient({ ...gradient, direction: value }))}
-              options={directions.map(direction => ({ value: direction, label: direction }))}
-            />
-          ) : (
-            <span />
-          )}
-        </>
-      ) : (
-        <CustomColorField priority={priority} value={value} onCommit={onCommit} />
-      )}
-    </div>
-  );
-}
-
-/** Escape hatch for stored values the pickers cannot represent. */
-function CustomColorField({
-  priority,
-  value,
-  onCommit
-}: {
-  priority: string;
-  value: string;
-  onCommit: (next: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  const [error, setError] = useState<string | undefined>();
-
-  useEffect(() => {
-    setDraft(value);
-    setError(undefined);
-  }, [value]);
-
-  const commit = () => {
-    // A bare `rrggbb` is a common paste shape; accept it by adding the `#`.
-    const candidate = /^[0-9a-fA-F]{6}$/.test(draft.trim()) ? `#${draft.trim()}` : draft;
-    const normalised = normalizePriorityColor(candidate);
-    if (!normalised) {
-      setError('Use a #rrggbb hex or a linear-gradient(...) expression.');
-      return;
-    }
-    setError(undefined);
-    onCommit(normalised);
-  };
-
-  return (
-    <>
-      <input
-        type="text"
-        className="input priority-color-custom"
-        value={draft}
-        aria-label={`${priority} priority color`}
-        placeholder="#rrggbb or linear-gradient(…)"
-        onChange={event => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={event => {
-          if (event.key === 'Enter') {
-            commit();
-            (event.target as HTMLInputElement).blur();
-          }
-        }}
-      />
-      {error && <div className="error-banner priority-color-error">{error}</div>}
-    </>
-  );
-}
-
-interface DebouncedTextFieldProps {
-  ariaLabel: string;
-  value: string;
-  placeholder?: string;
-  onCommit: (next: string) => void;
-  delayMs?: number;
-}
-
-/** Multi-line variant of DebouncedTextField (e.g. the analysis system prompt). */
-function DebouncedTextArea({ ariaLabel, value, placeholder, onCommit, delayMs = 600 }: DebouncedTextFieldProps) {
-  const [draft, setDraft] = useState(value);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-  useEffect(() => () => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-    }
-  }, []);
-  const schedule = (next: string) => {
-    setDraft(next);
-    if (timer.current) {
-      clearTimeout(timer.current);
-    }
-    timer.current = setTimeout(() => onCommit(next), delayMs);
-  };
-  return (
-    <textarea
-      className="textarea"
-      value={draft}
-      aria-label={ariaLabel}
-      placeholder={placeholder}
-      rows={4}
-      onChange={event => schedule(event.target.value)}
-      style={{ width: '100%' }}
-    />
-  );
-}
-
-const MODEL_TIER_NAMES = ['fast', 'standard', 'strong'] as const;
-type ModelTierName = (typeof MODEL_TIER_NAMES)[number];
-const CUSTOM_MODEL = '__custom__';
-
-/**
- * One provider's model tiers: what fast, standard and strong mean *for this provider*. Each tier is a
- * pick from the provider's real model list (so an id cannot be mistyped into one that does not exist);
- * a provider with no list, or a model outside it, falls back to typing an id. A tier left unset makes
- * a stage use the run's model.
- */
-function ProviderModelTiers({
-  provider,
-  tiers,
-  onChange
-}: {
+export interface AiProviderStatus {
   provider: AiProvider;
-  tiers: { fast?: string; standard?: string; strong?: string };
-  onChange: (next: { fast?: string; standard?: string; strong?: string }) => void;
-}) {
-  const [catalog, setCatalog] = useState<ModelChoice[] | undefined>();
-  const [loading, setLoading] = useState(true);
-  const [customTiers, setCustomTiers] = useState<Partial<Record<ModelTierName, boolean>>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void fetchModelOptions(provider, false)
-      .then(options => {
-        if (!cancelled) setCatalog(options?.options);
-      })
-      .catch(() => {
-        if (!cancelled) setCatalog(undefined);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [provider]);
-
-  const commit = (tier: ModelTierName, value: string) => {
-    const next = { ...tiers, [tier]: value.trim() || undefined };
-    onChange(Object.fromEntries(Object.entries(next).filter(([, model]) => model)) as typeof tiers);
-  };
-
-  return (
-    <div className="model-tiers-field" data-testid={`ai-model-tiers-${provider}`}>
-      {MODEL_TIER_NAMES.map(tier => {
-        const current = tiers[tier] ?? '';
-        const listed = !!catalog?.some(choice => choice.value === current);
-        const typing = !catalog || customTiers[tier] || (!!current && !listed);
-        return (
-          <label key={tier} className="model-tiers-row">
-            <span>{tier}</span>
-            {typing ? (
-              <span className="model-tiers-typed">
-                <DebouncedTextField
-                  ariaLabel={`${tier} tier model`}
-                  value={current}
-                  onCommit={value => commit(tier, value)}
-                  placeholder="model id (blank = the run's model)"
-                />
-                {catalog && (
-                  <button
-                    type="button"
-                    className="btn btn-compact"
-                    onClick={() => {
-                      setCustomTiers(state => ({ ...state, [tier]: false }));
-                      if (current && !listed) commit(tier, '');
-                    }}
-                  >
-                    Pick from list
-                  </button>
-                )}
-              </span>
-            ) : (
-              <ChipSelect
-                block
-                ariaLabel={`${tier} tier model`}
-                data-testid={`ai-model-tier-${provider}-${tier}`}
-                value={current}
-                searchable
-                onChange={value => {
-                  if (value === CUSTOM_MODEL) setCustomTiers(state => ({ ...state, [tier]: true }));
-                  else commit(tier, value);
-                }}
-                options={[
-                  { value: '', label: "The run's model" },
-                  ...catalog!.map(choice => ({
-                    value: choice.value,
-                    label: choice.name || choice.value,
-                    description: choice.name && choice.name !== choice.value ? choice.value : undefined
-                  })),
-                  { value: CUSTOM_MODEL, label: 'Other model id…', icon: 'pencil' as const }
-                ]}
-              />
-            )}
-          </label>
-        );
-      })}
-      {!loading && !catalog && (
-        <p className="settings-hint">This provider has no model list to pick from, so type the model ids.</p>
-      )}
-    </div>
-  );
+  /** Display name — a built-in's shipped label, or a custom endpoint's own name. */
+  label: string;
+  kind: 'api' | 'cli-agent';
+  /** A user-added OpenAI-compatible endpoint (`custom:<slug>`). */
+  custom?: boolean;
+  /** Custom endpoints only: false for a "No key" endpoint. */
+  needsKey?: boolean;
+  /** Custom endpoints only: what the last connection test found. */
+  capabilities?: ProviderCapabilities;
+  /** True when a usable API key exists (secret store or, for vercel-gateway, env fallback). */
+  configured: boolean;
+  /**
+   * The user has not turned this provider off (`ai.providers[id].enabled !== false`).
+   * A provider is offered for new sessions only when it is both `configured` and `enabled`.
+   */
+  enabled: boolean;
+  keySource: AiKeySource;
+  /** Effective base URL — the configured value or the provider's shipped default. */
+  gatewayUrl: string;
+  defaultModel: string;
+  agentName: string;
+  /** Issue keys with a currently running agent task. */
+  activeTasks: string[];
+  /** Lightweight local CLI preflight; API providers do not carry this field. */
+  preflight?: ProviderPreflightState;
 }
 
-function DebouncedTextField({ ariaLabel, value, placeholder, onCommit, delayMs = 400 }: DebouncedTextFieldProps) {
-  const [draft, setDraft] = useState(value);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-  useEffect(() => () => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-    }
-  }, []);
-  const schedule = (next: string) => {
-    setDraft(next);
-    if (timer.current) {
-      clearTimeout(timer.current);
-    }
-    timer.current = setTimeout(() => onCommit(next), delayMs);
-  };
-  return (
-    <input
-      type="text"
-      className="input"
-      value={draft}
-      aria-label={ariaLabel}
-      placeholder={placeholder}
-      onChange={event => schedule(event.target.value)}
-      style={{ width: '100%' }}
-    />
-  );
+export interface SaveCustomProviderInput {
+  /** Omitted `id` creates a new endpoint; its id is derived from the label. */
+  config: Omit<CustomProviderConfig, 'id'> & { id?: CustomProviderConfig['id'] };
+  /** Typed key: stored in the keychain; `''` clears it; omitted leaves it as is. */
+  apiKey?: string;
+  /** Written to `ai.providers[id].defaultModel`. */
+  defaultModel?: string;
 }
 
-interface DebouncedNumberFieldProps {
-  ariaLabel: string;
-  value: number;
-  min?: number;
-  max?: number;
-  onCommit: (next: number) => void;
-  delayMs?: number;
+export interface AiDelegateInput {
+  /** Explicit session purpose; defaults to chat for ordinary new sessions. */
+  mode?: SessionMode;
+  /**
+   * Issue to delegate. Omit for a free-form session: `goal` is then required and
+   * the main process synthesizes a session key (the session is not bound to any
+   * tracker issue).
+   */
+  issueKey?: string;
+  connectionId?: string;
+  /** Durable project ownership for project-scoped sessions and workflows. */
+  projectId?: string;
+  /** Free-form goal for an issue-less session (the New Session composer path). */
+  goal?: string;
+  /** Task overrides; any omitted field falls back to a default built from the issue. */
+  task?: Partial<AgentTaskDefinition>;
+  /**
+   * Working directory the agent's local tools run in. Required for a full-tools
+   * session (the main process rejects the delegate otherwise); read-only and
+   * project-only sessions may omit it.
+   */
+  workingDirectory?: string;
+  /**
+   * Run this session in a dedicated git worktree branched off `workingDirectory`'s
+   * current branch, instead of editing the working tree in place.
+   */
+  runInWorktree?: boolean;
+  /** Provider override for this session; defaults to `settings.ai.activeProvider`. */
+  provider?: AiProvider;
+  /** Model id override for this session; omitted to use the selected provider's default. */
+  model?: string;
+  /**
+   * Reasoning/thinking effort for this session's turns. Omitted uses the
+   * provider's per-model default (Settings → AI Provider → Manage models),
+   * then `'off'`.
+   */
+  reasoningEffort?: ReasoningEffort;
+  /** Tool-permission policy for this session. */
+  permissionMode?: AgentPermissionMode;
+  /** Host-enforced tool access for this session. Analysis always uses read-only. */
+  toolMode?: AgentToolMode;
+  /** Starts the issue's read-only analysis as the first turn of its normal chat session. */
+  purpose?: 'analysis';
+  /** Legacy combined id; new callers send profileId and hostId. */
+  agentId?: string;
+  profileId?: string;
+  hostId?: string;
+  skillNames?: string[];
+  /** Parent session that spawned this subagent session. */
+  parentSessionKey?: string;
 }
 
-function DebouncedNumberField({ ariaLabel, value, min, max, onCommit, delayMs = 400 }: DebouncedNumberFieldProps) {
-  const [draft, setDraft] = useState(String(value));
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => {
-    setDraft(String(value));
-  }, [value]);
-  useEffect(() => () => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-    }
-  }, []);
-  const commit = (next: string) => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-    }
-    const parsed = Number(next);
-    if (!Number.isFinite(parsed)) {
-      setDraft(String(value));
-      return;
-    }
-    let clamped = parsed;
-    if (typeof min === 'number' && clamped < min) {
-      clamped = min;
-    }
-    if (typeof max === 'number' && clamped > max) {
-      clamped = max;
-    }
-    setDraft(String(clamped));
-    if (clamped !== value) {
-      onCommit(clamped);
-    }
+export interface AiHandoverBriefEdits {
+  progress?: string;
+  changes?: string;
+  decisions?: string;
+  risks?: string;
+  openQuestions?: string;
+  nextSteps?: string;
+  userNotes?: string;
+}
+
+export interface AiHandoverInput {
+  provider: AiProvider;
+  model?: string;
+  expectedBriefRevision: number;
+  briefEdits?: AiHandoverBriefEdits;
+}
+
+export interface AiSessionModelInput {
+  model: string;
+}
+
+/**
+ * AI slice: Vercel-gateway provider setup plus agent session lifecycle. The API
+ * key lives in the OS-keychain secrets store and never crosses IPC — the
+ * renderer only learns whether one is configured. Session updates stream back
+ * over the `ai:sessionChanged` push channel.
+ */
+export interface CodeIntelligenceRequest {
+  action: 'list' | 'register' | 'index' | 'pause' | 'resume' | 'unregister' | 'query' | 'connect' | 'revoke' | 'model-install' | 'model-activate';
+  repositoryId?: string;
+  root?: string;
+  manifest?: string;
+  excludes?: string[];
+  tool?: string;
+  arguments?: Record<string, unknown>;
+  provider?: string;
+  bundle?: string;
+  fingerprint?: string;
+}
+export interface CodeIntelligenceResponse {
+  data?: unknown;
+  error?: { code: string; message: string; retryable?: boolean };
+  mcpServer?: McpServerConfig;
+  evidence?: unknown[];
+  warnings?: Array<{ code: string; message: string }>;
+  freshness?: { state: string };
+}
+
+export interface AiIpc {
+  codeIntelligence(request: CodeIntelligenceRequest): Promise<CodeIntelligenceResponse>;
+  /** Active provider's configuration snapshot — kept for back-compat callers. */
+  getStatus(): Promise<AiProviderStatus>;
+  /** Stores the active provider's API key encrypted; empty string clears it. */
+  setApiKey(value: string): Promise<AiProviderStatus>;
+  /** Every configured provider's status snapshot, for the settings UI and the session picker. */
+  listProviderStatuses(): Promise<AiProviderStatus[]>;
+  /** Runs the ACP handshake for a CLI provider without creating a session or sending a prompt. */
+  probeProviderCapability(provider: AiProvider): Promise<ProviderCapabilityProbe | undefined>;
+  /** Connects to a user-added MCP server once and lists its tools, for the settings "Test" button. */
+  testMcpServer(config: McpServerConfig): Promise<McpTestResult>;
+  /** Installs the allowlisted ACP package for a CLI provider, then returns its output summary. */
+  installCliProvider(provider: AiProvider): Promise<{ message: string }>;
+  /** Looks up the latest published version of a built-in provider's allowlisted ACP package. */
+  getLatestCliProviderVersion(provider: AiProvider): Promise<{ version: string }>;
+  /**
+   * The available models for a `hostKind: 'acp'` provider (Claude Code,
+   * Codex), read live from the agent's `session/new` response — a
+   * throwaway connection is spun up and immediately disposed, no prompt
+   * sent. `undefined` for providers with no model selector (including
+   * every non-ACP provider).
+   */
+  listCliModelOptions(provider: AiProvider): Promise<ModelOptions | undefined>;
+  /**
+   * The available models for a `kind: 'api'` provider (Vercel AI Gateway,
+   * OpenAI, Anthropic), read from its real `/v1/models`-style endpoint and
+   * cached (see `modelCatalog.ts`) — pass `forceRefresh: true` to bypass the
+   * cache (e.g. a "Refresh" button). `undefined` when no API key is
+   * configured or the fetch fails.
+   */
+  listApiModelOptions(provider: AiProvider, forceRefresh?: boolean): Promise<ModelOptions | undefined>;
+  /** Stores a specific provider's API key encrypted; empty string clears it. */
+  setProviderApiKey(provider: AiProvider, value: string): Promise<AiProviderStatus>;
+  /** Tests whether the configured API key and endpoint for a provider can connect successfully. */
+  testProviderApiKey(provider: AiProvider): Promise<{ ok: boolean; message: string }>;
+  /** Clears all AI provider API keys so credentials can be re-entered after a keychain migration. */
+  resetProviderApiKeys(): Promise<void>;
+  /** The OpenAI-compatible presets offered by Settings → AI Provider → Add provider. */
+  listProviderPresets(): Promise<ProviderPreset[]>;
+  /**
+   * Probes an endpoint — saved, or an unsaved draft from the settings form.
+   * `apiKey` is the key typed into the form; it is used for this probe only.
+   */
+  testCustomProvider(draft: CustomProviderConfig, options?: { apiKey?: string; model?: string }): Promise<ProviderProbeResult>;
+  /**
+   * Adds or updates an endpoint, and its key when one is given (`''` clears it).
+   * Returns the saved endpoint — its id is assigned here for a new one.
+   */
+  saveCustomProvider(input: SaveCustomProviderInput): Promise<CustomProviderConfig>;
+  /** Deletes an endpoint and its stored key; settings that pointed at it fall back. */
+  removeCustomProvider(id: AiProvider): Promise<void>;
+  /** Every persisted agent session, most recently started first. */
+  listSessions(): Promise<AgentSessionRecord[]>;
+  /** Gets a single agent session by issueKey or sessionId, hydrating its full event transcript on demand. */
+  getSession(issueKey: string): Promise<AgentSessionRecord | undefined>;
+  listInterruptedSessions(): Promise<AgentSessionRecord[]>;
+  resumeInterruptedSession(issueKey: string): Promise<void>;
+  dismissInterruptedSessions(issueKeys: string[]): Promise<void>;
+  /**
+   * Loads a raster image from the selected session's working folder for an
+   * in-app chat preview. The host enforces the session-folder boundary and
+   * returns a data URL so the renderer never receives filesystem access.
+   */
+  loadImagePreview(issueKey: string, filePath: string): Promise<string | undefined>;
+  /** Opens a bounded HTML file from the session's working folder in a restricted in-app preview window. */
+  openHtmlArtifactPreview(issueKey: string, filePath: string, title?: string): Promise<void>;
+  /** Renames a persisted session without changing its ticket binding or task goal. */
+  renameSession(issueKey: string, title: string): Promise<AgentSessionRecord>;
+  assignSessionToProject(issueKey: string, projectId: string, ticketKey?: string, workingDirectory?: string): Promise<AgentSessionRecord>;
+  /** Aborts a running session if needed, then permanently removes its saved conversation. */
+  deleteSession(issueKey: string): Promise<void>;
+  /**
+   * Archives or restores a saved session. Reversible and non-destructive —
+   * unlike `deleteSession`, the recorded conversation is kept; archived
+   * sessions leave the active session tree but remain listed in the sessions
+   * browser. Archiving a session whose task is still running is refused.
+   */
+  archiveSession(issueKey: string, archived: boolean): Promise<AgentSessionRecord>;
+  /** Starts a general agent task for an issue; resolves with the new session record. */
+  delegate(input: AiDelegateInput): Promise<AgentSessionRecord>;
+  /** Aborts the running task for an issue (no-op when none is active). */
+  abort(issueKey: string): Promise<void>;
+  /** Sends a follow-up message and continues the existing recorded session. */
+  /**
+   * Sends a follow-up message and continues the existing recorded session.
+   * `images` are attachments pasted/dropped into the composer, forwarded to the
+   * agent with the message as provider-native image content.
+   */
+  continueSession(
+    issueKey: string,
+    message: string,
+    images?: WireImageAttachment[],
+    options?: { gadgetAnswer?: boolean }
+  ): Promise<void>;
+  /** Changes the model used for the next turn of an idle session. */
+  updateSessionModel(issueKey: string, model: string): Promise<AgentSessionRecord>;
+  /** Changes the reasoning/thinking effort used for the next turn of an idle session. */
+  updateSessionReasoningEffort(issueKey: string, reasoningEffort: ReasoningEffort): Promise<AgentSessionRecord>;
+  /** Changes the permission policy used for the next turn of an idle session. */
+  updateSessionPermissionMode(issueKey: string, permissionMode: AgentPermissionMode): Promise<AgentSessionRecord>;
+  /** Updates the working directory or tool mode for an idle session. */
+  updateSessionToolAccess(
+    issueKey: string,
+    options: { workingDirectory?: string | null; toolMode?: AgentToolMode }
+  ): Promise<AgentSessionRecord>;
+  /** Hands the same Praxis session to another provider and seeds it with the living brief. */
+  handoverSession(issueKey: string, input: AiHandoverInput): Promise<AgentSessionRecord>;
+  startConversation(issueKey: string, input: AiStartConversationInput): Promise<AgentSessionRecord>;
+  /** Queues a human message for a selected participant in a running AI conversation. */
+  sendConversationMessage(issueKey: string, input: AiConversationMessageInput): Promise<AgentSessionRecord>;
+  stopConversation(issueKey: string): Promise<AgentSessionRecord>;
+  setConversationToolOwner(issueKey: string, participantId: string): Promise<AgentSessionRecord>;
+  /** Saves user edits to the living handover brief. */
+  editHandoverBrief(
+    issueKey: string,
+    expectedRevision: number,
+    edits: AiHandoverBriefEdits
+  ): Promise<AgentSessionRecord>;
+  /**
+   * Removes the git worktree a session was created in (branch and checkout).
+   * Fails if the session has no worktree or its task is still running.
+   */
+  removeWorktree(issueKey: string): Promise<void>;
+  /**
+   * Creates or attaches a dedicated git worktree for an existing session.
+   */
+  setWorktree(issueKey: string, options?: { baseBranch?: string; branchName?: string }): Promise<AgentSessionRecord>;
+  /** Switches the active phase of a session and continues it with that mode's contract. */
+  switchSessionMode(issueKey: string, mode: SessionMode): Promise<void>;
+  /**
+   * Switches an ACP-hosted agent's own Session Mode (e.g. "ask" / "architect"
+   * / "code") over its live connection — entirely distinct from
+   * `switchSessionMode` above, which is Praxis's own chat/analysis/review
+   * phase. Requires the session's task to still be running; throws for any
+   * non-ACP provider. `modeId` is one of the ids in the session record's
+   * `acpAvailableModes`.
+   */
+  setAcpMode(issueKey: string, modeId: string): Promise<void>;
+  /**
+   * Resolves the oldest pending permission request for an issue's active
+   * task (no-op when none is pending). `'allow_always'` also resolves every
+   * other request currently queued for that task.
+   */
+  respondToPermission(issueKey: string, decision: PermissionDecision): Promise<void>;
+  /**
+   * Reverts one file to what it was immediately before a specific recorded
+   * edit — restoring `oldText` on disk, sandboxed to the session's own
+   * working folder or worktree. Identifies the edit by the `tool_complete`
+   * event's own timestamp plus the path, since a session can touch the same
+   * file more than once. Refuses when the session has since made a later
+   * edit to that same path (undoing it would silently discard the newer
+   * one) or while a turn is still running.
+   */
+  undoToolFileChange(issueKey: string, eventTimestamp: string, path: string): Promise<AgentSessionRecord>;
+  /** Subscribes to session record updates; returns an unsubscribe function. */
+  onSessionChanged(listener: (record: AgentSessionRecord) => void): () => void;
+  /** Subscribes to session deletions; returns an unsubscribe function. */
+  onSessionDeleted(listener: (issueKey: string) => void): () => void;
+
+  // ── Workflow packs ────────────────────────────────────────────────────────
+  /** Workflow packs discovered under `<workingDirectory>/.github/skills`. */
+  listWorkflowPacks(): Promise<AgentWorkflowReference[]>;
+  /** The workflow pack assigned to an issue, if any. */
+  getWorkflowAssignment(issueKey: string): Promise<IssueWorkflowAssignment | undefined>;
+  /** Assigns a workflow pack to an issue; `null` clears the assignment. */
+  setWorkflowAssignment(issueKey: string, workflow: AgentWorkflowReference | null): Promise<void>;
+
+  // ── Ticket review ─────────────────────────────────────────────────────────
+  /**
+   * Starts the interactive review of a ticket as a read-only agent session,
+   * superseding any earlier review of the same ticket. Findings arrive as
+   * gadgets in the session; the record's `issueKey` is the review session's
+   * own key (not the ticket's) and is what `onSessionChanged` reports under.
+   */
+  startTicketReview(input: AiTicketReviewInput): Promise<AgentSessionRecord>;
+  /** The current review session for a ticket, or `undefined` when it has never been reviewed. */
+  getTicketReview(issueKey: string): Promise<AgentSessionRecord | undefined>;
+
+  // ── Local peer review ─────────────────────────────────────────────────────
+  /**
+   * Runs the three-section local peer review (code review, security review,
+   * then a summarizing verdict). Resolves with the three markdown bodies.
+   */
+  localPeerReview(
+    issueKey: string,
+    connectionId?: string,
+    provider?: AiProvider,
+    model?: string
+  ): Promise<LprResult>;
+  /** Continues a local peer review with a follow-up question. */
+  localPeerReviewFollowUp(
+    issueKey: string,
+    message: string,
+    connectionId?: string,
+    provider?: AiProvider,
+    model?: string
+  ): Promise<string>;
+
+  // ── Issue analysis (chat) ─────────────────────────────────────────────────
+  /** The persisted analysis conversation + confirmation state for an issue. */
+  getAnalysis(issueKey: string): Promise<AiAnalysisState>;
+  /**
+   * Asks a question (empty string runs the base analysis) and streams the answer
+   * into the state; every mutation pushes `ai:analysisChanged`.
+   */
+  submitAnalysis(
+    issueKey: string,
+    question: string,
+    connectionId?: string,
+    provider?: AiProvider,
+    model?: string
+  ): Promise<void>;
+  /** Cancels a running analysis (no-op when none is active). */
+  cancelAnalysis(issueKey: string): Promise<void>;
+  /** Marks the analysis confirmed (or un-confirms it) for the delegation gate. */
+  setAnalysisConfirmed(issueKey: string, confirmed: boolean): Promise<void>;
+  /** Clears the stored analysis conversation for an issue. */
+  clearAnalysis(issueKey: string): Promise<void>;
+  /** Subscribes to analysis state updates; returns an unsubscribe function. */
+  onAnalysisChanged(listener: (state: AiAnalysisState) => void): () => void;
+
+  // ── Delivery / decomposition / merge requests ─────────────────────────────
+  /** Starts the delivery workflow for an issue; validates delivery settings first. */
+  startDelivery(issueKey: string, connectionId?: string): Promise<AgentSessionRecord>;
+  /** Decomposes a feature-request issue into sub-tasks (created when the run completes). */
+  decomposeFeature(issueKey: string, connectionId?: string): Promise<AgentSessionRecord>;
+  /** Starts delivery of one decomposed sub-task of a feature issue. */
+  startSubTaskDelivery(
+    parentIssueKey: string,
+    subTaskKey: string,
+    connectionId?: string
+  ): Promise<AgentSessionRecord>;
+  /** Merge requests linked to the issue key (GitLab connections only). */
+  listMergeRequests(issueKey: string, connectionId: string): Promise<GitLabMergeRequest[]>;
+  /** Creates an MR for the issue's delivery branch; returns an existing open one when present. */
+  createMergeRequest(issueKey: string, connectionId: string): Promise<GitLabMergeRequest>;
+  /** Starts a feedback-addressing session when the open MR has new human notes. */
+  checkMergeRequestFeedback(
+    issueKey: string,
+    connectionId: string
+  ): Promise<{ started: boolean; noteCount: number }>;
+}
+
+/**
+ * Read side of the AI usage ledger (`AiUsageLog`) — every token/cost delta
+ * from every agent session plus internal one-shot calls like the workflow
+ * agent recommendation, aggregated for the Settings → AI usage report.
+ * Writes happen only from inside the main process (session-usage tracking,
+ * the recommendation handler itself); there is deliberately no `record`
+ * method here for the renderer to call.
+ */
+/** Agent session coordination (FX-BF-048): who holds what, who waits, and recovery. */
+export interface CoordinationIpc {
+  state(): Promise<{ state: CoordinationState; role: 'leader' | 'follower'; blockedReason: string | null }>;
+  /** A person confirms a claim awaiting recovery really stopped. */
+  recover(claimId: string, note: string): Promise<void>;
+  /**
+   * Stops a service an agent's shell command left running (its whole process group). Only a
+   * process this app instance started can be stopped from here; false otherwise.
+   */
+  stopService(pgid: number): Promise<boolean>;
+  onChanged(listener: () => void): () => void;
+}
+
+export interface AiUsageIpc {
+  /**
+   * Bucketed totals for the `periodsBack` most recent periods at this granularity, oldest first, zero-filled.
+   * Pass `provider` to scope the buckets to one provider (the session usage bar shows the selected
+   * provider's totals next to its account quota); omit it for account-wide totals.
+   */
+  series(granularity: UsageGranularity, periodsBack: number, provider?: AiProvider): Promise<UsageBucket[]>;
+  /** The latest period vs. the one before it — "more or less AI than last week", generalised to day/week/month. */
+  compareLatestPeriod(granularity: UsageGranularity): Promise<UsageComparison>;
+  /** Today / week / month / all-time totals, per-model breakdowns and peaks in one read — the Overview panel and Settings model breakdown. */
+  dashboardSummary(): Promise<UsageDashboardSummary>;
+  /** The raw ledger, newest last — for a detail table; not meant for charting directly. */
+  listEvents(): Promise<AiUsageEvent[]>;
+  /** Provider account usage/limits, when the provider exposes a supported API. */
+  providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot>;
+  /**
+   * Every enabled provider's account usage in one read (FX-BF-050). The
+   * Overview dashboard needs all of them at once and the Codex adapter spawns
+   * a CLI process, so a per-provider loop from the renderer would be N process
+   * spawns per page load. One provider failing never fails the batch.
+   */
+  providerSnapshots(): Promise<ProviderUsageSnapshotsResult>;
+  /** On-demand historical account usage; never writes to the local ledger. */
+  providerHistory(provider: AiProvider): Promise<ProviderUsageHistory>;
+  /** Stores a provider's optional admin/usage credential in the OS keychain. */
+  setProviderUsageKey(provider: AiProvider, value: string): Promise<void>;
+  /**
+   * Alibaba Coding Plan quota is read through a signed-in Alibaba Cloud
+   * console session that Praxis hosts in its own partition — the plan's API
+   * key cannot read it. Status and sign-in take the endpoint's id so the
+   * console region follows its base URL.
+   */
+  alibabaConsoleStatus(provider: AiProvider): Promise<{ signedIn: boolean }>;
+  /** Opens the console sign-in window; resolves once it is closed. */
+  alibabaConsoleSignIn(provider: AiProvider): Promise<{ signedIn: boolean }>;
+  /** Clears the console session (cookies and storage) Praxis holds. */
+  alibabaConsoleSignOut(): Promise<{ signedIn: boolean }>;
+}
+
+/**
+ * Interactive chat gadgets (FX-BF-036).
+ *
+ * The renderer never mints a scope. It names a session, a gadget and an action;
+ * the host looks the envelope up, pins the scope from its own view of the
+ * session, and authorises against that — so a renderer cannot retarget an
+ * approval at another project by rewriting what it sends.
+ */
+export interface GadgetsIpc {
+  /** Every block for a session, with lifecycle state resolved against now. */
+  getBlocks(sessionId: string): Promise<ChatBlock[]>;
+  /** Validate and store a response's blocks. Refused gadgets come back as fallbacks. */
+  publish(sessionId: string, blocks: RawChatBlockInput[]): Promise<ChatBlock[]>;
+  /**
+   * Parse one provider message and publish whatever it asked for. The host
+   * stamps scope and identity, so the producer only chooses what to ask.
+   */
+  publishFromText(sessionId: string, idPrefix: string, text: string): Promise<ChatBlock[]>;
+  /** Submit an answer. Safe to retry with the same `idempotencyKey`. */
+  submit(input: GadgetSubmitRequest): Promise<GadgetActionResult>;
+  /** Ledger events after a cursor, for a client that reconnected. */
+  replay(afterSequence: number): Promise<GadgetLedgerEvent[]>;
+  /** Withdraw a gadget so it stops accepting answers. */
+  revoke(sessionId: string, gadgetId: string): Promise<void>;
+  clear(sessionId: string): Promise<void>;
+  /** Fires when a session's blocks change, so an open transcript re-reads them. */
+  onChanged(callback: (sessionId: string) => void): () => void;
+}
+
+export interface GadgetSubmitRequest {
+  sessionId: string;
+  gadgetId: string;
+  actionId: string;
+  value: GadgetActionValue;
+  /** Stable per logical submission; a retry reuses it. Minted by the host when absent. */
+  idempotencyKey?: string;
+  correlationId?: string;
+}
+
+/** The app-wide Virtual Team Assistant: persona turns, team reviews and persisted chats. */
+export interface AssistantIpc {
+  /** One persona answers; an `@mention` in the message picks the persona. */
+  turn(request: AssistantTurnRequest): Promise<AssistantTurnResult>;
+  /** Dev → QA → Security → Lead pass over the supplied page context. */
+  teamReview(request: AssistantTeamReviewRequest): Promise<AssistantTurnResult>;
+  listChats(projectId: string): Promise<TeamChatSummary[]>;
+  getChat(chatId: string): Promise<TeamChatRecord | undefined>;
+  createChat(projectId: string, issueKey?: string): Promise<TeamChatRecord>;
+  saveChat(chatId: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord>;
+  renameChat(chatId: string, title: string): Promise<TeamChatRecord>;
+  deleteChat(chatId: string): Promise<void>;
+  /** Fires after any chat is created, saved, renamed or deleted, so the sidebar can refresh. */
+  onChatsChanged(listener: () => void): () => void;
+}
+
+export interface PraxisIpc {
+  activity: {
+    list(projectId: string): Promise<import('../projects/projectActivity').ProjectActivitySnapshot>;
   };
-  return (
-    <input
-      type="number"
-      className="input"
-      value={draft}
-      aria-label={ariaLabel}
-      min={min}
-      max={max}
-      onChange={event => {
-        const next = event.target.value;
-        setDraft(next);
-        if (timer.current) {
-          clearTimeout(timer.current);
-        }
-        timer.current = setTimeout(() => commit(next), delayMs);
-      }}
-      onBlur={event => commit(event.target.value)}
-      style={{ width: 140 }}
-    />
-  );
+  assistant: AssistantIpc;
+  app: AppIpc;
+  board: BoardIpc;
+  issue: IssueIpc;
+  connection: ConnectionIpc;
+  folder: FolderIpc;
+  window: WindowIpc;
+  detachedChat: DetachedChatIpc;
+  settings: SettingsIpc;
+  log: LogIpc;
+  dialog: DialogIpc;
+  shell: ShellIpc;
+  browser: BrowserIpc;
+  boardPrefs: BoardPrefsIpc;
+  ai: AiIpc;
+  aiUsage: AiUsageIpc;
+  coordination: CoordinationIpc;
+  agentRuntime: AgentRuntimeIpc;
+  gadgets: GadgetsIpc;
+  marketplace: MarketplaceIpc;
+  taskDesigner: TaskDesignerIpc;
+  workflows: WorkflowsIpc;
+  projects: ProjectsIpc;
+  workspaces: WorkspacesIpc;
+  terminal: TerminalIpc;
+  git: GitIpc;
+  runs: RunsIpc;
+  preview: PreviewIpc;
+  deployments: DeploymentsIpc;
+}
+
+/**
+ * Direct deployment actions (FX-BE-059 / TASK-158) — prepare, approve,
+ * deploy, health results, and explicit rollback, each a thin pass-through
+ * to the core orchestrator (`deployments/directDeploymentOrchestrator.ts`).
+ * A profile and its artifact/manifest are passed on every call rather than
+ * looked up from a stored id — choosing which profile and published
+ * artifact to act on is FX-BE-060's UI concern, not this surface's.
+ */
+export interface DeploymentsIpc {
+  // ── Profiles (TASK-151/159) ──────────────────────────────────────────
+  /** Every profile saved for a project. */
+  listProfiles(projectId: string): Promise<DeploymentProfile[]>;
+  getProfile(projectId: string, profileId: string): Promise<{ profile?: DeploymentProfile; issues: DeploymentProfileIssue[] }>;
+  /** Rejects an invalid profile with its errors rather than persisting it. */
+  saveProfile(projectId: string, profile: DeploymentProfile): Promise<DeploymentProfile>;
+  /** Live validation for the editor — no persistence. */
+  validateProfile(profile: DeploymentProfile): Promise<{ valid: boolean; errors: DeploymentProfileIssue[] }>;
+  /** "Can this build, right now, actually run this" — unsupported executor/target kinds, distinct from a structural error. */
+  preflightCapabilities(profile: DeploymentProfile): Promise<DeploymentProfileIssue[]>;
+  /** Whether each credential the profile names is currently bound in the local secret store — never the credential's value. */
+  evaluateCredentials(profile: DeploymentProfile): Promise<{ statuses: CredentialBindingStatus[]; allBound: boolean }>;
+
+  // ── Artifacts (TASK-160) ─────────────────────────────────────────────
+  /** Hashes `rootDir` and records the resulting immutable `PublishedArtifact`. Refuses to replace an existing artifact id. */
+  publishArtifact(
+    artifactId: string,
+    deploymentProfileId: string,
+    rootDir: string,
+    sourceCommit?: WorkflowEvidenceSourceRef
+  ): Promise<{ artifact: PublishedArtifact; manifest: PublishManifest }>;
+  /** Artifacts published under one profile, newest first. */
+  listArtifacts(deploymentProfileId: string): Promise<Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>>;
+  /** Every artifact published on this machine, newest first — for picking one to promote to a different profile. */
+  listAllArtifacts(): Promise<Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>>;
+  getArtifact(artifactId: string): Promise<{ artifact: PublishedArtifact; manifest: PublishManifest } | undefined>;
+
+  // ── Runs (TASK-158/160) ──────────────────────────────────────────────
+  /**
+   * Creates and persists a fresh run in `prepared` status. `context` is the
+   * optional linking data TASK-160 adds to `DeploymentRun` (issue, workflow
+   * run, target URL) — set once, immutable thereafter.
+   */
+  prepare(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    artifact: PublishedArtifact,
+    context?: { issueKey?: string; issueConnectionId?: string; workflowRunId?: string; targetUrl?: string }
+  ): Promise<DeploymentRun>;
+  /** Requests then grants approval; idempotent — re-approving an already-queued run changes nothing. */
+  approve(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    artifact: PublishedArtifact,
+    actor: string
+  ): Promise<{ run: DeploymentRun; ok: boolean; reason?: string }>;
+  /**
+   * Dispatches the deploy. Only ever actually invokes the executor once per
+   * run — a repeated call, whether from a double click or a reconnected UI
+   * re-sending the action, is refused with a reason rather than dispatching
+   * again. `options` covers a `directory` target's exclude/backup/staging
+   * paths and a `local-process` target's extra script inputs and timeout.
+   */
+  deploy(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    artifact: PublishedArtifact,
+    manifest: PublishManifest,
+    options?: {
+      excludePaths?: string[];
+      backupDir?: string;
+      stagingDir?: string;
+      processInputs?: Record<string, string>;
+      timeoutMs?: number;
+      healthCheckHost?: string;
+      healthCheckPort?: number;
+    }
+  ): Promise<{ dispatched: boolean; run: DeploymentRun; reason?: string }>;
+  getRun(runId: string): Promise<DeploymentRun | undefined>;
+  /** A profile's runs, newest first. */
+  listRuns(deploymentProfileId: string): Promise<DeploymentRun[]>;
+  /** A read-only summary of a run's last recorded health outcome. */
+  health(runId: string): Promise<DeploymentHealthResult>;
+  /**
+   * Restores the previous version for a `directory` target. Refused for any
+   * other target kind — the reason is returned, and the attempt itself is
+   * still recorded on the run (`rollback-started` followed by
+   * `rollback-failed`), never silently dropped.
+   */
+  rollback(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    options?: { backupDir?: string; excludePaths?: string[] }
+  ): Promise<{ rolledBack: boolean; run: DeploymentRun; reason?: string }>;
+}
+
+/**
+ * Governed delivery workflows (FX-BF-012). Definitions and policy live in app
+ * storage (global) or a project's `.praxis/workflows` folder (project); the
+ * designer edits project-scoped definitions and reads the template library and
+ * live validation from here.
+ */
+export interface WorkflowsIpc {
+  /**
+   * The template library offered to a project: built-in, then the user's
+   * globals, then the project's committed definitions. Not collapsed by id.
+   */
+  listTemplates(projectId: string): Promise<WorkflowTemplate[]>;
+  /**
+   * The project's cached template recommendation, if any — a free read
+   * (`ProjectRecord.recommendedWorkflowTemplate`), never an AI call. The New
+   * Workflow dialog reads this on open; only `recommendTemplate` spends money.
+   */
+  getRecommendedTemplate(projectId: string): Promise<StoredTemplateRecommendation | undefined>;
+  /**
+   * Asks the configured AI which offered template best fits this project
+   * (from its name/purpose/brief), then persists the answer onto the project
+   * record so `getRecommendedTemplate` can hand it back for free afterwards —
+   * see `ProjectStore.setRecommendedWorkflowTemplate`. Rejects when no
+   * gateway-backed provider is configured. Every call is logged to the AI
+   * usage ledger, tagged `workflow-template-recommendation`.
+   */
+  recommendTemplate(projectId: string): Promise<TemplateRecommendationResult>;
+  /**
+   * Asks the configured AI which model tier each agent stage of this (possibly unsaved) definition
+   * needs. Read-only: it changes nothing stored — the designer applies the answer to its draft. Every
+   * call is logged to the AI usage ledger, tagged `workflow-model-recommendation`.
+   */
+  recommendModelTiers(projectId: string, definition: WorkflowDefinition): Promise<ModelTierRecommendationResult>;
+  /** Per-template readiness against the live Agent Hub catalog. */
+  templateReadiness(projectId: string): Promise<TemplateReadiness[]>;
+  /** The resolved run catalog for a project, with shadowing and invalid entries. */
+  catalog(projectId: string): Promise<WorkflowCatalog>;
+  /** One project-scoped definition by id, or undefined. */
+  get(projectId: string, workflowId: string): Promise<WorkflowDefinition | undefined>;
+  /**
+   * Copies a template into the project as a new project-scoped definition and
+   * saves it. Returns the saved copy.
+   */
+  instantiate(projectId: string, templateId: string, name?: string): Promise<WorkflowDefinition>;
+  /** Promotes a discovered Markdown workflow pack into a governed project workflow. */
+  promotePack(
+    projectId: string,
+    packId: string,
+    binding: { agentId: string; profileId?: string; hostId?: string }
+  ): Promise<WorkflowDefinition>;
+  /** Saves a project-scoped definition; rejects an invalid one with its errors. */
+  save(projectId: string, definition: WorkflowDefinition): Promise<WorkflowDefinition>;
+  /** Removes a project-scoped definition. */
+  remove(projectId: string, workflowId: string): Promise<void>;
+  /** Live validation for the designer — no persistence. */
+  validate(projectId: string, definition: WorkflowDefinition): Promise<WorkflowValidationResult>;
+  /** The designer's constrained assistant: workflow questions, validation, and workflow edits only. */
+  assistant(
+    projectId: string,
+    definition: WorkflowDefinition,
+    message: string,
+    history?: readonly WorkflowAssistantMessage[]
+  ): Promise<WorkflowAssistantResult>;
+  /** The composed policy governing this project, strictest-wins over global. */
+  effectivePolicy(projectId: string): Promise<WorkflowPolicyProfile | undefined>;
+  /** Every stored policy profile, global and project-scoped, across all projects. */
+  listPolicies(): Promise<WorkflowPolicyProfile[]>;
+  /** Creates or updates a policy profile; rejects an invalid scope/projectId pairing. */
+  savePolicy(profile: WorkflowPolicyProfile): Promise<WorkflowPolicyProfile>;
+  /** Removes a policy profile. */
+  removePolicy(profileId: string): Promise<void>;
+
+  // ── Runs (FX-BE-022) ────────────────────────────────────────────────────
+  /**
+   * Starts a run of one project workflow against a task; returns the new run's
+   * summary. `issue`, when given, ties the run to a tracker ticket: its
+   * outcome is written back to that ticket as a comment once the run settles
+   * (succeeded, failed, or cancelled) — see `WorkflowRun.issueKey`. Omit for
+   * an ordinary project-scoped run with nothing to write back to.
+   */
+  projectTrust(projectId: string, workflowId: string): Promise<{ trusted: boolean; fingerprint: string; commands: string[] }>;
+  approveProjectTrust(projectId: string, workflowId: string, fingerprint: string): Promise<void>;
+  startRun(
+    projectId: string,
+    workflowId: string,
+    taskTitle: string,
+    issue?: { issueKey: string; connectionId?: string },
+    controller?: { sessionKey: string; sessionId: string },
+    planInput?: WorkflowPlanInput,
+    /** Options for the run: permissionMode, AI provider and AI model. */
+    options?: {
+      permissionMode?: WorkflowPermissionMode;
+      aiProvider?: AiProvider;
+      aiModel?: string;
+      /** Proceed although the checkout has uncommitted product changes: include them, or omit them. */
+      uncommittedChanges?: WorkflowUncommittedChanges;
+      /** When a stage's AI runs out of budget: ask (default), switch AI automatically, or stop. */
+      providerLimitPolicy?: WorkflowProviderLimitPolicy;
+      /** Values for the workflow's `parameters`; checked by `resolveRunParameters`, fixed for the run. */
+      parameters?: Record<string, string | number>;
+    }
+  ): Promise<WorkflowRunSummary>;
+  /**
+   * What starting this workflow involves, before anything is created: the parameters it asks
+   * for and the worst-case launches (and, where this machine has measured enough stage
+   * sessions, a token/spend range) given `parameters`. Read-only.
+   */
+  prepareRun(
+    projectId: string,
+    workflowId: string,
+    parameters?: Record<string, string | number>
+  ): Promise<{ parameters: WorkflowRunParameter[]; requiresMeasurableGoal: boolean; estimate: RunEstimate; issues: RunParameterIssue[] }>;
+  /**
+   * Product files with uncommitted changes that a new run's worktree would silently omit
+   * (Praxis metadata excluded). Empty means a run can start; use it to warn before creating anything.
+   */
+  checkRunBase(projectId: string): Promise<{ blockingFiles: string[] }>;
+  /** Commits exactly the files `checkRunBase` reports, so the run can start from a clean checkout. */
+  commitRunBase(projectId: string, message: string): Promise<void>;
+  /** Makes one of this session's controller runs its active workflow context. */
+  selectControllerRun(sessionKey: string, runId: string): Promise<WorkflowRunSummary>;
+  /**
+   * Cancels one of this session's controller runs if it is still active, then
+   * detaches it from the session. Falls back to another remaining run as the
+   * active context, or clears the session's workflow context if none remain.
+   */
+  removeControllerRun(sessionKey: string, runId: string, reason?: string): Promise<void>;
+  /** Run summaries for a project, newest first. */
+  listRuns(projectId: string): Promise<WorkflowRunSummary[]>;
+  /** One run's summary, or undefined. */
+  getRun(runId: string): Promise<WorkflowRunSummary | undefined>;
+  /** Renames one automation run without changing its workflow definition. */
+  renameRun(runId: string, name: string): Promise<WorkflowRunSummary>;
+  /**
+   * Records a stage outcome. FX-BF-011 will drive stages from real agent
+   * sessions; until then the run monitor advances them explicitly, which is
+   * also how the E2E suite exercises the engine.
+   */
+  advanceStage(
+    runId: string,
+    nodeId: string,
+    outcome: 'succeeded' | 'failed',
+    /** `findings` records structured findings, for a stage whose outcome routes or gates on them. */
+    detail?: { error?: string; snapshotRef?: string; findings?: CheckFindings }
+  ): Promise<WorkflowRunSummary>;
+  /**
+   * Grants approval at the run's approval stage; refuses while a required
+   * gate is unmet. `nodeId` targets a specific approval node — required when
+   * a workflow has more than one and several are awaiting approval at once;
+   * omitted, it resolves to the workflow's only approval node, or the only
+   * one currently awaiting.
+   */
+  approveRun(runId: string, actor: string, note?: string, nodeId?: string): Promise<WorkflowRunSummary>;
+  /**
+   * Records an attributed gate bypass, when policy and the stage permit one.
+   * `nodeId` targets a specific approval node, resolved the same way as
+   * `approveRun` when omitted.
+   */
+  bypassGate(runId: string, gate: string, actor: string, reason: string, nodeId?: string): Promise<WorkflowRunSummary>;
+  /** Skips an optional approval (`WorkflowApprovalNode.optional`); what follows it is skipped too. */
+  skipApproval(runId: string, nodeId: string, actor: string): Promise<WorkflowRunSummary>;
+  /**
+   * Answers a loop whose iteration budget ran out (FX-BE-162): `accept` continues past this
+   * result (a reason is required), `grant` adds `extraIterations` and goes round again (never
+   * past the ceiling), `stop` ends the run (a reason is required). Recorded with `actor`.
+   */
+  decideLoop(
+    runId: string,
+    edgeId: string,
+    actor: string,
+    decision: 'accept' | 'grant' | 'stop',
+    reason?: string,
+    extraIterations?: number
+  ): Promise<WorkflowRunSummary>;
+  /** The full written output (report or plan) of a stage, or undefined when it wrote none. */
+  stageReport(runId: string, nodeId: string): Promise<string | undefined>;
+  /** Asks where to save a stage's written output as Markdown, and saves it there. */
+  saveStageReport(runId: string, nodeId: string): Promise<{ saved: boolean; path?: string }>;
+  /** Queues a failed stage for another attempt within its budget. */
+  retryStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
+  /** Moves a stage whose AI ran out of budget to another AI and optional model; a paused stage goes again on it. */
+  switchStageProvider(runId: string, nodeId: string, provider: AiProvider, model?: string): Promise<WorkflowRunSummary>;
+  /** Ends the run because a stage's AI ran out of budget. */
+  stopForProviderLimit(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
+  /** Starts a new delivery revision and replays the selected stage's downstream path. */
+  reworkStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
+  /** Cancels a run. */
+  cancelRun(runId: string, reason?: string): Promise<WorkflowRunSummary>;
+  /**
+   * What a run has left in the repository — its branch and any live worktree — i.e. what deleting
+   * the run's *work* would lose. Read-only; call it before offering a delete.
+   */
+  inspectRunWork(runId: string): Promise<WorkflowRunWorkInfo>;
+  /**
+   * Deletes a run: cancels it first if still live, then removes the run, its
+   * stage sessions, and its link from the controller session.
+   *
+   * The run's branch is **kept** unless `deleteWork` is true — the branch is where the work is, and
+   * deleting a record must not decide that silently. Uncommitted changes in a live worktree are
+   * kept as a commit on the branch. With `deleteWork` the worktree and branch are removed too.
+   */
+  deleteRun(runId: string, options?: { deleteWork?: boolean }): Promise<void>;
+  /**
+   * Archives or restores a workflow run. Live runs cannot be archived.
+   */
+  archiveRun(runId: string, archived: boolean): Promise<WorkflowRunSummary>;
+  /**
+   * Fires with a run id after every persisted transition — the orchestrator
+   * advancing a stage in the background included. Returns an unsubscribe.
+   */
+  onRunChanged(listener: (runId: string) => void): () => void;
+  /**
+   * The cached agent recommendation for one stage, if any — a free read, not
+   * an AI call. `stale: true` means the stage's name/instructions/candidates
+   * have changed since `recommendAgent` last computed it; the caller decides
+   * whether to offer a refresh, this never recomputes on its own.
+   */
+  getRecommendation(
+    workflowId: string,
+    nodeId: string,
+    input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
+  ): Promise<{ recommendation: StoredAgentRecommendation | undefined; stale: boolean }>;
+  /**
+   * Asks the configured AI which of the given trusted agents best fits one
+   * agent-task stage, from its name/instructions alone, and caches the
+   * answer against `workflowId`/`nodeId` (see `getRecommendation`) so the
+   * same stage never triggers a second call just from being reopened —
+   * only an explicit "Recommend" or "Refresh" click in the designer reaches
+   * this. Rejects when no gateway-backed provider is configured — the
+   * caller only offers the action once `ai.listProviderStatuses()` shows
+   * one is, so a rejection here means the configuration changed mid-flight.
+   * Every call is logged to the AI usage ledger (`aiUsage`), tagged
+   * `workflow-recommendation`.
+   */
+  recommendAgent(
+    workflowId: string,
+    nodeId: string,
+    input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
+  ): Promise<AgentRecommendationResult>;
+  /**
+   * Drops the cached agent recommendation for one stage — e.g. when the user
+   * applies or dismisses it so they aren't repeatedly prompted.
+   */
+  clearRecommendation(workflowId: string, nodeId: string): Promise<void>;
+  /**
+   * Reads back the retained evidence for one stage attempt (FX-BE-051).
+   * `entry` is undefined when nothing was ever captured for that attempt — a
+   * stage that hasn't run, or one from before this capability shipped; that
+   * is `unavailable`, not `expired`. `content` is withheld once `expired` is
+   * true, even though the entry itself still says `present` — retention is
+   * enforced on read here, not only by a future reclaim sweep.
+   */
+  getEvidence(runId: string, nodeId: string, attempt: number): Promise<WorkflowEvidenceView>;
+  /**
+   * Starts a diagnosis session from a stage attempt's retained evidence
+   * (FX-BE-052). A refused preflight (no working folder, a read-only
+   * session, or no retained evidence) returns `ok: false` with the reason —
+   * no session opens just to discover it has nothing to work from.
+   */
+  startDiagnosis(runId: string, nodeId: string, attempt: number): Promise<CreateDiagnosisSessionResult>;
+}
+
+export interface WorkflowAssistantMessage {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+export interface WorkflowAssistantResult {
+  action: 'answer' | 'updated' | 'rejected';
+  message: string;
+  workflow?: WorkflowDefinition;
+}
+
+/** One stage attempt's retained evidence, as read back through `WorkflowsIpc.getEvidence`. */
+export interface WorkflowEvidenceView {
+  entry?: WorkflowEvidenceEntry;
+  /** Present only when `entry.presence === 'present'` and `expired` is false. */
+  content?: string;
+  expired: boolean;
+}
+
+/** Discovery and skill-registry status for the desktop runtime. */
+export interface AgentRuntimeIpc {
+  list(): Promise<AgentRuntimeSnapshot>;
+  refresh(): Promise<AgentRuntimeSnapshot>;
+  start(agentId: string): Promise<AgentRuntimeSnapshot>;
+  /** Disposes the agent's host and clears its lifecycle state. */
+  stop(agentId: string): Promise<AgentRuntimeSnapshot>;
+  /** Disposes then recreates the agent's host. */
+  restart(agentId: string): Promise<AgentRuntimeSnapshot>;
+  /** The discovery roots for each scope — shown read-only in advanced Settings. */
+  roots(): Promise<{
+    agents: Record<CatalogScope, string>;
+    runtimeHosts: Record<CatalogScope, string>;
+    profiles: Record<CatalogScope, string>;
+    skills: Record<CatalogScope, string>;
+  }>;
+  activateSkill(agentId: string, skillName: string): Promise<ActivatedSkill>;
+  /** Writes a new agent folder in the chosen scope; rejects on validation failure. */
+  createAgent(input: NewAgentInput): Promise<AgentRuntimeSnapshot>;
+  /** Writes a provider-neutral AGENT.md profile. */
+  createProfile(input: NewAgentProfileInput): Promise<AgentRuntimeSnapshot>;
+  /** Writes a new skill package in the chosen scope; rejects on validation failure. */
+  createSkill(input: NewSkillInput): Promise<AgentRuntimeSnapshot>;
+  /** Reads and validates an on-disk agent/skill folder for a target scope, without copying or running it. */
+  previewImport(kind: 'agent' | 'profile' | 'skill', sourceDir: string, scope: CatalogScope): Promise<ImportPreview>;
+  /** Copies a validated agent/skill folder into the scope; rejects on validation failure or an unresolved duplicate. */
+  importItem(
+    kind: 'agent' | 'profile' | 'skill',
+    sourceDir: string,
+    scope: CatalogScope,
+    onDuplicate: 'block' | 'rename'
+  ): Promise<AgentRuntimeSnapshot>;
+  /** Trusts (or stops trusting) the agents, skills and instruction files other AI tools keep in a project. */
+  approveNativeProject(projectRoot: string, approved: boolean): Promise<AgentRuntimeSnapshot>;
+  /** Shows a discovered agent, skill or instruction file in Finder / Explorer. */
+  revealNative(itemPath: string): Promise<void>;
+  /** Copies an agent or skill found in another AI tool's folder into Praxis's global folder. */
+  copyNative(kind: 'agent' | 'skill', id: string): Promise<AgentRuntimeSnapshot>;
+}
+
+// ── Integrated terminal ─────────────────────────────────────────────────────
+
+export interface CreateTerminalInput {
+  cwd?: string;
+  cols: number;
+  rows: number;
+  profileId?: string;
+  /** Reuse an active matching terminal during automatic panel initialisation. */
+  reuseExisting?: boolean;
+}
+
+export interface TerminalProfile {
+  id: string;
+  name: string;
+  shell: string;
+  isDefault: boolean;
+}
+
+export interface TerminalSessionInfo {
+  id: string;
+  title: string;
+  cwd: string;
+  shell: string;
+  profileId: string;
+  profileName: string;
+  hasContext: boolean;
+  exited: boolean;
+  lastCommand?: TerminalCommandRecord;
+}
+
+export interface TerminalCommandRecord {
+  id: string;
+  command: string;
+  cwd: string;
+  startedAt: string;
+  finishedAt?: string;
+  exitCode?: number;
+  output: string;
+  status: 'running' | 'success' | 'failed';
+}
+
+export interface TerminalCommandEvent {
+  sessionId: string;
+  command: TerminalCommandRecord;
+}
+
+export interface TerminalContext {
+  sessionId: string;
+  cwd: string;
+  /** ANSI-free recent output, capped main-side before it crosses IPC. */
+  output: string;
+  capturedAt: string;
+}
+
+export interface TerminalOutputEvent {
+  sessionId: string;
+  data: string;
+}
+
+export interface TerminalExitEvent {
+  sessionId: string;
+  exitCode: number;
+  signal?: number;
+}
+
+export interface TerminalContextAvailabilityEvent {
+  sessionId: string;
+  terminalHasContext: boolean;
+}
+
+export interface TerminalIpc {
+  listProfiles(): Promise<TerminalProfile[]>;
+  list(): Promise<TerminalSessionInfo[]>;
+  create(input: CreateTerminalInput): Promise<TerminalSessionInfo>;
+  write(sessionId: string, data: string): Promise<void>;
+  resize(sessionId: string, cols: number, rows: number): Promise<void>;
+  kill(sessionId: string): Promise<void>;
+  /** Raw xterm stream used to redraw a preserved terminal after the panel reopens. */
+  getBuffer(sessionId: string): Promise<string>;
+  getContext(sessionId: string): Promise<TerminalContext>;
+  listCommands(sessionId: string): Promise<TerminalCommandRecord[]>;
+  onOutput(listener: (event: TerminalOutputEvent) => void): () => void;
+  onExit(listener: (event: TerminalExitEvent) => void): () => void;
+  onContextAvailability(listener: (event: TerminalContextAvailabilityEvent) => void): () => void;
+  onCommand(listener: (event: TerminalCommandEvent) => void): () => void;
+}
+
+export interface GitIpc {
+  preflight(repositoryPath?: string): Promise<GitRepositoryPreflight>;
+  initialize(repositoryPath: string): Promise<GitRepositoryPreflight>;
+  clone(repositoryUrl: string, targetParent: string, targetName?: string): Promise<GitRepositoryPreflight>;
+  open(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  refresh(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  status(repositoryPath: string): Promise<GitStatusSnapshot>;
+  getCommit(repositoryPath: string, hash: string): Promise<GitCommitDetails>;
+  getDiff(repositoryPath: string, hash: string, filePath?: string): Promise<GitDiffResult>;
+  getComparison(repositoryPath: string, request: GitDiffRequest): Promise<GitDiffDocument>;
+  applyHunk(repositoryPath: string, request: GitHunkActionRequest): Promise<GitStatusSnapshot>;
+  stage(repositoryPath: string, paths: string[]): Promise<GitStatusSnapshot>;
+  unstage(repositoryPath: string, paths: string[]): Promise<GitStatusSnapshot>;
+  discard(repositoryPath: string, paths: string[]): Promise<GitStatusSnapshot>;
+  commit(repositoryPath: string, message: string): Promise<GitRepositorySnapshot>;
+  createBranch(repositoryPath: string, name: string, startPoint?: string): Promise<GitRepositorySnapshot>;
+  checkout(repositoryPath: string, name: string): Promise<GitRepositorySnapshot>;
+  deleteBranch(repositoryPath: string, name: string): Promise<GitRepositorySnapshot>;
+  renameBranch(repositoryPath: string, oldName: string, newName: string): Promise<GitRepositorySnapshot>;
+  merge(repositoryPath: string, source: string): Promise<GitRepositorySnapshot>;
+  rebase(repositoryPath: string, target: string): Promise<GitRepositorySnapshot>;
+  getConflict(repositoryPath: string, path: string): Promise<GitConflictFile>;
+  resolveConflict(repositoryPath: string, path: string, resolution: GitConflictResolution): Promise<GitStatusSnapshot>;
+  abortConflict(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  getFileContent(repositoryPath: string, path: string): Promise<GitFileContent>;
+  getFileHistory(repositoryPath: string, path: string, ref?: string): Promise<GitFileHistoryEntry[]>;
+  getBlame(repositoryPath: string, path: string, ref?: string): Promise<GitBlameLine[]>;
+  cherryPick(repositoryPath: string, commit: string): Promise<GitRepositorySnapshot>;
+  revert(repositoryPath: string, commit: string): Promise<GitRepositorySnapshot>;
+  stash(repositoryPath: string, message?: string): Promise<GitRepositorySnapshot>;
+  popStash(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  pull(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  fetch(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  push(repositoryPath: string): Promise<GitRepositorySnapshot>;
+}
+
+// ── Task Designer ────────────────────────────────────────────────────────────
+
+/** How a dropped issue relates to the main dropped issue (drives connector direction). */
+export type TaskDesignerRelatedIssueRelation = 'dependsOn' | 'subTask';
+
+export interface TaskDesignerResolvedIssueRelation {
+  relation: TaskDesignerRelatedIssueRelation;
+  sourceIssueKey: string;
+  targetIssueKey: string;
+}
+
+/** Node payload without position/type — what the backend returns for one issue. */
+export type TaskDesignerIssueNodePayload = Omit<TaskDesignerTicketNode, 'id' | 'x' | 'y' | 'type'>;
+
+/**
+ * Result of dropping an issue key onto the canvas: the main issue plus every
+ * resolvable dependsOn/subTask neighbour, with the directed relations the
+ * renderer turns into connectors.
+ */
+export interface TaskDesignerResolvedDroppedIssue {
+  mainIssue: TaskDesignerIssueNodePayload;
+  relatedIssues: Array<TaskDesignerIssueNodePayload & { relation: TaskDesignerRelatedIssueRelation }>;
+  relations: TaskDesignerResolvedIssueRelation[];
+}
+
+/**
+ * Outcome of persisting a canvas state. `ok:false` means the stored state did
+ * NOT change to what was sent — `state` carries the corrective state the
+ * renderer must adopt (normalization repair, or the previously persisted state
+ * on a graph validation failure).
+ */
+export interface TaskDesignerSetStateResult {
+  ok: boolean;
+  warning?: string;
+  state: TaskDesignerPersistedState;
+}
+
+/** Board-flow recommendation: the seeded nodes plus the gateway's ordering. */
+export interface TaskDesignerBoardFlowRecommendation {
+  boardName: string;
+  nodes: TaskDesignerRecommendationNode[];
+  recommendation: TaskDesignerFlowRecommendation;
+}
+
+/** Where the generated master-plan artifacts landed. */
+export interface TaskDesignerMasterPlanResult {
+  outputPath: string;
+  generatedFeaturesPath: string;
+  generatedFeatureCount: number;
+  generatedStoryCount: number;
+  fingerprint: string;
+}
+
+/**
+ * Task Designer slice: canvas persistence plus the host-owned operations
+ * (issue resolution for drops, AI flow recommendations, master-plan file
+ * generation). Canvas state is scoped per connection+board. Operational
+ * failures reject the promise (the renderer shows the message); only
+ * `setState` uses a result envelope because it also carries corrective state.
+ */
+export interface TaskDesignerIpc {
+  /** Loads the persisted canvas state (normalized + repaired on the way out). */
+  getState(boardId: string, connectionId?: string): Promise<TaskDesignerPersistedState>;
+  /** Persists a canvas state; rejects invalid payloads with corrective state. */
+  setState(
+    boardId: string,
+    connectionId: string | undefined,
+    state: TaskDesignerPersistedState
+  ): Promise<TaskDesignerSetStateResult>;
+  /** Resolves an issue key (drop target) plus its dependsOn/subTask neighbours. */
+  resolveIssue(issueKey: string, connectionId?: string): Promise<TaskDesignerResolvedDroppedIssue>;
+  /** AI flow recommendation over the current canvas ticket nodes. */
+  recommendFlow(
+    nodes: TaskDesignerRecommendationNode[],
+    connectors: TaskDesignerRecommendationConnector[]
+  ): Promise<TaskDesignerFlowRecommendation>;
+  /** AI flow recommendation seeded from every issue on a board. */
+  recommendBoardFlow(board: Board): Promise<TaskDesignerBoardFlowRecommendation>;
+  /** Writes plans/master-plan.md + generated feature/story files under the working directory. */
+  generateMasterPlan(
+    boardId: string,
+    connectionId: string | undefined,
+    state: TaskDesignerPersistedState
+  ): Promise<TaskDesignerMasterPlanResult>;
 }
