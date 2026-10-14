@@ -86,7 +86,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             if (manifestHash is not null && SourceFiles.Read(repository.Root, repository.Config.Manifest!, cancellationToken).Hash != manifestHash)
                 throw new IOException("INDEX_STALE: manifest changed during analysis.");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DecoderFallbackException)
         {
             using var failed = database.Open();
             failed.Execute(null, "UPDATE repositories SET state='unknown',query_epoch=query_epoch+1 WHERE repository_id=$0", id);
