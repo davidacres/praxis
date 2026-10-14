@@ -5,6 +5,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
     <EmbeddedResource Include="Storage/migration001.sql" />
     <EmbeddedResource Include="../../contracts.json" LogicalName="Praxis.CodeIntelligence.contracts.json" />
     <Content Include="../../contracts.json" Link="contracts.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
