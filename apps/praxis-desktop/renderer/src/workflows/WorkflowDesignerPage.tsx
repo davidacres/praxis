@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDialogs } from '../ui/dialogs';
 import { createPortal } from 'react-dom';
+import { Walkthrough, type WalkthroughStop } from '../app/Walkthrough';
 import type {
   AgentRuntimeSnapshot,
   AiProvider,
@@ -65,6 +66,41 @@ const SEVERITY_OPTIONS: Array<{ value: CheckFindingSeverity; label: string }> = 
   { value: 'info', label: 'Any severity' }
 ];
 const METRIC_OPERATORS = ['<', '<=', '>', '>=', '=='] as const;
+
+export const WORKFLOW_TUTORIAL_KEY = 'praxis-workflow-tutorial-seen';
+
+export const WORKFLOW_TUTORIAL_STOPS: WalkthroughStop[] = [
+  {
+    id: 'stages',
+    selector: '[data-testid="wf-node-entry"], .wf-node, [data-testid="wf-canvas"]',
+    title: 'Visual stage graph',
+    body: 'Your delivery pipeline is a directed graph of stages. Drag cards to arrange them, or drag from any stage’s handle (▸) to another stage to create transitions and dependencies.'
+  },
+  {
+    id: 'toolbar',
+    selector: '[data-testid="wf-designer-toolbar"]',
+    title: 'Add stages and controls',
+    body: 'Drag or click tools from the floating toolbar to add autonomous Agent stages, deterministic Checks (lint, build, test), human Approvals, Joins, or parallel For-each stages.'
+  },
+  {
+    id: 'agents-and-skills',
+    selector: '[data-testid="wf-tool-agents"]',
+    title: 'Assign specialist agents and skills',
+    body: 'Browse your Agent Hub library to drop specialist AI agents onto stages, or attach modular skills to teach agents repository rules and specialized tasks.'
+  },
+  {
+    id: 'inspector',
+    selector: '[data-testid="wf-stage-inspector"]',
+    title: 'Configure stages and review fix loops',
+    body: 'Select any stage or connection curve to open the inspector: configure tool sandboxing, assign AI models, or set up automated review fix loops on high findings.'
+  },
+  {
+    id: 'validation-save',
+    selector: '[data-testid="wf-validate-btn"]',
+    title: 'Continuous validation and save',
+    body: 'Praxis continuously validates your graph against DAG rules, dependency contracts, and loop iteration limits. Check issues here and save your workflow when ready.'
+  }
+];
 
 function nodeKind(type: WorkflowNodeType) {
   return NODE_KINDS.find(kind => kind.type === type) ?? NODE_KINDS[0];
@@ -259,6 +295,41 @@ export function WorkflowDesignerPage({
   const [suggestingTiers, setSuggestingTiers] = useState(false);
   const [tierNote, setTierNote] = useState<string | undefined>();
 
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+
+  const startTutorial = useCallback(() => {
+    if (!selectedNodeId && definition?.nodes[0]) {
+      selectStage(definition.nodes[0].id);
+    } else {
+      onRequireAux?.();
+    }
+    setTutorialOpen(true);
+  }, [selectedNodeId, definition, selectStage, onRequireAux]);
+
+  const finishTutorial = useCallback(() => {
+    setTutorialOpen(false);
+    try {
+      localStorage.setItem(WORKFLOW_TUTORIAL_KEY, '1');
+    } catch {
+      /* private mode */
+    }
+  }, []);
+
+  // First-run tutorial offer: if the user has not seen the workflow tutorial, start it after layout paints.
+  useEffect(() => {
+    if (!definition) return;
+    try {
+      if (localStorage.getItem(WORKFLOW_TUTORIAL_KEY) !== '1') {
+        const timer = window.setTimeout(() => {
+          setTutorialOpen(true);
+        }, 500);
+        return () => window.clearTimeout(timer);
+      }
+    } catch {
+      /* private mode */
+    }
+  }, [definition]);
+
   /**
    * Asks the AI for a tier per agent stage and applies them to the unsaved draft — the author saves or
    * discards. A stage that already names a tier or an exact model is the author's choice and is left alone.
@@ -443,7 +514,7 @@ export function WorkflowDesignerPage({
 
   const selectedEdge = selectedEdgeId ? definition.edges.find(edge => edge.id === selectedEdgeId) : undefined;
   const inspector = (
-    <section className="inspector wf-inspector aux-panel" aria-label="Stage inspector">
+    <section className="inspector wf-inspector aux-panel" aria-label="Stage inspector" data-testid="wf-stage-inspector">
       {selectedEdge ? (
         <EdgeInspector
           definition={definition}
@@ -488,6 +559,16 @@ export function WorkflowDesignerPage({
             </span>
           )}
           <ValidationChip feedback={feedback} validating={validating} disabled={validating || busy} onValidate={() => void runValidation()} />
+          <button
+            type="button"
+            className="icon-btn"
+            data-testid="wf-tour-btn"
+            aria-label="Workflow designer tutorial"
+            title="Take a tour — step-by-step tutorial of the workflow designer"
+            onClick={startTutorial}
+          >
+            <Icon name="lightbulb" size={14} />
+          </button>
           <button
             type="button"
             className="icon-btn"
@@ -561,6 +642,7 @@ export function WorkflowDesignerPage({
             onSelectEdge={selectEdge}
             onAddAgentStage={profileId => addProfileStage(profileId)}
             onUseSkill={skillName => useSkill(skillName, selectedAgentStage?.id)}
+            onStartTour={startTutorial}
             onPaletteDrop={(item, targetNodeId, at) => {
               if (item.kind === 'stage') {
                 const node = newNode(item.nodeType, at);
@@ -630,6 +712,7 @@ export function WorkflowDesignerPage({
       )}
 
       {auxSlot ? createPortal(inspector, auxSlot) : null}
+      {tutorialOpen && createPortal(<Walkthrough stops={WORKFLOW_TUTORIAL_STOPS} onDone={finishTutorial} />, document.body)}
     </div>
   );
 }

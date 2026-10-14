@@ -62,6 +62,8 @@ export interface WorkflowCanvasProps {
   onSelectEdge?: (edgeId: string | undefined) => void;
   onAddAgentStage?: (profileId: string) => void;
   onUseSkill?: (skillName: string) => void;
+  /** Start the interactive workflow designer walkthrough tour. */
+  onStartTour?: () => void;
   /** Receives agents dropped onto the canvas and skills dropped onto a stage. */
   onPaletteDrop?: (item: WorkflowPaletteItem, targetNodeId: string | undefined, at: { x: number; y: number }) => void;
 }
@@ -81,6 +83,7 @@ export function WorkflowCanvas({
   onSelectEdge,
   onAddAgentStage,
   onUseSkill,
+  onStartTour,
   onPaletteDrop
 }: WorkflowCanvasProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -471,7 +474,7 @@ export function WorkflowCanvas({
   const isSubmenuLeft = containerWidth > 0 && spaceLeft > spaceRight;
 
   return (
-    <div className="wf-canvas" onDragOver={onPaletteDragOver} onDrop={handlePaletteDrop}>
+    <div className="wf-canvas" data-testid="wf-canvas" onDragOver={onPaletteDragOver} onDrop={handlePaletteDrop}>
       <p id="wf-canvas-help" className="sr-only">
         Each stage is a button. Press Tab to move between stages, Enter or Space to select one
         and open its inspector, and the arrow keys to nudge the selected stage (hold Shift for a
@@ -673,6 +676,7 @@ export function WorkflowCanvas({
               <div
                 key={node.id}
                 data-node-id={node.id}
+                data-testid={isEntry ? 'wf-node-entry' : `wf-node-${node.id}`}
                 role="button"
                 tabIndex={0}
                 aria-pressed={selected}
@@ -1079,12 +1083,23 @@ export function WorkflowCanvas({
               type="button"
               className="designer-tool-btn"
               data-testid="wf-auto-arrange"
-              title="Auto arrange — lay stages out in dependency order without overlap"
-              aria-label="Auto arrange"
+              title="Auto arrange horizontally — lay stages out in dependency order"
+              aria-label="Auto arrange horizontally"
               disabled={definition.nodes.length < 2}
-              onClick={() => onChange(autoArrange(definition))}
+              onClick={() => onChange(autoArrange(definition, 'horizontal'))}
             >
               <Icon name="columns" size={17} />
+            </button>
+            <button
+              type="button"
+              className="designer-tool-btn"
+              data-testid="wf-auto-arrange-vertical"
+              title="Auto arrange vertically — lay stages out top to bottom in dependency order"
+              aria-label="Auto arrange vertically"
+              disabled={definition.nodes.length < 2}
+              onClick={() => onChange(autoArrange(definition, 'vertical'))}
+            >
+              <Icon name="rows" size={17} />
             </button>
             <button
               type="button"
@@ -1150,8 +1165,9 @@ export function WorkflowCanvas({
               type="button"
               className="designer-tool-btn"
               data-testid="wf-tool-help"
-              title="Canvas help: Drag a card to move it; drag from its handle onto another card to connect. Click a connection to select or delete it. Drag empty space to pan. Zoom with the toolbar or pinch."
-              aria-label="Canvas help"
+              title="Workflow tutorial — guided tour of the designer"
+              aria-label="Workflow tutorial"
+              onClick={onStartTour}
             >
               <Icon name="info" size={17} />
             </button>

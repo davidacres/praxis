@@ -80,6 +80,7 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
           workflowProvenance: context.workflowPack.provenance
         }
       : {}),
+    ...(context.ticketContext ? { ticketContext: context.ticketContext } : {}),
     nonGoals: [
       'Do not advance, approve, or skip any other stage of this workflow.',
       'Do not modify the workflow definition itself.'

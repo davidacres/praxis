@@ -70,9 +70,12 @@ export interface LaunchOptions {
   aiOnboarding?: boolean;
   /** Opt in only for tests of discovering CLI agents installed on PATH. */
   discoverInstalledCli?: boolean;
+  /** Opt in to exercise the first-run workflow designer tutorial. Defaults to false. */
+  workflowTutorial?: boolean;
 }
 
 const AI_ONBOARDED_KEY = 'praxis-ai-onboarded';
+const WORKFLOW_TUTORIAL_KEY = 'praxis-workflow-tutorial-seen';
 const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
 
@@ -146,14 +149,21 @@ export async function launchTestApp(
   }
 
   const skipAiOnboarding = options?.aiOnboarding !== true;
+  const skipWorkflowTutorial = options?.workflowTutorial !== true;
   if (options?.workspace !== false) {
-    await seedWorkspace(window, options?.openNewSession !== false, skipAiOnboarding);
+    await seedWorkspace(window, options?.openNewSession !== false, skipAiOnboarding, skipWorkflowTutorial);
     await window.waitForLoadState('domcontentloaded');
     if (!options?.keepSplash) {
       await dismissSplash(window);
     }
   } else if (skipAiOnboarding) {
-    await window.evaluate(key => localStorage.setItem(key, '1'), AI_ONBOARDED_KEY);
+    await window.evaluate(
+      ({ aiKey, wfKey, skipWorkflowTutorial }) => {
+        localStorage.setItem(aiKey, '1');
+        if (skipWorkflowTutorial) localStorage.setItem(wfKey, '1');
+      },
+      { aiKey: AI_ONBOARDED_KEY, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial }
+    );
     await window.reload();
     await window.waitForLoadState('domcontentloaded');
     if (!options?.keepSplash) {
@@ -170,10 +180,11 @@ export async function launchTestApp(
  * `openNewSession`, also seeds the durable route so it restores into the New
  * Session composer, matching the pre-onboarding default most specs assume.
  */
-async function seedWorkspace(window: Page, openNewSession: boolean, skipAiOnboarding: boolean): Promise<void> {
+async function seedWorkspace(window: Page, openNewSession: boolean, skipAiOnboarding: boolean, skipWorkflowTutorial: boolean): Promise<void> {
   await window.evaluate(
-    async ({ activeKey, routeKey, openNewSession, aiKey, skipAiOnboarding }) => {
+    async ({ activeKey, routeKey, openNewSession, aiKey, skipAiOnboarding, wfKey, skipWorkflowTutorial }) => {
       if (skipAiOnboarding) localStorage.setItem(aiKey, '1');
+      if (skipWorkflowTutorial) localStorage.setItem(wfKey, '1');
       const existing = await window.praxis.workspaces.list();
       const workspace = existing[0] ?? (await window.praxis.workspaces.create({ name: 'Test Workspace', projectIds: [] }));
       localStorage.setItem(activeKey, workspace.id);
@@ -186,7 +197,7 @@ async function seedWorkspace(window: Page, openNewSession: boolean, skipAiOnboar
         localStorage.removeItem(`${routeKey}:${workspace.id}`);
       }
     },
-    { activeKey: ACTIVE_WORKSPACE_KEY, routeKey: LAST_WORKSPACE_ROUTE_KEY, openNewSession, aiKey: AI_ONBOARDED_KEY, skipAiOnboarding }
+    { activeKey: ACTIVE_WORKSPACE_KEY, routeKey: LAST_WORKSPACE_ROUTE_KEY, openNewSession, aiKey: AI_ONBOARDED_KEY, skipAiOnboarding, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial }
   );
   await window.reload();
 }

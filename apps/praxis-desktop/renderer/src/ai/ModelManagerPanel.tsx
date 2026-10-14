@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AiProvider, AiProviderConfig, AppSettingsPatch, ModelOptions, ReasoningEffort } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { fetchModelOptions, supportsReasoningEffort } from './modelProviders';
+import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing, modelPriceLabel, modelPriceTitle } from './sessionNav';
 import { ChipSelect } from '../ui/ChipSelect';
 
 const REASONING_EFFORT_OPTIONS: Array<{ value: ReasoningEffort; label: string }> = [
@@ -142,8 +143,115 @@ export function ModelManagerPanel({
   const totalCount = catalog?.options.length ?? 0;
   const enabledCount = localEnabledIds === undefined ? totalCount : localEnabledIds.length;
 
+  // Composer-opened curation renders as a standard dialog: titlebar with icon
+  // actions and a close button, a full-width search row, scrolling model rows,
+  // and the dialog action (Done) in the footer. Settings keeps the pane form.
+  if (chipLayout) {
+    return (
+      <div className="conn-form model-manager-chips" data-testid="model-manager-panel">
+        <div className="modal-header">
+          <div className="model-manager-heading">
+            <h3>{providerLabel} — Models</h3>
+            <p className="settings-hint">Choose the models offered in this provider’s model picker. Changes save automatically.</p>
+          </div>
+          <button
+            type="button"
+            className="btn-icon"
+            title="Enable all models"
+            aria-label="Enable all models"
+            data-testid="model-manager-select-all"
+            disabled={loading || !catalog}
+            onClick={() => setEnabledIds(undefined)}
+          >
+            <Icon name="check-square" size={14} />
+          </button>
+          <button
+            type="button"
+            className="btn-icon"
+            title="Disable all models"
+            aria-label="Disable all models"
+            data-testid="model-manager-select-none"
+            disabled={loading || !catalog}
+            onClick={() => setEnabledIds([])}
+          >
+            <Icon name="close-square" size={14} />
+          </button>
+          <button
+            type="button"
+            className="btn-icon"
+            title="Refresh catalog"
+            aria-label="Refresh catalog"
+            data-testid="model-manager-refresh"
+            disabled={loading}
+            onClick={() => load(true)}
+          >
+            <Icon name="refresh" size={14} />
+          </button>
+          <button type="button" className="btn-icon" title="Close" aria-label="Close" data-testid="model-manager-close" onClick={onBack}>
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+        <div className="model-manager-search-bar">
+          <Icon name="search" size={13} />
+          <input
+            type="text"
+            className="input"
+            placeholder="Filter models…"
+            value={filter}
+            onChange={event => setFilter(event.target.value)}
+            data-testid="model-manager-filter"
+            autoFocus
+          />
+        </div>
+        <div className="conn-form-body">
+          {error && (
+            <div className="error-banner" data-testid="model-manager-error">
+              {error}
+            </div>
+          )}
+          {loading && <p className="placeholder-text">Loading catalog…</p>}
+          {!loading && catalog && (
+            <div className="model-manager-list" data-testid="model-manager-list">
+              {filteredOptions.length === 0 && <p className="placeholder-text">No matching models.</p>}
+              {filteredOptions.map(option => {
+                const contextSize = formatContextLength(option.contextLength ?? getKnownContextLength(option.value, providerId)) ?? option.contextLabel;
+                const cost = modelPriceLabel(option.pricingLabel ?? formatModelCost(option.pricing ?? getModelPricing(providerId, option.value)));
+                return (
+                  <div className="model-manager-chip-row" key={option.value} data-testid="model-manager-chip-row">
+                    <span className="model-manager-chip-name" title={option.value}>{option.name}</span>
+                    <span className="model-manager-chip-meta">
+                      {contextSize && <span className="composer-model-badge is-context">{contextSize}</span>}
+                      {cost && <span className="composer-model-badge is-cost" title={modelPriceTitle(option.pricingLabel)}>{cost}</span>}
+                    </span>
+                    <button
+                      type="button"
+                      className="switch"
+                      role="switch"
+                      aria-checked={isEnabled(option.value)}
+                      aria-label={option.name}
+                      data-testid={`model-manager-toggle-${option.value}`}
+                      onClick={() => toggle(option.value)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <span className="settings-hint" data-testid="model-manager-count">
+            {catalog ? `${enabledCount} of ${totalCount} selected` : '—'}
+          </span>
+          <button type="button" className="btn btn-primary" data-testid="model-manager-done" onClick={onBack}>
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`conn-form${chipLayout ? ' model-manager-chips' : ''}`} data-testid="model-manager-panel">
+    <div className="conn-form" data-testid="model-manager-panel">
       <header className="view-header">
         <span className="view-title">{providerLabel} — Models</span>
         <span className="spacer" />
@@ -154,7 +262,7 @@ export function ModelManagerPanel({
           disabled={loading || !catalog}
           onClick={() => setEnabledIds(undefined)}
         >
-          {chipLayout ? 'Enable all' : 'Select all'}
+          Select all
         </button>
         <button
           type="button"
@@ -163,7 +271,7 @@ export function ModelManagerPanel({
           disabled={loading || !catalog}
           onClick={() => setEnabledIds([])}
         >
-          {chipLayout ? 'Disable all' : 'Select none'}
+          Select none
         </button>
         <button
           type="button"
@@ -176,7 +284,7 @@ export function ModelManagerPanel({
           <Icon name="refresh" size={13} />
         </button>
         <button type="button" className="btn" data-testid="model-manager-back" onClick={onBack}>
-          {chipLayout ? 'Done' : 'Back'}
+          Back
         </button>
       </header>
       <div className="conn-form-body">
@@ -186,9 +294,7 @@ export function ModelManagerPanel({
           </div>
         )}
         <p className="placeholder-text">
-          {chipLayout
-            ? 'Choose the models offered in this provider’s model picker. Changes save automatically.'
-            : "Only checked models are offered in the composer's per-session Model picker. Leave everything checked (the default) to offer the whole catalog as-is."}
+          Only checked models are offered in the composer's per-session Model picker. Leave everything checked (the default) to offer the whole catalog as-is.
           {catalog && (
             <>
               {' '}
@@ -207,29 +313,13 @@ export function ModelManagerPanel({
             value={filter}
             onChange={event => setFilter(event.target.value)}
             data-testid="model-manager-filter"
-            autoFocus={chipLayout}
           />
         </div>
         {loading && <p className="placeholder-text">Loading catalog…</p>}
         {!loading && catalog && (
           <div className="model-manager-list" data-testid="model-manager-list">
             {filteredOptions.length === 0 && <p className="placeholder-text">No matching models.</p>}
-            {filteredOptions.map(option => chipLayout ? (
-              <button
-                type="button"
-                key={option.value}
-                className="composer-chip model-manager-model-chip"
-                role="switch"
-                aria-checked={isEnabled(option.value)}
-                aria-label={option.name}
-                title={option.value}
-                data-testid={`model-manager-toggle-${option.value}`}
-                onClick={() => toggle(option.value)}
-              >
-                <Icon name={isEnabled(option.value) ? 'check' : 'plus'} size={13} />
-                <span>{option.name}</span>
-              </button>
-            ) : (
+            {filteredOptions.map(option => (
               <label className="model-manager-row" key={option.value} data-testid="model-manager-row">
                 <input
                   type="checkbox"

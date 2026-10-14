@@ -29,6 +29,8 @@ import { SessionUsageSummary } from './SessionUsageSummary';
 import { SessionComposerToolbar } from './SessionComposerToolbar';
 import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
+import { SessionTeamControl } from './SessionTeamControl';
+import { askSessionTeamMember, mentionedSessionTeamMember } from './sessionTeamStore';
 import { SessionGitBranchControl } from './SessionGitBranchControl';
 import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, getKnownContextLength, isLimitNoticeReply, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionTurnStartedAt, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
@@ -1119,6 +1121,15 @@ export function SessionsPage({
   const sendFollowUp = async () => {
     if (!selected || sendingFollowUp) return;
     if (!followUp.trim() && followUpImages.length === 0) return;
+    const mentioned = followUpImages.length === 0 ? mentionedSessionTeamMember(selected.issueKey, followUp) : undefined;
+    if (mentioned) {
+      // Only an explicit @mention of an added member diverts the message; the session itself stays idle.
+      const request = followUp.trim();
+      setFollowUp('');
+      askSessionTeamMember(selected, mentioned, request)
+        .catch(error => setFollowUpError(error instanceof Error ? error.message : String(error)));
+      return;
+    }
     setLimitStoppedFor(undefined);
     if (selected.conversation?.state === 'running') {
       const message = followUp.trim();
@@ -2101,6 +2112,7 @@ export function SessionsPage({
                       onRemoveWorkflowRun={onRemoveWorkflowRun}
                       onError={setFollowUpError}
                     />}
+                    <SessionTeamControl session={selected} onError={setFollowUpError} />
                     {context && (
                       <button
                         ref={contextChipRef}

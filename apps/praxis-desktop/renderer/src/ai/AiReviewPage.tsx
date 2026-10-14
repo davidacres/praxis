@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentSessionRecord, AiProvider, ChatBlock, IssueDetails } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
+import { SessionTeamMessages } from './SessionTeamMessages';
 import { isTerminalAgentState } from './aiSessionState';
 import { isLimitNoticeReply } from './sessionNav';
 import { TranscriptAttachments } from './SessionsPage';
@@ -355,6 +356,7 @@ export function AiReviewPage({
           <summary className="session-chat-thought-summary">Thoughts</summary>
           <Markdown text={session.reasoningText} testId="review-thought-content" />
         </details>}
+        {session && <SessionTeamMessages sessionKey={session.issueKey} />}
       </div>
 
       {activeGadgetBlock && activeGadgetBlock.type === 'gadget' && (

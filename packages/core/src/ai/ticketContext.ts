@@ -10,6 +10,8 @@ export interface ResolveTicketContextOptions {
   relatedDescriptionLimit?: number;
   /** Max comments to show from the main ticket (defaults to 5). */
   recentCommentLimit?: number;
+  /** Directives style: 'tracker' (default), 'workflow', or 'none'. */
+  directives?: 'tracker' | 'workflow' | 'none';
 }
 
 /**
@@ -71,7 +73,7 @@ export async function resolveTicketContext(options: ResolveTicketContextOptions)
 
   // 4. Fetch available transitions
   let availableTransitions: WorkflowTransition[] = issue.transitions ?? [];
-  if (backendService && (!availableTransitions || availableTransitions.length === 0)) {
+  if (options.directives !== 'workflow' && backendService && (!availableTransitions || availableTransitions.length === 0)) {
     try {
       availableTransitions = await backendService.getTransitions(issue.key);
     } catch {
@@ -181,7 +183,7 @@ export async function resolveTicketContext(options: ResolveTicketContextOptions)
   }
 
   // Available Transitions
-  if (availableTransitions && availableTransitions.length > 0) {
+  if (options.directives !== 'workflow' && availableTransitions && availableTransitions.length > 0) {
     const transitionLines = [
       '## Available Ticket Transitions',
       `Current ticket status: **${issue.status}**`,
@@ -194,8 +196,13 @@ export async function resolveTicketContext(options: ResolveTicketContextOptions)
   }
 
   // Directives
-  if (toolMode !== 'read-only') {
-    sections.push(`## Ticket Lifecycle & Progress Reporting Directives
+  if (options.directives === 'workflow') {
+    sections.push(`## Ticket Context Directives (Workflow Mode)
+- Use the active ticket requirements, description, and related issues above to guide your work for this stage.
+- Do not attempt to transition tickets or post tracker comments directly; stage progression and terminal outcome write-back are managed by the workflow engine.`);
+  } else if (options.directives !== 'none') {
+    if (toolMode !== 'read-only') {
+      sections.push(`## Ticket Lifecycle & Progress Reporting Directives
 1. **Analyze Dependencies**: Carefully review the active ticket requirements and all related issues above. Ensure your implementation honors existing contracts and does not duplicate work assigned to sibling tasks.
 2. **Kickoff**: Before modifying files, transition this ticket to "In Progress" using \`tracker_transition_ticket\` (using the appropriate transition id or status name from the available transitions above), and post your initial plan using \`tracker_add_comment\`.
 3. **Stage Progression**: As you progress through major phases (such as completing implementation before beginning automated tests, or if an architectural blocker is found), post a concise progress comment using \`tracker_add_comment\`.
@@ -204,10 +211,11 @@ export async function resolveTicketContext(options: ResolveTicketContextOptions)
    - Test and verification results
    - Any follow-up items
    Then transition the ticket to "In Review" or "Done" using \`tracker_transition_ticket\`.`);
-  } else {
-    sections.push(`## Ticket Context Directives (Read-Only Mode)
+    } else {
+      sections.push(`## Ticket Context Directives (Read-Only Mode)
 - This session is read-only: do not transition tickets or post comments to the tracker.
 - Use the active ticket and related issues above to guide your analysis, findings, and conversation.`);
+    }
   }
 
   return sections.join('\n\n');

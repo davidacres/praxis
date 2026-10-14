@@ -267,11 +267,14 @@ so a spec needing one "missing" must pin its `cliPath` to a nonexistent path.
 First run is: Getting Started's "Create your first project" (a default workspace is created
 behind the scenes) → a three-panel wizard → the project dashboard, which carries a Get
 Started strip while the project has no sessions. `praxis-onboarded` marks the profile past
-Getting Started and shortens the splash; `praxis-walkthrough-seen` marks the tour done.
+Getting Started and shortens the splash; `praxis-walkthrough-seen` marks the project tour done;
+`praxis-workflow-tutorial-seen` marks the workflow designer tutorial done.
 
 `app/Walkthrough.tsx` is a short, non-blocking tour that rings controls the shell already
-renders — it annotates the user's real project rather than seeding a demo one. Stops are
-declared in `App` (`walkthroughStops`) as CSS selectors over existing `data-testid`s; a stop
+renders — it annotates the user's real project rather than seeding a demo one. It is also used
+by `WorkflowDesignerPage` to guide users through the workflow graph, toolbar, agents/skills,
+stage inspector, and validation (portaled to `document.body` so it is not trapped inside `.pane-main`'s
+isolated stacking context). Stops are declared as CSS selectors over existing `data-testid`s; a stop
 whose target is absent is skipped, not shown empty. Two invariants, both covered by
 `e2e/walkthrough.spec.ts`: **the ring never takes pointer events** (the highlighted control
 stays clickable), and **the ring must enclose the control the callout describes** — do not

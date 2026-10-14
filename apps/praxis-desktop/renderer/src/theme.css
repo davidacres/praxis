@@ -12587,19 +12587,18 @@ button.session-chat-attachment {
   max-width: 40%;
 }
 
-/* Composer model configuration uses the same saved provider curation as Settings. */
+/* Composer model configuration uses the same saved provider curation as
+   Settings, but presented as a standard dialog: titlebar + icon actions,
+   full-width search row, scrolling rows, footer actions bottom-right. */
 .modal-card.model-configuration-dialog {
   width: min(760px, 92vw);
   max-height: 80vh;
 }
 .model-manager-chips { min-height: 0; }
-.model-manager-chips .view-header {
-  height: auto;
-  padding: var(--space-3) var(--space-4);
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.model-manager-chips .view-title { flex: 1 1 100%; }
+.model-manager-chips .modal-header { align-items: flex-start; padding: var(--space-3) var(--space-4); }
+.model-manager-heading { flex: 1; min-width: 0; }
+.model-manager-heading h3 { margin: 0; color: var(--text); font-size: var(--text-md); font-weight: 600; }
+.model-manager-heading .settings-hint { margin: 2px 0 0; }
 .model-manager-search-bar {
   position: sticky;
   top: 0;
@@ -12607,39 +12606,59 @@ button.session-chat-attachment {
   background: var(--bg);
   padding: var(--space-1) 0 var(--space-2);
 }
-
 .model-manager-search-bar .input {
   width: 100%;
 }
-
-.model-manager-chips .conn-form-body { min-height: 0; overflow-y: auto; }
 .model-manager-chips .model-manager-search-bar {
-  top: calc(-1 * var(--space-3));
-  margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-4)) var(--space-2) calc(-1 * var(--space-4));
-  padding: var(--space-3) var(--space-4) var(--space-2) var(--space-4);
-  background: var(--bg-elevated);
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-tertiary);
+}
+.model-manager-chips .model-manager-search-bar .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.model-manager-chips .conn-form-body {
+  min-height: 0;
+  max-width: none;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
 }
 .model-manager-chips .model-manager-list {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-content: flex-start;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0;
+  overflow: hidden;
+}
+.model-manager-chips .modal-footer { justify-content: space-between; }
+/* One vertical row per model: name, context/cost badges, enable toggle. */
+.model-manager-chip-row {
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
-  border: 0;
-  padding: var(--space-1);
-  max-height: 48vh;
+  padding: 7px var(--space-2);
 }
-.model-manager-model-chip {
-  height: auto;
-  min-height: var(--field-chip-height);
-  max-width: 100%;
-  white-space: normal;
-  text-align: left;
+.model-manager-chip-row:hover { background: var(--bg-hover); }
+.model-manager-chip-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.model-manager-model-chip span { overflow-wrap: anywhere; }
-.model-manager-model-chip[aria-checked="true"] {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+.model-manager-chip-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 /* Project wizard and project home ------------------------------------------------ */

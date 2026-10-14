@@ -112,6 +112,11 @@ test('an empty instruction falls back to naming the stage rather than an empty g
   assert.equal(task.goal, 'Complete the Review stage.');
 });
 
+test('a stage carries ticket context when provided on context', () => {
+  const task = buildStageTaskDefinition(context({ ticketContext: '## Active Ticket: PROJ-101 — Fix bug' }));
+  assert.equal(task.ticketContext, '## Active Ticket: PROJ-101 — Fix bug');
+});
+
 // ── Outcome extraction ───────────────────────────────────────────────────
 
 test('an aborted or failed session fails the stage', () => {
