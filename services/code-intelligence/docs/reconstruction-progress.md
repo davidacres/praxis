@@ -21,6 +21,14 @@ Updated 15 October 2026. Branch: codex/code-intelligence-recovery. Feature remai
 - Self-contained Linux package passes CLI help, SQLite initialization and actual native ONNX inference.
 - Argument-hashed cursors remain within wire limits even for large valid filters.
 
+## Callable ownership checkpoint (15 October)
+
+Lambdas and anonymous delegates now have source-backed function symbols. Nested calls belong to the immediate callable; field/property initializer calls belong to the containing type. Local function and lambda descriptors use enclosing identity, syntax kind and preorder ordinal rather than character offsets. These identities remain explicitly local-edit-sensitive: inserting or removing a sibling callable may renumber later siblings.
+
+Current checkpoint verification: **40 C# tests passed, 0 failed, 0 skipped**, including real pinned-model inference and explicit SDK capture. No UI files changed in this checkpoint.
+
+Regression coverage includes nested lambda containment, resolved local-function targets, distinct delegate identities, body/offset edits, syntax-only prefixes and initializer ownership. Synthetic project-root/top-level entries and possible virtual dispatch remain separate unfinished work.
+
 ## Verification evidence
 
 15 October: C#38 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution. Explicit SDK capture, stale/deleted inputs, generated support non-disclosure and alias preservation also pass.
@@ -30,7 +38,7 @@ Full application build including the service passed; Linux self-contained publis
 ## Remaining implementation/release work
 
 - Independent golden tokenizer/vector fixture and representation chunk spans/source excerpts.
-- Semantic API-stamp/affected-context optimization, possible dispatch/type relationships, synthetic top-level/lambda ownership.
+- Semantic API-stamp/affected-context optimization, possible dispatch/type relationships, synthetic project-root/top-level ownership.
 - Complete line-budget truncation/pagination behavior and hardened source-handle checks on Windows/macOS.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
