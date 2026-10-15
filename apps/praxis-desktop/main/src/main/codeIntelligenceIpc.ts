@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { codeIntelligenceDataDirectory, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig } from '@praxis/core';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 
-const ACTIONS = new Set(['list', 'register', 'index', 'pause', 'resume', 'unregister', 'query', 'connect', 'revoke', 'model-install', 'model-activate']);
+const ACTIONS = new Set(['list', 'register', 'index', 'rebuild', 'relocate', 'pause', 'resume', 'unregister', 'query', 'connect', 'revoke', 'model-install', 'model-activate']);
 const TOOLS = new Set(['search_code', 'find_symbol', 'get_symbol', 'get_source', 'explain_symbol', 'get_callers', 'get_callees', 'trace_flow', 'find_related', 'summarize_project', 'get_index_status']);
 
 function dataDirectory(): string {
@@ -50,6 +50,11 @@ export function registerCodeIntelligenceIpc(): void {
           const args = ['register', text(request.root)];
           if (request.manifest) args.push('--manifest', text(request.manifest));
           if (request.excludes?.length) { if (request.excludes.length > 100) throw new Error('Too many exclusions.'); args.push('--exclude', request.excludes.map(value => text(value)).join(';')); }
+          return invoke(args);
+        }
+        case 'relocate': {
+          const args = ['relocate', text(request.repositoryId, 512), text(request.root)];
+          if (request.manifest) args.push('--manifest', text(request.manifest));
           return invoke(args);
         }
         case 'query': {
