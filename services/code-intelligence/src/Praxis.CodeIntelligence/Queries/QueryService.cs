@@ -204,10 +204,10 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                             ["evidenceIds"] = Array(matchEvidence.Distinct(StringComparer.Ordinal).Select(value => (JsonNode?)JsonValue.Create(value))), ["ranks"] = candidate.Ranks,
                             ["score"] = candidate.Score, ["freshness"] = state == "ready" ? "current" : "stale" });
                     }
-                    var kindsJson = (arguments["filters"] as JsonObject)?["kinds"]?.ToJsonString();
-                    var projectsJson = (arguments["filters"] as JsonObject)?["projectIds"]?.ToJsonString();
+                    var kindsJson = (arguments["filters"] as JsonObject)?["kinds"] is JsonArray { Count: > 0 } kindFilters ? kindFilters.ToJsonString() : null;
+                    var projectsJson = (arguments["filters"] as JsonObject)?["projectIds"] is JsonArray { Count: > 0 } projectFilters ? projectFilters.ToJsonString() : null;
                     var languageFilter = (arguments["filters"] as JsonObject)?["languages"]?.AsArray();
-                    var hasLanguage = languageFilter is null || languageFilter.Any(x => x!.GetValue<string>() == "csharp");
+                    var hasLanguage = languageFilter is null or { Count: 0 } || languageFilter.Any(x => x!.GetValue<string>() == "csharp");
                     const string scope = "s.repository_id=$0 AND s.external=0 AND ($1 IS NULL OR s.defining_context_id=$1) AND ($2 IS NULL OR s.kind IN(SELECT value FROM json_each($2))) AND ($3 IS NULL OR c.project_id IN(SELECT value FROM json_each($3)))";
                     var eligible = hasLanguage ? Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE " + scope, repositoryId, contextId, kindsJson, projectsJson)) : 0L;
                     var covered = embedded is null || !hasLanguage ? 0L : Convert.ToInt64(connection.Scalar(transaction,
