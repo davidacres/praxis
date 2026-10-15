@@ -7,7 +7,7 @@ using Praxis.CodeIntelligence.Storage;
 namespace Praxis.CodeIntelligence.Embeddings;
 
 internal sealed record ReusableChunk(byte[] Values, TokenizedChunk Span, string Metadata);
-internal sealed record ReusableEmbedding(string SymbolId, string Fingerprint, string Revision, string Hash, int ExpectedChunks, List<ReusableChunk> Chunks);
+internal sealed record ReusableEmbedding(string SetId, string SymbolId, string Fingerprint, string Revision, string Hash, int ExpectedChunks, List<ReusableChunk> Chunks);
 
 /// <summary>Bounded transaction-local reuse; no orphaned cache survives exclusions or repository removal.</summary>
 internal static class EmbeddingReuse
@@ -17,7 +17,7 @@ internal static class EmbeddingReuse
     {
         var result = new Dictionary<(string, string), ReusableEmbedding>(); long bytesRead = 0;
         using var command = connection.Command(transaction,
-            "SELECT e.symbol_id,e.model_fingerprint,e.input_revision,e.representation_hash,v.chunk_index,v.values_blob,v.spans_json,e.expected_chunks " +
+            "SELECT e.symbol_id,e.model_fingerprint,e.input_revision,e.representation_hash,v.chunk_index,v.values_blob,v.spans_json,e.expected_chunks,e.set_id " +
             "FROM embedding_sets e JOIN vectors v ON v.set_id=e.set_id JOIN symbols s ON s.symbol_id=e.symbol_id " +
             "JOIN representation_targets t ON t.symbol_id=e.symbol_id AND t.model_fingerprint=e.model_fingerprint " +
             "JOIN model_profiles m ON m.fingerprint=e.model_fingerprint JOIN repository_models r ON r.repository_id=s.repository_id AND r.model_fingerprint=e.model_fingerprint " +
@@ -46,7 +46,7 @@ internal static class EmbeddingReuse
                     || tokenSpan.Start < 0 || tokenSpan.End < tokenSpan.Start || tokenSpan.FirstToken < 0
                     || tokenSpan.EndToken < tokenSpan.FirstToken || tokenSpan.EndToken - tokenSpan.FirstToken > 254
                     || span["RepresentationHash"]!.GetValue<string>() != reader.GetString(3)) throw new ArgumentException("Invalid cached span.");
-                if (!result.TryGetValue(key, out var set)) result[key] = set = new(key.Item1, key.Item2, reader.GetString(2), reader.GetString(3), reader.GetInt32(7), []);
+                if (!result.TryGetValue(key, out var set)) result[key] = set = new(reader.GetString(8), key.Item1, key.Item2, reader.GetString(2), reader.GetString(3), reader.GetInt32(7), []);
                 if (set.ExpectedChunks is < 1 or > 4 || reader.GetInt32(4) != set.Chunks.Count) throw new ArgumentException("Incomplete cached chunks.");
                 set.Chunks.Add(new(values, tokenSpan, json));
             }
@@ -67,7 +67,7 @@ internal static class EmbeddingReuse
 
     public static void Publish(SqliteConnection connection, SqliteTransaction transaction, RepositoryAnalysis analysis,
         IReadOnlyList<SourceInput> sources, IReadOnlyDictionary<(string Symbol, string Profile), ReusableEmbedding> captured,
-        CancellationToken cancellationToken, SqlBatch batch)
+        CancellationToken cancellationToken, SqlBatch batch, bool retain = false)
     {
         if (captured.Count == 0) return;
         var byPath = sources.ToDictionary(source => source.Path, StringComparer.Ordinal);
@@ -83,11 +83,20 @@ internal static class EmbeddingReuse
             foreach (var cached in bySymbol[symbol.Id])
             {
                 if (cached.Hash != representation.Hash || cached.Chunks.Any(chunk => chunk.Span.End > representation.Text.Length)) continue;
-                var setId = Identity.Id("pci:vector:", symbol.Id, cached.Fingerprint, representation.Hash);
-                batch.Execute("INSERT INTO representation_targets VALUES($0,$1,$2,$3,'eligible',NULL)", symbol.Id, cached.Fingerprint, symbol.Revision, representation.Hash);
-                batch.Execute("INSERT INTO embedding_sets VALUES($0,$1,$2,$3,$4,$5,'pending',NULL)", setId, symbol.Id, cached.Fingerprint, symbol.Revision, representation.Hash, cached.ExpectedChunks);
+                var setId = retain ? cached.SetId : Identity.Id("pci:vector:", symbol.Id, cached.Fingerprint, representation.Hash);
+                batch.Execute("INSERT INTO representation_targets VALUES($0,$1,$2,$3,'eligible',NULL) ON CONFLICT(symbol_id,model_fingerprint) DO UPDATE SET input_revision=excluded.input_revision,representation_hash=excluded.representation_hash,eligibility='eligible',exclusion_reason=NULL", symbol.Id, cached.Fingerprint, symbol.Revision, representation.Hash);
+                if (retain)
+                    batch.Execute("UPDATE embedding_sets SET input_revision=$0,state='pending' WHERE set_id=$1", symbol.Revision, setId);
+                else
+                    batch.Execute("INSERT INTO embedding_sets VALUES($0,$1,$2,$3,$4,$5,'pending',NULL)", setId, symbol.Id, cached.Fingerprint, symbol.Revision, representation.Hash, cached.ExpectedChunks);
                 for (var i = 0; i < cached.Chunks.Count; i++)
-                    batch.Execute("INSERT INTO vectors VALUES($0,$1,384,$2,$3)", setId, i, cached.Chunks[i].Values, RepresentationBuilder.ChunkMetadata(representation, cached.Chunks[i].Span));
+                {
+                    var metadata = RepresentationBuilder.ChunkMetadata(representation, cached.Chunks[i].Span);
+                    if (!retain)
+                        batch.Execute("INSERT INTO vectors VALUES($0,$1,384,$2,$3)", setId, i, cached.Chunks[i].Values, metadata);
+                    else if (metadata != cached.Chunks[i].Metadata)
+                        batch.Execute("UPDATE vectors SET spans_json=$0 WHERE set_id=$1 AND chunk_index=$2", metadata, setId, i);
+                }
                 batch.Execute("UPDATE embedding_sets SET state='ready' WHERE set_id=$0", setId);
             }
         }

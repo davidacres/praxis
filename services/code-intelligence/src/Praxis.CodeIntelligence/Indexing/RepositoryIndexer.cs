@@ -181,22 +181,27 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         }
         // Reuse only complete current-profile sets whose exact representation is unchanged.
         var reusable = EmbeddingReuse.Capture(connection, transaction, id, cancellationToken);
-        // Conservatively republish every context. This intentionally claims no affected-file optimization.
+        // Keep parent rows only when all structural keys survive. Analysis is still
+        // complete; additions/removals and forced rebuilds use full replacement.
+        var retainedFiles = force ? null : MatchingStructure(connection, transaction, id, sources, analysis);
+        var retain = retainedFiles is not null;
         var aliases = new List<SavedAlias>();
+        if (!retain)
         using (var command = connection.Command(transaction, "SELECT alias_id,project_id,symbol_id,phrase,phrase_key,origin,enabled,created_utc FROM aliases WHERE repository_id=$0", id))
         using (var reader = command.ExecuteReader()) while (reader.Read()) aliases.Add(new(reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetInt64(6), reader.GetString(7)));
         using var batch = new SqlBatch(connection, transaction);
-        Clear(connection, transaction, id);
+        if (retain) ClearContributions(connection, transaction, id);
+        else Clear(connection, transaction, id);
         var generation = repository.Generation + 1;
-        var fileIds = sources.ToDictionary(s => s.Path, _ => "pci:file:" + Guid.NewGuid().ToString("N"), StringComparer.Ordinal);
+        var fileIds = retainedFiles ?? sources.ToDictionary(s => s.Path, _ => "pci:file:" + Guid.NewGuid().ToString("N"), StringComparer.Ordinal);
         foreach (var source in sources)
-            batch.Execute("INSERT INTO files(file_id,repository_id,relative_path,path_key,observed_hash,size_bytes,language,role,state) VALUES($0,$1,$2,$3,$4,$5,'csharp',$6,'ready')",
+            batch.Execute("INSERT INTO files(file_id,repository_id,relative_path,path_key,observed_hash,size_bytes,language,role,state) VALUES($0,$1,$2,$3,$4,$5,'csharp',$6,'ready') ON CONFLICT(file_id) DO UPDATE SET observed_hash=excluded.observed_hash,size_bytes=excluded.size_bytes,role=excluded.role,state='ready'",
                 fileIds[source.Path], id, source.Path, OperatingSystem.IsWindows() ? source.Path.ToUpperInvariant() : source.Path, source.Hash, source.Bytes.Length, source.Role);
         foreach (var context in analysis.Contexts)
         {
             var projectId = Identity.Id("pci:project:", id, context.Key);
-            batch.Execute("INSERT INTO projects VALUES($0,$1,$2,$3,'csharp')", projectId, id, context.Key, context.ProjectPath);
-            batch.Execute("INSERT INTO contexts(context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,desired_revision,published_revision,state,resolution,capabilities_json) VALUES($0,$1,$2,$3,$3,$7,$8,$4,$4,'ready',$5,$6)",
+            batch.Execute("INSERT INTO projects VALUES($0,$1,$2,$3,'csharp') ON CONFLICT(project_id) DO UPDATE SET relative_path=excluded.relative_path", projectId, id, context.Key, context.ProjectPath);
+            batch.Execute("INSERT INTO contexts(context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,desired_revision,published_revision,state,resolution,capabilities_json) VALUES($0,$1,$2,$3,$3,$7,$8,$4,$4,'ready',$5,$6) ON CONFLICT(context_id) DO UPDATE SET context_hash=excluded.context_hash,api_hash=excluded.api_hash,adapter_version=excluded.adapter_version,options_json=excluded.options_json,desired_revision=excluded.desired_revision,published_revision=excluded.published_revision,state=excluded.state,resolution=excluded.resolution,capabilities_json=excluded.capabilities_json",
                 context.Id, projectId, context.Key, context.Hash, generation, context.Resolution,
                 JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls", "references", "accesses", "typeDependencies" }), RoslynAnalyzer.AdapterVersion, JsonSerializer.Serialize(new { snapshotHash }));
             foreach (var source in context.Sources)
@@ -204,7 +209,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         }
         foreach (var symbol in analysis.Symbols)
         {
-            batch.Execute("INSERT INTO symbols VALUES($0,$1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11)", symbol.Id, id,
+            batch.Execute("INSERT INTO symbols VALUES($0,$1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(symbol_id) DO UPDATE SET defining_context_id=excluded.defining_context_id,identity_key=excluded.identity_key,descriptor_json=excluded.descriptor_json,kind=excluded.kind,name=excluded.name,qualified_name=excluded.qualified_name,signature=excluded.signature,revision=excluded.revision,external=excluded.external,resolution=excluded.resolution,containment_id=excluded.containment_id", symbol.Id, id,
                 symbol.External ? null : symbol.ContextId, symbol.Identity, symbol.Kind, symbol.Name, symbol.QualifiedName,
                 symbol.Signature, symbol.Revision, symbol.External ? 1 : 0, symbol.Resolution, symbol.ContainerId);
             foreach (var location in symbol.Locations)
@@ -212,10 +217,17 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                     location.ContextId, fileIds[location.FilePath], location.Hash, location.Start, location.End,
                     location.Range.Start.Line, location.Range.Start.Character, location.Range.End.Line, location.Range.End.Character);
             if (!symbol.External)
-                batch.Execute("INSERT INTO search_documents(symbol_id,input_revision,name,signature,documentation,description) VALUES($0,$1,$2,$3,$4,$5)",
+                batch.Execute("INSERT INTO search_documents(symbol_id,input_revision,name,signature,documentation,description) VALUES($0,$1,$2,$3,$4,$5) ON CONFLICT(symbol_id) DO UPDATE SET input_revision=excluded.input_revision,name=excluded.name,signature=excluded.signature,documentation=excluded.documentation,description=excluded.description",
                     symbol.Id, symbol.Revision, symbol.QualifiedName + " " + SplitCamel(symbol.Name), symbol.Signature, symbol.Documentation, $"{symbol.Kind} {symbol.QualifiedName}. {symbol.Signature}");
         }
-        EmbeddingReuse.Publish(connection, transaction, analysis, sources, reusable, cancellationToken, batch);
+        EmbeddingReuse.Publish(connection, transaction, analysis, sources, reusable, cancellationToken, batch, retain);
+        if (retain)
+        {
+            // Every old set was made stale before updating symbol revisions. Only
+            // validated, representation-equivalent sets were made ready again.
+            batch.Execute("DELETE FROM embedding_sets WHERE symbol_id IN(SELECT symbol_id FROM symbols WHERE repository_id=$0) AND state!='ready'", id);
+            batch.Execute("DELETE FROM representation_targets WHERE symbol_id IN(SELECT symbol_id FROM symbols WHERE repository_id=$0) AND NOT EXISTS(SELECT 1 FROM embedding_sets e WHERE e.symbol_id=representation_targets.symbol_id AND e.model_fingerprint=representation_targets.model_fingerprint)", id);
+        }
         foreach (var alias in aliases)
             if (connection.Scalar(transaction, "SELECT symbol_id FROM symbols WHERE symbol_id=$0", alias.SymbolId) is not null
                 && (alias.ProjectId is null || connection.Scalar(transaction, "SELECT project_id FROM projects WHERE project_id=$0", alias.ProjectId) is not null))
@@ -272,6 +284,40 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         if (leaseToken is not null) Host.DurableScheduler.AssertLease(connection, transaction, leaseToken);
         cancellationToken.ThrowIfCancellationRequested(); transaction.Commit();
         return new(repository.Id, repository.Generation, files, symbols, false);
+    }
+
+    private static Dictionary<string, string>? MatchingStructure(SqliteConnection connection, SqliteTransaction transaction,
+        string repositoryId, IReadOnlyList<SourceInput> sources, RepositoryAnalysis analysis)
+    {
+        var files = new Dictionary<string, string>(StringComparer.Ordinal);
+        using (var command = connection.Command(transaction, "SELECT relative_path,file_id FROM files WHERE repository_id=$0", repositoryId))
+        using (var reader = command.ExecuteReader()) while (reader.Read()) files.Add(reader.GetString(0), reader.GetString(1));
+        if (!files.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(sources.Select(source => source.Path))) return null;
+        bool SameKeys(string sql, IEnumerable<string> expected)
+        {
+            var actual = new HashSet<string>(StringComparer.Ordinal);
+            using var command = connection.Command(transaction, sql, repositoryId); using var reader = command.ExecuteReader();
+            while (reader.Read()) actual.Add(reader.GetString(0));
+            return actual.SetEquals(expected);
+        }
+        if (!SameKeys("SELECT c.context_id FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0", analysis.Contexts.Select(context => context.Id))
+            || !SameKeys("SELECT symbol_id FROM symbols WHERE repository_id=$0", analysis.Symbols.Select(symbol => symbol.Id))) return null;
+        return files;
+    }
+
+    private static void ClearContributions(SqliteConnection connection, SqliteTransaction transaction, string id)
+    {
+        const string contexts = "SELECT c.context_id FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0";
+        connection.Execute(transaction, "UPDATE embedding_sets SET state='stale' WHERE symbol_id IN(SELECT symbol_id FROM symbols WHERE repository_id=$0)", id);
+        connection.Execute(transaction, "DELETE FROM edges WHERE owner_context_id IN(" + contexts + ")", id);
+        connection.Execute(transaction, "DELETE FROM occurrences WHERE context_id IN(" + contexts + ")", id);
+        // Context/file membership cascades old declaration locations, not parent symbols.
+        connection.Execute(transaction, "DELETE FROM context_files WHERE context_id IN(" + contexts + ")", id);
+        connection.Execute(transaction, "DELETE FROM context_dependencies WHERE caller_context_id IN(" + contexts + ") OR target_context_id IN(" + contexts + ")", id);
+        connection.Execute(transaction, "DELETE FROM project_inputs WHERE context_id IN(" + contexts + ")", id);
+        connection.Execute(transaction, "DELETE FROM descriptions WHERE symbol_id IN(SELECT symbol_id FROM symbols WHERE repository_id=$0)", id);
+        connection.Execute(transaction, "DELETE FROM jobs WHERE repository_id=$0 AND (context_id IS NOT NULL OR symbol_id IS NOT NULL)", id);
+        connection.Execute(transaction, "DELETE FROM diagnostics WHERE repository_id=$0", id);
     }
 
     private static IEnumerable<string> ReadContextHashes(SqliteConnection connection, SqliteTransaction transaction, string id)

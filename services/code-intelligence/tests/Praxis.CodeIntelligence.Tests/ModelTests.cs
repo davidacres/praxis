@@ -177,6 +177,43 @@ public sealed class ModelTests
     }
 
     [LocalModelFact]
+    public void BodyEditsRetainUnchangedVectorBlobsAndRevokeChangedRepresentations()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "praxis-retained-vectors-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var database = new IndexDatabase(Path.Combine(root, "data", "index.db")); database.Initialize();
+            File.WriteAllText(Path.Combine(root, "Changed.cs"), "class Changed { int Run() => 1; }");
+            File.WriteAllText(Path.Combine(root, "Unchanged.cs"), "class Unchanged { int Keep() => 2; }");
+            var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root); indexer.Index(repository);
+            using var store = new ModelStore(database, Path.Combine(root, "models"));
+            var profile = store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!); store.Activate(repository, profile, CancellationToken.None);
+            using (var connection = database.Open())
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "CREATE TRIGGER preserve_blob_delete BEFORE DELETE ON vectors WHEN OLD.set_id IN(SELECT e.set_id FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.name='Keep') BEGIN SELECT RAISE(ABORT,'unchanged vector deleted'); END; "
+                    + "CREATE TRIGGER preserve_blob_update BEFORE UPDATE OF values_blob ON vectors BEGIN SELECT RAISE(ABORT,'vector blob rewritten'); END";
+                command.ExecuteNonQuery();
+            }
+            File.WriteAllText(Path.Combine(root, "Changed.cs"), "class Changed { int Run() => 3; }");
+            Assert.True(indexer.Index(repository).Changed);
+            using (var connection = database.Open(readOnly: true))
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.name='Keep' AND e.state='ready' AND e.input_revision=s.revision";
+                Assert.Equal(1L, command.ExecuteScalar());
+                command.CommandText = "SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.name='Run'";
+                Assert.Equal(0L, command.ExecuteScalar());
+                command.CommandText = "SELECT count(*) FROM jobs WHERE kind='embed' AND state='pending'";
+                Assert.Equal(1L, command.ExecuteScalar());
+            }
+            store.Activate(repository, profile, CancellationToken.None);
+            Assert.Empty(database.Check());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [LocalModelFact]
     public void RealOnnxInstallActivationAndVectorRetrievalAreOfflineAndRevisionScoped()
     {
         var root = Path.Combine(Path.GetTempPath(), "praxis-model-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);

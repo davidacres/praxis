@@ -141,6 +141,12 @@ Compiler passes share semantic models, diagnostics and non-local symbol identiti
 
 The controlled local 5k synthetic comparison reduces model-enabled body edits from 3352.3529 to 2691.3054 ms, still above target. Hybrid p95 is 111.7799 ms versus 107.8961 ms before, so no hybrid improvement is claimed. Benchmark RSS unavailability is now explicit; independent system measurement shows 877920256 bytes peak RSS. Reports and limitations are in `docs/benchmarks`.
 
+## Retained publication checkpoint (15 October)
+
+When repository files, contexts and symbol keys are unchanged, structural publication retains parent rows and updates their current facts atomically. Complete validated active-profile vectors retain their blobs when the exact representation matches; changed source mappings are regenerated, changed representations are revoked, and durable refresh is queued. Additions/removals and forced rebuilds retain full replacement. Complete compiler analysis still runs; this is not API-stamp invalidation.
+
+**86 C# tests passed, 0 failed, 0 skipped; 87 responses validate across all 11 schemas.** Added checks compare retained publication with clean indexing across project contexts, prove failed writes roll back facts/generation, and prevent deletion/rewriting of an unchanged vector while verifying changed representations disappear until refresh. The 5k body-edit measurement is 2530.7532 ms (baseline 3352.3529 ms), still failing the two-second threshold. Hybrid p95 is 113.1703 ms, refresh 384.8981 ms, and independent peak RSS 1005813760 bytes. Desktop/native IPC and 50k/quality gates remain open.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.

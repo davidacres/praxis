@@ -173,8 +173,10 @@ public sealed class IndexingTests : IDisposable
         Assert.NotEqual(call.ContextId, constructor.ContextId); Assert.Equal("resolved", call.Resolution);
     }
 
-    [Fact]
-    public void EditedPublicationMatchesACleanIndexAcrossCompilerContexts()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EditedPublicationMatchesACleanIndexAcrossCompilerContexts(bool sameShape)
     {
         var sourceRoot = System.IO.Path.Combine(root, "source"); Directory.CreateDirectory(sourceRoot);
         void SourceFile(string path, string text) => File.WriteAllText(System.IO.Path.Combine(sourceRoot, path), text);
@@ -188,11 +190,16 @@ public sealed class IndexingTests : IDisposable
         SourceFile("context.praxis.json", JsonSerializer.Serialize(manifest));
         var edited = new RepositoryIndexer(database); var id = edited.Register(sourceRoot, new("context.praxis.json")); edited.Index(id);
         SourceFile("Library.cs", "namespace App; public partial class Library { public static int Target(int renamed) => renamed + 2; }");
-        SourceFile("Addition.cs", "namespace App; public class Addition : Library {}");
-        File.Delete(System.IO.Path.Combine(sourceRoot, "Partial.cs"));
-        SourceFile("Caller.cs", "namespace App; class Caller { int Run() { System.Func<int> next = () => Library.Target(3); return next(); } }");
-        manifest = manifest with { Projects = [manifest.Projects[0] with { Sources = ["Library.cs", "Addition.cs"] }, manifest.Projects[1]] };
-        SourceFile("context.praxis.json", JsonSerializer.Serialize(manifest));
+        if (sameShape)
+            SourceFile("Caller.cs", "namespace App; class Caller { int Run() => Library.Target(42); }");
+        else
+        {
+            SourceFile("Addition.cs", "namespace App; public class Addition : Library {}");
+            File.Delete(System.IO.Path.Combine(sourceRoot, "Partial.cs"));
+            SourceFile("Caller.cs", "namespace App; class Caller { int Run() { System.Func<int> next = () => Library.Target(3); return next(); } }");
+            manifest = manifest with { Projects = [manifest.Projects[0] with { Sources = ["Library.cs", "Addition.cs"] }, manifest.Projects[1]] };
+            SourceFile("context.praxis.json", JsonSerializer.Serialize(manifest));
+        }
         Assert.Equal(2, edited.Index(id).Generation);
         var cleanDatabase = new IndexDatabase(System.IO.Path.Combine(root, "clean", "index.db")); cleanDatabase.Initialize();
         using (var connection = cleanDatabase.Open())
@@ -206,6 +213,31 @@ public sealed class IndexingTests : IDisposable
         Assert.Equal(1, new RepositoryIndexer(cleanDatabase).Index(id).Generation);
         Assert.Equal(StructuralSnapshot(cleanDatabase), StructuralSnapshot(database));
         Assert.Empty(database.Check()); Assert.Empty(cleanDatabase.Check());
+    }
+
+    [Fact]
+    public void FailedRetainedPublicationRollsBackFactsAndGeneration()
+    {
+        Write("Example.cs", "class Example { int First() => 1; int Second() => 2; int Run() => First(); }");
+        var indexer = new RepositoryIndexer(database); var id = indexer.Register(root); indexer.Index(id);
+        var before = StructuralSnapshot(database); var repository = indexer.Get(id);
+        using (var connection = database.Open())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "CREATE TRIGGER fail_publication BEFORE INSERT ON occurrences BEGIN SELECT RAISE(ABORT,'publication failed'); END";
+            command.ExecuteNonQuery();
+        }
+        Write("Example.cs", "class Example { int First() => 1; int Second() => 2; int Run() => Second(); }");
+        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() => indexer.Index(id));
+        Assert.Equal(repository, indexer.Get(id)); Assert.Equal(before, StructuralSnapshot(database)); Assert.Empty(database.Check());
+        using (var connection = database.Open())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "DROP TRIGGER fail_publication; CREATE TRIGGER preserve_parent BEFORE DELETE ON symbols BEGIN SELECT RAISE(ABORT,'parent deleted'); END";
+            command.ExecuteNonQuery();
+        }
+        Assert.Equal(repository.Generation + 1, indexer.Index(id).Generation);
+        Assert.Empty(database.Check());
     }
 
     private static string StructuralSnapshot(IndexDatabase database)
