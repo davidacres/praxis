@@ -68,6 +68,22 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             throw new KeyNotFoundException("REPOSITORY_NOT_FOUND");
     }
 
+    public void Relocate(string id, string root, string? manifest = null)
+    {
+        var repository = Get(id); root = SourceFiles.CanonicalDirectory(root);
+        if (manifest is not null) SourceFiles.Resolve(root, manifest);
+        foreach (var exclude in repository.Config.Excludes ?? []) SourceFiles.Resolve(root, exclude.TrimEnd('/'));
+        using var connection = database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
+        var conflict = connection.Scalar(transaction, "SELECT repository_id FROM repositories WHERE canonical_root=$0 AND repository_id!=$1", root, id);
+        if (conflict is not null) throw new ArgumentException("Destination root is already registered.");
+        // Captured absolute project/import paths must be recaptured for a relocated root.
+        // Only an explicitly supplied new manifest is retained; exclusion policy survives.
+        Clear(connection, transaction, id);
+        connection.Execute(transaction, "UPDATE repositories SET canonical_root=$0,config_json=$1,state=$2,query_epoch=query_epoch+1,last_reconciled_utc=NULL WHERE repository_id=$3",
+            root, JsonSerializer.Serialize(new RepositoryConfig(manifest, repository.Config.Excludes)), repository.State == "paused" ? "paused" : "discovered", id);
+        transaction.Commit();
+    }
+
     public void Unregister(string id)
     {
         using var connection = database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
@@ -76,7 +92,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         transaction.Commit();
     }
 
-    public IndexResult Index(string id, CancellationToken cancellationToken = default, string? leaseToken = null)
+    public IndexResult Index(string id, CancellationToken cancellationToken = default, string? leaseToken = null, bool force = false)
     {
         var repository = Get(id);
         if (repository.State == "paused") throw new InvalidOperationException("INDEX_BUSY: repository is paused.");
@@ -135,7 +151,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             throw new InvalidOperationException("INDEX_STALE: repository state changed during analysis.");
         var oldHash = string.Join("|", ReadContextHashes(connection, transaction, id));
         var newHash = string.Join("|", analysis.Contexts.OrderBy(c => c.Id, StringComparer.Ordinal).Select(c => c.Hash));
-        if (oldHash == newHash && repository.Generation > 0)
+        if (!force && oldHash == newHash && repository.Generation > 0)
         {
             connection.Execute(transaction, "UPDATE repositories SET state='ready',last_reconciled_utc=$0 WHERE repository_id=$1", DateTimeOffset.UtcNow.ToString("O"), id);
             transaction.Commit(); return new(id, repository.Generation, sources.Count, analysis.Symbols.Count, false);
