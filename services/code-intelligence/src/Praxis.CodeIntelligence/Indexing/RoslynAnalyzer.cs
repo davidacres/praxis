@@ -36,16 +36,40 @@ public sealed class RoslynAnalyzer
             .ToDictionary(x => x.t, x => x.Context);
         var symbols = new Dictionary<string, IndexedSymbol>(StringComparer.Ordinal);
         var nodeSymbols = new Dictionary<SyntaxNode, string>();
+        var sourceMethods = new Dictionary<string, (IMethodSymbol Symbol, IndexedContext Context)>();
+        var sourceTypes = new Dictionary<string, (INamedTypeSymbol Symbol, IndexedContext Context)>();
         var calls = new List<IndexedCall>(); var diagnostics = new List<IndexedDiagnostic>();
 
         foreach (var input in inputs.Values)
         {
+            var rootIdentity = Identity.Json(1, "synthetic", repositoryId, input.Context.Id, "projectRoot");
+            var rootId = Identity.Id(input.Context.Resolution == "syntaxOnly" ? "pci:syntactic:" : "pci:sym:", rootIdentity);
+            symbols[rootId] = new(rootId, rootIdentity, input.Context.Id, "module", "[synthetic projectRoot]",
+                input.Project.AssemblyName + " [synthetic projectRoot]", "[synthetic projectRoot]",
+                input.Context.Hash, input.Context.Resolution == "syntaxOnly" ? "syntaxOnly" : "resolved", null, false,
+                "Synthetic context containment root; not a source declaration.", []);
             foreach (var tree in input.Compilation.SyntaxTrees)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var source = byPath[tree.FilePath]; var model = input.Compilation.GetSemanticModel(tree);
                 if (source.Role == "semanticSupport") continue;
-                foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(IsDeclaration))
+                var syntaxRoot = tree.GetRoot(cancellationToken);
+                nodeSymbols[syntaxRoot] = rootId;
+                var globals = syntaxRoot.ChildNodes().OfType<GlobalStatementSyntax>().ToArray();
+                if (globals.Length > 0)
+                {
+                    var entryIdentity = Identity.Json(1, "synthetic", repositoryId, input.Context.Id, source.Path, "topLevelEntry");
+                    var entryId = Identity.Id(input.Context.Resolution == "syntaxOnly" ? "pci:syntactic:" : "pci:sym:", entryIdentity);
+                    var span = Microsoft.CodeAnalysis.Text.TextSpan.FromBounds(globals[0].SpanStart, globals[^1].Span.End);
+                    var location = new IndexedLocation(Identity.Id("pci:loc:", entryId, source.Hash, span.Start, span.End),
+                        input.Context.Id, source.Path, source.Hash, span.Start, span.End, Range(tree, span));
+                    symbols[entryId] = new(entryId, entryIdentity, input.Context.Id, "method", "[synthetic top-level entry]",
+                        source.Path + " [synthetic top-level entry]", "[synthetic top-level entry]", source.Hash,
+                        input.Context.Resolution == "syntaxOnly" ? "syntaxOnly" : "resolved", rootId, false,
+                        "Synthetic source-level owner for top-level statements; not the compiler-generated Main method.", [location]);
+                    foreach (var global in globals) nodeSymbols[global] = entryId;
+                }
+                foreach (var node in syntaxRoot.DescendantNodes().Where(IsDeclaration))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var compilerSymbol = node is AnonymousFunctionExpressionSyntax
@@ -69,9 +93,39 @@ public sealed class RoslynAnalyzer
                         symbol = existing with { Locations = [.. existing.Locations, location], Revision = SourceFiles.Hash(Encoding.UTF8.GetBytes(existing.Revision + symbol.Revision)) };
                     }
                     symbols[symbol.Id] = symbol; nodeSymbols[node] = symbol.Id;
+                    if (compilerSymbol is IMethodSymbol methodSymbol) sourceMethods[symbol.Id] = (methodSymbol, input.Context);
+                    if (compilerSymbol is INamedTypeSymbol typeSymbol) sourceTypes[symbol.Id] = (typeSymbol, input.Context);
                     if (symbols.Count > 50_000) throw new IOException("INPUT_TOO_LARGE: symbol limit exceeded.");
                 }
             }
+        }
+        // Build candidate dispatch once, rather than scanning every method at every callsite.
+        // These are structural candidates only; runtime receiver identity is not inferred.
+        var dispatch = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+        var limitedDispatch = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (candidateId, entry) in sourceMethods)
+        {
+            var ancestor = entry.Symbol.OverriddenMethod;
+            for (var depth = 0; ancestor is not null && depth < 128; depth++, ancestor = ancestor.OverriddenMethod)
+                AddCandidate(Identify(ancestor, entry.Context, null).Id, candidateId);
+        }
+        foreach (var entry in sourceTypes.Values)
+            foreach (var contract in entry.Symbol.AllInterfaces)
+                foreach (var member in contract.GetMembers().OfType<IMethodSymbol>())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (entry.Symbol.FindImplementationForInterfaceMember(member) is not IMethodSymbol implementation) continue;
+                    var implementationId = Identify(implementation, entry.Context, null).Id;
+                    if (sourceMethods.ContainsKey(implementationId)) AddCandidate(Identify(member, entry.Context, null).Id, implementationId);
+                }
+        void AddCandidate(string boundId, string candidateId)
+        {
+            if (boundId == candidateId) return;
+            if (!dispatch.TryGetValue(boundId, out var candidates)) dispatch[boundId] = candidates = new(StringComparer.Ordinal);
+            if (candidates.Count < 64) candidates.Add(candidateId);
+            else if (!candidates.Contains(candidateId) && limitedDispatch.Add(boundId))
+                diagnostics.Add(new("", null, "DISPATCH_TRUNCATED", "warning",
+                    "Candidate dispatch is limited to 64 source targets for " + boundId + ". Runtime dispatch is not proven.", null));
         }
         foreach (var input in inputs.Values)
         {
@@ -79,14 +133,20 @@ public sealed class RoslynAnalyzer
             {
                 var model = input.Compilation.GetSemanticModel(tree); var source = byPath[tree.FilePath];
                 if (source.Role == "semanticSupport") continue;
-                foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(n => n is InvocationExpressionSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax))
+                foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(n => n is InvocationExpressionSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax or BaseTypeSyntax))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var ownerNode = node.Ancestors().FirstOrDefault(n => nodeSymbols.TryGetValue(n, out var ownerId)
                         && symbols[ownerId].Kind is "type" or "method" or "function" or "constructor" or "accessor" or "module");
                     if (ownerNode is null) continue;
-                    var info = model.GetSymbolInfo(node, cancellationToken);
-                    var target = info.Symbol;
+                    ISymbol? target = node is BaseTypeSyntax baseType
+                        ? model.GetTypeInfo(baseType.Type, cancellationToken).Type
+                        : model.GetSymbolInfo(node, cancellationToken).Symbol;
+                    if (target is ITypeSymbol { TypeKind: TypeKind.Error }) target = null;
+                    var relationKind = node is BaseTypeSyntax
+                        ? target is INamedTypeSymbol { TypeKind: TypeKind.Interface } && model.GetDeclaredSymbol(ownerNode, cancellationToken) is INamedTypeSymbol { TypeKind: not TypeKind.Interface }
+                            ? "implements" : "inherits"
+                        : "calls";
                     string? targetId = null;
                     if (target is not null && input.Context.Resolution != "syntaxOnly")
                     {
@@ -103,7 +163,14 @@ public sealed class RoslynAnalyzer
                     var resolution = targetId is null ? (input.Context.Resolution == "syntaxOnly" ? "syntaxOnly" : "unresolved")
                         : input.Context.Resolution == "complete" ? "resolved" : "possible";
                     calls.Add(new(Identity.Id("pci:occ:", input.Context.Id, source.Path, source.Hash, node.Span.Start, node.Span.End),
-                        input.Context.Id, source.Path, source.Hash, nodeSymbols[ownerNode], targetId, node.Span.Start, node.Span.End, Range(tree, node.Span), resolution));
+                        input.Context.Id, source.Path, source.Hash, nodeSymbols[ownerNode], targetId, node.Span.Start, node.Span.End, Range(tree, node.Span), resolution, relationKind));
+                    if (relationKind == "calls" && targetId is not null && target is IMethodSymbol { IsStatic: false }
+                        && node is not InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: BaseExpressionSyntax } }
+                        && dispatch.TryGetValue(targetId, out var candidates))
+                        foreach (var candidateId in candidates)
+                            calls.Add(new(Identity.Id("pci:occ:", input.Context.Id, source.Path, source.Hash, node.Span.Start, node.Span.End, "may_call", candidateId),
+                                input.Context.Id, source.Path, source.Hash, nodeSymbols[ownerNode], candidateId, node.Span.Start, node.Span.End,
+                                Range(tree, node.Span), "possible", "may_call"));
                     if (calls.Count > 200_000) throw new IOException("INPUT_TOO_LARGE: occurrence limit exceeded.");
                 }
             }
@@ -167,10 +234,12 @@ public sealed class RoslynAnalyzer
                     // Preorder ordinals belong to the immediate callable, so edits inside a
                     // nested callable cannot renumber its enclosing callable's siblings.
                     var parent = local.Ancestors().FirstOrDefault(IsCallable);
-                    var scope = parent ?? local.Ancestors().First(IsDeclaration);
+                    var scope = parent ?? local.Ancestors().FirstOrDefault(IsDeclaration) ?? local.SyntaxTree.GetRoot(cancellationToken);
                     var ordinal = scope.DescendantNodes().Where(n => n is LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax)
                         .Where(n => n.Ancestors().FirstOrDefault(IsCallable) == parent)
                         .TakeWhile(n => n != local).Count();
+                    var globalScope = local.Ancestors().OfType<GlobalStatementSyntax>().FirstOrDefault();
+                    if (parent is null && globalScope is not null) scope = globalScope;
                     var parentId = nodeSymbols.TryGetValue(scope, out var id) ? id
                         : Identity.Id("pci:scope:", current.Id, local.SyntaxTree.FilePath, scope.RawKind);
                     descriptor = Identity.Json("local", parentId, local.RawKind, ordinal);
