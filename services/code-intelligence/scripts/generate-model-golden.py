@@ -27,12 +27,23 @@ session = ort.InferenceSession(str(bundle / 'model.onnx'), options, providers=['
 texts = ['', 'parse authentication token', 'Héllo, worlds! Café naïve résumé.',
          'namespace App { string ParseToken(string value) => value; }',
          '中文 日本語 한글 😀', 'line\r\nnext\tcolumn\u0000value',
-         '[CLS] [SEP] [UNK] [PAD] [MASK]', 'authentication token parser ' * 400]
+         '[CLS] [SEP] [UNK] [PAD] [MASK]', 'authentication token parser ' * 400,
+         'İstanbul Cafe\u0301 \ufffd hello', 'prefix 😀 suffix \U00020000 end']
 cases = []
 for index, text in enumerate(texts):
-    ids = tokenizer.encode(text, add_special_tokens=False).ids
+    encoded = tokenizer.encode(text, add_special_tokens=False)
+    ids = encoded.ids
     chunks = [[101] + ids[offset:offset + 254] + [102] for offset in range(0, max(1, len(ids)), 254)][:4]
-    case = {'text': text, 'tokenChunks': chunks}
+    def utf16(position):
+        return len(text[:position].encode('utf-16-le')) // 2
+    spans = []
+    for chunk_index, chunk in enumerate(chunks):
+        first = chunk_index * 254
+        end = first + len(chunk) - 2
+        spans.append({'start': utf16(encoded.offsets[first][0]) if end > first else 0,
+                      'end': utf16(encoded.offsets[end - 1][1]) if end > first else 0,
+                      'firstToken': first, 'endToken': end, 'truncated': len(ids) > 4 * 254})
+    case = {'text': text, 'tokenChunks': chunks, 'chunkSpans': spans}
     if index in (0, 1, 2, 4):
         tokens = np.array([chunks[0]], dtype=np.int64)
         hidden = session.run(None, {'input_ids': tokens, 'attention_mask': np.ones_like(tokens), 'token_type_ids': np.zeros_like(tokens)})[0]
