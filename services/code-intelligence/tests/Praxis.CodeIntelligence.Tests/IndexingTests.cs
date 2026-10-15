@@ -87,7 +87,7 @@ public sealed class IndexingTests : IDisposable
         var sourceRoot = System.IO.Path.Combine(root, "source-root"); Directory.CreateDirectory(sourceRoot); Write("source-root/Another.cs", "class Another {}");
         var lost = indexer.Register(sourceRoot); indexer.Index(lost); Directory.Move(sourceRoot, sourceRoot + "-gone");
         Assert.Throws<DirectoryNotFoundException>(() => indexer.Index(lost)); Assert.Equal("unknown", indexer.Get(lost).State);
-        command.CommandText = "SELECT count(*) FROM symbols WHERE repository_id='" + lost + "'"; Assert.Equal(1L, command.ExecuteScalar());
+        command.CommandText = "SELECT count(*) FROM symbols WHERE repository_id='" + lost + "'"; Assert.Equal(2L, command.ExecuteScalar());
         Assert.NotNull(before);
     }
 
@@ -128,6 +128,33 @@ public sealed class IndexingTests : IDisposable
         Assert.Equal(2, result.Calls.Count(c => c.OwnerId == type.Id));
         Assert.Single(result.Calls, c => c.OwnerId == lambda.Id);
         Assert.All(result.Symbols, s => Assert.StartsWith("pci:syntactic:", s.Id));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TopLevelStatementsHaveLabelledSyntheticOwnersAndDistinctLocalIdentities(bool semantic)
+    {
+        const string code = "System.Func<int> first = () => Target(); System.Func<int> second = () => Target(); int Target() => 1; var result = Target(); class Other {}";
+        var metadataPath = typeof(object).Assembly.Location;
+        var manifest = semantic ? new PassiveManifest(1, [new("app", "App", ["Program.cs"], Metadata: [new(metadataPath, SourceFiles.Hash(File.ReadAllBytes(metadataPath)))], OutputKind: "exe")]) : null;
+        var result = new RoslynAnalyzer().Analyze("repo", [Source("Program.cs", code)], manifest);
+        Assert.Equal(semantic ? "complete" : "syntaxOnly", Assert.Single(result.Contexts).Resolution);
+        var module = Assert.Single(result.Symbols, s => s.Kind == "module");
+        Assert.Empty(module.Locations);
+        var entry = Assert.Single(result.Symbols, s => s.Name == "[synthetic top-level entry]");
+        Assert.Equal(module.Id, entry.ContainerId);
+        Assert.Single(entry.Locations);
+        var type = Assert.Single(result.Symbols, s => s.Name == "Other");
+        Assert.Equal(module.Id, type.ContainerId);
+        var functions = result.Symbols.Where(s => s.Kind == "function").ToArray();
+        Assert.Equal(3, functions.Length);
+        Assert.Equal(3, functions.Select(s => s.Id).Distinct().Count());
+        Assert.All(functions, s => Assert.Equal(entry.Id, s.ContainerId));
+        Assert.Equal(3, result.Calls.Count);
+        Assert.Single(result.Calls, c => c.OwnerId == entry.Id);
+        Assert.All(result.Calls, call => Assert.Contains(result.Symbols, s => s.Id == call.OwnerId));
+        if (semantic) Assert.All(result.Calls, call => Assert.Equal("resolved", call.Resolution));
     }
 
     private static SourceInput Source(string path, string text) { var bytes = Encoding.UTF8.GetBytes(text); return new(path, SourceFiles.Hash(bytes), bytes, text); }
