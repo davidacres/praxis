@@ -81,7 +81,11 @@ public static class OwnerService
                     var frame = await Framing.ReadAsync(pipe, Framing.MaximumRequestBytes, deadline.Token);
                     var supplied = frame["token"]?.GetValue<string>() ?? "";
                     if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(supplied), Encoding.UTF8.GetBytes(token)))
-                    { await Framing.WriteAsync(pipe, ServiceRuntime.Error("ACCESS_DENIED", "Owner authentication failed."), Framing.MaximumResponseBytes, deadline.Token); return; }
+                    {
+                        var rejected = ServiceRuntime.Error("ACCESS_DENIED", "Owner authentication failed.");
+                        rejected["handshake"] = "authenticationRejected";
+                        await Framing.WriteAsync(pipe, rejected, Framing.MaximumResponseBytes, deadline.Token); return;
+                    }
                     var request = frame["request"]!.AsObject(); var query = request["action"]?.GetValue<string>() == "query";
                     var repository = request["arguments"]?["repositoryId"]?.GetValue<string>() ?? request["repositoryId"]?.GetValue<string>() ?? "local";
                     if (request["action"]?.GetValue<string>() is "pause" or "unregister" or "rebuild" or "relocate") runtime.CancelRepositoryWork(repository);
@@ -127,7 +131,16 @@ public static class OwnerService
                         submitted = true; // Never replay a mutation after an uncertain execution/disconnect.
                         await Framing.WriteAsync(pipe, new JsonObject { ["token"] = owner["token"]!.DeepClone(), ["request"] = request.DeepClone() }, Framing.MaximumRequestBytes, deadline.Token);
                         using var execution = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); execution.CancelAfter(TimeSpan.FromMinutes(2));
-                        return await Framing.ReadAsync(pipe, Framing.MaximumResponseBytes, execution.Token);
+                        var response = await Framing.ReadAsync(pipe, Framing.MaximumResponseBytes, execution.Token);
+                        if (response["handshake"]?.GetValue<string>() == "authenticationRejected")
+                        {
+                            // A replacement owner can accept before a client refreshes
+                            // its rendezvous. This explicit pre-dispatch rejection proves
+                            // the request did not execute; uncertain disconnects still never replay.
+                            submitted = false;
+                            await Task.Delay(25, deadline.Token); continue;
+                        }
+                        return response;
                     }
                     catch (Exception ex) when (!submitted && ex is IOException or TimeoutException or System.Text.Json.JsonException) { }
                 startup ??= Start(directory);

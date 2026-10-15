@@ -10,6 +10,32 @@ namespace Praxis.CodeIntelligence.Tests;
 public sealed class HostTests
 {
     [Fact]
+    public async Task ClientRefreshesRejectedHandshakeBeforeDispatchingARequest()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "pci-" + Guid.NewGuid().ToString("N")[..8]);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var owner = OwnerService.RunAsync(directory, cancellation.Token);
+        try
+        {
+            var rendezvous = Path.Combine(directory, "owner.json");
+            var original = File.ReadAllText(rendezvous);
+            var stale = JsonNode.Parse(original)!.AsObject(); stale["token"] = new string('0', 64);
+            File.WriteAllText(rendezvous, stale.ToJsonString());
+            var request = OwnerService.SendAsync(directory, new JsonObject { ["action"] = "list" }, cancellation.Token);
+            await Task.Delay(200, cancellation.Token);
+            Assert.False(request.IsCompleted, "A rejected handshake must refresh discovery rather than surface a stale-token error.");
+            File.WriteAllText(rendezvous + ".tmp", original); File.Move(rendezvous + ".tmp", rendezvous, overwrite: true);
+            var response = await request.WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.Null(response["error"]); Assert.Empty(response["data"]!.AsArray());
+        }
+        finally
+        {
+            cancellation.Cancel(); await owner;
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ExplicitRebuildRepublishesUnchangedInputsAndPreservesManualAliases()
     {
         var root = Path.Combine(Path.GetTempPath(), "praxis-rebuild-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);

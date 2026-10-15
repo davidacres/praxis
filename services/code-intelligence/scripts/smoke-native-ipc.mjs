@@ -54,7 +54,7 @@ export async function smokeNativeIpc(executable) {
       result = await pending;
       result.code = 0;
     } catch (error) {
-      if (error.killed || typeof error.code !== 'number') throw new Error(`${args[0]} did not exit: ${error.message}; stdout=${String(error.stdout ?? '').slice(0, 2048)}; stderr=${String(error.stderr ?? '').slice(0, 2048)}`, { cause: error });
+      if (error.killed || typeof error.code !== 'number') throw new Error(`${args[0]} did not exit: code=${error.code}, signal=${error.signal}, killed=${error.killed}; ${error.message}; stdout=${String(error.stdout ?? '').slice(0, 2048)}; stderr=${String(error.stderr ?? '').slice(0, 2048)}`, { cause: error });
       result = error;
     }
     assert.equal(result.code, expectedExit, `${args[0]}: ${result.stderr}\n${result.stdout}`);
