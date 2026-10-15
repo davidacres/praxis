@@ -14,6 +14,40 @@ public sealed class LocalModelFactAttribute : FactAttribute
 }
 public sealed class ModelTests
 {
+    [Fact]
+    public void BertSpecialTokensBypassNormalizationAndKeepTheirVocabularyIds()
+    {
+        var tokenizer = new WordPieceTokenizer(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "hello"]);
+        Assert.Equal(new long[] { 2, 2, 5, 3, 1, 0, 4, 3 }, tokenizer.EncodeChunks("[CLS]HÉLLO[SEP] [UNK] [PAD] [MASK]")[0]);
+    }
+
+    [LocalModelFact]
+    public void BaselineMatchesIndependentPythonTokenizerAndOnnxGolden()
+    {
+        var fixture = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "minilm-golden.json")))!;
+        var bundle = Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!;
+        var tokenizer = new WordPieceTokenizer(File.ReadLines(Path.Combine(bundle, "vocab.txt")));
+        using var model = new LocalModel(bundle);
+        foreach (var item in fixture["cases"]!.AsArray())
+        {
+            var text = item!["text"]!.GetValue<string>(); var actual = tokenizer.EncodeChunks(text);
+            var expected = item["tokenChunks"]!.AsArray();
+            Assert.Equal(expected.Count, actual.Count);
+            for (var chunk = 0; chunk < actual.Count; chunk++)
+                Assert.Equal(expected[chunk]!.AsArray().Select(id => id!.GetValue<long>()), actual[chunk]);
+            if (item["queryVector"] is not JsonArray vector) continue;
+            var result = model.EmbedQuery(text, CancellationToken.None); LocalModel.ValidateVector(result);
+            double cosine = 0;
+            for (var dimension = 0; dimension < result.Length; dimension++)
+            {
+                var reference = vector[dimension]!.GetValue<double>();
+                Assert.InRange(Math.Abs(result[dimension] - reference), 0, fixture["absoluteTolerance"]!.GetValue<double>());
+                cosine += result[dimension] * reference;
+            }
+            Assert.True(cosine >= fixture["minimumCosine"]!.GetValue<double>(), "Golden cosine below tolerance: " + cosine);
+        }
+    }
+
     [LocalModelFact]
     public async Task RuntimeRefreshesVectorsFromDurableWorkAfterSourcePublication()
     {
