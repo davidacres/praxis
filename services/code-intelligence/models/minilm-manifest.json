@@ -6,12 +6,12 @@
   "vocabSha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
   "dimensions": 384,
   "maximumTokens": 256,
-  "tokenizer": "bert-uncased-wordpiece-v2",
+  "tokenizer": "bert-uncased-wordpiece-v3",
   "pooling": "attention-mask-mean",
   "normalization": "l2",
   "metric": "cosine",
   "queryPrefix": "",
   "documentPrefix": "",
-  "representationVersion": 1,
+  "representationVersion": 2,
   "license": "Apache-2.0"
 }
