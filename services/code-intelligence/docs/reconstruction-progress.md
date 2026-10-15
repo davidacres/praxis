@@ -29,6 +29,14 @@ Current checkpoint verification: **44 C# tests passed, 0 failed, 0 skipped**, in
 
 Regression coverage includes nested lambda containment, resolved local-function targets, distinct delegate identities, body/offset edits, syntax-only prefixes and initializer ownership. Synthetic project roots and source-level top-level entries are now labelled explicitly. Inheritance/interface type relationships carry occurrence evidence. Virtual/interface dispatch adds bounded source candidates as `may_call`/`possible`, opt-in for call queries; direct base calls remain static. Candidate sets cap at 64 with a diagnostic when truncated. Delegate points-to/runtime receiver analysis remains unsupported.
 
+## Independent model checkpoint (15 October)
+
+The checked-in golden fixture was generated independently with Python tokenizers 0.21.4, ONNX Runtime 1.23.2, NumPy 2.5.4 and CPU inference against the pinned asset hashes. Eight tokenizer cases cover empty input, source code, accents, multilingual/emoji, control characters, literal special tokens and four-chunk truncation. Four full 384-dimensional query vectors use absolute tolerance 1e-5 and minimum cosine 0.99999. Fixture SHA256: `67700b62e4bdeb733d4baced69041397051f6f87bd68ce3f70ae987d49f25a0b`.
+
+The fixture exposed incorrect splitting of BERT special tokens. Corrected behavior uses tokenizer profile `bert-uncased-wordpiece-v2`, changing the model fingerprint. Existing v1 installations must provision/install/activate the new profile; weights and vocabulary hashes are unchanged. Old profile vectors cannot participate in the new profile. C# suite: **46 passed, 0 failed, 0 skipped** on Linux x64. Cross-platform numerical verification remains required.
+
+Metadata images are now shared across project contexts within an analysis, preserving per-reference aliases/options. The 512 MiB unique-metadata bound applies to the repository analysis instead of separately to each project.
+
 ## Verification evidence
 
 15 October: C#38 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution. Explicit SDK capture, stale/deleted inputs, generated support non-disclosure and alias preservation also pass.
@@ -37,7 +45,7 @@ Full application build including the service passed; Linux self-contained publis
 
 ## Remaining implementation/release work
 
-- Independent golden tokenizer/vector fixture and representation chunk spans/source excerpts.
+- Cross-platform golden numerical verification and representation chunk spans/source excerpts.
 - Semantic API-stamp/affected-context optimization, richer member/type/reference relationships and delegate points-to analysis.
 - Complete line-budget truncation/pagination behavior and hardened source-handle checks on Windows/macOS.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
