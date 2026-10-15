@@ -15,6 +15,21 @@ public sealed class LocalModelFactAttribute : FactAttribute
 public sealed class ModelTests
 {
     [Fact]
+    public void RepresentationPrioritizesIdentityAndRecordsBoundedSourceCoordinates()
+    {
+        const string sourceText = "prefix class Example { string Value => \"😀\"; } suffix";
+        var bytes = System.Text.Encoding.UTF8.GetBytes(sourceText);
+        var source = new SourceInput("Example.cs", SourceFiles.Hash(bytes), bytes, sourceText);
+        var representation = RepresentationBuilder.Build("Example", "class Example", "documentation", "baseline", source, 7, sourceText.Length - 7);
+        var span = Assert.Single(representation.Sources);
+        Assert.Equal(sourceText[span.Start..span.End], representation.Text[span.RepresentationStart..span.RepresentationEnd]);
+        Assert.StartsWith("Example\nclass Example\ndocumentation\nbaseline", representation.Text);
+        Assert.Equal(SourceFiles.Hash(System.Text.Encoding.UTF8.GetBytes(representation.Text)), representation.Hash);
+        var limited = RepresentationBuilder.Build("Example", "class Example", new string('x', 20000), "baseline", source, 7, sourceText.Length - 7);
+        Assert.True(limited.Truncated); Assert.InRange(limited.Text.Length, 1, 16384); Assert.Empty(limited.Sources);
+    }
+
+    [Fact]
     public void BertSpecialTokensBypassNormalizationAndKeepTheirVocabularyIds()
     {
         var tokenizer = new WordPieceTokenizer(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "hello"]);
@@ -32,6 +47,16 @@ public sealed class ModelTests
         {
             var text = item!["text"]!.GetValue<string>(); var actual = tokenizer.EncodeChunks(text);
             var expected = item["tokenChunks"]!.AsArray();
+            var detailed = tokenizer.EncodeDetailed(text);
+            for (var chunk = 0; chunk < detailed.Count; chunk++)
+            {
+                var span = item["chunkSpans"]![chunk]!;
+                Assert.Equal(span["start"]!.GetValue<int>(), detailed[chunk].Start);
+                Assert.Equal(span["end"]!.GetValue<int>(), detailed[chunk].End);
+                Assert.Equal(span["firstToken"]!.GetValue<int>(), detailed[chunk].FirstToken);
+                Assert.Equal(span["endToken"]!.GetValue<int>(), detailed[chunk].EndToken);
+                Assert.Equal(span["truncated"]!.GetValue<bool>(), detailed[chunk].Truncated);
+            }
             Assert.Equal(expected.Count, actual.Count);
             for (var chunk = 0; chunk < actual.Count; chunk++)
                 Assert.Equal(expected[chunk]!.AsArray().Select(id => id!.GetValue<long>()), actual[chunk]);
@@ -102,12 +127,28 @@ public sealed class ModelTests
             File.WriteAllText(Path.Combine(root, "Example.cs"), "class AuthenticationTokenParser { string ParseToken(string token) => token; }");
             var repository = indexer.Register(root); indexer.Index(repository);
             using var store = new ModelStore(database, Path.Combine(root, "models")); var profile = store.Install(bundle); store.Activate(repository, profile, CancellationToken.None);
+            using (var read = database.Open(readOnly: true))
+            using (var command = read.CreateCommand())
+            {
+                command.CommandText = "SELECT representation_version FROM model_profiles";
+                Assert.Equal(2L, command.ExecuteScalar());
+                command.CommandText = "SELECT v.spans_json FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.name='ParseToken'";
+                var spans = JsonNode.Parse((string)command.ExecuteScalar()!)!;
+                Assert.Equal("utf16", spans["CoordinateBasis"]!.GetValue<string>());
+                Assert.StartsWith("sha256:", spans["RepresentationHash"]!.GetValue<string>());
+                var sourceSpan = Assert.Single(spans["Sources"]!.AsArray());
+                var text = File.ReadAllText(Path.Combine(root, "Example.cs"));
+                Assert.Contains("ParseToken", text[sourceSpan!["Start"]!.GetValue<int>()..sourceSpan["End"]!.GetValue<int>()]);
+                Assert.Equal(SourceFiles.Hash(File.ReadAllBytes(Path.Combine(root, "Example.cs"))), sourceSpan["ContentHash"]!.GetValue<string>());
+            }
             var queries = new QueryService(database, store);
             var input = new JsonObject { ["repositoryId"] = repository, ["query"] = "authentication token parsing", ["mode"] = "vector", ["responseBudgetTokens"] = 8000 };
             var response = queries.Execute("search_code", input, new HashSet<string> { repository }); Assert.Null(response["error"]);
             Assert.NotEmpty(response["data"]!["matches"]!.AsArray()); Assert.Equal("vector", response["data"]!["channelsUsed"]![0]!.GetValue<string>());
             Assert.True(response["data"]!["vectorCoveredSymbolCount"]!.GetValue<long>() > 0);
-            File.AppendAllText(Path.Combine(root, "Example.cs"), " // changed"); indexer.Index(repository);
+            File.AppendAllText(Path.Combine(root, "Example.cs"), " // changed");
+            Assert.Contains("INDEX_STALE", Assert.Throws<IOException>(() => store.Activate(repository, profile, CancellationToken.None)).Message);
+            indexer.Index(repository);
             var after = queries.Execute("search_code", input, new HashSet<string> { repository }); Assert.Null(after["error"]);
             Assert.Empty(after["data"]!["matches"]!.AsArray()); Assert.NotEmpty(after["warnings"]!.AsArray());
             Assert.Empty(database.Check());
