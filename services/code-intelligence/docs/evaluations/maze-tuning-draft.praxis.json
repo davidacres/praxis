@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "sourceRepository": "https://github.com/davidacres/maze",
+  "sourceRevision": "61d4510a8ef6946407fa310038ae0add1fffdf24",
+  "reviewed": false,
+  "reviewedBy": "",
+  "nearDuplicateSplitReviewed": false,
+  "negativeAbstentionReviewed": false,
+  "reviewedExplanationCount": 0,
+  "notes": "Initial source-grounded tuning drafts only. No held-out or cross-project/stale acceptance claims.",
+  "queries": [
+    {
+      "id": "maze-draft-1",
+      "category": "exact",
+      "split": "tuning",
+      "query": "GenerateRefreshTokenAsync",
+      "expected": [
+        {
+          "name": "GenerateRefreshTokenAsync",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.GenerateRefreshTokenAsync(Guid, CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/RefreshTokenService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-2",
+      "category": "exact",
+      "split": "tuning",
+      "query": "RevokeAllUserTokensAsync",
+      "expected": [
+        {
+          "name": "RevokeAllUserTokensAsync",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.RevokeAllUserTokensAsync(Guid, CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/RefreshTokenService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-3",
+      "category": "exact",
+      "split": "tuning",
+      "query": "ProviderHealthMonitor",
+      "expected": [
+        {
+          "name": "ProviderHealthMonitor",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderHealthMonitor.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-4",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "reject expired revoked or inactive-user refresh credentials and consume a valid token",
+      "expected": [
+        {
+          "name": "ValidateAndConsumeRefreshTokenAsync",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.ValidateAndConsumeRefreshTokenAsync(string, CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/RefreshTokenService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-5",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "delete old revoked refresh tokens and expired credentials from the database",
+      "expected": [
+        {
+          "name": "CleanupExpiredTokensAsync",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.CleanupExpiredTokensAsync(CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/RefreshTokenService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-6",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "calculate uptime excluding accumulated provider downtime",
+      "expected": [
+        {
+          "name": "CalculateUptime",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.CalculateUptime(Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderHealthMonitor.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-7",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "SHA256 token hashing",
+      "expected": [
+        {
+          "name": "ComputeTokenHash",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.ComputeTokenHash(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/RefreshTokenService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-8",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "degraded provider success rate and response time status",
+      "expected": [
+        {
+          "name": "DetermineStatus",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.DetermineStatus(Maze.SearchCore.Models.ProviderStats, Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderHealthMonitor.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-9",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "match dynamic collection terms ignoring accents punctuation and case",
+      "expected": [
+        {
+          "name": "Matches",
+          "qualifiedName": "Maze.SearchCore.Services.DynamicCollectionMatcher.Matches(Maze.SearchCore.Models.MediaItem, IReadOnlyList<string>)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/DynamicCollectionMatcher.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-10",
+      "category": "negative",
+      "split": "tuning",
+      "query": "Kubernetes pod autoscaler reconciliation",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-11",
+      "category": "negative",
+      "split": "tuning",
+      "query": "Bitcoin proof of work miner implementation",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": false
+    }
+  ]
+}

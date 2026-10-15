@@ -1,0 +1,1214 @@
+{
+  "version": 1,
+  "declaredSourceRevision": "61d4510a8ef6946407fa310038ae0add1fffdf24",
+  "measurement": "Sequential CLI/owner transport included; not the capacity performance protocol",
+  "contexts": [
+    {
+      "contextId": "pci:ctx:cf25f6aebf674009bb445584e0d332da7ec9111ce2e4a04f3ed2c2dcc1356a8f",
+      "state": "ready",
+      "resolution": "syntaxOnly",
+      "desiredRevision": 1,
+      "publishedRevision": 1,
+      "capabilities": [
+        "declarations",
+        "lexical"
+      ]
+    }
+  ],
+  "before": {
+    "indexGeneration": 1,
+    "queryEpoch": 18
+  },
+  "after": {
+    "indexGeneration": 1,
+    "queryEpoch": 18
+  },
+  "summary": {
+    "lexical/all": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "lexical/behaviour": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "lexical/crossProject": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "lexical/exact": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "lexical/negative": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "lexical/stale": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "lexical/terminology": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "hybrid/all": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "hybrid/behaviour": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "hybrid/crossProject": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "hybrid/exact": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "hybrid/negative": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "hybrid/stale": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    },
+    "hybrid/terminology": {
+      "queries": 0,
+      "labelledQueries": 0,
+      "errors": 0,
+      "recallAt10": null,
+      "mrrAt10": null,
+      "p95Ms": null
+    }
+  },
+  "gates": {
+    "sourceRevisionDeclared": true,
+    "nearDuplicateSplitReviewDeclared": false,
+    "atLeast120Queries": false,
+    "heldOutEveryCategory": false,
+    "atLeast20PerCategory": false,
+    "tuning40HeldOut80": false,
+    "reviewDeclared": false,
+    "completeCompilerContexts": false,
+    "stableSnapshot": true,
+    "noToolErrors": true,
+    "noDuplicateResults": true,
+    "fullSemanticCoverage": false,
+    "exactTop1": false,
+    "heldOutRecallAtLeast080": false,
+    "noCategoryRegressionOver005": false,
+    "expectedEvidencePresent": true,
+    "negativeAbstentionReviewDeclared": false,
+    "thirtyExplanationsReviewDeclared": false
+  },
+  "passedDeclaredGates": false,
+  "results": [
+    {
+      "id": "maze-draft-1",
+      "category": "exact",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "top1": true,
+      "latencyMs": 59.578250016784295,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:9bcf8f1c8c090bf1c67d9face88051a96c6c06387b8cf37625846c62da04318f",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.GenerateRefreshTokenAsync(Guid, CancellationToken)"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-1",
+      "category": "exact",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "top1": true,
+      "latencyMs": 41.64587499690242,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:9bcf8f1c8c090bf1c67d9face88051a96c6c06387b8cf37625846c62da04318f",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.GenerateRefreshTokenAsync(Guid, CancellationToken)"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-2",
+      "category": "exact",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "top1": true,
+      "latencyMs": 40.84066700306721,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:3c24ecf15edccb4ff2499de29453af05a833736886e16a56fddd9e5eaa313bad",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.RevokeAllUserTokensAsync(Guid, CancellationToken)"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-2",
+      "category": "exact",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "top1": true,
+      "latencyMs": 44.343250017846,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:3c24ecf15edccb4ff2499de29453af05a833736886e16a56fddd9e5eaa313bad",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.RevokeAllUserTokensAsync(Guid, CancellationToken)"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-3",
+      "category": "exact",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "top1": true,
+      "latencyMs": 50.196416006656364,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:3f6c5e0df41d97e815add0bdca0208d069b61b0752fc7266a4fefa87693a9817",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor"
+        },
+        {
+          "symbolId": "pci:syntactic:7ecf97aa171c8809607618468988b1ea391aa899317dcb3f2cec616e20706472",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthMonitor(Maze.SearchCore.Services.ISearchMetricsService, ILogger<Maze.SearchCore.Services.ProviderHealthMonitor>)"
+        },
+        {
+          "symbolId": "pci:syntactic:6e282781821c36adbef6bad5c81671c0426d0d059e42261809c7db6a1431f908",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.CalculateUptime(Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData)"
+        },
+        {
+          "symbolId": "pci:syntactic:770f89109bcee6fda8e0e5231e54f0f899fce6574050aa1828eceebd24822128",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData"
+        },
+        {
+          "symbolId": "pci:syntactic:4dea13c8ce72b9a2d57ba698062d33b0fdfab380d67f84116343da510c3d910b",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor._logger"
+        },
+        {
+          "symbolId": "pci:syntactic:029cd7c0053ec30ca198888e93c7f8c7dd13e51674a0886d31d2512c251fbabd",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor._startTime"
+        },
+        {
+          "symbolId": "pci:syntactic:c1f5dd57f22cf58da49604726725481a45c93fe6160bddf32d5fc27366f889e5",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor._healthData"
+        },
+        {
+          "symbolId": "pci:syntactic:1dffe4f82f76a8c11c3105097984b0ffc4b3653adf8ddf4d3946827b983a05e9",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.LastFailure"
+        },
+        {
+          "symbolId": "pci:syntactic:309dc0233fa5872dbffcadf6b62873dcc16c12024c4e6c1c92ae95f354bd91eb",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.DowntimeStarted"
+        },
+        {
+          "symbolId": "pci:syntactic:3c29326a491937257ead61e102e7ca78e90455684c4b797af8b53f9bf251428c",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.LastSuccess"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-3",
+      "category": "exact",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "top1": true,
+      "latencyMs": 46.130500006256625,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:3f6c5e0df41d97e815add0bdca0208d069b61b0752fc7266a4fefa87693a9817",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor"
+        },
+        {
+          "symbolId": "pci:syntactic:7ecf97aa171c8809607618468988b1ea391aa899317dcb3f2cec616e20706472",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthMonitor(Maze.SearchCore.Services.ISearchMetricsService, ILogger<Maze.SearchCore.Services.ProviderHealthMonitor>)"
+        },
+        {
+          "symbolId": "pci:syntactic:6e282781821c36adbef6bad5c81671c0426d0d059e42261809c7db6a1431f908",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.CalculateUptime(Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData)"
+        },
+        {
+          "symbolId": "pci:syntactic:770f89109bcee6fda8e0e5231e54f0f899fce6574050aa1828eceebd24822128",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData"
+        },
+        {
+          "symbolId": "pci:syntactic:4dea13c8ce72b9a2d57ba698062d33b0fdfab380d67f84116343da510c3d910b",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor._logger"
+        },
+        {
+          "symbolId": "pci:syntactic:029cd7c0053ec30ca198888e93c7f8c7dd13e51674a0886d31d2512c251fbabd",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor._startTime"
+        },
+        {
+          "symbolId": "pci:syntactic:c1f5dd57f22cf58da49604726725481a45c93fe6160bddf32d5fc27366f889e5",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor._healthData"
+        },
+        {
+          "symbolId": "pci:syntactic:1dffe4f82f76a8c11c3105097984b0ffc4b3653adf8ddf4d3946827b983a05e9",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.LastFailure"
+        },
+        {
+          "symbolId": "pci:syntactic:309dc0233fa5872dbffcadf6b62873dcc16c12024c4e6c1c92ae95f354bd91eb",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.DowntimeStarted"
+        },
+        {
+          "symbolId": "pci:syntactic:3c29326a491937257ead61e102e7ca78e90455684c4b797af8b53f9bf251428c",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.LastSuccess"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-4",
+      "category": "behaviour",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": 1.0,
+      "mrrAt10": 0.5,
+      "top1": false,
+      "latencyMs": 51.95491699851118,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:f43acd6e0f481f6af325f2cadde94f554ef64d68c695c33b73482661e5d66e8f",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenCleanupService"
+        },
+        {
+          "symbolId": "pci:syntactic:cd081b8555ea9a5e1ec9b8c03a345bd09d9e07264c798ae3035aed2ad0dc6aa7",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.ValidateAndConsumeRefreshTokenAsync(string, CancellationToken)"
+        },
+        {
+          "symbolId": "pci:syntactic:57d25937755ca74459860ad3a27babcb063879c2b7465a6c4a8bb8be622c5214",
+          "qualifiedName": "MazeHub.Server.Authentication.ServerAuthenticationService.EnsureTokenValidAsync()"
+        },
+        {
+          "symbolId": "pci:syntactic:b0ff430adc66dac9ad6e4473bb0ac7a35ff44d848bc954a9e88e03cf4a938578",
+          "qualifiedName": "MazeHub.Tests.Authentication.ServerAuthenticationServiceTests.EnsureTokenValidAsync_ReturnsFalse_WhenRefreshTokenMissing()"
+        },
+        {
+          "symbolId": "pci:syntactic:9ab05d763305d726022027234c8ac5c6c59ce2f02b310f05ea141e8a18c336fc",
+          "qualifiedName": "MazeHub.Tests.Authentication.ServerAuthenticationServiceTests.EnsureTokenValidAsync_UsesUserServiceRefresh_WhenTokenExpiring()"
+        },
+        {
+          "symbolId": "pci:syntactic:17b998b6ac9006db9358c6e5381db627087922de0b6fdc63980d270f7a93e48d",
+          "qualifiedName": "MazeHub.Tests.Authentication.ServerAuthenticationServiceTests.EnsureTokenValidAsync_ReturnsFalse_WhenRefreshFails()"
+        },
+        {
+          "symbolId": "pci:syntactic:2c0528d0f81de82c229683c43bc1353634322196eea630336fc0648379738dce",
+          "qualifiedName": "MazeHub.Server.Services.UserServiceClient.RefreshMazeTokenAsync(string)"
+        },
+        {
+          "symbolId": "pci:syntactic:1e762c175938caab18d192682c875b3e65e0132cc429c192c66fa5ead52ab7ee",
+          "qualifiedName": "MazeHub.Server.Authentication.ServerAuthenticationService.EnsureTokenValidBySessionIdAsync(string)"
+        },
+        {
+          "symbolId": "pci:syntactic:fe770a3f3d8f62da33e09c8f9b55dd3a2d4cad2efe0129864d0040b081c3a066",
+          "qualifiedName": "MazeHub.Server.Services.Modules.IModuleActionTokenService.TryConsume(string, out MazeHub.Server.Services.Modules.ModuleActionBinding?)"
+        },
+        {
+          "symbolId": "pci:syntactic:e38b63373e736f0a362b7dff0048f1f8bb7e35c47db6e712c70aed39eb4ed832",
+          "qualifiedName": "Maze.MetaDataService.Services.Metadata.MediaMetadataService.DownloadImageOrDefaultAsync(Maze.MetaDataService.Services.Metadata.IMediaMetadataProvider, string?, byte[]?, string?, int?, int?, CancellationToken)"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-4",
+      "category": "behaviour",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": 1.0,
+      "mrrAt10": 0.5,
+      "top1": false,
+      "latencyMs": 53.17195798852481,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:f43acd6e0f481f6af325f2cadde94f554ef64d68c695c33b73482661e5d66e8f",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenCleanupService"
+        },
+        {
+          "symbolId": "pci:syntactic:cd081b8555ea9a5e1ec9b8c03a345bd09d9e07264c798ae3035aed2ad0dc6aa7",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.ValidateAndConsumeRefreshTokenAsync(string, CancellationToken)"
+        },
+        {
+          "symbolId": "pci:syntactic:57d25937755ca74459860ad3a27babcb063879c2b7465a6c4a8bb8be622c5214",
+          "qualifiedName": "MazeHub.Server.Authentication.ServerAuthenticationService.EnsureTokenValidAsync()"
+        },
+        {
+          "symbolId": "pci:syntactic:b0ff430adc66dac9ad6e4473bb0ac7a35ff44d848bc954a9e88e03cf4a938578",
+          "qualifiedName": "MazeHub.Tests.Authentication.ServerAuthenticationServiceTests.EnsureTokenValidAsync_ReturnsFalse_WhenRefreshTokenMissing()"
+        },
+        {
+          "symbolId": "pci:syntactic:9ab05d763305d726022027234c8ac5c6c59ce2f02b310f05ea141e8a18c336fc",
+          "qualifiedName": "MazeHub.Tests.Authentication.ServerAuthenticationServiceTests.EnsureTokenValidAsync_UsesUserServiceRefresh_WhenTokenExpiring()"
+        },
+        {
+          "symbolId": "pci:syntactic:17b998b6ac9006db9358c6e5381db627087922de0b6fdc63980d270f7a93e48d",
+          "qualifiedName": "MazeHub.Tests.Authentication.ServerAuthenticationServiceTests.EnsureTokenValidAsync_ReturnsFalse_WhenRefreshFails()"
+        },
+        {
+          "symbolId": "pci:syntactic:2c0528d0f81de82c229683c43bc1353634322196eea630336fc0648379738dce",
+          "qualifiedName": "MazeHub.Server.Services.UserServiceClient.RefreshMazeTokenAsync(string)"
+        },
+        {
+          "symbolId": "pci:syntactic:1e762c175938caab18d192682c875b3e65e0132cc429c192c66fa5ead52ab7ee",
+          "qualifiedName": "MazeHub.Server.Authentication.ServerAuthenticationService.EnsureTokenValidBySessionIdAsync(string)"
+        },
+        {
+          "symbolId": "pci:syntactic:fe770a3f3d8f62da33e09c8f9b55dd3a2d4cad2efe0129864d0040b081c3a066",
+          "qualifiedName": "MazeHub.Server.Services.Modules.IModuleActionTokenService.TryConsume(string, out MazeHub.Server.Services.Modules.ModuleActionBinding?)"
+        },
+        {
+          "symbolId": "pci:syntactic:e38b63373e736f0a362b7dff0048f1f8bb7e35c47db6e712c70aed39eb4ed832",
+          "qualifiedName": "Maze.MetaDataService.Services.Metadata.MediaMetadataService.DownloadImageOrDefaultAsync(Maze.MetaDataService.Services.Metadata.IMediaMetadataProvider, string?, byte[]?, string?, int?, int?, CancellationToken)"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-5",
+      "category": "behaviour",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": 1.0,
+      "mrrAt10": 0.3333333333333333,
+      "top1": false,
+      "latencyMs": 54.06475000199862,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:f43acd6e0f481f6af325f2cadde94f554ef64d68c695c33b73482661e5d66e8f",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenCleanupService"
+        },
+        {
+          "symbolId": "pci:syntactic:d5ef236cb0094c2d30600fac0af3e95a11d4ff7e30dca6c0f94835af01d6db4f",
+          "qualifiedName": "Maze.SearchCore.Services.ExternalSettingsService.RefreshSettingsAsync()"
+        },
+        {
+          "symbolId": "pci:syntactic:59aee2e263dffb50b25c591d53cc7a70d0a944b733076ad2bf364748862580e3",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.CleanupExpiredTokensAsync(CancellationToken)"
+        },
+        {
+          "symbolId": "pci:syntactic:e2a997f8de2289cadb6cde721b861c77f4614783d8eb4575be83c4a3cceba57c",
+          "qualifiedName": "Maze.StreamingModule.Tests.StreamingModuleHostTests.Asset_never_registered_here_is_resolved_from_the_maze_catalogue_and_streamed()"
+        },
+        {
+          "symbolId": "pci:syntactic:8d11779c528d99e9f2c7933aacee7faed0248864a7b162b25b53e0f07fc58053",
+          "qualifiedName": "MazeHub.PlaywrightTests.AdvancedSetupFlowTests.AdvancedSetup_Step4_ReviewShowsDatabaseBootstrapState()"
+        },
+        {
+          "symbolId": "pci:syntactic:8e9c4f74bc3391a7f37e932d7a7aaf45d24b9ff97598cdb1bd06398ce7a8419e",
+          "qualifiedName": "MazeHub.PlaywrightTests.AdvancedSetupFlowTests.AdvancedSetup_FullFlow_ThenLoginWithSetupCredentials()"
+        },
+        {
+          "symbolId": "pci:syntactic:5619af5a0743a6cf8f90c840730f5dc62f402e7c7835ef4b5da2c73f8ad938ef",
+          "qualifiedName": "MazeHub.Server.Services.PathHelperService.DeriveDatabasePath(string?, string)"
+        },
+        {
+          "symbolId": "pci:syntactic:6c8edbeaac0ee53ab04ea46936ec4e9333f0eb8722d666611deb692967e76a8e",
+          "qualifiedName": "Maze.Common.MazeConnectionStringResolver"
+        },
+        {
+          "symbolId": "pci:syntactic:75c9209994dc36475d9814f98ced1e5895b1c353e5efa64a6abbc203d6d9ebcc",
+          "qualifiedName": "Maze.UserService.Models.User.RefreshTokens.set"
+        },
+        {
+          "symbolId": "pci:syntactic:09ebbcae6bcd15bdb1cfc68eb4a98abf9ab3eef42c6b8b1f583c04d9d3e9fcb2",
+          "qualifiedName": "Maze.UserService.Models.User.RefreshTokens"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-5",
+      "category": "behaviour",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": 1.0,
+      "mrrAt10": 0.3333333333333333,
+      "top1": false,
+      "latencyMs": 52.77520799427293,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:f43acd6e0f481f6af325f2cadde94f554ef64d68c695c33b73482661e5d66e8f",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenCleanupService"
+        },
+        {
+          "symbolId": "pci:syntactic:d5ef236cb0094c2d30600fac0af3e95a11d4ff7e30dca6c0f94835af01d6db4f",
+          "qualifiedName": "Maze.SearchCore.Services.ExternalSettingsService.RefreshSettingsAsync()"
+        },
+        {
+          "symbolId": "pci:syntactic:59aee2e263dffb50b25c591d53cc7a70d0a944b733076ad2bf364748862580e3",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.CleanupExpiredTokensAsync(CancellationToken)"
+        },
+        {
+          "symbolId": "pci:syntactic:e2a997f8de2289cadb6cde721b861c77f4614783d8eb4575be83c4a3cceba57c",
+          "qualifiedName": "Maze.StreamingModule.Tests.StreamingModuleHostTests.Asset_never_registered_here_is_resolved_from_the_maze_catalogue_and_streamed()"
+        },
+        {
+          "symbolId": "pci:syntactic:8d11779c528d99e9f2c7933aacee7faed0248864a7b162b25b53e0f07fc58053",
+          "qualifiedName": "MazeHub.PlaywrightTests.AdvancedSetupFlowTests.AdvancedSetup_Step4_ReviewShowsDatabaseBootstrapState()"
+        },
+        {
+          "symbolId": "pci:syntactic:8e9c4f74bc3391a7f37e932d7a7aaf45d24b9ff97598cdb1bd06398ce7a8419e",
+          "qualifiedName": "MazeHub.PlaywrightTests.AdvancedSetupFlowTests.AdvancedSetup_FullFlow_ThenLoginWithSetupCredentials()"
+        },
+        {
+          "symbolId": "pci:syntactic:5619af5a0743a6cf8f90c840730f5dc62f402e7c7835ef4b5da2c73f8ad938ef",
+          "qualifiedName": "MazeHub.Server.Services.PathHelperService.DeriveDatabasePath(string?, string)"
+        },
+        {
+          "symbolId": "pci:syntactic:6c8edbeaac0ee53ab04ea46936ec4e9333f0eb8722d666611deb692967e76a8e",
+          "qualifiedName": "Maze.Common.MazeConnectionStringResolver"
+        },
+        {
+          "symbolId": "pci:syntactic:75c9209994dc36475d9814f98ced1e5895b1c353e5efa64a6abbc203d6d9ebcc",
+          "qualifiedName": "Maze.UserService.Models.User.RefreshTokens.set"
+        },
+        {
+          "symbolId": "pci:syntactic:09ebbcae6bcd15bdb1cfc68eb4a98abf9ab3eef42c6b8b1f583c04d9d3e9fcb2",
+          "qualifiedName": "Maze.UserService.Models.User.RefreshTokens"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-6",
+      "category": "behaviour",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": 1.0,
+      "mrrAt10": 0.25,
+      "top1": false,
+      "latencyMs": 48.615750012686476,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:86c04d6e5b6a2105d2db1f8c41095fb64b7f6d6ecfdf104e9c633596d1985aea",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.AccumulatedDowntime"
+        },
+        {
+          "symbolId": "pci:syntactic:0891c1055e8911c3e72a3ccf021b340e5b215eb5b17b949863fe95c19207b0bc",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.AccumulatedDowntime.set"
+        },
+        {
+          "symbolId": "pci:syntactic:1b86e71597ee12aa0f8b744c6f9769cb6f926efac526dd9cb3cb64fb01dccc0e",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.AccumulatedDowntime.get"
+        },
+        {
+          "symbolId": "pci:syntactic:6e282781821c36adbef6bad5c81671c0426d0d059e42261809c7db6a1431f908",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.CalculateUptime(Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData)"
+        },
+        {
+          "symbolId": "pci:syntactic:6433683004283ca81b8deb2ebd2dfec2090eab1d28010f7bedf993df9a44284d",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.Uptime"
+        },
+        {
+          "symbolId": "pci:syntactic:80be91965831277224a6e544ae0585f21de22d8f8532e844d32f2322615aaa6f",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.Uptime.get"
+        },
+        {
+          "symbolId": "pci:syntactic:f75e2e4ed6b273a746b9d1408405890b3564d8a71eeef2532fbf04f5928351d8",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.Uptime.set"
+        },
+        {
+          "symbolId": "pci:syntactic:309dc0233fa5872dbffcadf6b62873dcc16c12024c4e6c1c92ae95f354bd91eb",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.DowntimeStarted"
+        },
+        {
+          "symbolId": "pci:syntactic:451a3293e3ea0c11aeafdf12a2053b257aefe3d7755afbefed2b6089ac79ccff",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.DowntimeStarted.get"
+        },
+        {
+          "symbolId": "pci:syntactic:6ae89eb1d2d9cda95c5b4079f7598262b7b1ca971a5af1dee05f3f2fe9d5787c",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.DowntimeStarted.set"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-6",
+      "category": "behaviour",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": 1.0,
+      "mrrAt10": 0.25,
+      "top1": false,
+      "latencyMs": 51.35787502513267,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:86c04d6e5b6a2105d2db1f8c41095fb64b7f6d6ecfdf104e9c633596d1985aea",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.AccumulatedDowntime"
+        },
+        {
+          "symbolId": "pci:syntactic:0891c1055e8911c3e72a3ccf021b340e5b215eb5b17b949863fe95c19207b0bc",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.AccumulatedDowntime.set"
+        },
+        {
+          "symbolId": "pci:syntactic:1b86e71597ee12aa0f8b744c6f9769cb6f926efac526dd9cb3cb64fb01dccc0e",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.AccumulatedDowntime.get"
+        },
+        {
+          "symbolId": "pci:syntactic:6e282781821c36adbef6bad5c81671c0426d0d059e42261809c7db6a1431f908",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.CalculateUptime(Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData)"
+        },
+        {
+          "symbolId": "pci:syntactic:6433683004283ca81b8deb2ebd2dfec2090eab1d28010f7bedf993df9a44284d",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.Uptime"
+        },
+        {
+          "symbolId": "pci:syntactic:80be91965831277224a6e544ae0585f21de22d8f8532e844d32f2322615aaa6f",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.Uptime.get"
+        },
+        {
+          "symbolId": "pci:syntactic:f75e2e4ed6b273a746b9d1408405890b3564d8a71eeef2532fbf04f5928351d8",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.Uptime.set"
+        },
+        {
+          "symbolId": "pci:syntactic:309dc0233fa5872dbffcadf6b62873dcc16c12024c4e6c1c92ae95f354bd91eb",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.DowntimeStarted"
+        },
+        {
+          "symbolId": "pci:syntactic:451a3293e3ea0c11aeafdf12a2053b257aefe3d7755afbefed2b6089ac79ccff",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.DowntimeStarted.get"
+        },
+        {
+          "symbolId": "pci:syntactic:6ae89eb1d2d9cda95c5b4079f7598262b7b1ca971a5af1dee05f3f2fe9d5787c",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData.DowntimeStarted.set"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-7",
+      "category": "terminology",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": 0.0,
+      "mrrAt10": 0,
+      "top1": false,
+      "latencyMs": 47.900083009153605,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:5e99e43d7e5e52d41818e908644c4d51853a9195dbecdd0d4efddb56852e03be",
+          "qualifiedName": "Maze.UserService.Models.ServiceApiKey.ApiKeyHash"
+        },
+        {
+          "symbolId": "pci:syntactic:36123380b3ed89fc6f9e8057e210316ff8a775117c3931c7066af5f049cbc5c7",
+          "qualifiedName": "MazeHub.Models.AuthResponseModel.Token"
+        },
+        {
+          "symbolId": "pci:syntactic:f339a473af505afcc2dc973b5e2be7b9308f3fde7e288103fcef264c6695dc71",
+          "qualifiedName": "MazeHub.Server.Authentication.SessionData.Token"
+        },
+        {
+          "symbolId": "pci:syntactic:2b757105a0e758750263091969afac03ee4b542c27425d81f1c552b711ee76dc",
+          "qualifiedName": "MazeHub.Models.AuthResponseModel.Token.get"
+        },
+        {
+          "symbolId": "pci:syntactic:76f8a2548d835190581d6c9cfa2c58f268f43fbd7856de70eb1d39d48d5617a9",
+          "qualifiedName": "MazeHub.Models.AuthResponseModel.Token.set"
+        },
+        {
+          "symbolId": "pci:syntactic:dfeba10e698910f04d1baf2d3979e41d9002f890725f7830f8e52f39e123c099",
+          "qualifiedName": "Maze.UserService.Models.Dtos.AuthResponse.Token"
+        },
+        {
+          "symbolId": "pci:syntactic:3907977fb5cd7bbf8c1ce22d809653b6d3d939d2c3e89a25d24a101d96c0ffd4",
+          "qualifiedName": "MazeHub.Server.Authentication.SessionData.Token.get"
+        },
+        {
+          "symbolId": "pci:syntactic:8c5efcd47ec9b706abf4230e978575a9304d7c5e5aaa49e0ea90684e7ef59508",
+          "qualifiedName": "MazeHub.Server.Authentication.SessionData.Token.set"
+        },
+        {
+          "symbolId": "pci:syntactic:4419edc96b233f83aa269fd2c62eda01c8ac3199f70dabbc337b8acf96b51aa9",
+          "qualifiedName": "Maze.UserService.Models.Dtos.AuthResponse.Token.set"
+        },
+        {
+          "symbolId": "pci:syntactic:d64b0c92912dd0e4d32242564ccad75359b570f2940c3d6adfb0d9f164b2a4b5",
+          "qualifiedName": "Maze.UserService.Models.Dtos.AuthResponse.Token.get"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-7",
+      "category": "terminology",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": 0.0,
+      "mrrAt10": 0,
+      "top1": false,
+      "latencyMs": 46.5170830138959,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:5e99e43d7e5e52d41818e908644c4d51853a9195dbecdd0d4efddb56852e03be",
+          "qualifiedName": "Maze.UserService.Models.ServiceApiKey.ApiKeyHash"
+        },
+        {
+          "symbolId": "pci:syntactic:36123380b3ed89fc6f9e8057e210316ff8a775117c3931c7066af5f049cbc5c7",
+          "qualifiedName": "MazeHub.Models.AuthResponseModel.Token"
+        },
+        {
+          "symbolId": "pci:syntactic:f339a473af505afcc2dc973b5e2be7b9308f3fde7e288103fcef264c6695dc71",
+          "qualifiedName": "MazeHub.Server.Authentication.SessionData.Token"
+        },
+        {
+          "symbolId": "pci:syntactic:2b757105a0e758750263091969afac03ee4b542c27425d81f1c552b711ee76dc",
+          "qualifiedName": "MazeHub.Models.AuthResponseModel.Token.get"
+        },
+        {
+          "symbolId": "pci:syntactic:76f8a2548d835190581d6c9cfa2c58f268f43fbd7856de70eb1d39d48d5617a9",
+          "qualifiedName": "MazeHub.Models.AuthResponseModel.Token.set"
+        },
+        {
+          "symbolId": "pci:syntactic:dfeba10e698910f04d1baf2d3979e41d9002f890725f7830f8e52f39e123c099",
+          "qualifiedName": "Maze.UserService.Models.Dtos.AuthResponse.Token"
+        },
+        {
+          "symbolId": "pci:syntactic:3907977fb5cd7bbf8c1ce22d809653b6d3d939d2c3e89a25d24a101d96c0ffd4",
+          "qualifiedName": "MazeHub.Server.Authentication.SessionData.Token.get"
+        },
+        {
+          "symbolId": "pci:syntactic:8c5efcd47ec9b706abf4230e978575a9304d7c5e5aaa49e0ea90684e7ef59508",
+          "qualifiedName": "MazeHub.Server.Authentication.SessionData.Token.set"
+        },
+        {
+          "symbolId": "pci:syntactic:4419edc96b233f83aa269fd2c62eda01c8ac3199f70dabbc337b8acf96b51aa9",
+          "qualifiedName": "Maze.UserService.Models.Dtos.AuthResponse.Token.set"
+        },
+        {
+          "symbolId": "pci:syntactic:d64b0c92912dd0e4d32242564ccad75359b570f2940c3d6adfb0d9f164b2a4b5",
+          "qualifiedName": "Maze.UserService.Models.Dtos.AuthResponse.Token.get"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-8",
+      "category": "terminology",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": 0.0,
+      "mrrAt10": 0,
+      "top1": false,
+      "latencyMs": 50.956541002960876,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:29d9a8402ad6549cb5d363092d0a3cbbf685cdc3585b0303677901a7ba7681ce",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.SuccessRate"
+        },
+        {
+          "symbolId": "pci:syntactic:68675668b4697ba3b49bc37719c13944f9d0f56b419277ae8106ea9f21f49444",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderStats.SuccessRate"
+        },
+        {
+          "symbolId": "pci:syntactic:b29508be73e75dfbd72f05c4cab5198b0c8a2e30f06a73d94de9552d119f286b",
+          "qualifiedName": "MazeHub.Server.Services.ProviderStats.SuccessRate"
+        },
+        {
+          "symbolId": "pci:syntactic:b3c660332a9572b9963ba5af0fca3fa5c06f85b2b88cc1b71231192328229c08",
+          "qualifiedName": "MazeHub.Server.Services.ProviderHealthReport.SuccessRate"
+        },
+        {
+          "symbolId": "pci:syntactic:02abcd62f7f0bde47903b4c0cbdbcc1768d13235a1bc02cb6771b8d26ebcfa1c",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.SuccessRate.get"
+        },
+        {
+          "symbolId": "pci:syntactic:02da0ae2dae659f7be7ba8809f1e19c8c2093dd8d45e36b466a77ecc7b3b7f0b",
+          "qualifiedName": "MazeHub.Server.Services.ProviderHealthReport.SuccessRate.get"
+        },
+        {
+          "symbolId": "pci:syntactic:18a321fd27d29f88332c00e365bd84279478f2764f62193406fa6f9e907f103b",
+          "qualifiedName": "MazeHub.Server.Services.ProviderStats.SuccessRate.set"
+        },
+        {
+          "symbolId": "pci:syntactic:737ffa415542341d76cffd5c475aaf11a02150fb0820ebc766a5725206354c6e",
+          "qualifiedName": "MazeHub.Server.Services.ProviderStats.SuccessRate.get"
+        },
+        {
+          "symbolId": "pci:syntactic:aa067be021ba835363eba4f28880faa2f0c9ca1c40f502691ecddca3d6881fea",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.SuccessRate.set"
+        },
+        {
+          "symbolId": "pci:syntactic:ce445f793fc25932cf6ff756fef3aa75ce8dcd8f189499e95bc927a61eab9dcb",
+          "qualifiedName": "MazeHub.Server.Services.ProviderHealthReport.SuccessRate.set"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-8",
+      "category": "terminology",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": 0.0,
+      "mrrAt10": 0,
+      "top1": false,
+      "latencyMs": 56.06162498588674,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:29d9a8402ad6549cb5d363092d0a3cbbf685cdc3585b0303677901a7ba7681ce",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.SuccessRate"
+        },
+        {
+          "symbolId": "pci:syntactic:68675668b4697ba3b49bc37719c13944f9d0f56b419277ae8106ea9f21f49444",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderStats.SuccessRate"
+        },
+        {
+          "symbolId": "pci:syntactic:b29508be73e75dfbd72f05c4cab5198b0c8a2e30f06a73d94de9552d119f286b",
+          "qualifiedName": "MazeHub.Server.Services.ProviderStats.SuccessRate"
+        },
+        {
+          "symbolId": "pci:syntactic:b3c660332a9572b9963ba5af0fca3fa5c06f85b2b88cc1b71231192328229c08",
+          "qualifiedName": "MazeHub.Server.Services.ProviderHealthReport.SuccessRate"
+        },
+        {
+          "symbolId": "pci:syntactic:02abcd62f7f0bde47903b4c0cbdbcc1768d13235a1bc02cb6771b8d26ebcfa1c",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.SuccessRate.get"
+        },
+        {
+          "symbolId": "pci:syntactic:02da0ae2dae659f7be7ba8809f1e19c8c2093dd8d45e36b466a77ecc7b3b7f0b",
+          "qualifiedName": "MazeHub.Server.Services.ProviderHealthReport.SuccessRate.get"
+        },
+        {
+          "symbolId": "pci:syntactic:18a321fd27d29f88332c00e365bd84279478f2764f62193406fa6f9e907f103b",
+          "qualifiedName": "MazeHub.Server.Services.ProviderStats.SuccessRate.set"
+        },
+        {
+          "symbolId": "pci:syntactic:737ffa415542341d76cffd5c475aaf11a02150fb0820ebc766a5725206354c6e",
+          "qualifiedName": "MazeHub.Server.Services.ProviderStats.SuccessRate.get"
+        },
+        {
+          "symbolId": "pci:syntactic:aa067be021ba835363eba4f28880faa2f0c9ca1c40f502691ecddca3d6881fea",
+          "qualifiedName": "Maze.SearchCore.Models.ProviderHealthReport.SuccessRate.set"
+        },
+        {
+          "symbolId": "pci:syntactic:ce445f793fc25932cf6ff756fef3aa75ce8dcd8f189499e95bc927a61eab9dcb",
+          "qualifiedName": "MazeHub.Server.Services.ProviderHealthReport.SuccessRate.set"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-9",
+      "category": "behaviour",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": 0.0,
+      "mrrAt10": 0,
+      "top1": false,
+      "latencyMs": 52.19604101148434,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:9f323214099e128c77ff2815bfc424c6f3f576c0878584638cb0408bd91b7213",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.DynamicCollectionMatcherTests.Matches_title_case_and_punctuation_insensitively()"
+        },
+        {
+          "symbolId": "pci:syntactic:20e17ed1197c5957c59fcefa4faadf6c2cc46ea1f719f6f3eebef73887ddb561",
+          "qualifiedName": "Maze.SearchCore.Tests.Controllers.MediaCollectionControllerTests.CreateCollection_Dynamic_BadRequest_When_MatchTerms_Empty()"
+        },
+        {
+          "symbolId": "pci:syntactic:53a19596441e1e5f3919047365ab9f6102ec9c39254e527b9617fca8aebcaba6",
+          "qualifiedName": "Maze.SearchCore.Models.UpdateCollectionRequest.MatchTerms"
+        },
+        {
+          "symbolId": "pci:syntactic:42858b8b5008cee82327ed7d21b17749da6621ea38aae81aa30826ae987bdc6e",
+          "qualifiedName": "Maze.SearchCore.Models.MediaCollection.MatchTerms"
+        },
+        {
+          "symbolId": "pci:syntactic:2030ca220cb0d12c47a9f76bafca4c7811c3498a8d175531ab2240378274cebb",
+          "qualifiedName": "Maze.SearchCore.Data.Entities.MediaCollectionEntity.MatchTermsJson"
+        },
+        {
+          "symbolId": "pci:syntactic:ea1e7ab9e2ba4fc6aed4ecce8d4a93c493105ab2ac1634b4f1cbb25f8313400f",
+          "qualifiedName": "Maze.SearchCore.Models.CreateCollectionRequest.MatchTerms"
+        },
+        {
+          "symbolId": "pci:syntactic:615bef4ab92f99b7a872fdb0ca17ffa0c70eb4f568df974f0351504db0452460",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaCollectionController.UpdateDynamicCollectionAsync(Maze.SearchCore.Models.MediaCollection, Maze.SearchCore.Models.UpdateCollectionRequest, CancellationToken)"
+        },
+        {
+          "symbolId": "pci:syntactic:7e4eada14f1d99c02819ad8f006549a1d3fd6d8e0e31c88cf0f90c20413a3090",
+          "qualifiedName": "Maze.SearchCore.Services.MediaCatalogService.UpdateDynamicCollectionFieldsAsync(Maze.SearchCore.Models.MediaCollection)"
+        },
+        {
+          "symbolId": "pci:syntactic:c624b3f89e7576543b6a69bc37d82ded3a603d8af37741e6ee0338cb15e27af1",
+          "qualifiedName": "Maze.SearchCore.Repositories.IMediaCatalogRepository.UpdateDynamicCollectionStatsAsync(Maze.SearchCore.Models.MediaCollection)"
+        },
+        {
+          "symbolId": "pci:syntactic:2c576a8a55eddd68d28ca4848d2569615fc5fbbdbe57cbecfb2af497a7afafe8",
+          "qualifiedName": "Maze.SearchCore.Tests.Controllers.MediaCollectionControllerTests.CreateCollection_Dynamic_Success_MatchesParentItemsAndPersistsMembership()"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-9",
+      "category": "behaviour",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": 0.0,
+      "mrrAt10": 0,
+      "top1": false,
+      "latencyMs": 60.21391699323431,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:9f323214099e128c77ff2815bfc424c6f3f576c0878584638cb0408bd91b7213",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.DynamicCollectionMatcherTests.Matches_title_case_and_punctuation_insensitively()"
+        },
+        {
+          "symbolId": "pci:syntactic:20e17ed1197c5957c59fcefa4faadf6c2cc46ea1f719f6f3eebef73887ddb561",
+          "qualifiedName": "Maze.SearchCore.Tests.Controllers.MediaCollectionControllerTests.CreateCollection_Dynamic_BadRequest_When_MatchTerms_Empty()"
+        },
+        {
+          "symbolId": "pci:syntactic:53a19596441e1e5f3919047365ab9f6102ec9c39254e527b9617fca8aebcaba6",
+          "qualifiedName": "Maze.SearchCore.Models.UpdateCollectionRequest.MatchTerms"
+        },
+        {
+          "symbolId": "pci:syntactic:42858b8b5008cee82327ed7d21b17749da6621ea38aae81aa30826ae987bdc6e",
+          "qualifiedName": "Maze.SearchCore.Models.MediaCollection.MatchTerms"
+        },
+        {
+          "symbolId": "pci:syntactic:2030ca220cb0d12c47a9f76bafca4c7811c3498a8d175531ab2240378274cebb",
+          "qualifiedName": "Maze.SearchCore.Data.Entities.MediaCollectionEntity.MatchTermsJson"
+        },
+        {
+          "symbolId": "pci:syntactic:ea1e7ab9e2ba4fc6aed4ecce8d4a93c493105ab2ac1634b4f1cbb25f8313400f",
+          "qualifiedName": "Maze.SearchCore.Models.CreateCollectionRequest.MatchTerms"
+        },
+        {
+          "symbolId": "pci:syntactic:615bef4ab92f99b7a872fdb0ca17ffa0c70eb4f568df974f0351504db0452460",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaCollectionController.UpdateDynamicCollectionAsync(Maze.SearchCore.Models.MediaCollection, Maze.SearchCore.Models.UpdateCollectionRequest, CancellationToken)"
+        },
+        {
+          "symbolId": "pci:syntactic:7e4eada14f1d99c02819ad8f006549a1d3fd6d8e0e31c88cf0f90c20413a3090",
+          "qualifiedName": "Maze.SearchCore.Services.MediaCatalogService.UpdateDynamicCollectionFieldsAsync(Maze.SearchCore.Models.MediaCollection)"
+        },
+        {
+          "symbolId": "pci:syntactic:c624b3f89e7576543b6a69bc37d82ded3a603d8af37741e6ee0338cb15e27af1",
+          "qualifiedName": "Maze.SearchCore.Repositories.IMediaCatalogRepository.UpdateDynamicCollectionStatsAsync(Maze.SearchCore.Models.MediaCollection)"
+        },
+        {
+          "symbolId": "pci:syntactic:2c576a8a55eddd68d28ca4848d2569615fc5fbbdbe57cbecfb2af497a7afafe8",
+          "qualifiedName": "Maze.SearchCore.Tests.Controllers.MediaCollectionControllerTests.CreateCollection_Dynamic_Success_MatchesParentItemsAndPersistsMembership()"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-10",
+      "category": "negative",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": null,
+      "mrrAt10": null,
+      "top1": null,
+      "latencyMs": 41.623541997978464,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": []
+    },
+    {
+      "id": "maze-draft-10",
+      "category": "negative",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": null,
+      "mrrAt10": null,
+      "top1": null,
+      "latencyMs": 42.596999992383644,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": []
+    },
+    {
+      "id": "maze-draft-11",
+      "category": "negative",
+      "split": "tuning",
+      "mode": "lexical",
+      "recallAt10": null,
+      "mrrAt10": null,
+      "top1": null,
+      "latencyMs": 46.24424999929033,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:82df89cdbe702a00503c4f4ead9ca545660916c5256d86af7bf9d32fa7e51652",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService"
+        },
+        {
+          "symbolId": "pci:syntactic:dd839562dff2d887334997e88caf7ed91b2bd49b775f21a3d218b7235b8709ed",
+          "qualifiedName": "Maze.SearchCore.Services.SearchCacheService"
+        },
+        {
+          "symbolId": "pci:syntactic:3fe7c4a90ee3486155940402f15c584d4ec200a787fa0c3155bd546b9abc5402",
+          "qualifiedName": "Maze.SearchCore.Tests.Controllers.MediaCollectionControllerTests.Utility_Endpoints_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:1b5b5773b69b71a0290657d3af4c56507dae53b14083531aebd0d9a39d931202",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.MediaCatalogServiceTests.BackupAndRestore_Collections_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:04510b96059d04a2eff641cc00e7d8f100f714ab50b5277c4841f2e9be118dc6",
+          "qualifiedName": "Maze.SearchCore.Tests.ModelTypes.SearchResultSummaryTests.Defaults_And_Setters_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:177d9da3deeeb18ea2476f926d369390127da174f3994f19d0801abfef18f758",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.TorrentScrapingServiceMoreTests.SortResults_All_Modes_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:9bd40a3bfcde5ce09be336398cb1c983a069320519b52ead9b73dc5f6e88da8a",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.MediaCollectionStorageServiceTests.LoadSave_GetDelete_Update_Work_And_AreThreadSafe()"
+        },
+        {
+          "symbolId": "pci:syntactic:4e583c45b8ceb62e3004c8b225a3d20d29333e30e70959637810859375e3bcb1",
+          "qualifiedName": "Maze.SearchCore.Tests.Repositories.MediaCatalogRepositoryTests.Delete_And_Existence_And_Count_Methods_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:730eaa4fc9a1973a2051b1c60d9c144cfef3edee58908e07f61f6f054cb6099b",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.MediaCatalogServiceTests.Get_Save_Update_Delete_And_Exists_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:c85b8364d8b1745a27a554ca8f6d1b7c9ae62545ba4a1acd2ef376c2167d2f60",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.ExternalSettingsServiceTests.AccessorDirectories_Work_With_Explicit_Or_Default_Directory()"
+        }
+      ]
+    },
+    {
+      "id": "maze-draft-11",
+      "category": "negative",
+      "split": "tuning",
+      "mode": "hybrid",
+      "recallAt10": null,
+      "mrrAt10": null,
+      "top1": null,
+      "latencyMs": 45.74304199195467,
+      "error": null,
+      "indexGeneration": 1,
+      "queryEpoch": 18,
+      "semanticAvailable": false,
+      "missingExpectedEvidence": [],
+      "duplicateResults": false,
+      "retrieved": [
+        {
+          "symbolId": "pci:syntactic:82df89cdbe702a00503c4f4ead9ca545660916c5256d86af7bf9d32fa7e51652",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService"
+        },
+        {
+          "symbolId": "pci:syntactic:dd839562dff2d887334997e88caf7ed91b2bd49b775f21a3d218b7235b8709ed",
+          "qualifiedName": "Maze.SearchCore.Services.SearchCacheService"
+        },
+        {
+          "symbolId": "pci:syntactic:3fe7c4a90ee3486155940402f15c584d4ec200a787fa0c3155bd546b9abc5402",
+          "qualifiedName": "Maze.SearchCore.Tests.Controllers.MediaCollectionControllerTests.Utility_Endpoints_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:1b5b5773b69b71a0290657d3af4c56507dae53b14083531aebd0d9a39d931202",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.MediaCatalogServiceTests.BackupAndRestore_Collections_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:04510b96059d04a2eff641cc00e7d8f100f714ab50b5277c4841f2e9be118dc6",
+          "qualifiedName": "Maze.SearchCore.Tests.ModelTypes.SearchResultSummaryTests.Defaults_And_Setters_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:177d9da3deeeb18ea2476f926d369390127da174f3994f19d0801abfef18f758",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.TorrentScrapingServiceMoreTests.SortResults_All_Modes_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:9bd40a3bfcde5ce09be336398cb1c983a069320519b52ead9b73dc5f6e88da8a",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.MediaCollectionStorageServiceTests.LoadSave_GetDelete_Update_Work_And_AreThreadSafe()"
+        },
+        {
+          "symbolId": "pci:syntactic:4e583c45b8ceb62e3004c8b225a3d20d29333e30e70959637810859375e3bcb1",
+          "qualifiedName": "Maze.SearchCore.Tests.Repositories.MediaCatalogRepositoryTests.Delete_And_Existence_And_Count_Methods_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:730eaa4fc9a1973a2051b1c60d9c144cfef3edee58908e07f61f6f054cb6099b",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.MediaCatalogServiceTests.Get_Save_Update_Delete_And_Exists_Work()"
+        },
+        {
+          "symbolId": "pci:syntactic:c85b8364d8b1745a27a554ca8f6d1b7c9ae62545ba4a1acd2ef376c2167d2f60",
+          "qualifiedName": "Maze.SearchCore.Tests.Services.ExternalSettingsServiceTests.AccessorDirectories_Work_With_Explicit_Or_Default_Directory()"
+        }
+      ]
+    }
+  ],
+  "corpusHash": "sha256:821f7f6ee8fec32fd681f8d84fb6d756a4aff37418c333e6f44964547a1b9665"
+}

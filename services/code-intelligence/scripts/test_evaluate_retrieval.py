@@ -15,23 +15,24 @@ spec.loader.exec_module(retrieval)
 
 def corpus():
     queries = []
-    for category in sorted(retrieval.CATEGORIES):
+    for category_index, category in enumerate(sorted(retrieval.CATEGORIES)):
         for index in range(20):
             identity = f'{category}-{index}'
             queries.append({'id': identity, 'category': category, 'query': identity,
-                            'split': 'tuning' if len(queries) < 40 else 'heldOut',
+                            'split': 'tuning' if index < (7 if category_index < 4 else 6) else 'heldOut',
                             'expected': [] if category == 'negative' else [{'name': identity, 'qualifiedName': identity}],
                             'expectedEvidence': ['Example.cs'], 'reviewed': False})
     return {'version': 1, 'sourceRevision': 'fixture', 'queries': queries}
 
 
-def owner(semantic=True, change_epoch=False, miss=False):
+def owner(semantic=True, change_epoch=False, miss=False, resolution="complete"):
     statuses = 0
 
     def invoke(tool, arguments):
         nonlocal statuses
         result = {'indexGeneration': 1, 'queryEpoch': 2}
         if tool == 'get_index_status':
+            result['data'] = {'contexts': [{'resolution': resolution}]}
             statuses += 1
             if change_epoch and statuses > 1:
                 result['queryEpoch'] = 3
@@ -66,6 +67,18 @@ class EvaluationTests(unittest.TestCase):
         report = retrieval.evaluate(corpus(), owner(semantic=False))
         self.assertEqual(1, report['summary']['hybrid/all']['recallAt10'])
         self.assertFalse(report['gates']['fullSemanticCoverage'])
+
+    def test_source_only_context_cannot_pass_compiler_coverage(self):
+        report = retrieval.evaluate(corpus(), owner(resolution='syntaxOnly'))
+        self.assertEqual(1, report['summary']['hybrid/all']['recallAt10'])
+        self.assertFalse(report['gates']['completeCompilerContexts'])
+
+    def test_tuning_only_category_cannot_escape_held_out_regression_gate(self):
+        draft = corpus()
+        for case in draft['queries']:
+            if case['category'] == 'behaviour':
+                case['split'] = 'tuning'
+        self.assertFalse(retrieval.validate(draft)['heldOutEveryCategory'])
 
     def test_changed_epoch_invalidates_snapshot(self):
         self.assertFalse(retrieval.evaluate(corpus(), owner(change_epoch=True))['gates']['stableSnapshot'])

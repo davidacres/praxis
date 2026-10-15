@@ -52,6 +52,8 @@ def validate(corpus):
             raise ValueError("Negative queries cannot have positive relevance labels.")
         if case["category"] != "negative" and not labels:
             raise ValueError("Nonnegative queries need explicit current relevance labels.")
+        if case["category"] == "exact" and len(labels) != 1:
+            raise ValueError("Exact queries require one unique relevance label.")
         for label in labels:
             if not isinstance(label, dict) or set(label) - {"name", "qualifiedName", "signature", "contextId"} or any(
                     not isinstance(value, str) or not value for value in label.values()):
@@ -66,13 +68,15 @@ def validate(corpus):
     if not isinstance(review_count, int) or isinstance(review_count, bool) or review_count < 0:
         raise ValueError("reviewedExplanationCount must be a nonnegative integer.")
     counts = Counter(case["category"] for case in queries)
-    return {"sourceRevisionDeclared": bool(corpus.get("sourceRevision")),
+    return {"sourceRevisionDeclared": isinstance(corpus.get("sourceRevision"), str) and bool(corpus["sourceRevision"].strip()),
             "nearDuplicateSplitReviewDeclared": corpus.get("nearDuplicateSplitReviewed") is True,
             "atLeast120Queries": len(queries) >= 120,
+            "heldOutEveryCategory": all(any(case["category"] == category and case["split"] == "heldOut"
+                                               for case in queries) for category in CATEGORIES),
             "atLeast20PerCategory": all(counts[category] >= 20 for category in CATEGORIES),
             "tuning40HeldOut80": sum(case["split"] == "tuning" for case in queries) == 40
             and sum(case["split"] == "heldOut" for case in queries) == 80,
-            "reviewDeclared": corpus.get("reviewed") is True and bool(corpus.get("reviewedBy"))
+            "reviewDeclared": corpus.get("reviewed") is True and isinstance(corpus.get("reviewedBy"), str) and bool(corpus["reviewedBy"].strip())
             and all(case.get("reviewed") is True and (case["category"] == "negative" or case.get("expectedEvidence")) for case in queries)}
 
 
@@ -141,7 +145,10 @@ def evaluate(corpus, invoke):
     category_deltas = [summary[f"hybrid/{category}"]["recallAt10"] - summary[f"lexical/{category}"]["recallAt10"]
                        for category in CATEGORIES if summary[f"hybrid/{category}"]["recallAt10"] is not None]
     exact = [case for case in results if case["category"] == "exact" and case["mode"] == "hybrid" and case["split"] == "heldOut"]
+    contexts = before.get("data", {}).get("contexts", [])
     gates = {**protocol,
+             "completeCompilerContexts": bool(contexts) and not before.get("truncated")
+             and all(context.get("resolution") == "complete" for context in contexts),
              "stableSnapshot": not after.get("error") and before.get("indexGeneration") == after.get("indexGeneration")
              and before.get("queryEpoch") == after.get("queryEpoch")
              and all(case["indexGeneration"] == before.get("indexGeneration") and case["queryEpoch"] == before.get("queryEpoch") for case in results),
@@ -156,6 +163,7 @@ def evaluate(corpus, invoke):
              "thirtyExplanationsReviewDeclared": corpus.get("reviewedExplanationCount", 0) >= 30}
     return {"version": 1, "declaredSourceRevision": corpus.get("sourceRevision"),
             "measurement": "Sequential CLI/owner transport included; not the capacity performance protocol",
+            "contexts": contexts,
             "before": {key: before.get(key) for key in ("indexGeneration", "queryEpoch")},
             "after": {key: after.get(key) for key in ("indexGeneration", "queryEpoch")},
             "summary": summary, "gates": gates, "passedDeclaredGates": all(gates.values()), "results": results}
