@@ -3,10 +3,11 @@ using System.Text.Json.Serialization;
 
 namespace Praxis.CodeIntelligence.Indexing;
 
-public sealed record MetadataInput(string Path, string ContentHash);
+public sealed record MetadataInput(string Path, string ContentHash, string[]? Aliases = null, bool EmbedInteropTypes = false);
 public sealed record ProjectInput(string Path, string ContentHash);
 public sealed record PassiveProject(string Key, string AssemblyName, string[] Sources, string[]? References = null,
-    MetadataInput[]? Metadata = null, ProjectInput[]? Inputs = null, string[]? Defines = null, string LanguageVersion = "default", bool AllowUnsafe = false);
+    MetadataInput[]? Metadata = null, ProjectInput[]? Inputs = null, string[]? Defines = null, string LanguageVersion = "default", bool AllowUnsafe = false,
+    string[]? SupportSources = null, string Nullable = "disable", string OutputKind = "library");
 public sealed record PassiveManifest(int Version, PassiveProject[] Projects)
 {
     public static PassiveManifest Read(string root, string relativePath)
