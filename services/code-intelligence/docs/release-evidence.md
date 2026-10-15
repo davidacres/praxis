@@ -4,13 +4,13 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 | Check | Evidence | Result |
 |---|---|---|
-| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 60 passed,0 failed,0 skipped |
+| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 63 passed,0 failed,0 skipped |
 | Source/context | Raw UTF16 hashes, path policy, passive no-execution, SDK capture, generated support and stale/deleted inputs | Covered by targeted tests |
 | Durable jobs | Coalescing, backoff, heartbeat, expired owner recovery, wrong-token publication, pause and atomic refresh enqueue | Covered by targeted tests |
 | Automatic embeddings | Runtime registration/index, queued activation, real inference, edit, empty stale vector results, background refresh | Covered by native model fixture |
 | Git policy | Ignored invalid-encoding source skipped before reads; configured fsmonitor cannot execute | Test passed |
 | MCP/settings | SDK initialize/list/call, scoped denial/cancellation, provider handover filter, settings regressions | 46 focused Node tests passed |
-| JSON Schema | 71 fresh actual responses across11tools, including metadata/unresolved evidence, graph expansion and trimmed status/summary/pages/source | Passed with JSON Schema2020-12 |
+| JSON Schema | 80 actual responses across11tools, including metadata/unresolved evidence, graph expansion and trimmed status/summary/pages/source | Passed with JSON Schema2020-12 |
 | Full application build | Includes service, renderer import guard, Vite, copied renderer and trusted IPC guard | Passed after restoring complete SettingsPage source; exact remote blob checked |
 | Linux native package | Self-contained publish, native CLI help, SQLite initialization and native ONNX model check | Passed on Linux x64; Windows/macOS and native owner IPC remain outstanding |
 | UI e2e/screenshots | Prior environment denied UI launch sockets; user requested implementation proceed | Deferred, not passed |
@@ -42,7 +42,7 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 ## Representation checkpoint — 15 October
 
-52 C# tests passed, 0 failed, 0 skipped. Representation v2 includes bounded, hash-verified source excerpts and persists exact UTF-16/token chunk bounds, source mappings, hashes and truncation. Independent token/span golden coverage expanded to 10 cases; all four full vector comparisons pass. Tokenizer v3 and representation v2 produce fingerprint `sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba`; upgrade by provisioning/installing/activating this profile. Prior profile vectors remain isolated. Reuse across full structural republishing and scale performance remain unfinished.
+52 C# tests passed, 0 failed, 0 skipped. Representation v2 includes bounded, hash-verified source excerpts and persists exact UTF-16/token chunk bounds, source mappings, hashes and truncation. Independent token/span golden coverage expanded to 10 cases; all four full vector comparisons pass. Tokenizer v3 and representation v2 produce fingerprint `sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba`; upgrade by provisioning/installing/activating this profile. Prior profile vectors remain isolated. Exact-representation reuse across structural republishing is implemented (see following checkpoint); scale performance remains unmeasured.
 
 ## Source-handle checkpoint — 15 October
 
@@ -59,6 +59,10 @@ Full application build passes with typed trusted rebuild/relocate IPC and deskto
 ## Retrieval completeness checkpoint — 15 October
 
 60 C# tests passed, 0 failed, 0 skipped; 71 fresh responses across all 11 schemas validated. Status/summary budgets, unresolved source evidence and bounded one-hop search expansion now have regression coverage. Expansion preserves filters/evidence and keeps graph-only neighbors below direct matches. Graph/alias relevance and scale benchmarks remain unmeasured.
+
+## Vector reuse/equivalence checkpoint — 15 October
+
+63 C# tests passed, 0 failed, 0 skipped. Complete current-profile vectors reuse exact representations atomically under updated revisions/source mappings, with a 128 MiB capture bound and no detached cache. Changed/corrupt sets re-infer; exclusion changes purge vectors. An edited-vs-clean compiler fixture matches all structural domain projections. Normative pagination/trace defaults, empty filter behavior, normalization and duplicate rejection pass. The query-enabled run validated 80 responses across all 11 schemas. Targeted invalidation, representative performance/RSS and relevance remain release work.
 
 ## Remaining code and acceptance work
 
