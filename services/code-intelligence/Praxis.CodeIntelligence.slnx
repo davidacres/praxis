@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="src/Praxis.CodeIntelligence/Praxis.CodeIntelligence.csproj" />
   <Project Path="tests/Praxis.CodeIntelligence.Tests/Praxis.CodeIntelligence.Tests.csproj" />
+  <Project Path="benchmarks/Praxis.CodeIntelligence.Benchmarks/Praxis.CodeIntelligence.Benchmarks.csproj" />
 </Solution>
