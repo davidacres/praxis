@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace Praxis.CodeIntelligence.Indexing;
 
@@ -47,7 +48,9 @@ public sealed class RoslynAnalyzer
                 foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(IsDeclaration))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var compilerSymbol = model.GetDeclaredSymbol(node, cancellationToken);
+                    var compilerSymbol = node is AnonymousFunctionExpressionSyntax
+                        ? (model.GetOperation(node, cancellationToken) as IAnonymousFunctionOperation)?.Symbol
+                        : model.GetDeclaredSymbol(node, cancellationToken);
                     if (compilerSymbol is null) continue;
                     var identity = Identify(compilerSymbol, input.Context, node);
                     var location = new IndexedLocation(Identity.Id("pci:loc:", identity.Id, input.Context.Id, source.Path, source.Hash, node.Span.Start, node.Span.End),
@@ -79,7 +82,8 @@ public sealed class RoslynAnalyzer
                 foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(n => n is InvocationExpressionSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var ownerNode = node.Ancestors().FirstOrDefault(nodeSymbols.ContainsKey);
+                    var ownerNode = node.Ancestors().FirstOrDefault(n => nodeSymbols.TryGetValue(n, out var ownerId)
+                        && symbols[ownerId].Kind is "type" or "method" or "function" or "constructor" or "accessor" or "module");
                     if (ownerNode is null) continue;
                     var info = model.GetSymbolInfo(node, cancellationToken);
                     var target = info.Symbol;
@@ -155,8 +159,23 @@ public sealed class RoslynAnalyzer
             var defining = reference is not null && treeContexts.TryGetValue(reference.SyntaxTree, out var context) ? context : null;
             var external = defining is null && reference is null;
             var descriptor = symbol.GetDocumentationCommentId() ?? symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (symbol is IMethodSymbol { MethodKind: MethodKind.LocalFunction })
-                descriptor += "|local:" + (declaration ?? reference?.GetSyntax(cancellationToken))?.SpanStart;
+            if (symbol is IMethodSymbol { MethodKind: MethodKind.LocalFunction or MethodKind.AnonymousFunction })
+            {
+                var local = declaration ?? reference?.GetSyntax(cancellationToken);
+                if (local is not null)
+                {
+                    // Preorder ordinals belong to the immediate callable, so edits inside a
+                    // nested callable cannot renumber its enclosing callable's siblings.
+                    var parent = local.Ancestors().FirstOrDefault(IsCallable);
+                    var scope = parent ?? local.Ancestors().First(IsDeclaration);
+                    var ordinal = scope.DescendantNodes().Where(n => n is LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax)
+                        .Where(n => n.Ancestors().FirstOrDefault(IsCallable) == parent)
+                        .TakeWhile(n => n != local).Count();
+                    var parentId = nodeSymbols.TryGetValue(scope, out var id) ? id
+                        : Identity.Id("pci:scope:", current.Id, local.SyntaxTree.FilePath, scope.RawKind);
+                    descriptor = Identity.Json("local", parentId, local.RawKind, ordinal);
+                }
+            }
             var syntax = (defining ?? current).Resolution == "syntaxOnly";
             var json = external
                 ? Identity.Json(1, "external", repositoryId, "csharp", symbol.ContainingAssembly?.Identity.ToString(), Kind(symbol), descriptor)
@@ -167,12 +186,14 @@ public sealed class RoslynAnalyzer
 
     private static bool IsDeclaration(SyntaxNode node) => node is BaseNamespaceDeclarationSyntax or BaseTypeDeclarationSyntax
         or DelegateDeclarationSyntax or BaseMethodDeclarationSyntax or PropertyDeclarationSyntax or IndexerDeclarationSyntax
-        or EventDeclarationSyntax or AccessorDeclarationSyntax or LocalFunctionStatementSyntax
+        or EventDeclarationSyntax or AccessorDeclarationSyntax or LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax
         || node is VariableDeclaratorSyntax { Parent.Parent: BaseFieldDeclarationSyntax };
+    private static bool IsCallable(SyntaxNode node) => node is BaseMethodDeclarationSyntax or AccessorDeclarationSyntax
+        or LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax;
     private static string Kind(ISymbol symbol) => symbol switch
     {
         INamespaceSymbol => "namespace", INamedTypeSymbol => "type", IMethodSymbol m => m.MethodKind switch
-        { MethodKind.Constructor or MethodKind.StaticConstructor => "constructor", MethodKind.LocalFunction => "function",
+        { MethodKind.Constructor or MethodKind.StaticConstructor => "constructor", MethodKind.LocalFunction or MethodKind.AnonymousFunction => "function",
           MethodKind.PropertyGet or MethodKind.PropertySet or MethodKind.EventAdd or MethodKind.EventRemove => "accessor", _ => "method" },
         IPropertySymbol => "property", IFieldSymbol => "field", IEventSymbol => "event", _ => symbol.Kind.ToString().ToLowerInvariant()
     };
