@@ -91,6 +91,45 @@ public sealed class IndexingTests : IDisposable
         Assert.NotNull(before);
     }
 
+    [Fact]
+    public void NestedCallablesOwnTheirCallsAndUseStableScopedIdentities()
+    {
+        const string code = "class Example { static int Target() => 1; int Run() { System.Func<int> first = () => Target(); System.Func<int> second = delegate { return Target(); }; int Local() { System.Func<int> nested = () => Target(); return nested(); } return Local(); } }";
+        var metadataPath = typeof(object).Assembly.Location;
+        var manifest = new PassiveManifest(1, [new("project", "Project", ["Example.cs"], Metadata: [new(metadataPath, SourceFiles.Hash(File.ReadAllBytes(metadataPath)))])]);
+        var analyzer = new RoslynAnalyzer();
+        var first = analyzer.Analyze("repo", [Source("Example.cs", code)], manifest);
+        Assert.All(first.Contexts, context => Assert.Equal("complete", context.Resolution));
+        var functions = first.Symbols.Where(s => s.Kind == "function").ToArray();
+        Assert.Equal(4, functions.Length);
+        Assert.Equal(4, functions.Select(s => s.Id).Distinct().Count());
+        var target = Assert.Single(first.Symbols, s => s.Name == "Target");
+        var targetCalls = first.Calls.Where(c => c.TargetId == target.Id).ToArray();
+        Assert.Equal(3, targetCalls.Length);
+        Assert.All(targetCalls, call => Assert.Contains(functions, s => s.Id == call.OwnerId));
+        var local = Assert.Single(functions, s => s.Name == "Local");
+        Assert.Single(functions, s => s.ContainerId == local.Id);
+        Assert.Contains(first.Calls, c => c.TargetId == local.Id);
+        // Offsets and parameter/body text do not define a local callable identity.
+        var changed = code.Replace("int Run()", "int Run(/* offset change */)").Replace("=> Target();", "=> Target() + 2;");
+        var second = analyzer.Analyze("repo", [Source("Example.cs", changed)], manifest);
+        Assert.Equal(functions.Select(s => s.Id).Order(), second.Symbols.Where(s => s.Kind == "function").Select(s => s.Id).Order());
+        Assert.All(first.Calls.Where(c => c.TargetId is not null), call => Assert.Contains(first.Symbols, s => s.Id == call.TargetId));
+    }
+
+    [Fact]
+    public void InitializerCallsBelongToTheTypeRatherThanNonCallableMembers()
+    {
+        const string code = "class Example { static int Target() => 1; int field = Target(); int Property { get; } = Target(); System.Func<int> callback = () => Target(); }";
+        var result = new RoslynAnalyzer().Analyze("repo", [Source("Example.cs", code)], null);
+        var type = Assert.Single(result.Symbols, s => s.Kind == "type");
+        var lambda = Assert.Single(result.Symbols, s => s.Kind == "function");
+        Assert.Equal(3, result.Calls.Count);
+        Assert.Equal(2, result.Calls.Count(c => c.OwnerId == type.Id));
+        Assert.Single(result.Calls, c => c.OwnerId == lambda.Id);
+        Assert.All(result.Symbols, s => Assert.StartsWith("pci:syntactic:", s.Id));
+    }
+
     private static SourceInput Source(string path, string text) { var bytes = Encoding.UTF8.GetBytes(text); return new(path, SourceFiles.Hash(bytes), bytes, text); }
     public void Dispose() => Directory.Delete(root, recursive: true);
 }
