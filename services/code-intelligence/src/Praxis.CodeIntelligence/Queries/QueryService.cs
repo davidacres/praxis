@@ -22,8 +22,11 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             JsonContract.Validate(tool, arguments);
             if (!allowedRepositories.Contains(repositoryId)) throw new QueryException("ACCESS_DENIED", "Repository access has not been granted.");
             cancellationToken.ThrowIfCancellationRequested();
-            var embedded = tool == "search_code" && Text(arguments, "mode") != "lexical" && models is not null
-                ? models.QueryEmbedding(repositoryId, Text(arguments, "query")!, cancellationToken) : null;
+            ModelQuery? embedded = null;
+            if (tool == "search_code" && Text(arguments, "mode") != "lexical" && models is not null)
+                try { embedded = models.QueryEmbedding(repositoryId, Text(arguments, "query")!, cancellationToken); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException)
+                { cancellationToken.ThrowIfCancellationRequested(); /* Hybrid degrades to lexical; vector returns MODEL_UNAVAILABLE below. */ }
             using var connection = database.Open(readOnly: true); using var transaction = connection.BeginTransaction(deferred: true);
             var repository = Rows(connection, transaction, "SELECT * FROM repositories WHERE repository_id=$0", repositoryId).SingleOrDefault()
                 ?? throw new QueryException("REPOSITORY_NOT_FOUND", "Repository is not registered.");
