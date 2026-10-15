@@ -280,6 +280,20 @@ public sealed class QueryTests : IDisposable
     }
 
     [Fact]
+    public void EventAndExplicitThrowEdgesRemainSeparateFromCallQueries()
+    {
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "delegate void Signal(); class Example { event Signal Changed; void Handler() {} void Wire() { Changed += Handler; } void Run() { Changed?.Invoke(); throw new System.InvalidOperationException(); } }"); indexer.Index(repository);
+        var run = Symbol("Run"); var handler = Symbol("Handler");
+        var trace = Query("trace_flow", new() { ["symbolId"] = run["symbolId"]!.DeepClone(), ["edgeKinds"] = new JsonArray("emits_event", "throws_explicitly") });
+        Assert.Null(trace["error"]); var edges = trace["data"]!["edges"]!.AsArray();
+        Assert.Single(edges, edge => edge!["kind"]!.GetValue<string>() == "emits_event");
+        Assert.Single(edges, edge => edge!["kind"]!.GetValue<string>() == "throws_explicitly");
+        var subscription = Query("trace_flow", new() { ["symbolId"] = handler["symbolId"]!.DeepClone(), ["edgeKinds"] = new JsonArray("handles_event") });
+        Assert.Single(subscription["data"]!["edges"]!.AsArray());
+        Assert.Empty(Query("get_callers", new() { ["symbolId"] = handler["symbolId"]!.DeepClone() })["data"]!["items"]!.AsArray());
+    }
+
+    [Fact]
     public void StaticGraphIncludesEndpointsAndCallsiteEvidence()
     {
         var caller = Symbol("Caller"); var target = Symbol("Target");
