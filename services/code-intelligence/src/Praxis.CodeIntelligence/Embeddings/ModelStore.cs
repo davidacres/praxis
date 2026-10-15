@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Text;
-using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.CodeIntelligence.Indexing;
 using Praxis.CodeIntelligence.Storage;
@@ -73,11 +72,17 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
                 if (inputs.Count > 50_000) throw new InvalidOperationException("VECTOR_CAPACITY_EXCEEDED");
             }
         }
+        Dictionary<(string Symbol, string Profile), ReusableEmbedding> reusable;
+        using (var read = database.Open(readOnly: true)) reusable = EmbeddingReuse.Capture(read, null, repositoryId, cancellationToken, fingerprint);
         var embeddings = new List<(string Id, string Revision, SymbolRepresentation Representation, IReadOnlyList<EmbeddedChunk> Chunks)>();
         foreach (var input in inputs)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var chunks = model.EmbedDetailedRepresentation(input.Representation.Text, cancellationToken); foreach (var chunk in chunks) LocalModel.ValidateVector(chunk.Vector);
+            var chunks = reusable.TryGetValue((input.Id, fingerprint), out var cached) && cached.Hash == input.Representation.Hash
+                && cached.Revision == input.Revision && cached.Chunks.All(chunk => chunk.Span.End <= input.Representation.Text.Length)
+                ? cached.Chunks.Select(chunk => new EmbeddedChunk(EmbeddingReuse.Decode(chunk.Values), chunk.Span)).ToArray()
+                : model.EmbedDetailedRepresentation(input.Representation.Text, cancellationToken);
+            foreach (var chunk in chunks) LocalModel.ValidateVector(chunk.Vector);
             embeddings.Add((input.Id, input.Revision, input.Representation, chunks));
         }
         foreach (var source in observedSources)
@@ -100,14 +105,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             {
                 var values = new byte[LocalModel.Dimensions * 4]; for (var dimension = 0; dimension < LocalModel.Dimensions; dimension++) BinaryPrimitives.WriteSingleLittleEndian(values.AsSpan(dimension * 4, 4), item.Chunks[index].Vector[dimension]);
                 var span = item.Chunks[index].Span;
-                var sources = item.Representation.Sources.Where(source => source.RepresentationStart < span.End && source.RepresentationEnd > span.Start)
-                    .Select(source => {
-                        var start = Math.Max(source.RepresentationStart, span.Start); var end = Math.Min(source.RepresentationEnd, span.End);
-                        return new { source.Path, source.ContentHash, Start = source.Start + start - source.RepresentationStart,
-                            End = source.Start + end - source.RepresentationStart, RepresentationStart = start, RepresentationEnd = end };
-                    });
-                var spans = JsonSerializer.Serialize(new { CoordinateBasis = "utf16", span.Start, span.End, span.FirstToken, span.EndToken,
-                    Truncated = span.Truncated || item.Representation.Truncated, RepresentationHash = item.Representation.Hash, Sources = sources });
+                var spans = RepresentationBuilder.ChunkMetadata(item.Representation, span);
                 writer.Execute(transaction, "INSERT INTO vectors VALUES($0,$1,384,$2,$3)", set, index, values, spans);
             }
             writer.Execute(transaction, "UPDATE embedding_sets SET state='ready' WHERE set_id=$0", set);
@@ -136,7 +134,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         foreach (var (column, values) in new[] { ("s.kind", kinds), ("c.project_id", projectIds) })
         {
             if (values is null) continue;
-            if (values.Count == 0) return [];
+            if (values.Count == 0) continue;
             var names = values.Select(value => { var parameter = "$" + parameters.Count; parameters.Add(value); return parameter; });
             filter += " AND " + column + " IN(" + string.Join(',', names) + ")";
         }
