@@ -8,7 +8,7 @@ public static class SourceScanner
     public static IReadOnlyList<SourceInput> Scan(string root, IReadOnlyList<string> excludedPrefixes, CancellationToken cancellationToken)
     {
         root = SourceFiles.CanonicalDirectory(root);
-        var sources = new List<SourceInput>(); var directories = new Stack<string>(); directories.Push(root);
+        var sources = new List<SourceInput>(); var candidates = new List<string>(); var directories = new Stack<string>(); directories.Push(root);
         long bytes = 0; var entries = 0;
         while (directories.TryPop(out var directory))
         {
@@ -26,9 +26,14 @@ public static class SourceScanner
                     continue;
                 }
                 if (!entry.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || entry.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)) continue;
-                var source = SourceFiles.Read(root, relative, cancellationToken); sources.Add(source); bytes += source.Bytes.Length;
-                if (sources.Count > 25_000 || bytes > 256L * 1024 * 1024) throw new IOException("INPUT_TOO_LARGE: repository source limit exceeded.");
+                candidates.Add(relative);
+                if (candidates.Count > 25_000) throw new IOException("INPUT_TOO_LARGE: repository source limit exceeded.");
             }
+        }
+        foreach (var path in GitFilePolicy.Filter(root, candidates, cancellationToken))
+        {
+            var source = SourceFiles.Read(root, path, cancellationToken); sources.Add(source); bytes += source.Bytes.Length;
+            if (bytes > 256L * 1024 * 1024) throw new IOException("INPUT_TOO_LARGE: repository source limit exceeded.");
         }
         return sources.OrderBy(s => s.Path, StringComparer.Ordinal).ToArray();
     }
