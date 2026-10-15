@@ -13,7 +13,7 @@ internal static class GitFilePolicy
         {
             var input = string.Join('\0', batch) + "\0";
             if (Encoding.UTF8.GetByteCount(input) > 4 * 1024 * 1024) throw new IOException("INPUT_TOO_LARGE: ignore policy input exceeds its limit.");
-            var start = new ProcessStartInfo("git")
+            var start = new ProcessStartInfo(ResolveGit(root))
             {
                 WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
@@ -47,5 +47,25 @@ internal static class GitFilePolicy
             result.Append(buffer, 0, count);
         }
         return result.ToString();
+    }
+    private static string ResolveGit(string root)
+    {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!Path.IsPathRooted(directory)) continue; // Never resolve a program relative to an untrusted repository cwd.
+            try
+            {
+                var physicalDirectory = SourceFiles.CanonicalDirectory(directory);
+                var candidate = Path.Combine(physicalDirectory, OperatingSystem.IsWindows() ? "git.exe" : "git");
+                if (!File.Exists(candidate)) continue;
+                candidate = new FileInfo(candidate).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? candidate;
+                if (candidate.StartsWith(root + Path.DirectorySeparatorChar, comparison)) continue;
+                if (!OperatingSystem.IsWindows() && (File.GetUnixFileMode(candidate) & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) == 0) continue;
+                return candidate;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        throw new IOException("A trusted Git executable outside the indexed root is required to honor Git ignore policy.");
     }
 }
