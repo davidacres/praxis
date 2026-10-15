@@ -34,6 +34,16 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public void LargeValidFiltersKeepCursorsWithinTheWireLimit()
+    {
+        var kinds = new JsonArray("method"); for (var index = 0; index < 49; index++) kinds.Add(new string('x', 60) + index);
+        var input = new JsonObject { ["query"] = "Overload " + new string('q', 1900), ["mode"] = "lexical", ["limit"] = 1, ["filters"] = new JsonObject { ["kinds"] = kinds } };
+        var first = Query("search_code", input); Assert.Null(first["error"]);
+        Assert.InRange(first["nextCursor"]!.GetValue<string>().Length, 1, 4096);
+        input["cursor"] = first["nextCursor"]!.DeepClone(); Assert.Null(Query("search_code", input)["error"]);
+    }
+
+    [Fact]
     public void ManualAliasesSurviveBodyRepublishAndRespectStructuralFilters()
     {
         var target = Symbol("Target"); var symbolId = target["symbolId"]!.GetValue<string>(); indexer.AddAlias(repository, symbolId, "unusual concept phrase");
