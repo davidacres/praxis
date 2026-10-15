@@ -45,6 +45,14 @@ Method override relationships are separate from call edges. External symbols now
 
 Latest C# run: **51 passed, 0 failed, 0 skipped**. 64 fresh responses across all 11 tools pass normative schemas. Full application build and two scoped MCP tests pass; Linux self-contained CLI/SQLite/ONNX package passes with tokenizer-v2 fingerprint `sha256:567dd29d161c0beb8dd0474774adbd41924c6c274faa92b065925b63de2c1705`. No UI files changed; platform/UI/quality gates remain unexecuted.
 
+## Representation checkpoint (15 October)
+
+Selected source excerpts are now part of representation v2 after identity/signature/documentation/description fields. Excerpts cap at 4096 UTF-16 units, total representations at 16384. Partial declarations choose a deterministic path/offset location. Source hashes are verified before inference and rechecked before atomic publication. Stored chunk metadata includes exact original-input UTF-16 bounds, payload token ranges, representation hashes, truncation and intersecting source path/hash/offset mappings. No fabricated spans or split surrogate pairs are stored.
+
+Tokenizer v3 corrects Unicode cleanup/case/CJK handling while mapping normalized tokens back to original UTF-16 coordinates. The independent fixture now covers **10 cases** including combining marks, Turkish casing, replacement characters, supplementary CJK and emoji; exact chunk spans and token IDs pass alongside four 384-dimensional query vectors. Current fixture SHA256: `3a1da71af763aa127e61e6f6d846d5598e81b03c302741c3243cd5a0cf7178cd`.
+
+Current profile: tokenizer `bert-uncased-wordpiece-v3`, representation version 2, fingerprint `sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba`. Reprovision/install/activate to upgrade; previous profile vectors remain isolated. **52 C# tests passed, 0 failed, 0 skipped**, including persisted source spans, representation priority/caps and changed-source rejection. Earlier checkpoint hashes/results above are historical evidence.
+
 ## Verification evidence
 
 15 October: C#38 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution. Explicit SDK capture, stale/deleted inputs, generated support non-disclosure and alias preservation also pass.
@@ -53,7 +61,7 @@ Full application build including the service passed; Linux self-contained publis
 
 ## Remaining implementation/release work
 
-- Cross-platform golden numerical verification and representation chunk spans/source excerpts.
+- Cross-platform golden numerical verification and vector representation reuse/performance verification.
 - Semantic API-stamp/affected-context optimization, richer member/type/reference relationships and delegate points-to analysis.
 - Remaining status/summary/irreducible-item budget boundaries and hardened source-handle checks on Windows/macOS.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
