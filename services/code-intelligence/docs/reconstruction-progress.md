@@ -159,6 +159,12 @@ At source commit `3e1da0cf9f3536cac6e19c9e79428fe27c9f354b`, the standard `scrip
 
 This verifies local native packaging, CLI startup, database initialization and ONNX inference. Signing/notarization, owner-process IPC, desktop integration and other platform packages remain separate acceptance work. Generated binaries are excluded from Git.
 
+## Packaged owner-process IPC checkpoint (15 October)
+
+The host packaging workflow now runs a disposable native IPC fixture against the published executable. On macOS arm64 it passed registration and indexing, four concurrent lexical searches, provider access denial before grant and after revocation, granted provider search, backup creation with a SQLite header, database doctor checks, persisted generation/search and revoked access after owner restart, and unregister. The standalone fixture and complete packaging workflow both passed with SDK 10.0.402; the complete workflow also passed real-model inference.
+
+The fixture explicitly starts/stops its own owner process and uses temporary sources/data. It does not establish automatic owner startup, stale-rendezvous recovery, semantic project capture, desktop/MCP adapters or Windows/Linux execution. The existing platform CI packaging step will execute it on each host; those remote results are not claimed here.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.

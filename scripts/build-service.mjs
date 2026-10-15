@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rename, rm, access, copyFile, writeFile } from 'node:fs
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+import { smokeNativeIpc } from '../services/code-intelligence/scripts/smoke-native-ipc.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const service = path.join(root, 'services', 'code-intelligence');
@@ -46,6 +47,7 @@ try {
         const smoke = await mkdtemp(path.join(tmpdir(), 'praxis-native-smoke-'));
         try { await run(executable, ['init', path.join(smoke, 'index.db')]); } finally { await rm(smoke, { recursive: true, force: true }); }
         if (process.env.PRAXIS_MODEL_BUNDLE) await run(executable, ['model-check', process.env.PRAXIS_MODEL_BUNDLE]);
+        await smokeNativeIpc(executable);
       }
       await rm(previous, { recursive: true, force: true });
       try { await rename(destination, previous); hadPrevious = true; } catch (error) { if (error.code !== 'ENOENT') throw error; }

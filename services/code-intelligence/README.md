@@ -15,6 +15,8 @@ npm run build
 
 Set `PRAXIS_DOTNET` to an absolute SDK executable if `dotnet` is not on PATH. `npm run build` now includes the service. Normal compilation uses locked restores. Tests use temporary repositories, never the working tree as a source-write fixture. Native model tests require `PRAXIS_MODEL_BUNDLE`; SDK capture integration requires `PRAXIS_DOTNET`. Without those explicit fixtures, their tests are visibly skipped.
 
+`node scripts/build-service.mjs --package` publishes a self-contained host package and checks CLI startup, SQLite initialization, and local model inference when `PRAXIS_MODEL_BUNDLE` is set. For the host runtime it also runs real owner-process IPC checks: indexing, four concurrent searches, provider grant/revocation, backup creation, persisted search after restart, and unregister. The fixture owns and stops its service process and removes its temporary source/data directories. To rerun just IPC against an existing package, use `node services/code-intelligence/scripts/smoke-native-ipc.mjs /absolute/path/to/Praxis.CodeIntelligence` (add `.exe` on Windows).
+
 ## Index a repository
 
 The development executable is `services/code-intelligence/src/Praxis.CodeIntelligence/bin/Debug/net10.0/Praxis.CodeIntelligence.dll`. Run it through `dotnet`; a packaged self-contained executable needs no separately installed runtime.
