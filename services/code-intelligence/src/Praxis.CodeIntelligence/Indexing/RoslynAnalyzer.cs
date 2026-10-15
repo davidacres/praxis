@@ -43,6 +43,7 @@ public sealed class RoslynAnalyzer
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var source = byPath[tree.FilePath]; var model = input.Compilation.GetSemanticModel(tree);
+                if (source.Role == "semanticSupport") continue;
                 foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(IsDeclaration))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -74,6 +75,7 @@ public sealed class RoslynAnalyzer
             foreach (var tree in input.Compilation.SyntaxTrees)
             {
                 var model = input.Compilation.GetSemanticModel(tree); var source = byPath[tree.FilePath];
+                if (source.Role == "semanticSupport") continue;
                 foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(n => n is InvocationExpressionSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -117,7 +119,7 @@ public sealed class RoslynAnalyzer
             if (inputs.TryGetValue(key, out var cached)) return cached;
             if (!visiting.Add(key)) throw new ArgumentException("Passive project references contain a cycle.");
             var project = projects.SingleOrDefault(x => x.Key == key) ?? throw new ArgumentException("Passive project reference is missing.");
-            var projectSources = project.Sources.Distinct(StringComparer.Ordinal).Select(path =>
+            var projectSources = project.Sources.Concat(project.SupportSources ?? []).Distinct(StringComparer.Ordinal).Select(path =>
                 byPath.TryGetValue(path, out var source) ? source : throw new IOException("Passive source is missing or excluded.")).ToArray();
             if (!LanguageVersionFacts.TryParse(project.LanguageVersion, out var languageVersion)) throw new ArgumentException("Invalid C# language version.");
             var parseOptions = new CSharpParseOptions(languageVersion, preprocessorSymbols: project.Defines ?? []);
@@ -128,12 +130,14 @@ public sealed class RoslynAnalyzer
                 var bytes = PassiveManifest.ReadExternal(metadata.Path); metadataBytes += bytes.Length;
                 if (metadataBytes > 512L * 1024 * 1024) throw new IOException("INPUT_TOO_LARGE: metadata limit exceeded.");
                 if (SourceFiles.Hash(bytes) != metadata.ContentHash) throw new IOException("INDEX_STALE: captured metadata changed.");
-                references.Add(MetadataReference.CreateFromImage(bytes));
+                references.Add(MetadataReference.CreateFromImage(bytes, MetadataReferenceProperties.Assembly.WithAliases(metadata.Aliases ?? []).WithEmbedInteropTypes(metadata.EmbedInteropTypes)));
             }
             var dependencies = (project.References ?? []).Select(Build).ToArray();
             references.AddRange(dependencies.Select(x => x.Compilation.ToMetadataReference()));
+            if (!Enum.TryParse<NullableContextOptions>(project.Nullable, ignoreCase: true, out var nullable)) throw new ArgumentException("Invalid nullable context option.");
+            var outputKind = project.OutputKind.ToLowerInvariant() switch { "library" => OutputKind.DynamicallyLinkedLibrary, "exe" => OutputKind.ConsoleApplication, "winexe" => OutputKind.WindowsApplication, _ => throw new ArgumentException("Invalid output kind.") };
             var compilation = CSharpCompilation.Create(project.AssemblyName, trees, references,
-                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: project.AllowUnsafe));
+                new CSharpCompilationOptions(outputKind, allowUnsafe: project.AllowUnsafe, nullableContextOptions: nullable));
             var syntaxOnly = manifest is null || key == "uncovered-syntax";
             var resolution = syntaxOnly ? "syntaxOnly" : compilation.GetDiagnostics(cancellationToken).Any(d => d.Severity == DiagnosticSeverity.Error) ? "partial" : "complete";
             var hash = SourceFiles.Hash(Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(project)
