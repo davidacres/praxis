@@ -11,6 +11,18 @@ public sealed record IndexResult(string RepositoryId, long Generation, int Files
 
 public sealed class RepositoryIndexer(IndexDatabase database)
 {
+    private sealed record SavedAlias(string Id, string? ProjectId, string SymbolId, string Phrase, string Key, string Origin, long Enabled, string Created);
+
+    public void AddAlias(string repositoryId, string symbolId, string phrase)
+    {
+        phrase = phrase.Trim(); if (phrase.Length is < 1 or > 2000) throw new ArgumentException("Alias phrase is invalid.");
+        using var connection = database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
+        if (connection.Scalar(transaction, "SELECT symbol_id FROM symbols WHERE repository_id=$0 AND symbol_id=$1 AND external=0", repositoryId, symbolId) is null)
+            throw new KeyNotFoundException("SYMBOL_NOT_FOUND");
+        connection.Execute(transaction, "INSERT INTO aliases VALUES($0,$1,NULL,$2,$3,$4,'manual',1,$5) ON CONFLICT DO NOTHING",
+            "pci:alias:" + Guid.NewGuid().ToString("N"), repositoryId, symbolId, phrase, phrase.ToLowerInvariant(), DateTimeOffset.UtcNow.ToString("O"));
+        connection.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repositoryId); transaction.Commit();
+    }
     public string Register(string root, RepositoryConfig? config = null)
     {
         root = SourceFiles.CanonicalDirectory(root);
@@ -75,16 +87,41 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             PassiveManifest? manifest = null; IndexedDiagnostic? manifestDiagnostic = null; string? manifestHash = null;
             if (repository.Config.Manifest is not null)
             {
-                try { manifestHash = SourceFiles.Read(repository.Root, repository.Config.Manifest, cancellationToken).Hash; manifest = PassiveManifest.Read(repository.Root, repository.Config.Manifest); }
+                var authored = sources;
+                try
+                {
+                    manifestHash = SourceFiles.Read(repository.Root, repository.Config.Manifest, cancellationToken).Hash; manifest = PassiveManifest.Read(repository.Root, repository.Config.Manifest);
+                    var combined = sources.ToDictionary(source => source.Path, StringComparer.Ordinal);
+                    foreach (var path in manifest.Projects.SelectMany(project => project.SupportSources ?? []).Distinct(StringComparer.Ordinal))
+                    {
+                        if (SourceScanner.IsExcluded(path, repository.Config.Excludes ?? [])) throw new IOException("Semantic support source is explicitly excluded.");
+                        combined[path] = SourceFiles.Read(repository.Root, path, cancellationToken) with { Role = "semanticSupport" };
+                    }
+                    sources = combined.Values.OrderBy(source => source.Path, StringComparer.Ordinal).ToArray();
+                    if (manifest.Projects.SelectMany(project => project.Sources.Concat(project.SupportSources ?? [])).Any(path => !combined.ContainsKey(path)))
+                        throw new IOException("Passive source membership is stale or excluded.");
+                    foreach (var metadata in manifest.Projects.SelectMany(project => project.Metadata ?? []).Distinct())
+                        if (SourceFiles.Hash(PassiveManifest.ReadExternal(metadata.Path)) != metadata.ContentHash) throw new IOException("Captured metadata is stale.");
+                    if (sources.Count > 25_000 || sources.Sum(source => (long)source.Bytes.Length) > 256L * 1024 * 1024) throw new IOException("INPUT_TOO_LARGE: source snapshot exceeds its limit.");
+                }
                 catch (Exception ex) when (ex is IOException or ArgumentException or JsonException)
-                { manifestDiagnostic = new("", null, "INDEX_STALE", "warning", "Passive context is unavailable or stale; indexed source using syntax-only analysis.", null); }
+                { manifest = null; sources = authored; manifestDiagnostic = new("", null, "INDEX_STALE", "warning", "Passive context is unavailable or stale; indexed source using syntax-only analysis.", null); }
             }
             analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken);
             if (manifestDiagnostic is not null) analysis = analysis with { Diagnostics = [.. analysis.Diagnostics, manifestDiagnostic] };
             var confirmed = SourceScanner.Scan(repository.Root, repository.Config.Excludes ?? [], cancellationToken);
-            if (!sources.Select(s => (s.Path, s.Hash)).SequenceEqual(confirmed.Select(s => (s.Path, s.Hash)))) throw new IOException("INDEX_STALE: source snapshot changed during analysis.");
+            var supportPaths = sources.Where(source => source.Role == "semanticSupport").Select(source => source.Path).ToHashSet(StringComparer.Ordinal);
+            if (!sources.Where(source => source.Role == "searchableSource").Select(s => (s.Path, s.Hash)).SequenceEqual(confirmed.Where(source => !supportPaths.Contains(source.Path)).Select(s => (s.Path, s.Hash)))) throw new IOException("INDEX_STALE: source snapshot changed during analysis.");
+            foreach (var source in sources.Where(source => source.Role == "semanticSupport"))
+                if (SourceFiles.Read(repository.Root, source.Path, cancellationToken).Hash != source.Hash) throw new IOException("INDEX_STALE: semantic support changed during analysis.");
             if (manifestHash is not null && SourceFiles.Read(repository.Root, repository.Config.Manifest!, cancellationToken).Hash != manifestHash)
                 throw new IOException("INDEX_STALE: manifest changed during analysis.");
+            if (manifest is not null)
+            {
+                _ = PassiveManifest.Read(repository.Root, repository.Config.Manifest!);
+                foreach (var metadata in manifest.Projects.SelectMany(project => project.Metadata ?? []).Distinct())
+                    if (SourceFiles.Hash(PassiveManifest.ReadExternal(metadata.Path)) != metadata.ContentHash) throw new IOException("INDEX_STALE: reference changed during analysis.");
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DecoderFallbackException)
         {
@@ -104,12 +141,15 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             transaction.Commit(); return new(id, repository.Generation, sources.Count, analysis.Symbols.Count, false);
         }
         // Conservatively republish every context. This intentionally claims no affected-file optimization.
+        var aliases = new List<SavedAlias>();
+        using (var command = connection.Command(transaction, "SELECT alias_id,project_id,symbol_id,phrase,phrase_key,origin,enabled,created_utc FROM aliases WHERE repository_id=$0", id))
+        using (var reader = command.ExecuteReader()) while (reader.Read()) aliases.Add(new(reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetInt64(6), reader.GetString(7)));
         Clear(connection, transaction, id);
         var generation = repository.Generation + 1;
         var fileIds = sources.ToDictionary(s => s.Path, _ => "pci:file:" + Guid.NewGuid().ToString("N"), StringComparer.Ordinal);
         foreach (var source in sources)
-            connection.Execute(transaction, "INSERT INTO files(file_id,repository_id,relative_path,path_key,observed_hash,size_bytes,language,role,state) VALUES($0,$1,$2,$3,$4,$5,'csharp','searchableSource','ready')",
-                fileIds[source.Path], id, source.Path, OperatingSystem.IsWindows() ? source.Path.ToUpperInvariant() : source.Path, source.Hash, source.Bytes.Length);
+            connection.Execute(transaction, "INSERT INTO files(file_id,repository_id,relative_path,path_key,observed_hash,size_bytes,language,role,state) VALUES($0,$1,$2,$3,$4,$5,'csharp',$6,'ready')",
+                fileIds[source.Path], id, source.Path, OperatingSystem.IsWindows() ? source.Path.ToUpperInvariant() : source.Path, source.Hash, source.Bytes.Length, source.Role);
         foreach (var context in analysis.Contexts)
         {
             var projectId = Identity.Id("pci:project:", id, context.Key);
@@ -133,6 +173,10 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 connection.Execute(transaction, "INSERT INTO search_documents(symbol_id,input_revision,name,signature,documentation,description) VALUES($0,$1,$2,$3,$4,$5)",
                     symbol.Id, symbol.Revision, symbol.QualifiedName + " " + SplitCamel(symbol.Name), symbol.Signature, symbol.Documentation, $"{symbol.Kind} {symbol.QualifiedName}. {symbol.Signature}");
         }
+        foreach (var alias in aliases)
+            if (connection.Scalar(transaction, "SELECT symbol_id FROM symbols WHERE symbol_id=$0", alias.SymbolId) is not null
+                && (alias.ProjectId is null || connection.Scalar(transaction, "SELECT project_id FROM projects WHERE project_id=$0", alias.ProjectId) is not null))
+                connection.Execute(transaction, "INSERT INTO aliases VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8)", alias.Id, id, alias.ProjectId, alias.SymbolId, alias.Phrase, alias.Key, alias.Origin, alias.Enabled, alias.Created);
         foreach (var call in analysis.Calls)
         {
             connection.Execute(transaction, "INSERT INTO occurrences(occurrence_id,context_id,file_id,owner_symbol_id,target_symbol_id,content_hash,start_offset,end_offset,range_json,resolution) VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8,$9)",
