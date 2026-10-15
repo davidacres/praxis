@@ -52,13 +52,17 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 57 C# tests passed, 0 failed, 0 skipped on Linux x64. Forced rebuild, alias retention, stable-ID relocation with old-fact/grant revocation, exclusion preservation, duplicate-root rejection and actual watcher rebinding are covered. Root/nonce-bound consent is rechecked before returning provider responses; legacy grants require reapproval. Desktop recovery controls and platform/provider/UI execution remain unfinished.
 
+## Desktop recovery checkpoint — 15 October
+
+Full application build passes with typed trusted rebuild/relocate IPC and desktop controls, themed relocation prompt, consent-config cleanup, search continuation, truncation feedback and polled generation. Two functional specs were added and attempted. Electron startup failed before UI interaction (missing X display/native node-pty); these tests and visual inspection remain blocked, not passed. Application workspace typechecking passes; an ad-hoc standalone e2e tsc invocation also exposes existing launchTestApp declaration errors.
+
 ## Remaining code and acceptance work
 
 1. Execute the independent golden tokenizer/vector fixture on Windows/macOS; execute representation source-span fixtures on those platforms. Exact persisted chunk spans and selected source excerpts are implemented. Linux x64 passes the checked-in Python-reference fixture (10 token/span cases, 4 full vectors, absolute tolerance 1e-5/cosine >= 0.99999).
 2. Extend member/type/reference relationships and delegate points-to analysis. Local callable, synthetic project-root/top-level ownership, type inheritance/implementation and optional bounded virtual/interface candidates now have regression coverage. Candidates are possible structural targets, not runtime proof.
 3. Verify remaining status/summary/irreducible-item budget boundaries and freshness errors against A01–A40. Paged collections, source text and graphs now trim with evidence/range/cursor invariants covered by regression tests. A single irreducible item can still return an explicit budget error.
 4. Execute Windows/macOS source-handle race fixtures, including junctions, case/Unicode paths and concurrent swaps. Platform-specific handle-path verification is implemented and compiles; only Linux execution is evidenced. Linux rename/replacement and nonblocking FIFO regressions pass.
-5. Wire the implemented service/CLI rebuild/relocate operations into desktop controls; execute final UI walkthrough/functional e2e and provider cancellation/error transcripts.
+5. Execute desktop recovery/search functional e2e, final visual walkthrough and provider cancellation/error transcripts. Recovery controls and cursor/truncation feedback are implemented; the two new UI specs are blocked before panel interaction by missing X display/native node-pty.
 6. Measure scale/quality gates. Conservative full-context publication is intentional until equivalence/performance evidence supports more targeted invalidation.
 
 Native IPC, corruption/full-disk recovery, crash takeover, package dependencies and offline operation require execution on required platforms before release. Review the full normative acceptance list rather than treating the test count as coverage of every gate. M4 TypeScript/JavaScript, M5 local LLM enrichment and M6 scale/federation remain future milestones.
