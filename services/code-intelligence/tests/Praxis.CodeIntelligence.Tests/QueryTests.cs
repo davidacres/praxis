@@ -25,13 +25,92 @@ public sealed class QueryTests : IDisposable
     }
     private JsonObject Query(string tool, JsonObject? input = null)
     {
-        input ??= new(); input["repositoryId"] = repository; input["responseBudgetTokens"] = 8000;
+        input ??= new(); input["repositoryId"] = repository; if (!input.ContainsKey("responseBudgetTokens")) input["responseBudgetTokens"] = 8000;
         var response = queries.Execute(tool, input, new HashSet<string> { repository });
         var directory = Environment.GetEnvironmentVariable("PRAXIS_CONTRACT_SAMPLES");
         if (directory is not null) { Directory.CreateDirectory(directory); File.WriteAllText(Path.Combine(directory, tool + "-" + Guid.NewGuid() + ".json"), response.ToJsonString()); }
         return response;
     }
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
+
+    [Fact]
+    public void ExternalSymbolsHaveMetadataEvidenceAndNoInventedSourceDeclaration()
+    {
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { bool Caller() => object.ReferenceEquals(null, null); }"); indexer.Index(repository);
+        var external = Symbol("ReferenceEquals"); var id = external["symbolId"]!.GetValue<string>();
+        Assert.True(external["external"]!.GetValue<bool>()); Assert.Null(external["contextId"]); Assert.Empty(external["declarations"]!.AsArray());
+        var explained = Query("explain_symbol", new() { ["symbolId"] = id }); Assert.Null(explained["error"]);
+        Assert.Equal("metadata", explained["data"]!["provenance"]!.GetValue<string>());
+        var evidence = Assert.Single(explained["evidence"]!.AsArray());
+        Assert.Equal("metadata", evidence!["provenance"]!.GetValue<string>());
+        Assert.NotNull(evidence["referenceIdentity"]); Assert.Null(evidence["fileId"]);
+        Assert.Contains(explained["data"]!["facts"]![0]!["evidenceIds"]!.AsArray(), value => value!.GetValue<string>() == evidence["id"]!.GetValue<string>());
+        Assert.Equal("CAPABILITY_UNAVAILABLE", Query("get_source", new() { ["symbolId"] = id })["error"]!["code"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void GraphBudgetTrimmingKeepsRootEndpointsAndEvidenceConsistent()
+    {
+        var methods = string.Join(" ", Enumerable.Range(0, 20).Select(i => "void Target" + i + "() {}"));
+        var calls = string.Join(" ", Enumerable.Range(0, 20).Select(i => "Target" + i + "();"));
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { " + methods + " void Caller() { " + calls + " } }"); indexer.Index(repository);
+        var caller = Symbol("Caller"); var id = caller["symbolId"]!.GetValue<string>();
+        var response = Query("trace_flow", new() { ["symbolId"] = id, ["responseBudgetTokens"] = 2400 });
+        Assert.Null(response["error"]); Assert.True(response["truncated"]!.GetValue<bool>()); Assert.Null(response["nextCursor"]);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(response.ToJsonString()) <= 7200);
+        var nodes = response["data"]!["nodes"]!.AsArray().Select(n => n!["symbolId"]!.GetValue<string>()).ToHashSet();
+        Assert.Contains(id, nodes); Assert.True(nodes.Count < 21);
+        foreach (var edge in response["data"]!["edges"]!.AsArray())
+        {
+            Assert.Contains(edge!["sourceSymbolId"]!.GetValue<string>(), nodes); Assert.Contains(edge["targetSymbolId"]!.GetValue<string>(), nodes);
+            foreach (var evidenceId in edge["evidenceIds"]!.AsArray())
+                Assert.Contains(response["evidence"]!.AsArray(), evidence => evidence!["id"]!.GetValue<string>() == evidenceId!.GetValue<string>());
+        }
+    }
+
+    [Fact]
+    public void SourceTruncationReportsExactRangesWithoutAnUnusableCursor()
+    {
+        var code = "class Example {\n string Huge() => \"" + string.Concat(Enumerable.Repeat("😀", 2000)) + "\";\n}";
+        File.WriteAllText(Path.Combine(root, "Example.cs"), code); indexer.Index(repository);
+        var symbol = Symbol("Huge");
+        var response = Query("get_source", new() { ["symbolId"] = symbol["symbolId"]!.DeepClone(), ["responseBudgetTokens"] = 1200 });
+        Assert.Null(response["error"]); Assert.True(response["truncated"]!.GetValue<bool>()); Assert.Null(response["nextCursor"]);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(response.ToJsonString()) <= 3600);
+        var fragment = response["data"]!["fragments"]![0]!; var text = fragment["text"]!.GetValue<string>();
+        Assert.DoesNotContain("�", text);
+        var start = fragment["range"]!["start"]!; var end = fragment["range"]!["end"]!;
+        var sourceText = Microsoft.CodeAnalysis.Text.SourceText.From(code);
+        var startOffset = sourceText.Lines[start["line"]!.GetValue<int>()].Start + start["character"]!.GetValue<int>();
+        var endOffset = sourceText.Lines[end["line"]!.GetValue<int>()].Start + end["character"]!.GetValue<int>();
+        Assert.Equal(code[startOffset..endOffset], text);
+        var byLines = Query("get_source", new() { ["symbolId"] = Symbol("Example")["symbolId"]!.DeepClone(), ["maxLines"] = 1 });
+        Assert.True(byLines["truncated"]!.GetValue<bool>()); Assert.Null(byLines["nextCursor"]);
+    }
+
+    [Fact]
+    public void BudgetReducedPagesResumeWithoutSkippingAndRetainReferencedEvidence()
+    {
+        File.WriteAllText(Path.Combine(root, "Example.cs"), string.Join("\n", Enumerable.Range(0, 20).Select(i => "class BudgetEntry" + i + " {}")));
+        indexer.Index(repository);
+        var input = new JsonObject { ["query"] = "Budget", ["mode"] = "lexical", ["limit"] = 50, ["responseBudgetTokens"] = 1200 };
+        var seen = new HashSet<string>(); var pages = 0;
+        do
+        {
+            var response = Query("search_code", input); Assert.Null(response["error"]);
+            Assert.True(System.Text.Encoding.UTF8.GetByteCount(response.ToJsonString()) <= 3600);
+            var matches = response["data"]!["matches"]!.AsArray(); Assert.NotEmpty(matches);
+            foreach (var match in matches)
+            {
+                Assert.True(seen.Add(match!["symbol"]!["symbolId"]!.GetValue<string>()));
+                foreach (var id in match["symbol"]!["declarations"]!.AsArray())
+                    Assert.Contains(response["evidence"]!.AsArray(), evidence => evidence!["id"]!.GetValue<string>() == id!.GetValue<string>());
+            }
+            input["cursor"] = response["nextCursor"]?.DeepClone();
+            Assert.True(++pages <= 20);
+        } while (input["cursor"] is not null);
+        Assert.Equal(20, seen.Count); Assert.True(pages > 1);
+    }
 
     [Fact]
     public void PossibleDispatchIsOptInAndBaseCallsStayStaticallyBound()
@@ -52,6 +131,9 @@ public sealed class QueryTests : IDisposable
         }
         var derived = Query("find_symbol", new() { ["name"] = "Work", ["qualifiedName"] = "Derived.Work()" })["data"]!["items"]![0]!;
         Assert.Single(Query("get_callees", new() { ["symbolId"] = derived["symbolId"]!.DeepClone(), ["includePossibleTargets"] = true })["data"]!["items"]!.AsArray());
+        var overridden = Query("find_related", new() { ["symbolId"] = derived["symbolId"]!.DeepClone(), ["kinds"] = new JsonArray("overrides") });
+        Assert.Single(overridden["data"]!["items"]!.AsArray());
+        Assert.Equal("Base.Work()", overridden["data"]!["items"]![0]!["symbol"]!["qualifiedName"]!.GetValue<string>());
     }
 
     [Fact]
