@@ -9,6 +9,7 @@ namespace Praxis.CodeIntelligence.Indexing;
 /// <summary>In-memory compiler analysis from explicit inputs. Never evaluates a project or executes generators.</summary>
 public sealed class RoslynAnalyzer
 {
+    public const string AdapterVersion = "roslyn-5.9/v2";
     private sealed record CompilationInput(PassiveProject Project, IndexedContext Context, CSharpCompilation Compilation);
     private static readonly SymbolDisplayFormat SignatureFormat = SymbolDisplayFormat.CSharpErrorMessageFormat
         .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType | SymbolDisplayMemberOptions.IncludeType
@@ -195,7 +196,94 @@ public sealed class RoslynAnalyzer
                     tree is null ? null : Range(tree, diagnostic.Location.SourceSpan)));
             }
         }
-        return new(inputs.Values.Select(x => x.Context).ToArray(), symbols.Values.OrderBy(x => x.Id, StringComparer.Ordinal).ToArray(), calls, diagnostics);
+        var relationships = new List<IndexedCall>();
+        foreach (var input in inputs.Values)
+        {
+            if (input.Context.Resolution == "syntaxOnly") continue;
+            foreach (var tree in input.Compilation.SyntaxTrees)
+            {
+                var source = byPath[tree.FilePath]; if (source.Role == "semanticSupport") continue;
+                var model = input.Compilation.GetSemanticModel(tree); var root = tree.GetRoot(cancellationToken);
+                string? Owner(SyntaxNode node) => node.AncestorsAndSelf().Where(nodeSymbols.ContainsKey)
+                    .Select(node => nodeSymbols[node]).FirstOrDefault(id => symbols[id].Kind is "type" or "method" or "function" or "constructor" or "accessor" or "module");
+                void Add(SyntaxNode node, string owner, ISymbol target, string kind)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (target is ITypeSymbol { TypeKind: TypeKind.Error }) return;
+                    var identity = Identify(target, input.Context, null);
+                    if (!symbols.ContainsKey(identity.Id))
+                    {
+                        if (!identity.External) return;
+                        symbols[identity.Id] = new(identity.Id, identity.Json, "", Kind(target), target.Name,
+                            target.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat), target.ToDisplayString(SignatureFormat),
+                            SourceFiles.Hash(Encoding.UTF8.GetBytes(identity.Json)), "resolved", null, true, "", []);
+                    }
+                    relationships.Add(new(Identity.Id("pci:occ:", input.Context.Id, source.Path, source.Hash, node.SpanStart, node.Span.End, kind, identity.Id),
+                        input.Context.Id, source.Path, source.Hash, owner, identity.Id, node.SpanStart, node.Span.End, Range(tree, node.Span),
+                        input.Context.Resolution == "complete" ? "resolved" : "possible", kind));
+                    if (relationships.Count + calls.Count > 200_000 || symbols.Count > 50_000)
+                        throw new IOException("INPUT_TOO_LARGE: semantic fact limit exceeded.");
+                }
+                foreach (var name in root.DescendantNodes().OfType<SimpleNameSyntax>())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var target = model.GetSymbolInfo(name, cancellationToken).Symbol;
+                    if (target is not (INamedTypeSymbol or IMethodSymbol or IFieldSymbol or IPropertySymbol or IEventSymbol)
+                        || Owner(name) is not string owner) continue;
+                    Add(name, owner, target, "references");
+                    if (target is not (IFieldSymbol or IPropertySymbol)) continue;
+                    var expression = name.Parent is MemberAccessExpressionSyntax access && access.Name == name ? (SyntaxNode)access
+                        : name.Parent is MemberBindingExpressionSyntax binding ? binding : name;
+                    var operation = model.GetOperation(expression, cancellationToken);
+                    if (operation is not (IFieldReferenceOperation or IPropertyReferenceOperation)) continue;
+                    // nameof produces a reference, never a runtime access classification.
+                    if (Ancestors(operation).Any(parent => parent is INameOfOperation)) continue;
+                    var parent = operation.Parent; var read = true; var write = false;
+                    if (parent is ISimpleAssignmentOperation assignment && assignment.Target == operation) { read = false; write = true; }
+                    else if (parent is ICompoundAssignmentOperation compound && compound.Target == operation
+                        || parent is IIncrementOrDecrementOperation) write = true;
+                    else if (parent is IArgumentOperation argument)
+                    {
+                        if (argument.Parameter?.RefKind == RefKind.Out) { read = false; write = true; }
+                        else if (argument.Parameter?.RefKind == RefKind.Ref) write = true;
+                    }
+                    else if (Ancestors(operation).Any(parent => parent is IDeconstructionAssignmentOperation)) continue;
+                    if (read) Add(name, owner, target, "reads");
+                    if (write) Add(name, owner, target, "writes");
+                }
+                foreach (var node in root.DescendantNodes())
+                {
+                    TypeSyntax? declared = node switch
+                    {
+                        MethodDeclarationSyntax method => method.ReturnType,
+                        DelegateDeclarationSyntax declaration => declaration.ReturnType,
+                        PropertyDeclarationSyntax property => property.Type,
+                        IndexerDeclarationSyntax indexer => indexer.Type,
+                        VariableDeclarationSyntax variable => variable.Type,
+                        ParameterSyntax parameter => parameter.Type,
+                        EventDeclarationSyntax eventDeclaration => eventDeclaration.Type,
+                        ForEachStatementSyntax loop => loop.Type,
+                        _ => null
+                    };
+                    if (declared is null || Owner(node) is not string owner) continue;
+                    if (node is MethodDeclarationSyntax or DelegateDeclarationSyntax
+                        && nodeSymbols.TryGetValue(node, out var callable)
+                        && model.GetTypeInfo(declared, cancellationToken).Type is INamedTypeSymbol returnType)
+                        Add(declared, callable, returnType, "returns_type");
+                    foreach (var type in declared.DescendantNodesAndSelf().OfType<TypeSyntax>())
+                        if (model.GetTypeInfo(type, cancellationToken).Type is INamedTypeSymbol dependency)
+                            Add(type, owner, dependency, "uses_type");
+                }
+            }
+        }
+        return new(inputs.Values.Select(x => x.Context).ToArray(), symbols.Values.OrderBy(x => x.Id, StringComparer.Ordinal).ToArray(), calls, diagnostics)
+            { Relationships = relationships };
+
+        static IEnumerable<IOperation> Ancestors(IOperation operation)
+        {
+            while (operation.Parent is IOperation parent) { yield return parent; operation = parent; }
+        }
+
 
         CompilationInput Build(string key)
         {
@@ -231,7 +319,7 @@ public sealed class RoslynAnalyzer
                 new CSharpCompilationOptions(outputKind, allowUnsafe: project.AllowUnsafe, nullableContextOptions: nullable));
             var syntaxOnly = manifest is null || key == "uncovered-syntax";
             var resolution = syntaxOnly ? "syntaxOnly" : compilation.GetDiagnostics(cancellationToken).Any(d => d.Severity == DiagnosticSeverity.Error) ? "partial" : "complete";
-            var hash = SourceFiles.Hash(Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(project)
+            var hash = SourceFiles.Hash(Encoding.UTF8.GetBytes(AdapterVersion + System.Text.Json.JsonSerializer.Serialize(project)
                 + string.Join("|", projectSources.Select(s => s.Hash)) + string.Join("|", dependencies.Select(d => d.Context.Hash))));
             var context = new IndexedContext(key, key == "syntax" || key == "uncovered-syntax" ? "" : key,
                 Identity.Id("pci:ctx:", repositoryId, key), hash, resolution, projectSources);
