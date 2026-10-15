@@ -182,9 +182,9 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             connection.Execute(transaction, "INSERT INTO occurrences(occurrence_id,context_id,file_id,owner_symbol_id,target_symbol_id,content_hash,start_offset,end_offset,range_json,resolution) VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8,$9)",
                 call.Id, call.ContextId, fileIds[call.FilePath], call.OwnerId, call.TargetId, call.Hash, call.Start, call.End, JsonSerializer.Serialize(call.Range), call.Resolution);
             if (call.TargetId is not null)
-                connection.Execute(transaction, "INSERT INTO edges VALUES($0,$1,$2,$3,$4,$5,'calls','compiler',$6,$7,$8)",
+                connection.Execute(transaction, "INSERT INTO edges VALUES($0,$1,$2,$3,$4,$5,$9,'compiler',$6,$7,$8)",
                     Identity.Id("pci:edge:", call.Id, call.TargetId), call.ContextId, fileIds[call.FilePath], call.OwnerId, call.TargetId, call.Id,
-                    call.Resolution, call.Hash, call.Id);
+                    call.Resolution, call.Hash, call.Id, call.Kind);
         }
         foreach (var diagnostic in analysis.Diagnostics)
             connection.Execute(transaction, "INSERT INTO diagnostics VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8)", "pci:diag:" + Guid.NewGuid().ToString("N"), id,
