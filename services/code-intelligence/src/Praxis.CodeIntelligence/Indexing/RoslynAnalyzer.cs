@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Indexing;
 /// <summary>In-memory compiler analysis from explicit inputs. Never evaluates a project or executes generators.</summary>
 public sealed class RoslynAnalyzer
 {
-    public const string AdapterVersion = "roslyn-5.9/v4";
+    public const string AdapterVersion = "roslyn-5.9/v5";
     private sealed record CompilationInput(PassiveProject Project, IndexedContext Context, CSharpCompilation Compilation, IReadOnlyList<Diagnostic> Diagnostics);
     private static readonly SymbolDisplayFormat SignatureFormat = SymbolDisplayFormat.CSharpErrorMessageFormat
         .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType | SymbolDisplayMemberOptions.IncludeType
@@ -44,6 +44,7 @@ public sealed class RoslynAnalyzer
             .ToDictionary(entry => entry.Tree, entry => entry.Model);
         var identities = new Dictionary<string, Dictionary<ISymbol, (string Id, string Json, bool External)>>(StringComparer.Ordinal);
         var symbols = new Dictionary<string, IndexedSymbol>(StringComparer.Ordinal);
+        var projectRoots = new Dictionary<string, string>(StringComparer.Ordinal);
         var nodeSymbols = new Dictionary<SyntaxNode, string>();
         var sourceMethods = new Dictionary<string, (IMethodSymbol Symbol, IndexedContext Context)>();
         var sourceTypes = new Dictionary<string, (INamedTypeSymbol Symbol, IndexedContext Context)>();
@@ -53,6 +54,7 @@ public sealed class RoslynAnalyzer
         {
             var rootIdentity = Identity.Json(1, "synthetic", repositoryId, input.Context.Id, "projectRoot");
             var rootId = Identity.Id(input.Context.Resolution == "syntaxOnly" ? "pci:syntactic:" : "pci:sym:", rootIdentity);
+            projectRoots[input.Context.Id] = rootId;
             symbols[rootId] = new(rootId, rootIdentity, input.Context.Id, "module", "[synthetic projectRoot]",
                 input.Project.AssemblyName + " [synthetic projectRoot]", "[synthetic projectRoot]",
                 input.Context.Hash, input.Context.Resolution == "syntaxOnly" ? "syntaxOnly" : "resolved", null, false,
@@ -352,6 +354,23 @@ public sealed class RoslynAnalyzer
                 }
             }
         }
+        // Lift observed source references to project dependencies without inventing
+        // source evidence for an unused configuration-only project reference.
+        var projectDependencies = new Dictionary<string, IndexedCall>(StringComparer.Ordinal);
+        var contextResolutions = inputs.Values.ToDictionary(input => input.Context.Id, input => input.Context.Resolution, StringComparer.Ordinal);
+        foreach (var fact in calls.Concat(relationships))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (fact.TargetId is null || !symbols.TryGetValue(fact.TargetId, out var target) || target.External
+                || target.ContextId == fact.ContextId || !projectRoots.TryGetValue(target.ContextId, out var targetRoot)) continue;
+            var ownerRoot = projectRoots[fact.ContextId];
+            var dependencyId = Identity.Id("pci:occ:", fact.ContextId, fact.FilePath, fact.Hash, fact.Start, fact.End, ownerRoot, "depends_on", targetRoot);
+            projectDependencies.TryAdd(dependencyId, fact with { Id = dependencyId, OwnerId = ownerRoot, TargetId = targetRoot, Kind = "depends_on",
+                Resolution = fact.Resolution == "resolved" && contextResolutions[target.ContextId] == "complete" ? "resolved" : "possible" });
+            if (calls.Count + relationships.Count + projectDependencies.Count > 200_000)
+                throw new IOException("INPUT_TOO_LARGE: semantic fact limit exceeded.");
+        }
+        relationships.AddRange(projectDependencies.Values);
         return new(inputs.Values.Select(x => x.Context).ToArray(), symbols.Values.OrderBy(x => x.Id, StringComparer.Ordinal).ToArray(), calls, diagnostics)
             { Relationships = relationships };
 

@@ -283,6 +283,37 @@ public sealed class QueryTests : IDisposable
     }
 
     [Fact]
+    public void ProjectDependenciesAreQueryableWithSourceEvidenceAndWithdrawAfterEdits()
+    {
+        File.WriteAllText(Path.Combine(root, "Library.cs"), "public class Library { public static int Value() => 1; }");
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "class Caller { int Run() => Library.Value(); }");
+        var metadata = typeof(object).Assembly.Location;
+        MetadataInput[] references = [new(metadata, SourceFiles.Hash(File.ReadAllBytes(metadata)))];
+        File.WriteAllText(Path.Combine(root, "context.praxis.json"), JsonSerializer.Serialize(new PassiveManifest(1,
+            [new("library", "Library", ["Library.cs"], Metadata: references), new("project", "Caller", ["Example.cs"], ["library"], references)])));
+        indexer.Index(repository);
+        var found = Query("find_symbol", new() { ["name"] = "[synthetic projectRoot]", ["qualifiedName"] = "Caller [synthetic projectRoot]" });
+        Assert.Null(found["error"]);
+        var module = Assert.Single(found["data"]!["items"]!.AsArray())!;
+        var input = new JsonObject { ["symbolId"] = module["symbolId"]!.DeepClone(), ["edgeKinds"] = new JsonArray("depends_on") };
+        var trace = Query("trace_flow", input); Assert.Null(trace["error"]);
+        var edges = trace["data"]!["edges"]!.AsArray(); Assert.NotEmpty(edges);
+        Assert.All(edges, edge =>
+        {
+            Assert.Equal("depends_on", edge!["kind"]!.GetValue<string>());
+            Assert.Equal("resolved", edge["resolution"]!.GetValue<string>());
+            var target = Assert.Single(trace["data"]!["nodes"]!.AsArray(), node => node!["symbolId"]!.GetValue<string>() == edge["targetSymbolId"]!.GetValue<string>());
+            Assert.Equal("Library [synthetic projectRoot]", target!["qualifiedName"]!.GetValue<string>());
+            Assert.NotEmpty(edge["evidenceIds"]!.AsArray());
+            foreach (var id in edge["evidenceIds"]!.AsArray())
+                Assert.Contains(trace["evidence"]!.AsArray(), evidence => evidence!["id"]!.GetValue<string>() == id!.GetValue<string>() && evidence["path"]!.GetValue<string>() == "Example.cs");
+        });
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "class Caller { int Run() => 1; }"); indexer.Index(repository);
+        Assert.Empty(Query("trace_flow", input)["data"]!["edges"]!.AsArray());
+        Assert.Empty(database.Check());
+    }
+
+    [Fact]
     public void ImportGraphsPublishCompilerEvidenceAndDisappearWhenDirectivesAreRemoved()
     {
         const string code = "using System; using Alias = System.String; class Example {}";

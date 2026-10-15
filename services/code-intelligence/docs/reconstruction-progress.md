@@ -175,6 +175,12 @@ Adapter `roslyn-5.9/v4` records compiler-bound namespace, alias and static impor
 
 **90 C# tests passed, zero failures/skips; 91 captured responses validated across all 11 tool schemas.** Tests cover global/namespace-scoped imports, alias/static targets, cross-project merged namespaces, partial contexts, publication/removal and query evidence. Project/package dependency completeness and general delegate flow remain open.
 
+## Observed project dependency checkpoint (15 October)
+
+Adapter `roslyn-5.9/v5` lifts compiler-bound cross-project source references into `depends_on` edges between their synthetic context roots. Each edge retains the actual source occurrence, hash, range and resolution; duplicate evidence for the same occurrence/project pair is collapsed. Possible bindings remain possible, and partial target contexts cannot become resolved project dependencies. Metadata-only targets and unused configuration-only project references do not receive invented source evidence.
+
+**92 C# tests passed, zero failures/skips; 94 actual responses validated across all 11 schemas; full application build passed.** Analyzer and query fixtures verify defining roots, source evidence, graph publication and edge withdrawal after edits. Configuration-only project references/package dependencies remain separate work.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.

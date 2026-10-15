@@ -65,6 +65,41 @@ public sealed class RelationshipTests
     }
 
     [Fact]
+    public void ObservedCrossProjectDependenciesRetainSourceEvidenceAndDefiningRoots()
+    {
+        var files = new[] { ("Library.cs", "public class Library { public static int Value() => 1; }"),
+            ("Caller.cs", "using Alias = Library; class Caller { int Run() => Alias.Value(); }") };
+        var sources = files.Select(file => new SourceInput(file.Item1, SourceFiles.Hash(Encoding.UTF8.GetBytes(file.Item2)), Encoding.UTF8.GetBytes(file.Item2), file.Item2)).ToArray();
+        var assembly = typeof(object).Assembly.Location;
+        MetadataInput[] metadata = [new(assembly, SourceFiles.Hash(File.ReadAllBytes(assembly)))];
+        var manifest = new PassiveManifest(1, [new("library", "Library", ["Library.cs"], Metadata: metadata),
+            new("caller", "Caller", ["Caller.cs"], ["library"], metadata)]);
+        var result = new RoslynAnalyzer().Analyze("repo", sources, manifest);
+        Assert.All(result.Contexts, context => Assert.Equal("complete", context.Resolution));
+        var library = result.Contexts.Single(context => context.Key == "library");
+        var caller = result.Contexts.Single(context => context.Key == "caller");
+        var dependencies = result.Relationships.Where(edge => edge.Kind == "depends_on").ToArray();
+        Assert.NotEmpty(dependencies);
+        Assert.All(dependencies, edge =>
+        {
+            Assert.Equal(caller.Id, edge.ContextId);
+            var owner = result.Symbols.Single(symbol => symbol.Id == edge.OwnerId);
+            var target = result.Symbols.Single(symbol => symbol.Id == edge.TargetId);
+            Assert.Equal("module", owner.Kind); Assert.Equal("module", target.Kind);
+            Assert.Equal(caller.Id, owner.ContextId); Assert.Equal(library.Id, target.ContextId);
+            Assert.Equal("Caller.cs", edge.FilePath); Assert.Equal(sources[1].Hash, edge.Hash);
+            Assert.True(edge.End > edge.Start); Assert.Equal("resolved", edge.Resolution);
+            Assert.Contains(result.Calls.Concat(result.Relationships), fact => fact.Kind != "depends_on" && fact.ContextId == edge.ContextId
+                && fact.Start == edge.Start && fact.End == edge.End && result.Symbols.Single(symbol => symbol.Id == fact.TargetId).ContextId == library.Id);
+        });
+        Assert.Equal(dependencies.Length, dependencies.Select(edge => edge.Id).Distinct().Count());
+        const string unused = "class Caller {}";
+        sources[1] = new("Caller.cs", SourceFiles.Hash(Encoding.UTF8.GetBytes(unused)), Encoding.UTF8.GetBytes(unused), unused);
+        var unusedReference = new RoslynAnalyzer().Analyze("repo", sources, manifest);
+        Assert.DoesNotContain(unusedReference.Relationships, edge => edge.Kind == "depends_on");
+    }
+
+    [Fact]
     public void CompilerClassifiesFieldPropertyAssignmentsAndArguments()
     {
         const string code = "class Example { int field; int Property { get; set; } static void Output(out int value) { value = 1; } static void Mutate(ref int value) {} int Run() { field = 1; field += 2; ++field; Output(out field); Mutate(ref field); Property = field; return Property; } }";
