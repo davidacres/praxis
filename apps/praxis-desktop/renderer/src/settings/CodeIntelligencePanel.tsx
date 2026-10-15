@@ -14,10 +14,11 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
   servers: McpServerConfig[];
   onServersChange: (servers: McpServerConfig[]) => Promise<void>;
 }) {
-  const { confirm } = useDialogs();
+  const { confirm, prompt } = useDialogs();
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [repositoryId, setRepositoryId] = useState('');
   const [root, setRoot] = useState(''); const [manifest, setManifest] = useState(''); const [excludes, setExcludes] = useState('');
+  const [searchArguments, setSearchArguments] = useState<ObjectValue>();
   const [query, setQuery] = useState(''); const [provider, setProvider] = useState('');
   const [bundle, setBundle] = useState(''); const [fingerprint, setFingerprint] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
@@ -38,7 +39,7 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
   }
   useEffect(() => { void work(() => refresh()); }, []);
   useEffect(() => {
-    setResponse(undefined); setStatus(undefined);
+    setResponse(undefined); setStatus(undefined); setSearchArguments(undefined);
     if (repositoryId) void work(async () => setStatus(await call({ action: 'query', tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: 8000 } })));
   }, [repositoryId]);
   useEffect(() => {
@@ -55,6 +56,7 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
     return () => { disposed = true; window.clearInterval(timer); };
   }, [repositoryId, busy]);
   async function runTool(tool: string, arguments_: ObjectValue): Promise<void> {
+    if (tool === 'search_code') setSearchArguments(arguments_);
     setResponse(await call({ action: 'query', tool, arguments: { ...arguments_, repositoryId, responseBudgetTokens: 8000 } }));
   }
   const matches = items(record(response?.data).matches);
@@ -93,7 +95,7 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
         options={repositories.map(repository => ({ value: repository.id, label: repository.root, meta: repository.state }))}
         onChange={setRepositoryId} placeholder="No registered repositories" />
       {selected && <>
-        <p className="settings-hint">{selected.state} · Generation {selected.generation} · {status?.freshness?.state || 'Coverage unavailable'}</p>
+        <p className="settings-hint">{selected.state} · Generation {status?.indexGeneration ?? selected.generation} · {status?.freshness?.state || 'Coverage unavailable'}</p>
         {(Number(record(record(status?.data).jobsByState).pending) > 0 || Number(record(record(status?.data).jobsByState).leased) > 0) &&
           <p className="settings-hint" role="status">Background work: {String(record(record(status?.data).jobsByState).pending)} queued · {String(record(record(status?.data).jobsByState).leased)} running</p>}
         {items(record(status?.data).models).map(value => { const model = record(value); const coverage = record(model.coverage); return <p className="settings-hint" key={String(model.fingerprint)}>
@@ -103,6 +105,20 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
           <button className="btn" type="button" disabled={busy} onClick={() => void work(async () => {
             await call({ action: 'index', repositoryId }); await refresh(); setStatus(await call({ action: 'query', tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: 8000 } }));
           })}>Index now</button>
+          <button className="btn" type="button" disabled={busy || selected.state === 'paused'} onClick={() => void work(async () => {
+            await call({ action: 'rebuild', repositoryId }); await refresh();
+            setStatus(await call({ action: 'query', tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: 8000 } }));
+          })}>Rebuild index</button>
+          <button className="btn" type="button" disabled={busy} onClick={() => void work(async () => {
+            const destination = await prompt({ title: 'Relocate repository', label: 'New repository folder', initialValue: selected.root,
+              message: 'This clears the old index and revokes all provider access. Exclusions are preserved. Capture a new passive manifest after moving, then register it for this folder. Source files are preserved.',
+              confirmLabel: 'Relocate repository', validate: value => !value.trim() ? 'Enter the new repository folder.' : value.trim() === selected.root ? 'Choose the new folder.' : undefined });
+            if (!destination) return;
+            await call({ action: 'relocate', repositoryId, root: destination.trim() });
+            setResponse(undefined); setStatus(undefined); await refresh(repositoryId);
+            await onServersChange(servers.filter(server => !(server.env?.PRAXIS_CODE_INTELLIGENCE_PROVIDER && server.args?.includes(repositoryId))));
+            setStatus(await call({ action: 'query', tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: 8000 } }));
+          })}>Relocate repository</button>
           <button className="btn" type="button" disabled={busy} onClick={() => void work(async () => { await call({ action: selected.state === 'paused' ? 'resume' : 'pause', repositoryId }); await refresh(); })}>{selected.state === 'paused' ? 'Resume indexing' : 'Pause indexing'}</button>
           <button className="btn" type="button" disabled={busy} onClick={() => void work(async () => {
             if (!(await confirm({ title: 'Unregister repository?', message: 'This removes its index and provider grants. Source files are preserved.', danger: true, confirmLabel: 'Unregister' }))) return;
@@ -115,6 +131,7 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
           <label>Search source<input className="input" value={query} onChange={event => setQuery(event.target.value)} placeholder="Symbol name or description" /></label>
           <button className="btn" type="submit" disabled={busy || !query.trim()}>Search code</button>
         </form>
+        {response?.truncated && <p className="settings-hint" role="status">Results were shortened to fit the requested limits.{response.nextCursor ? ' More results are available.' : ' Narrow the request for additional detail.'}</p>}
         {response?.warnings?.map(warning => <p className="settings-hint" key={warning.code}>{warning.message}</p>)}
         {matches.map(value => {
           const match = record(value); const symbol = record(match.symbol); const symbolId = String(symbol.symbolId);
@@ -127,6 +144,7 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
             </div>
           </article>;
         })}
+        {response?.nextCursor && matches.length > 0 && searchArguments && <button className="btn" type="button" disabled={busy} onClick={() => void work(() => runTool('search_code', { ...searchArguments, cursor: response.nextCursor }))}>More search results</button>}
         {fragments.map((value, index) => { const fragment = record(value); return <article key={index}><p className="settings-hint">Hash verified: {String(fragment.currentHash)}</p><pre>{String(fragment.text)}</pre></article>; })}
         {response && matches.length === 0 && fragments.length === 0 && <pre className="code-intelligence-result">{JSON.stringify(response.data, null, 2)}</pre>}
         {items(response?.evidence).length > 0 && <details><summary>Source evidence</summary>{items(response?.evidence).map(value => { const evidence = record(value); return typeof evidence.fileId === 'string' && evidence.range ?
