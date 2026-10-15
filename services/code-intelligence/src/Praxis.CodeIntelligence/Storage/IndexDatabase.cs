@@ -48,8 +48,15 @@ public sealed class IndexDatabase
         connection.Open();
         Execute(connection, "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;");
         // Check a newer schema before changing persistent journal policy.
-        var version = Version(connection);
-        if (version != 0) { ValidateHistory(connection, version); if (version == SchemaVersion) return; }
+        int version;
+        using (var preflight = connection.BeginTransaction(deferred: true))
+        {
+            version = Version(connection, preflight);
+            if (version != 0) ValidateHistory(connection, version, preflight);
+            if (version is > 0 and < SchemaVersion) BackupBeforeUpgrade(connection, version);
+            preflight.Commit();
+        }
+        if (version == SchemaVersion) return;
         Execute(connection, "PRAGMA journal_mode=WAL;");
         using var transaction = connection.BeginTransaction(deferred: false);
         // Another initializer may have committed while this connection waited for the writer.
@@ -67,6 +74,38 @@ public sealed class IndexDatabase
             record.ExecuteNonQuery();
         }
         transaction.Commit();
+    }
+
+    private void BackupBeforeUpgrade(SqliteConnection source, int version)
+    {
+        var destination = Path + $".schema{version}." + Guid.NewGuid().ToString("N") + ".praxis.db";
+        var temporary = destination + ".tmp";
+        try
+        {
+            using (var target = new SqliteConnection(new SqliteConnectionStringBuilder
+            { DataSource = temporary, Mode = SqliteOpenMode.ReadWriteCreate, Pooling = false }.ToString()))
+            {
+                target.Open(); source.BackupDatabase(target);
+            }
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            using (var check = new SqliteConnection(new SqliteConnectionStringBuilder
+            { DataSource = temporary, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString()))
+            {
+                check.Open();
+                if (Version(check) != version) throw new IOException("Pre-upgrade backup version mismatch.");
+                ValidateHistory(check, version);
+                using var command = check.CreateCommand(); command.CommandText = "PRAGMA quick_check";
+                using (var reader = command.ExecuteReader())
+                    while (reader.Read()) if (reader.GetString(0) != "ok") throw new IOException("Pre-upgrade backup integrity check failed.");
+                command.CommandText = "PRAGMA foreign_key_check";
+                using (var reader = command.ExecuteReader()) if (reader.Read()) throw new IOException("Pre-upgrade backup foreign-key check failed.");
+            }
+            File.Move(temporary, destination, overwrite: false);
+        }
+        finally
+        {
+            File.Delete(temporary); File.Delete(temporary + "-wal"); File.Delete(temporary + "-shm");
+        }
     }
 
     public IReadOnlyList<string> Check()
