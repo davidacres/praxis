@@ -22,17 +22,23 @@
     "dist:linux:publish": "electron-builder --linux AppImage deb --publish always",
     "dist:linux:appimage": "electron-builder --linux AppImage --publish never",
     "dist:linux:deb": "electron-builder --linux deb --publish never",
-    "predist": "npm run copy-renderer",
-    "predist:mac": "npm run copy-renderer",
-    "predist:win": "npm run copy-renderer",
-    "predist:linux": "npm run copy-renderer",
+    "predist": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package",
+    "predist:mac": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --platform darwin",
+    "predist:win": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --rid win-x64",
+    "predist:linux": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --platform linux",
     "rebuild-terminal": "npm rebuild node-pty --build-from-source",
     "start": "npm run compile && electron .",
     "test:e2e": "npm run copy-renderer && npm run compile && npx playwright test",
     "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/shellEnvironment.test.js out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/workflowMergeRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js out/main/mapWorktrees.test.js out/main/contextSnapshotHost.test.js out/main/coordinationHost.test.js out/main/coordinationHook.test.js out/main/coordinationInstance.test.js out/main/workflowProjectTrust.test.js out/main/adapters/electronAddonStorage.test.js",
     "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/projectSnapshot.test.js out/main/adapters/jsonKeyValueStore.test.js out/main/minimaxUsage.test.js out/main/alibabaCodingPlanUsage.test.js out/main/antigravityUsage.test.js out/main/providerUsageBatch.test.js out/main/providerUsageHistory.test.js out/main/ticketReviewApply.test.js out/main/windowState.test.js out/main/autoUpdate.test.js out/main/windowBroadcast.test.js",
     "test:mobile": "npm run compile && node --test out/main/mobileHostServices.test.js out/main/mobileRunProjection.test.js out/main/mobileSessionProjection.test.js out/main/mobileSessionChanges.test.js out/main/mobileImagePreview.test.js out/main/mobilePermissions.test.js out/main/mobileAccessLifecycle.test.js out/main/mobileLanServer.test.js out/main/mobileRelayClient.test.js out/main/mobilePairingRegistry.test.js out/main/mobileDiscoveryAdvertiser.test.js out/main/mobileEndToEnd.test.js out/main/mobileAppearance.test.js",
-    "check-ipc-senders": "node scripts/checkTrustedIpc.cjs"
+    "check-ipc-senders": "node scripts/checkTrustedIpc.cjs",
+    "predist:mac:publish": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --platform darwin",
+    "predist:win:publish": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --rid win-x64",
+    "predist:win:ia32": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --rid win-x86",
+    "predist:linux:publish": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --platform linux",
+    "predist:linux:appimage": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --platform linux",
+    "predist:linux:deb": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --platform linux"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",
@@ -154,6 +160,12 @@
         "libxtst6",
         "libnss3"
       ]
-    }
+    },
+    "extraResources": [
+      {
+        "from": "../../../services/code-intelligence/artifacts/package",
+        "to": "code-intelligence"
+      }
+    ]
   }
 }
