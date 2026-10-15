@@ -147,6 +147,12 @@ When repository files, contexts and symbol keys are unchanged, structural public
 
 **86 C# tests passed, 0 failed, 0 skipped; 87 responses validate across all 11 schemas.** Added checks compare retained publication with clean indexing across project contexts, prove failed writes roll back facts/generation, and prevent deletion/rewriting of an unchanged vector while verifying changed representations disappear until refresh. The 5k body-edit measurement is 2530.7532 ms (baseline 3352.3529 ms), still failing the two-second threshold. Hybrid p95 is 113.1703 ms, refresh 384.8981 ms, and independent peak RSS 1005813760 bytes. Desktop/native IPC and 50k/quality gates remain open.
 
+## Retained declaration/relationship checkpoint (15 October)
+
+Stable-key publications now retain declaration locations and occurrence/edge rows only when their complete stored facts match the newly computed analysis. Context/file membership changes fall back to full replacement. Changed or missing facts are replaced in the same transaction; cancellation remains checked during comparison. A cross-project overload-accessibility regression proves an unchanged caller is rebound to the new target, unchanged caller locations survive, and resulting facts match forced clean publication.
+
+**87 C# tests passed, 0 failed, 0 skipped; 87 responses validate against all 11 tool schemas; Release build passed with zero warnings/errors.** The macOS arm64 5k real-model benchmark measured body edit **1532.0555 ms**, down from native baseline **3352.3529 ms** (54.3%). Lexical p95 is 21.362 ms, hybrid p95 129.0305 ms, semantic refresh 420.4457 ms and independently measured peak RSS 874692608 bytes. Hybrid passes the local comparison but no speedup is established. This is a single direct body edit, not watcher-inclusive p95; 50k/platform/quality/UI acceptance remains open.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.
@@ -154,7 +160,7 @@ When repository files, contexts and symbol keys are unchanged, structural public
 - Irreducible single-item budget behavior and execution of Windows/macOS source-handle fixtures.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
-Current indexing intentionally uses conservative full-context republishing; it does not claim incremental performance or release readiness. M4–M6 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
+Current indexing performs full-context compiler analysis and atomically updates or replaces structural facts. It does not yet implement targeted API-stamp invalidation or establish complete performance/release acceptance. M4–M6 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
 
 ## Preservation policy
 

@@ -35,3 +35,11 @@ The macOS runtime reports PeakWorkingSet64 as zero. Baseline reports retain that
 ## Retained parent/vector publication checkpoint
 
 The same corpus with retained structural parent rows and validated vector blobs measured a body edit at 2530.7532 ms, versus baseline 3352.3529 ms (24.5% lower). Hybrid p95 was 113.1703 ms and semantic refresh 384.8981 ms. The direct structural threshold still fails; this is not acceptance completion. Independent `/usr/bin/time -l` measured maximum RSS 1005813760 bytes. `macos-arm64-5000-retained-hybrid.praxis.json` preserves the raw report.
+
+## Retained declaration/relationship checkpoint
+
+The final Release run, after builds and all 87 tests completed, measured body-edit publication at **1532.0555 ms** versus the same-machine native baseline **3352.3529 ms** (54.3% lower). Structural keys and context/file memberships must match before retaining contributions. Persisted declarations and occurrences/edges are compared with fresh complete compiler output; changed bindings are replaced even when the caller source is unchanged.
+
+Lexical p95 was 21.362 ms; hybrid p95 129.0305 ms over 400 samples with four readers; semantic refresh was 420.4457 ms. Hybrid remains below the 500 ms comparison, but is higher than the baseline 107.8961 ms: this series establishes no hybrid speedup. Independent `/usr/bin/time -l` measured maximum RSS 874692608 bytes. The runtime RSS field remains null. The complete raw report is `macos-arm64-5000-contributions-hybrid.praxis.json`.
+
+This is one direct body-edit observation, not structural p95 including 500 ms watcher debounce. It does not establish the normative 50k-symbol query gate, Windows/Linux behavior, representative repository relevance, native IPC/MCP overhead or desktop UI acceptance. The full feature remains in progress.
