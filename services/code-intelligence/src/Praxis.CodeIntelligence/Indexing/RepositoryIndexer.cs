@@ -163,57 +163,58 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         var aliases = new List<SavedAlias>();
         using (var command = connection.Command(transaction, "SELECT alias_id,project_id,symbol_id,phrase,phrase_key,origin,enabled,created_utc FROM aliases WHERE repository_id=$0", id))
         using (var reader = command.ExecuteReader()) while (reader.Read()) aliases.Add(new(reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetInt64(6), reader.GetString(7)));
+        using var batch = new SqlBatch(connection, transaction);
         Clear(connection, transaction, id);
         var generation = repository.Generation + 1;
         var fileIds = sources.ToDictionary(s => s.Path, _ => "pci:file:" + Guid.NewGuid().ToString("N"), StringComparer.Ordinal);
         foreach (var source in sources)
-            connection.Execute(transaction, "INSERT INTO files(file_id,repository_id,relative_path,path_key,observed_hash,size_bytes,language,role,state) VALUES($0,$1,$2,$3,$4,$5,'csharp',$6,'ready')",
+            batch.Execute("INSERT INTO files(file_id,repository_id,relative_path,path_key,observed_hash,size_bytes,language,role,state) VALUES($0,$1,$2,$3,$4,$5,'csharp',$6,'ready')",
                 fileIds[source.Path], id, source.Path, OperatingSystem.IsWindows() ? source.Path.ToUpperInvariant() : source.Path, source.Hash, source.Bytes.Length, source.Role);
         foreach (var context in analysis.Contexts)
         {
             var projectId = Identity.Id("pci:project:", id, context.Key);
-            connection.Execute(transaction, "INSERT INTO projects VALUES($0,$1,$2,$3,'csharp')", projectId, id, context.Key, context.ProjectPath);
-            connection.Execute(transaction, "INSERT INTO contexts(context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,desired_revision,published_revision,state,resolution,capabilities_json) VALUES($0,$1,$2,$3,$3,'roslyn-5.9/v1','{}',$4,$4,'ready',$5,$6)",
+            batch.Execute("INSERT INTO projects VALUES($0,$1,$2,$3,'csharp')", projectId, id, context.Key, context.ProjectPath);
+            batch.Execute("INSERT INTO contexts(context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,desired_revision,published_revision,state,resolution,capabilities_json) VALUES($0,$1,$2,$3,$3,'roslyn-5.9/v1','{}',$4,$4,'ready',$5,$6)",
                 context.Id, projectId, context.Key, context.Hash, generation, context.Resolution,
                 JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls" }));
             foreach (var source in context.Sources)
-                connection.Execute(transaction, "INSERT INTO context_files VALUES($0,$1,$2,$3)", context.Id, fileIds[source.Path], source.Hash, generation);
+                batch.Execute("INSERT INTO context_files VALUES($0,$1,$2,$3)", context.Id, fileIds[source.Path], source.Hash, generation);
         }
         foreach (var symbol in analysis.Symbols)
         {
-            connection.Execute(transaction, "INSERT INTO symbols VALUES($0,$1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11)", symbol.Id, id,
+            batch.Execute("INSERT INTO symbols VALUES($0,$1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11)", symbol.Id, id,
                 symbol.External ? null : symbol.ContextId, symbol.Identity, symbol.Kind, symbol.Name, symbol.QualifiedName,
                 symbol.Signature, symbol.Revision, symbol.External ? 1 : 0, symbol.Resolution, symbol.ContainerId);
             foreach (var location in symbol.Locations)
-                connection.Execute(transaction, "INSERT INTO locations VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'declaration')", location.Id, symbol.Id,
+                batch.Execute("INSERT INTO locations VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'declaration')", location.Id, symbol.Id,
                     location.ContextId, fileIds[location.FilePath], location.Hash, location.Start, location.End,
                     location.Range.Start.Line, location.Range.Start.Character, location.Range.End.Line, location.Range.End.Character);
             if (!symbol.External)
-                connection.Execute(transaction, "INSERT INTO search_documents(symbol_id,input_revision,name,signature,documentation,description) VALUES($0,$1,$2,$3,$4,$5)",
+                batch.Execute("INSERT INTO search_documents(symbol_id,input_revision,name,signature,documentation,description) VALUES($0,$1,$2,$3,$4,$5)",
                     symbol.Id, symbol.Revision, symbol.QualifiedName + " " + SplitCamel(symbol.Name), symbol.Signature, symbol.Documentation, $"{symbol.Kind} {symbol.QualifiedName}. {symbol.Signature}");
         }
-        EmbeddingReuse.Publish(connection, transaction, analysis, sources, reusable, cancellationToken);
+        EmbeddingReuse.Publish(connection, transaction, analysis, sources, reusable, cancellationToken, batch);
         foreach (var alias in aliases)
             if (connection.Scalar(transaction, "SELECT symbol_id FROM symbols WHERE symbol_id=$0", alias.SymbolId) is not null
                 && (alias.ProjectId is null || connection.Scalar(transaction, "SELECT project_id FROM projects WHERE project_id=$0", alias.ProjectId) is not null))
-                connection.Execute(transaction, "INSERT INTO aliases VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8)", alias.Id, id, alias.ProjectId, alias.SymbolId, alias.Phrase, alias.Key, alias.Origin, alias.Enabled, alias.Created);
+                batch.Execute("INSERT INTO aliases VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8)", alias.Id, id, alias.ProjectId, alias.SymbolId, alias.Phrase, alias.Key, alias.Origin, alias.Enabled, alias.Created);
         foreach (var call in analysis.Calls)
         {
-            connection.Execute(transaction, "INSERT INTO occurrences(occurrence_id,context_id,file_id,owner_symbol_id,target_symbol_id,content_hash,start_offset,end_offset,range_json,resolution) VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8,$9)",
+            batch.Execute("INSERT INTO occurrences(occurrence_id,context_id,file_id,owner_symbol_id,target_symbol_id,content_hash,start_offset,end_offset,range_json,resolution) VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8,$9)",
                 call.Id, call.ContextId, fileIds[call.FilePath], call.OwnerId, call.TargetId, call.Hash, call.Start, call.End, JsonSerializer.Serialize(call.Range), call.Resolution);
             if (call.TargetId is not null)
-                connection.Execute(transaction, "INSERT INTO edges VALUES($0,$1,$2,$3,$4,$5,$9,'compiler',$6,$7,$8)",
+                batch.Execute("INSERT INTO edges VALUES($0,$1,$2,$3,$4,$5,$9,'compiler',$6,$7,$8)",
                     Identity.Id("pci:edge:", call.Id, call.TargetId), call.ContextId, fileIds[call.FilePath], call.OwnerId, call.TargetId, call.Id,
                     call.Resolution, call.Hash, call.Id, call.Kind);
         }
         foreach (var diagnostic in analysis.Diagnostics)
-            connection.Execute(transaction, "INSERT INTO diagnostics VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8)", "pci:diag:" + Guid.NewGuid().ToString("N"), id,
+            batch.Execute("INSERT INTO diagnostics VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8)", "pci:diag:" + Guid.NewGuid().ToString("N"), id,
                 diagnostic.ContextId.Length == 0 ? null : diagnostic.ContextId, diagnostic.FilePath is null ? null : fileIds.GetValueOrDefault(diagnostic.FilePath),
                 diagnostic.Code, diagnostic.Severity, diagnostic.Message, diagnostic.Range is null ? null : JsonSerializer.Serialize(diagnostic.Range), generation);
-        connection.Execute(transaction, "UPDATE repositories SET structural_generation=$0,desired_revision=$0,query_epoch=query_epoch+1,state='ready',last_reconciled_utc=$1 WHERE repository_id=$2",
+        batch.Execute("UPDATE repositories SET structural_generation=$0,desired_revision=$0,query_epoch=query_epoch+1,state='ready',last_reconciled_utc=$1 WHERE repository_id=$2",
             generation, DateTimeOffset.UtcNow.ToString("O"), id);
         // Structural facts and refresh work commit together: a crash cannot strand an active profile without a job.
-        connection.Execute(transaction, "UPDATE jobs SET state='obsolete',lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL WHERE repository_id=$0 AND kind='embed' AND state IN('pending','leased')", id);
+        batch.Execute("UPDATE jobs SET state='obsolete',lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL WHERE repository_id=$0 AND kind='embed' AND state IN('pending','leased')", id);
         var profiles = new List<string>();
         using (var command = connection.Command(transaction, "SELECT model_fingerprint FROM repository_models WHERE repository_id=$0 AND state IN('active','building')", id))
         using (var reader = command.ExecuteReader()) while (reader.Read()) profiles.Add(reader.GetString(0));
@@ -224,7 +225,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             var covered = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.repository_id=$0 AND e.model_fingerprint=$1 AND e.state='ready' AND e.input_revision=s.revision", id, profile));
             if (active && eligible == covered) continue;
             var key = Identity.Id("", profile, generation);
-            connection.Execute(transaction, "INSERT INTO jobs(job_id,repository_id,kind,input_key,payload_json,desired_revision,state,available_utc) VALUES($0,$1,'embed',$2,$3,$4,'pending',$5) ON CONFLICT(repository_id,kind,input_key) DO NOTHING",
+            batch.Execute("INSERT INTO jobs(job_id,repository_id,kind,input_key,payload_json,desired_revision,state,available_utc) VALUES($0,$1,'embed',$2,$3,$4,'pending',$5) ON CONFLICT(repository_id,kind,input_key) DO NOTHING",
                 Identity.Id("pci:job:", id, "embed", key), id, key, JsonSerializer.Serialize(new { fingerprint = profile }), generation, DateTimeOffset.UtcNow.ToString("O"));
         }
         if (leaseToken is not null) Host.DurableScheduler.AssertLease(connection, transaction, leaseToken);
