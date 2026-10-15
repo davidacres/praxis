@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Praxis.CodeIntelligence.Indexing;
 
-public sealed record SourceInput(string Path, string Hash, byte[] Bytes, string Text);
+public sealed record SourceInput(string Path, string Hash, byte[] Bytes, string Text, string Role = "searchableSource");
 
 /// <summary>Bounded source reads. Coordinates use decoded UTF-16; freshness uses raw bytes.</summary>
 public static class SourceFiles
