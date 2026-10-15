@@ -1,4 +1,5 @@
 using System.Text;
+using System.Runtime.InteropServices;
 using Praxis.CodeIntelligence.Indexing;
 using Xunit;
 
@@ -6,6 +7,8 @@ namespace Praxis.CodeIntelligence.Tests;
 
 public sealed class SourceFilesTests : IDisposable
 {
+    [DllImport("libc", EntryPoint = "mkfifo", SetLastError = true)]
+    private static extern int MakeFifo([MarshalAs(UnmanagedType.LPUTF8Str)] string path, uint mode);
     private readonly string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "praxis-source-tests-" + Guid.NewGuid().ToString("N"));
     public SourceFilesTests() => Directory.CreateDirectory(root);
 
@@ -51,6 +54,27 @@ public sealed class SourceFilesTests : IDisposable
         Assert.Equal("class Example {}", SourceFiles.Read(alias, "Example.cs").Text);
         File.CreateSymbolicLink(System.IO.Path.Combine(physical, "linked.cs"), System.IO.Path.Combine(physical, "Example.cs"));
         Assert.Throws<IOException>(() => SourceFiles.Read(physical, "linked.cs"));
+    }
+
+    [Fact]
+    public void RenamedOpenedFileIsRejectedEvenWhenTheOriginalPathIsReplaced()
+    {
+        var path = System.IO.Path.Combine(root, "Example.cs");
+        File.WriteAllText(path, "class Original {}");
+        using var stream = SafeSourceHandle.Read(root, "Example.cs", path);
+        File.Move(path, System.IO.Path.Combine(root, "Moved.cs"));
+        File.WriteAllText(path, "class Replacement {}");
+        Assert.Throws<IOException>(() => SafeSourceHandle.Verify(stream, path));
+        Assert.Equal("class Replacement {}", SourceFiles.Read(root, "Example.cs").Text);
+    }
+
+    [Fact]
+    public async Task FifoSourceCannotBlockTheIndexerWaitingForAWriter()
+    {
+        if (OperatingSystem.IsWindows()) return; // Windows has no filesystem FIFO inputs.
+        var path = System.IO.Path.Combine(root, "Pipe.cs");
+        Assert.Equal(0, MakeFifo(path, 0x180));
+        await Task.Run(() => Assert.Throws<IOException>(() => SourceFiles.Read(root, "Pipe.cs"))).WaitAsync(TimeSpan.FromSeconds(3));
     }
 
     public void Dispose() => Directory.Delete(root, recursive: true);
