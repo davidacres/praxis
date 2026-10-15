@@ -98,3 +98,11 @@ The tokenizer now preserves BERT special tokens consistently with the independen
 `tests/Praxis.CodeIntelligence.Tests/Fixtures/minilm-golden.json` records ten tokenizer cases, exact UTF-16/token chunk spans and four full query vectors. The model-enabled C# suite checks exact token IDs, absolute vector error <= 1e-5 and cosine >= 0.99999. `scripts/generate-model-golden.py` documents the pinned independent Python reference stack; regenerate only for a deliberate reviewed baseline change. Linux x64 passes; Windows/macOS numerical checks remain release gates.
 
 Representations now prioritize qualified name/signature, documentation and baseline description, then append a selected source declaration excerpt (up to 4096 UTF-16 units; total representation cap 16384). Each stored chunk records its exact UTF-16/token bounds, representation hash, truncation, and intersecting original-source spans/hashes. Source is verified before inference and rechecked before atomic publication. Partial declarations select the first location by path/offset deterministically. Current profile fingerprint: `sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba`. Reprovision, install and activate this profile to upgrade.
+
+### Rebuild and relocation recovery
+
+`rebuild <repository>` queues a forced structural republish even for unchanged inputs. It preserves surviving manual aliases, refreshes active-model vectors through durable work and leaves source files untouched. Paused repositories must be resumed first.
+
+`relocate <repository> <new-root> [--manifest newly-captured.praxis.json]` preserves the repository ID and exclusion policy while clearing old derived facts and revoking provider grants. It schedules indexing at the new canonical root and rebinds watchers. A destination already registered under another ID is rejected. Old captures may contain absolute paths, so the old manifest is dropped unless a newly captured manifest is explicitly supplied. Reapprove provider access after reviewing the relocated root. Paused repositories remain paused.
+
+Provider grants now bind to the canonical root and a unique issuance nonce, checked again before a query response is returned. Legacy grants without these fields fail closed; disable/re-enable provider access to reissue consent.
