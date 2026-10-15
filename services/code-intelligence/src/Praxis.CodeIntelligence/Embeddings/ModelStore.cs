@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Text;
-using System.Runtime.InteropServices;
 using Microsoft.Data.Sqlite;
 using Praxis.CodeIntelligence.Indexing;
 using Praxis.CodeIntelligence.Storage;
@@ -12,7 +11,7 @@ public sealed record VectorCandidate(string SymbolId, double Score);
 
 public sealed class ModelStore(IndexDatabase database, string directory) : IDisposable
 {
-    public const int VectorScorerVersion = 2;
+    public const int VectorScorerVersion = 3;
     private readonly object queryLock = new(); private LocalModel? cached; private string? cachedFingerprint;
     private string ProfileDirectory(string fingerprint)
     {
@@ -155,15 +154,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             if (++scanned > 200_000) throw new InvalidOperationException("VECTOR_CAPACITY_EXCEEDED");
             if ((scanned & 127) == 0) cancellationToken.ThrowIfCancellationRequested();
             if (reader.GetBytes(1, 0, null, 0, 0) != bytes.Length || reader.GetBytes(1, 0, bytes, 0, bytes.Length) != bytes.Length) continue;
-            var native = MemoryMarshal.Cast<byte, float>(bytes.AsSpan()); double score = 0, norm = 0; var finite = true;
-            // One reusable buffer and one pass: no per-chunk float arrays or LINQ enumerations.
-            for (var dimension = 0; dimension < LocalModel.Dimensions; dimension++)
-            {
-                var value = BitConverter.IsLittleEndian ? native[dimension] : BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(dimension * 4, 4));
-                if (!float.IsFinite(value)) { finite = false; break; }
-                norm += (double)value * value; score += value * query.Vector[dimension];
-            }
-            if (!finite || Math.Abs(norm - 1) > 0.001) continue;
+            if (!VectorScoring.TryScore(bytes, query.Vector, out var score)) continue;
             var id = reader.GetString(0); scores[id] = scores.TryGetValue(id, out var previous) ? Math.Max(previous, score) : score;
         }
         cancellationToken.ThrowIfCancellationRequested();
