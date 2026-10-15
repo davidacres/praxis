@@ -46,7 +46,14 @@ try
     var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root, new("context.praxis.json"));
     Console.Error.WriteLine($"Indexing {symbols} generated symbols.");
     var watch = Stopwatch.StartNew(); var initial = indexer.Index(repository); var initialMs = watch.Elapsed.TotalMilliseconds;
-    if (initial.Symbols != symbols) throw new InvalidOperationException($"Expected {symbols} symbols, got {initial.Symbols}.");
+    int sourceSymbols;
+    using (var read = database.Open(readOnly: true))
+    using (var count = read.CreateCommand())
+    {
+        count.CommandText = "SELECT count(*) FROM symbols WHERE external=0";
+        sourceSymbols = Convert.ToInt32(count.ExecuteScalar());
+    }
+    if (sourceSymbols != symbols) throw new InvalidOperationException($"Expected {symbols} source symbols, got {sourceSymbols}.");
     using var models = new ModelStore(database, Path.Combine(temporary, "models"));
     string? fingerprint = null; double? initialVectorsMs = null;
     if (options.TryGetValue("--model", out var bundle))
@@ -108,11 +115,11 @@ try
 #endif
         OperatingSystem = RuntimeInformation.OSDescription, Architecture = RuntimeInformation.ProcessArchitecture.ToString(),
         LogicalProcessors = Environment.ProcessorCount, Runtime = RuntimeInformation.FrameworkDescription, Sqlite = command.ExecuteScalar(),
-        ModelFingerprint = fingerprint, RequestedSymbols = symbols, PublishedSymbols = initial.Symbols, SourceFiles = paths.Count,
+        ModelFingerprint = fingerprint, RequestedSymbols = symbols, PublishedSymbols = initial.Symbols, PublishedSourceSymbols = sourceSymbols, SourceFiles = paths.Count,
         CorpusHash = SourceFiles.Hash(Encoding.UTF8.GetBytes(string.Join("\n", hashes))), ReferenceAssemblyHash = referenceHash,
         InitialIndexMs = initialMs, InitialVectorsMs = initialVectorsMs, Lexical = lexical, Hybrid = hybrid,
         NoOpIndexMs = noOpMs, BodyEditMs = editMs, VectorRefreshMs = refreshMs, PeakRssBytes = rss, Gates = gates,
-        Unmeasured = new[] { "owner/native IPC", "MCP/provider transport", "held-out relevance", "other platforms", "representative real repository" },
+        Unmeasured = new[] { "owner/native IPC", "MCP/provider transport", "held-out relevance", "other platforms", "representative real repository", "edit p95 including watcher debounce" },
         PassedMeasuredGates = gates.Values.All(value => value != false)
     };
     Directory.CreateDirectory(Path.GetDirectoryName(output)!);
