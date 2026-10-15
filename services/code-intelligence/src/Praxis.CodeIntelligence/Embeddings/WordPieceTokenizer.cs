@@ -16,20 +16,27 @@ public sealed class WordPieceTokenizer
         if (maximumTokens < 3 || maximumChunks is < 1 or > 4) throw new ArgumentException("Tokenizer limits are invalid.");
         var words = new List<string>(); var current = new StringBuilder();
         void Flush() { if (current.Length > 0) { words.Add(current.ToString()); current.Clear(); } }
-        foreach (var rune in text.ToLowerInvariant().Normalize(NormalizationForm.FormD).EnumerateRunes())
+        // BERT added tokens are case-sensitive and bypass ordinary normalization.
+        foreach (var segment in System.Text.RegularExpressions.Regex.Split(text, @"(\[UNK\]|\[CLS\]|\[SEP\]|\[PAD\]|\[MASK\])"))
         {
-            var category = Rune.GetUnicodeCategory(rune);
-            if (category == UnicodeCategory.NonSpacingMark) continue;
-            if (Rune.IsWhiteSpace(rune)) { Flush(); continue; }
-            if (category is UnicodeCategory.Control or UnicodeCategory.Format) continue;
-            var value = rune.Value;
-            var punctuation = (value is >= 33 and <= 47 or >= 58 and <= 64 or >= 91 and <= 96 or >= 123 and <= 126)
-                || category is UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation or UnicodeCategory.OpenPunctuation
-                    or UnicodeCategory.ClosePunctuation or UnicodeCategory.InitialQuotePunctuation or UnicodeCategory.FinalQuotePunctuation or UnicodeCategory.OtherPunctuation;
-            var chinese = value is >= 0x4e00 and <= 0x9fff or >= 0x3400 and <= 0x4dbf or >= 0x20000 and <= 0x2fa1f;
-            if (punctuation || chinese) { Flush(); words.Add(rune.ToString()); } else current.Append(rune.ToString());
+            if (segment is "[UNK]" or "[CLS]" or "[SEP]" or "[PAD]" or "[MASK]" && vocabulary.ContainsKey(segment))
+            { Flush(); words.Add(segment); continue; }
+            foreach (var rune in segment.ToLowerInvariant().Normalize(NormalizationForm.FormD).EnumerateRunes())
+            {
+                var category = Rune.GetUnicodeCategory(rune);
+                if (category == UnicodeCategory.NonSpacingMark) continue;
+                if (Rune.IsWhiteSpace(rune)) { Flush(); continue; }
+                if (category is UnicodeCategory.Control or UnicodeCategory.Format) continue;
+                var value = rune.Value;
+                var punctuation = (value is >= 33 and <= 47 or >= 58 and <= 64 or >= 91 and <= 96 or >= 123 and <= 126)
+                    || category is UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation or UnicodeCategory.OpenPunctuation
+                        or UnicodeCategory.ClosePunctuation or UnicodeCategory.InitialQuotePunctuation or UnicodeCategory.FinalQuotePunctuation or UnicodeCategory.OtherPunctuation;
+                var chinese = value is >= 0x4e00 and <= 0x9fff or >= 0x3400 and <= 0x4dbf or >= 0x20000 and <= 0x2fa1f;
+                if (punctuation || chinese) { Flush(); words.Add(rune.ToString()); } else current.Append(rune.ToString());
+            }
+            Flush();
         }
-        Flush(); var pieces = new List<long>();
+        var pieces = new List<long>();
         foreach (var word in words)
         {
             if (word.Length > 100) { pieces.Add(vocabulary["[UNK]"]); continue; }
