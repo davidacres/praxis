@@ -59,6 +59,14 @@ Unix source opening now uses platform-specific descriptor-relative no-follow tra
 
 **54 C# tests passed, 0 failed, 0 skipped** on Linux x64. Deterministic rename/replacement and FIFO timeout regressions pass. Windows/macOS branches compile but require native execution, including links/junctions, case/Unicode paths and concurrent swaps; this is not a cross-platform pass claim.
 
+## Recovery operations checkpoint (15 October)
+
+Service/CLI rebuild queues a forced republish under the durable lease protocol; unchanged inputs advance generation and surviving manual aliases persist. Relocation keeps repository identity/exclusions, clears old facts, revokes root-bound provider grants and drops old captured manifests unless explicitly replaced. Indexing is queued for the new root; paused repositories remain paused. Duplicate destination registrations are rejected. Watchers rebind on root changes and are recreated after root loss/errors.
+
+Provider consent includes canonical root and an issuance nonce. Queries recheck the exact grant after execution before returning data, so revoked/reissued or old-root consent cannot authorize a result. Legacy grants require explicit reapproval.
+
+**57 C# tests passed, 0 failed, 0 skipped** on Linux x64. New runtime tests cover forced rebuild/alias retention, relocation/fact revocation/provider reapproval/duplicate-root rejection and real watcher rebinding. Desktop controls still need wiring; native IPC/platform/UI execution and release gates remain outstanding.
+
 ## Verification evidence
 
 15 October: C#38 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution. Explicit SDK capture, stale/deleted inputs, generated support non-disclosure and alias preservation also pass.
