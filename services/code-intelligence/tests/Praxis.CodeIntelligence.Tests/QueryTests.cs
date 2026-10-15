@@ -34,6 +34,47 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public void PossibleDispatchIsOptInAndBaseCallsStayStaticallyBound()
+    {
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "interface IWorker { int Work(); } class Base { public virtual int Work() => 1; } class Derived : Base, IWorker { public override int Work() => base.Work(); } class Caller { int ViaBase(Base value) => value.Work(); int ViaInterface(IWorker value) => value.Work(); }");
+        indexer.Index(repository);
+        foreach (var name in new[] { "ViaBase", "ViaInterface" })
+        {
+            var caller = Symbol(name); var id = caller["symbolId"]!.GetValue<string>();
+            var definite = Query("get_callees", new() { ["symbolId"] = id });
+            Assert.Single(definite["data"]!["items"]!.AsArray());
+            var possible = Query("get_callees", new() { ["symbolId"] = id, ["includePossibleTargets"] = true });
+            Assert.Null(possible["error"]);
+            Assert.Equal(2, possible["data"]!["items"]!.AsArray().Count);
+            var candidate = Assert.Single(possible["data"]!["items"]!.AsArray(), edge => edge!["kind"]!.GetValue<string>() == "may_call");
+            Assert.Equal("possible", candidate!["resolution"]!.GetValue<string>());
+            Assert.NotEmpty(candidate["evidenceIds"]!.AsArray());
+        }
+        var derived = Query("find_symbol", new() { ["name"] = "Work", ["qualifiedName"] = "Derived.Work()" })["data"]!["items"]![0]!;
+        Assert.Single(Query("get_callees", new() { ["symbolId"] = derived["symbolId"]!.DeepClone(), ["includePossibleTargets"] = true })["data"]!["items"]!.AsArray());
+    }
+
+    [Fact]
+    public void TypeRelationshipsHaveEvidenceAndNeverLeakIntoCallQueries()
+    {
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "interface IContract {} interface IDerived : IContract {} class Base {} class Derived : Base, IDerived {}");
+        indexer.Index(repository);
+        var derived = Symbol("Derived"); var id = derived["symbolId"]!.GetValue<string>();
+        Assert.Empty(Query("get_callees", new() { ["symbolId"] = id })["data"]!["items"]!.AsArray());
+        var related = Query("find_related", new() { ["symbolId"] = id, ["kinds"] = new JsonArray("implements") });
+        Assert.Null(related["error"]);
+        Assert.Single(related["data"]!["items"]!.AsArray());
+        Assert.Contains("IDerived", related["data"]!["items"]![0]!["symbol"]!["qualifiedName"]!.GetValue<string>());
+        var trace = Query("trace_flow", new() { ["symbolId"] = id, ["edgeKinds"] = new JsonArray("inherits", "implements") });
+        Assert.Null(trace["error"]);
+        Assert.Equal(3, trace["data"]!["edges"]!.AsArray().Count);
+        Assert.All(trace["data"]!["edges"]!.AsArray(), edge => Assert.NotEmpty(edge!["evidenceIds"]!.AsArray()));
+        var contract = Symbol("IContract");
+        Assert.Empty(Query("get_callers", new() { ["symbolId"] = contract["symbolId"]!.DeepClone() })["data"]!["items"]!.AsArray());
+        Assert.Empty(database.Check());
+    }
+
+    [Fact]
     public void LargeValidFiltersKeepCursorsWithinTheWireLimit()
     {
         var kinds = new JsonArray("method"); for (var index = 0; index < 49; index++) kinds.Add(new string('x', 60) + index);
