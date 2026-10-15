@@ -19,6 +19,15 @@
           102
         ]
       ],
+      "chunkSpans": [
+        {
+          "start": 0,
+          "end": 0,
+          "firstToken": 0,
+          "endToken": 0,
+          "truncated": false
+        }
+      ],
       "queryVector": [
         -0.1188383549451828,
         0.04829869791865349,
@@ -417,6 +426,15 @@
           19204,
           102
         ]
+      ],
+      "chunkSpans": [
+        {
+          "start": 0,
+          "end": 26,
+          "firstToken": 0,
+          "endToken": 4,
+          "truncated": false
+        }
       ],
       "queryVector": [
         -0.051015716046094894,
@@ -820,6 +838,15 @@
           1012,
           102
         ]
+      ],
+      "chunkSpans": [
+        {
+          "start": 0,
+          "end": 33,
+          "firstToken": 0,
+          "endToken": 8,
+          "truncated": false
+        }
       ],
       "queryVector": [
         -0.02895773947238922,
@@ -1233,6 +1260,15 @@
           1065,
           102
         ]
+      ],
+      "chunkSpans": [
+        {
+          "start": 0,
+          "end": 59,
+          "firstToken": 0,
+          "endToken": 18,
+          "truncated": false
+        }
       ]
     },
     {
@@ -1254,6 +1290,15 @@
           100,
           102
         ]
+      ],
+      "chunkSpans": [
+        {
+          "start": 0,
+          "end": 12,
+          "firstToken": 0,
+          "endToken": 12,
+          "truncated": false
+        }
       ],
       "queryVector": [
         -0.04056314006447792,
@@ -1654,6 +1699,15 @@
           5657,
           102
         ]
+      ],
+      "chunkSpans": [
+        {
+          "start": 0,
+          "end": 23,
+          "firstToken": 0,
+          "endToken": 5,
+          "truncated": false
+        }
       ]
     },
     {
@@ -1668,6 +1722,15 @@
           103,
           102
         ]
+      ],
+      "chunkSpans": [
+        {
+          "start": 0,
+          "end": 30,
+          "firstToken": 0,
+          "endToken": 5,
+          "truncated": false
+        }
       ]
     },
     {
@@ -2705,6 +2768,80 @@
           8043,
           102
         ]
+      ],
+      "chunkSpans": [
+        {
+          "start": 0,
+          "end": 1784,
+          "firstToken": 0,
+          "endToken": 254,
+          "truncated": true
+        },
+        {
+          "start": 1785,
+          "end": 3555,
+          "firstToken": 254,
+          "endToken": 508,
+          "truncated": true
+        },
+        {
+          "start": 3556,
+          "end": 5340,
+          "firstToken": 508,
+          "endToken": 762,
+          "truncated": true
+        },
+        {
+          "start": 5341,
+          "end": 7111,
+          "firstToken": 762,
+          "endToken": 1016,
+          "truncated": true
+        }
+      ]
+    },
+    {
+      "text": "İstanbul Café � hello",
+      "tokenChunks": [
+        [
+          101,
+          9960,
+          7668,
+          7592,
+          102
+        ]
+      ],
+      "chunkSpans": [
+        {
+          "start": 0,
+          "end": 22,
+          "firstToken": 0,
+          "endToken": 3,
+          "truncated": false
+        }
+      ]
+    },
+    {
+      "text": "prefix 😀 suffix 𠀀 end",
+      "tokenChunks": [
+        [
+          101,
+          17576,
+          100,
+          16809,
+          100,
+          2203,
+          102
+        ]
+      ],
+      "chunkSpans": [
+        {
+          "start": 0,
+          "end": 23,
+          "firstToken": 0,
+          "endToken": 5,
+          "truncated": false
+        }
       ]
     }
   ]
