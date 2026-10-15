@@ -28,10 +28,14 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 | Linux arm64/macOS x64 | Additional build targets | None in this environment |
 | Claude Code/Codex/Copilot/Antigravity | Existing MCP routing plus explicit destination grants | Generic SDK mock only; no actual adapter tool invocation claim |
 
+## Semantic graph checkpoint — 15 October
+
+44 C# tests passed, 0 failed, 0 skipped, including provisioned ONNX and explicit SDK capture. 86 captured responses across all 11 tool schemas passed JSON Schema 2020-12 validation. New fixtures cover semantic/syntax top-level entries, context roots, initializer/lambda ownership, type relationships, optional virtual/interface candidates and static base calls. No UI changes in this checkpoint.
+
 ## Remaining code and acceptance work
 
 1. Independent golden tokenizer/vector fixture/checksum and cross-platform numerical tolerance; persist precise representation chunk spans and selected source excerpts.
-2. Complete local callable/synthetic top-level ownership, possible dispatch and additional type relationships. Current graph is bounded static calls.
+2. Extend member/type/reference relationships and delegate points-to analysis. Local callable, synthetic project-root/top-level ownership, type inheritance/implementation and optional bounded virtual/interface candidates now have regression coverage. Candidates are possible structural targets, not runtime proof.
 3. Verify all budget/pagination boundaries, output truncation and freshness errors against A01–A40. The service can return an explicit budget error; it does not yet fully trim every collection/source case.
 4. Harden and execute Windows/macOS source-handle race fixtures. Linux descriptor-relative reads are implemented.
 5. Add dedicated rebuild/relocate workflows, final UI walkthrough/functional e2e and provider cancellation/error transcripts.
