@@ -37,7 +37,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             var evidence = new Dictionary<string, JsonObject>(StringComparer.Ordinal); var warnings = new JsonArray();
             var contextId = Text(arguments, "contextId");
             var offset = Text(arguments, "cursor") is string cursor ? cursors.Read(cursor, tool, arguments, epoch.Value) : 0;
-            var limit = Number(arguments, "limit", tool is "search_code" or "find_symbol" ? 20 : 100);
+            var limit = Number(arguments, "limit", tool is "search_code" or "find_symbol" or "find_related" ? 10 : 50);
             var more = false; var contentTruncated = false;
             var unresolvedOwners = new Dictionary<string, string>(StringComparer.Ordinal);
             JsonObject Symbol(string symbolId)
@@ -128,9 +128,9 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     bool Eligible(JsonObject row)
                     {
                         var filters = arguments["filters"] as JsonObject;
-                        if (filters?["languages"] is JsonArray languages && !languages.Any(x => x!.GetValue<string>() == "csharp")) return false;
-                        if (filters?["kinds"] is JsonArray kinds && !kinds.Any(x => x!.GetValue<string>() == Text(row, "kind"))) return false;
-                        if (filters?["projectIds"] is JsonArray projects)
+                        if (filters?["languages"] is JsonArray { Count: > 0 } languages && !languages.Any(x => x!.GetValue<string>() == "csharp")) return false;
+                        if (filters?["kinds"] is JsonArray { Count: > 0 } kinds && !kinds.Any(x => x!.GetValue<string>() == Text(row, "kind"))) return false;
+                        if (filters?["projectIds"] is JsonArray { Count: > 0 } projects)
                         {
                             var project = connection.Scalar(transaction, "SELECT project_id FROM contexts WHERE context_id=$0", Text(row, "defining_context_id")) as string;
                             if (!projects.Any(x => x!.GetValue<string>() == project)) return false;
@@ -154,7 +154,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         var kinds = filters?["kinds"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
                         var projects = filters?["projectIds"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
                         var languages = filters?["languages"]?.AsArray();
-                        var vectors = languages is not null && !languages.Any(x => x!.GetValue<string>() == "csharp") ? []
+                        var vectors = languages is { Count: > 0 } && !languages.Any(x => x!.GetValue<string>() == "csharp") ? []
                             : ModelStore.Candidates(connection, transaction, repositoryId, embedded, contextId, kinds, projects);
                         var position = 0;
                         foreach (var vector in vectors)
@@ -288,7 +288,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 {
                     var symbolId = Text(arguments, "symbolId")!; Symbol(symbolId);
                     var edges = Edges(symbolId, false, 1000).Concat(Edges(symbolId, true, 1000));
-                    if (arguments["kinds"] is JsonArray kinds) edges = edges.Where(row => kinds.Any(k => k!.GetValue<string>() == Text(row, "kind")));
+                    if (arguments["kinds"] is JsonArray { Count: > 0 } kinds) edges = edges.Where(row => kinds.Any(k => k!.GetValue<string>() == Text(row, "kind")));
                     var ids = edges.Select(row => Text(row, "source_symbol_id") == symbolId ? Text(row, "target_symbol_id")! : Text(row, "source_symbol_id")!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
                     more = ids.Length > offset + limit;
                     data = new() { ["items"] = Array(ids.Skip(offset).Take(limit).Select(relatedId =>
@@ -296,7 +296,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 }
                 case "trace_flow":
                 {
-                    var root = Text(arguments, "symbolId")!; var depth = Number(arguments, "depth", 3); var maxNodes = Number(arguments, "maxNodes", 100); var maxEdges = Number(arguments, "maxEdges", 200);
+                    var root = Text(arguments, "symbolId")!; var depth = Number(arguments, "depth", 3); var maxNodes = Number(arguments, "maxNodes", 100); var maxEdges = Number(arguments, "maxEdges", 2000);
                     var nodes = new Dictionary<string, JsonObject>(StringComparer.Ordinal) { [root] = Symbol(root) }; var edges = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
                     var boundaries = new Dictionary<string, JsonObject>(StringComparer.Ordinal); var queue = new Queue<(string Id, int Depth)>(); queue.Enqueue((root, 0));
                     var incoming = Text(arguments, "direction") == "incoming";
@@ -307,7 +307,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         { boundaries[item.Id] = new() { ["symbolId"] = item.Id, ["reason"] = item.Depth == depth ? "depthLimit" : "externalSymbol" }; continue; }
                         foreach (var row in Edges(item.Id, incoming, Math.Min(2001, maxEdges + 1)))
                         {
-                            if (arguments["edgeKinds"] is JsonArray kinds && !kinds.Any(k => k!.GetValue<string>() == Text(row, "kind"))) continue;
+                            if (arguments["edgeKinds"] is JsonArray { Count: > 0 } kinds && !kinds.Any(k => k!.GetValue<string>() == Text(row, "kind"))) continue;
                             var next = Text(row, incoming ? "source_symbol_id" : "target_symbol_id")!;
                             if (edges.Count >= maxEdges || (!nodes.ContainsKey(next) && nodes.Count >= maxNodes))
                             { contentTruncated = true; boundaries[item.Id] = new() { ["symbolId"] = item.Id, ["reason"] = "graphBudget" }; continue; }
