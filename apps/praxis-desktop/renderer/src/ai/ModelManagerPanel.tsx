@@ -319,47 +319,54 @@ export function ModelManagerPanel({
         {!loading && catalog && (
           <div className="model-manager-list" data-testid="model-manager-list">
             {filteredOptions.length === 0 && <p className="placeholder-text">No matching models.</p>}
-            {filteredOptions.map(option => (
-              <label className="model-manager-row" key={option.value} data-testid="model-manager-row">
-                <input
-                  type="checkbox"
-                  checked={isEnabled(option.value)}
-                  onChange={() => toggle(option.value)}
-                  data-testid={`model-manager-checkbox-${option.value}`}
-                />
-                <span className="model-manager-row-name">{option.name}</span>
-                <span className="model-manager-row-id">{option.value}</span>
-                <span className="model-manager-tier-wrap" onClick={event => event.stopPropagation()}>
-                  <ChipSelect
-                    className="model-manager-tier"
-                    ariaLabel={`Model tier for ${option.name}`}
-                    title="Which workflow tier this model serves on this provider"
-                    data-testid={`model-manager-tier-${option.value}`}
-                    value={tierOf(option.value)}
-                    onChange={value => setTier(option.value, value as TierName | '')}
-                    options={[
-                      { value: '', label: 'No tier' },
-                      { value: 'fast', label: 'Fast' },
-                      { value: 'standard', label: 'Standard' },
-                      { value: 'strong', label: 'Strong' }
-                    ]}
+            {filteredOptions.map(option => {
+              const contextSize = formatContextLength(option.contextLength ?? getKnownContextLength(option.value, providerId)) ?? option.contextLabel;
+              const cost = modelPriceLabel(option.pricingLabel ?? formatModelCost(option.pricing ?? getModelPricing(providerId, option.value)));
+              return (
+                <label className="model-manager-row" key={option.value} data-testid="model-manager-row">
+                  <input
+                    type="checkbox"
+                    checked={isEnabled(option.value)}
+                    onChange={() => toggle(option.value)}
+                    data-testid={`model-manager-checkbox-${option.value}`}
                   />
-                </span>
-                {supportsReasoningEffort(providerId, option.value) && (
+                  <span className="model-manager-row-name">{option.name}</span>
+                  <span className="model-manager-chip-meta">
+                    {contextSize && <span className="composer-model-badge is-context">{contextSize}</span>}
+                    {cost && <span className="composer-model-badge is-cost" title={modelPriceTitle(option.pricingLabel)}>{cost}</span>}
+                  </span>
                   <span className="model-manager-tier-wrap" onClick={event => event.stopPropagation()}>
                     <ChipSelect
                       className="model-manager-tier"
-                      ariaLabel={`Default reasoning effort for ${option.name}`}
-                      title="Default reasoning/thinking effort new sessions on this model start with"
-                      data-testid={`model-manager-reasoning-${option.value}`}
-                      value={reasoningDefaultOf(option.value)}
-                      onChange={value => setReasoningDefault(option.value, value as ReasoningEffort)}
-                      options={REASONING_EFFORT_OPTIONS}
+                      ariaLabel={`Model tier for ${option.name}`}
+                      title="Which workflow tier this model serves on this provider"
+                      data-testid={`model-manager-tier-${option.value}`}
+                      value={tierOf(option.value)}
+                      onChange={value => setTier(option.value, value as TierName | '')}
+                      options={[
+                        { value: '', label: 'No tier' },
+                        { value: 'fast', label: 'Fast' },
+                        { value: 'standard', label: 'Standard' },
+                        { value: 'strong', label: 'Strong' }
+                      ]}
                     />
                   </span>
-                )}
-              </label>
-            ))}
+                  {supportsReasoningEffort(providerId, option.value) && (
+                    <span className="model-manager-tier-wrap" onClick={event => event.stopPropagation()}>
+                      <ChipSelect
+                        className="model-manager-tier"
+                        ariaLabel={`Default reasoning effort for ${option.name}`}
+                        title="Default reasoning/thinking effort new sessions on this model start with"
+                        data-testid={`model-manager-reasoning-${option.value}`}
+                        value={reasoningDefaultOf(option.value)}
+                        onChange={value => setReasoningDefault(option.value, value as ReasoningEffort)}
+                        options={REASONING_EFFORT_OPTIONS}
+                      />
+                    </span>
+                  )}
+                </label>
+              );
+            })}
           </div>
         )}
       </div>

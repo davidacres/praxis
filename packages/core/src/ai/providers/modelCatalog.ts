@@ -166,7 +166,14 @@ export async function listCatalogModels(
           ...(pricing || known?.pricing ? { pricing: pricing ?? known?.pricing } : {})
         };
       }
-      return pricing ? { ...choice, pricing } : choice;
+      const contextLength = (typeof choice.contextLength === 'number' && choice.contextLength > 0)
+        ? choice.contextLength
+        : getKnownContextLength(choice.value, provider);
+      return {
+        ...choice,
+        ...(contextLength ? { contextLength } : {}),
+        ...(pricing ? { pricing } : {})
+      };
     });
     for (const extra of manualChoices()) {
       if (!choices.some(choice => choice.value === extra.value)) choices.push(extra);

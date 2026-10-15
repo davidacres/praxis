@@ -12577,16 +12577,6 @@ button.session-chat-attachment {
   font-size: var(--text-md);
 }
 
-.model-manager-row-id {
-  font-size: var(--text-xs);
-  font-family: var(--font-mono);
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 40%;
-}
-
 /* Composer model configuration uses the same saved provider curation as
    Settings, but presented as a standard dialog: titlebar + icon actions,
    full-width search row, scrolling rows, footer actions bottom-right. */
