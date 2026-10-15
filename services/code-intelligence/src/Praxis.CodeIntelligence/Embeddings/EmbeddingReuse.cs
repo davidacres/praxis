@@ -67,7 +67,7 @@ internal static class EmbeddingReuse
 
     public static void Publish(SqliteConnection connection, SqliteTransaction transaction, RepositoryAnalysis analysis,
         IReadOnlyList<SourceInput> sources, IReadOnlyDictionary<(string Symbol, string Profile), ReusableEmbedding> captured,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, SqlBatch batch)
     {
         if (captured.Count == 0) return;
         var byPath = sources.ToDictionary(source => source.Path, StringComparer.Ordinal);
@@ -84,11 +84,11 @@ internal static class EmbeddingReuse
             {
                 if (cached.Hash != representation.Hash || cached.Chunks.Any(chunk => chunk.Span.End > representation.Text.Length)) continue;
                 var setId = Identity.Id("pci:vector:", symbol.Id, cached.Fingerprint, representation.Hash);
-                connection.Execute(transaction, "INSERT INTO representation_targets VALUES($0,$1,$2,$3,'eligible',NULL)", symbol.Id, cached.Fingerprint, symbol.Revision, representation.Hash);
-                connection.Execute(transaction, "INSERT INTO embedding_sets VALUES($0,$1,$2,$3,$4,$5,'pending',NULL)", setId, symbol.Id, cached.Fingerprint, symbol.Revision, representation.Hash, cached.ExpectedChunks);
+                batch.Execute("INSERT INTO representation_targets VALUES($0,$1,$2,$3,'eligible',NULL)", symbol.Id, cached.Fingerprint, symbol.Revision, representation.Hash);
+                batch.Execute("INSERT INTO embedding_sets VALUES($0,$1,$2,$3,$4,$5,'pending',NULL)", setId, symbol.Id, cached.Fingerprint, symbol.Revision, representation.Hash, cached.ExpectedChunks);
                 for (var i = 0; i < cached.Chunks.Count; i++)
-                    connection.Execute(transaction, "INSERT INTO vectors VALUES($0,$1,384,$2,$3)", setId, i, cached.Chunks[i].Values, RepresentationBuilder.ChunkMetadata(representation, cached.Chunks[i].Span));
-                connection.Execute(transaction, "UPDATE embedding_sets SET state='ready' WHERE set_id=$0", setId);
+                    batch.Execute("INSERT INTO vectors VALUES($0,$1,384,$2,$3)", setId, i, cached.Chunks[i].Values, RepresentationBuilder.ChunkMetadata(representation, cached.Chunks[i].Span));
+                batch.Execute("UPDATE embedding_sets SET state='ready' WHERE set_id=$0", setId);
             }
         }
     }
