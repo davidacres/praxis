@@ -71,8 +71,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         using var writer = database.Open(); using var transaction = writer.BeginTransaction(deferred: false);
         if (Convert.ToInt64(writer.Scalar(transaction, "SELECT query_epoch FROM repositories WHERE repository_id=$0", repositoryId)) != repository.QueryEpoch)
             throw new InvalidOperationException("INDEX_STALE: embedding inputs changed during inference.");
-        if (leaseToken is not null && writer.Scalar(transaction, "SELECT lease_token FROM jobs WHERE lease_token=$0 AND state='leased'", leaseToken) is null)
-            throw new InvalidOperationException("INDEX_STALE: embedding job lease was replaced.");
+        if (leaseToken is not null) Host.DurableScheduler.AssertLease(writer, transaction, leaseToken);
         writer.Execute(transaction, "UPDATE repository_models SET state='retiring' WHERE repository_id=$0 AND state='active' AND model_fingerprint!=$1", repositoryId, fingerprint);
         writer.Execute(transaction, "INSERT INTO repository_models VALUES($0,$1,'active',$2) ON CONFLICT(repository_id,model_fingerprint) DO UPDATE SET state='active',activated_utc=excluded.activated_utc", repositoryId, fingerprint, DateTimeOffset.UtcNow.ToString("O"));
         foreach (var item in embeddings)
@@ -90,6 +89,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             writer.Execute(transaction, "UPDATE embedding_sets SET state='ready' WHERE set_id=$0", set);
         }
         writer.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repositoryId);
+        if (leaseToken is not null) Host.DurableScheduler.AssertLease(writer, transaction, leaseToken);
         cancellationToken.ThrowIfCancellationRequested(); transaction.Commit();
     }
 
