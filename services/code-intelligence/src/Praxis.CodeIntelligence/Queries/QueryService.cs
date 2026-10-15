@@ -87,11 +87,11 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     ["targetSymbolId"] = row["target_symbol_id"]!.DeepClone(), ["kind"] = row["kind"]!.DeepClone(), ["provenance"] = row["provenance"]!.DeepClone(),
                     ["resolution"] = row["resolution"]!.DeepClone(), ["evidenceIds"] = evidenceIds };
             }
-            List<JsonObject> Edges(string symbolId, bool incoming, int maximum)
+            List<JsonObject> Edges(string symbolId, bool incoming, int maximum, string? kind = null)
             {
                 var side = incoming ? "target_symbol_id" : "source_symbol_id";
-                return Rows(connection, transaction, $"SELECT e.* FROM edges e JOIN symbols s ON s.symbol_id=e.source_symbol_id WHERE s.repository_id=$0 AND e.{side}=$1 AND ($2 IS NULL OR e.owner_context_id=$2) AND ($3=1 OR e.resolution='resolved') ORDER BY edge_id LIMIT $4", repositoryId, symbolId,
-                    contextId, Flag(arguments, "includePossibleTargets") ? 1 : 0, maximum);
+                return Rows(connection, transaction, $"SELECT e.* FROM edges e JOIN symbols s ON s.symbol_id=e.source_symbol_id WHERE s.repository_id=$0 AND e.{side}=$1 AND ($2 IS NULL OR e.owner_context_id=$2) AND ($3=1 OR e.resolution='resolved') AND ($5 IS NULL OR e.kind=$5 OR ($5='calls' AND $3=1 AND e.kind='may_call')) ORDER BY edge_id LIMIT $4", repositoryId, symbolId,
+                    contextId, Flag(arguments, "includePossibleTargets") ? 1 : 0, maximum, kind);
             }
             JsonObject data;
             switch (tool)
@@ -241,7 +241,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 case "get_callers": case "get_callees":
                 {
                     var symbolId = Text(arguments, "symbolId")!; Symbol(symbolId);
-                    var edges = Edges(symbolId, tool == "get_callers", offset + limit + 1); more = edges.Count > offset + limit;
+                    var edges = Edges(symbolId, tool == "get_callers", offset + limit + 1, "calls"); more = edges.Count > offset + limit;
                     data = new() { ["items"] = Array(edges.Skip(offset).Take(limit).Select(row => (JsonNode?)Relation(row))) }; break;
                 }
                 case "find_related":
@@ -252,7 +252,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     var ids = edges.Select(row => Text(row, "source_symbol_id") == symbolId ? Text(row, "target_symbol_id")! : Text(row, "source_symbol_id")!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
                     more = ids.Length > offset + limit;
                     data = new() { ["items"] = Array(ids.Skip(offset).Take(limit).Select(relatedId =>
-                    { var symbol = Symbol(relatedId); return (JsonNode?)new JsonObject { ["symbol"] = symbol, ["reasons"] = new JsonArray("staticCallRelation"), ["evidenceIds"] = symbol["declarations"]!.DeepClone() }; })) }; break;
+                    { var symbol = Symbol(relatedId); return (JsonNode?)new JsonObject { ["symbol"] = symbol, ["reasons"] = new JsonArray("compilerRelationship"), ["evidenceIds"] = symbol["declarations"]!.DeepClone() }; })) }; break;
                 }
                 case "trace_flow":
                 {
