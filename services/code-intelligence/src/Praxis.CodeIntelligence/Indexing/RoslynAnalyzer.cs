@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Indexing;
 /// <summary>In-memory compiler analysis from explicit inputs. Never evaluates a project or executes generators.</summary>
 public sealed class RoslynAnalyzer
 {
-    public const string AdapterVersion = "roslyn-5.9/v2";
+    public const string AdapterVersion = "roslyn-5.9/v3";
     private sealed record CompilationInput(PassiveProject Project, IndexedContext Context, CSharpCompilation Compilation);
     private static readonly SymbolDisplayFormat SignatureFormat = SymbolDisplayFormat.CSharpErrorMessageFormat
         .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType | SymbolDisplayMemberOptions.IncludeType
@@ -197,6 +197,7 @@ public sealed class RoslynAnalyzer
             }
         }
         var relationships = new List<IndexedCall>();
+        var relationshipIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var input in inputs.Values)
         {
             if (input.Context.Resolution == "syntaxOnly") continue;
@@ -218,7 +219,9 @@ public sealed class RoslynAnalyzer
                             target.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat), target.ToDisplayString(SignatureFormat),
                             SourceFiles.Hash(Encoding.UTF8.GetBytes(identity.Json)), "resolved", null, true, "", []);
                     }
-                    relationships.Add(new(Identity.Id("pci:occ:", input.Context.Id, source.Path, source.Hash, node.SpanStart, node.Span.End, kind, identity.Id),
+                    var occurrenceId = Identity.Id("pci:occ:", input.Context.Id, source.Path, source.Hash, node.SpanStart, node.Span.End, owner, kind, identity.Id);
+                    if (!relationshipIds.Add(occurrenceId)) return;
+                    relationships.Add(new(occurrenceId,
                         input.Context.Id, source.Path, source.Hash, owner, identity.Id, node.SpanStart, node.Span.End, Range(tree, node.Span),
                         input.Context.Resolution == "complete" ? "resolved" : "possible", kind));
                     if (relationships.Count + calls.Count > 200_000 || symbols.Count > 50_000)
@@ -241,6 +244,7 @@ public sealed class RoslynAnalyzer
                     var parent = operation.Parent; var read = true; var write = false;
                     if (parent is ISimpleAssignmentOperation assignment && assignment.Target == operation) { read = false; write = true; }
                     else if (parent is ICompoundAssignmentOperation compound && compound.Target == operation
+                        || parent is ICoalesceAssignmentOperation coalesce && coalesce.Target == operation
                         || parent is IIncrementOrDecrementOperation) write = true;
                     else if (parent is IArgumentOperation argument)
                     {
@@ -253,6 +257,53 @@ public sealed class RoslynAnalyzer
                 }
                 foreach (var node in root.DescendantNodes())
                 {
+                    if (node is PropertyDeclarationSyntax or IndexerDeclarationSyntax or EventDeclarationSyntax
+                        && nodeSymbols.TryGetValue(node, out var memberOwner))
+                    {
+                        var overridden = model.GetDeclaredSymbol(node, cancellationToken) switch
+                        {
+                            IPropertySymbol property => (ISymbol?)property.OverriddenProperty,
+                            IEventSymbol eventSymbol => eventSymbol.OverriddenEvent,
+                            _ => null
+                        };
+                        if (overridden is not null) Add(node, memberOwner, overridden, "overrides");
+                    }
+                    if (node is BaseTypeDeclarationSyntax && model.GetDeclaredSymbol(node, cancellationToken) is INamedTypeSymbol { TypeKind: TypeKind.Class or TypeKind.Struct } implementingType)
+                    {
+                        foreach (var contract in implementingType.AllInterfaces)
+                            foreach (var member in contract.GetMembers())
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+                                if (implementingType.FindImplementationForInterfaceMember(member) is not ISymbol implementation) continue;
+                                var implementationId = Identify(implementation, input.Context, null).Id;
+                                if (symbols.TryGetValue(implementationId, out var indexed) && !indexed.External)
+                                    Add(node, implementationId, member, "implements");
+                            }
+                    }
+                    if (node is ThrowStatementSyntax or ThrowExpressionSyntax or InvocationExpressionSyntax or AssignmentExpressionSyntax
+                        && Owner(node) is string occurrenceOwner)
+                    {
+                        var thrown = node switch { ThrowStatementSyntax statement => statement.Expression, ThrowExpressionSyntax expression => expression.Expression, _ => null };
+                        if (thrown is not null && model.GetTypeInfo(thrown, cancellationToken).Type is INamedTypeSymbol exception)
+                            Add(node, occurrenceOwner, exception, "throws_explicitly");
+                        if (node is InvocationExpressionSyntax && model.GetOperation(node, cancellationToken) is IInvocationOperation { TargetMethod.MethodKind: MethodKind.DelegateInvoke } invocation)
+                        {
+                            var receiver = invocation.Instance;
+                            if (receiver is IConditionalAccessInstanceOperation)
+                                receiver = Ancestors(invocation).OfType<IConditionalAccessOperation>().FirstOrDefault()?.Operation;
+                            if (receiver is IEventReferenceOperation emitted) Add(node, occurrenceOwner, emitted.Event, "emits_event");
+                        }
+                        if (node is AssignmentExpressionSyntax && model.GetOperation(node, cancellationToken) is IEventAssignmentOperation { Adds: true } subscription
+                            && subscription.EventReference is IEventReferenceOperation subscribed)
+                        {
+                            var handler = subscription.HandlerValue is IDelegateCreationOperation creation ? creation.Target : subscription.HandlerValue;
+                            IMethodSymbol? handlerMethod = handler switch { IMethodReferenceOperation reference => reference.Method, IAnonymousFunctionOperation anonymous => anonymous.Symbol, _ => null };
+                            if (handlerMethod is not null && symbols.ContainsKey(Identify(handlerMethod, input.Context, null).Id))
+                                Add(node, Identify(handlerMethod, input.Context, null).Id, subscribed.Event, "handles_event");
+                            else diagnostics.Add(new(input.Context.Id, source.Path, "EVENT_HANDLER_UNRESOLVED", "info",
+                                "Event subscription handler is not a directly bound indexed source callable; runtime handler flow is not inferred.", Range(tree, node.Span)));
+                        }
+                    }
                     TypeSyntax? declared = node switch
                     {
                         MethodDeclarationSyntax method => method.ReturnType,
@@ -270,9 +321,13 @@ public sealed class RoslynAnalyzer
                         && nodeSymbols.TryGetValue(node, out var callable)
                         && model.GetTypeInfo(declared, cancellationToken).Type is INamedTypeSymbol returnType)
                         Add(declared, callable, returnType, "returns_type");
+                    var dependencyOwners = nodeSymbols.TryGetValue(node, out var declarationOwner) ? new[] { declarationOwner }
+                        : node is VariableDeclarationSyntax { Parent: BaseFieldDeclarationSyntax } fields
+                            ? fields.Variables.Where(nodeSymbols.ContainsKey).Select(variable => nodeSymbols[variable]).ToArray()
+                            : new[] { owner };
                     foreach (var type in declared.DescendantNodesAndSelf().OfType<TypeSyntax>())
                         if (model.GetTypeInfo(type, cancellationToken).Type is INamedTypeSymbol dependency)
-                            Add(type, owner, dependency, "uses_type");
+                            foreach (var dependencyOwner in dependencyOwners) Add(type, dependencyOwner, dependency, "uses_type");
                 }
             }
         }
@@ -328,10 +383,10 @@ public sealed class RoslynAnalyzer
 
         (string Id, string Json, bool External) Identify(ISymbol symbol, IndexedContext current, SyntaxNode? declaration)
         {
-            symbol = symbol.OriginalDefinition;
+            symbol = (symbol is IMethodSymbol { ReducedFrom: not null } reduced ? reduced.ReducedFrom : symbol).OriginalDefinition;
             if (symbol is IMethodSymbol { PartialDefinitionPart: not null } method) symbol = method.PartialDefinitionPart;
             var reference = symbol.DeclaringSyntaxReferences.FirstOrDefault();
-            if (reference is null && symbol is IMethodSymbol { MethodKind: MethodKind.Constructor, IsImplicitlyDeclared: true })
+            if (reference is null && symbol is IMethodSymbol { IsImplicitlyDeclared: true })
                 reference = symbol.ContainingType?.DeclaringSyntaxReferences.FirstOrDefault();
             var defining = reference is not null && treeContexts.TryGetValue(reference.SyntaxTree, out var context) ? context : null;
             var external = defining is null && reference is null;
