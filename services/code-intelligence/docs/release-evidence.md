@@ -32,9 +32,13 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 44 C# tests passed, 0 failed, 0 skipped, including provisioned ONNX and explicit SDK capture. 86 captured responses across all 11 tool schemas passed JSON Schema 2020-12 validation. New fixtures cover semantic/syntax top-level entries, context roots, initializer/lambda ownership, type relationships, optional virtual/interface candidates and static base calls. No UI changes in this checkpoint.
 
+## Independent baseline checkpoint — 15 October
+
+46 C# tests passed, 0 failed, 0 skipped. Golden reference checks detected and fixed special-token splitting. Tokenizer profile v2 changes the fingerprint; provision/install/activate it to replace v1. Model/vocabulary bytes remain pinned and unchanged. See reconstruction-progress.md for exact reference versions and fixture checksum. Metadata references now share immutable image data across contexts under one 512 MiB analysis bound.
+
 ## Remaining code and acceptance work
 
-1. Independent golden tokenizer/vector fixture/checksum and cross-platform numerical tolerance; persist precise representation chunk spans and selected source excerpts.
+1. Execute the independent golden tokenizer/vector fixture on Windows/macOS; persist precise representation chunk spans and selected source excerpts. Linux x64 passes the checked-in Python-reference fixture (8 token cases, 4 full vectors, absolute tolerance 1e-5/cosine >= 0.99999).
 2. Extend member/type/reference relationships and delegate points-to analysis. Local callable, synthetic project-root/top-level ownership, type inheritance/implementation and optional bounded virtual/interface candidates now have regression coverage. Candidates are possible structural targets, not runtime proof.
 3. Verify all budget/pagination boundaries, output truncation and freshness errors against A01–A40. The service can return an explicit budget error; it does not yet fully trim every collection/source case.
 4. Harden and execute Windows/macOS source-handle race fixtures. Linux descriptor-relative reads are implemented.
