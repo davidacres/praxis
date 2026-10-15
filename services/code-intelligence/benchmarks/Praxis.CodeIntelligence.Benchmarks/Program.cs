@@ -67,6 +67,10 @@ try
         var response = service.Execute("search_code", new JsonObject { ["repositoryId"] = repository, ["query"] = names[index % names.Count], ["mode"] = mode, ["limit"] = 10, ["responseBudgetTokens"] = 8000 }, allowed);
         if (response["error"] is not null || response["data"]?["matches"] is not JsonArray matches || matches.Count == 0)
             throw new InvalidOperationException("Search failed: " + response.ToJsonString());
+        if (mode == "hybrid" && (response["data"]?["channelsUsed"] is not JsonArray channels
+            || !channels.Any(channel => channel?.GetValue<string>() == "vector")
+            || response["data"]?["vectorCoveredSymbolCount"]?.GetValue<long>() != sourceSymbols))
+            throw new InvalidOperationException("Hybrid benchmark requires complete real vector coverage.");
     }
     async Task<object> Measure(string mode)
     {
@@ -107,7 +111,7 @@ try
     };
     var report = new
     {
-        Version = 1, TimestampUtc = DateTimeOffset.UtcNow, ExecutionMode = "Direct service API; owner/MCP transport excluded",
+        Version = 1, AdapterVersion = RoslynAnalyzer.AdapterVersion, OnnxInterOpThreads = 1, OnnxIntraOpThreads = Math.Clamp(Environment.ProcessorCount, 1, 4), TimestampUtc = DateTimeOffset.UtcNow, ExecutionMode = "Direct service API; owner/MCP transport excluded",
 #if DEBUG
         BuildConfiguration = "Debug",
 #else
