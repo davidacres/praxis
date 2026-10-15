@@ -1,0 +1,78 @@
+name: Code intelligence native verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_benchmarks:
+        description: 'Run the generated 5k-symbol real-model benchmark on Linux'
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - 'services/code-intelligence/**'
+      - 'scripts/build-service.mjs'
+      - '.github/workflows/code-intelligence.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: code-intelligence-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: Native verification (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      PRAXIS_DOTNET: dotnet
+      PRAXIS_MODEL_BUNDLE: ${{ runner.temp }}/praxis-model
+      PRAXIS_CONTRACT_SAMPLES: ${{ runner.temp }}/praxis-contract-samples
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.402'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Provision hash-pinned local model assets
+        run: python services/code-intelligence/scripts/prepare-model.py "$PRAXIS_MODEL_BUNDLE"
+      - name: Restore locked service dependencies
+        run: dotnet restore services/code-intelligence/Praxis.CodeIntelligence.slnx --locked-mode --disable-parallel -m:1
+      - name: Run compiler, storage, path and native model fixtures
+        run: dotnet test services/code-intelligence/Praxis.CodeIntelligence.slnx --no-restore --nologo -m:1 -p:UseSharedCompilation=false --logger trx --results-directory "${{ runner.temp }}/praxis-test-results"
+      - name: Validate actual responses against all normative tool schemas
+        run: |
+          python -m pip install jsonschema==4.25.1
+          python services/code-intelligence/scripts/verify-contracts.py "$PRAXIS_CONTRACT_SAMPLES"
+      - name: Measure generated 5k-symbol real-model fixture
+        if: github.event_name == 'workflow_dispatch' && inputs.run_benchmarks && matrix.os == 'ubuntu-latest'
+        run: |
+          dotnet build services/code-intelligence/benchmarks/Praxis.CodeIntelligence.Benchmarks -c Release --no-restore --nologo -m:1 -p:UseSharedCompilation=false
+          dotnet services/code-intelligence/benchmarks/Praxis.CodeIntelligence.Benchmarks/bin/Release/net10.0/Praxis.CodeIntelligence.Benchmarks.dll --symbols 5000 --queries 100 --model "$PRAXIS_MODEL_BUNDLE" --output "$RUNNER_TEMP/praxis-benchmarks/linux-x64-5000-hybrid.praxis.json"
+      - name: Package host runtime and smoke-test native CLI, SQLite and ONNX
+        run: node scripts/build-service.mjs --package
+      - name: Preserve verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-intelligence-${{ matrix.os }}
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/praxis-test-results
+            ${{ runner.temp }}/praxis-contract-samples
+            ${{ runner.temp }}/praxis-benchmarks
+            services/code-intelligence/artifacts/package/package-manifest.json
