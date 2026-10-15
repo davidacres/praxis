@@ -1,43 +1,39 @@
-# Reconstruction progress
+# Code intelligence implementation progress
 
-Updated 14 October 2026.
+Updated 15 October 2026. Branch: codex/code-intelligence-recovery. Feature remains in progress; no PR or main merge.
 
-## Current verified checkpoint
+## Implemented
 
-Branch: codex/code-intelligence-recovery. No PR or main merge.
-Original baseline: f8ef840269ec871aa87ae4d2a50c26950e14b875.
-The previous implementation is not recovered. See recovery-record.md for historical inventory.
+- .NET 10.0.402 solution, locked dependencies and executable specification migration.
+- SQLite WAL, foreign keys, migration compatibility/checksums, integrity checks and verified backups.
+- Raw-byte hashes, UTF8/UTF16 coordinates, bounded source reads, root/path policy and Linux descriptor-relative source opening.
+- C# passive Roslyn analysis, syntax fallback, overload/partial identities, cross-project call targets and atomic repository publication.
+- Eleven schema-defined read-only queries, lexical/hybrid/vector search, static graphs, evidence/source checks, cursors and response limits.
+- Per-user authenticated owner/CLI, repository/provider grants and revocation, scoped MCP SDK bridge, provider isolation during handover.
+- Desktop registration, exclusions, status, search/source/navigation, model install/activation and provider consent controls.
+- Pinned local MiniLM ONNX/WordPiece provider, complete atomic vector sets, query/profile checks and lexical fallback.
+- Durable index/embedding jobs with coalescing, lease tokens, heartbeat, expiry recovery, bounded retry and wrong-lease publication rejection.
+- Structural publication atomically enqueues current model refresh work. Model activation queues durable work rather than holding a UI request open for inference.
+- Watcher hints with debounce, overflow handling, retry cooldown and periodic reconciliation. Pause/unregister obsoletes work.
+- Git ignore evaluation filters paths before decoding, disables fsmonitor execution and bounds subprocess time/output.
 
-Reconstructed:
-- .NET10.0.402 solution, strict compiler settings and pinned dependency locks.
-- Executable migration001 extracted from the reviewed specification.
-- SQLite WAL/foreign-key connections, atomic migration/checksum record, idempotent initialization, newer-schema and checksum rejection.
-- Integrity checks and verified backup preserving committed WAL data, refusing overwrite.
-- Raw-byte source hashes, strict UTF8/UTF16 BOM decoding, byte limits, path component rejection, canonical selected-root aliases, source symlink/reparse-point exclusion.
-- Minimal init/doctor CLI; indexing and query commands are not yet available.
+## Verification evidence
 
-## Verification performed on reconstructed files
+15 October: C#34 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution.
+14 October: full desktop build passed including renderer core-import and trusted-IPC guards;2 MCP SDK/provider-isolation tests passed;24 responses across all11 tools validated with JSON Schema2020-12.
+New packaging and status integration are being verified separately. Do not treat historical results as verification of later changes.
 
-SDK10.0.402 downloaded from official builds.dotnet.microsoft.com and verified against upstream SHA512.
-C# test run:13passed,0failed,0skipped. This replaces no historical release claim.
-Tests cover migration idempotence, FK enforcement, newer schema rejection without downgrade, migration checksum mismatch, backup content/refusal, raw-byte hashes and UTF16 decoding, six traversal/ambiguous path forms, oversized/invalid encoding, and Unix root/source symlink policy.
-Source alias test bypasses Windows because link privileges need a platform fixture.
-SQLite Python smoke: migration executes, quick_check=ok, no foreign-key violations,28tables includingFTS internals.
-Locked-mode restore succeeds. git diff --check succeeds.
-No UI/platform/MCP/model/performance/quality tests exist on the reconstructed branch yet.
+## Remaining implementation/release work
 
-## Preservation evidence
+- Explicit context-capture command and semantic-support source roles.
+- Final packaging smoke, operational instructions, integration/capability matrix and Praxis plan records.
+- Independent golden tokenizer/vector fixture and representation chunk spans/source excerpts.
+- Semantic API-stamp/affected-context optimization, alias preservation across full publication, possible dispatch/type relationships, synthetic top-level/lambda ownership.
+- Complete line-budget truncation/pagination behavior and hardened source-handle checks on Windows/macOS.
+- Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
-Recovery record and reviewed specification committed directly through connected GitHub API.
-Specification saved149539bytes, matching Library version2 size.
-Storage/config/test files and source policy/dependency locks committed through GitHub API and read back with exact text comparison.
-Command-line git push failed because its HTTPS credentials were unavailable; connector commits succeeded. Local checkpoint8c9b6a28 is not the remote SHA because connector saved files as individual commits. Do not mistake local commits for preservation.
-Remote checkpoint before this progress document: d0e2989fb1cc1e6a68e40160cbb547864466d032.
+Current indexing intentionally uses conservative full-context republishing; it does not claim incremental performance or release readiness. M4–M6 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
 
-## Next work and limitations
+## Preservation policy
 
-Reconstruct Roslyn declarations/canonical identities and passive manifests, then registration/index publication/query contracts, owner/MCP, local model and desktop.
-Source path checks are not yet a race-proof filesystem sandbox: adversarial concurrent directory replacement requires handle-relative platform validation and dedicated tests. Do not expose source reads through MCP until that boundary is completed.
-Current schema initialization does not perform corruption recovery/maintenance scheduling. No repository admission, grants, epochs, watcher, jobs, embeddings, graph, providers or desktop functionality is wired yet.
-Continue against specification release gates A01–A40. Historical40test run in recovery record applies only to deleted checkout.
-Every turn must end with meaningful source/tests/docs remotely preserved and verified, including incomplete checkpoints.
+Meaningful code/tests/docs must be committed remotely before ending a turn and at intermediate checkpoints. Verify exact remote file contents. A local Git commit is insufficient. Command-line HTTPS push was unavailable; the connected GitHub API has successfully preserved checkpoints. Use the actual remote commit SHA in reports. Recovery-record.md retains the deleted implementation inventory; it is not current passing code.
