@@ -155,7 +155,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         var projects = filters?["projectIds"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
                         var languages = filters?["languages"]?.AsArray();
                         var vectors = languages is { Count: > 0 } && !languages.Any(x => x!.GetValue<string>() == "csharp") ? []
-                            : ModelStore.Candidates(connection, transaction, repositoryId, embedded, contextId, kinds, projects);
+                            : ModelStore.Candidates(connection, transaction, repositoryId, embedded, contextId, kinds, projects, cancellationToken);
                         var position = 0;
                         foreach (var vector in vectors)
                         {
