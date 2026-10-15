@@ -16,7 +16,7 @@ for (var i = 0; i < args.Length; i += 2)
         throw new ArgumentException("Unknown or duplicate flag.");
 var symbols = int.Parse(options.GetValueOrDefault("--symbols", "5000"));
 var queries = int.Parse(options.GetValueOrDefault("--queries", "100"));
-if (symbols is < 100 or > 50000 || queries is < 10 or > 1000) throw new ArgumentException("Symbols must be 100–50000; queries 10–1000 per reader.");
+if (symbols is < 100 or > 49999 || queries is < 10 or > 1000) throw new ArgumentException("Symbols must be 100–49999 source symbols (50000 total including metadata); queries 10–1000 per reader.");
 var output = Path.GetFullPath(options.GetValueOrDefault("--output", "benchmark.praxis.json"));
 if (!output.EndsWith(".praxis.json", StringComparison.Ordinal)) throw new ArgumentException("Output must end in .praxis.json.");
 var temporary = Path.Combine(Path.GetTempPath(), "praxis-benchmark-" + Guid.NewGuid().ToString("N"));
@@ -111,7 +111,7 @@ try
     };
     var report = new
     {
-        Version = 1, AdapterVersion = RoslynAnalyzer.AdapterVersion, OnnxInterOpThreads = 1, OnnxIntraOpThreads = Math.Clamp(Environment.ProcessorCount, 1, 4), TimestampUtc = DateTimeOffset.UtcNow, ExecutionMode = "Direct service API; owner/MCP transport excluded",
+        Version = 1, StorageSchemaVersion = IndexDatabase.SchemaVersion, AdapterVersion = RoslynAnalyzer.AdapterVersion, OnnxInterOpThreads = 1, OnnxIntraOpThreads = Math.Clamp(Environment.ProcessorCount, 1, 4), TimestampUtc = DateTimeOffset.UtcNow, ExecutionMode = "Direct service API; owner/MCP transport excluded",
 #if DEBUG
         BuildConfiguration = "Debug",
 #else
