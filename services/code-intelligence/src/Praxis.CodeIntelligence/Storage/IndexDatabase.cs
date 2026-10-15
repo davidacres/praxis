@@ -9,9 +9,12 @@ namespace Praxis.CodeIntelligence.Storage;
 /// <summary>Owns schema compatibility and connection policy; source files are never modified.</summary>
 public sealed class IndexDatabase
 {
-    public const int SchemaVersion = 1;
-    private static readonly string Migration = ReadMigration();
-    private static readonly string Checksum = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Migration)));
+    public const int SchemaVersion = 2;
+    private static readonly (string Sql, string Checksum)[] Migrations = Enumerable.Range(1, SchemaVersion).Select(version =>
+    {
+        var sql = ReadMigration(version);
+        return (sql, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sql))));
+    }).ToArray();
     public string Path { get; }
 
     public IndexDatabase(string path) => Path = System.IO.Path.GetFullPath(path);
@@ -46,26 +49,23 @@ public sealed class IndexDatabase
         Execute(connection, "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;");
         // Check a newer schema before changing persistent journal policy.
         var version = Version(connection);
-        if (version != 0) { Validate(connection); return; }
+        if (version != 0) { ValidateHistory(connection, version); if (version == SchemaVersion) return; }
         Execute(connection, "PRAGMA journal_mode=WAL;");
         using var transaction = connection.BeginTransaction(deferred: false);
         // Another initializer may have committed while this connection waited for the writer.
         version = Version(connection, transaction);
-        if (version == 0)
+        if (version != 0) ValidateHistory(connection, version, transaction);
+        for (var next = version + 1; next <= SchemaVersion; next++)
         {
             using var schema = connection.CreateCommand();
-            schema.Transaction = transaction;
-            schema.CommandText = Migration;
-            schema.ExecuteNonQuery();
-            using var record = connection.CreateCommand();
-            record.Transaction = transaction;
-            record.CommandText = "INSERT INTO schema_migrations(version,checksum,applied_utc) VALUES($version,$checksum,$utc); PRAGMA user_version=1;";
-            record.Parameters.AddWithValue("$version", SchemaVersion);
-            record.Parameters.AddWithValue("$checksum", Checksum);
+            schema.Transaction = transaction; schema.CommandText = Migrations[next - 1].Sql; schema.ExecuteNonQuery();
+            using var record = connection.CreateCommand(); record.Transaction = transaction;
+            record.CommandText = "INSERT INTO schema_migrations(version,checksum,applied_utc) VALUES($version,$checksum,$utc); PRAGMA user_version=" + next.ToString(CultureInfo.InvariantCulture) + ";";
+            record.Parameters.AddWithValue("$version", next);
+            record.Parameters.AddWithValue("$checksum", Migrations[next - 1].Checksum);
             record.Parameters.AddWithValue("$utc", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
             record.ExecuteNonQuery();
         }
-        else Validate(connection, transaction);
         transaction.Commit();
     }
 
@@ -120,14 +120,24 @@ public sealed class IndexDatabase
 
     private static void Validate(SqliteConnection connection, SqliteTransaction? transaction = null)
     {
-        if (Version(connection, transaction) != SchemaVersion)
-            throw new InvalidOperationException("INDEX_VERSION_UNSUPPORTED: incompatible schema version.");
-        using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = "SELECT checksum FROM schema_migrations WHERE version=$version";
-        command.Parameters.AddWithValue("$version", SchemaVersion);
-        if (command.ExecuteScalar() is not string checksum || checksum != Checksum)
-            throw new InvalidOperationException("INDEX_VERSION_UNSUPPORTED: migration checksum mismatch.");
+        var version = Version(connection, transaction);
+        if (version != SchemaVersion) throw new InvalidOperationException("INDEX_VERSION_UNSUPPORTED: incompatible schema version.");
+        ValidateHistory(connection, version, transaction);
+    }
+
+    private static void ValidateHistory(SqliteConnection connection, int version, SqliteTransaction? transaction = null)
+    {
+        if (version < 1 || version > SchemaVersion) throw new InvalidOperationException("INDEX_VERSION_UNSUPPORTED: incompatible schema version.");
+        using var command = connection.CreateCommand(); command.Transaction = transaction;
+        command.CommandText = "SELECT version,checksum FROM schema_migrations ORDER BY version";
+        using var reader = command.ExecuteReader(); var applied = 0;
+        while (reader.Read())
+        {
+            applied++;
+            if (applied > version || reader.GetInt32(0) != applied || reader.GetString(1) != Migrations[applied - 1].Checksum)
+                throw new InvalidOperationException("INDEX_VERSION_UNSUPPORTED: migration checksum mismatch.");
+        }
+        if (applied != version) throw new InvalidOperationException("INDEX_VERSION_UNSUPPORTED: migration history is incomplete.");
     }
 
     private static int Version(SqliteConnection connection, SqliteTransaction? transaction = null)
@@ -143,9 +153,9 @@ public sealed class IndexDatabase
         using var command = connection.CreateCommand(); command.CommandText = sql; command.ExecuteNonQuery();
     }
 
-    private static string ReadMigration()
+    private static string ReadMigration(int version)
     {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Praxis.CodeIntelligence.Storage.migration001.sql")
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"Praxis.CodeIntelligence.Storage.migration{version:D3}.sql")
             ?? throw new InvalidOperationException("Embedded migration missing.");
         using var reader = new StreamReader(stream, Encoding.UTF8);
         return reader.ReadToEnd();
