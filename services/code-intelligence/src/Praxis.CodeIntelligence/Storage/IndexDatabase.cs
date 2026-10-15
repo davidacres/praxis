@@ -10,6 +10,8 @@ namespace Praxis.CodeIntelligence.Storage;
 public sealed class IndexDatabase
 {
     public const int SchemaVersion = 2;
+    public const int ReadMappingVersion = 1;
+    public const long MaximumReadMappingBytes = 128L * 1024 * 1024;
     private static readonly (string Sql, string Checksum)[] Migrations = Enumerable.Range(1, SchemaVersion).Select(version =>
     {
         var sql = ReadMigration(version);
@@ -33,6 +35,9 @@ public sealed class IndexDatabase
             connection.Open();
             Execute(connection, "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;");
             Validate(connection);
+            // Bound file-backed read mappings; SQLite retains WAL snapshot and
+            // locking semantics and falls back to its pager where unsupported.
+            if (readOnly) Execute(connection, $"PRAGMA mmap_size={MaximumReadMappingBytes};");
             return connection;
         }
         catch { connection.Dispose(); throw; }

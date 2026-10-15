@@ -4,7 +4,7 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 | Check | Evidence | Result |
 |---|---|---|
-| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 94 passed,0 failed,0 skipped |
+| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 97 local / 96 native CI passed,0 failed,0 skipped |
 | Source/context | Raw UTF16 hashes, path policy, passive no-execution, SDK capture, generated support and stale/deleted inputs | Covered by targeted tests |
 | Durable jobs | Coalescing, backoff, heartbeat, expired owner recovery, wrong-token publication, pause and atomic refresh enqueue | Covered by targeted tests |
 | Automatic embeddings | Runtime registration/index, queued activation, real inference, edit, empty stale vector results, background refresh | Covered by native model fixture |
@@ -168,3 +168,11 @@ The model-inclusive 50k count-cache/search-plan rerun measured lexical p95 **3.8
 Scorer version 3 uses hardware vector operations on little-endian supported hosts and a portable little-endian scalar path elsewhere. Products retain the former float rounding before double accumulation; no approximate candidate pruning or vector caching is introduced. Independent seeded comparisons cover 1,000 normalized vector/query pairs on both paths to 12 decimal places. Invalid lengths, nonfinite components and nonnormalized vectors are rejected. The full local suite passes **96 tests, zero failures/skips**, including real-model ranking against independently decoded scalar products. Post-change 50k performance and fresh cross-platform execution must be measured before claiming a latency improvement.
 
 The Maze tuning draft now contains 40 queries and its source-only report contains 80 actual searches with stable generation/epoch, no tool errors and valid evidence for returned relevant labels. All review declarations remain false and no held-out metrics are inferred. The first scorer-3 CI run passed Linux but the macOS handshake regression hit its fixture-only three-second deadline under concurrent native tests; the client already allows 15 seconds for startup/re-discovery. The regression now uses that same bounded 15-second wait and a 30-second fixture lifetime, retaining stale-token rejection and eventual success assertions. The local full 96-test suite passes after this fixture change. Fresh native CI is still required.
+
+## Native scorer validation and bounded reader mapping — 16 October
+
+[CI run 38820512973](https://github.com/davidacres/praxis/actions/runs/38820512973) at `b5c10d9e788a488f9764e70483a48e9329b7baef` is green on Windows x64, Linux x64 and macOS arm64. Every host ran 96 C# tests without skips, validated 109 responses, passed native golden/model/package/owner lifecycle checks and ran all 10 evaluator tests with the real packaged owner. This supersedes the fixture timeout failure; it does not qualify later changes automatically.
+
+The scorer-3 50k run recorded lexical p95 **3.6989 ms**, hybrid p95 **1026.5347 ms**, body edit 16202.3371 ms and semantic refresh 2157.7971 ms. Independent maximum RSS was **1783087104 bytes**. Hybrid still fails 500 ms; the observed change from 1117.9363 ms is not five-run acceptance or proof of a general speedup. Cold vector construction overlapped focused local tests and Maze corpus preparation; timed query/edit phases had no concurrent builds/tests. Raw report: `benchmarks/macos-arm64-50000-scorer3-hybrid.praxis.json`.
+
+Read-mapping version 1 requests at most **128 MiB** of file-backed SQLite mapping per read connection. Unsupported hosts fall back to the pager; SQLite retains its WAL snapshot/locking behavior. It retains no detached source/compiler/vector cache. A concurrent-publication regression proves an existing reader sees its original BLOB while a fresh read sees the committed replacement; the actual mapping size is bounded. All **97 local C# tests** and **109 response schemas** pass. Performance and native CI for this mapping change are pending measurement.

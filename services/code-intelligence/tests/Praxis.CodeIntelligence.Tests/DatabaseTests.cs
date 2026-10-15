@@ -10,6 +10,40 @@ public sealed class DatabaseTests : IDisposable
     private IndexDatabase Database => new(System.IO.Path.Combine(root, "index.db"));
 
     [Fact]
+    public void BoundedReadMappingPreservesWalSnapshotDuringConcurrentPublication()
+    {
+        Database.Initialize();
+        using var writer = Database.Open();
+        using (var setup = writer.CreateCommand())
+        {
+            setup.CommandText = "CREATE TABLE mapping_probe(value BLOB NOT NULL); INSERT INTO mapping_probe VALUES(zeroblob(8192)); PRAGMA wal_checkpoint(TRUNCATE);";
+            setup.ExecuteNonQuery();
+        }
+        using var reader = Database.Open(readOnly: true);
+        using (var setting = reader.CreateCommand())
+        {
+            setting.CommandText = "PRAGMA mmap_size";
+            Assert.InRange(Convert.ToInt64(setting.ExecuteScalar()), 0, IndexDatabase.MaximumReadMappingBytes);
+        }
+        byte ReadFirst(Microsoft.Data.Sqlite.SqliteTransaction? transaction)
+        {
+            using var command = reader.CreateCommand(); command.Transaction = transaction;
+            command.CommandText = "SELECT value FROM mapping_probe";
+            return ((byte[])command.ExecuteScalar()!)[0];
+        }
+        using (var snapshot = reader.BeginTransaction(deferred: true))
+        {
+            Assert.Equal(0, ReadFirst(snapshot));
+            using var publish = writer.CreateCommand(); publish.CommandText = "UPDATE mapping_probe SET value=$value";
+            publish.Parameters.AddWithValue("$value", Enumerable.Repeat((byte)3, 8192).ToArray()); publish.ExecuteNonQuery();
+            Assert.Equal(0, ReadFirst(snapshot));
+            snapshot.Commit();
+        }
+        Assert.Equal(3, ReadFirst(null));
+        Assert.Empty(Database.Check());
+    }
+
+    [Fact]
     public void MigrationIsIdempotentAndEnforcesForeignKeys()
     {
         Database.Initialize(); Database.Initialize();
