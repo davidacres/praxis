@@ -9,3 +9,9 @@ The user supplied `https://github.com/davidacres/maze`. These drafts use a separ
 Remaining preparation: independently prepare/freeze 80 held-out queries with at least 20 total per required category and held-out representation of every category, review labels and split leakage, capture trusted compiler contexts, install/activate the pinned model and verify complete current coverage, then rerun. Cross-project and stale-transition scenarios require their own concrete setup/evidence. Human abstention and 30 explanation reviews remain required; declarations cannot substitute for that work. The full feature is not complete.
 
 The separate native CI run [38818829365](https://github.com/davidacres/praxis/actions/runs/38818829365) checks the evaluator and service at `855aba2099a5ed179f14faa99a99e5c89b73c50b`; consult its result rather than assuming a green result for later revisions.
+
+## Real local model tuning run — 16 October
+
+`maze-model-tuning-results.praxis.json` records the same 40 unreviewed tuning queries through the current packaged native owner, with the pinned MiniLM profile activated. All 14,298 eligible source symbols have current vectors. All 80 searches completed without errors or duplicate results; returned relevant symbols have expected source evidence, and generation/query epoch stayed fixed. Every hybrid response reports full vector coverage.
+
+Among the 35 positive tuning cases, macro Recall@10 is **0.80 hybrid** and **0.4571428571 lexical**. Five negative cases do not earn recall. These figures are calculated from the per-case tuning results, not the report's held-out aggregates (which correctly remain empty). They are preliminary tuning observations, not held-out acceptance. Compiler context remains syntax-only, and human labels, split leakage, abstention and explanation reviews remain undeclared. No Maze project targets or application were executed; local embedding inference is performed by Praxis.
