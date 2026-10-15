@@ -3,6 +3,7 @@ using Praxis.CodeIntelligence.Embeddings;
 using Praxis.CodeIntelligence.Indexing;
 using Praxis.CodeIntelligence.Queries;
 using Praxis.CodeIntelligence.Storage;
+using Praxis.CodeIntelligence.Host;
 using Xunit;
 
 namespace Praxis.CodeIntelligence.Tests;
@@ -13,6 +14,32 @@ public sealed class LocalModelFactAttribute : FactAttribute
 }
 public sealed class ModelTests
 {
+    [LocalModelFact]
+    public async Task RuntimeRefreshesVectorsFromDurableWorkAfterSourcePublication()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "praxis-refresh-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Example.cs"), "class AuthenticationTokenParser { string ParseToken(string token) => token; }");
+            using var runtime = new ServiceRuntime(Path.Combine(root, "runtime"));
+            var id = runtime.Dispatch(new JsonObject { ["action"] = "register", ["root"] = root }, CancellationToken.None)["data"]!["repositoryId"]!.GetValue<string>();
+            Assert.Null(runtime.Dispatch(new JsonObject { ["action"] = "index", ["repositoryId"] = id }, CancellationToken.None)["error"]);
+            var installed = runtime.Dispatch(new JsonObject { ["action"] = "model-install", ["bundle"] = Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE") }, CancellationToken.None);
+            var fingerprint = installed["data"]!["fingerprint"]!.GetValue<string>();
+            var queued = runtime.Dispatch(new JsonObject { ["action"] = "model-activate", ["repositoryId"] = id, ["fingerprint"] = fingerprint }, CancellationToken.None);
+            Assert.True(queued["data"]!["queued"]!.GetValue<bool>());
+            await runtime.MaintainAsync(CancellationToken.None); await runtime.MaintainAsync(CancellationToken.None);
+            JsonObject Search() => runtime.Dispatch(new JsonObject { ["action"] = "query", ["tool"] = "search_code", ["arguments"] = new JsonObject { ["repositoryId"] = id, ["query"] = "token parser", ["mode"] = "vector", ["responseBudgetTokens"] = 8000 } }, CancellationToken.None);
+            Assert.NotEmpty(Search()["data"]!["matches"]!.AsArray());
+            File.AppendAllText(Path.Combine(root, "Example.cs"), " // body revision");
+            Assert.Null(runtime.Dispatch(new JsonObject { ["action"] = "index", ["repositoryId"] = id }, CancellationToken.None)["error"]);
+            Assert.Empty(Search()["data"]!["matches"]!.AsArray());
+            await runtime.MaintainAsync(CancellationToken.None); await runtime.MaintainAsync(CancellationToken.None);
+            Assert.NotEmpty(Search()["data"]!["matches"]!.AsArray());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void WordPieceUsesUncasedAccentStrippingAndCompleteBoundedChunks()
     {
