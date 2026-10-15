@@ -51,6 +51,7 @@ Provisioning is a separate, explicit network operation:
 
 ```sh
 python3 services/code-intelligence/scripts/prepare-model.py /absolute/model-bundle
+dotnet path/to/Praxis.CodeIntelligence.dll model-check /absolute/model-bundle
 dotnet path/to/Praxis.CodeIntelligence.dll model-install /absolute/model-bundle
 dotnet path/to/Praxis.CodeIntelligence.dll model-activate REPOSITORY_ID sha256:FINGERPRINT
 ```
