@@ -37,6 +37,14 @@ The fixture exposed incorrect splitting of BERT special tokens. Corrected behavi
 
 Metadata images are now shared across project contexts within an analysis, preserving per-reference aliases/options. The 512 MiB unique-metadata bound applies to the repository analysis instead of separately to each project.
 
+## Query completeness checkpoint (15 October)
+
+Paged search/lookup/caller/callee/related responses reduce their collections to fit the byte budget and resume at the retained count, with evidence pruned only when unreferenced. Regression pagination visits 20 results without skips or duplicates. Source trimming preserves UTF-16 range/text agreement and surrogate pairs; source line/budget truncation is explicit without a pagination cursor. Graph budget trimming retains the root, valid edge endpoints and referenced evidence, with a boundary and truncation warning. Single irreducible items may still return an explicit budget error.
+
+Method override relationships are separate from call edges. External symbols now expose metadata evidence for explanations without invented local declarations. Implicit source constructors resolve to the defining type/context, carry no fabricated declaration location and remain non-external, including cross-project calls.
+
+Latest C# run: **51 passed, 0 failed, 0 skipped**. 64 fresh responses across all 11 tools pass normative schemas. Full application build and two scoped MCP tests pass; Linux self-contained CLI/SQLite/ONNX package passes with tokenizer-v2 fingerprint `sha256:567dd29d161c0beb8dd0474774adbd41924c6c274faa92b065925b63de2c1705`. No UI files changed; platform/UI/quality gates remain unexecuted.
+
 ## Verification evidence
 
 15 October: C#38 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution. Explicit SDK capture, stale/deleted inputs, generated support non-disclosure and alias preservation also pass.
@@ -47,7 +55,7 @@ Full application build including the service passed; Linux self-contained publis
 
 - Cross-platform golden numerical verification and representation chunk spans/source excerpts.
 - Semantic API-stamp/affected-context optimization, richer member/type/reference relationships and delegate points-to analysis.
-- Complete line-budget truncation/pagination behavior and hardened source-handle checks on Windows/macOS.
+- Remaining status/summary/irreducible-item budget boundaries and hardened source-handle checks on Windows/macOS.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
 Current indexing intentionally uses conservative full-context republishing; it does not claim incremental performance or release readiness. M4–M6 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
