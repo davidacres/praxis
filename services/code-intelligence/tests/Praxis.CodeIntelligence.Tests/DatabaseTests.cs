@@ -63,11 +63,28 @@ public sealed class DatabaseTests : IDisposable
             command.Parameters.AddWithValue("$checksum", checksum); command.ExecuteNonQuery();
         }
         Database.Initialize(); Database.Initialize(); Assert.Empty(Database.Check());
+        var backup = Assert.Single(Directory.GetFiles(root, "index.db.schema1.*.praxis.db"));
+        using (var saved = new SqliteConnection($"Data Source={backup};Mode=ReadOnly;Pooling=False"))
+        {
+            saved.Open(); using var query = saved.CreateCommand(); query.CommandText = "PRAGMA user_version";
+            Assert.Equal(1L, query.ExecuteScalar());
+            query.CommandText = "SELECT repository_id FROM repositories"; Assert.Equal("kept", query.ExecuteScalar());
+            query.CommandText = "PRAGMA quick_check"; Assert.Equal("ok", query.ExecuteScalar());
+        }
         using var connection = Database.Open(); using var check = connection.CreateCommand();
         check.CommandText = "SELECT repository_id FROM repositories"; Assert.Equal("kept", check.ExecuteScalar());
         check.CommandText = "SELECT count(*) FROM schema_migrations"; Assert.Equal((long)IndexDatabase.SchemaVersion, check.ExecuteScalar());
         check.CommandText = "EXPLAIN QUERY PLAN SELECT edge_id FROM edges WHERE occurrence_id='fixture'";
         using var plan = check.ExecuteReader(); Assert.True(plan.Read()); Assert.Contains("edge_occurrence", plan.GetString(3));
+    }
+
+    [Fact]
+    public async Task ConcurrentInitializersRetainACompleteMigrationHistory()
+    {
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(() => Database.Initialize())));
+        Assert.Empty(Database.Check());
+        using var connection = Database.Open(readOnly: true); using var command = connection.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM schema_migrations"; Assert.Equal((long)IndexDatabase.SchemaVersion, command.ExecuteScalar());
     }
 
     [Fact]
