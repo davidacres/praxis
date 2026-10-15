@@ -6,7 +6,7 @@ using Praxis.CodeIntelligence.Storage;
 
 namespace Praxis.CodeIntelligence.Embeddings;
 
-internal sealed record ReusableChunk(byte[] Values, TokenizedChunk Span);
+internal sealed record ReusableChunk(byte[] Values, TokenizedChunk Span, string Metadata);
 internal sealed record ReusableEmbedding(string SymbolId, string Fingerprint, string Revision, string Hash, int ExpectedChunks, List<ReusableChunk> Chunks);
 
 /// <summary>Bounded transaction-local reuse; no orphaned cache survives exclusions or repository removal.</summary>
@@ -48,7 +48,7 @@ internal static class EmbeddingReuse
                     || span["RepresentationHash"]!.GetValue<string>() != reader.GetString(3)) throw new ArgumentException("Invalid cached span.");
                 if (!result.TryGetValue(key, out var set)) result[key] = set = new(key.Item1, key.Item2, reader.GetString(2), reader.GetString(3), reader.GetInt32(7), []);
                 if (set.ExpectedChunks is < 1 or > 4 || reader.GetInt32(4) != set.Chunks.Count) throw new ArgumentException("Incomplete cached chunks.");
-                set.Chunks.Add(new(values, tokenSpan));
+                set.Chunks.Add(new(values, tokenSpan, json));
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NullReferenceException or FormatException or OverflowException or System.Text.Json.JsonException)
             { result.Remove(key); invalid.Add(key); }
