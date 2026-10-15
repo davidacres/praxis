@@ -81,6 +81,16 @@ Optional search graph expansion adds at most 100 one-hop neighbors from the top 
 
 **60 C# tests passed, 0 failed, 0 skipped**; **71 fresh responses across all 11 tools** passed normative schemas. UI execution remains blocked as documented; no new UI changes in this checkpoint.
 
+## Vector reuse and equivalence checkpoint (15 October)
+
+Complete current-profile vectors are captured within the structural write transaction (128 MiB bound), validated for dimensions/norm/chunk completeness/spans, and reused only for the same symbol/profile/exact representation hash. New revisions and source mappings are published atomically. There is no detached cache: exclusions, relocation and unregister purge derivatives normally. Fully reused active-profile coverage avoids redundant refresh jobs; partial refresh skips inference for already-current sets. Corrupt normalized-vector data is rejected and re-inferred. Real body edits still invalidate changed representations and refresh through durable work.
+
+A clean-index equivalence fixture compares normalized symbols, projects/contexts, files/locations, occurrences, edges, search documents and diagnostics after source edits, additions, deletion, partial-type/context changes and cross-project lambda calls. Random storage IDs/generation counters are intentionally excluded; semantic identities share the same repository ID. Edited and clean publications match.
+
+Normative defaults are now search/lookup/related limit 10, callers/callees limit 50 and trace maxEdges 2000. Empty relation/kind filters use defaults; filter case/whitespace normalization and duplicate rejection are tested.
+
+**63 C# tests passed, 0 failed, 0 skipped**. 80 actual tool responses across all 11 schemas passed validation in the preceding query-enabled run. Full-context Roslyn/SQLite republishing remains conservative; no 5k/50k latency or 2 GiB RSS claim is made.
+
 ## Verification evidence
 
 15 October: C#38 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution. Explicit SDK capture, stale/deleted inputs, generated support non-disclosure and alias preservation also pass.
@@ -89,7 +99,7 @@ Full application build including the service passed; Linux self-contained publis
 
 ## Remaining implementation/release work
 
-- Cross-platform golden numerical verification and vector representation reuse/performance verification.
+- Cross-platform golden numerical verification and representative scale/quality performance verification.
 - Semantic API-stamp/affected-context optimization, richer member/type/reference relationships and delegate points-to analysis.
 - Irreducible single-item budget behavior and execution of Windows/macOS source-handle fixtures.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
