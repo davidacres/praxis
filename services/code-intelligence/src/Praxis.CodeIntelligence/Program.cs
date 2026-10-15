@@ -20,7 +20,8 @@ try
     {
         Console.WriteLine("Praxis Code Intelligence\n" +
             "register <root> [--manifest context.praxis.json] [--exclude folder;folder]\n" +
-            "list | index <repository> | pause <repository> | resume <repository> | unregister <repository>\n" +
+            "list | index <repository> | rebuild <repository> | pause <repository> | resume <repository> | unregister <repository>\n" +
+            "relocate <repository> <new-root> [--manifest newly-captured.praxis.json] (revokes grants)\n" +
             "status <repository> | search <repository> <query> | query <tool> <JSON arguments>\n" +
             "grant <repository> --client <provider> | revoke <repository> --client <provider>\n" +
             "rpc --client <provider> (one tool/arguments JSON object on stdin)\n" +
@@ -49,7 +50,8 @@ try
         "list" or "doctor" when arguments.Count == 1 => new() { ["action"] = arguments[0] },
         "register" when arguments.Count == 2 => new() { ["action"] = "register", ["root"] = arguments[1], ["manifest"] = manifest,
             ["excludes"] = excludes is null ? null : new JsonArray(excludes.Split(';', StringSplitOptions.RemoveEmptyEntries).Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()) },
-        "index" or "pause" or "resume" or "unregister" or "grant" or "revoke" when arguments.Count == 2 => new() { ["action"] = arguments[0], ["repositoryId"] = arguments[1], ["client"] = client },
+        "index" or "rebuild" or "pause" or "resume" or "unregister" or "grant" or "revoke" when arguments.Count == 2 => new() { ["action"] = arguments[0], ["repositoryId"] = arguments[1], ["client"] = client },
+        "relocate" when arguments.Count == 3 => new() { ["action"] = "relocate", ["repositoryId"] = arguments[1], ["root"] = arguments[2], ["manifest"] = manifest },
         "status" when arguments.Count == 2 => new() { ["action"] = "query", ["tool"] = "get_index_status", ["arguments"] = new JsonObject { ["repositoryId"] = arguments[1] } },
         "search" when arguments.Count == 3 => new() { ["action"] = "query", ["tool"] = "search_code", ["arguments"] = new JsonObject { ["repositoryId"] = arguments[1], ["query"] = arguments[2] } },
         "query" when arguments.Count == 3 => new() { ["action"] = "query", ["tool"] = arguments[1], ["arguments"] = JsonNode.Parse(arguments[2])!.AsObject() },
