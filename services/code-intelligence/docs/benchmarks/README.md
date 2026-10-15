@@ -43,3 +43,10 @@ The final Release run, after builds and all 87 tests completed, measured body-ed
 Lexical p95 was 21.362 ms; hybrid p95 129.0305 ms over 400 samples with four readers; semantic refresh was 420.4457 ms. Hybrid remains below the 500 ms comparison, but is higher than the baseline 107.8961 ms: this series establishes no hybrid speedup. Independent `/usr/bin/time -l` measured maximum RSS 874692608 bytes. The runtime RSS field remains null. The complete raw report is `macos-arm64-5000-contributions-hybrid.praxis.json`.
 
 This is one direct body-edit observation, not structural p95 including 500 ms watcher debounce. It does not establish the normative 50k-symbol query gate, Windows/Linux behavior, representative repository relevance, native IPC/MCP overhead or desktop UI acceptance. The full feature remains in progress.
+
+## First 50k-symbol native measurement (15 October)
+
+`macos-arm64-50000-v5-hybrid.praxis.json` records a single Release run with adapter v5, schema 2, scorer 2, 49,999 source symbols and one metadata symbol. Both latency targets **fail**: lexical p95 204.2217 ms (target 100 ms), hybrid p95 1732.5997 ms (target 500 ms), each over 400 timed queries/four readers after 20 warmups. Independently measured maximum resident size was 1,308,540,928 bytes (below 2 GiB); the runtime RSS field correctly remains null. Body edit 17105.3281 ms and semantic refresh 2073.6256 ms are 50k observations, not applications of the 5k edit/refresh thresholds. Initial index took 18007.3026 ms; initial vectors took 524779.3442 ms.
+
+The synthetic corpus, fixed query schedule, pinned model/reference and environment are recorded in the raw report. Initial vector construction overlapped focused MCP compilation/tests; the measured query/edit phases ran after those completed. This is one direct-service run, not the full five-run/category/concurrent-edit protocol or held-out relevance proof. It excludes owner/MCP transport and does not report retrieval-only latency. Preserve the failure rather than treating 5k improvements as 50k acceptance.
+
