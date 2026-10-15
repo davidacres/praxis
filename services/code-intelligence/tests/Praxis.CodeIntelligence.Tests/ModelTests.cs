@@ -120,6 +120,28 @@ public sealed class ModelTests
             var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root); indexer.Index(repository);
             using var store = new ModelStore(database, Path.Combine(root, "models"));
             var profile = store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!); store.Activate(repository, profile, CancellationToken.None);
+            var query = store.QueryEmbedding(repository, "Example Run", CancellationToken.None)!;
+            using (var read = database.Open(readOnly: true))
+            using (var transaction = read.BeginTransaction(deferred: true))
+            {
+                var actual = ModelStore.Candidates(read, transaction, repository, query, null, null, null);
+                var expected = new Dictionary<string, double>();
+                using (var command = read.CreateCommand())
+                {
+                    command.Transaction = transaction; command.CommandText = "SELECT e.symbol_id,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id";
+                    using var reader = command.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var bytes = (byte[])reader.GetValue(1); double dot = 0;
+                        for (var i = 0; i < 384; i++) dot += System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(i * 4, 4)) * query.Vector[i];
+                        var id = reader.GetString(0); expected[id] = expected.TryGetValue(id, out var prior) ? Math.Max(prior, dot) : dot;
+                    }
+                }
+                Assert.Equal(expected.Count, actual.Count);
+                foreach (var candidate in actual) Assert.Equal(expected[candidate.SymbolId], candidate.Score, 12);
+                using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+                Assert.Throws<OperationCanceledException>(() => ModelStore.Candidates(read, transaction, repository, query, null, null, null, cancelled.Token));
+            }
             using (var write = database.Open())
             using (var command = write.CreateCommand())
             {
