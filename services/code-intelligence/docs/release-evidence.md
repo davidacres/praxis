@@ -4,15 +4,15 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 | Check | Evidence | Result |
 |---|---|---|
-| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 37 passed,0 failed,0 skipped |
+| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 38 passed,0 failed,0 skipped |
 | Source/context | Raw UTF16 hashes, path policy, passive no-execution, SDK capture, generated support and stale/deleted inputs | Covered by targeted tests |
 | Durable jobs | Coalescing, backoff, heartbeat, expired owner recovery, wrong-token publication, pause and atomic refresh enqueue | Covered by targeted tests |
 | Automatic embeddings | Runtime registration/index, queued activation, real inference, edit, empty stale vector results, background refresh | Covered by native model fixture |
 | Git policy | Ignored invalid-encoding source skipped before reads; configured fsmonitor cannot execute | Test passed |
 | MCP/settings | SDK initialize/list/call, scoped denial/cancellation, provider handover filter, settings regressions | 46 focused Node tests passed |
-| JSON Schema | 24 actual responses across11tools on prior reconstructed query checkpoint | Passed; refresh samples after later query changes |
+| JSON Schema | 30 fresh actual responses across11tools, including large-filter cursors and aliases | Passed with JSON Schema2020-12 |
 | Full application build | Includes service, renderer import guard, Vite, copied renderer and trusted IPC guard | Passed after restoring complete SettingsPage source; exact remote blob checked |
-| Linux native package | Self-contained publish and native CLI help smoke | Passed with context-capture source; final runtime/platform execution beyond help remains |
+| Linux native package | Self-contained publish, native CLI help, SQLite initialization and native ONNX model check | Passed on Linux x64; Windows/macOS and native owner IPC remain outstanding |
 | UI e2e/screenshots | Prior environment denied UI launch sockets; user requested implementation proceed | Deferred, not passed |
 | Native owner process/platform matrix | Unit framing/grants/lease tests are not a process-boundary proof | Outstanding |
 | Live provider invocation | No paid/live adapter runs authorized or performed | Outstanding |
@@ -22,7 +22,7 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 | Target | Configured | Executed evidence |
 |---|---|---|
-| Linux x64 | Yes | C# tests, native ONNX and self-contained help smoke |
+| Linux x64 | Yes | C# tests, native ONNX and self-contained CLI/SQLite/model checks |
 | Windows x64 | Yes | None in this environment |
 | macOS arm64 | Yes | None in this environment |
 | Linux arm64/macOS x64 | Additional build targets | None in this environment |
