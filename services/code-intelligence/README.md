@@ -19,6 +19,8 @@ Set `PRAXIS_DOTNET` to an absolute SDK executable if `dotnet` is not on PATH. `n
 
 To run the real desktop integration fixture after the full application build and host packaging, set `PRAXIS_CODE_INTELLIGENCE_EXE` to the packaged executable and run `npx playwright test codeIntelligenceNative.spec.ts --project=functional --workers=1` from `apps/praxis-desktop/main`. It uses a disposable repository and isolated app profile; it performs no project evaluation or paid provider invocation.
 
+With the same `PRAXIS_CODE_INTELLIGENCE_EXE` setting and a built core, `node --test packages/core/out/codeIntelligence/mcpBridge.test.js` from the root also runs the real stdio MCP fixture. It exercises provider-specific grant/revocation and source reads locally, without contacting an inference provider.
+
 ## Index a repository
 
 The development executable is `services/code-intelligence/src/Praxis.CodeIntelligence/bin/Debug/net10.0/Praxis.CodeIntelligence.dll`. Run it through `dotnet`; a packaged self-contained executable needs no separately installed runtime.

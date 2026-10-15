@@ -187,6 +187,12 @@ The full application build and both existing desktop recovery/search regressions
 
 The Playwright catalog now includes the new fixture, and `npm run test:praxis-contracts` passes (614 catalogued tests). The native test visibly skips unless `PRAXIS_CODE_INTELLIGENCE_EXE` identifies a host package. No paid provider call or project evaluation is used.
 
+## Native stdio MCP checkpoint (15 October)
+
+The opt-in core fixture now launches the compiled stdio bridge through the real MCP SDK client and talks to the self-contained native service. It lists all 11 tools, denies ungranted reads, proves a different provider's grant is insufficient, grants the selected provider, searches indexed source, retrieves a hash-verified source fragment, rejects a different repository and denies reads immediately after revocation. The bridge, service and owner transport are real; no inference provider is contacted. Three focused MCP/provider tests pass with zero skips, and core compilation passes.
+
+This closes the local native stdio protocol gap on macOS arm64. It does not claim paid/live Claude Code, Codex, Copilot or Antigravity adapter qualification, nor Windows/Linux execution. The fixture uses temporary data and stops its owner/bridge processes.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.

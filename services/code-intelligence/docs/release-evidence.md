@@ -26,7 +26,7 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 | Windows x64 | Yes | None in this environment |
 | macOS arm64 | Yes | 87 C# tests, independent golden/native ONNX, self-contained CLI/SQLite/model and owner-process IPC checks |
 | Linux arm64/macOS x64 | Additional build targets | None in this environment |
-| Claude Code/Codex/Copilot/Antigravity | Existing MCP routing plus explicit destination grants | Generic SDK mock only; no actual adapter tool invocation claim |
+| Claude Code/Codex/Copilot/Antigravity | Existing MCP routing plus explicit destination grants | Real native stdio MCP SDK invocation passes on macOS; actual agent adapters remain unqualified |
 
 ## Semantic graph checkpoint — 15 October
 
@@ -119,6 +119,12 @@ Adapter `roslyn-5.9/v5` lifts compiler-bound cross-project source references int
 The full application build and both existing desktop recovery/search regressions pass on macOS arm64. A new opt-in native desktop fixture passes against the freshly published self-contained service without replacing its IPC handler: register a disposable repository, index/search, read hash-verified source, force rebuild, pause/resume, relocate to distinct source, search the relocated symbol and unregister. The fixture owns its service process and temporary data. The source view and themed relocation dialog screenshots were inspected on this same build; text, controls, focus ring and dialog layout were legible. This is one light-theme native walkthrough, not a complete theme/accessibility/platform or live-provider qualification.
 
 The Playwright catalog now includes the new fixture, and `npm run test:praxis-contracts` passes (614 catalogued tests). The native test visibly skips unless `PRAXIS_CODE_INTELLIGENCE_EXE` identifies a host package. No paid provider call or project evaluation is used.
+
+## Native stdio MCP checkpoint (15 October)
+
+The opt-in core fixture now launches the compiled stdio bridge through the real MCP SDK client and talks to the self-contained native service. It lists all 11 tools, denies ungranted reads, proves a different provider's grant is insufficient, grants the selected provider, searches indexed source, retrieves a hash-verified source fragment, rejects a different repository and denies reads immediately after revocation. The bridge, service and owner transport are real; no inference provider is contacted. Three focused MCP/provider tests pass with zero skips, and core compilation passes.
+
+This closes the local native stdio protocol gap on macOS arm64. It does not claim paid/live Claude Code, Codex, Copilot or Antigravity adapter qualification, nor Windows/Linux execution. The fixture uses temporary data and stops its owner/bridge processes.
 
 ## Remaining code and acceptance work
 
