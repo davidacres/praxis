@@ -65,7 +65,13 @@ Service/CLI rebuild queues a forced republish under the durable lease protocol; 
 
 Provider consent includes canonical root and an issuance nonce. Queries recheck the exact grant after execution before returning data, so revoked/reissued or old-root consent cannot authorize a result. Legacy grants require explicit reapproval.
 
-**57 C# tests passed, 0 failed, 0 skipped** on Linux x64. New runtime tests cover forced rebuild/alias retention, relocation/fact revocation/provider reapproval/duplicate-root rejection and real watcher rebinding. Desktop controls still need wiring; native IPC/platform/UI execution and release gates remain outstanding.
+**57 C# tests passed, 0 failed, 0 skipped** on Linux x64. New runtime tests cover forced rebuild/alias retention, relocation/fact revocation/provider reapproval/duplicate-root rejection and real watcher rebinding. Desktop controls are now wired (see following checkpoint); native IPC/platform/UI execution and release gates remain outstanding.
+
+## Desktop recovery checkpoint (15 October)
+
+Typed trusted IPC now exposes rebuild/relocate. The Tools panel uses an in-app relocation prompt, removes obsolete generated MCP configurations after moving, offers cursor-based search continuation, labels truncated responses and shows generation from polled status. Full application build passes, including renderer core-import and trusted-IPC guards.
+
+Two functional UI specs were added for recovery/status/dialog behavior and paginated search. Execution was attempted: startup failed before panel interaction because the environment has no X display and lacks the native node-pty module; no screenshots or passing UI assertions are claimed. Standalone ad-hoc e2e typechecking also reports existing launchTestApp.ts Window/Page declaration errors; application workspace typechecking/build passes. User instruction is to proceed with implementation rather than block on GUI environment repair.
 
 ## Verification evidence
 
