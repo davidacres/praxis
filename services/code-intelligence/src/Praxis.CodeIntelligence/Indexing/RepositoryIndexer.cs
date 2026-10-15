@@ -190,7 +190,13 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         using (var command = connection.Command(transaction, "SELECT alias_id,project_id,symbol_id,phrase,phrase_key,origin,enabled,created_utc FROM aliases WHERE repository_id=$0", id))
         using (var reader = command.ExecuteReader()) while (reader.Read()) aliases.Add(new(reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetInt64(6), reader.GetString(7)));
         using var batch = new SqlBatch(connection, transaction);
-        if (retain) ClearContributions(connection, transaction, id);
+        var retainedLocations = new HashSet<string>(StringComparer.Ordinal);
+        var retainedOccurrences = new HashSet<string>(StringComparer.Ordinal);
+        if (retain)
+        {
+            (retainedLocations, retainedOccurrences) = RetainMatchingContributions(connection, transaction, batch, id, analysis, cancellationToken);
+            ClearContributions(connection, transaction, id);
+        }
         else Clear(connection, transaction, id);
         var generation = repository.Generation + 1;
         var fileIds = retainedFiles ?? sources.ToDictionary(s => s.Path, _ => "pci:file:" + Guid.NewGuid().ToString("N"), StringComparer.Ordinal);
@@ -205,7 +211,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 context.Id, projectId, context.Key, context.Hash, generation, context.Resolution,
                 JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls", "references", "accesses", "typeDependencies" }), RoslynAnalyzer.AdapterVersion, JsonSerializer.Serialize(new { snapshotHash }));
             foreach (var source in context.Sources)
-                batch.Execute("INSERT INTO context_files VALUES($0,$1,$2,$3)", context.Id, fileIds[source.Path], source.Hash, generation);
+                batch.Execute("INSERT INTO context_files VALUES($0,$1,$2,$3) ON CONFLICT(context_id,file_id) DO UPDATE SET analysed_hash=excluded.analysed_hash,generation=excluded.generation", context.Id, fileIds[source.Path], source.Hash, generation);
         }
         foreach (var symbol in analysis.Symbols)
         {
@@ -213,7 +219,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 symbol.External ? null : symbol.ContextId, symbol.Identity, symbol.Kind, symbol.Name, symbol.QualifiedName,
                 symbol.Signature, symbol.Revision, symbol.External ? 1 : 0, symbol.Resolution, symbol.ContainerId);
             foreach (var location in symbol.Locations)
-                batch.Execute("INSERT INTO locations VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'declaration')", location.Id, symbol.Id,
+                if (!retainedLocations.Contains(location.Id)) batch.Execute("INSERT INTO locations VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'declaration')", location.Id, symbol.Id,
                     location.ContextId, fileIds[location.FilePath], location.Hash, location.Start, location.End,
                     location.Range.Start.Line, location.Range.Start.Character, location.Range.End.Line, location.Range.End.Character);
             if (!symbol.External)
@@ -234,6 +240,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 batch.Execute("INSERT INTO aliases VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8)", alias.Id, id, alias.ProjectId, alias.SymbolId, alias.Phrase, alias.Key, alias.Origin, alias.Enabled, alias.Created);
         foreach (var call in analysis.Calls.Concat(analysis.Relationships))
         {
+            if (retainedOccurrences.Contains(call.Id)) continue;
             batch.Execute("INSERT INTO occurrences(occurrence_id,context_id,file_id,owner_symbol_id,target_symbol_id,content_hash,start_offset,end_offset,range_json,resolution) VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8,$9)",
                 call.Id, call.ContextId, fileIds[call.FilePath], call.OwnerId, call.TargetId, call.Hash, call.Start, call.End, JsonSerializer.Serialize(call.Range), call.Resolution);
             if (call.TargetId is not null)
@@ -302,17 +309,69 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         }
         if (!SameKeys("SELECT c.context_id FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0", analysis.Contexts.Select(context => context.Id))
             || !SameKeys("SELECT symbol_id FROM symbols WHERE repository_id=$0", analysis.Symbols.Select(symbol => symbol.Id))) return null;
+        var membership = new HashSet<(string Context, string File)>();
+        using (var command = connection.Command(transaction, "SELECT cf.context_id,cf.file_id FROM context_files cf JOIN files f ON f.file_id=cf.file_id WHERE f.repository_id=$0", repositoryId))
+        using (var reader = command.ExecuteReader()) while (reader.Read()) membership.Add((reader.GetString(0), reader.GetString(1)));
+        if (!membership.SetEquals(analysis.Contexts.SelectMany(context => context.Sources.Select(source => (context.Id, files[source.Path]))))) return null;
         return files;
+    }
+
+    private static (HashSet<string> Locations, HashSet<string> Occurrences) RetainMatchingContributions(
+        SqliteConnection connection, SqliteTransaction transaction, SqlBatch batch, string repositoryId, RepositoryAnalysis analysis, CancellationToken cancellationToken)
+    {
+        var expectedLocations = analysis.Symbols.SelectMany(symbol => symbol.Locations.Select(location => (symbol.Id, Location: location)))
+            .ToDictionary(entry => entry.Location.Id, StringComparer.Ordinal);
+        var locations = new HashSet<string>(StringComparer.Ordinal); var removeLocations = new List<string>();
+        using (var command = connection.Command(transaction, "SELECT l.location_id,l.symbol_id,l.context_id,f.relative_path,l.content_hash,l.start_offset,l.end_offset,l.start_line,l.start_character,l.end_line,l.end_character,l.role FROM locations l JOIN files f ON f.file_id=l.file_id WHERE f.repository_id=$0", repositoryId))
+        using (var reader = command.ExecuteReader())
+            while (reader.Read())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var id = reader.GetString(0);
+                var location = new IndexedLocation(id, reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetInt32(5), reader.GetInt32(6),
+                    new(new(reader.GetInt32(7), reader.GetInt32(8)), new(reader.GetInt32(9), reader.GetInt32(10))));
+                if (expectedLocations.TryGetValue(id, out var expected) && expected.Id == reader.GetString(1)
+                    && expected.Location == location && reader.GetString(11) == "declaration") locations.Add(id);
+                else removeLocations.Add(id);
+            }
+        foreach (var id in removeLocations) batch.Execute("DELETE FROM locations WHERE location_id=$0", id);
+
+        var expectedCalls = analysis.Calls.Concat(analysis.Relationships).ToDictionary(call => call.Id, StringComparer.Ordinal);
+        var occurrences = new HashSet<string>(StringComparer.Ordinal); var removeCalls = new HashSet<string>(StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        using (var command = connection.Command(transaction,
+            "SELECT o.occurrence_id,o.context_id,f.relative_path,o.owner_symbol_id,o.target_symbol_id,o.content_hash,o.start_offset,o.end_offset,o.range_json,o.resolution," +
+            "e.edge_id,e.kind,e.provenance,e.resolution,e.input_revision,e.evidence_key,e.source_symbol_id,e.target_symbol_id,e.owner_context_id,e.owner_file_id,o.file_id " +
+            "FROM occurrences o JOIN files f ON f.file_id=o.file_id LEFT JOIN edges e ON e.occurrence_id=o.occurrence_id WHERE f.repository_id=$0", repositoryId))
+        using (var reader = command.ExecuteReader())
+            while (reader.Read())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var id = reader.GetString(0);
+                var same = visited.Add(id) && expectedCalls.TryGetValue(id, out var expected)
+                    && expected.ContextId == reader.GetString(1) && expected.FilePath == reader.GetString(2)
+                    && expected.OwnerId == reader.GetString(3) && expected.TargetId == (reader.IsDBNull(4) ? null : reader.GetString(4))
+                    && expected.Hash == reader.GetString(5) && expected.Start == reader.GetInt32(6) && expected.End == reader.GetInt32(7)
+                    && JsonSerializer.Serialize(expected.Range) == reader.GetString(8) && expected.Resolution == reader.GetString(9)
+                    && (expected.TargetId is null ? reader.IsDBNull(10)
+                        : !reader.IsDBNull(10) && reader.GetString(10) == Identity.Id("pci:edge:", id, expected.TargetId)
+                            && reader.GetString(11) == expected.Kind && reader.GetString(12) == "compiler"
+                            && reader.GetString(13) == expected.Resolution && reader.GetString(14) == expected.Hash && reader.GetString(15) == id
+                            && reader.GetString(16) == expected.OwnerId && reader.GetString(17) == expected.TargetId
+                            && reader.GetString(18) == expected.ContextId && !reader.IsDBNull(19) && reader.GetString(19) == reader.GetString(20));
+                if (same) occurrences.Add(id);
+                else { occurrences.Remove(id); removeCalls.Add(id); }
+            }
+        foreach (var id in removeCalls) batch.Execute("DELETE FROM occurrences WHERE occurrence_id=$0", id);
+        // Edges without occurrences are not emitted by this analyzer and must not survive.
+        batch.Execute("DELETE FROM edges WHERE occurrence_id IS NULL AND owner_context_id IN(SELECT c.context_id FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0)", repositoryId);
+        return (locations, occurrences);
     }
 
     private static void ClearContributions(SqliteConnection connection, SqliteTransaction transaction, string id)
     {
         const string contexts = "SELECT c.context_id FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0";
         connection.Execute(transaction, "UPDATE embedding_sets SET state='stale' WHERE symbol_id IN(SELECT symbol_id FROM symbols WHERE repository_id=$0)", id);
-        connection.Execute(transaction, "DELETE FROM edges WHERE owner_context_id IN(" + contexts + ")", id);
-        connection.Execute(transaction, "DELETE FROM occurrences WHERE context_id IN(" + contexts + ")", id);
-        // Context/file membership cascades old declaration locations, not parent symbols.
-        connection.Execute(transaction, "DELETE FROM context_files WHERE context_id IN(" + contexts + ")", id);
         connection.Execute(transaction, "DELETE FROM context_dependencies WHERE caller_context_id IN(" + contexts + ") OR target_context_id IN(" + contexts + ")", id);
         connection.Execute(transaction, "DELETE FROM project_inputs WHERE context_id IN(" + contexts + ")", id);
         connection.Execute(transaction, "DELETE FROM descriptions WHERE symbol_id IN(SELECT symbol_id FROM symbols WHERE repository_id=$0)", id);

@@ -240,6 +240,40 @@ public sealed class IndexingTests : IDisposable
         Assert.Empty(database.Check());
     }
 
+    [Fact]
+    public void UnchangedCallerIsReboundWhenOverloadAccessibilityChanges()
+    {
+        var metadata = typeof(object).Assembly.Location;
+        var manifest = new PassiveManifest(1, [new("library", "Library", ["Library.cs"], Metadata: [new(metadata, SourceFiles.Hash(File.ReadAllBytes(metadata)))]),
+            new("caller", "Caller", ["Caller.cs"], ["library"], [new(metadata, SourceFiles.Hash(File.ReadAllBytes(metadata)))])]);
+        Write("context.praxis.json", JsonSerializer.Serialize(manifest));
+        Write("Library.cs", "public class Library { public static int Target(int value) => 1; private static int Target(string value) => 2; }");
+        Write("Caller.cs", "class Caller { int Run() => Library.Target(default); }");
+        var indexer = new RepositoryIndexer(database); var id = indexer.Register(root, new("context.praxis.json")); indexer.Index(id);
+        (string Occurrence, string Target, string Signature) Call()
+        {
+            using var connection = database.Open(readOnly: true); using var command = connection.CreateCommand();
+            command.CommandText = "SELECT o.occurrence_id,o.target_symbol_id,s.signature FROM occurrences o JOIN edges e ON e.occurrence_id=o.occurrence_id JOIN symbols s ON s.symbol_id=o.target_symbol_id JOIN files f ON f.file_id=o.file_id WHERE f.relative_path='Caller.cs' AND e.kind='calls'";
+            using var reader = command.ExecuteReader(); Assert.True(reader.Read());
+            var result = (reader.GetString(0), reader.GetString(1), reader.GetString(2)); Assert.False(reader.Read()); return result;
+        }
+        var before = Call(); Assert.Contains("int value", before.Signature);
+        using (var connection = database.Open())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "CREATE TRIGGER retain_caller_locations BEFORE DELETE ON locations WHEN OLD.file_id IN(SELECT file_id FROM files WHERE relative_path='Caller.cs') BEGIN SELECT RAISE(ABORT,'unchanged caller location deleted'); END";
+            command.ExecuteNonQuery();
+        }
+        Write("Library.cs", "public class Library { private static int Target(int value) => 1; public static int Target(string value) => 2; }");
+        Assert.True(indexer.Index(id).Changed);
+        var after = Call(); Assert.Equal(before.Occurrence, after.Occurrence); Assert.NotEqual(before.Target, after.Target); Assert.Contains("string value", after.Signature);
+        var retained = StructuralSnapshot(database);
+        using (var connection = database.Open())
+        using (var command = connection.CreateCommand()) { command.CommandText = "DROP TRIGGER retain_caller_locations"; command.ExecuteNonQuery(); }
+        Assert.True(indexer.Index(id, force: true).Changed);
+        Assert.Equal(retained, StructuralSnapshot(database)); Assert.Empty(database.Check());
+    }
+
     private static string StructuralSnapshot(IndexDatabase database)
     {
         string[] queries = [
