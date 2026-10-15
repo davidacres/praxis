@@ -73,6 +73,14 @@ Typed trusted IPC now exposes rebuild/relocate. The Tools panel uses an in-app r
 
 Two functional UI specs were added for recovery/status/dialog behavior and paginated search. Execution was attempted: startup failed before panel interaction because the environment has no X display and lacks the native node-pty module; no screenshots or passing UI assertions are claimed. Standalone ad-hoc e2e typechecking also reports existing launchTestApp.ts Window/Page declaration errors; application workspace typechecking/build passes. User instruction is to proceed with implementation rather than block on GUI environment repair.
 
+## Retrieval completeness checkpoint (15 October)
+
+Status/summary collections now reduce detail to the byte budget, preserve full project coverage totals, prioritize active model/error diagnostics and flag both fixed-cap and budget truncation. Unresolved trace occurrences include source evidence; graph trimming removes occurrences from omitted nodes and batches node removal to bound repeated serialization.
+
+Optional search graph expansion adds at most 100 one-hop neighbors from the top 20 direct seeds, respects structural filters, preserves seed/edge evidence, and ranks graph-only results below direct matches. The wire contract has no graph-rank field, so graph support appears in reasons/channels and score without inventing a schema field.
+
+**60 C# tests passed, 0 failed, 0 skipped**; **71 fresh responses across all 11 tools** passed normative schemas. UI execution remains blocked as documented; no new UI changes in this checkpoint.
+
 ## Verification evidence
 
 15 October: C#38 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution. Explicit SDK capture, stale/deleted inputs, generated support non-disclosure and alias preservation also pass.
@@ -83,7 +91,7 @@ Full application build including the service passed; Linux self-contained publis
 
 - Cross-platform golden numerical verification and vector representation reuse/performance verification.
 - Semantic API-stamp/affected-context optimization, richer member/type/reference relationships and delegate points-to analysis.
-- Remaining status/summary/irreducible-item budget boundaries and execution of Windows/macOS source-handle fixtures.
+- Irreducible single-item budget behavior and execution of Windows/macOS source-handle fixtures.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
 Current indexing intentionally uses conservative full-context republishing; it does not claim incremental performance or release readiness. M4–M6 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
