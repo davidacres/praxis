@@ -45,6 +45,7 @@ public sealed class ServiceRuntime : IDisposable
                     return Result(new { repositoryId = registered });
                 }
                 case "index": return Result(Indexer.Index(repositoryId!, cancellationToken));
+                case "alias": Indexer.AddAlias(repositoryId!, request["symbolId"]!.GetValue<string>(), request["phrase"]!.GetValue<string>()); return Result(new { added = true });
                 case "pause": CancelRepositoryWork(repositoryId!); Scheduler.CancelRepository(repositoryId!); Indexer.SetPaused(repositoryId!, true); return Result(new { paused = true });
                 case "resume": Indexer.SetPaused(repositoryId!, false); return Result(Indexer.Index(repositoryId!, cancellationToken));
                 case "unregister":
