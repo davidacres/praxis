@@ -105,10 +105,16 @@ Transaction-local prepared commands are reused during structural/vector publicat
 
 A reproducible Release benchmark now generates isolated sources and measures four concurrent readers, indexing and optional local model refresh. Checked-in Linux reports are explicitly unsuccessful: the prepared-command run measured lexical p95 62.9009 ms, one body edit 5422.148 ms and peak RSS 452349952 bytes. It predates adapter v2 and excludes debounce/native owner/MCP; it establishes no normative edit p95 or release readiness. The earlier baseline overlapped compilation and is not a controlled comparison. See `benchmarks/README.md`; rerun after semantic changes.
 
+## Member/event/throw checkpoint (15 October)
+
+Adapter `roslyn-5.9/v3` normalizes reduced extension methods to their source definitions; shared field declarations retain separate member-owned type dependencies with distinct occurrence identities. Null-coalescing assignment is classified as read/write. Compiler-resolved interface member implementations and property/indexer/event overrides now have relationship evidence. Direct source handler subscriptions produce HANDLES_EVENT from handler to event; unsubscription does not create that relationship. Direct and conditional event invocation produce EMITS_EVENT from enclosing callable to event. Unknown handler flow emits EVENT_HANDLER_UNRESOLVED rather than inventing a handler edge. Explicit throw statements/expressions identify their statically known named exception type; bare rethrow is not given an invented type. These facts do not prove handler execution, event ordering, runtime receivers or exhaustive exception behavior.
+
+Unsupported implicitly declared source delegate methods remain unresolved source endpoints instead of being mislabelled external metadata. Adapter-version hashes trigger reconciliation after upgrades. **75 C# tests passed, 0 failed, 0 skipped**, including real pinned-model inference and a query test separating event/throw relationships from call queries. No desktop UI files changed. General delegate points-to flow, project/module dependency relationships, targeted invalidation and release performance/quality/platform gates remain open.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.
-- Semantic API-stamp/affected-context optimization, remaining member contracts, event/exception/dependency relationships and delegate points-to analysis.
+- Semantic API-stamp/affected-context optimization, remaining dependency relationships and general delegate points-to analysis.
 - Irreducible single-item budget behavior and execution of Windows/macOS source-handle fixtures.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
