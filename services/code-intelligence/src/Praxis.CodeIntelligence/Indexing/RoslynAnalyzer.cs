@@ -135,17 +135,21 @@ public sealed class RoslynAnalyzer
             {
                 var model = input.Compilation.GetSemanticModel(tree); var source = byPath[tree.FilePath];
                 if (source.Role == "semanticSupport") continue;
-                foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(n => n is InvocationExpressionSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax or BaseTypeSyntax))
+                foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(n => n is InvocationExpressionSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax or BaseTypeSyntax
+                    || n is MethodDeclarationSyntax methodDeclaration && methodDeclaration.Modifiers.Any(SyntaxKind.OverrideKeyword)))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var ownerNode = node.Ancestors().FirstOrDefault(n => nodeSymbols.TryGetValue(n, out var ownerId)
+                    var ownerNode = node is MethodDeclarationSyntax ? node : node.Ancestors().FirstOrDefault(n => nodeSymbols.TryGetValue(n, out var ownerId)
                         && symbols[ownerId].Kind is "type" or "method" or "function" or "constructor" or "accessor" or "module");
                     if (ownerNode is null) continue;
-                    ISymbol? target = node is BaseTypeSyntax baseType
-                        ? model.GetTypeInfo(baseType.Type, cancellationToken).Type
-                        : model.GetSymbolInfo(node, cancellationToken).Symbol;
+                    ISymbol? target = node switch
+                    {
+                        BaseTypeSyntax baseType => model.GetTypeInfo(baseType.Type, cancellationToken).Type,
+                        MethodDeclarationSyntax methodDeclaration => (model.GetDeclaredSymbol(methodDeclaration, cancellationToken) as IMethodSymbol)?.OverriddenMethod,
+                        _ => model.GetSymbolInfo(node, cancellationToken).Symbol
+                    };
                     if (target is ITypeSymbol { TypeKind: TypeKind.Error }) target = null;
-                    var relationKind = node is BaseTypeSyntax
+                    var relationKind = node is MethodDeclarationSyntax ? "overrides" : node is BaseTypeSyntax
                         ? target is INamedTypeSymbol { TypeKind: TypeKind.Interface } && model.GetDeclaredSymbol(ownerNode, cancellationToken) is INamedTypeSymbol { TypeKind: not TypeKind.Interface }
                             ? "implements" : "inherits"
                         : "calls";
@@ -159,6 +163,12 @@ public sealed class RoslynAnalyzer
                                 symbols[targetId] = new(targetId, identity.Json, "", Kind(target), target.Name,
                                     target.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat), target.ToDisplayString(SignatureFormat),
                                     SourceFiles.Hash(Encoding.UTF8.GetBytes(identity.Json)), "resolved", null, true, "", []);
+                            else if (target is IMethodSymbol { MethodKind: MethodKind.Constructor, IsImplicitlyDeclared: true }
+                                && symbols.TryGetValue(Identify(target.ContainingType, input.Context, null).Id, out var containingType))
+                                symbols[targetId] = new(targetId, identity.Json, containingType.ContextId, "constructor", target.Name,
+                                    target.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat), target.ToDisplayString(SignatureFormat),
+                                    SourceFiles.Hash(Encoding.UTF8.GetBytes(identity.Json + containingType.Revision)), "resolved", containingType.Id, false,
+                                    "Implicit source constructor inferred by the compiler; no explicit declaration.", []);
                             else targetId = null; // Unsupported declaration never creates a dangling endpoint.
                         }
                     }
@@ -233,6 +243,8 @@ public sealed class RoslynAnalyzer
             symbol = symbol.OriginalDefinition;
             if (symbol is IMethodSymbol { PartialDefinitionPart: not null } method) symbol = method.PartialDefinitionPart;
             var reference = symbol.DeclaringSyntaxReferences.FirstOrDefault();
+            if (reference is null && symbol is IMethodSymbol { MethodKind: MethodKind.Constructor, IsImplicitlyDeclared: true })
+                reference = symbol.ContainingType?.DeclaringSyntaxReferences.FirstOrDefault();
             var defining = reference is not null && treeContexts.TryGetValue(reference.SyntaxTree, out var context) ? context : null;
             var external = defining is null && reference is null;
             var descriptor = symbol.GetDocumentationCommentId() ?? symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
