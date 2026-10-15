@@ -157,6 +157,22 @@ public sealed class IndexingTests : IDisposable
         if (semantic) Assert.All(result.Calls, call => Assert.Equal("resolved", call.Resolution));
     }
 
+    [Fact]
+    public void ImplicitSourceConstructorsAreNotMisclassifiedAsExternalMetadata()
+    {
+        var metadataPath = typeof(object).Assembly.Location;
+        var manifest = new PassiveManifest(1, [new("library", "Library", ["Example.cs"], Metadata: [new(metadataPath, SourceFiles.Hash(File.ReadAllBytes(metadataPath)))]),
+            new("caller", "Caller", ["Caller.cs"], ["library"], [new(metadataPath, SourceFiles.Hash(File.ReadAllBytes(metadataPath)))])]);
+        var result = new RoslynAnalyzer().Analyze("repo", [Source("Example.cs", "public class Example {}"), Source("Caller.cs", "class Caller { Example Make() => new(); }")], manifest);
+        Assert.All(result.Contexts, context => Assert.Equal("complete", context.Resolution));
+        var call = Assert.Single(result.Calls);
+        var constructor = Assert.Single(result.Symbols, s => s.Id == call.TargetId);
+        Assert.False(constructor.External); Assert.Equal("constructor", constructor.Kind); Assert.Empty(constructor.Locations);
+        var type = Assert.Single(result.Symbols, s => s.Name == "Example");
+        Assert.Equal(type.Id, constructor.ContainerId); Assert.Equal(type.ContextId, constructor.ContextId);
+        Assert.NotEqual(call.ContextId, constructor.ContextId); Assert.Equal("resolved", call.Resolution);
+    }
+
     private static SourceInput Source(string path, string text) { var bytes = Encoding.UTF8.GetBytes(text); return new(path, SourceFiles.Hash(bytes), bytes, text); }
     public void Dispose() => Directory.Delete(root, recursive: true);
 }
