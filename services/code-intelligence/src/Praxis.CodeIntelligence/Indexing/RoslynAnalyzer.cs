@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Indexing;
 /// <summary>In-memory compiler analysis from explicit inputs. Never evaluates a project or executes generators.</summary>
 public sealed class RoslynAnalyzer
 {
-    public const string AdapterVersion = "roslyn-5.9/v3";
+    public const string AdapterVersion = "roslyn-5.9/v4";
     private sealed record CompilationInput(PassiveProject Project, IndexedContext Context, CSharpCompilation Compilation, IReadOnlyList<Diagnostic> Diagnostics);
     private static readonly SymbolDisplayFormat SignatureFormat = SymbolDisplayFormat.CSharpErrorMessageFormat
         .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType | SymbolDisplayMemberOptions.IncludeType
@@ -232,6 +232,21 @@ public sealed class RoslynAnalyzer
                         input.Context.Resolution == "complete" ? "resolved" : "possible", kind));
                     if (relationships.Count + calls.Count > 200_000 || symbols.Count > 50_000)
                         throw new IOException("INPUT_TOO_LARGE: semantic fact limit exceeded.");
+                }
+                foreach (var directive in root.DescendantNodes().OfType<UsingDirectiveSyntax>())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (directive.Name is null || Owner(directive) is not string owner) continue;
+                    var imported = model.GetSymbolInfo(directive.Name, cancellationToken).Symbol;
+                    // Merged namespaces may span multiple defining projects/assemblies.
+                    // Resolve each constituent rather than assigning a referencing-context identity.
+                    if (imported is INamespaceSymbol importedNamespace)
+                    {
+                        foreach (var constituent in importedNamespace.ConstituentNamespaces)
+                            if (constituent.ContainingAssembly is not null)
+                                Add(directive.Name, owner, constituent, "imports");
+                    }
+                    else if (imported is INamedTypeSymbol) Add(directive.Name, owner, imported, "imports");
                 }
                 foreach (var name in root.DescendantNodes().OfType<SimpleNameSyntax>())
                 {

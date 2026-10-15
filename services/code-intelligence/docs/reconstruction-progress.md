@@ -169,6 +169,12 @@ The fixture explicitly starts/stops its own owner process and uses temporary sou
 
 The packaged IPC fixture now starts the owner through a normal CLI command, rejects a concurrent second owner, and recovers after a forced owner crash without removing the stale rendezvous/socket. Persisted generation, search and provider revocation survive; the recovered owner has a fresh authentication token. The private rendezvous adds an informational process ID for fixture cleanup; authentication still uses its existing endpoint/version/token checks. Complete self-contained macOS arm64 packaging and real-model checks pass. Windows/Linux execution remains open.
 
+## Compiler import checkpoint (15 October)
+
+Adapter `roslyn-5.9/v4` records compiler-bound namespace, alias and static imports with exact source occurrences. Merged namespace imports resolve each constituent to its defining project/assembly rather than inventing a caller-owned namespace. Unbound imports emit no invented target; compiler diagnostics remain visible. Syntax-only analysis emits no semantic import edges. Graph queries expose imports separately from calls, and removing directives removes the published edges. Adapter-version hashing reconciles existing indexes on upgrade.
+
+**90 C# tests passed, zero failures/skips; 91 captured responses validated across all 11 tool schemas.** Tests cover global/namespace-scoped imports, alias/static targets, cross-project merged namespaces, partial contexts, publication/removal and query evidence. Project/package dependency completeness and general delegate flow remain open.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.

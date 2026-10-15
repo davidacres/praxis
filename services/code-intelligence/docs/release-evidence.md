@@ -102,6 +102,12 @@ Self-contained macOS arm64 packaging now executes actual local IPC: automatic ow
 
 Windows/Linux execution of this IPC fixture, desktop visual/e2e proof, live provider adapters, normative scale/quality gates, targeted invalidation and remaining relationship coverage are still open. Automatic startup/crash takeover is now evidenced on macOS; it must not be treated as proof of the other platform results.
 
+## Compiler import checkpoint (15 October)
+
+Adapter `roslyn-5.9/v4` records compiler-bound namespace, alias and static imports with exact source occurrences. Merged namespace imports resolve each constituent to its defining project/assembly rather than inventing a caller-owned namespace. Unbound imports emit no invented target; compiler diagnostics remain visible. Syntax-only analysis emits no semantic import edges. Graph queries expose imports separately from calls, and removing directives removes the published edges. Adapter-version hashing reconciles existing indexes on upgrade.
+
+**90 C# tests passed, zero failures/skips; 91 captured responses validated across all 11 tool schemas.** Tests cover global/namespace-scoped imports, alias/static targets, cross-project merged namespaces, partial contexts, publication/removal and query evidence. Project/package dependency completeness and general delegate flow remain open.
+
 ## Remaining code and acceptance work
 
 1. Execute the independent golden tokenizer/vector and representation source-span fixtures on Windows; macOS arm64 now passes these fixtures. Exact persisted chunk spans and selected source excerpts are implemented. Linux x64 passes the checked-in Python-reference fixture (10 token/span cases, 4 full vectors, absolute tolerance 1e-5/cosine >= 0.99999).

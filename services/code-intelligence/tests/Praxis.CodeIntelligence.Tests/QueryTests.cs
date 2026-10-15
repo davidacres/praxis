@@ -283,6 +283,35 @@ public sealed class QueryTests : IDisposable
     }
 
     [Fact]
+    public void ImportGraphsPublishCompilerEvidenceAndDisappearWhenDirectivesAreRemoved()
+    {
+        const string code = "using System; using Alias = System.String; class Example {}";
+        File.WriteAllText(Path.Combine(root, "Example.cs"), code); indexer.Index(repository);
+        var module = Symbol("[synthetic projectRoot]");
+        var input = new JsonObject { ["symbolId"] = module["symbolId"]!.DeepClone(), ["edgeKinds"] = new JsonArray("imports") };
+        var trace = Query("trace_flow", input);
+        Assert.Null(trace["error"]);
+        var edges = trace["data"]!["edges"]!.AsArray(); Assert.Equal(2, edges.Count);
+        Assert.All(edges, edge =>
+        {
+            Assert.Equal("imports", edge!["kind"]!.GetValue<string>());
+            foreach (var evidenceId in edge["evidenceIds"]!.AsArray())
+            {
+                var evidence = Assert.Single(trace["evidence"]!.AsArray(), item => item!["id"]!.GetValue<string>() == evidenceId!.GetValue<string>());
+                Assert.Equal("compiler", evidence!["provenance"]!.GetValue<string>());
+                Assert.Equal("Example.cs", evidence["path"]!.GetValue<string>());
+                var range = evidence["range"]!;
+                var text = code[range["start"]!["character"]!.GetValue<int>()..range["end"]!["character"]!.GetValue<int>()];
+                Assert.Contains(text, new[] { "System", "System.String" });
+            }
+        });
+        Assert.Empty(Query("get_callees", new() { ["symbolId"] = module["symbolId"]!.DeepClone() })["data"]!["items"]!.AsArray());
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example {}"); indexer.Index(repository);
+        Assert.Empty(Query("trace_flow", input)["data"]!["edges"]!.AsArray());
+        Assert.Empty(database.Check());
+    }
+
+    [Fact]
     public void EventAndExplicitThrowEdgesRemainSeparateFromCallQueries()
     {
         File.WriteAllText(Path.Combine(root, "Example.cs"), "delegate void Signal(); class Example { event Signal Changed; void Handler() {} void Wire() { Changed += Handler; } void Run() { Changed?.Invoke(); throw new System.InvalidOperationException(); } }"); indexer.Index(repository);

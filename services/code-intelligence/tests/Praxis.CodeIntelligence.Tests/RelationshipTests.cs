@@ -17,6 +17,54 @@ public sealed class RelationshipTests
     }
 
     [Fact]
+    public void NamespaceAliasAndStaticImportsHaveBoundTargetsAndExactEvidence()
+    {
+        const string code = "global using System; using Alias = System.String; using static System.Math; namespace Local { using System.Collections.Generic; class Example {} }";
+        var result = Analyze(code);
+        Assert.All(result.Contexts, context => Assert.Equal("complete", context.Resolution));
+        var imports = result.Relationships.Where(edge => edge.Kind == "imports").ToArray();
+        Assert.Equal(4, imports.Length);
+        Assert.Equal(new[] { "System", "System.Collections.Generic", "System.Math", "string" }, imports.Select(edge => result.Symbols.Single(symbol => symbol.Id == edge.TargetId).QualifiedName).Order(StringComparer.Ordinal));
+        foreach (var edge in imports)
+        {
+            Assert.Equal("resolved", edge.Resolution);
+            Assert.Equal("module", result.Symbols.Single(symbol => symbol.Id == edge.OwnerId).Kind);
+            Assert.True(result.Symbols.Single(symbol => symbol.Id == edge.TargetId).External);
+            Assert.Contains(code[edge.Start..edge.End], new[] { "System", "System.String", "System.Math", "System.Collections.Generic" });
+        }
+        Assert.Empty(Analyze(code, semantic: false).Relationships);
+    }
+
+    [Fact]
+    public void CrossProjectNamespaceImportsUseEachDefiningContextAndNeverInventUnboundTargets()
+    {
+        var files = new[] { ("First.cs", "namespace Shared { public class First {} }"),
+            ("Second.cs", "namespace Shared { public class Second {} }"),
+            ("Caller.cs", "using Shared; using Missing; using Alias = Shared.First; class Caller { Alias Run() => new(); }") };
+        var sources = files.Select(file => new SourceInput(file.Item1, SourceFiles.Hash(Encoding.UTF8.GetBytes(file.Item2)), Encoding.UTF8.GetBytes(file.Item2), file.Item2)).ToArray();
+        var assembly = typeof(object).Assembly.Location;
+        MetadataInput[] metadata = [new(assembly, SourceFiles.Hash(File.ReadAllBytes(assembly)))];
+        var manifest = new PassiveManifest(1, [new("first", "First", ["First.cs"], Metadata: metadata),
+            new("second", "Second", ["Second.cs"], Metadata: metadata),
+            new("caller", "Caller", ["Caller.cs"], ["first", "second"], metadata)]);
+        var result = new RoslynAnalyzer().Analyze("repo", sources, manifest);
+        var imports = result.Relationships.Where(edge => edge.Kind == "imports").ToArray();
+        Assert.Equal(3, imports.Length);
+        var namespaces = result.Symbols.Where(symbol => symbol.Kind == "namespace" && symbol.Name == "Shared").ToArray();
+        Assert.Equal(2, namespaces.Length);
+        Assert.All(namespaces, symbol => Assert.Single(imports, edge => edge.TargetId == symbol.Id));
+        Assert.All(imports, edge =>
+        {
+            var target = result.Symbols.Single(symbol => symbol.Id == edge.TargetId);
+            Assert.False(target.External);
+            Assert.NotEqual(edge.ContextId, target.ContextId);
+            Assert.Equal("possible", edge.Resolution); // Missing using makes the caller context partial.
+        });
+        Assert.DoesNotContain(result.Symbols, symbol => symbol.Name == "Missing");
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Code == "CS0246");
+    }
+
+    [Fact]
     public void CompilerClassifiesFieldPropertyAssignmentsAndArguments()
     {
         const string code = "class Example { int field; int Property { get; set; } static void Output(out int value) { value = 1; } static void Mutate(ref int value) {} int Run() { field = 1; field += 2; ++field; Output(out field); Mutate(ref field); Property = field; return Property; } }";
