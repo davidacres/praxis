@@ -97,10 +97,18 @@ Normative defaults are now search/lookup/related limit 10, callers/callees limit
 14 October: full desktop build passed including renderer core-import and trusted-IPC guards;2 MCP SDK/provider-isolation tests passed;24 responses across all11 tools validated with JSON Schema2020-12.
 Full application build including the service passed; Linux self-contained publish/CLI/SQLite/native-model checks passed after context capture.30fresh responses across all11tools validate against the normative schemas.46focused MCP/settings tests passed. Parser counts moved53/160/345/18to54/164/366/18(features/stories/tasks/bugs). Do not treat historical results as verification of later changes.
 
+## Relationship and benchmark checkpoint (15 October)
+
+Compiler adapter `roslyn-5.9/v2` adds source-backed REFERENCES, supported field/property READS/WRITES, declared USES_TYPE dependencies and named method/delegate RETURNS_TYPE edges. Simple/compound assignment, increment, ref/out arguments and nameof have explicit classification tests. Local variables/parameters are not promoted to member symbols; unsupported source endpoints are omitted. Syntax fallback emits no new semantic facts. All relationship occurrences carry exact source hash/range, context and compiler resolution; they publish atomically alongside calls. The adapter version participates in context hashes so reconciliation upgrades existing v1 indexes rather than accepting a false no-op. Unfiltered graphs/search expansion may now include type dependencies; call-filtered queries remain isolated.
+
+Transaction-local prepared commands are reused during structural/vector publication; there is no shared mutable command cache or schema migration. **67 C# tests passed, 0 failed, 0 skipped** with the pinned real model. Four new relationship tests cover classifications, syntax fallback, type facts, foreign keys and no-op publication. Updated graph tests retain direct-result ordering and evidence checks.
+
+A reproducible Release benchmark now generates isolated sources and measures four concurrent readers, indexing and optional local model refresh. Checked-in Linux reports are explicitly unsuccessful: the prepared-command run measured lexical p95 62.9009 ms, one body edit 5422.148 ms and peak RSS 452349952 bytes. It predates adapter v2 and excludes debounce/native owner/MCP; it establishes no normative edit p95 or release readiness. The earlier baseline overlapped compilation and is not a controlled comparison. See `benchmarks/README.md`; rerun after semantic changes.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.
-- Semantic API-stamp/affected-context optimization, richer member/type/reference relationships and delegate points-to analysis.
+- Semantic API-stamp/affected-context optimization, remaining member contracts, event/exception/dependency relationships and delegate points-to analysis.
 - Irreducible single-item budget behavior and execution of Windows/macOS source-handle fixtures.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
