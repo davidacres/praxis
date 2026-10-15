@@ -78,9 +78,13 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         foreach (var input in inputs)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var chunks = reusable.TryGetValue((input.Id, fingerprint), out var cached) && cached.Hash == input.Representation.Hash
-                && cached.Revision == input.Revision && cached.Chunks.All(chunk => chunk.Span.End <= input.Representation.Text.Length)
-                ? cached.Chunks.Select(chunk => new EmbeddedChunk(EmbeddingReuse.Decode(chunk.Values), chunk.Span)).ToArray()
+            var current = reusable.TryGetValue((input.Id, fingerprint), out var cached) && cached.Hash == input.Representation.Hash
+                && cached.Revision == input.Revision && cached.Chunks.All(chunk => chunk.Span.End <= input.Representation.Text.Length);
+            // Complete validated current sets require neither inference nor derivative rewrites.
+            // Compare exact regenerated source metadata so corrupt/stale spans are still repaired.
+            if (current && cached!.Chunks.All(chunk => chunk.Metadata == RepresentationBuilder.ChunkMetadata(input.Representation, chunk.Span))) continue;
+            var chunks = current
+                ? cached!.Chunks.Select(chunk => new EmbeddedChunk(EmbeddingReuse.Decode(chunk.Values), chunk.Span)).ToArray()
                 : model.EmbedDetailedRepresentation(input.Representation.Text, cancellationToken);
             foreach (var chunk in chunks) LocalModel.ValidateVector(chunk.Vector);
             embeddings.Add((input.Id, input.Revision, input.Representation, chunks));
