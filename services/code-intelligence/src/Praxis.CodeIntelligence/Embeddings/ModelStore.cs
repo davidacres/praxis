@@ -89,28 +89,29 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             if (SourceFiles.Read(repository.Root, source.Key, cancellationToken).Hash != source.Value)
                 throw new IOException("INDEX_STALE: source changed during embedding.");
         using var writer = database.Open(); using var transaction = writer.BeginTransaction(deferred: false);
+        using var batch = new SqlBatch(writer, transaction);
         if (Convert.ToInt64(writer.Scalar(transaction, "SELECT query_epoch FROM repositories WHERE repository_id=$0", repositoryId)) != repository.QueryEpoch)
             throw new InvalidOperationException("INDEX_STALE: embedding inputs changed during inference.");
         if (leaseToken is not null) Host.DurableScheduler.AssertLease(writer, transaction, leaseToken);
-        writer.Execute(transaction, "UPDATE repository_models SET state='retiring' WHERE repository_id=$0 AND state='active' AND model_fingerprint!=$1", repositoryId, fingerprint);
-        writer.Execute(transaction, "INSERT INTO repository_models VALUES($0,$1,'active',$2) ON CONFLICT(repository_id,model_fingerprint) DO UPDATE SET state='active',activated_utc=excluded.activated_utc", repositoryId, fingerprint, DateTimeOffset.UtcNow.ToString("O"));
+        batch.Execute("UPDATE repository_models SET state='retiring' WHERE repository_id=$0 AND state='active' AND model_fingerprint!=$1", repositoryId, fingerprint);
+        batch.Execute("INSERT INTO repository_models VALUES($0,$1,'active',$2) ON CONFLICT(repository_id,model_fingerprint) DO UPDATE SET state='active',activated_utc=excluded.activated_utc", repositoryId, fingerprint, DateTimeOffset.UtcNow.ToString("O"));
         foreach (var item in embeddings)
         {
-            writer.Execute(transaction, "UPDATE embedding_sets SET state='stale' WHERE symbol_id=$0 AND model_fingerprint=$1", item.Id, fingerprint);
-            writer.Execute(transaction, "DELETE FROM embedding_sets WHERE symbol_id=$0 AND model_fingerprint=$1", item.Id, fingerprint);
-            writer.Execute(transaction, "INSERT INTO representation_targets VALUES($0,$1,$2,$3,'eligible',NULL) ON CONFLICT(symbol_id,model_fingerprint) DO UPDATE SET input_revision=excluded.input_revision,representation_hash=excluded.representation_hash,eligibility='eligible',exclusion_reason=NULL", item.Id, fingerprint, item.Revision, item.Representation.Hash);
+            batch.Execute("UPDATE embedding_sets SET state='stale' WHERE symbol_id=$0 AND model_fingerprint=$1", item.Id, fingerprint);
+            batch.Execute("DELETE FROM embedding_sets WHERE symbol_id=$0 AND model_fingerprint=$1", item.Id, fingerprint);
+            batch.Execute("INSERT INTO representation_targets VALUES($0,$1,$2,$3,'eligible',NULL) ON CONFLICT(symbol_id,model_fingerprint) DO UPDATE SET input_revision=excluded.input_revision,representation_hash=excluded.representation_hash,eligibility='eligible',exclusion_reason=NULL", item.Id, fingerprint, item.Revision, item.Representation.Hash);
             var set = Identity.Id("pci:vector:", item.Id, fingerprint, item.Representation.Hash);
-            writer.Execute(transaction, "INSERT INTO embedding_sets VALUES($0,$1,$2,$3,$4,$5,'pending',NULL)", set, item.Id, fingerprint, item.Revision, item.Representation.Hash, item.Chunks.Count);
+            batch.Execute("INSERT INTO embedding_sets VALUES($0,$1,$2,$3,$4,$5,'pending',NULL)", set, item.Id, fingerprint, item.Revision, item.Representation.Hash, item.Chunks.Count);
             for (var index = 0; index < item.Chunks.Count; index++)
             {
                 var values = new byte[LocalModel.Dimensions * 4]; for (var dimension = 0; dimension < LocalModel.Dimensions; dimension++) BinaryPrimitives.WriteSingleLittleEndian(values.AsSpan(dimension * 4, 4), item.Chunks[index].Vector[dimension]);
                 var span = item.Chunks[index].Span;
                 var spans = RepresentationBuilder.ChunkMetadata(item.Representation, span);
-                writer.Execute(transaction, "INSERT INTO vectors VALUES($0,$1,384,$2,$3)", set, index, values, spans);
+                batch.Execute("INSERT INTO vectors VALUES($0,$1,384,$2,$3)", set, index, values, spans);
             }
-            writer.Execute(transaction, "UPDATE embedding_sets SET state='ready' WHERE set_id=$0", set);
+            batch.Execute("UPDATE embedding_sets SET state='ready' WHERE set_id=$0", set);
         }
-        writer.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repositoryId);
+        batch.Execute("UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repositoryId);
         if (leaseToken is not null) Host.DurableScheduler.AssertLease(writer, transaction, leaseToken);
         cancellationToken.ThrowIfCancellationRequested(); transaction.Commit();
     }
