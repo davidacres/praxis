@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Praxis.CodeIntelligence.Host;
 using Praxis.CodeIntelligence.Storage;
 using Praxis.CodeIntelligence.Indexing;
+using Praxis.CodeIntelligence.Embeddings;
 
 var arguments = args.ToList();
 string? Option(string name)
@@ -24,12 +25,18 @@ try
             "grant <repository> --client <provider> | revoke <repository> --client <provider>\n" +
             "rpc --client <provider> (one tool/arguments JSON object on stdin)\n" +
             "capture <root> <relative.csproj> [--output context.praxis.json] [--configuration Debug] [--framework net10.0] [--restore]\n" +
-            "model-install <bundle> | model-activate <repository> <fingerprint>\n" +
+            "model-check <bundle> | model-install <bundle> | model-activate <repository> <fingerprint>\n" +
             "alias <repository> <symbolId> <phrase>\n" +
             "doctor | backup <destination> | serve\nAll commands accept --data <private directory>. Normal indexing never builds or restores projects."); return 0;
     }
     if (arguments[0] == "init" && arguments.Count == 2) { new IndexDatabase(arguments[1]).Initialize(); Console.WriteLine("Index initialized."); return 0; }
     using var cancellation = new CancellationTokenSource(); Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
+    if (arguments[0] == "model-check" && arguments.Count == 2)
+    {
+        using var model = new LocalModel(arguments[1]);
+        var vector = model.EmbedQuery("Praxis code intelligence", cancellation.Token); LocalModel.ValidateVector(vector);
+        Console.WriteLine(new JsonObject { ["fingerprint"] = model.Fingerprint, ["dimensions"] = vector.Length, ["normalized"] = true }.ToJsonString()); return 0;
+    }
     if (arguments[0] == "capture" && arguments.Count == 3)
     {
         Console.Error.WriteLine("Explicit context capture evaluates projects and MSBuild targets and may execute project code." + (restore ? " Restore is enabled and may contact configured package feeds." : " Restore is disabled."));
