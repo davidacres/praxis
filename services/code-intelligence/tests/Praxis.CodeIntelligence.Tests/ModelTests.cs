@@ -88,9 +88,9 @@ public sealed class ModelTests
             var queued = runtime.Dispatch(new JsonObject { ["action"] = "model-activate", ["repositoryId"] = id, ["fingerprint"] = fingerprint }, CancellationToken.None);
             Assert.True(queued["data"]!["queued"]!.GetValue<bool>());
             await runtime.MaintainAsync(CancellationToken.None); await runtime.MaintainAsync(CancellationToken.None);
-            JsonObject Search() => runtime.Dispatch(new JsonObject { ["action"] = "query", ["tool"] = "search_code", ["arguments"] = new JsonObject { ["repositoryId"] = id, ["query"] = "token parser", ["mode"] = "vector", ["responseBudgetTokens"] = 8000 } }, CancellationToken.None);
+            JsonObject Search() => runtime.Dispatch(new JsonObject { ["action"] = "query", ["tool"] = "search_code", ["arguments"] = new JsonObject { ["repositoryId"] = id, ["query"] = "token parser", ["mode"] = "vector", ["filters"] = new JsonObject { ["kinds"] = new JsonArray("method") }, ["responseBudgetTokens"] = 8000 } }, CancellationToken.None);
             Assert.NotEmpty(Search()["data"]!["matches"]!.AsArray());
-            File.AppendAllText(Path.Combine(root, "Example.cs"), " // body revision");
+            File.WriteAllText(Path.Combine(root, "Example.cs"), File.ReadAllText(Path.Combine(root, "Example.cs")).Replace("=> token;", "=> token.Trim();"));
             Assert.Null(runtime.Dispatch(new JsonObject { ["action"] = "index", ["repositoryId"] = id }, CancellationToken.None)["error"]);
             Assert.Empty(Search()["data"]!["matches"]!.AsArray());
             await runtime.MaintainAsync(CancellationToken.None); await runtime.MaintainAsync(CancellationToken.None);
@@ -150,7 +150,32 @@ public sealed class ModelTests
             Assert.Contains("INDEX_STALE", Assert.Throws<IOException>(() => store.Activate(repository, profile, CancellationToken.None)).Message);
             indexer.Index(repository);
             var after = queries.Execute("search_code", input, new HashSet<string> { repository }); Assert.Null(after["error"]);
-            Assert.Empty(after["data"]!["matches"]!.AsArray()); Assert.NotEmpty(after["warnings"]!.AsArray());
+            Assert.NotEmpty(after["data"]!["matches"]!.AsArray());
+            Assert.Equal(after["data"]!["eligibleSymbolCount"]!.GetValue<long>(), after["data"]!["vectorCoveredSymbolCount"]!.GetValue<long>());
+            using (var read = database.Open(readOnly: true))
+            using (var command = read.CreateCommand())
+            {
+                command.CommandText = "SELECT count(*) FROM jobs WHERE kind='embed' AND state='pending'"; Assert.Equal(0L, command.ExecuteScalar());
+                command.CommandText = "SELECT v.spans_json FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.name='ParseToken'";
+                var metadata = JsonNode.Parse((string)command.ExecuteScalar()!)!;
+                Assert.Equal(SourceFiles.Hash(File.ReadAllBytes(Path.Combine(root, "Example.cs"))), metadata["Sources"]![0]!["ContentHash"]!.GetValue<string>());
+            }
+            // A structurally complete set with corrupt vector values must never be reused.
+            using (var write = database.Open())
+            using (var command = write.CreateCommand())
+            {
+                command.CommandText = "UPDATE embedding_sets SET state='stale' WHERE symbol_id IN(SELECT symbol_id FROM symbols WHERE name='ParseToken'); UPDATE vectors SET values_blob=zeroblob(1536) WHERE set_id IN(SELECT e.set_id FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.name='ParseToken'); UPDATE embedding_sets SET state='ready' WHERE symbol_id IN(SELECT symbol_id FROM symbols WHERE name='ParseToken')";
+                command.ExecuteNonQuery();
+            }
+            indexer.Index(repository, force: true);
+            var methodsOnly = input.DeepClone().AsObject(); methodsOnly["filters"] = new JsonObject { ["kinds"] = new JsonArray("method") };
+            Assert.Empty(queries.Execute("search_code", methodsOnly, new HashSet<string> { repository })["data"]!["matches"]!.AsArray());
+            store.Activate(repository, profile, CancellationToken.None);
+            Assert.NotEmpty(queries.Execute("search_code", methodsOnly, new HashSet<string> { repository })["data"]!["matches"]!.AsArray());
+            indexer.Register(root, new(Excludes: ["Example.cs"]));
+            using (var read = database.Open(readOnly: true))
+            using (var command = read.CreateCommand())
+            { command.CommandText = "SELECT count(*) FROM vectors"; Assert.Equal(0L, command.ExecuteScalar()); }
             Assert.Empty(database.Check());
         }
         finally { Directory.Delete(root, recursive: true); }
