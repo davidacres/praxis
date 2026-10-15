@@ -55,6 +55,8 @@ jobs:
           printf 'PRAXIS_CONTRACT_SAMPLES=%s/praxis-contract-samples\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Provision hash-pinned local model assets
         run: python services/code-intelligence/scripts/prepare-model.py "$PRAXIS_MODEL_BUNDLE"
+      - name: Verify relevance evaluator safeguards
+        run: python -m unittest discover -s services/code-intelligence/scripts -p 'test_*.py'
       - name: Restore locked service dependencies
         run: dotnet restore services/code-intelligence/Praxis.CodeIntelligence.slnx --locked-mode --disable-parallel -m:1
       - name: Run compiler, storage, path and native model fixtures
@@ -70,6 +72,11 @@ jobs:
           dotnet services/code-intelligence/benchmarks/Praxis.CodeIntelligence.Benchmarks/bin/Release/net10.0/Praxis.CodeIntelligence.Benchmarks.dll --symbols 5000 --queries 100 --model "$PRAXIS_MODEL_BUNDLE" --output "$RUNNER_TEMP/praxis-benchmarks/linux-x64-5000-hybrid.praxis.json"
       - name: Package host runtime and smoke-test native CLI, SQLite and ONNX
         run: node scripts/build-service.mjs --package
+      - name: Verify evaluator through the packaged owner
+        run: |
+          executable="$GITHUB_WORKSPACE/services/code-intelligence/artifacts/package/Praxis.CodeIntelligence"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then executable="$executable.exe"; fi
+          PRAXIS_CODE_INTELLIGENCE_EXE="$executable" python -m unittest discover -s services/code-intelligence/scripts -p 'test_*.py'
       - name: Preserve verification evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -4,17 +4,17 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 | Check | Evidence | Result |
 |---|---|---|
-| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 92 passed,0 failed,0 skipped |
+| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 94 passed,0 failed,0 skipped |
 | Source/context | Raw UTF16 hashes, path policy, passive no-execution, SDK capture, generated support and stale/deleted inputs | Covered by targeted tests |
 | Durable jobs | Coalescing, backoff, heartbeat, expired owner recovery, wrong-token publication, pause and atomic refresh enqueue | Covered by targeted tests |
 | Automatic embeddings | Runtime registration/index, queued activation, real inference, edit, empty stale vector results, background refresh | Covered by native model fixture |
 | Git policy | Ignored invalid-encoding source skipped before reads; configured fsmonitor cannot execute | Test passed |
 | MCP/settings | SDK initialize/list/call, scoped denial/cancellation, provider handover filter, settings regressions | 46 focused Node tests passed |
-| JSON Schema | 94 actual responses across11tools, including metadata/unresolved evidence, graph expansion and trimmed status/summary/pages/source | Passed with JSON Schema2020-12 |
+| JSON Schema | 109 actual responses across11tools, including metadata/unresolved evidence, graph expansion and trimmed status/summary/pages/source | Passed with JSON Schema2020-12 |
 | Full application build | Includes service, renderer import guard, Vite, copied renderer and trusted IPC guard | Passed after restoring complete SettingsPage source; exact remote blob checked |
-| Linux native package | Self-contained publish, native CLI help, SQLite initialization and native ONNX model check | Passed on Linux x64; see macOS packaging and owner-process checkpoints below; Windows remains outstanding |
+| Linux native package | Self-contained publish, native CLI help, SQLite initialization and native ONNX model check | Passed on Linux x64, Windows x64 and macOS arm64 in native CI |
 | UI e2e/screenshots | macOS: two mocked recovery/search regressions and one real packaged-service desktop flow; source/dialog captures inspected | Focused checks pass; full theme/accessibility/platform qualification remains open |
-| Native owner process/platform matrix | Packaged macOS arm64 startup, lock, concurrent queries, grants, backup, restart and crash takeover | macOS passed; Windows/Linux process matrix outstanding |
+| Native owner process/platform matrix | Packaged macOS arm64 startup, lock, concurrent queries, grants, backup, restart and crash takeover | Linux x64, Windows x64 and macOS arm64 passed native CI |
 | Live provider invocation | No paid/live adapter runs authorized or performed | Outstanding |
 | Performance/quality corpus | Local macOS 5k comparison in docs/benchmarks; 50k-symbol and120-query relevance protocol | Local body edit 1532.0555 ms, hybrid p95 129.0305 ms; normative scale/quality gates outstanding |
 
@@ -22,9 +22,9 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 | Target | Configured | Executed evidence |
 |---|---|---|
-| Linux x64 | Yes | C# tests, native ONNX and self-contained CLI/SQLite/model checks |
-| Windows x64 | Yes | None in this environment |
-| macOS arm64 | Yes | 87 C# tests, independent golden/native ONNX, self-contained CLI/SQLite/model and owner-process IPC checks |
+| Linux x64 | Yes | 94 C# tests, 109 schema responses, native ONNX, self-contained package and owner-process IPC |
+| Windows x64 | Yes | 94 C# tests, 109 schema responses, native ONNX, self-contained package and owner-process IPC |
+| macOS arm64 | Yes | 94 C# tests, 109 schema responses, golden/native ONNX, self-contained package and owner-process IPC |
 | Linux arm64/macOS x64 | Additional build targets | None in this environment |
 | Claude Code/Codex/Copilot/Antigravity | Existing MCP routing plus explicit destination grants | Real native stdio MCP SDK invocation passes on macOS; actual agent adapters remain unqualified |
 
@@ -154,3 +154,11 @@ Native IPC, corruption/full-disk recovery, crash takeover, package dependencies 
 ## Preservation
 
 Work is on `codex/code-intelligence-recovery`, not main. Remote checkpoints are verified against Git blob SHA values. Large file contents are transferred in bounded chunks; textual tool-output truncation must never be accepted as source. The prior SettingsPage checkpoint corruption was repaired from main with the small integration reapplied and its exact remote blob verified.
+
+## Three-host native verification and relevance evaluator — 15 October
+
+[CI run 38817326799](https://github.com/davidacres/praxis/actions/runs/38817326799) at `faf6408bd9943e1c94e8b5115402741d8111fbf5` passed all three native hosts. Each executed 94 C# tests without skips, validated 109 responses across 11 schemas, packaged the self-contained service and passed startup/owner lock, forged/stale token rejection, concurrent searches, consent, backup, restart and crash takeover. This does not qualify full desktop themes/accessibility or actual provider adapters.
+
+The local relevance evaluator has seven metric/report safeguard tests plus one real packaged-owner fixture. The native fixture confirms label resolution, source evidence, report output and honest rejection of a small unreviewed lexical-fallback corpus. Maze was supplied as the representative repository: `https://github.com/davidacres/maze`, snapshot `61d4510a8ef6946407fa310038ae0add1fffdf24`. The 120 reviewed labels and manual explanation/abstention checks remain open; evaluator availability does not pass those gates.
+
+The model-inclusive 50k count-cache/search-plan rerun measured lexical p95 **3.8807 ms**, hybrid p95 **1117.9363 ms**, body edit 16057.7432 ms and vector refresh 2130.1119 ms. Independently measured maximum RSS was **1350893568 bytes**. Hybrid still fails 500 ms; this is one synthetic direct-service run, not the full acceptance protocol.
