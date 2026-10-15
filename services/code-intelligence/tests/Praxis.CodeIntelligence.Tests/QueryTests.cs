@@ -34,6 +34,17 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public void ManualAliasesSurviveBodyRepublishAndRespectStructuralFilters()
+    {
+        var target = Symbol("Target"); var symbolId = target["symbolId"]!.GetValue<string>(); indexer.AddAlias(repository, symbolId, "unusual concept phrase");
+        var response = Query("search_code", new() { ["query"] = "unusual concept phrase", ["mode"] = "lexical" });
+        Assert.Single(response["data"]!["matches"]!.AsArray()); Assert.Contains(response["data"]!["matches"]![0]!["reasons"]!.AsArray(), reason => reason!.GetValue<string>() == "alias");
+        File.AppendAllText(Path.Combine(root, "Example.cs"), " // changed body revision"); indexer.Index(repository);
+        Assert.Single(Query("search_code", new() { ["query"] = "unusual concept phrase", ["mode"] = "lexical" })["data"]!["matches"]!.AsArray());
+        Assert.Empty(Query("search_code", new() { ["query"] = "unusual concept phrase", ["mode"] = "lexical", ["filters"] = new JsonObject { ["kinds"] = new JsonArray("type") } })["data"]!["matches"]!.AsArray());
+    }
+
+    [Fact]
     public void ExactSearchOverloadsAndEvidenceHaveNormativeEnvelope()
     {
         var response = Query("search_code", new() { ["query"] = "Target", ["mode"] = "hybrid" });
