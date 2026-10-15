@@ -4,19 +4,19 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 | Check | Evidence | Result |
 |---|---|---|
-| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 63 passed,0 failed,0 skipped |
+| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 87 passed,0 failed,0 skipped |
 | Source/context | Raw UTF16 hashes, path policy, passive no-execution, SDK capture, generated support and stale/deleted inputs | Covered by targeted tests |
 | Durable jobs | Coalescing, backoff, heartbeat, expired owner recovery, wrong-token publication, pause and atomic refresh enqueue | Covered by targeted tests |
 | Automatic embeddings | Runtime registration/index, queued activation, real inference, edit, empty stale vector results, background refresh | Covered by native model fixture |
 | Git policy | Ignored invalid-encoding source skipped before reads; configured fsmonitor cannot execute | Test passed |
 | MCP/settings | SDK initialize/list/call, scoped denial/cancellation, provider handover filter, settings regressions | 46 focused Node tests passed |
-| JSON Schema | 80 actual responses across11tools, including metadata/unresolved evidence, graph expansion and trimmed status/summary/pages/source | Passed with JSON Schema2020-12 |
+| JSON Schema | 87 actual responses across11tools, including metadata/unresolved evidence, graph expansion and trimmed status/summary/pages/source | Passed with JSON Schema2020-12 |
 | Full application build | Includes service, renderer import guard, Vite, copied renderer and trusted IPC guard | Passed after restoring complete SettingsPage source; exact remote blob checked |
-| Linux native package | Self-contained publish, native CLI help, SQLite initialization and native ONNX model check | Passed on Linux x64; Windows/macOS and native owner IPC remain outstanding |
+| Linux native package | Self-contained publish, native CLI help, SQLite initialization and native ONNX model check | Passed on Linux x64; see macOS packaging and owner-process checkpoints below; Windows remains outstanding |
 | UI e2e/screenshots | Prior environment denied UI launch sockets; user requested implementation proceed | Deferred, not passed |
-| Native owner process/platform matrix | Unit framing/grants/lease tests are not a process-boundary proof | Outstanding |
+| Native owner process/platform matrix | Packaged macOS arm64 startup, lock, concurrent queries, grants, backup, restart and crash takeover | macOS passed; Windows/Linux process matrix outstanding |
 | Live provider invocation | No paid/live adapter runs authorized or performed | Outstanding |
-| Performance/quality corpus | 50k-symbol latency/update/RSS and120-query relevance protocol | Outstanding; no benchmark claims |
+| Performance/quality corpus | Local macOS 5k comparison in docs/benchmarks; 50k-symbol and120-query relevance protocol | Local body edit 1532.0555 ms, hybrid p95 129.0305 ms; normative scale/quality gates outstanding |
 
 ## Platform and provider claims
 
@@ -24,7 +24,7 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 |---|---|---|
 | Linux x64 | Yes | C# tests, native ONNX and self-contained CLI/SQLite/model checks |
 | Windows x64 | Yes | None in this environment |
-| macOS arm64 | Yes | None in this environment |
+| macOS arm64 | Yes | 87 C# tests, independent golden/native ONNX, self-contained CLI/SQLite/model and owner-process IPC checks |
 | Linux arm64/macOS x64 | Additional build targets | None in this environment |
 | Claude Code/Codex/Copilot/Antigravity | Existing MCP routing plus explicit destination grants | Generic SDK mock only; no actual adapter tool invocation claim |
 
@@ -94,12 +94,20 @@ The checked-in schema-2/adapter-v3 benchmark recorded 5000 source symbols plus o
 
 A scoped GitHub workflow now defines Linux, Windows and macOS locked restores, independent golden/native model tests, captured-response schema validation, and self-contained CLI/SQLite/ONNX smoke packaging. It runs on relevant PRs or manual dispatch; the real-model Linux benchmark is opt-in. YAML structure was validated locally. No remote platform CI result or UI visual pass is claimed.
 
+## Native macOS performance and owner-process checkpoint (15 October)
+
+The latest macOS arm64 compiler/model suite passes 87 tests with zero failures/skips, and 87 captured responses validate against all 11 schemas. The controlled 5k-symbol comparison reduced a single direct body edit from 3352.3529 to 1532.0555 ms (54.3%); hybrid p95 is 129.0305 ms, with no hybrid speedup claimed. These are local synthetic measurements, not watcher-inclusive p95, 50k capacity or relevance acceptance. Full-context compiler analysis remains; matching structural and derivative facts are retained during publication. See `docs/benchmarks` for reports and limits.
+
+Self-contained macOS arm64 packaging now executes actual local IPC: automatic owner startup from a normal CLI command, duplicate-owner rejection, indexing, four concurrent lexical searches, provider grant/revocation, SQLite backup creation, clean doctor checks, persisted search/generation after restart, and forced-crash takeover with the old rendezvous/socket left in place. The new owner rotates its authentication token; revoked provider access remains denied after recovery. The rendezvous includes an informational process ID so the fixture can stop only its own automatically launched owner. Endpoint validation and token authentication remain unchanged. Native ONNX inference also passes during packaging.
+
+Windows/Linux execution of this IPC fixture, desktop visual/e2e proof, live provider adapters, normative scale/quality gates, targeted invalidation and remaining relationship coverage are still open. Automatic startup/crash takeover is now evidenced on macOS; it must not be treated as proof of the other platform results.
+
 ## Remaining code and acceptance work
 
-1. Execute the independent golden tokenizer/vector fixture on Windows/macOS; execute representation source-span fixtures on those platforms. Exact persisted chunk spans and selected source excerpts are implemented. Linux x64 passes the checked-in Python-reference fixture (10 token/span cases, 4 full vectors, absolute tolerance 1e-5/cosine >= 0.99999).
+1. Execute the independent golden tokenizer/vector and representation source-span fixtures on Windows; macOS arm64 now passes these fixtures. Exact persisted chunk spans and selected source excerpts are implemented. Linux x64 passes the checked-in Python-reference fixture (10 token/span cases, 4 full vectors, absolute tolerance 1e-5/cosine >= 0.99999).
 2. Complete remaining dependency relationships and general delegate points-to analysis. Local callable, synthetic project-root/top-level ownership, type inheritance/implementation and optional bounded virtual/interface candidates now have regression coverage. Candidates are possible structural targets, not runtime proof.
 3. Verify remaining irreducible-item budget/freshness errors against A01–A40. Status/summary collection trimming and full coverage counts now have targeted regression coverage. Paged collections, source text and graphs now trim with evidence/range/cursor invariants covered by regression tests. A single irreducible item can still return an explicit budget error.
-4. Execute Windows/macOS source-handle race fixtures, including junctions, case/Unicode paths and concurrent swaps. Platform-specific handle-path verification is implemented and compiles; only Linux execution is evidenced. Linux rename/replacement and nonblocking FIFO regressions pass.
+4. Execute Windows/macOS source-handle race fixtures, including junctions, case/Unicode paths and concurrent swaps. Platform-specific handle-path verification is implemented and compiles; Linux and macOS arm64 execution is evidenced. Native macOS fixes cover the Darwin arm64 fcntl ABI and canonical alias parents; Windows execution remains open. Linux/macOS rename/replacement and nonblocking FIFO regressions pass.
 5. Execute desktop recovery/search functional e2e, final visual walkthrough and provider cancellation/error transcripts. Recovery controls and cursor/truncation feedback are implemented; the two new UI specs are blocked before panel interaction by missing X display/native node-pty.
 6. Measure scale/quality gates. Conservative full-context publication is intentional until equivalence/performance evidence supports more targeted invalidation.
 

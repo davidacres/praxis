@@ -28,7 +28,8 @@ public static class OwnerService
         NamedPipeServerStream? next = Server(endpoint);
         try
         {
-            File.WriteAllText(staging, new JsonObject { ["version"] = 1, ["endpoint"] = endpoint, ["token"] = token }.ToJsonString());
+            File.WriteAllText(staging, new JsonObject { ["version"] = 1, ["endpoint"] = endpoint, ["token"] = token,
+                ["processId"] = Environment.ProcessId }.ToJsonString());
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(staging, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             File.Move(staging, rendezvous, overwrite: true);
             var maintenance = Task.Run(async () =>

@@ -16,6 +16,7 @@ export async function smokeNativeIpc(executable) {
   const data = path.join(temporary, 'data');
   const source = path.join(temporary, 'source');
   let owner;
+  let automaticOwner;
   let ownerOutput = '';
   const invoke = async (args, { input, expectedExit = 0 } = {}) => {
     let result;
@@ -44,7 +45,18 @@ export async function smokeNativeIpc(executable) {
     throw new Error(`Owner startup timed out: ${ownerOutput}`);
   };
   const stop = async () => {
-    if (!owner) return;
+    if (automaticOwner) {
+      const pid = automaticOwner; automaticOwner = undefined;
+      const alive = () => { try { process.kill(pid, 0); return true; } catch (error) { if (error.code === 'ESRCH') return false; throw error; } };
+      if (alive()) process.kill(pid, 'SIGINT');
+      for (let attempt = 0; attempt < 30 && alive(); attempt++) await delay(100);
+      if (alive()) {
+        process.kill(pid, 'SIGKILL');
+        for (let attempt = 0; attempt < 30 && alive(); attempt++) await delay(100);
+      }
+      assert.equal(alive(), false, 'Automatically launched fixture owner did not exit.');
+    }
+    if (!owner) { await rm(path.join(data, 'owner.json'), { force: true }); return; }
     const current = owner; owner = undefined;
     if (current.exitCode === null && current.signalCode === null) {
       const closed = once(current, 'close');
@@ -58,7 +70,16 @@ export async function smokeNativeIpc(executable) {
   try {
     await mkdir(source);
     await writeFile(path.join(source, 'Example.cs'), 'public class SmokeExample { public int Compute() => 42; }\n');
-    await start();
+    // A normal CLI command must launch the owner without an explicit serve.
+    const adoptAutomaticOwner = async () => {
+      const rendezvous = JSON.parse(await readFile(path.join(data, 'owner.json'), 'utf8'));
+      assert.ok(Number.isInteger(rendezvous.processId) && rendezvous.processId > 0 && rendezvous.processId !== process.pid);
+      automaticOwner = rendezvous.processId;
+      return rendezvous;
+    };
+    try { assert.deepEqual((await invoke(['doctor'])).data.checks, []); }
+    finally { await adoptAutomaticOwner(); }
+    await assert.rejects(execute(executable, ['serve', '--data', data], { timeout: 5000 }), error => error.code === 5);
     const registered = await invoke(['register', source]);
     const repositoryId = registered.data.repositoryId;
     assert.equal(typeof repositoryId, 'string');
@@ -86,9 +107,20 @@ export async function smokeNativeIpc(executable) {
     assert.equal((await invoke(['status', repositoryId])).indexGeneration, before.indexGeneration);
     assertMatch(await search());
     assert.equal((await rpc(5)).error.code, 'ACCESS_DENIED');
+    // An abrupt owner death leaves the actual rendezvous/socket untouched.
+    const crashed = JSON.parse(await readFile(path.join(data, 'owner.json'), 'utf8'));
+    const closed = once(owner, 'close'); owner.kill('SIGKILL'); await closed; owner = undefined;
+    await access(path.join(data, 'owner.json'));
+    let recovered;
+    try { assert.deepEqual((await invoke(['doctor'])).data.checks, []); }
+    finally { recovered = await adoptAutomaticOwner(); }
+    assert.notEqual(recovered.token, crashed.token);
+    assert.equal((await invoke(['status', repositoryId])).indexGeneration, before.indexGeneration);
+    assertMatch(await search());
+    assert.equal((await rpc(5)).error.code, 'ACCESS_DENIED');
     await invoke(['unregister', repositoryId]);
     assert.deepEqual((await invoke(['list'])).data, []);
-    process.stdout.write('Native IPC smoke passed: indexing, concurrent search, consent, backup, restart and unregister.\n');
+    process.stdout.write('Native IPC smoke passed: automatic startup, owner lock, indexing, concurrent search, consent, backup, restart, crash takeover and unregister.\n');
   } finally {
     await stop();
     await rm(temporary, { recursive: true, force: true });

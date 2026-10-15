@@ -165,6 +165,10 @@ The host packaging workflow now runs a disposable native IPC fixture against the
 
 The fixture explicitly starts/stops its own owner process and uses temporary sources/data. It does not establish automatic owner startup, stale-rendezvous recovery, semantic project capture, desktop/MCP adapters or Windows/Linux execution. The existing platform CI packaging step will execute it on each host; those remote results are not claimed here.
 
+## Automatic owner startup/crash takeover checkpoint (15 October)
+
+The packaged IPC fixture now starts the owner through a normal CLI command, rejects a concurrent second owner, and recovers after a forced owner crash without removing the stale rendezvous/socket. Persisted generation, search and provider revocation survive; the recovered owner has a fresh authentication token. The private rendezvous adds an informational process ID for fixture cleanup; authentication still uses its existing endpoint/version/token checks. Complete self-contained macOS arm64 packaging and real-model checks pass. Windows/Linux execution remains open.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.
