@@ -97,7 +97,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
     {
         var repository = Get(id);
         if (repository.State == "paused") throw new InvalidOperationException("INDEX_BUSY: repository is paused.");
-        IReadOnlyList<SourceInput> sources; RepositoryAnalysis analysis;
+        IReadOnlyList<SourceInput> sources; RepositoryAnalysis analysis; string snapshotHash;
         try
         {
             sources = SourceScanner.Scan(repository.Root, repository.Config.Excludes ?? [], cancellationToken);
@@ -124,13 +124,34 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 catch (Exception ex) when (ex is IOException or ArgumentException or JsonException)
                 { manifest = null; sources = authored; manifestDiagnostic = new("", null, "INDEX_STALE", "warning", "Passive context is unavailable or stale; indexed source using syntax-only analysis.", null); }
             }
-            analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken);
-            if (manifestDiagnostic is not null) analysis = analysis with { Diagnostics = [.. analysis.Diagnostics, manifestDiagnostic] };
             var confirmed = SourceScanner.Scan(repository.Root, repository.Config.Excludes ?? [], cancellationToken);
             var supportPaths = sources.Where(source => source.Role == "semanticSupport").Select(source => source.Path).ToHashSet(StringComparer.Ordinal);
             if (!sources.Where(source => source.Role == "searchableSource").Select(s => (s.Path, s.Hash)).SequenceEqual(confirmed.Where(source => !supportPaths.Contains(source.Path)).Select(s => (s.Path, s.Hash)))) throw new IOException("INDEX_STALE: source snapshot changed during analysis.");
             foreach (var source in sources.Where(source => source.Role == "semanticSupport"))
                 if (SourceFiles.Read(repository.Root, source.Path, cancellationToken).Hash != source.Hash) throw new IOException("INDEX_STALE: semantic support changed during analysis.");
+            if (manifestHash is not null && SourceFiles.Read(repository.Root, repository.Config.Manifest!, cancellationToken).Hash != manifestHash)
+                throw new IOException("INDEX_STALE: manifest changed during analysis.");
+            if (manifest is not null)
+            {
+                _ = PassiveManifest.Read(repository.Root, repository.Config.Manifest!);
+                foreach (var metadata in manifest.Projects.SelectMany(project => project.Metadata ?? []).Distinct())
+                    if (SourceFiles.Hash(PassiveManifest.ReadExternal(metadata.Path)) != metadata.ContentHash) throw new IOException("INDEX_STALE: reference changed during analysis.");
+            }
+            snapshotHash = SourceFiles.Hash(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            {
+                Adapter = RoslynAnalyzer.AdapterVersion, ManifestHash = manifestHash, Manifest = manifest, repository.Config,
+                Sources = sources.Select(source => new { source.Path, source.Hash, source.Role }).OrderBy(source => source.Path, StringComparer.Ordinal)
+            })));
+            if (!force && TryUnchanged(repository, sources.Count, snapshotHash, cancellationToken, leaseToken) is IndexResult unchanged) return unchanged;
+            analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken);
+            if (manifestDiagnostic is not null) analysis = analysis with { Diagnostics = [.. analysis.Diagnostics, manifestDiagnostic] };
+            // Analysis can be lengthy. Verify inputs again before any structural publication.
+            var afterAnalysis = SourceScanner.Scan(repository.Root, repository.Config.Excludes ?? [], cancellationToken);
+            if (!sources.Where(source => source.Role == "searchableSource").Select(source => (source.Path, source.Hash))
+                .SequenceEqual(afterAnalysis.Where(source => !supportPaths.Contains(source.Path)).Select(source => (source.Path, source.Hash))))
+                throw new IOException("INDEX_STALE: source changed during analysis.");
+            foreach (var source in sources.Where(source => source.Role == "semanticSupport"))
+                if (SourceFiles.Read(repository.Root, source.Path, cancellationToken).Hash != source.Hash) throw new IOException("INDEX_STALE: support source changed during analysis.");
             if (manifestHash is not null && SourceFiles.Read(repository.Root, repository.Config.Manifest!, cancellationToken).Hash != manifestHash)
                 throw new IOException("INDEX_STALE: manifest changed during analysis.");
             if (manifest is not null)
@@ -154,8 +175,9 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         var newHash = string.Join("|", analysis.Contexts.OrderBy(c => c.Id, StringComparer.Ordinal).Select(c => c.Hash));
         if (!force && oldHash == newHash && repository.Generation > 0)
         {
+            connection.Execute(transaction, "UPDATE contexts SET options_json=$0 WHERE project_id IN(SELECT project_id FROM projects WHERE repository_id=$1)", JsonSerializer.Serialize(new { snapshotHash }), id);
             connection.Execute(transaction, "UPDATE repositories SET state='ready',last_reconciled_utc=$0 WHERE repository_id=$1", DateTimeOffset.UtcNow.ToString("O"), id);
-            transaction.Commit(); return new(id, repository.Generation, sources.Count, analysis.Symbols.Count, false);
+            cancellationToken.ThrowIfCancellationRequested(); transaction.Commit(); return new(id, repository.Generation, sources.Count, analysis.Symbols.Count, false);
         }
         // Reuse only complete current-profile sets whose exact representation is unchanged.
         var reusable = EmbeddingReuse.Capture(connection, transaction, id, cancellationToken);
@@ -174,9 +196,9 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         {
             var projectId = Identity.Id("pci:project:", id, context.Key);
             batch.Execute("INSERT INTO projects VALUES($0,$1,$2,$3,'csharp')", projectId, id, context.Key, context.ProjectPath);
-            batch.Execute("INSERT INTO contexts(context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,desired_revision,published_revision,state,resolution,capabilities_json) VALUES($0,$1,$2,$3,$3,$7,'{}',$4,$4,'ready',$5,$6)",
+            batch.Execute("INSERT INTO contexts(context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,desired_revision,published_revision,state,resolution,capabilities_json) VALUES($0,$1,$2,$3,$3,$7,$8,$4,$4,'ready',$5,$6)",
                 context.Id, projectId, context.Key, context.Hash, generation, context.Resolution,
-                JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls", "references", "accesses", "typeDependencies" }), RoslynAnalyzer.AdapterVersion);
+                JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls", "references", "accesses", "typeDependencies" }), RoslynAnalyzer.AdapterVersion, JsonSerializer.Serialize(new { snapshotHash }));
             foreach (var source in context.Sources)
                 batch.Execute("INSERT INTO context_files VALUES($0,$1,$2,$3)", context.Id, fileIds[source.Path], source.Hash, generation);
         }
@@ -231,6 +253,25 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         if (leaseToken is not null) Host.DurableScheduler.AssertLease(connection, transaction, leaseToken);
         cancellationToken.ThrowIfCancellationRequested(); transaction.Commit();
         return new(id, generation, sources.Count, analysis.Symbols.Count, true);
+    }
+
+    private IndexResult? TryUnchanged(RepositoryRecord repository, int files, string snapshotHash, CancellationToken cancellationToken, string? leaseToken)
+    {
+        if (repository.Generation == 0) return null;
+        using var connection = database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
+        if (leaseToken is not null) Host.DurableScheduler.AssertLease(connection, transaction, leaseToken);
+        if (Convert.ToInt64(connection.Scalar(transaction, "SELECT query_epoch FROM repositories WHERE repository_id=$0", repository.Id)) != repository.QueryEpoch)
+            throw new InvalidOperationException("INDEX_STALE: repository changed during input validation.");
+        var total = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0", repository.Id));
+        var matching = Convert.ToInt64(connection.Scalar(transaction,
+            "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0 AND c.adapter_version=$1 AND json_extract(c.options_json,'$.snapshotHash')=$2",
+            repository.Id, RoslynAnalyzer.AdapterVersion, snapshotHash));
+        if (total == 0 || total != matching) return null;
+        var symbols = Convert.ToInt32(connection.Scalar(transaction, "SELECT count(*) FROM symbols WHERE repository_id=$0", repository.Id));
+        connection.Execute(transaction, "UPDATE repositories SET state='ready',last_reconciled_utc=$0 WHERE repository_id=$1", DateTimeOffset.UtcNow.ToString("O"), repository.Id);
+        if (leaseToken is not null) Host.DurableScheduler.AssertLease(connection, transaction, leaseToken);
+        cancellationToken.ThrowIfCancellationRequested(); transaction.Commit();
+        return new(repository.Id, repository.Generation, files, symbols, false);
     }
 
     private static IEnumerable<string> ReadContextHashes(SqliteConnection connection, SqliteTransaction transaction, string id)
