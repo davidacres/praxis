@@ -21,6 +21,8 @@ public sealed class RoslynAnalyzer
         CancellationToken cancellationToken = default)
     {
         var inputs = new Dictionary<string, CompilationInput>(StringComparer.Ordinal);
+        var metadataCache = new Dictionary<string, (string Hash, PortableExecutableReference Reference)>(StringComparer.Ordinal);
+        long totalMetadataBytes = 0;
         var projects = manifest?.Projects ?? [new PassiveProject("syntax", "Syntax", sources.Select(s => s.Path).ToArray())];
         var byPath = sources.ToDictionary(s => s.Path, StringComparer.Ordinal);
         var visiting = new HashSet<string>(StringComparer.Ordinal);
@@ -195,13 +197,21 @@ public sealed class RoslynAnalyzer
             if (!LanguageVersionFacts.TryParse(project.LanguageVersion, out var languageVersion)) throw new ArgumentException("Invalid C# language version.");
             var parseOptions = new CSharpParseOptions(languageVersion, preprocessorSymbols: project.Defines ?? []);
             var trees = projectSources.Select(source => CSharpSyntaxTree.ParseText(source.Text, parseOptions, source.Path, cancellationToken: cancellationToken)).ToArray();
-            var references = new List<MetadataReference>(); long metadataBytes = 0;
+            var references = new List<MetadataReference>();
             foreach (var metadata in project.Metadata ?? [])
             {
-                var bytes = PassiveManifest.ReadExternal(metadata.Path); metadataBytes += bytes.Length;
-                if (metadataBytes > 512L * 1024 * 1024) throw new IOException("INPUT_TOO_LARGE: metadata limit exceeded.");
-                if (SourceFiles.Hash(bytes) != metadata.ContentHash) throw new IOException("INDEX_STALE: captured metadata changed.");
-                references.Add(MetadataReference.CreateFromImage(bytes, MetadataReferenceProperties.Assembly.WithAliases(metadata.Aliases ?? []).WithEmbedInteropTypes(metadata.EmbedInteropTypes)));
+                if (!metadataCache.TryGetValue(metadata.Path, out var cachedMetadata))
+                {
+                    var bytes = PassiveManifest.ReadExternal(metadata.Path);
+                    totalMetadataBytes += bytes.Length;
+                    if (totalMetadataBytes > 512L * 1024 * 1024) throw new IOException("INPUT_TOO_LARGE: repository metadata limit exceeded.");
+                    if (SourceFiles.Hash(bytes) != metadata.ContentHash) throw new IOException("INDEX_STALE: captured metadata changed.");
+                    cachedMetadata = (metadata.ContentHash, MetadataReference.CreateFromImage(bytes));
+                    metadataCache[metadata.Path] = cachedMetadata;
+                }
+                if (cachedMetadata.Hash != metadata.ContentHash) throw new IOException("INDEX_STALE: conflicting captured metadata hashes.");
+                references.Add(cachedMetadata.Reference.WithProperties(MetadataReferenceProperties.Assembly
+                    .WithAliases(metadata.Aliases ?? []).WithEmbedInteropTypes(metadata.EmbedInteropTypes)));
             }
             var dependencies = (project.References ?? []).Select(Build).ToArray();
             references.AddRange(dependencies.Select(x => x.Compilation.ToMetadataReference()));
