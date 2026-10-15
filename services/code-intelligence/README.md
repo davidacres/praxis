@@ -17,6 +17,8 @@ Set `PRAXIS_DOTNET` to an absolute SDK executable if `dotnet` is not on PATH. `n
 
 `node scripts/build-service.mjs --package` publishes a self-contained host package and checks CLI startup, SQLite initialization, and local model inference when `PRAXIS_MODEL_BUNDLE` is set. For the host runtime it also runs real owner-process IPC checks: automatic startup, duplicate-owner rejection, indexing, four concurrent searches, provider grant/revocation, backup creation, persisted search after restart, crash takeover with stale rendezvous/socket files, and unregister. The fixture owns and stops its service processes and removes its temporary source/data directories. To rerun just IPC against an existing package, use `node services/code-intelligence/scripts/smoke-native-ipc.mjs /absolute/path/to/Praxis.CodeIntelligence` (add `.exe` on Windows).
 
+To run the real desktop integration fixture after the full application build and host packaging, set `PRAXIS_CODE_INTELLIGENCE_EXE` to the packaged executable and run `npx playwright test codeIntelligenceNative.spec.ts --project=functional --workers=1` from `apps/praxis-desktop/main`. It uses a disposable repository and isolated app profile; it performs no project evaluation or paid provider invocation.
+
 ## Index a repository
 
 The development executable is `services/code-intelligence/src/Praxis.CodeIntelligence/bin/Debug/net10.0/Praxis.CodeIntelligence.dll`. Run it through `dotnet`; a packaged self-contained executable needs no separately installed runtime.

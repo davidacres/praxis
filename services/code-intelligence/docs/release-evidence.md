@@ -4,16 +4,16 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 | Check | Evidence | Result |
 |---|---|---|
-| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 87 passed,0 failed,0 skipped |
+| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 92 passed,0 failed,0 skipped |
 | Source/context | Raw UTF16 hashes, path policy, passive no-execution, SDK capture, generated support and stale/deleted inputs | Covered by targeted tests |
 | Durable jobs | Coalescing, backoff, heartbeat, expired owner recovery, wrong-token publication, pause and atomic refresh enqueue | Covered by targeted tests |
 | Automatic embeddings | Runtime registration/index, queued activation, real inference, edit, empty stale vector results, background refresh | Covered by native model fixture |
 | Git policy | Ignored invalid-encoding source skipped before reads; configured fsmonitor cannot execute | Test passed |
 | MCP/settings | SDK initialize/list/call, scoped denial/cancellation, provider handover filter, settings regressions | 46 focused Node tests passed |
-| JSON Schema | 87 actual responses across11tools, including metadata/unresolved evidence, graph expansion and trimmed status/summary/pages/source | Passed with JSON Schema2020-12 |
+| JSON Schema | 94 actual responses across11tools, including metadata/unresolved evidence, graph expansion and trimmed status/summary/pages/source | Passed with JSON Schema2020-12 |
 | Full application build | Includes service, renderer import guard, Vite, copied renderer and trusted IPC guard | Passed after restoring complete SettingsPage source; exact remote blob checked |
 | Linux native package | Self-contained publish, native CLI help, SQLite initialization and native ONNX model check | Passed on Linux x64; see macOS packaging and owner-process checkpoints below; Windows remains outstanding |
-| UI e2e/screenshots | Prior environment denied UI launch sockets; user requested implementation proceed | Deferred, not passed |
+| UI e2e/screenshots | macOS: two mocked recovery/search regressions and one real packaged-service desktop flow; source/dialog captures inspected | Focused checks pass; full theme/accessibility/platform qualification remains open |
 | Native owner process/platform matrix | Packaged macOS arm64 startup, lock, concurrent queries, grants, backup, restart and crash takeover | macOS passed; Windows/Linux process matrix outstanding |
 | Live provider invocation | No paid/live adapter runs authorized or performed | Outstanding |
 | Performance/quality corpus | Local macOS 5k comparison in docs/benchmarks; 50k-symbol and120-query relevance protocol | Local body edit 1532.0555 ms, hybrid p95 129.0305 ms; normative scale/quality gates outstanding |
@@ -114,13 +114,19 @@ Adapter `roslyn-5.9/v5` lifts compiler-bound cross-project source references int
 
 **92 C# tests passed, zero failures/skips; 94 actual responses validated across all 11 schemas; full application build passed.** Analyzer and query fixtures verify defining roots, source evidence, graph publication and edge withdrawal after edits. Configuration-only project references/package dependencies remain separate work.
 
+## Native desktop recovery/search checkpoint (15 October)
+
+The full application build and both existing desktop recovery/search regressions pass on macOS arm64. A new opt-in native desktop fixture passes against the freshly published self-contained service without replacing its IPC handler: register a disposable repository, index/search, read hash-verified source, force rebuild, pause/resume, relocate to distinct source, search the relocated symbol and unregister. The fixture owns its service process and temporary data. The source view and themed relocation dialog screenshots were inspected on this same build; text, controls, focus ring and dialog layout were legible. This is one light-theme native walkthrough, not a complete theme/accessibility/platform or live-provider qualification.
+
+The Playwright catalog now includes the new fixture, and `npm run test:praxis-contracts` passes (614 catalogued tests). The native test visibly skips unless `PRAXIS_CODE_INTELLIGENCE_EXE` identifies a host package. No paid provider call or project evaluation is used.
+
 ## Remaining code and acceptance work
 
 1. Execute the independent golden tokenizer/vector and representation source-span fixtures on Windows; macOS arm64 now passes these fixtures. Exact persisted chunk spans and selected source excerpts are implemented. Linux x64 passes the checked-in Python-reference fixture (10 token/span cases, 4 full vectors, absolute tolerance 1e-5/cosine >= 0.99999).
 2. Complete remaining dependency relationships and general delegate points-to analysis. Local callable, synthetic project-root/top-level ownership, type inheritance/implementation and optional bounded virtual/interface candidates now have regression coverage. Candidates are possible structural targets, not runtime proof.
 3. Verify remaining irreducible-item budget/freshness errors against A01–A40. Status/summary collection trimming and full coverage counts now have targeted regression coverage. Paged collections, source text and graphs now trim with evidence/range/cursor invariants covered by regression tests. A single irreducible item can still return an explicit budget error.
 4. Execute Windows/macOS source-handle race fixtures, including junctions, case/Unicode paths and concurrent swaps. Platform-specific handle-path verification is implemented and compiles; Linux and macOS arm64 execution is evidenced. Native macOS fixes cover the Darwin arm64 fcntl ABI and canonical alias parents; Windows execution remains open. Linux/macOS rename/replacement and nonblocking FIFO regressions pass.
-5. Execute desktop recovery/search functional e2e, final visual walkthrough and provider cancellation/error transcripts. Recovery controls and cursor/truncation feedback are implemented; the two new UI specs are blocked before panel interaction by missing X display/native node-pty.
+5. Complete theme/accessibility/platform qualification and provider cancellation/error transcripts. On macOS the two recovery/search specs and a new real packaged-service desktop flow pass, with source/dialog captures inspected. Earlier Linux attempts remain blocked evidence, not a current macOS blocker.
 6. Measure scale/quality gates. Conservative full-context publication is intentional until equivalence/performance evidence supports more targeted invalidation.
 
 Native IPC, corruption/full-disk recovery, crash takeover, package dependencies and offline operation require execution on required platforms before release. Review the full normative acceptance list rather than treating the test count as coverage of every gate. M4 TypeScript/JavaScript, M5 local LLM enrichment and M6 scale/federation remain future milestones.

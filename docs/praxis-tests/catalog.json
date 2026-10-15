@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 603,
+  "testCount": 614,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -459,7 +459,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 484,
+        "line": 485,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -475,7 +475,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 513,
+        "line": 514,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -491,7 +491,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 523,
+        "line": 524,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -507,7 +507,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 589,
+        "line": 590,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -523,7 +523,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 602,
+        "line": 603,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -539,7 +539,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 625,
+        "line": 626,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -1467,7 +1467,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 342,
+        "line": 350,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1483,7 +1483,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 422,
+        "line": 430,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1499,7 +1499,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 460,
+        "line": 468,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1515,7 +1515,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 476,
+        "line": 484,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1531,7 +1531,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 522,
+        "line": 530,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1547,7 +1547,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 576,
+        "line": 584,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1563,7 +1563,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 627,
+        "line": 635,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1579,7 +1579,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 655,
+        "line": 663,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1595,7 +1595,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 721,
+        "line": 729,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1611,7 +1611,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 810,
+        "line": 818,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1627,7 +1627,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 850,
+        "line": 858,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1643,7 +1643,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 910,
+        "line": 918,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1659,7 +1659,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 972,
+        "line": 980,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1675,7 +1675,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 1030,
+        "line": 1038,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1691,7 +1691,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 1097,
+        "line": 1105,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1707,7 +1707,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 1170,
+        "line": 1178,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1723,7 +1723,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 1216,
+        "line": 1224,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1739,7 +1739,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 1253,
+        "line": 1261,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -2187,7 +2187,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts",
-        "line": 406,
+        "line": 418,
         "project": "functional"
       },
       "area": "ai Ticket Review",
@@ -2379,7 +2379,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts",
-        "line": 511,
+        "line": 524,
         "project": "functional"
       },
       "area": "ai Workflows",
@@ -2443,7 +2443,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 18,
+        "line": 19,
         "project": "functional"
       },
       "area": "app",
@@ -2459,7 +2459,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 35,
+        "line": 36,
         "project": "functional"
       },
       "area": "app",
@@ -2475,7 +2475,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 68,
+        "line": 69,
         "project": "functional"
       },
       "area": "app",
@@ -2491,7 +2491,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 92,
+        "line": 93,
         "project": "functional"
       },
       "area": "app",
@@ -2507,7 +2507,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 109,
+        "line": 110,
         "project": "functional"
       },
       "area": "app",
@@ -2523,7 +2523,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 115,
+        "line": 116,
         "project": "functional"
       },
       "area": "app",
@@ -2539,7 +2539,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 122,
+        "line": 123,
         "project": "functional"
       },
       "area": "app",
@@ -2555,7 +2555,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 133,
+        "line": 134,
         "project": "functional"
       },
       "area": "app",
@@ -2571,7 +2571,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 152,
+        "line": 153,
         "project": "functional"
       },
       "area": "app",
@@ -2587,7 +2587,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 175,
+        "line": 176,
         "project": "functional"
       },
       "area": "app",
@@ -2603,7 +2603,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 184,
+        "line": 185,
         "project": "functional"
       },
       "area": "app",
@@ -2619,7 +2619,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 196,
+        "line": 197,
         "project": "functional"
       },
       "area": "app",
@@ -2630,18 +2630,18 @@
       }
     },
     {
-      "id": "PT-CD88DD8E19",
-      "title": "navigating to Connections shows the connection management screen",
+      "id": "PT-B7E9ACDDB7",
+      "title": "Connections is absent from the sidebar and opens through the command palette",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 204,
+        "line": 205,
         "project": "functional"
       },
       "area": "app",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "navigating to Connections shows the connection management screen",
+        "when": "Connections is absent from the sidebar and opens through the command palette",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -2651,7 +2651,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 211,
+        "line": 214,
         "project": "functional"
       },
       "area": "app",
@@ -2667,7 +2667,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 236,
+        "line": 239,
         "project": "functional"
       },
       "area": "app",
@@ -2939,7 +2939,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 228,
+        "line": 238,
         "project": "functional"
       },
       "area": "assistant",
@@ -2955,7 +2955,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 258,
+        "line": 268,
         "project": "functional"
       },
       "area": "assistant",
@@ -2971,7 +2971,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 287,
+        "line": 297,
         "project": "functional"
       },
       "area": "assistant",
@@ -2987,7 +2987,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 319,
+        "line": 329,
         "project": "functional"
       },
       "area": "assistant",
@@ -3003,7 +3003,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 341,
+        "line": 351,
         "project": "functional"
       },
       "area": "assistant",
@@ -3019,7 +3019,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 353,
+        "line": 363,
         "project": "functional"
       },
       "area": "assistant",
@@ -3035,7 +3035,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 414,
+        "line": 424,
         "project": "functional"
       },
       "area": "assistant",
@@ -3051,7 +3051,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 431,
+        "line": 441,
         "project": "functional"
       },
       "area": "assistant",
@@ -3067,7 +3067,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 445,
+        "line": 455,
         "project": "functional"
       },
       "area": "assistant",
@@ -3083,7 +3083,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 484,
+        "line": 494,
         "project": "functional"
       },
       "area": "assistant",
@@ -3099,7 +3099,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 503,
+        "line": 513,
         "project": "functional"
       },
       "area": "assistant",
@@ -3115,7 +3115,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 542,
+        "line": 552,
         "project": "functional"
       },
       "area": "assistant",
@@ -3131,7 +3131,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 561,
+        "line": 571,
         "project": "functional"
       },
       "area": "assistant",
@@ -3147,7 +3147,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 578,
+        "line": 588,
         "project": "functional"
       },
       "area": "assistant",
@@ -3163,7 +3163,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 642,
+        "line": 652,
         "project": "functional"
       },
       "area": "assistant",
@@ -3179,7 +3179,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 733,
+        "line": 743,
         "project": "functional"
       },
       "area": "assistant",
@@ -4075,13 +4075,61 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatProjectAssignment.visual.spec.ts",
-        "line": 109,
+        "line": 111,
         "project": "functional"
       },
       "area": "chat Project Assignment.visual",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "assign chat ticket field lists tickets for a folder-backed project",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-DCF22F6C16",
+      "title": "rebuild and relocation use the themed recovery flow and refresh status",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
+        "line": 38,
+        "project": "functional"
+      },
+      "area": "code Intelligence",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "rebuild and relocation use the themed recovery flow and refresh status",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-892AB10FFA",
+      "title": "budget-truncated search offers the returned cursor and shows the next page",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
+        "line": 54,
+        "project": "functional"
+      },
+      "area": "code Intelligence",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "budget-truncated search offers the returned cursor and shows the next page",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-C0D616E5B7",
+      "title": "packaged service supports desktop source navigation and repository recovery",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/codeIntelligenceNative.spec.ts",
+        "line": 9,
+        "project": "functional"
+      },
+      "area": "code Intelligence Native",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "packaged service supports desktop source navigation and repository recovery",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -4198,12 +4246,60 @@
       }
     },
     {
+      "id": "PT-C4C9115D0B",
+      "title": "the new-session composer lists providers with their brand logo, not a glyph",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/composerProviderBrandIcons.spec.ts",
+        "line": 40,
+        "project": "functional"
+      },
+      "area": "composer Provider Brand Icons",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the new-session composer lists providers with their brand logo, not a glyph",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-0229E7D2BF",
+      "title": "the composer provider chip keeps the brand logo after a choice",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/composerProviderBrandIcons.spec.ts",
+        "line": 56,
+        "project": "functional"
+      },
+      "area": "composer Provider Brand Icons",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the composer provider chip keeps the brand logo after a choice",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-D661E0DF32",
+      "title": "Settings' provider card still announces its logo, where the mark is the label",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/composerProviderBrandIcons.spec.ts",
+        "line": 67,
+        "project": "functional"
+      },
+      "area": "composer Provider Brand Icons",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "Settings' provider card still announces its logo, where the mark is the label",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-DE1AE73B0C",
       "title": "the new-connection form renders the per-mode field sets",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/connectionsManager.spec.ts",
-        "line": 40,
+        "line": 43,
         "project": "functional"
       },
       "area": "connections Manager",
@@ -4219,7 +4315,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/connectionsManager.spec.ts",
-        "line": 95,
+        "line": 98,
         "project": "functional"
       },
       "area": "connections Manager",
@@ -4235,7 +4331,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/connectionsManager.spec.ts",
-        "line": 122,
+        "line": 127,
         "project": "functional"
       },
       "area": "connections Manager",
@@ -4251,7 +4347,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/connectionsManager.spec.ts",
-        "line": 145,
+        "line": 150,
         "project": "functional"
       },
       "area": "connections Manager",
@@ -4267,7 +4363,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/connectionsManager.spec.ts",
-        "line": 156,
+        "line": 161,
         "project": "functional"
       },
       "area": "connections Manager",
@@ -4283,7 +4379,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/connectionsManager.spec.ts",
-        "line": 185,
+        "line": 190,
         "project": "functional"
       },
       "area": "connections Manager",
@@ -4299,7 +4395,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/connectionsManager.spec.ts",
-        "line": 207,
+        "line": 212,
         "project": "functional"
       },
       "area": "connections Manager",
@@ -4315,7 +4411,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/connectionsManager.spec.ts",
-        "line": 258,
+        "line": 263,
         "project": "functional"
       },
       "area": "connections Manager",
@@ -4459,7 +4555,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 278,
+        "line": 328,
         "project": "functional"
       },
       "area": "easymode",
@@ -4475,7 +4571,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 307,
+        "line": 357,
         "project": "functional"
       },
       "area": "easymode",
@@ -4491,7 +4587,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 339,
+        "line": 389,
         "project": "functional"
       },
       "area": "easymode",
@@ -4507,7 +4603,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 368,
+        "line": 418,
         "project": "functional"
       },
       "area": "easymode",
@@ -4523,7 +4619,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 389,
+        "line": 439,
         "project": "functional"
       },
       "area": "easymode",
@@ -4539,7 +4635,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 429,
+        "line": 479,
         "project": "functional"
       },
       "area": "easymode",
@@ -4555,7 +4651,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 453,
+        "line": 503,
         "project": "functional"
       },
       "area": "easymode",
@@ -4571,7 +4667,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 563,
+        "line": 624,
         "project": "functional"
       },
       "area": "easymode",
@@ -4587,7 +4683,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 660,
+        "line": 721,
         "project": "functional"
       },
       "area": "easymode",
@@ -4603,7 +4699,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 795,
+        "line": 856,
         "project": "functional"
       },
       "area": "easymode",
@@ -4619,7 +4715,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 895,
+        "line": 956,
         "project": "functional"
       },
       "area": "easymode",
@@ -4635,7 +4731,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1023,
+        "line": 1084,
         "project": "functional"
       },
       "area": "easymode",
@@ -4651,7 +4747,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1195,
+        "line": 1256,
         "project": "functional"
       },
       "area": "easymode",
@@ -4667,7 +4763,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1417,
+        "line": 1478,
         "project": "functional"
       },
       "area": "easymode",
@@ -4683,7 +4779,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1560,
+        "line": 1621,
         "project": "functional"
       },
       "area": "easymode",
@@ -4731,7 +4827,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/folder.spec.ts",
-        "line": 63,
+        "line": 64,
         "project": "functional"
       },
       "area": "folder",
@@ -4747,7 +4843,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/folder.spec.ts",
-        "line": 75,
+        "line": 76,
         "project": "functional"
       },
       "area": "folder",
@@ -4763,7 +4859,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/folder.spec.ts",
-        "line": 92,
+        "line": 93,
         "project": "functional"
       },
       "area": "folder",
@@ -4891,7 +4987,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/github.spec.ts",
-        "line": 88,
+        "line": 89,
         "project": "functional"
       },
       "area": "github",
@@ -4907,7 +5003,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/github.spec.ts",
-        "line": 103,
+        "line": 104,
         "project": "functional"
       },
       "area": "github",
@@ -4923,7 +5019,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/github.spec.ts",
-        "line": 116,
+        "line": 117,
         "project": "functional"
       },
       "area": "github",
@@ -4939,7 +5035,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/github.spec.ts",
-        "line": 144,
+        "line": 145,
         "project": "functional"
       },
       "area": "github",
@@ -4955,7 +5051,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/github.spec.ts",
-        "line": 158,
+        "line": 159,
         "project": "functional"
       },
       "area": "github",
@@ -4971,7 +5067,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/github.spec.ts",
-        "line": 168,
+        "line": 169,
         "project": "functional"
       },
       "area": "github",
@@ -4987,7 +5083,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/gitlab.spec.ts",
-        "line": 95,
+        "line": 96,
         "project": "functional"
       },
       "area": "gitlab",
@@ -5003,7 +5099,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/gitlab.spec.ts",
-        "line": 116,
+        "line": 117,
         "project": "functional"
       },
       "area": "gitlab",
@@ -5019,7 +5115,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/gitlab.spec.ts",
-        "line": 134,
+        "line": 135,
         "project": "functional"
       },
       "area": "gitlab",
@@ -5275,7 +5371,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/jira.spec.ts",
-        "line": 77,
+        "line": 78,
         "project": "functional"
       },
       "area": "jira",
@@ -5291,7 +5387,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/jira.spec.ts",
-        "line": 91,
+        "line": 92,
         "project": "functional"
       },
       "area": "jira",
@@ -5307,7 +5403,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/jiraAuth.spec.ts",
-        "line": 147,
+        "line": 148,
         "project": "functional"
       },
       "area": "jira Auth",
@@ -5323,7 +5419,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/jiraAuth.spec.ts",
-        "line": 212,
+        "line": 213,
         "project": "functional"
       },
       "area": "jira Auth",
@@ -5339,7 +5435,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/jiraAuth.spec.ts",
-        "line": 293,
+        "line": 294,
         "project": "functional"
       },
       "area": "jira Auth",
@@ -5426,6 +5522,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "the ring is themed, and pointer clicks stay quiet",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-47C9FD95ED",
+      "title": "AI Usage displays million, billion and trillion token totals with compact units",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/largeTokenUsage.spec.ts",
+        "line": 7,
+        "project": "functional"
+      },
+      "area": "large Token Usage",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "AI Usage displays million, billion and trillion token totals with compact units",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -5643,7 +5755,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/newIssue.spec.ts",
-        "line": 67,
+        "line": 69,
         "project": "functional"
       },
       "area": "new Issue",
@@ -5659,7 +5771,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/newIssue.spec.ts",
-        "line": 90,
+        "line": 92,
         "project": "functional"
       },
       "area": "new Issue",
@@ -5675,7 +5787,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/newIssue.spec.ts",
-        "line": 132,
+        "line": 136,
         "project": "functional"
       },
       "area": "new Issue",
@@ -5691,7 +5803,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/newIssue.spec.ts",
-        "line": 147,
+        "line": 152,
         "project": "functional"
       },
       "area": "new Issue",
@@ -5707,7 +5819,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/newIssue.spec.ts",
-        "line": 156,
+        "line": 161,
         "project": "functional"
       },
       "area": "new Issue",
@@ -5723,7 +5835,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/newIssue.spec.ts",
-        "line": 183,
+        "line": 188,
         "project": "functional"
       },
       "area": "new Issue",
@@ -5739,7 +5851,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/newIssue.spec.ts",
-        "line": 239,
+        "line": 245,
         "project": "functional"
       },
       "area": "new Issue",
@@ -5947,7 +6059,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projectReview.spec.ts",
-        "line": 11,
+        "line": 21,
         "project": "functional"
       },
       "area": "project Review",
@@ -5963,7 +6075,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projectReview.spec.ts",
-        "line": 106,
+        "line": 116,
         "project": "functional"
       },
       "area": "project Review",
@@ -5979,7 +6091,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projectReview.spec.ts",
-        "line": 176,
+        "line": 186,
         "project": "functional"
       },
       "area": "project Review",
@@ -6294,6 +6406,22 @@
       }
     },
     {
+      "id": "PT-372B4C8AC9",
+      "title": "provider history stays separate, handles keys, coverage, zero and unavailable summaries",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/providerUsageHistory.spec.ts",
+        "line": 6,
+        "project": "functional"
+      },
+      "area": "provider Usage History",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "provider history stays separate, handles keys, coverage, zero and unavailable summaries",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-58E206C861",
       "title": "global capture requires a destination, creates through the ordinary path, and clears only on success",
       "source": {
@@ -6475,7 +6603,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/quickSession.spec.ts",
-        "line": 119,
+        "line": 168,
         "project": "functional"
       },
       "area": "quick Session",
@@ -7174,18 +7302,18 @@
       }
     },
     {
-      "id": "PT-53AB1FCF37",
-      "title": "session categories stack below Sessions and hand over within their own lists",
+      "id": "PT-856185D4D7",
+      "title": "recency buckets stack below the project row and hand over within their own lists",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sidebarStickyHeaders.spec.ts",
-        "line": 152,
+        "line": 161,
         "project": "functional"
       },
       "area": "sidebar Sticky Headers",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "session categories stack below Sessions and hand over within their own lists",
+        "when": "recency buckets stack below the project row and hand over within their own lists",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -7243,7 +7371,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/startupExperience.spec.ts",
-        "line": 16,
+        "line": 17,
         "project": "functional"
       },
       "area": "startup Experience",
@@ -7259,7 +7387,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/startupExperience.spec.ts",
-        "line": 39,
+        "line": 40,
         "project": "functional"
       },
       "area": "startup Experience",
@@ -7275,7 +7403,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/startupExperience.spec.ts",
-        "line": 96,
+        "line": 97,
         "project": "functional"
       },
       "area": "startup Experience",
@@ -7291,7 +7419,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/startupExperience.spec.ts",
-        "line": 116,
+        "line": 117,
         "project": "functional"
       },
       "area": "startup Experience",
@@ -7307,7 +7435,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/startupExperience.spec.ts",
-        "line": 148,
+        "line": 149,
         "project": "functional"
       },
       "area": "startup Experience",
@@ -7323,7 +7451,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/startupExperience.spec.ts",
-        "line": 212,
+        "line": 213,
         "project": "functional"
       },
       "area": "startup Experience",
@@ -7339,7 +7467,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/startupExperience.spec.ts",
-        "line": 271,
+        "line": 272,
         "project": "functional"
       },
       "area": "startup Experience",
@@ -7355,7 +7483,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/startupExperience.spec.ts",
-        "line": 293,
+        "line": 294,
         "project": "functional"
       },
       "area": "startup Experience",
@@ -7371,7 +7499,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/startupExperience.spec.ts",
-        "line": 317,
+        "line": 318,
         "project": "functional"
       },
       "area": "startup Experience",
@@ -7387,7 +7515,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/startupExperience.spec.ts",
-        "line": 331,
+        "line": 332,
         "project": "functional"
       },
       "area": "startup Experience",
@@ -8054,6 +8182,54 @@
       }
     },
     {
+      "id": "PT-A78EE346F5",
+      "title": "normal teardown exits Electron and removes its isolated profile",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/testAppCleanup.spec.ts",
+        "line": 5,
+        "project": "functional"
+      },
+      "area": "test App Cleanup",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "normal teardown exits Electron and removes its isolated profile",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-95EBB52521",
+      "title": "stalled renderer cleanup is bounded and reported after terminating its app",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/testAppCleanup.spec.ts",
+        "line": 15,
+        "project": "functional"
+      },
+      "area": "test App Cleanup",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "stalled renderer cleanup is bounded and reported after terminating its app",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-CEBD73E498",
+      "title": "vetoed Electron shutdown is bounded and remains a failure",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/testAppCleanup.spec.ts",
+        "line": 31,
+        "project": "functional"
+      },
+      "area": "test App Cleanup",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "vetoed Electron shutdown is bounded and remains a failure",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-12759B4DF5",
       "title": "ships the four built-in Looks with Parchment active",
       "source": {
@@ -8187,7 +8363,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/walkthrough.spec.ts",
-        "line": 102,
+        "line": 99,
         "project": "functional"
       },
       "area": "walkthrough",
@@ -8203,7 +8379,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/walkthrough.spec.ts",
-        "line": 145,
+        "line": 142,
         "project": "functional"
       },
       "area": "walkthrough",
@@ -8219,7 +8395,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/walkthrough.spec.ts",
-        "line": 159,
+        "line": 156,
         "project": "functional"
       },
       "area": "walkthrough",
@@ -8235,7 +8411,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/walkthrough.spec.ts",
-        "line": 171,
+        "line": 168,
         "project": "functional"
       },
       "area": "walkthrough",
@@ -9275,7 +9451,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 285,
+        "line": 299,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9291,7 +9467,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 311,
+        "line": 325,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9307,7 +9483,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 360,
+        "line": 374,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9323,7 +9499,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 379,
+        "line": 393,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9339,7 +9515,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 414,
+        "line": 428,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9355,7 +9531,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 501,
+        "line": 515,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9371,7 +9547,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 514,
+        "line": 528,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9387,7 +9563,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 522,
+        "line": 536,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9403,7 +9579,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 532,
+        "line": 546,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9419,7 +9595,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 560,
+        "line": 574,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9435,7 +9611,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 627,
+        "line": 641,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9451,7 +9627,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 667,
+        "line": 681,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9467,7 +9643,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 681,
+        "line": 695,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9483,7 +9659,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 707,
+        "line": 721,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9499,7 +9675,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 777,
+        "line": 791,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -9515,7 +9691,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 800,
+        "line": 814,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
