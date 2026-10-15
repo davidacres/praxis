@@ -54,6 +54,7 @@ public static class SourceFiles
     {
         var path = Resolve(root, relativePath);
         using var stream = SafeSourceHandle.Read(root, relativePath, path);
+        if (!stream.CanSeek) throw new IOException("Non-seekable source inputs are unsupported.");
         if (stream.Length > MaximumBytes) throw new IOException("INPUT_TOO_LARGE: source exceeds the byte limit.");
         using var buffer = new MemoryStream();
         var chunk = new byte[16 * 1024];
@@ -64,6 +65,8 @@ public static class SourceFiles
             if (buffer.Length + count > MaximumBytes) throw new IOException("INPUT_TOO_LARGE: source exceeds the byte limit.");
             buffer.Write(chunk, 0, count);
         }
+        // Validate the actual opened object as well as the current pathname.
+        SafeSourceHandle.Verify(stream, path);
         // Re-check path policy after reading; a detected path swap never returns source.
         if (Resolve(root, relativePath) != path) throw new IOException("Source path changed during reading.");
         var bytes = buffer.ToArray();
