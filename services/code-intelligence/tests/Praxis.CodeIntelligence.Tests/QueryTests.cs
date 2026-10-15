@@ -34,6 +34,32 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public void NormativeDefaultLimitsAndEmptyRelationFiltersAreApplied()
+    {
+        var types = string.Join(" ", Enumerable.Range(0, 15).Select(i => "class DefaultEntry" + i + " {}"));
+        var overloads = string.Join(" ", Enumerable.Range(0, 12).Select(i => "void Target(" + string.Join(",", Enumerable.Range(0, i).Select(n => "int p" + n)) + ") {}"));
+        File.WriteAllText(Path.Combine(root, "Example.cs"), types + " class Example { " + overloads + " void Caller() { Target(); } }"); indexer.Index(repository);
+        var search = Query("search_code", new() { ["query"] = "Default", ["mode"] = "lexical", ["filters"] = new JsonObject { ["kinds"] = new JsonArray(), ["languages"] = new JsonArray(), ["projectIds"] = new JsonArray() } });
+        Assert.Null(search["error"]); Assert.Equal(10, search["data"]!["matches"]!.AsArray().Count); Assert.NotNull(search["nextCursor"]);
+        Assert.Equal(10, Query("find_symbol", new() { ["name"] = "Target" })["data"]!["items"]!.AsArray().Count);
+        var caller = Symbol("Caller");
+        var trace = Query("trace_flow", new() { ["symbolId"] = caller["symbolId"]!.DeepClone(), ["edgeKinds"] = new JsonArray() });
+        Assert.Single(trace["data"]!["edges"]!.AsArray()); Assert.Equal(2000, trace["data"]!["limitsApplied"]!["maxEdges"]!.GetValue<int>());
+        Assert.Single(Query("find_related", new() { ["symbolId"] = caller["symbolId"]!.DeepClone(), ["kinds"] = new JsonArray() })["data"]!["items"]!.AsArray());
+    }
+
+    [Fact]
+    public void FiltersNormalizeCaseWhitespaceAndRejectDuplicateValues()
+    {
+        var normalized = Query("search_code", new() { ["query"] = "Target", ["mode"] = "lexical", ["filters"] = new JsonObject { ["kinds"] = new JsonArray(" METHOD "), ["languages"] = new JsonArray(" CSHARP ") } });
+        Assert.Null(normalized["error"]); Assert.NotEmpty(normalized["data"]!["matches"]!.AsArray());
+        var duplicate = Query("search_code", new() { ["query"] = "Target", ["filters"] = new JsonObject { ["kinds"] = new JsonArray("method", " METHOD ") } });
+        Assert.Equal("INVALID_ARGUMENT", duplicate["error"]!["code"]!.GetValue<string>());
+        var duplicateEdges = Query("trace_flow", new() { ["symbolId"] = Symbol("Caller")["symbolId"]!.DeepClone(), ["edgeKinds"] = new JsonArray("calls", " CALLS ") });
+        Assert.Equal("INVALID_ARGUMENT", duplicateEdges["error"]!["code"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void OptionalGraphExpansionKeepsDirectMatchesFirstAndPreservesEdgeEvidence()
     {
         File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { int Related() => 1; int UniqueSeed() => Related(); }"); indexer.Index(repository);
