@@ -23,7 +23,7 @@ public sealed class LocalModel : IDisposable
             || node["dimensions"]?.GetValue<int>() != Dimensions || node["maximumTokens"]?.GetValue<int>() != 256
             || node["license"]?.GetValue<string>() != "Apache-2.0" || node["pooling"]?.GetValue<string>() != "attention-mask-mean"
             || node["normalization"]?.GetValue<string>() != "l2" || node["metric"]?.GetValue<string>() != "cosine"
-            || node["tokenizer"]?.GetValue<string>() != "bert-uncased-wordpiece-v1" || node["representationVersion"]?.GetValue<int>() != 1
+            || node["tokenizer"]?.GetValue<string>() != "bert-uncased-wordpiece-v2" || node["representationVersion"]?.GetValue<int>() != 1
             || node["queryPrefix"]?.GetValue<string>() != "" || node["documentPrefix"]?.GetValue<string>() != "")
             throw new ArgumentException("Model manifest is not the supported baseline profile.");
         var model = ReadBounded(Path.Combine(directory, "model.onnx"), 128 * 1024 * 1024);
