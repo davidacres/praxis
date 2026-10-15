@@ -16,7 +16,7 @@ public sealed class DatabaseTests : IDisposable
         using var connection = Database.Open();
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT count(*) FROM schema_migrations";
-        Assert.Equal(1L, command.ExecuteScalar());
+        Assert.Equal((long)IndexDatabase.SchemaVersion, command.ExecuteScalar());
         command.CommandText = "INSERT INTO projects VALUES('p','missing','key','project.csproj','csharp')";
         Assert.Throws<SqliteException>(() => command.ExecuteNonQuery());
         Assert.Empty(Database.Check());
@@ -28,13 +28,13 @@ public sealed class DatabaseTests : IDisposable
         Database.Initialize();
         using (var connection = Database.Open())
         {
-            using var command = connection.CreateCommand(); command.CommandText = "PRAGMA user_version=2"; command.ExecuteNonQuery();
+            using var command = connection.CreateCommand(); command.CommandText = "PRAGMA user_version=" + (IndexDatabase.SchemaVersion + 1); command.ExecuteNonQuery();
         }
         Assert.Throws<InvalidOperationException>(() => Database.Initialize());
         Assert.Throws<InvalidOperationException>(() => Database.Open());
         using var raw = new SqliteConnection($"Data Source={Database.Path};Pooling=False");
         raw.Open(); using var check = raw.CreateCommand(); check.CommandText = "PRAGMA user_version";
-        Assert.Equal(2L, check.ExecuteScalar());
+        Assert.Equal((long)IndexDatabase.SchemaVersion + 1, check.ExecuteScalar());
     }
 
     [Fact]
@@ -46,6 +46,28 @@ public sealed class DatabaseTests : IDisposable
             using var command = connection.CreateCommand(); command.CommandText = "UPDATE schema_migrations SET checksum='invalid'"; command.ExecuteNonQuery();
         }
         Assert.Throws<InvalidOperationException>(() => Database.Initialize());
+    }
+
+    [Fact]
+    public void VersionOneUpgradePreservesFactsAndAddsCascadeLookupIndexes()
+    {
+        Directory.CreateDirectory(root);
+        using (var raw = new SqliteConnection($"Data Source={Database.Path};Pooling=False"))
+        {
+            raw.Open(); using var command = raw.CreateCommand();
+            using var stream = typeof(IndexDatabase).Assembly.GetManifestResourceStream("Praxis.CodeIntelligence.Storage.migration001.sql")!;
+            using var reader = new StreamReader(stream); var migration = reader.ReadToEnd();
+            command.CommandText = migration; command.ExecuteNonQuery();
+            var checksum = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(migration)));
+            command.CommandText = "INSERT INTO schema_migrations VALUES(1,$checksum,'fixture'); PRAGMA user_version=1; INSERT INTO repositories(repository_id,canonical_root,path_policy) VALUES('kept','/fixture','caseSensitive');";
+            command.Parameters.AddWithValue("$checksum", checksum); command.ExecuteNonQuery();
+        }
+        Database.Initialize(); Database.Initialize(); Assert.Empty(Database.Check());
+        using var connection = Database.Open(); using var check = connection.CreateCommand();
+        check.CommandText = "SELECT repository_id FROM repositories"; Assert.Equal("kept", check.ExecuteScalar());
+        check.CommandText = "SELECT count(*) FROM schema_migrations"; Assert.Equal((long)IndexDatabase.SchemaVersion, check.ExecuteScalar());
+        check.CommandText = "EXPLAIN QUERY PLAN SELECT edge_id FROM edges WHERE occurrence_id='fixture'";
+        using var plan = check.ExecuteReader(); Assert.True(plan.Read()); Assert.Contains("edge_occurrence", plan.GetString(3));
     }
 
     [Fact]
