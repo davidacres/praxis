@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Praxis.CodeIntelligence.Indexing;
 
 namespace Praxis.CodeIntelligence.Embeddings;
@@ -8,6 +9,19 @@ public sealed record SymbolRepresentation(string Text, string Hash, bool Truncat
 
 public static class RepresentationBuilder
 {
+    public static string ChunkMetadata(SymbolRepresentation representation, TokenizedChunk span)
+    {
+        var sources = representation.Sources.Where(source => source.RepresentationStart < span.End && source.RepresentationEnd > span.Start)
+            .Select(source => {
+                var start = Math.Max(source.RepresentationStart, span.Start); var end = Math.Min(source.RepresentationEnd, span.End);
+                return new { source.Path, source.ContentHash, Start = source.Start + start - source.RepresentationStart,
+                    End = source.Start + end - source.RepresentationStart, RepresentationStart = start, RepresentationEnd = end };
+            });
+        return JsonSerializer.Serialize(new { CoordinateBasis = "utf16", span.Start, span.End, span.FirstToken, span.EndToken,
+            Truncated = span.Truncated || representation.Truncated, TokenTruncated = span.Truncated, InputTruncated = representation.Truncated,
+            RepresentationHash = representation.Hash, Sources = sources });
+    }
+
     public static SymbolRepresentation Build(string name, string signature, string documentation, string description,
         SourceInput? source = null, int sourceStart = 0, int sourceEnd = 0)
     {
