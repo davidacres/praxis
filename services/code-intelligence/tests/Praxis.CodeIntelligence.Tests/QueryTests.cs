@@ -41,6 +41,9 @@ public sealed class QueryTests : IDisposable
         File.WriteAllText(Path.Combine(root, "Example.cs"), types + " class Example { " + overloads + " void Caller() { Target(); } }"); indexer.Index(repository);
         var search = Query("search_code", new() { ["query"] = "Default", ["mode"] = "lexical", ["filters"] = new JsonObject { ["kinds"] = new JsonArray(), ["languages"] = new JsonArray(), ["projectIds"] = new JsonArray() } });
         Assert.Null(search["error"]); Assert.Equal(10, search["data"]!["matches"]!.AsArray().Count); Assert.NotNull(search["nextCursor"]);
+        var unfilteredSearch = Query("search_code", new() { ["query"] = "Default", ["mode"] = "lexical" });
+        Assert.Equal(unfilteredSearch["data"]!["eligibleSymbolCount"]!.GetValue<long>(), search["data"]!["eligibleSymbolCount"]!.GetValue<long>());
+        Assert.True(search["data"]!["eligibleSymbolCount"]!.GetValue<long>() > 0);
         Assert.Equal(10, Query("find_symbol", new() { ["name"] = "Target" })["data"]!["items"]!.AsArray().Count);
         var caller = Symbol("Caller");
         var trace = Query("trace_flow", new() { ["symbolId"] = caller["symbolId"]!.DeepClone(), ["edgeKinds"] = new JsonArray() });
