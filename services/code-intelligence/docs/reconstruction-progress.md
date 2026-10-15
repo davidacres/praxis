@@ -129,6 +129,12 @@ The checked-in schema-2/adapter-v3 benchmark recorded 5000 source symbols plus o
 
 A scoped GitHub workflow now defines Linux, Windows and macOS locked restores, independent golden/native model tests, captured-response schema validation, and self-contained CLI/SQLite/ONNX smoke packaging. It runs on relevant PRs or manual dispatch; the real-model Linux benchmark is opt-in. YAML structure was validated locally. No remote platform CI result or UI visual pass is claimed.
 
+## Native macOS prerequisite checkpoint (15 October)
+
+The first native macOS arm64 run exposed an incorrect variadic `fcntl(F_GETPATH)` call: Darwin arm64 requires the buffer argument on the stack. The architecture-specific declaration now supplies that ABI layout; the existing x64 declaration remains isolated to non-arm64 macOS. Source-root canonicalization also resolves aliased parents inside a symlink target, including macOS `/var` to `/private/var`. A new nested-alias regression checks canonical identity and actual reads, and the opened-file rename fixture now supplies the canonical expected path.
+
+**82 C# tests passed, 0 failed, 0 skipped** on macOS arm64 with SDK 10.0.402, explicit SDK capture and the pinned real model. This includes source aliases, replaced handles, nonblocking FIFO rejection, the independent tokenizer/vector golden fixture and durable vector refresh. The initial unmodified native run hung and was terminated; it is not passing evidence. This checkpoint enables local performance measurements; no performance improvement is claimed yet. Windows, Linux revalidation and desktop UI remain separate checks.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.

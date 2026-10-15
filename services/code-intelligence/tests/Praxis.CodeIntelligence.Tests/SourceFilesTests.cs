@@ -57,9 +57,25 @@ public sealed class SourceFilesTests : IDisposable
     }
 
     [Fact]
+    public void RootAliasTargetsWithAliasedParentsAreCanonicalAndReadable()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var physical = System.IO.Path.Combine(root, "physical"); Directory.CreateDirectory(physical);
+        var parentAlias = System.IO.Path.Combine(root, "parent-alias"); Directory.CreateSymbolicLink(parentAlias, physical);
+        var child = System.IO.Path.Combine(physical, "nested"); Directory.CreateDirectory(child);
+        var alias = System.IO.Path.Combine(root, "root-alias");
+        Directory.CreateSymbolicLink(alias, System.IO.Path.Combine(parentAlias, "nested"));
+        File.WriteAllText(System.IO.Path.Combine(child, "Example.cs"), "class Example {}");
+        var canonical = SourceFiles.CanonicalDirectory(alias);
+        Assert.Equal(SourceFiles.CanonicalDirectory(child), canonical);
+        Assert.Equal(canonical, SourceFiles.CanonicalDirectory(canonical));
+        Assert.Equal("class Example {}", SourceFiles.Read(alias, "Example.cs").Text);
+    }
+
+    [Fact]
     public void RenamedOpenedFileIsRejectedEvenWhenTheOriginalPathIsReplaced()
     {
-        var path = System.IO.Path.Combine(root, "Example.cs");
+        var path = SourceFiles.Resolve(root, "Example.cs");
         File.WriteAllText(path, "class Original {}");
         using var stream = SafeSourceHandle.Read(root, "Example.cs", path);
         File.Move(path, System.IO.Path.Combine(root, "Moved.cs"));

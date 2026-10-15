@@ -16,6 +16,12 @@ internal static class SafeSourceHandle
     // https://github.com/apple/darwin-xnu/blob/main/bsd/sys/fcntl.h
     [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
     private static extern int GetMacPath(int descriptor, int command, [Out] byte[] buffer);
+    // Darwin arm64 passes variadic arguments on the stack. Fill x2-x7 so the
+    // buffer occupies the first stack argument; the ordinary overload is for x64.
+    // https://github.com/dotnet/runtime/issues/48796
+    [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    private static extern int GetMacArm64Path(int descriptor, int command,
+        nint unused2, nint unused3, nint unused4, nint unused5, nint unused6, nint unused7, [Out] byte[] buffer);
     // https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew
     [DllImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint GetWindowsPath(SafeFileHandle file, StringBuilder path, uint capacity, uint flags);
@@ -81,7 +87,10 @@ internal static class SafeSourceHandle
         if (OperatingSystem.IsMacOS())
         {
             var bytes = new byte[4096];
-            if (GetMacPath(handle.DangerousGetHandle().ToInt32(), 50, bytes) != 0) throw new IOException("Cannot verify the opened source path.");
+            var result = RuntimeInformation.ProcessArchitecture == Architecture.Arm64
+                ? GetMacArm64Path(handle.DangerousGetHandle().ToInt32(), 50, 0, 0, 0, 0, 0, 0, bytes)
+                : GetMacPath(handle.DangerousGetHandle().ToInt32(), 50, bytes);
+            if (result != 0) throw new IOException("Cannot verify the opened source path.");
             var end = Array.IndexOf(bytes, (byte)0);
             if (end <= 0) throw new IOException("Opened source path is unavailable.");
             return new UTF8Encoding(false, true).GetString(bytes, 0, end);

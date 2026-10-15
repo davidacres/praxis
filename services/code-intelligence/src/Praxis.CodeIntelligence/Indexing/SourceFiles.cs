@@ -15,8 +15,11 @@ public static class SourceFiles
 
     public static string Hash(ReadOnlySpan<byte> bytes) => "sha256:" + Convert.ToHexStringLower(SHA256.HashData(bytes));
 
-    public static string CanonicalDirectory(string path)
+    public static string CanonicalDirectory(string path) => CanonicalDirectory(path, 40);
+
+    private static string CanonicalDirectory(string path, int remainingLinks)
     {
+        if (remainingLinks == 0) throw new IOException("Repository root has too many aliases.");
         var full = System.IO.Path.GetFullPath(path);
         var root = System.IO.Path.GetPathRoot(full)!;
         var current = root;
@@ -25,8 +28,8 @@ public static class SourceFiles
             var directory = new DirectoryInfo(System.IO.Path.Combine(current, component));
             if (!directory.Exists) throw new DirectoryNotFoundException("Repository root is unavailable.");
             current = directory.LinkTarget is null ? directory.FullName
-                : directory.ResolveLinkTarget(returnFinalTarget: true)?.FullName
-                  ?? throw new IOException("Repository root alias cannot be resolved.");
+                : CanonicalDirectory(directory.ResolveLinkTarget(returnFinalTarget: true)?.FullName
+                    ?? throw new IOException("Repository root alias cannot be resolved."), remainingLinks - 1);
         }
         return System.IO.Path.TrimEndingDirectorySeparator(current);
     }
