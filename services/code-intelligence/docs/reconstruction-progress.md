@@ -53,6 +53,12 @@ Tokenizer v3 corrects Unicode cleanup/case/CJK handling while mapping normalized
 
 Current profile: tokenizer `bert-uncased-wordpiece-v3`, representation version 2, fingerprint `sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba`. Reprovision/install/activate to upgrade; previous profile vectors remain isolated. **52 C# tests passed, 0 failed, 0 skipped**, including persisted source spans, representation priority/caps and changed-source rejection. Earlier checkpoint hashes/results above are historical evidence.
 
+## Source-handle checkpoint (15 October)
+
+Unix source opening now uses platform-specific descriptor-relative no-follow traversal on Linux and macOS. Windows validates the opened handle with GetFinalPathNameByHandleW; macOS uses fcntl(F_GETPATH). The actual handle path is checked again after reading, in addition to pathname policy checks, so replacing the pathname does not validate an already-renamed handle. Unix source handles open nonblocking and non-seekable inputs are rejected, preventing FIFO inputs from waiting indefinitely for a writer.
+
+**54 C# tests passed, 0 failed, 0 skipped** on Linux x64. Deterministic rename/replacement and FIFO timeout regressions pass. Windows/macOS branches compile but require native execution, including links/junctions, case/Unicode paths and concurrent swaps; this is not a cross-platform pass claim.
+
 ## Verification evidence
 
 15 October: C#38 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution. Explicit SDK capture, stale/deleted inputs, generated support non-disclosure and alias preservation also pass.
@@ -63,7 +69,7 @@ Full application build including the service passed; Linux self-contained publis
 
 - Cross-platform golden numerical verification and vector representation reuse/performance verification.
 - Semantic API-stamp/affected-context optimization, richer member/type/reference relationships and delegate points-to analysis.
-- Remaining status/summary/irreducible-item budget boundaries and hardened source-handle checks on Windows/macOS.
+- Remaining status/summary/irreducible-item budget boundaries and execution of Windows/macOS source-handle fixtures.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
 Current indexing intentionally uses conservative full-context republishing; it does not claim incremental performance or release readiness. M4–M6 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
