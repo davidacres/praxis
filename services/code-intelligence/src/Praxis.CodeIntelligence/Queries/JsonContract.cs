@@ -19,12 +19,32 @@ public static class JsonContract
     {
         if (!Contracts.TryGetPropertyValue(tool, out var contract)) throw new QueryException("INVALID_ARGUMENT", "Unknown query tool.");
         Check(contract!["inputSchema"]!, arguments);
+        NormalizeArray(arguments, "kinds", lower: true);
+        NormalizeArray(arguments, "edgeKinds", lower: true);
+        if (arguments["filters"] is JsonObject filters)
+        {
+            NormalizeArray(filters, "kinds", lower: true);
+            NormalizeArray(filters, "languages", lower: true);
+            NormalizeArray(filters, "projectIds", lower: false);
+        }
         if (tool == "get_source")
         {
             var symbol = arguments.ContainsKey("symbolId"); var file = arguments.ContainsKey("fileId");
             if (symbol == file || (file && (!arguments.ContainsKey("range") || arguments.ContainsKey("locationId")))
                 || (symbol && (arguments.ContainsKey("range") || (arguments.ContainsKey("expectedContentHash") && !arguments.ContainsKey("locationId")))))
                 throw new QueryException("INVALID_ARGUMENT", "Choose a symbol selector or a file/range selector; expected symbol hashes require locationId.");
+        }
+    }
+    private static void NormalizeArray(JsonObject parent, string key, bool lower)
+    {
+        if (parent[key] is not JsonArray values) return;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < values.Count; i++)
+        {
+            var value = values[i]!.GetValue<string>().Trim();
+            if (lower) value = value.ToLowerInvariant();
+            if (value.Length == 0 || !seen.Add(value)) throw new QueryException("INVALID_ARGUMENT", "Filter values must be nonblank and unique after normalization.");
+            values[i] = value;
         }
     }
     private static void Check(JsonNode schema, JsonNode? value)
