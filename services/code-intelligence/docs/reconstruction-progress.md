@@ -153,6 +153,12 @@ Stable-key publications now retain declaration locations and occurrence/edge row
 
 **87 C# tests passed, 0 failed, 0 skipped; 87 responses validate against all 11 tool schemas; Release build passed with zero warnings/errors.** The macOS arm64 5k real-model benchmark measured body edit **1532.0555 ms**, down from native baseline **3352.3529 ms** (54.3%). Lexical p95 is 21.362 ms, hybrid p95 129.0305 ms, semantic refresh 420.4457 ms and independently measured peak RSS 874692608 bytes. Hybrid passes the local comparison but no speedup is established. This is a single direct body edit, not watcher-inclusive p95; 50k/platform/quality/UI acceptance remains open.
 
+## Native macOS package smoke checkpoint (15 October)
+
+At source commit `3e1da0cf9f3536cac6e19c9e79428fe27c9f354b`, the standard `scripts/build-service.mjs --package` workflow successfully published the self-contained `osx-arm64` package using SDK 10.0.402. The packaged executable passed `help`, initialized a fresh SQLite index, and ran `model-check` against the pinned real MiniLM bundle. Model output reported 384 dimensions, normalized vectors, and fingerprint `sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba`. All commands exited successfully.
+
+This verifies local native packaging, CLI startup, database initialization and ONNX inference. Signing/notarization, owner-process IPC, desktop integration and other platform packages remain separate acceptance work. Generated binaries are excluded from Git.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.
