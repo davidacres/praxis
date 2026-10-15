@@ -90,3 +90,9 @@ Jobs have 60-second leases and 20-second heartbeats. Retries use 1,5,30,120,300-
 `npm run package:code-intelligence` stages a self-contained service under `artifacts/package`; desktop distribution hooks include it outside the application archive. `--rid` supports linux-x64, linux-arm64, osx-x64, osx-arm64 and win-x64. Model weights are provisioned separately. Cross-target build configuration is not execution evidence. Windows ia32 packaging is explicitly unsupported for this feature.
 
 See [integration map](docs/integration-map.md), [release evidence](docs/release-evidence.md), [current progress](docs/reconstruction-progress.md), and the feature plan under `apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence`.
+
+### Tokenizer profile v2 and independent baseline verification
+
+The tokenizer now preserves BERT special tokens consistently with the independent Python reference. This changes the profile fingerprint (`bert-uncased-wordpiece-v2`); rerun provisioning, installation and activation for an existing v1 setup. Weight/vocabulary hashes do not change. Existing v1 vectors are never reused under v2.
+
+`tests/Praxis.CodeIntelligence.Tests/Fixtures/minilm-golden.json` records eight tokenizer cases and four full query vectors. The model-enabled C# suite checks exact token IDs, absolute vector error <= 1e-5 and cosine >= 0.99999. `scripts/generate-model-golden.py` documents the pinned independent Python reference stack; regenerate only for a deliberate reviewed baseline change. Linux x64 passes; Windows/macOS numerical checks remain release gates.
