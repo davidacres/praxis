@@ -135,6 +135,12 @@ The first native macOS arm64 run exposed an incorrect variadic `fcntl(F_GETPATH)
 
 **82 C# tests passed, 0 failed, 0 skipped** on macOS arm64 with SDK 10.0.402, explicit SDK capture and the pinned real model. This includes source aliases, replaced handles, nonblocking FIFO rejection, the independent tokenizer/vector golden fixture and durable vector refresh. The initial unmodified native run hung and was terminated; it is not passing evidence. This checkpoint enables local performance measurements; no performance improvement is claimed yet. Windows, Linux revalidation and desktop UI remain separate checks.
 
+## Analysis and publication batching checkpoint (15 October)
+
+Compiler passes share semantic models, diagnostics and non-local symbol identities within one analysis only. No cache survives source snapshots. Relationship deletion happens before symbol cascades; a two-repository regression proves rebuild/unregister preserve the other repository's facts. Vector candidate rows load in one bounded query and an independent rank-order assertion covers query publication. **83 C# tests pass with no failures/skips** on macOS arm64, with native model and SDK fixtures enabled.
+
+The controlled local 5k synthetic comparison reduces model-enabled body edits from 3352.3529 to 2691.3054 ms, still above target. Hybrid p95 is 111.7799 ms versus 107.8961 ms before, so no hybrid improvement is claimed. Benchmark RSS unavailability is now explicit; independent system measurement shows 877920256 bytes peak RSS. Reports and limitations are in `docs/benchmarks`.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.

@@ -10,7 +10,7 @@ namespace Praxis.CodeIntelligence.Indexing;
 public sealed class RoslynAnalyzer
 {
     public const string AdapterVersion = "roslyn-5.9/v3";
-    private sealed record CompilationInput(PassiveProject Project, IndexedContext Context, CSharpCompilation Compilation);
+    private sealed record CompilationInput(PassiveProject Project, IndexedContext Context, CSharpCompilation Compilation, IReadOnlyList<Diagnostic> Diagnostics);
     private static readonly SymbolDisplayFormat SignatureFormat = SymbolDisplayFormat.CSharpErrorMessageFormat
         .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType | SymbolDisplayMemberOptions.IncludeType
             | SymbolDisplayMemberOptions.IncludeParameters | SymbolDisplayMemberOptions.IncludeExplicitInterface
@@ -37,6 +37,12 @@ public sealed class RoslynAnalyzer
         }
         var treeContexts = inputs.Values.SelectMany(x => x.Compilation.SyntaxTrees.Select(t => (t, x.Context)))
             .ToDictionary(x => x.t, x => x.Context);
+        // Keep each semantic model for this analysis only: declaration, call and
+        // relationship passes share its bound-node cache without retaining old snapshots.
+        var models = inputs.Values.SelectMany(input => input.Compilation.SyntaxTrees
+            .Select(tree => (Tree: tree, Model: input.Compilation.GetSemanticModel(tree))))
+            .ToDictionary(entry => entry.Tree, entry => entry.Model);
+        var identities = new Dictionary<string, Dictionary<ISymbol, (string Id, string Json, bool External)>>(StringComparer.Ordinal);
         var symbols = new Dictionary<string, IndexedSymbol>(StringComparer.Ordinal);
         var nodeSymbols = new Dictionary<SyntaxNode, string>();
         var sourceMethods = new Dictionary<string, (IMethodSymbol Symbol, IndexedContext Context)>();
@@ -54,7 +60,7 @@ public sealed class RoslynAnalyzer
             foreach (var tree in input.Compilation.SyntaxTrees)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var source = byPath[tree.FilePath]; var model = input.Compilation.GetSemanticModel(tree);
+                var source = byPath[tree.FilePath]; var model = models[tree];
                 if (source.Role == "semanticSupport") continue;
                 var syntaxRoot = tree.GetRoot(cancellationToken);
                 nodeSymbols[syntaxRoot] = rootId;
@@ -134,7 +140,7 @@ public sealed class RoslynAnalyzer
         {
             foreach (var tree in input.Compilation.SyntaxTrees)
             {
-                var model = input.Compilation.GetSemanticModel(tree); var source = byPath[tree.FilePath];
+                var model = models[tree]; var source = byPath[tree.FilePath];
                 if (source.Role == "semanticSupport") continue;
                 foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(n => n is InvocationExpressionSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax or BaseTypeSyntax
                     || n is MethodDeclarationSyntax methodDeclaration && methodDeclaration.Modifiers.Any(SyntaxKind.OverrideKeyword)))
@@ -187,7 +193,7 @@ public sealed class RoslynAnalyzer
                     if (calls.Count > 200_000) throw new IOException("INPUT_TOO_LARGE: occurrence limit exceeded.");
                 }
             }
-            foreach (var diagnostic in input.Compilation.GetDiagnostics(cancellationToken).Take(1000))
+            foreach (var diagnostic in input.Diagnostics.Take(1000))
             {
                 var tree = diagnostic.Location.SourceTree;
                 diagnostics.Add(new(input.Context.Id, tree?.FilePath, diagnostic.Id,
@@ -204,7 +210,7 @@ public sealed class RoslynAnalyzer
             foreach (var tree in input.Compilation.SyntaxTrees)
             {
                 var source = byPath[tree.FilePath]; if (source.Role == "semanticSupport") continue;
-                var model = input.Compilation.GetSemanticModel(tree); var root = tree.GetRoot(cancellationToken);
+                var model = models[tree]; var root = tree.GetRoot(cancellationToken);
                 string? Owner(SyntaxNode node) => node.AncestorsAndSelf().Where(nodeSymbols.ContainsKey)
                     .Select(node => nodeSymbols[node]).FirstOrDefault(id => symbols[id].Kind is "type" or "method" or "function" or "constructor" or "accessor" or "module");
                 void Add(SyntaxNode node, string owner, ISymbol target, string kind)
@@ -373,18 +379,23 @@ public sealed class RoslynAnalyzer
             var compilation = CSharpCompilation.Create(project.AssemblyName, trees, references,
                 new CSharpCompilationOptions(outputKind, allowUnsafe: project.AllowUnsafe, nullableContextOptions: nullable));
             var syntaxOnly = manifest is null || key == "uncovered-syntax";
-            var resolution = syntaxOnly ? "syntaxOnly" : compilation.GetDiagnostics(cancellationToken).Any(d => d.Severity == DiagnosticSeverity.Error) ? "partial" : "complete";
+            var compilerDiagnostics = compilation.GetDiagnostics(cancellationToken);
+            var resolution = syntaxOnly ? "syntaxOnly" : compilerDiagnostics.Any(d => d.Severity == DiagnosticSeverity.Error) ? "partial" : "complete";
             var hash = SourceFiles.Hash(Encoding.UTF8.GetBytes(AdapterVersion + System.Text.Json.JsonSerializer.Serialize(project)
                 + string.Join("|", projectSources.Select(s => s.Hash)) + string.Join("|", dependencies.Select(d => d.Context.Hash))));
             var context = new IndexedContext(key, key == "syntax" || key == "uncovered-syntax" ? "" : key,
                 Identity.Id("pci:ctx:", repositoryId, key), hash, resolution, projectSources);
-            var input = new CompilationInput(project, context, compilation); inputs[key] = input; visiting.Remove(key); return input;
+            var input = new CompilationInput(project, context, compilation, compilerDiagnostics); inputs[key] = input; visiting.Remove(key); return input;
         }
 
         (string Id, string Json, bool External) Identify(ISymbol symbol, IndexedContext current, SyntaxNode? declaration)
         {
             symbol = (symbol is IMethodSymbol { ReducedFrom: not null } reduced ? reduced.ReducedFrom : symbol).OriginalDefinition;
             if (symbol is IMethodSymbol { PartialDefinitionPart: not null } method) symbol = method.PartialDefinitionPart;
+            var localCallable = symbol is IMethodSymbol { MethodKind: MethodKind.LocalFunction or MethodKind.AnonymousFunction };
+            if (!identities.TryGetValue(current.Id, out var contextIdentities))
+                identities[current.Id] = contextIdentities = new(SymbolEqualityComparer.Default);
+            if (!localCallable && contextIdentities.TryGetValue(symbol, out var cachedIdentity)) return cachedIdentity;
             var reference = symbol.DeclaringSyntaxReferences.FirstOrDefault();
             if (reference is null && symbol is IMethodSymbol { IsImplicitlyDeclared: true })
                 reference = symbol.ContainingType?.DeclaringSyntaxReferences.FirstOrDefault();
@@ -414,7 +425,11 @@ public sealed class RoslynAnalyzer
             var json = external
                 ? Identity.Json(1, "external", repositoryId, "csharp", symbol.ContainingAssembly?.Identity.ToString(), Kind(symbol), descriptor)
                 : Identity.Json(1, "source", repositoryId, (defining ?? current).Key, (defining ?? current).Id, "csharp", Kind(symbol), descriptor);
-            return ((syntax && !external ? "pci:syntactic:" : "pci:sym:") + SourceFiles.Hash(Encoding.UTF8.GetBytes(json))[7..], json, external);
+            var result = ((syntax && !external ? "pci:syntactic:" : "pci:sym:") + SourceFiles.Hash(Encoding.UTF8.GetBytes(json))[7..], json, external);
+            // Local callable descriptors depend on declaration ownership established
+            // during traversal, so they deliberately bypass the symbol-only cache.
+            if (!localCallable) contextIdentities[symbol] = result;
+            return result;
         }
     }
 

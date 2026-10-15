@@ -59,5 +59,37 @@ public sealed class ReconciliationTests : IDisposable
         Assert.Equal(1, Count(database, "SELECT count(*) FROM contexts WHERE length(json_extract(options_json,'$.snapshotHash'))=71"));
         Assert.False(indexer.Index(id).Changed); Assert.Empty(database.Check());
     }
+    [Fact]
+    public void RebuildAndUnregisterPreserveAnotherRepositoriesRelationships()
+    {
+        File.WriteAllText(Path.Combine(Root, "Example.cs"), "class Example { int Target() => 1; int Caller() => Target(); }");
+        var other = Path.Combine(temporary, "other"); Directory.CreateDirectory(other);
+        File.Copy(Path.Combine(Root, "Example.cs"), Path.Combine(other, "Example.cs"));
+        var database = Database(); var indexer = new RepositoryIndexer(database);
+        var reference = typeof(object).Assembly.Location;
+        var manifest = JsonSerializer.Serialize(new PassiveManifest(1, [new("project", "Project", ["Example.cs"],
+            Metadata: [new(reference, SourceFiles.Hash(File.ReadAllBytes(reference)))])]));
+        File.WriteAllText(Path.Combine(Root, "context.praxis.json"), manifest);
+        File.WriteAllText(Path.Combine(other, "context.praxis.json"), manifest);
+        var first = indexer.Register(Root, new("context.praxis.json")); var second = indexer.Register(other, new("context.praxis.json"));
+        indexer.Index(first); indexer.Index(second);
+        string OtherRelationships()
+        {
+            using var connection = database.Open(readOnly: true); using var command = connection.CreateCommand();
+            command.CommandText = "SELECT e.edge_id,e.source_symbol_id,e.target_symbol_id,o.content_hash,o.range_json FROM edges e JOIN occurrences o ON o.occurrence_id=e.occurrence_id JOIN symbols s ON s.symbol_id=e.source_symbol_id WHERE s.repository_id=$id ORDER BY e.edge_id";
+            command.Parameters.AddWithValue("$id", second); using var reader = command.ExecuteReader();
+            var rows = new List<string>();
+            while (reader.Read()) rows.Add(JsonSerializer.Serialize(Enumerable.Range(0, reader.FieldCount).Select(reader.GetValue)));
+            return string.Join("\n", rows);
+        }
+        var before = OtherRelationships(); Assert.NotEmpty(before);
+        File.WriteAllText(Path.Combine(Root, "Example.cs"), "class Replacement {}");
+        indexer.Index(first);
+        Assert.Equal(before, OtherRelationships()); Assert.Empty(database.Check());
+        indexer.Unregister(first);
+        Assert.Equal(before, OtherRelationships()); Assert.Empty(database.Check());
+        Assert.False(indexer.Index(second).Changed);
+    }
+
     public void Dispose() => Directory.Delete(temporary, recursive: true);
 }

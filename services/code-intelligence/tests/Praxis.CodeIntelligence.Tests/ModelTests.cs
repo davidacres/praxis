@@ -121,10 +121,12 @@ public sealed class ModelTests
             using var store = new ModelStore(database, Path.Combine(root, "models"));
             var profile = store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!); store.Activate(repository, profile, CancellationToken.None);
             var query = store.QueryEmbedding(repository, "Example Run", CancellationToken.None)!;
+            IReadOnlyList<VectorCandidate> ranked;
             using (var read = database.Open(readOnly: true))
             using (var transaction = read.BeginTransaction(deferred: true))
             {
                 var actual = ModelStore.Candidates(read, transaction, repository, query, null, null, null);
+                ranked = actual;
                 var expected = new Dictionary<string, double>();
                 using (var command = read.CreateCommand())
                 {
@@ -142,6 +144,13 @@ public sealed class ModelTests
                 using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
                 Assert.Throws<OperationCanceledException>(() => ModelStore.Candidates(read, transaction, repository, query, null, null, null, cancelled.Token));
             }
+            var response = new QueryService(database, store).Execute("search_code", new JsonObject
+            { ["repositoryId"] = repository, ["query"] = "Example Run", ["mode"] = "vector", ["responseBudgetTokens"] = 8000 },
+                new HashSet<string> { repository });
+            Assert.Null(response["error"]);
+            var matches = response["data"]!["matches"]!.AsArray();
+            Assert.Equal(ranked.Select(candidate => candidate.SymbolId), matches.Select(match => match!["symbol"]!["symbolId"]!.GetValue<string>()));
+            Assert.Equal(Enumerable.Range(1, ranked.Count), matches.Select(match => match!["ranks"]!["vector"]!.GetValue<int>()));
             using (var write = database.Open())
             using (var command = write.CreateCommand())
             {

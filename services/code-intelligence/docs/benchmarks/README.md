@@ -25,3 +25,9 @@ The recorded threshold-definition version 1 compared **combined edit plus refres
 ## Buffered scorer / corrected harness smoke
 
 The 100-source-symbol real-model run records threshold-definition version 2, vector-scorer version 2, schema 2 and adapter v3. It exercised all phases with complete real vector coverage and 40 samples per query mode. Hybrid p95 was 83.9372 ms, lexical p95 117.4202 ms, body edit 668.1955 ms and refresh 1625.8922 ms. The lexical threshold comparison failed; this remains an unsuccessful small-fixture measurement, not 5k/50k capacity or relevance evidence. All raw observations, including peak RSS, are preserved in `linux-x64-100-schema2-scorer2-hybrid.praxis.json`.
+
+## macOS arm64 analysis/batch checkpoint
+
+Same-machine Release runs after the native source-handle prerequisite fix compare the same 5,000-source-symbol corpus, SDK/runtime/reference assembly and pinned model. Builds/tests completed before each run. Baseline hybrid body-edit publication was 3352.3529 ms; analysis-local semantic-model/diagnostic/identity reuse and child-first relationship deletion reduced it to 2691.3054 ms. It still fails the two-second direct structural comparison, which also excludes watcher debounce. Hybrid p95 was 107.8961 ms before and 111.7799 ms after; no hybrid latency improvement is established by this pair. Candidate symbol rows are fetched in a single bounded query while retaining vector rank order.
+
+The macOS runtime reports PeakWorkingSet64 as zero. Baseline reports retain that raw zero and their resulting RSS gate must not be treated as valid evidence. The harness now records unavailable RSS as null and an unmeasured gate. Independent `/usr/bin/time -l` measured maximum RSS 877920256 bytes for the analysis/batch run. This is 5k synthetic direct-service evidence, not the normative 50k query capacity or representative relevance gate.

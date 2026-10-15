@@ -99,7 +99,8 @@ try
     if (!edited.Changed || edited.Generation != initial.Generation + 1) throw new InvalidOperationException("Edit failed to publish.");
     double? refreshMs = null;
     if (fingerprint is not null) { watch.Restart(); models.Activate(repository, fingerprint, CancellationToken.None); refreshMs = watch.Elapsed.TotalMilliseconds; }
-    var rss = Process.GetCurrentProcess().PeakWorkingSet64;
+    using var process = Process.GetCurrentProcess(); process.Refresh();
+    long? rss = process.PeakWorkingSet64 > 0 ? process.PeakWorkingSet64 : null;
     using var connection = database.Open(readOnly: true); using var command = connection.CreateCommand(); command.CommandText = "SELECT sqlite_version()";
     var gates = new Dictionary<string, bool?>
     {
@@ -107,7 +108,7 @@ try
         ["hybridP95AtMost500Ms"] = hybrid is null ? null : hybrid.P95Ms <= 500,
         ["fiveThousandSymbolBodyEditAtMost2Seconds"] = symbols == 5000 ? editMs <= 2000 : null,
         ["fiveThousandSymbolSemanticRefreshAtMost10Seconds"] = symbols == 5000 && refreshMs.HasValue ? refreshMs <= 10000 : null,
-        ["peakRssAtMost2GiB"] = rss <= 2L * 1024 * 1024 * 1024
+        ["peakRssAtMost2GiB"] = rss.HasValue ? rss <= 2L * 1024 * 1024 * 1024 : null
     };
     var report = new
     {
@@ -123,7 +124,7 @@ try
         CorpusHash = SourceFiles.Hash(Encoding.UTF8.GetBytes(string.Join("\n", hashes))), ReferenceAssemblyHash = referenceHash,
         InitialIndexMs = initialMs, InitialVectorsMs = initialVectorsMs, Lexical = lexical, Hybrid = hybrid,
         NoOpIndexMs = noOpMs, BodyEditMs = editMs, VectorRefreshMs = refreshMs, EditToVectorsMs = refreshMs.HasValue ? editMs + refreshMs : (double?)null, PeakRssBytes = rss, Gates = gates,
-        Unmeasured = new[] { "owner/native IPC", "MCP/provider transport", "held-out relevance", "other platforms", "representative real repository", "edit p95 including watcher debounce", "retrieval-only latency" }.Concat(initial.Symbols < 50000 ? new[] { "50k-symbol capacity" } : fingerprint is null ? new[] { "50k-symbol hybrid capacity" } : Array.Empty<string>()).ToArray(),
+        Unmeasured = new[] { "owner/native IPC", "MCP/provider transport", "held-out relevance", "other platforms", "representative real repository", "edit p95 including watcher debounce", "retrieval-only latency" }.Concat(rss.HasValue ? Array.Empty<string>() : new[] { "peak RSS unavailable from this runtime" }).Concat(initial.Symbols < 50000 ? new[] { "50k-symbol capacity" } : fingerprint is null ? new[] { "50k-symbol hybrid capacity" } : Array.Empty<string>()).ToArray(),
         PassedMeasuredGates = gates.Values.All(value => value != false)
     };
     Directory.CreateDirectory(Path.GetDirectoryName(output)!);

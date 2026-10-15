@@ -282,6 +282,10 @@ public sealed class RepositoryIndexer(IndexDatabase database)
     private static void Clear(SqliteConnection connection, SqliteTransaction transaction, string id)
     {
         connection.Execute(transaction, "UPDATE embedding_sets SET state='stale' WHERE symbol_id IN(SELECT symbol_id FROM symbols WHERE repository_id=$0)", id);
+        // Remove owned relationships in batches before symbol cascades. Otherwise each
+        // deleted target nulls surviving occurrences that this publication will delete too.
+        connection.Execute(transaction, "DELETE FROM edges WHERE owner_context_id IN(SELECT c.context_id FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0)", id);
+        connection.Execute(transaction, "DELETE FROM occurrences WHERE context_id IN(SELECT c.context_id FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0)", id);
         connection.Execute(transaction, "DELETE FROM symbols WHERE repository_id=$0", id);
         connection.Execute(transaction, "DELETE FROM projects WHERE repository_id=$0", id);
         connection.Execute(transaction, "DELETE FROM files WHERE repository_id=$0", id);

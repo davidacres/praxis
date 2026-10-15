@@ -156,11 +156,13 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         var languages = filters?["languages"]?.AsArray();
                         var vectors = languages is { Count: > 0 } && !languages.Any(x => x!.GetValue<string>() == "csharp") ? []
                             : ModelStore.Candidates(connection, transaction, repositoryId, embedded, contextId, kinds, projects, cancellationToken);
+                        // Fetch the bounded top-k rows once, then retain vector score order.
+                        var vectorRows = vectors.Count == 0 ? new Dictionary<string, JsonObject>(StringComparer.Ordinal)
+                            : Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND symbol_id IN(SELECT value FROM json_each($1))",
+                                repositoryId, JsonSerializer.Serialize(vectors.Select(vector => vector.SymbolId)))
+                                .ToDictionary(row => Text(row, "symbol_id")!, StringComparer.Ordinal);
                         var position = 0;
-                        foreach (var vector in vectors)
-                        {
-                            var row = Rows(connection, transaction, "SELECT * FROM symbols WHERE symbol_id=$0", vector.SymbolId).Single(); Add(row, "vector", ++position);
-                        }
+                        foreach (var vector in vectors) Add(vectorRows[vector.SymbolId], "vector", ++position);
                         channels.Add("vector");
                     }
                     if (mode != "vector")

@@ -1,0 +1,63 @@
+{
+  "Version": 1,
+  "ThresholdDefinitionVersion": 2,
+  "VectorScorerVersion": 2,
+  "StorageSchemaVersion": 2,
+  "AdapterVersion": "roslyn-5.9/v3",
+  "OnnxInterOpThreads": 1,
+  "OnnxIntraOpThreads": 4,
+  "TimestampUtc": "2026-10-15T16:47:05.952388+00:00",
+  "ExecutionMode": "Direct service API; owner/MCP transport excluded",
+  "BuildConfiguration": "Release",
+  "OperatingSystem": "macOS 26.6.0",
+  "Architecture": "Arm64",
+  "LogicalProcessors": 12,
+  "Runtime": ".NET 10.0.13",
+  "Sqlite": "3.53.3",
+  "ModelFingerprint": "sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba",
+  "RequestedSymbols": 5000,
+  "PublishedSymbols": 5001,
+  "PublishedSourceSymbols": 5000,
+  "SourceFiles": 50,
+  "CorpusHash": "sha256:58795a77f4f92bfb22e35285a6b98213592bbc9512ea890360af4ad40e0e37aa",
+  "ReferenceAssemblyHash": "sha256:b435af0b749740a312891b3ab0d014091b1b75573dfede5b1c3eff96c533332b",
+  "InitialIndexMs": 2088.6102,
+  "InitialVectorsMs": 51148.2121,
+  "Lexical": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 16.8481,
+    "P95Ms": 19.1111,
+    "MaximumMs": 23.4967
+  },
+  "Hybrid": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 97.8463,
+    "P95Ms": 107.8961,
+    "MaximumMs": 186.9302
+  },
+  "NoOpIndexMs": 49.7383,
+  "BodyEditMs": 3352.3529,
+  "VectorRefreshMs": 383.996,
+  "EditToVectorsMs": 3736.3489,
+  "PeakRssBytes": 0,
+  "Gates": {
+    "lexicalP95AtMost100Ms": true,
+    "hybridP95AtMost500Ms": true,
+    "fiveThousandSymbolBodyEditAtMost2Seconds": false,
+    "fiveThousandSymbolSemanticRefreshAtMost10Seconds": true,
+    "peakRssAtMost2GiB": true
+  },
+  "Unmeasured": [
+    "owner/native IPC",
+    "MCP/provider transport",
+    "held-out relevance",
+    "other platforms",
+    "representative real repository",
+    "edit p95 including watcher debounce",
+    "retrieval-only latency",
+    "50k-symbol capacity"
+  ],
+  "PassedMeasuredGates": false
+}
