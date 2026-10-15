@@ -87,14 +87,29 @@ public sealed class ModelTests
             var fingerprint = installed["data"]!["fingerprint"]!.GetValue<string>();
             var queued = runtime.Dispatch(new JsonObject { ["action"] = "model-activate", ["repositoryId"] = id, ["fingerprint"] = fingerprint }, CancellationToken.None);
             Assert.True(queued["data"]!["queued"]!.GetValue<bool>());
-            await runtime.MaintainAsync(CancellationToken.None); await runtime.MaintainAsync(CancellationToken.None);
             JsonObject Search() => runtime.Dispatch(new JsonObject { ["action"] = "query", ["tool"] = "search_code", ["arguments"] = new JsonObject { ["repositoryId"] = id, ["query"] = "token parser", ["mode"] = "vector", ["filters"] = new JsonObject { ["kinds"] = new JsonArray("method") }, ["responseBudgetTokens"] = 8000 } }, CancellationToken.None);
-            Assert.NotEmpty(Search()["data"]!["matches"]!.AsArray());
+            async Task WaitForVectors()
+            {
+                // Watcher debounce can insert an additional reconciliation before
+                // embedding. Assert eventual publication, not an exact tick count.
+                var elapsed = System.Diagnostics.Stopwatch.StartNew();
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                JsonObject? result = null;
+                while (elapsed.Elapsed < TimeSpan.FromSeconds(10))
+                {
+                    await runtime.MaintainAsync(timeout.Token);
+                    result = Search();
+                    if (result["error"] is null && result["data"]?["matches"] is JsonArray { Count: > 0 }) return;
+                    if (result["error"] is not null) Assert.Equal("MODEL_UNAVAILABLE", result["error"]!["code"]!.GetValue<string>());
+                    await Task.Delay(25);
+                }
+                Assert.Fail("Durable vector publication did not complete: " + result?.ToJsonString());
+            }
+            await WaitForVectors();
             File.WriteAllText(Path.Combine(root, "Example.cs"), File.ReadAllText(Path.Combine(root, "Example.cs")).Replace("=> token;", "=> token.Trim();"));
             Assert.Null(runtime.Dispatch(new JsonObject { ["action"] = "index", ["repositoryId"] = id }, CancellationToken.None)["error"]);
             Assert.Empty(Search()["data"]!["matches"]!.AsArray());
-            await runtime.MaintainAsync(CancellationToken.None); await runtime.MaintainAsync(CancellationToken.None);
-            Assert.NotEmpty(Search()["data"]!["matches"]!.AsArray());
+            await WaitForVectors();
         }
         finally { Directory.Delete(root, recursive: true); }
     }

@@ -54,7 +54,7 @@ export async function smokeNativeIpc(executable) {
       result = await pending;
       result.code = 0;
     } catch (error) {
-      if (error.killed || typeof error.code !== 'number') throw error;
+      if (error.killed || typeof error.code !== 'number') throw new Error(`${args[0]} did not exit: ${error.message}; stdout=${String(error.stdout ?? '').slice(0, 2048)}; stderr=${String(error.stderr ?? '').slice(0, 2048)}`, { cause: error });
       result = error;
     }
     assert.equal(result.code, expectedExit, `${args[0]}: ${result.stderr}\n${result.stdout}`);
@@ -105,6 +105,7 @@ export async function smokeNativeIpc(executable) {
       automaticOwner = rendezvous.processId;
       return rendezvous;
     };
+    process.stdout.write('Native IPC: checking automatic owner startup.\n');
     try { assert.deepEqual((await invoke(['doctor'])).data.checks, []); }
     finally { await adoptAutomaticOwner(); }
     const forged = await authenticate('0'.repeat(64));
@@ -139,6 +140,7 @@ export async function smokeNativeIpc(executable) {
     assertMatch(await search());
     assert.equal((await rpc(5)).error.code, 'ACCESS_DENIED');
     // An abrupt owner death leaves the actual rendezvous/socket untouched.
+    process.stdout.write('Native IPC: checking crash takeover.\n');
     const crashed = JSON.parse(await readFile(path.join(data, 'owner.json'), 'utf8'));
     const closed = once(owner, 'close'); owner.kill('SIGKILL'); await closed; owner = undefined;
     await access(path.join(data, 'owner.json'));
