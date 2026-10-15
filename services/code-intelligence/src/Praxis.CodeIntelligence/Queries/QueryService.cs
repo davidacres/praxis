@@ -39,6 +39,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             var offset = Text(arguments, "cursor") is string cursor ? cursors.Read(cursor, tool, arguments, epoch.Value) : 0;
             var limit = Number(arguments, "limit", tool is "search_code" or "find_symbol" ? 20 : 100);
             var more = false; var contentTruncated = false;
+            var unresolvedOwners = new Dictionary<string, string>(StringComparer.Ordinal);
             JsonObject Symbol(string symbolId)
             {
                 var row = Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND symbol_id=$1", repositoryId, symbolId).SingleOrDefault()
@@ -75,19 +76,23 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 var resolution = connection.Scalar(transaction, "SELECT resolution FROM contexts WHERE context_id=$0", Text(location, "context_id")) as string;
                 if (resolution != "syntaxOnly") { evidence[evidenceId]["provenance"] = "compiler"; evidence[evidenceId]["resolution"] = "resolved"; }
             }
+            void AddOccurrenceEvidence(string occurrenceId, string provenance, string resolution)
+            {
+                if (evidence.ContainsKey(occurrenceId)) return;
+                var occurrence = Rows(connection, transaction, "SELECT o.*,f.relative_path FROM occurrences o JOIN files f ON f.file_id=o.file_id WHERE occurrence_id=$0", occurrenceId).Single();
+                evidence[occurrenceId] = new JsonObject {
+                    ["id"] = occurrenceId, ["fileId"] = occurrence["file_id"]!.DeepClone(), ["contextId"] = occurrence["context_id"]!.DeepClone(),
+                    ["path"] = occurrence["relative_path"]!.DeepClone(), ["contentHash"] = occurrence["content_hash"]!.DeepClone(),
+                    ["range"] = JsonNode.Parse(occurrence["range_json"]!.GetValue<string>()) is JsonObject range ? LowerRange(range) : null,
+                    ["provenance"] = provenance, ["resolution"] = resolution };
+            }
             JsonObject Relation(JsonObject row)
             {
                 var evidenceIds = new JsonArray();
                 if (Text(row, "occurrence_id") is string occurrenceId)
                 {
-                    var occurrence = Rows(connection, transaction, "SELECT o.*,f.relative_path FROM occurrences o JOIN files f ON f.file_id=o.file_id WHERE occurrence_id=$0", occurrenceId).Single();
-                    evidence[occurrenceId] = new JsonObject
-                    {
-                        ["id"] = occurrenceId, ["fileId"] = occurrence["file_id"]!.DeepClone(), ["contextId"] = occurrence["context_id"]!.DeepClone(),
-                        ["path"] = occurrence["relative_path"]!.DeepClone(), ["contentHash"] = occurrence["content_hash"]!.DeepClone(),
-                        ["range"] = JsonNode.Parse(occurrence["range_json"]!.GetValue<string>()) is JsonObject range ? LowerRange(range) : null,
-                        ["provenance"] = row["provenance"]!.DeepClone(), ["resolution"] = row["resolution"]!.DeepClone()
-                    }; evidenceIds.Add(occurrenceId);
+                    AddOccurrenceEvidence(occurrenceId, Text(row, "provenance")!, Text(row, "resolution")!);
+                    evidenceIds.Add(occurrenceId);
                 }
                 return new JsonObject { ["edgeId"] = row["edge_id"]!.DeepClone(), ["sourceSymbolId"] = row["source_symbol_id"]!.DeepClone(),
                     ["targetSymbolId"] = row["target_symbol_id"]!.DeepClone(), ["kind"] = row["kind"]!.DeepClone(), ["provenance"] = row["provenance"]!.DeepClone(),
@@ -138,7 +143,8 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     {
                         var candidateId = Text(row, "symbol_id")!;
                         if (!candidates.TryGetValue(candidateId, out var candidate)) candidate = (row, new(), new(), 0);
-                        candidate.Ranks[channel] = position; candidate.Reasons.Add(channel); candidate.Score += 1.0 / (60 + position); candidates[candidateId] = candidate;
+                        if (channel != "graph") candidate.Ranks[channel] = position;
+                        candidate.Reasons.Add(channel); candidate.Score += 1.0 / (60 + position); candidates[candidateId] = candidate;
                     }
                     for (var index = 0; index < rows.Count; index++) { Add(rows[index], "lexical", index + 1); if (Text(rows[index], "name") == query) Add(rows[index], "exact", 1); }
                     var channels = new JsonArray(); if (mode != "vector") channels.Add("lexical");
@@ -163,13 +169,39 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         for (var index = 0; index < aliases.Length; index++) Add(aliases[index], "alias", index + 1);
                         if (aliases.Length > 0) channels.Add("alias");
                     }
-                    var ordered = candidates.Values.OrderByDescending(c => c.Score).ThenBy(c => Text(c.Row, "symbol_id"), StringComparer.Ordinal).ToArray();
+                    var graphSupport = new Dictionary<string, (string Seed, JsonObject Edge)>(StringComparer.Ordinal);
+                    if (Flag(arguments, "expandGraph"))
+                    {
+                        var seeds = candidates.Values.OrderByDescending(c => c.Score).ThenBy(c => Text(c.Row, "symbol_id"), StringComparer.Ordinal).Take(20).ToArray();
+                        foreach (var seed in seeds)
+                        {
+                            var seedId = Text(seed.Row, "symbol_id")!;
+                            foreach (var edge in Edges(seedId, false, 101).Concat(Edges(seedId, true, 101)))
+                            {
+                                var neighborId = Text(edge, "source_symbol_id") == seedId ? Text(edge, "target_symbol_id")! : Text(edge, "source_symbol_id")!;
+                                if (neighborId == seedId || graphSupport.ContainsKey(neighborId) || graphSupport.Count >= 100) continue;
+                                var neighbor = Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND symbol_id=$1 AND ($2 IS NULL OR defining_context_id=$2 OR external=1)", repositoryId, neighborId, contextId).SingleOrDefault();
+                                if (neighbor is null || !Eligible(neighbor)) continue;
+                                graphSupport[neighborId] = (seedId, edge); Add(neighbor, "graph", graphSupport.Count);
+                            }
+                        }
+                        if (graphSupport.Count > 0) channels.Add("graph");
+                    }
+                    // Graph-only expansion never outranks a direct retrieval match.
+                    var ordered = candidates.Values.OrderByDescending(c => c.Ranks.Count > 0).ThenByDescending(c => c.Score).ThenBy(c => Text(c.Row, "symbol_id"), StringComparer.Ordinal).ToArray();
                     more = ordered.Length > offset + limit; var matches = new JsonArray();
                     foreach (var candidate in ordered.Skip(offset).Take(limit))
                     {
                         cancellationToken.ThrowIfCancellationRequested(); var symbol = Symbol(Text(candidate.Row, "symbol_id")!);
+                        var matchEvidence = symbol["declarations"]!.AsArray().Select(value => value!.GetValue<string>()).Take(98).ToList();
+                        if (graphSupport.TryGetValue(Text(candidate.Row, "symbol_id")!, out var support))
+                        {
+                            var seed = Symbol(support.Seed);
+                            matchEvidence.AddRange(seed["declarations"]!.AsArray().Select(value => value!.GetValue<string>()).Take(1));
+                            matchEvidence.AddRange(Relation(support.Edge)["evidenceIds"]!.AsArray().Select(value => value!.GetValue<string>()).Take(1));
+                        }
                         matches.Add(new JsonObject { ["symbol"] = symbol, ["reasons"] = candidate.Reasons,
-                            ["evidenceIds"] = symbol["declarations"]!.DeepClone(), ["ranks"] = candidate.Ranks,
+                            ["evidenceIds"] = Array(matchEvidence.Distinct(StringComparer.Ordinal).Select(value => (JsonNode?)JsonValue.Create(value))), ["ranks"] = candidate.Ranks,
                             ["score"] = candidate.Score, ["freshness"] = state == "ready" ? "current" : "stale" });
                     }
                     var kindsJson = (arguments["filters"] as JsonObject)?["kinds"]?.ToJsonString();
@@ -285,7 +317,13 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     }
                     var unresolved = new JsonArray();
                     foreach (var node in nodes.Keys)
-                        foreach (var row in Rows(connection, transaction, "SELECT occurrence_id FROM occurrences WHERE owner_symbol_id=$0 AND target_symbol_id IS NULL LIMIT $1", node, 1000 - unresolved.Count)) unresolved.Add(Text(row, "occurrence_id"));
+                        foreach (var row in Rows(connection, transaction, "SELECT occurrence_id,resolution FROM occurrences WHERE owner_symbol_id=$0 AND target_symbol_id IS NULL LIMIT $1", node, 1000 - unresolved.Count))
+                        {
+                            var occurrenceIdentity = Text(row, "occurrence_id")!; unresolved.Add(occurrenceIdentity); unresolvedOwners[occurrenceIdentity] = node;
+                            var resolution = Text(row, "resolution")!;
+                            AddOccurrenceEvidence(occurrenceIdentity, resolution == "syntaxOnly" ? "syntax" : "compiler", resolution);
+                        }
+                    contentTruncated |= unresolved.Count == 1000;
                     data = new() { ["nodes"] = Array(nodes.Values.Select(v => (JsonNode?)v)), ["edges"] = Array(edges.Values.Select(v => (JsonNode?)v)),
                         ["boundaries"] = Array(boundaries.Values.Select(v => (JsonNode?)v)), ["unresolvedOccurrences"] = unresolved,
                         ["limitsApplied"] = new JsonObject { ["depth"] = depth, ["maxNodes"] = maxNodes, ["maxEdges"] = maxEdges } }; break;
@@ -294,18 +332,23 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 {
                     var projectId = Text(arguments, "projectId")!;
                     if (connection.Scalar(transaction, "SELECT project_id FROM projects WHERE repository_id=$0 AND project_id=$1", repositoryId, projectId) is null) throw new QueryException("INVALID_ARGUMENT", "Project is unavailable.");
+                    var componentCount = Convert.ToInt32(connection.Scalar(transaction, "SELECT count(*) FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE c.project_id=$0 AND s.kind='type'", projectId));
                     var components = Rows(connection, transaction, "SELECT symbol_id FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE c.project_id=$0 AND s.kind='type' ORDER BY qualified_name LIMIT 100", projectId);
+                    contentTruncated |= componentCount > components.Count;
                     data = new() { ["projectId"] = projectId, ["components"] = Array(components.Select(row =>
                         { var symbol = Symbol(Text(row, "symbol_id")!); return (JsonNode?)new JsonObject { ["symbol"] = symbol, ["description"] = null, ["evidenceIds"] = symbol["declarations"]!.DeepClone() }; })),
-                        ["description"] = null, ["coverage"] = Coverage(components.Count, components.Count), ["uncertainties"] = new JsonArray("Aggregate generated descriptions are unavailable.") }; break;
+                        ["description"] = null, ["coverage"] = Coverage(componentCount, componentCount), ["uncertainties"] = new JsonArray("Aggregate generated descriptions are unavailable.") }; break;
                 }
                 case "get_index_status":
                 {
-                    var contexts = Rows(connection, transaction, "SELECT c.* FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0 ORDER BY context_id LIMIT 1000", repositoryId);
-                    var diagnostics = Rows(connection, transaction, "SELECT * FROM diagnostics WHERE repository_id=$0 ORDER BY diagnostic_id LIMIT 1000", repositoryId);
+                    var contexts = Rows(connection, transaction, "SELECT c.* FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0 ORDER BY context_id LIMIT 1001", repositoryId);
+                    var diagnostics = Rows(connection, transaction, "SELECT * FROM diagnostics WHERE repository_id=$0 ORDER BY CASE severity WHEN 'error' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,diagnostic_id LIMIT 1001", repositoryId);
                     var jobs = new JsonObject(); foreach (var jobState in new[] { "pending", "leased", "succeeded", "failed", "obsolete" })
                         jobs[jobState] = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM jobs WHERE repository_id=$0 AND state=$1", repositoryId, jobState));
-                    var profiles = Rows(connection, transaction, "SELECT r.model_fingerprint,r.state,m.dimensions FROM repository_models r JOIN model_profiles m ON m.fingerprint=r.model_fingerprint WHERE r.repository_id=$0 LIMIT 10", repositoryId);
+                    var profiles = Rows(connection, transaction, "SELECT r.model_fingerprint,r.state,m.dimensions FROM repository_models r JOIN model_profiles m ON m.fingerprint=r.model_fingerprint WHERE r.repository_id=$0 ORDER BY CASE r.state WHEN 'active' THEN 0 WHEN 'building' THEN 1 ELSE 2 END,r.model_fingerprint LIMIT 11", repositoryId);
+                    if (contexts.Count > 1000) { contexts.RemoveAt(1000); contentTruncated = true; }
+                    if (diagnostics.Count > 1000) { diagnostics.RemoveAt(1000); contentTruncated = true; }
+                    if (profiles.Count > 10) { profiles.RemoveAt(10); contentTruncated = true; }
                     var eligible = Convert.ToInt32(connection.Scalar(transaction, "SELECT count(*) FROM symbols WHERE repository_id=$0 AND external=0", repositoryId));
                     var modelStatuses = Array(profiles.Select(profile => (JsonNode?)new JsonObject {
                         ["fingerprint"] = profile["model_fingerprint"]!.DeepClone(), ["state"] = profile["state"]!.DeepClone(), ["dimensions"] = profile["dimensions"]!.DeepClone(),
@@ -347,6 +390,23 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 CollectStrings(data, referenced);
                 envelope["evidence"] = Array(evidence.Where(pair => referenced.Contains(pair.Key)).Select(pair => (JsonNode?)pair.Value.DeepClone()));
             }
+            if (tool is "get_index_status" or "summarize_project")
+            {
+                var trimmed = false;
+                while (Encoding.UTF8.GetByteCount(envelope.ToJsonString()) > budget)
+                {
+                    var candidates = tool == "get_index_status" ? new[] { "diagnostics", "contexts", "models" } : new[] { "components" };
+                    var target = candidates.Select(key => (Key: key, Values: data[key] as JsonArray))
+                        .FirstOrDefault(pair => pair.Values is not null && pair.Values.Count > (pair.Key == "diagnostics" ? 0 : 1));
+                    if (target.Values is null) break;
+                    var remove = Math.Max(1, target.Values.Count / 2);
+                    for (var i = 0; i < remove; i++) target.Values.RemoveAt(target.Values.Count - 1);
+                    if (!trimmed) warnings.Add(new JsonObject { ["code"] = "RESPONSE_TRUNCATED", ["message"] = "Collection detail shortened to fit the response budget; request a larger budget for more detail.", ["retryable"] = false });
+                    trimmed = true; envelope["truncated"] = true;
+                    var referenced = new HashSet<string>(StringComparer.Ordinal); CollectStrings(data, referenced);
+                    envelope["evidence"] = Array(evidence.Where(pair => referenced.Contains(pair.Key)).Select(pair => (JsonNode?)pair.Value.DeepClone()));
+                }
+            }
             if (tool == "trace_flow" && data["nodes"] is JsonArray graphNodes && data["edges"] is JsonArray graphEdges)
             {
                 var boundaries = data["boundaries"]!.AsArray();
@@ -357,12 +417,19 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 {
                     if (graphNodes.Count > 1)
                     {
-                        var removed = graphNodes[^1]!["symbolId"]!.GetValue<string>();
-                        graphNodes.RemoveAt(graphNodes.Count - 1);
+                        var removed = new HashSet<string>(StringComparer.Ordinal);
+                        var count = Math.Max(1, (graphNodes.Count - 1) / 2);
+                        for (var i = 0; i < count; i++)
+                        {
+                            removed.Add(graphNodes[^1]!["symbolId"]!.GetValue<string>());
+                            graphNodes.RemoveAt(graphNodes.Count - 1);
+                        }
                         for (var i = graphEdges.Count - 1; i >= 0; i--)
-                            if (Text(graphEdges[i]!.AsObject(), "sourceSymbolId") == removed || Text(graphEdges[i]!.AsObject(), "targetSymbolId") == removed) graphEdges.RemoveAt(i);
+                            if (removed.Contains(Text(graphEdges[i]!.AsObject(), "sourceSymbolId")!) || removed.Contains(Text(graphEdges[i]!.AsObject(), "targetSymbolId")!)) graphEdges.RemoveAt(i);
                         for (var i = boundaries.Count - 1; i >= 0; i--)
-                            if (Text(boundaries[i]!.AsObject(), "symbolId") == removed) boundaries.RemoveAt(i);
+                            if (removed.Contains(Text(boundaries[i]!.AsObject(), "symbolId")!)) boundaries.RemoveAt(i);
+                        for (var i = unresolved.Count - 1; i >= 0; i--)
+                            if (unresolvedOwners.TryGetValue(unresolved[i]!.GetValue<string>(), out var owner) && removed.Contains(owner)) unresolved.RemoveAt(i);
                     }
                     else if (graphEdges.Count > 0) graphEdges.RemoveAt(graphEdges.Count - 1);
                     else if (unresolved.Count > 0) unresolved.RemoveAt(unresolved.Count - 1);
