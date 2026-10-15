@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rename, rm, access, copyFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const service = path.join(root, 'services', 'code-intelligence');
@@ -40,7 +41,12 @@ try {
       await copyFile(path.join(service, 'models', 'minilm-manifest.json'), path.join(stage, 'baseline-model-manifest.json'));
       await writeFile(path.join(stage, 'package-manifest.json'), JSON.stringify({ runtime: rid, schemaVersion: '1.2', selfContained: true, modelWeightsIncluded: false }, null, 2) + '\n');
       const hostRid = `${{ linux: 'linux', darwin: 'osx', win32: 'win' }[process.platform]}-${process.arch}`;
-      if (rid === hostRid) await run(executable, ['help']);
+      if (rid === hostRid) {
+        await run(executable, ['help']);
+        const smoke = await mkdtemp(path.join(tmpdir(), 'praxis-native-smoke-'));
+        try { await run(executable, ['init', path.join(smoke, 'index.db')]); } finally { await rm(smoke, { recursive: true, force: true }); }
+        if (process.env.PRAXIS_MODEL_BUNDLE) await run(executable, ['model-check', process.env.PRAXIS_MODEL_BUNDLE]);
+      }
       await rm(previous, { recursive: true, force: true });
       try { await rename(destination, previous); hadPrevious = true; } catch (error) { if (error.code !== 'ENOENT') throw error; }
       try { await rename(stage, destination); } catch (error) { if (hadPrevious) await rename(previous, destination); throw error; }
