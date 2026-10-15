@@ -7,6 +7,8 @@ using Praxis.CodeIntelligence.Indexing;
 
 namespace Praxis.CodeIntelligence.Embeddings;
 
+public sealed record EmbeddedChunk(float[] Vector, TokenizedChunk Span);
+
 public sealed class LocalModel : IDisposable
 {
     private readonly InferenceSession session;
@@ -14,6 +16,7 @@ public sealed class LocalModel : IDisposable
     public string Fingerprint { get; }
     public string ManifestJson { get; }
     public const int Dimensions = 384;
+    public const int RepresentationVersion = 2;
     public LocalModel(string directory)
     {
         var manifest = ReadBounded(Path.Combine(directory, "manifest.json"), 64 * 1024);
@@ -23,7 +26,7 @@ public sealed class LocalModel : IDisposable
             || node["dimensions"]?.GetValue<int>() != Dimensions || node["maximumTokens"]?.GetValue<int>() != 256
             || node["license"]?.GetValue<string>() != "Apache-2.0" || node["pooling"]?.GetValue<string>() != "attention-mask-mean"
             || node["normalization"]?.GetValue<string>() != "l2" || node["metric"]?.GetValue<string>() != "cosine"
-            || node["tokenizer"]?.GetValue<string>() != "bert-uncased-wordpiece-v2" || node["representationVersion"]?.GetValue<int>() != 1
+            || node["tokenizer"]?.GetValue<string>() != "bert-uncased-wordpiece-v3" || node["representationVersion"]?.GetValue<int>() != RepresentationVersion
             || node["queryPrefix"]?.GetValue<string>() != "" || node["documentPrefix"]?.GetValue<string>() != "")
             throw new ArgumentException("Model manifest is not the supported baseline profile.");
         var model = ReadBounded(Path.Combine(directory, "model.onnx"), 128 * 1024 * 1024);
@@ -40,7 +43,9 @@ public sealed class LocalModel : IDisposable
         session = new InferenceSession(model, options);
     }
     public float[] EmbedQuery(string text, CancellationToken cancellationToken) => Embed(tokenizer.EncodeChunks(text, maximumChunks: 1)[0], cancellationToken);
-    public IReadOnlyList<float[]> EmbedRepresentation(string text, CancellationToken cancellationToken) => tokenizer.EncodeChunks(text).Select(tokens => Embed(tokens, cancellationToken)).ToArray();
+    public IReadOnlyList<float[]> EmbedRepresentation(string text, CancellationToken cancellationToken) => EmbedDetailedRepresentation(text, cancellationToken).Select(chunk => chunk.Vector).ToArray();
+    public IReadOnlyList<EmbeddedChunk> EmbedDetailedRepresentation(string text, CancellationToken cancellationToken) =>
+        tokenizer.EncodeDetailed(text).Select(chunk => new EmbeddedChunk(Embed(chunk.Tokens, cancellationToken), chunk)).ToArray();
     private float[] Embed(long[] tokens, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
