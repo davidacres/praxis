@@ -1,0 +1,68 @@
+{
+  "Version": 1,
+  "StorageSchemaVersion": 2,
+  "AdapterVersion": "roslyn-5.9/v3",
+  "OnnxInterOpThreads": 1,
+  "OnnxIntraOpThreads": 4,
+  "TimestampUtc": "2026-10-15T12:24:43.4401097+00:00",
+  "ExecutionMode": "Direct service API; owner/MCP transport excluded",
+  "BuildConfiguration": "Release",
+  "OperatingSystem": "Ubuntu 24.04.3 LTS",
+  "Architecture": "X64",
+  "LogicalProcessors": 8,
+  "Runtime": ".NET 10.0.13",
+  "Sqlite": "3.53.3",
+  "ModelFingerprint": "sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba",
+  "RequestedSymbols": 5000,
+  "PublishedSymbols": 5001,
+  "PublishedSourceSymbols": 5000,
+  "SourceFiles": 50,
+  "CorpusHash": "sha256:58795a77f4f92bfb22e35285a6b98213592bbc9512ea890360af4ad40e0e37aa",
+  "ReferenceAssemblyHash": "sha256:11a0f23df9fbb128743f372b0583528aac702f6b534706bfc28bfcd54dae6907",
+  "InitialIndexMs": 17164.0145,
+  "InitialVectorsMs": 414655.5164,
+  "Lexical": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 32.7975,
+    "P95Ms": 52.4869,
+    "MaximumMs": 196.5859
+  },
+  "Hybrid": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 284.8924,
+    "P95Ms": 531.2665,
+    "MaximumMs": 1495.1284
+  },
+  "NoOpIndexMs": 939.6106,
+  "BodyEditMs": 9179.6436,
+  "VectorRefreshMs": 2342.056,
+  "PeakRssBytes": 1198485504,
+  "Gates": {
+    "lexicalP95AtMost100Ms": true,
+    "hybridP95AtMost500Ms": false,
+    "fiveThousandSymbolBodyEditAtMost2Seconds": false,
+    "fiveThousandSymbolEditToVectorsAtMost10Seconds": false,
+    "peakRssAtMost2GiB": true
+  },
+  "Unmeasured": [
+    "owner/native IPC",
+    "MCP/provider transport",
+    "held-out relevance",
+    "other platforms",
+    "representative real repository",
+    "edit p95 including watcher debounce",
+    "50k-symbol capacity",
+    "retrieval-only latency"
+  ],
+  "PassedMeasuredGates": false,
+  "VectorScorerVersion": 1,
+  "ThresholdDefinitionVersion": 1,
+  "MeasurementNotes": [
+    "Initial vector construction overlapped a focused database-fixture build/run. The report is not a controlled causal comparison.",
+    "Recorded Gates used a combined edit-to-vectors 10-second comparison; the normative semantic threshold is refresh after structural publication. VectorRefreshMs 2342.056 meets that threshold.",
+    "Body edit is a single direct API sample and excludes watcher debounce; 5k query timings do not establish 50k capacity.",
+    "This report predates buffered vector scoring and automatic pre-upgrade backups."
+  ]
+}
