@@ -13,7 +13,10 @@ public sealed record IndexedCall(string Id, string ContextId, string FilePath, s
 public sealed record IndexedDiagnostic(string ContextId, string? FilePath, string Code, string Severity, string Message, SourceRange? Range);
 public sealed record IndexedContext(string Key, string ProjectPath, string Id, string Hash, string Resolution, IReadOnlyList<SourceInput> Sources);
 public sealed record RepositoryAnalysis(IReadOnlyList<IndexedContext> Contexts, IReadOnlyList<IndexedSymbol> Symbols,
-    IReadOnlyList<IndexedCall> Calls, IReadOnlyList<IndexedDiagnostic> Diagnostics);
+    IReadOnlyList<IndexedCall> Calls, IReadOnlyList<IndexedDiagnostic> Diagnostics)
+{
+    public IReadOnlyList<IndexedCall> Relationships { get; init; } = [];
+}
 
 public static class Identity
 {
