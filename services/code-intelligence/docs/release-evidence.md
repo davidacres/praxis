@@ -126,6 +126,10 @@ The opt-in core fixture now launches the compiled stdio bridge through the real 
 
 This closes the local native stdio protocol gap on macOS arm64. It does not claim paid/live Claude Code, Codex, Copilot or Antigravity adapter qualification, nor Windows/Linux execution. The fixture uses temporary data and stops its owner/bridge processes.
 
+## Native owner authentication checkpoint (15 October)
+
+The packaged IPC smoke now sends actual length-prefixed frames directly to the owner socket/pipe. A forged token is rejected without returning the fixture path, and the previous owner's token is rejected after crash takeover rotates the token. Normal queries still succeed afterward. The expanded fixture passes on macOS arm64. These are same-user authentication checks; they do not substitute for cross-user ACL/platform verification.
+
 ## Remaining code and acceptance work
 
 1. Execute the independent golden tokenizer/vector and representation source-span fixtures on Windows; macOS arm64 now passes these fixtures. Exact persisted chunk spans and selected source excerpts are implemented. Linux x64 passes the checked-in Python-reference fixture (10 token/span cases, 4 full vectors, absolute tolerance 1e-5/cosine >= 0.99999).

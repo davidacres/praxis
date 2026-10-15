@@ -3,6 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createConnection } from 'node:net';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,33 @@ export async function smokeNativeIpc(executable) {
   let owner;
   let automaticOwner;
   let ownerOutput = '';
+  const authenticate = async token => {
+    const rendezvous = JSON.parse(await readFile(path.join(data, 'owner.json'), 'utf8'));
+    const endpoint = process.platform === 'win32' ? `\\\\.\\pipe\\${rendezvous.endpoint}` : rendezvous.endpoint;
+    const socket = createConnection(endpoint);
+    try {
+      return await new Promise((resolve, reject) => {
+        let received = Buffer.alloc(0); let settled = false;
+        const finish = (error, value) => { if (settled) return; settled = true; error ? reject(error) : resolve(value); };
+        socket.setTimeout(5000, () => finish(new Error('Authentication probe timed out.')));
+        socket.on('error', error => finish(error));
+        socket.on('close', () => finish(new Error('Authentication probe closed before a response.')));
+        socket.on('connect', () => {
+          const payload = Buffer.from(JSON.stringify({ token, request: { action: 'list' } }));
+          const header = Buffer.alloc(4); header.writeInt32LE(payload.length); socket.write(Buffer.concat([header, payload]));
+        });
+        socket.on('data', chunk => {
+          received = Buffer.concat([received, chunk]);
+          if (received.length < 4) return;
+          const length = received.readInt32LE();
+          if (length <= 0 || length > 128 * 1024 || received.length > 128 * 1024 + 4) return finish(new Error('Invalid authentication response length.'));
+          if (received.length >= length + 4) {
+            try { finish(null, JSON.parse(received.subarray(4, length + 4))); } catch (error) { finish(error); }
+          }
+        });
+      });
+    } finally { socket.destroy(); }
+  };
   const invoke = async (args, { input, expectedExit = 0 } = {}) => {
     let result;
     try {
@@ -79,6 +107,9 @@ export async function smokeNativeIpc(executable) {
     };
     try { assert.deepEqual((await invoke(['doctor'])).data.checks, []); }
     finally { await adoptAutomaticOwner(); }
+    const forged = await authenticate('0'.repeat(64));
+    assert.equal(forged.error.code, 'ACCESS_DENIED');
+    assert.equal(JSON.stringify(forged).includes(temporary), false);
     await assert.rejects(execute(executable, ['serve', '--data', data], { timeout: 5000 }), error => error.code === 5);
     const registered = await invoke(['register', source]);
     const repositoryId = registered.data.repositoryId;
@@ -115,12 +146,13 @@ export async function smokeNativeIpc(executable) {
     try { assert.deepEqual((await invoke(['doctor'])).data.checks, []); }
     finally { recovered = await adoptAutomaticOwner(); }
     assert.notEqual(recovered.token, crashed.token);
+    assert.equal((await authenticate(crashed.token)).error.code, 'ACCESS_DENIED');
     assert.equal((await invoke(['status', repositoryId])).indexGeneration, before.indexGeneration);
     assertMatch(await search());
     assert.equal((await rpc(5)).error.code, 'ACCESS_DENIED');
     await invoke(['unregister', repositoryId]);
     assert.deepEqual((await invoke(['list'])).data, []);
-    process.stdout.write('Native IPC smoke passed: automatic startup, owner lock, indexing, concurrent search, consent, backup, restart, crash takeover and unregister.\n');
+    process.stdout.write('Native IPC smoke passed: automatic startup, owner lock, forged/stale token rejection, indexing, concurrent search, consent, backup, restart, crash takeover and unregister.\n');
   } finally {
     await stop();
     await rm(temporary, { recursive: true, force: true });
