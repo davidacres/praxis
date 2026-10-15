@@ -1,0 +1,57 @@
+{
+  "Version": 1,
+  "TimestampUtc": "2026-10-15T12:09:40.7282184+00:00",
+  "ExecutionMode": "Direct service API; owner/MCP transport excluded",
+  "BuildConfiguration": "Release",
+  "OperatingSystem": "Ubuntu 24.04.3 LTS",
+  "Architecture": "X64",
+  "LogicalProcessors": 8,
+  "Runtime": ".NET 10.0.13",
+  "Sqlite": "3.53.3",
+  "ModelFingerprint": "sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba",
+  "RequestedSymbols": 5000,
+  "PublishedSymbols": 5000,
+  "SourceFiles": 50,
+  "CorpusHash": "sha256:58795a77f4f92bfb22e35285a6b98213592bbc9512ea890360af4ad40e0e37aa",
+  "ReferenceAssemblyHash": "sha256:11a0f23df9fbb128743f372b0583528aac702f6b534706bfc28bfcd54dae6907",
+  "InitialIndexMs": 69905.5669,
+  "InitialVectorsMs": 199981.9083,
+  "Lexical": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 23.5523,
+    "P95Ms": 39.8003,
+    "MaximumMs": 77.5841
+  },
+  "Hybrid": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 236.6902,
+    "P95Ms": 686.3245,
+    "MaximumMs": 1360.8724
+  },
+  "NoOpIndexMs": 4456.4417,
+  "BodyEditMs": 11505.5783,
+  "VectorRefreshMs": 11119.251,
+  "PeakRssBytes": 1155346432,
+  "Gates": {
+    "lexicalP95AtMost100Ms": true,
+    "hybridP95AtMost500Ms": false,
+    "fiveThousandSymbolBodyEditAtMost2Seconds": false,
+    "fiveThousandSymbolEditToVectorsAtMost10Seconds": false,
+    "peakRssAtMost2GiB": true
+  },
+  "Unmeasured": [
+    "owner/native IPC",
+    "MCP/provider transport",
+    "held-out relevance",
+    "other platforms",
+    "representative real repository"
+  ],
+  "PassedMeasuredGates": false,
+  "AdapterVersion": "roslyn-5.9/v1",
+  "MeasurementNotes": [
+    "This invocation loaded the previous Release artifact while the v3 build was pending; this is not v3 evidence. Initial indexing overlapped compilation.",
+    "Lexical/hybrid query and edit timings finished after compilation. Body edit is one direct API sample, excluding debounce and native owner/MCP transport."
+  ]
+}
