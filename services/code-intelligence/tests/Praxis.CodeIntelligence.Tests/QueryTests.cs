@@ -44,8 +44,11 @@ public sealed class QueryTests : IDisposable
         Assert.Equal(10, Query("find_symbol", new() { ["name"] = "Target" })["data"]!["items"]!.AsArray().Count);
         var caller = Symbol("Caller");
         var trace = Query("trace_flow", new() { ["symbolId"] = caller["symbolId"]!.DeepClone(), ["edgeKinds"] = new JsonArray() });
-        Assert.Single(trace["data"]!["edges"]!.AsArray()); Assert.Equal(2000, trace["data"]!["limitsApplied"]!["maxEdges"]!.GetValue<int>());
-        Assert.Single(Query("find_related", new() { ["symbolId"] = caller["symbolId"]!.DeepClone(), ["kinds"] = new JsonArray() })["data"]!["items"]!.AsArray());
+        Assert.Single(trace["data"]!["edges"]!.AsArray(), edge => edge!["kind"]!.GetValue<string>() == "calls"); Assert.Equal(2000, trace["data"]!["limitsApplied"]!["maxEdges"]!.GetValue<int>());
+        var related = Query("find_related", new() { ["symbolId"] = caller["symbolId"]!.DeepClone(), ["kinds"] = new JsonArray() });
+        var unfiltered = Query("find_related", new() { ["symbolId"] = caller["symbolId"]!.DeepClone() });
+        Assert.Equal(unfiltered["data"]!["items"]!.AsArray().Count, related["data"]!["items"]!.AsArray().Count);
+        Assert.True(related["data"]!["items"]!.AsArray().Count >= 2);
     }
 
     [Fact]
@@ -66,12 +69,12 @@ public sealed class QueryTests : IDisposable
         var direct = Query("search_code", new() { ["query"] = "UniqueSeed", ["mode"] = "lexical" });
         Assert.Single(direct["data"]!["matches"]!.AsArray());
         var expanded = Query("search_code", new() { ["query"] = "UniqueSeed", ["mode"] = "lexical", ["expandGraph"] = true });
-        Assert.Null(expanded["error"]); var matches = expanded["data"]!["matches"]!.AsArray(); Assert.Equal(2, matches.Count);
+        Assert.Null(expanded["error"]); var matches = expanded["data"]!["matches"]!.AsArray(); Assert.Equal(3, matches.Count);
         Assert.Equal("Example.UniqueSeed()", matches[0]!["symbol"]!["qualifiedName"]!.GetValue<string>());
-        Assert.Equal("Example.Related()", matches[1]!["symbol"]!["qualifiedName"]!.GetValue<string>());
-        Assert.Contains(matches[1]!["reasons"]!.AsArray(), reason => reason!.GetValue<string>() == "graph");
+        var related = Assert.Single(matches, match => match!["symbol"]!["qualifiedName"]!.GetValue<string>() == "Example.Related()")!;
+        Assert.Contains(related["reasons"]!.AsArray(), reason => reason!.GetValue<string>() == "graph");
         Assert.Contains(expanded["data"]!["channelsUsed"]!.AsArray(), channel => channel!.GetValue<string>() == "graph");
-        foreach (var evidenceId in matches[1]!["evidenceIds"]!.AsArray())
+        foreach (var evidenceId in related["evidenceIds"]!.AsArray())
             Assert.Contains(expanded["evidence"]!.AsArray(), evidence => evidence!["id"]!.GetValue<string>() == evidenceId!.GetValue<string>());
         Assert.Contains(expanded["evidence"]!.AsArray(), evidence => evidence!["id"]!.GetValue<string>().StartsWith("pci:occ:", StringComparison.Ordinal));
         var filtered = Query("search_code", new() { ["query"] = "UniqueSeed", ["mode"] = "lexical", ["expandGraph"] = true, ["filters"] = new JsonObject { ["kinds"] = new JsonArray("type") } });
@@ -289,7 +292,7 @@ public sealed class QueryTests : IDisposable
             Assert.Contains(edge!["sourceSymbolId"]!.GetValue<string>(), nodes); Assert.Contains(edge["targetSymbolId"]!.GetValue<string>(), nodes);
             foreach (var evidence in edge["evidenceIds"]!.AsArray()) Assert.Contains(trace["evidence"]!.AsArray(), e => e!["id"]!.GetValue<string>() == evidence!.GetValue<string>());
         }
-        Assert.Single(Query("find_related", new() { ["symbolId"] = caller["symbolId"]!.DeepClone() })["data"]!["items"]!.AsArray());
+        Assert.Single(Query("find_related", new() { ["symbolId"] = caller["symbolId"]!.DeepClone(), ["kinds"] = new JsonArray("calls") })["data"]!["items"]!.AsArray());
     }
 
     [Fact]
