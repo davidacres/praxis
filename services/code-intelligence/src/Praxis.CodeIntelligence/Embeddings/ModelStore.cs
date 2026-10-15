@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using System.Runtime.InteropServices;
 using Microsoft.Data.Sqlite;
 using Praxis.CodeIntelligence.Indexing;
 using Praxis.CodeIntelligence.Storage;
@@ -11,6 +12,7 @@ public sealed record VectorCandidate(string SymbolId, double Score);
 
 public sealed class ModelStore(IndexDatabase database, string directory) : IDisposable
 {
+    public const int VectorScorerVersion = 2;
     private readonly object queryLock = new(); private LocalModel? cached; private string? cachedFingerprint;
     private string ProfileDirectory(string fingerprint)
     {
@@ -132,8 +134,9 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         }
     }
 
-    public static IReadOnlyList<VectorCandidate> Candidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds)
+    public static IReadOnlyList<VectorCandidate> Candidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         LocalModel.ValidateVector(query.Vector); var parameters = new List<object?> { repositoryId, query.Fingerprint, contextId };
         var filter = "";
         foreach (var (column, values) in new[] { ("s.kind", kinds), ("c.project_id", projectIds) })
@@ -146,15 +149,24 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         using var command = connection.Command(transaction,
             "SELECT s.symbol_id,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id JOIN representation_targets r ON r.symbol_id=e.symbol_id AND r.model_fingerprint=e.model_fingerprint JOIN symbols s ON s.symbol_id=e.symbol_id JOIN contexts c ON c.context_id=s.defining_context_id WHERE s.repository_id=$0 AND e.model_fingerprint=$1 AND ($2 IS NULL OR s.defining_context_id=$2) AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND r.eligibility='eligible' AND v.dimensions=384 AND (SELECT count(*) FROM vectors complete WHERE complete.set_id=e.set_id)=e.expected_chunks" + filter, parameters.ToArray());
         using var reader = command.ExecuteReader(); var scores = new Dictionary<string, double>(StringComparer.Ordinal); var scanned = 0;
+        var bytes = new byte[LocalModel.Dimensions * 4];
         while (reader.Read())
         {
             if (++scanned > 200_000) throw new InvalidOperationException("VECTOR_CAPACITY_EXCEEDED");
-            var bytes = (byte[])reader.GetValue(1); if (bytes.Length != LocalModel.Dimensions * 4) continue;
-            var vector = new float[LocalModel.Dimensions]; for (var dimension = 0; dimension < vector.Length; dimension++) vector[dimension] = BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(dimension * 4, 4));
-            try { LocalModel.ValidateVector(vector); } catch (ArgumentException) { continue; }
-            double score = 0; for (var dimension = 0; dimension < vector.Length; dimension++) score += vector[dimension] * query.Vector[dimension];
-            var id = reader.GetString(0); scores[id] = Math.Max(scores.GetValueOrDefault(id, -1), score);
+            if ((scanned & 127) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (reader.GetBytes(1, 0, null, 0, 0) != bytes.Length || reader.GetBytes(1, 0, bytes, 0, bytes.Length) != bytes.Length) continue;
+            var native = MemoryMarshal.Cast<byte, float>(bytes.AsSpan()); double score = 0, norm = 0; var finite = true;
+            // One reusable buffer and one pass: no per-chunk float arrays or LINQ enumerations.
+            for (var dimension = 0; dimension < LocalModel.Dimensions; dimension++)
+            {
+                var value = BitConverter.IsLittleEndian ? native[dimension] : BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(dimension * 4, 4));
+                if (!float.IsFinite(value)) { finite = false; break; }
+                norm += (double)value * value; score += value * query.Vector[dimension];
+            }
+            if (!finite || Math.Abs(norm - 1) > 0.001) continue;
+            var id = reader.GetString(0); scores[id] = scores.TryGetValue(id, out var previous) ? Math.Max(previous, score) : score;
         }
+        cancellationToken.ThrowIfCancellationRequested();
         return scores.Select(p => new VectorCandidate(p.Key, p.Value)).OrderByDescending(p => p.Score).ThenBy(p => p.SymbolId, StringComparer.Ordinal).Take(100).ToArray();
     }
     public void Dispose() { lock (queryLock) { cached?.Dispose(); cached = null; } }
