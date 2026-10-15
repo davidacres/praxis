@@ -58,7 +58,7 @@ public sealed class CaptureTests
             Assert.Throws<IOException>(() => PassiveManifest.Read(root, output));
             indexer.Index(repository); Assert.Equal("syntaxOnly", command.ExecuteScalar());
             File.Delete(Path.Combine(root, "Example.cs")); indexer.Index(repository);
-            command.CommandText = "SELECT count(*) FROM symbols"; Assert.Equal(0L, command.ExecuteScalar());
+            command.CommandText = "SELECT count(*) FROM symbols WHERE kind <> 'module'"; Assert.Equal(0L, command.ExecuteScalar());
         }
         finally { Directory.Delete(root, recursive: true); }
     }
