@@ -33,16 +33,14 @@ public static class OwnerService
             File.Move(staging, rendezvous, overwrite: true);
             var maintenance = Task.Run(async () =>
             {
-                using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+                using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(500));
                 while (await timer.WaitForNextTickAsync(lifetime.Token))
                 {
                     if (active.IsEmpty && DateTimeOffset.UtcNow - lastActivity > TimeSpan.FromMinutes(5)) { lifetime.Cancel(); break; }
                     await writer.WaitAsync(lifetime.Token);
                     try
                     {
-                        foreach (var repository in runtime.Indexer.List().Where(r => r.State != "paused"))
-                            try { runtime.Indexer.Index(repository.Id, lifetime.Token); }
-                            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException) { }
+                        await runtime.MaintainAsync(lifetime.Token);
                     }
                     finally { writer.Release(); }
                 }
@@ -85,6 +83,7 @@ public static class OwnerService
                     { await Framing.WriteAsync(pipe, ServiceRuntime.Error("ACCESS_DENIED", "Owner authentication failed."), Framing.MaximumResponseBytes, deadline.Token); return; }
                     var request = frame["request"]!.AsObject(); var query = request["action"]?.GetValue<string>() == "query";
                     var repository = request["arguments"]?["repositoryId"]?.GetValue<string>() ?? request["repositoryId"]?.GetValue<string>() ?? "local";
+                    if (request["action"]?.GetValue<string>() is "pause" or "unregister") runtime.CancelRepositoryWork(repository);
                     var admission = admissions.GetOrAdd(repository, _ => new Admission());
                     if (Interlocked.Increment(ref admission.Waiting) > 32)
                     {
