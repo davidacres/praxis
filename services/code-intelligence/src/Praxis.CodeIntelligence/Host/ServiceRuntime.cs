@@ -45,15 +45,29 @@ public sealed class ServiceRuntime : IDisposable
                     return Result(new { repositoryId = registered });
                 }
                 case "index": return Result(Indexer.Index(repositoryId!, cancellationToken));
+                case "rebuild":
+                {
+                    var repository = Indexer.Get(repositoryId!);
+                    if (repository.State == "paused") throw new InvalidOperationException("Repository is paused.");
+                    CancelRepositoryWork(repositoryId!); Scheduler.CancelRepository(repositoryId!);
+                    Scheduler.Schedule(repositoryId!, "index", "rebuild", "{\"force\":true}", repository.Generation);
+                    return Result(new { queued = true });
+                }
+                case "relocate":
+                {
+                    var root = SourceFiles.CanonicalDirectory(request["root"]!.GetValue<string>());
+                    CancelRepositoryWork(repositoryId!); Scheduler.CancelRepository(repositoryId!);
+                    RevokeRepositoryGrants(repositoryId!);
+                    Indexer.Relocate(repositoryId!, root, request["manifest"]?.GetValue<string>());
+                    if (Indexer.Get(repositoryId!).State != "paused") ScheduleIndex(repositoryId!);
+                    return Result(new { repositoryId, relocated = true, grantsRevoked = true });
+                }
                 case "alias": Indexer.AddAlias(repositoryId!, request["symbolId"]!.GetValue<string>(), request["phrase"]!.GetValue<string>()); return Result(new { added = true });
                 case "pause": CancelRepositoryWork(repositoryId!); Scheduler.CancelRepository(repositoryId!); Indexer.SetPaused(repositoryId!, true); return Result(new { paused = true });
                 case "resume": Indexer.SetPaused(repositoryId!, false); return Result(Indexer.Index(repositoryId!, cancellationToken));
                 case "unregister":
                     CancelRepositoryWork(repositoryId!); Scheduler.CancelRepository(repositoryId!);
-                    foreach (var path in Directory.EnumerateFiles(grantsDirectory))
-                    {
-                        var grant = JsonNode.Parse(File.ReadAllText(path)); if (grant?["repositoryId"]?.GetValue<string>() == repositoryId) File.Delete(path);
-                    }
+                    RevokeRepositoryGrants(repositoryId!);
                     Indexer.Unregister(repositoryId!); return Result(new { unregistered = true });
                 case "grant":
                     Indexer.Get(repositoryId!); SaveGrant(repositoryId!, Client(request)); return Result(new { granted = true });
@@ -61,8 +75,15 @@ public sealed class ServiceRuntime : IDisposable
                 case "query":
                 {
                     var arguments = request["arguments"]!.AsObject(); var id = arguments["repositoryId"]?.GetValue<string>() ?? "unknown";
-                    var allowed = request["client"] is null || HasGrant(id, Client(request));
-                    return queries.Execute(request["tool"]!.GetValue<string>(), arguments, allowed ? new HashSet<string> { id } : new HashSet<string>(), cancellationToken);
+                    var client = request["client"] is null ? null : Client(request);
+                    var grant = client is null ? null : GrantSnapshot(id, client);
+                    var allowed = client is null || grant is not null;
+                    var result = queries.Execute(request["tool"]!.GetValue<string>(), arguments, allowed ? new HashSet<string> { id } : new HashSet<string>(), cancellationToken);
+                    // Consent may change while inference/source reads run. Never return data
+                    // authorized by an earlier root or by a revoked/reissued grant.
+                    if (client is not null && (grant is null || grant != GrantSnapshot(id, client)))
+                        return queries.Execute(request["tool"]!.GetValue<string>(), arguments, new HashSet<string>(), cancellationToken);
+                    return result;
                 }
                 case "doctor": return Result(new { checks = Database.Check() });
                 case "model-install": return Result(new { fingerprint = models.Install(request["bundle"]!.GetValue<string>()) });
@@ -76,23 +97,38 @@ public sealed class ServiceRuntime : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException)
         { return Error("OPERATION_FAILED", "Operation could not complete; check source access, passive context and owner state."); }
     }
+    private void RevokeRepositoryGrants(string repositoryId)
+    {
+        foreach (var path in Directory.EnumerateFiles(grantsDirectory))
+        {
+            var grant = JsonNode.Parse(File.ReadAllText(path));
+            if (grant?["repositoryId"]?.GetValue<string>() == repositoryId) File.Delete(path);
+        }
+    }
     private static string Client(JsonObject request)
     {
         var client = request["client"]!.GetValue<string>();
         if (client.Length is < 1 or > 256) throw new ArgumentException("Client scope is invalid."); return client;
     }
     private string GrantPath(string id, string client) => Path.Combine(grantsDirectory, Identity.Id("", id, client) + ".json");
-    private bool HasGrant(string id, string client)
+    private string? GrantSnapshot(string id, string client)
     {
-        var path = GrantPath(id, client); if (!File.Exists(path)) return false;
-        var grant = JsonNode.Parse(File.ReadAllText(path)); return grant?["repositoryId"]?.GetValue<string>() == id && grant?["client"]?.GetValue<string>() == client;
+        try
+        {
+            var path = GrantPath(id, client); if (!File.Exists(path)) return null;
+            var text = File.ReadAllText(path); var grant = JsonNode.Parse(text);
+            return grant?["repositoryId"]?.GetValue<string>() == id && grant?["client"]?.GetValue<string>() == client
+                && grant?["root"]?.GetValue<string>() == Indexer.Get(id).Root && grant?["nonce"]?.GetValue<string>() is { Length: > 0 } ? text : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or KeyNotFoundException or System.Text.Json.JsonException)
+        { return null; }
     }
     private void SaveGrant(string id, string client)
     {
         var path = GrantPath(id, client); var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllText(temporary, new JsonObject { ["repositoryId"] = id, ["client"] = client }.ToJsonString());
+            File.WriteAllText(temporary, new JsonObject { ["repositoryId"] = id, ["client"] = client, ["root"] = Indexer.Get(id).Root, ["nonce"] = Guid.NewGuid().ToString("N") }.ToJsonString());
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             File.Move(temporary, path, overwrite: true);
         }
@@ -139,7 +175,7 @@ public sealed class ServiceRuntime : IDisposable
         }, heartbeatCancellation.Token);
         try
         {
-            if (job.Kind == "index") await Task.Run(() => Indexer.Index(job.RepositoryId, work.Token, job.Token), work.Token);
+            if (job.Kind == "index") await Task.Run(() => Indexer.Index(job.RepositoryId, work.Token, job.Token, JsonNode.Parse(job.Payload)?["force"]?.GetValue<bool>() == true), work.Token);
             else
             {
                 var repository = Indexer.Get(job.RepositoryId);
