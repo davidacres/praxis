@@ -1,0 +1,67 @@
+{
+  "Version": 1,
+  "ThresholdDefinitionVersion": 2,
+  "VectorScorerVersion": 2,
+  "StorageSchemaVersion": 2,
+  "AdapterVersion": "roslyn-5.9/v3",
+  "OnnxInterOpThreads": 1,
+  "OnnxIntraOpThreads": 4,
+  "TimestampUtc": "2026-10-15T12:32:27.3887081+00:00",
+  "ExecutionMode": "Direct service API; owner/MCP transport excluded",
+  "BuildConfiguration": "Release",
+  "OperatingSystem": "Ubuntu 24.04.3 LTS",
+  "Architecture": "X64",
+  "LogicalProcessors": 8,
+  "Runtime": ".NET 10.0.13",
+  "Sqlite": "3.53.3",
+  "ModelFingerprint": "sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba",
+  "RequestedSymbols": 100,
+  "PublishedSymbols": 101,
+  "PublishedSourceSymbols": 100,
+  "SourceFiles": 1,
+  "CorpusHash": "sha256:7c61b4c6158ef0179f02ada9498efcc04df390c858d4360edaab8e7a0e2a450c",
+  "ReferenceAssemblyHash": "sha256:11a0f23df9fbb128743f372b0583528aac702f6b534706bfc28bfcd54dae6907",
+  "InitialIndexMs": 6738.2857,
+  "InitialVectorsMs": 18231.7431,
+  "Lexical": {
+    "Readers": 4,
+    "Count": 40,
+    "P50Ms": 11.7788,
+    "P95Ms": 117.4202,
+    "MaximumMs": 137.3142
+  },
+  "Hybrid": {
+    "Readers": 4,
+    "Count": 40,
+    "P50Ms": 60.7881,
+    "P95Ms": 83.9372,
+    "MaximumMs": 111.0214
+  },
+  "NoOpIndexMs": 178.4476,
+  "BodyEditMs": 668.1955,
+  "VectorRefreshMs": 1625.8922,
+  "EditToVectorsMs": 2294.0877,
+  "PeakRssBytes": 1388797952,
+  "Gates": {
+    "lexicalP95AtMost100Ms": false,
+    "hybridP95AtMost500Ms": true,
+    "fiveThousandSymbolBodyEditAtMost2Seconds": null,
+    "fiveThousandSymbolSemanticRefreshAtMost10Seconds": null,
+    "peakRssAtMost2GiB": true
+  },
+  "Unmeasured": [
+    "owner/native IPC",
+    "MCP/provider transport",
+    "held-out relevance",
+    "other platforms",
+    "representative real repository",
+    "edit p95 including watcher debounce",
+    "retrieval-only latency",
+    "50k-symbol capacity"
+  ],
+  "PassedMeasuredGates": false,
+  "MeasurementNotes": [
+    "Small-fixture smoke only: 40 query samples per mode; not a 5k/50k capacity or relevance gate.",
+    "Lexical p95 exceeded the comparison threshold; the observed result is retained without attributing causality to host scheduling."
+  ]
+}
