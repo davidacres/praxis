@@ -1,0 +1,51 @@
+{
+  "Version": 1,
+  "TimestampUtc": "2026-10-15T11:48:17.8067393+00:00",
+  "ExecutionMode": "Direct service API; owner/MCP transport excluded",
+  "BuildConfiguration": "Release",
+  "OperatingSystem": "Ubuntu 24.04.3 LTS",
+  "Architecture": "X64",
+  "LogicalProcessors": 8,
+  "Runtime": ".NET 10.0.13",
+  "Sqlite": "3.53.3",
+  "ModelFingerprint": null,
+  "RequestedSymbols": 5000,
+  "PublishedSymbols": 5000,
+  "SourceFiles": 50,
+  "CorpusHash": "sha256:58795a77f4f92bfb22e35285a6b98213592bbc9512ea890360af4ad40e0e37aa",
+  "ReferenceAssemblyHash": "sha256:11a0f23df9fbb128743f372b0583528aac702f6b534706bfc28bfcd54dae6907",
+  "InitialIndexMs": 7250.5112,
+  "InitialVectorsMs": null,
+  "Lexical": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 29.1506,
+    "P95Ms": 62.9009,
+    "MaximumMs": 221.624
+  },
+  "Hybrid": null,
+  "NoOpIndexMs": 2515.4999,
+  "BodyEditMs": 5422.148,
+  "VectorRefreshMs": null,
+  "PeakRssBytes": 452349952,
+  "Gates": {
+    "lexicalP95AtMost100Ms": true,
+    "hybridP95AtMost500Ms": null,
+    "fiveThousandSymbolBodyEditAtMost2Seconds": false,
+    "fiveThousandSymbolEditToVectorsAtMost10Seconds": null,
+    "peakRssAtMost2GiB": true
+  },
+  "Unmeasured": [
+    "owner/native IPC",
+    "MCP/provider transport",
+    "held-out relevance",
+    "other platforms",
+    "representative real repository"
+  ],
+  "PassedMeasuredGates": false,
+  "AdapterVersion": "roslyn-5.9/v1",
+  "MeasurementNotes": [
+    "Direct API timings exclude watcher debounce, owner and MCP transport. Body edit is one sample, not p95.",
+    "Observed body-edit threshold failed. Host scheduling was not controlled; do not infer a causal speedup from the baseline comparison."
+  ]
+}
