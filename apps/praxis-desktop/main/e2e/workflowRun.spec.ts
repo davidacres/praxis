@@ -119,15 +119,15 @@ test('runs the governed pipeline: parallel branches converge, then approval unlo
   const gatesNode = runDetail.getByRole('button', { name: /^Gates / });
   await expect(runDetail.getByRole('status')).toContainText(/waiting for the next stage|Stage in progress|Plan/i);
 
-  // Plan → Implement → Praxis Test contracts are serial (Implement writes the worktree).
+  // Plan → Implement → Review are serial (Review directly gates Implement's change).
   await markDone(page, 'Plan');
   await markDone(page, 'Implement');
-  await markDone(page, 'Praxis Test contracts');
+  await markDone(page, 'Review');
 
-  // Review and Security are ready at once; QA waits for the dependencies to be installed and built.
+  // Once Review passes, Praxis Test contracts runs, followed by install/build and Security.
+  await markDone(page, 'Praxis Test contracts');
   await markDone(page, 'Install dependencies');
   await markDone(page, 'Build');
-  await markDone(page, 'Review');
   await markDone(page, 'QA');
 
   // Approval is still blocked — the security branch has not reached the join.

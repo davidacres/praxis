@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **614 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -32,12 +32,12 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-E868E41A8C | ai Cli Agent Host | an ACP diff tool call renders as a red/green diff in the console | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:398` |
 | PT-81CB515D12 | ai Cli Agent Host | ticket-selected Claude Code runs review and analysis without using Vercel | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:417` |
 | PT-1868BD4BF4 | ai Cli Agent Host | an in-flight turn shows one live status line, not streamed tool blocks | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:464` |
-| PT-18A9C6783D | ai Cli Agent Host | abort kills the ACP agent subprocess cleanly | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:484` |
-| PT-B20B70A423 | ai Cli Agent Host | listCliModelOptions reads the real model list from session/new | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:513` |
-| PT-5FE459F9D3 | ai Cli Agent Host | ACP model menus show context sizes and published pricing for model aliases | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:523` |
-| PT-FCC07A19B5 | ai Cli Agent Host | delegating with a model override applies it via session/set_config_option | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:589` |
-| PT-0019D9276D | ai Cli Agent Host | a CLI model reasoning default applies through ACP thought_level | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:602` |
-| PT-478356E0FC | ai Cli Agent Host | a CLI agent's reply shows the turn's time, tokens, cost and model, and the session total grows | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:625` |
+| PT-18A9C6783D | ai Cli Agent Host | abort kills the ACP agent subprocess cleanly | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:485` |
+| PT-B20B70A423 | ai Cli Agent Host | listCliModelOptions reads the real model list from session/new | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:514` |
+| PT-5FE459F9D3 | ai Cli Agent Host | ACP model menus show context sizes and published pricing for model aliases | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:524` |
+| PT-FCC07A19B5 | ai Cli Agent Host | delegating with a model override applies it via session/set_config_option | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:590` |
+| PT-0019D9276D | ai Cli Agent Host | a CLI model reasoning default applies through ACP thought_level | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:603` |
+| PT-478356E0FC | ai Cli Agent Host | a CLI agent's reply shows the turn's time, tokens, cost and model, and the session total grows | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:626` |
 | PT-F9FE6B89E2 | ai Coding Task | a ticket for a one-line fix is delegated to an agent and lands on disk | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:36` |
 | PT-41267424E7 | ai Coding Task | a read-only session cannot write the file | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:126` |
 | PT-3CFB8F109B | ai Coding Task | each turn records its reply once, and follow-ups carry the earlier answer | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:172` |
@@ -95,24 +95,24 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-16A529CAF6 | ai Session Mode | switching a finished session to Review sends the mode transition and resumes it | `apps/praxis-desktop/main/e2e/aiSessionMode.spec.ts:33` |
 | PT-E5CDA49312 | ai Sessions | closing Praxis warns before interrupting an active AI session | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:100` |
 | PT-391BE89930 | ai Sessions | composer selects a board and open ticket, names the session, and streams to completion | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:136` |
-| PT-C5EEB040ED | ai Sessions | issue detail starts a prompted ticket session and opens its console | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:342` |
-| PT-B888C57744 | ai Sessions | API session executes a tracker tool and shows the call and result inline | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:422` |
-| PT-3CC04EDF51 | ai Sessions | composer surfaces the provider-not-configured error when no API key exists | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:460` |
-| PT-4BA1F5064F | ai Sessions | a write_file tool call renders a red/green diff after the write is approved | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:476` |
-| PT-5084A64AC6 | ai Sessions | the inspector is tabbed state, not a second copy of the conversation | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:522` |
-| PT-58DC72B588 | ai Sessions | the agent's reply uses the pane it has; yours stays a reply beside it | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:576` |
-| PT-CEBA29D1BE | ai Sessions | change model and handover stay unreachable while a turn is running | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:627` |
-| PT-C862FEE311 | ai Sessions | the session composer model picker honours the curated enabled models | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:655` |
-| PT-8B498DBD6E | ai Sessions | a completed session can edit its brief, change model, and hand over | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:721` |
-| PT-E8718CE61D | ai Sessions | an opt-in conversation alternates attributed AI turns and stops at its cap | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:810` |
-| PT-C4D6CE19FD | ai Sessions | a human can direct a message to either participant during an AI conversation | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:850` |
-| PT-0002CA30E9 | ai Sessions | an image pasted during a conversation rides with the directed message | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:910` |
-| PT-3FBB5F9EAE | ai Sessions | focus mode presents sessions as tabs and keeps them available while starting a new session | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:972` |
-| PT-3849E1CAB4 | ai Sessions | session failure displays unified error banner above the chat panel and not scattered in chat | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1030` |
-| PT-E4F45D8F5D | ai Sessions | composer paste and drop carries an image to the agent and the transcript | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1097` |
-| PT-6FD9400441 | ai Sessions | a transcript attachment enlarges in a lightbox and closes on click | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1170` |
-| PT-CC6C44E927 | ai Sessions | a file dropped outside the composer never navigates the window | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1216` |
-| PT-7D4DE7FD50 | ai Sessions | a session can be archived from its row and restored from the inspector browser | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1253` |
+| PT-C5EEB040ED | ai Sessions | issue detail starts a prompted ticket session and opens its console | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:350` |
+| PT-B888C57744 | ai Sessions | API session executes a tracker tool and shows the call and result inline | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:430` |
+| PT-3CC04EDF51 | ai Sessions | composer surfaces the provider-not-configured error when no API key exists | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:468` |
+| PT-4BA1F5064F | ai Sessions | a write_file tool call renders a red/green diff after the write is approved | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:484` |
+| PT-5084A64AC6 | ai Sessions | the inspector is tabbed state, not a second copy of the conversation | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:530` |
+| PT-58DC72B588 | ai Sessions | the agent's reply uses the pane it has; yours stays a reply beside it | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:584` |
+| PT-CEBA29D1BE | ai Sessions | change model and handover stay unreachable while a turn is running | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:635` |
+| PT-C862FEE311 | ai Sessions | the session composer model picker honours the curated enabled models | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:663` |
+| PT-8B498DBD6E | ai Sessions | a completed session can edit its brief, change model, and hand over | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:729` |
+| PT-E8718CE61D | ai Sessions | an opt-in conversation alternates attributed AI turns and stops at its cap | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:818` |
+| PT-C4D6CE19FD | ai Sessions | a human can direct a message to either participant during an AI conversation | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:858` |
+| PT-0002CA30E9 | ai Sessions | an image pasted during a conversation rides with the directed message | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:918` |
+| PT-3FBB5F9EAE | ai Sessions | focus mode presents sessions as tabs and keeps them available while starting a new session | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:980` |
+| PT-3849E1CAB4 | ai Sessions | session failure displays unified error banner above the chat panel and not scattered in chat | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1038` |
+| PT-E4F45D8F5D | ai Sessions | composer paste and drop carries an image to the agent and the transcript | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1105` |
+| PT-6FD9400441 | ai Sessions | a transcript attachment enlarges in a lightbox and closes on click | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1178` |
+| PT-CC6C44E927 | ai Sessions | a file dropped outside the composer never navigates the window | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1224` |
+| PT-7D4DE7FD50 | ai Sessions | a session can be archived from its row and restored from the inspector browser | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1261` |
 | PT-3B9205BF7B | ai Session Tasks | the task list updates live as the agent works through it, then settles once the turn ends | `apps/praxis-desktop/main/e2e/aiSessionTasks.spec.ts:38` |
 | PT-7F852938F4 | ai Session Tasks | a fully completed plan shows all three done | `apps/praxis-desktop/main/e2e/aiSessionTasks.spec.ts:74` |
 | PT-48E536B7E9 | ai Session Tasks | a session that never reports a plan shows no Tasks block at all | `apps/praxis-desktop/main/e2e/aiSessionTasks.spec.ts:91` |
@@ -140,7 +140,7 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-C813BD711A | ai Ticket Review | a queued review follow-up is sent exactly once when the current turn completes | `apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts:299` |
 | PT-47C95EBD35 | ai Ticket Review | the review composer pastes and drops images, removes one and sends the retained image to the agent | `apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts:315` |
 | PT-348197C67C | ai Ticket Review | review exposes shared runtime controls while preserving its review boundaries | `apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts:347` |
-| PT-4C644762B5 | ai Ticket Review | a pending read permission is answered directly in the review composer | `apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts:406` |
+| PT-4C644762B5 | ai Ticket Review | a pending read permission is answered directly in the review composer | `apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts:418` |
 | PT-B44F5463D3 | ai Usage Dashboard Redesign | AI Usage & Provider Fleet Dashboard renders pixel-perfect with full functionality | `apps/praxis-desktop/main/e2e/aiUsageDashboardRedesign.spec.ts:11` |
 | PT-F3833555DA | ai Workflows | workflow pack picker lists discovered packs and assigns one | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:127` |
 | PT-3269A847C9 | ai Workflows | review page streams the review markdown and posts it as a comment | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:157` |
@@ -152,25 +152,25 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-45E6380505 | ai Workflows | delivery refuses to start when the workflow is disabled in settings | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:382` |
 | PT-2D32AEE248 | ai Workflows | feature decomposition creates the sub-task issues and lists them | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:395` |
 | PT-A5306CD7F1 | ai Workflows | local peer review runs the three sections against the gateway | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:471` |
-| PT-3F16D9601E | ai Workflows | merge requests list empty, then create after a delivery recorded a branch | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:511` |
+| PT-3F16D9601E | ai Workflows | merge requests list empty, then create after a delivery recorded a branch | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:524` |
 | PT-CBE42CD885 | ai Worktree | a worktree session creates the branch + checkout and the console can remove it | `apps/praxis-desktop/main/e2e/aiWorktree.spec.ts:55` |
 | PT-46C81218A5 | alibaba Coding Plan Usage | Coding Plan quota is read through the Praxis-hosted Alibaba console sign-in | `apps/praxis-desktop/main/e2e/alibabaCodingPlanUsage.spec.ts:75` |
 | PT-67A9D74A51 | alibaba Provider | Alibaba Model Studio presets carry paired base URLs, key help and the Alibaba Cloud mark | `apps/praxis-desktop/main/e2e/alibabaProvider.spec.ts:9` |
-| PT-142C2B7A1B | app | groups all layout toggles on the right side of the title bar | `apps/praxis-desktop/main/e2e/app.spec.ts:18` |
-| PT-865C5ABA3C | app | focus mode button in titlebar is available in a session and toggles panels | `apps/praxis-desktop/main/e2e/app.spec.ts:35` |
-| PT-4D5169B00E | app | Praxis section in sidebar can expand to full sidebar and restore | `apps/praxis-desktop/main/e2e/app.spec.ts:68` |
-| PT-8287929558 | app | remembers which panels are open across a relaunch | `apps/praxis-desktop/main/e2e/app.spec.ts:92` |
-| PT-CF9F8E1A1A | app | displays the running Praxis version in the title bar | `apps/praxis-desktop/main/e2e/app.spec.ts:109` |
-| PT-2DDEE2CB06 | app | boards render on launch | `apps/praxis-desktop/main/e2e/app.spec.ts:115` |
-| PT-50D9451E47 | app | normal launch does not include built-in demo data | `apps/praxis-desktop/main/e2e/app.spec.ts:122` |
-| PT-2F0F85516F | app | a folder conversation without trackers does not claim to use demo boards | `apps/praxis-desktop/main/e2e/app.spec.ts:133` |
-| PT-07AE341C04 | app | selecting a board renders its columns and issue cards | `apps/praxis-desktop/main/e2e/app.spec.ts:152` |
-| PT-7DBFACF20E | app | opening an issue card shows the issue detail panel | `apps/praxis-desktop/main/e2e/app.spec.ts:175` |
-| PT-6E62D61719 | app | adding a comment appears in the issue detail panel | `apps/praxis-desktop/main/e2e/app.spec.ts:184` |
-| PT-A6199352B5 | app | closing the issue detail panel hides it | `apps/praxis-desktop/main/e2e/app.spec.ts:196` |
-| PT-CD88DD8E19 | app | navigating to Connections shows the connection management screen | `apps/praxis-desktop/main/e2e/app.spec.ts:204` |
-| PT-9C84544990 | app | adding and removing a connection updates the list | `apps/praxis-desktop/main/e2e/app.spec.ts:211` |
-| PT-BBA9C83046 | app | a returning user gets the brief splash, not the full crawl | `apps/praxis-desktop/main/e2e/app.spec.ts:236` |
+| PT-142C2B7A1B | app | groups all layout toggles on the right side of the title bar | `apps/praxis-desktop/main/e2e/app.spec.ts:19` |
+| PT-865C5ABA3C | app | focus mode button in titlebar is available in a session and toggles panels | `apps/praxis-desktop/main/e2e/app.spec.ts:36` |
+| PT-4D5169B00E | app | Praxis section in sidebar can expand to full sidebar and restore | `apps/praxis-desktop/main/e2e/app.spec.ts:69` |
+| PT-8287929558 | app | remembers which panels are open across a relaunch | `apps/praxis-desktop/main/e2e/app.spec.ts:93` |
+| PT-CF9F8E1A1A | app | displays the running Praxis version in the title bar | `apps/praxis-desktop/main/e2e/app.spec.ts:110` |
+| PT-2DDEE2CB06 | app | boards render on launch | `apps/praxis-desktop/main/e2e/app.spec.ts:116` |
+| PT-50D9451E47 | app | normal launch does not include built-in demo data | `apps/praxis-desktop/main/e2e/app.spec.ts:123` |
+| PT-2F0F85516F | app | a folder conversation without trackers does not claim to use demo boards | `apps/praxis-desktop/main/e2e/app.spec.ts:134` |
+| PT-07AE341C04 | app | selecting a board renders its columns and issue cards | `apps/praxis-desktop/main/e2e/app.spec.ts:153` |
+| PT-7DBFACF20E | app | opening an issue card shows the issue detail panel | `apps/praxis-desktop/main/e2e/app.spec.ts:176` |
+| PT-6E62D61719 | app | adding a comment appears in the issue detail panel | `apps/praxis-desktop/main/e2e/app.spec.ts:185` |
+| PT-A6199352B5 | app | closing the issue detail panel hides it | `apps/praxis-desktop/main/e2e/app.spec.ts:197` |
+| PT-B7E9ACDDB7 | app | Connections is absent from the sidebar and opens through the command palette | `apps/praxis-desktop/main/e2e/app.spec.ts:205` |
+| PT-9C84544990 | app | adding and removing a connection updates the list | `apps/praxis-desktop/main/e2e/app.spec.ts:214` |
+| PT-BBA9C83046 | app | a returning user gets the brief splash, not the full crawl | `apps/praxis-desktop/main/e2e/app.spec.ts:239` |
 | PT-0C494CCBEC | appearance Settings | opens Settings from the title bar as a dismissible popover dialog | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:33` |
 | PT-554DF61623 | appearance Settings | theme gallery previews and persists the selected complete palette | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:44` |
 | PT-E7281D960A | appearance Settings | persists the selected theme and mode through app settings | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:70` |
@@ -187,22 +187,22 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-DA3DC9B1D8 | assistant | floating assistant drags by its header and resizes from its corner | `apps/praxis-desktop/main/e2e/assistant.spec.ts:105` |
 | PT-161D626D8D | assistant | assistant composer selects provider, model, reasoning, and permission mode for the next turn | `apps/praxis-desktop/main/e2e/assistant.spec.ts:135` |
 | PT-99F1FB5440 | assistant | assistant composer collapses and animates its border while the team replies | `apps/praxis-desktop/main/e2e/assistant.spec.ts:206` |
-| PT-6BF3BFEE6B | assistant | an image can be dropped or pasted into the assistant composer and is sent with the turn | `apps/praxis-desktop/main/e2e/assistant.spec.ts:228` |
-| PT-B21CE8C307 | assistant | assistant full tools uses the selected working folder through an agent session | `apps/praxis-desktop/main/e2e/assistant.spec.ts:258` |
-| PT-567A553B13 | assistant | an @mention routes to that persona and transcript suggestions are read-only | `apps/praxis-desktop/main/e2e/assistant.spec.ts:287` |
-| PT-746D1BA14C | assistant | selected team members reply in order, then the selected lead synthesises | `apps/praxis-desktop/main/e2e/assistant.spec.ts:319` |
-| PT-3412C6D2C6 | assistant | deselecting every seat sends a general chat to the Tech Lead | `apps/praxis-desktop/main/e2e/assistant.spec.ts:341` |
-| PT-450D784024 | assistant | page context follows navigation, can be detached, and chats persist in the tree | `apps/praxis-desktop/main/e2e/assistant.spec.ts:353` |
-| PT-9ADE9F9E42 | assistant | an update-ticket proposal is informational and has no transcript controls | `apps/praxis-desktop/main/e2e/assistant.spec.ts:414` |
-| PT-E27C5BEA0C | assistant | a create-subtask proposal does not create a task without a composer send | `apps/praxis-desktop/main/e2e/assistant.spec.ts:431` |
-| PT-B8B9837347 | assistant | an update-workflow proposal is informational and leaves the workflow unchanged | `apps/praxis-desktop/main/e2e/assistant.spec.ts:445` |
-| PT-A62081453E | assistant | Git changes context carries the file list and the diff hunks | `apps/praxis-desktop/main/e2e/assistant.spec.ts:484` |
-| PT-6BA3D0980D | assistant | a chat can be renamed, survives an app restart, and the docked width persists | `apps/praxis-desktop/main/e2e/assistant.spec.ts:503` |
-| PT-5E8DFAD0E8 | assistant | the assistant IPC reports a missing provider as an error message, not a crash | `apps/praxis-desktop/main/e2e/assistant.spec.ts:542` |
-| PT-C9FF04A5E3 | assistant | every persona renders with its own distinct colour and a readable badge | `apps/praxis-desktop/main/e2e/assistant.spec.ts:561` |
-| PT-6CF9CAE63A | assistant | the assistant's controls show a focus ring and carry tooltips | `apps/praxis-desktop/main/e2e/assistant.spec.ts:578` |
-| PT-D850AA5BDC | assistant | the assistant stays readable on every theme and surface pack | `apps/praxis-desktop/main/e2e/assistant.spec.ts:642` |
-| PT-C34A6897DE | assistant | the composer grows with its text up to the shared cap, then scrolls | `apps/praxis-desktop/main/e2e/assistant.spec.ts:733` |
+| PT-6BF3BFEE6B | assistant | an image can be dropped or pasted into the assistant composer and is sent with the turn | `apps/praxis-desktop/main/e2e/assistant.spec.ts:238` |
+| PT-B21CE8C307 | assistant | assistant full tools uses the selected working folder through an agent session | `apps/praxis-desktop/main/e2e/assistant.spec.ts:268` |
+| PT-567A553B13 | assistant | an @mention routes to that persona and transcript suggestions are read-only | `apps/praxis-desktop/main/e2e/assistant.spec.ts:297` |
+| PT-746D1BA14C | assistant | selected team members reply in order, then the selected lead synthesises | `apps/praxis-desktop/main/e2e/assistant.spec.ts:329` |
+| PT-3412C6D2C6 | assistant | deselecting every seat sends a general chat to the Tech Lead | `apps/praxis-desktop/main/e2e/assistant.spec.ts:351` |
+| PT-450D784024 | assistant | page context follows navigation, can be detached, and chats persist in the tree | `apps/praxis-desktop/main/e2e/assistant.spec.ts:363` |
+| PT-9ADE9F9E42 | assistant | an update-ticket proposal is informational and has no transcript controls | `apps/praxis-desktop/main/e2e/assistant.spec.ts:424` |
+| PT-E27C5BEA0C | assistant | a create-subtask proposal does not create a task without a composer send | `apps/praxis-desktop/main/e2e/assistant.spec.ts:441` |
+| PT-B8B9837347 | assistant | an update-workflow proposal is informational and leaves the workflow unchanged | `apps/praxis-desktop/main/e2e/assistant.spec.ts:455` |
+| PT-A62081453E | assistant | Git changes context carries the file list and the diff hunks | `apps/praxis-desktop/main/e2e/assistant.spec.ts:494` |
+| PT-6BA3D0980D | assistant | a chat can be renamed, survives an app restart, and the docked width persists | `apps/praxis-desktop/main/e2e/assistant.spec.ts:513` |
+| PT-5E8DFAD0E8 | assistant | the assistant IPC reports a missing provider as an error message, not a crash | `apps/praxis-desktop/main/e2e/assistant.spec.ts:552` |
+| PT-C9FF04A5E3 | assistant | every persona renders with its own distinct colour and a readable badge | `apps/praxis-desktop/main/e2e/assistant.spec.ts:571` |
+| PT-6CF9CAE63A | assistant | the assistant's controls show a focus ring and carry tooltips | `apps/praxis-desktop/main/e2e/assistant.spec.ts:588` |
+| PT-D850AA5BDC | assistant | the assistant stays readable on every theme and surface pack | `apps/praxis-desktop/main/e2e/assistant.spec.ts:652` |
+| PT-C34A6897DE | assistant | the composer grows with its text up to the shared cap, then scrolls | `apps/praxis-desktop/main/e2e/assistant.spec.ts:743` |
 | PT-0000309442 | auto Update | an unpackaged build reports that updates are unsupported and offers no check | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:22` |
 | PT-24D162FA28 | auto Update | shows download progress, then offers a restart once the update is ready | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:32` |
 | PT-92B7424B04 | auto Update | an update this build cannot install links to the release page | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:48` |
@@ -258,7 +258,7 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-7BC7E2071E | chat Gadgets | a form will not submit until its required fields are filled | `apps/praxis-desktop/main/e2e/chatGadgets.spec.ts:721` |
 | PT-7134E97BD0 | chat Gadgets | a conflict gadget refuses to resolve until every side is chosen | `apps/praxis-desktop/main/e2e/chatGadgets.spec.ts:738` |
 | PT-3EDDE51138 | chat Project Assignment.visual | assign chat picker and project session placement | `apps/praxis-desktop/main/e2e/chatProjectAssignment.visual.spec.ts:16` |
-| PT-CDB77B83E7 | chat Project Assignment.visual | assign chat ticket field lists tickets for a folder-backed project | `apps/praxis-desktop/main/e2e/chatProjectAssignment.visual.spec.ts:109` |
+| PT-CDB77B83E7 | chat Project Assignment.visual | assign chat ticket field lists tickets for a folder-backed project | `apps/praxis-desktop/main/e2e/chatProjectAssignment.visual.spec.ts:111` |
 | PT-59DA0C8AD7 | command Palette | opens with the shortcut, filters, and navigates on Enter | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:21` |
 | PT-FA69F53102 | command Palette | closes on Escape without navigating | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:39` |
 | PT-41E36CF713 | command Palette | finds a demo issue by summary text and navigates to it on Enter | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:50` |
@@ -266,14 +266,17 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-4BA2448F9C | composer Model Configuration | composer model settings curate provider chips and preserve the conversation draft | `apps/praxis-desktop/main/e2e/composerModelConfiguration.spec.ts:18` |
 | PT-2E55D7925C | composer Model Configuration | an existing session configures its selected provider rather than the app default | `apps/praxis-desktop/main/e2e/composerModelConfiguration.spec.ts:90` |
 | PT-B902DE0E5F | composer Model Configuration | model search stays fixed when scrolling models in the model menu and manager | `apps/praxis-desktop/main/e2e/composerModelConfiguration.spec.ts:127` |
-| PT-DE1AE73B0C | connections Manager | the new-connection form renders the per-mode field sets | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:40` |
-| PT-2AB651383F | connections Manager | saving a live folder connection auto-tracks its board | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:95` |
-| PT-53DD1D137C | connections Manager | testing an unconfigured Jira connection surfaces the stub error | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:122` |
-| PT-F00954D241 | connections Manager | saving a demo connection synthesizes its tracked board | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:145` |
-| PT-C3D6DFD5C4 | connections Manager | connection rows edit names, lock backend type, and require boards to be removed first | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:156` |
-| PT-C7D59124B0 | connections Manager | a saved GitLab API key shows as saved when the connection is re-opened | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:185` |
-| PT-4C058F707A | connections Manager | saving a Jira Cloud connection in API-token mode writes the expected on-disk shape | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:207` |
-| PT-EAE28B8DCD | connections Manager | saving a Jira Cloud connection with a BYO OAuth app writes the client id | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:258` |
+| PT-C4C9115D0B | composer Provider Brand Icons | the new-session composer lists providers with their brand logo, not a glyph | `apps/praxis-desktop/main/e2e/composerProviderBrandIcons.spec.ts:40` |
+| PT-0229E7D2BF | composer Provider Brand Icons | the composer provider chip keeps the brand logo after a choice | `apps/praxis-desktop/main/e2e/composerProviderBrandIcons.spec.ts:56` |
+| PT-D661E0DF32 | composer Provider Brand Icons | Settings' provider card still announces its logo, where the mark is the label | `apps/praxis-desktop/main/e2e/composerProviderBrandIcons.spec.ts:67` |
+| PT-DE1AE73B0C | connections Manager | the new-connection form renders the per-mode field sets | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:43` |
+| PT-2AB651383F | connections Manager | saving a live folder connection auto-tracks its board | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:98` |
+| PT-53DD1D137C | connections Manager | testing an unconfigured Jira connection surfaces the stub error | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:127` |
+| PT-F00954D241 | connections Manager | saving a demo connection synthesizes its tracked board | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:150` |
+| PT-C3D6DFD5C4 | connections Manager | connection rows edit names, lock backend type, and require boards to be removed first | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:161` |
+| PT-C7D59124B0 | connections Manager | a saved GitLab API key shows as saved when the connection is re-opened | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:190` |
+| PT-4C058F707A | connections Manager | saving a Jira Cloud connection in API-token mode writes the expected on-disk shape | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:212` |
+| PT-EAE28B8DCD | connections Manager | saving a Jira Cloud connection with a BYO OAuth app writes the client id | `apps/praxis-desktop/main/e2e/connectionsManager.spec.ts:263` |
 | PT-4D8075BFEA | coordination | a file another session holds is not written; recovery is a person's call, then the fix lands | `apps/praxis-desktop/main/e2e/coordination.spec.ts:48` |
 | PT-761127B80B | coordination Wait | an agent refused a held file waits for it once, is woken when it is released, and then writes | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:58` |
 | PT-8B10456AD1 | coordination Wait | a server an agent left running stays claimed after its turn, and Stop in the inspector ends it | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:112` |
@@ -282,26 +285,26 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-842B523925 | easymode | default sidebar is standard when enableEasyMode is false | `apps/praxis-desktop/main/e2e/easymode.spec.ts:29` |
 | PT-E4A09A92CD | easymode | toggling EasyMode in settings switches to EasyModeSidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:39` |
 | PT-3403539E7A | easymode | EasyMode sidebar renders Sessions and Automations with + buttons and handles selection and navigation | `apps/praxis-desktop/main/e2e/easymode.spec.ts:71` |
-| PT-78A9780217 | easymode | toggling EasyMode via titlebar button switches between standard sidebar and EasyModeSidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:278` |
-| PT-594C7ED7EF | easymode | opening a folder from Getting Started enables EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:307` |
-| PT-3B8F38ED21 | easymode | opening a folder from TitleBar workspace menu enables EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:339` |
-| PT-E864C7EB0E | easymode | global keyboard shortcut Cmd+Shift+E / Ctrl+Shift+E toggles EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:368` |
-| PT-F2FE06D85F | easymode | EasyMode canvas renders on project root with prompt hero, starter chips, and theme switch | `apps/praxis-desktop/main/e2e/easymode.spec.ts:389` |
-| PT-3960246515 | easymode | EasyMode sidebar displays onboarding empty cards when lists are empty | `apps/praxis-desktop/main/e2e/easymode.spec.ts:429` |
-| PT-8B7CA7EEE6 | easymode | EasyMode session card displays live ticker, hover actions, and automations show stage badge | `apps/praxis-desktop/main/e2e/easymode.spec.ts:453` |
-| PT-797C06EBE5 | easymode | opening a folder in EasyMode scopes sessions to that folder and excludes unrelated sessions | `apps/praxis-desktop/main/e2e/easymode.spec.ts:563` |
-| PT-8C982E7F97 | easymode | automation stage sessions appear nested under automation and are excluded from sessions list | `apps/praxis-desktop/main/e2e/easymode.spec.ts:660` |
-| PT-ED816D0823 | easymode | automation rows have rename, archive, delete and run actions like a session row | `apps/praxis-desktop/main/e2e/easymode.spec.ts:795` |
-| PT-C7547B818D | easymode | classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree | `apps/praxis-desktop/main/e2e/easymode.spec.ts:895` |
-| PT-D6E1059F2C | easymode | in EasyMode selecting a session opens details in the center | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1023` |
-| PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1195` |
-| PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1417` |
-| PT-B674916509 | easymode | paused and not_started sessions beyond the first five stay visible in All and Live | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1560` |
+| PT-78A9780217 | easymode | toggling EasyMode via titlebar button switches between standard sidebar and EasyModeSidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:328` |
+| PT-594C7ED7EF | easymode | opening a folder from Getting Started enables EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:357` |
+| PT-3B8F38ED21 | easymode | opening a folder from TitleBar workspace menu enables EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:389` |
+| PT-E864C7EB0E | easymode | global keyboard shortcut Cmd+Shift+E / Ctrl+Shift+E toggles EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:418` |
+| PT-F2FE06D85F | easymode | EasyMode canvas renders on project root with prompt hero, starter chips, and theme switch | `apps/praxis-desktop/main/e2e/easymode.spec.ts:439` |
+| PT-3960246515 | easymode | EasyMode sidebar displays onboarding empty cards when lists are empty | `apps/praxis-desktop/main/e2e/easymode.spec.ts:479` |
+| PT-8B7CA7EEE6 | easymode | EasyMode session card displays live ticker, hover actions, and automations show stage badge | `apps/praxis-desktop/main/e2e/easymode.spec.ts:503` |
+| PT-797C06EBE5 | easymode | opening a folder in EasyMode scopes sessions to that folder and excludes unrelated sessions | `apps/praxis-desktop/main/e2e/easymode.spec.ts:624` |
+| PT-8C982E7F97 | easymode | automation stage sessions appear nested under automation and are excluded from sessions list | `apps/praxis-desktop/main/e2e/easymode.spec.ts:721` |
+| PT-ED816D0823 | easymode | automation rows have rename, archive, delete and run actions like a session row | `apps/praxis-desktop/main/e2e/easymode.spec.ts:856` |
+| PT-C7547B818D | easymode | classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree | `apps/praxis-desktop/main/e2e/easymode.spec.ts:956` |
+| PT-D6E1059F2C | easymode | in EasyMode selecting a session opens details in the center | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1084` |
+| PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1256` |
+| PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1478` |
+| PT-B674916509 | easymode | paused and not_started sessions beyond the first five stay visible in All and Live | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1621` |
 | PT-60D8BF1214 | edit Issue | editing a live folder issue writes the priority back to markdown | `apps/praxis-desktop/main/e2e/editIssue.spec.ts:108` |
 | PT-B5CC8CC324 | edit Issue | changing a folder ticket parent moves it to the selected feature | `apps/praxis-desktop/main/e2e/editIssue.spec.ts:143` |
-| PT-AB88717169 | folder | folder board lists the fixture feature task | `apps/praxis-desktop/main/e2e/folder.spec.ts:63` |
-| PT-842ED9B41E | folder | transitioning a live folder issue writes the new status back to markdown | `apps/praxis-desktop/main/e2e/folder.spec.ts:75` |
-| PT-F6DA248F8B | folder | adding a comment on a live folder issue writes it back to markdown | `apps/praxis-desktop/main/e2e/folder.spec.ts:92` |
+| PT-AB88717169 | folder | folder board lists the fixture feature task | `apps/praxis-desktop/main/e2e/folder.spec.ts:64` |
+| PT-842ED9B41E | folder | transitioning a live folder issue writes the new status back to markdown | `apps/praxis-desktop/main/e2e/folder.spec.ts:76` |
+| PT-F6DA248F8B | folder | adding a comment on a live folder issue writes it back to markdown | `apps/praxis-desktop/main/e2e/folder.spec.ts:93` |
 | PT-5B255858B0 | folder Issue Mirror Phantom Board | an issue-mirror stories/ folder next to a real plans root does not surface as its own board | `apps/praxis-desktop/main/e2e/folderIssueMirrorPhantomBoard.spec.ts:51` |
 | PT-2D1F18B0CC | folder Multi | a parent folder with two plans roots lists one board per root | `apps/praxis-desktop/main/e2e/folderMulti.spec.ts:101` |
 | PT-AA021C9550 | folder Multi | each board shows only its own root’s issues | `apps/praxis-desktop/main/e2e/folderMulti.spec.ts:118` |
@@ -309,15 +312,15 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-87E898E104 | git Graph | Refresh reloads the project repository, not the app working directory | `apps/praxis-desktop/main/e2e/gitGraph.spec.ts:205` |
 | PT-2DA4C4A369 | git Graph | keeps the graph usable in a narrow reduced-motion window | `apps/praxis-desktop/main/e2e/gitGraph.spec.ts:228` |
 | PT-23037916A6 | git Graph | presents a clear three-way conflict editor and saves a resolution | `apps/praxis-desktop/main/e2e/gitGraph.spec.ts:247` |
-| PT-F917800DC6 | github | test connection against the mock REST server reports success | `apps/praxis-desktop/main/e2e/github.spec.ts:88` |
-| PT-0CAF76F9FE | github | board renders every synthesized column with its issue | `apps/praxis-desktop/main/e2e/github.spec.ts:103` |
-| PT-9C108229F6 | github | adding a comment and editing summary round-trips through the mock | `apps/praxis-desktop/main/e2e/github.spec.ts:116` |
-| PT-3B749865A9 | github | moving a card to a status column adds the label and preserves unrelated labels | `apps/praxis-desktop/main/e2e/github.spec.ts:144` |
-| PT-61A5FF6B13 | github | issue creation is disabled until the connection allows it | `apps/praxis-desktop/main/e2e/github.spec.ts:158` |
-| PT-932B4018E4 | github | issue creation round-trips a new issue once enabled | `apps/praxis-desktop/main/e2e/github.spec.ts:168` |
-| PT-902227C624 | gitlab | test connection against the mock REST server reports success | `apps/praxis-desktop/main/e2e/gitlab.spec.ts:95` |
-| PT-12BB7CE87C | gitlab | board picker lists the boards the mock REST server reports | `apps/praxis-desktop/main/e2e/gitlab.spec.ts:116` |
-| PT-E18BCAB4A2 | gitlab | tracked board renders issue cards and accepts a new comment via the mock | `apps/praxis-desktop/main/e2e/gitlab.spec.ts:134` |
+| PT-F917800DC6 | github | test connection against the mock REST server reports success | `apps/praxis-desktop/main/e2e/github.spec.ts:89` |
+| PT-0CAF76F9FE | github | board renders every synthesized column with its issue | `apps/praxis-desktop/main/e2e/github.spec.ts:104` |
+| PT-9C108229F6 | github | adding a comment and editing summary round-trips through the mock | `apps/praxis-desktop/main/e2e/github.spec.ts:117` |
+| PT-3B749865A9 | github | moving a card to a status column adds the label and preserves unrelated labels | `apps/praxis-desktop/main/e2e/github.spec.ts:145` |
+| PT-61A5FF6B13 | github | issue creation is disabled until the connection allows it | `apps/praxis-desktop/main/e2e/github.spec.ts:159` |
+| PT-932B4018E4 | github | issue creation round-trips a new issue once enabled | `apps/praxis-desktop/main/e2e/github.spec.ts:169` |
+| PT-902227C624 | gitlab | test connection against the mock REST server reports success | `apps/praxis-desktop/main/e2e/gitlab.spec.ts:96` |
+| PT-12BB7CE87C | gitlab | board picker lists the boards the mock REST server reports | `apps/praxis-desktop/main/e2e/gitlab.spec.ts:117` |
+| PT-E18BCAB4A2 | gitlab | tracked board renders issue cards and accepts a new comment via the mock | `apps/praxis-desktop/main/e2e/gitlab.spec.ts:135` |
 | PT-3FFA8FE2C9 | git Onboarding | Git Graph explains that a project workspace is required | `apps/praxis-desktop/main/e2e/gitOnboarding.spec.ts:13` |
 | PT-64BEE7E4CE | git Onboarding | project Git navigation opens the graph for its workspace repository | `apps/praxis-desktop/main/e2e/gitOnboarding.spec.ts:37` |
 | PT-9D9D7DC61F | governed Delivery Loop.live | Governed delivery with a real AI: review findings loop back to Implement and the run converges or escalates | `apps/praxis-desktop/main/e2e/governedDeliveryLoop.live.spec.ts:64` |
@@ -333,16 +336,17 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-62E497E328 | issue Ai Session Uncommitted | starting an AI session from a ticket warns about uncommitted changes and offers choices | `apps/praxis-desktop/main/e2e/issueAiSessionUncommitted.spec.ts:38` |
 | PT-5183AA83ED | issue Ai Session Uncommitted | starting an AI session from a ticket can omit uncommitted files | `apps/praxis-desktop/main/e2e/issueAiSessionUncommitted.spec.ts:165` |
 | PT-0F0FBD8AD5 | issue Detail | issue detail shows sub-tasks, linked issues, attachments and essential header actions | `apps/praxis-desktop/main/e2e/issueDetail.spec.ts:21` |
-| PT-574710978E | jira | test connection against the mock MCP server reports success | `apps/praxis-desktop/main/e2e/jira.spec.ts:77` |
-| PT-8342401BB6 | jira | board picker lists the boards the mock MCP server reports | `apps/praxis-desktop/main/e2e/jira.spec.ts:91` |
-| PT-F0EE39C8BA | jira Auth | jiracloud api-token connection injects Authorization: Basic on every MCP request | `apps/praxis-desktop/main/e2e/jiraAuth.spec.ts:147` |
-| PT-BFEB9A190C | jira Auth | jiracloud oauth connection runs the full SDK OAuth loop without a browser | `apps/praxis-desktop/main/e2e/jiraAuth.spec.ts:212` |
-| PT-79B214506B | jira Auth | jiracloud oauth connection can use a pre-registered client (BYO) | `apps/praxis-desktop/main/e2e/jiraAuth.spec.ts:293` |
+| PT-574710978E | jira | test connection against the mock MCP server reports success | `apps/praxis-desktop/main/e2e/jira.spec.ts:78` |
+| PT-8342401BB6 | jira | board picker lists the boards the mock MCP server reports | `apps/praxis-desktop/main/e2e/jira.spec.ts:92` |
+| PT-F0EE39C8BA | jira Auth | jiracloud api-token connection injects Authorization: Basic on every MCP request | `apps/praxis-desktop/main/e2e/jiraAuth.spec.ts:148` |
+| PT-BFEB9A190C | jira Auth | jiracloud oauth connection runs the full SDK OAuth loop without a browser | `apps/praxis-desktop/main/e2e/jiraAuth.spec.ts:213` |
+| PT-79B214506B | jira Auth | jiracloud oauth connection can use a pre-registered client (BYO) | `apps/praxis-desktop/main/e2e/jiraAuth.spec.ts:294` |
 | PT-4B39900D85 | journey | a project created from a folder of existing plans shows them on its board | `apps/praxis-desktop/main/e2e/journey.spec.ts:133` |
 | PT-580F518F3D | journey | a project created from a folder with no plans stays on app storage | `apps/praxis-desktop/main/e2e/journey.spec.ts:210` |
 | PT-54F79B0024 | journey | a broken-era project record heals to folder-backed at startup | `apps/praxis-desktop/main/e2e/journey.spec.ts:240` |
 | PT-209BAE8A67 | keyboard Focus | every control reached by Tab paints a visible focus ring | `apps/praxis-desktop/main/e2e/keyboardFocus.spec.ts:51` |
 | PT-459F7A49D9 | keyboard Focus | the ring is themed, and pointer clicks stay quiet | `apps/praxis-desktop/main/e2e/keyboardFocus.spec.ts:73` |
+| PT-47C9FD95ED | large Token Usage | AI Usage displays million, billion and trillion token totals with compact units | `apps/praxis-desktop/main/e2e/largeTokenUsage.spec.ts:7` |
 | PT-8C7A4CF782 | marketplace | Add-ons panel holds only the central config and points at the per-kind panels | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:149` |
 | PT-E53CD33CCE | marketplace | Surfaces panel: the marketplace section installs a pack, and it can be removed from the gallery | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:216` |
 | PT-50545241D6 | marketplace | Agent Runtime panel: installing an agent asks first, then it can be uninstalled | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:239` |
@@ -356,13 +360,13 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-112E148947 | mobile Access | an allowed-subnet entry the policy cannot match is rejected inline, and a legacy prefix migrates | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:57` |
 | PT-372C7E1F65 | native Sources | other AI tools’ agents, skills and instructions are discovered, approved, copied, and used in a session | `apps/praxis-desktop/main/e2e/nativeSources.spec.ts:49` |
 | PT-7EA609AC58 | native Sources | an agent from another AI tool can be placed on a workflow stage and bound to its skill | `apps/praxis-desktop/main/e2e/nativeSources.spec.ts:160` |
-| PT-F027143814 | new Issue | creating a demo issue with the full field set shows it on the board | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:67` |
-| PT-EBCB12B9AA | new Issue | creating a live folder task under a feature writes the markdown file | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:90` |
-| PT-067D93638F | new Issue | live folder without allowIssueCreation shows a disabled create button with a hint | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:132` |
-| PT-24034BC9B8 | new Issue | the New idea button is hidden unless the preview setting is enabled | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:147` |
-| PT-CD33498B00 | new Issue | New idea opens the create form preset to Idea with the research transcript field | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:156` |
-| PT-201D18C39C | new Issue | creating a live folder idea writes the research transcript into the markdown | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:183` |
-| PT-55715AB01F | new Issue | the demo board offers Subtask with a required story/task/bug parent | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:239` |
+| PT-F027143814 | new Issue | creating a demo issue with the full field set shows it on the board | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:69` |
+| PT-EBCB12B9AA | new Issue | creating a live folder task under a feature writes the markdown file | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:92` |
+| PT-067D93638F | new Issue | live folder without allowIssueCreation shows a disabled create button with a hint | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:136` |
+| PT-24034BC9B8 | new Issue | the New idea button is hidden unless the preview setting is enabled | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:152` |
+| PT-CD33498B00 | new Issue | New idea opens the create form preset to Idea with the research transcript field | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:161` |
+| PT-201D18C39C | new Issue | creating a live folder idea writes the research transcript into the markdown | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:188` |
+| PT-55715AB01F | new Issue | the demo board offers Subtask with a required story/task/bug parent | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:245` |
 | PT-5870B4F60C | overview | renders the workspace overview dashboard | `apps/praxis-desktop/main/e2e/overview.spec.ts:9` |
 | PT-D0D129AB73 | overview Ai Usage | shows exact period totals, peaks, cost and ranked models from a seeded ledger | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:59` |
 | PT-41BEE977CD | overview Ai Usage | says cost comes from ACP agents only when no cost is reported | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:115` |
@@ -375,9 +379,9 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-32EEAB3A9B | overview Provider Budgets | a provider that exposes no usage API is never badged Offline | `apps/praxis-desktop/main/e2e/overviewProviderBudgets.spec.ts:109` |
 | PT-7768AC7D0C | overview Provider Budgets | a card shows no invented spend, rate limit or reset figures | `apps/praxis-desktop/main/e2e/overviewProviderBudgets.spec.ts:122` |
 | PT-5951674B1E | pane Inset | the centre pane is inset by 4px on every side and rounded on all four corners | `apps/praxis-desktop/main/e2e/paneInset.spec.ts:19` |
-| PT-22F5EE9E77 | project Review | project review scopes history, surfaces blocked and stale work, and acts through the board rules | `apps/praxis-desktop/main/e2e/projectReview.spec.ts:11` |
-| PT-031B958FB6 | project Review | daily review: a configurable aging rule, a re-opened review for new blockers, board-only moves, and a ten-item pass with no page load | `apps/praxis-desktop/main/e2e/projectReview.spec.ts:106` |
-| PT-D248A18A8B | project Review | moving an item to Blocked from the review asks why, and the reason is kept with the item | `apps/praxis-desktop/main/e2e/projectReview.spec.ts:176` |
+| PT-22F5EE9E77 | project Review | project review scopes history, surfaces blocked and stale work, and acts through the board rules | `apps/praxis-desktop/main/e2e/projectReview.spec.ts:21` |
+| PT-031B958FB6 | project Review | daily review: a configurable aging rule, a re-opened review for new blockers, board-only moves, and a ten-item pass with no page load | `apps/praxis-desktop/main/e2e/projectReview.spec.ts:116` |
+| PT-D248A18A8B | project Review | moving an item to Blocked from the review asks why, and the reason is kept with the item | `apps/praxis-desktop/main/e2e/projectReview.spec.ts:186` |
 | PT-A093EBE8D0 | projects | creates a folderless Product project through advanced setup, then adds its board | `apps/praxis-desktop/main/e2e/projects.spec.ts:23` |
 | PT-F168CE8C6E | projects | opens the unified Add Project flow from the New menu | `apps/praxis-desktop/main/e2e/projects.spec.ts:206` |
 | PT-445F9E991F | projects | a first project is three steps: type, name, review | `apps/praxis-desktop/main/e2e/projects.spec.ts:236` |
@@ -397,6 +401,7 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-508D8D1DB5 | projects | ticking advanced setup adds brief and tool access in existing-folder mode | `apps/praxis-desktop/main/e2e/projects.spec.ts:709` |
 | PT-F3FE778F2D | projects | the command palette can add a project from an existing folder | `apps/praxis-desktop/main/e2e/projects.spec.ts:733` |
 | PT-401BD32A9D | project Session Actions | General and Ticket project sessions expose rename, archive, and delete actions | `apps/praxis-desktop/main/e2e/projectSessionActions.spec.ts:18` |
+| PT-372B4C8AC9 | provider Usage History | provider history stays separate, handles keys, coverage, zero and unavailable summaries | `apps/praxis-desktop/main/e2e/providerUsageHistory.spec.ts:6` |
 | PT-58E206C861 | quick Capture | global capture requires a destination, creates through the ordinary path, and clears only on success | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:26` |
 | PT-F6DDEAD096 | quick Capture | the capture shortcut opens over Settings and over another open dialog, on top of both | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:82` |
 | PT-0EBCAEDC04 | quick Capture | a capture stamps its creation time; Escape creates nothing | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:108` |
@@ -408,7 +413,7 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-668B1806B5 | quick Capture | the capture dialog fits and stays readable across themes, surface packs and zoom | `apps/praxis-desktop/main/e2e/quickCapture.spec.ts:279` |
 | PT-E65F2B46F5 | quick Session | the title-bar quick session opens the composer scoped to the current project with quick-change ready | `apps/praxis-desktop/main/e2e/quickSession.spec.ts:61` |
 | PT-515B50E6B1 | quick Session | a project session action scopes the composer to that project | `apps/praxis-desktop/main/e2e/quickSession.spec.ts:102` |
-| PT-4B8B596B62 | quick Session | draft and existing sessions share the composer frame and input layout | `apps/praxis-desktop/main/e2e/quickSession.spec.ts:119` |
+| PT-4B8B596B62 | quick Session | draft and existing sessions share the composer frame and input layout | `apps/praxis-desktop/main/e2e/quickSession.spec.ts:168` |
 | PT-AAC7A98AEE | saved Workspaces | project creation requires a valid workspace and assigns the first project as default | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:21` |
 | PT-E4A652D7E0 | saved Workspaces | deleting the active workspace returns to Getting Started without deleting projects | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:42` |
 | PT-6A873CE029 | saved Workspaces | closing the active workspace returns to the Open Workspace screen | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:58` |
@@ -443,6 +448,7 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-0FBAAEEA42 | session Recovery | keyboard focus stays in recovery, and Escape leaves sessions stopped | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:85` |
 | PT-0F10648F67 | session Recovery | interrupted CLI sessions also wait for selection and resume through ACP | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:99` |
 | PT-75B0F93373 | session Recovery | teardown drains an ACP task even when the session list already reports completion | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:110` |
+| PT-AEE8B7A3ED | session Team | a session can add several team members; a lone reviewer offers a review | `apps/praxis-desktop/main/e2e/sessionTeam.spec.ts:19` |
 | PT-1EF3C80135 | session Usage Quota | composer usage panel draws provider quota windows as bars with a collapsed meter | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:42` |
 | PT-67020F5525 | settings Reset | reset to defaults asks separately before clearing saved AI session data | `apps/praxis-desktop/main/e2e/settingsReset.spec.ts:22` |
 | PT-3BA46A8FF8 | settings Reset | clears app-owned project, workspace, and board data without deleting shared connections | `apps/praxis-desktop/main/e2e/settingsReset.spec.ts:38` |
@@ -452,20 +458,20 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-3DA72EF9DD | shell Polish | connection groups carry a health dot from connection checks | `apps/praxis-desktop/main/e2e/shellPolish.spec.ts:112` |
 | PT-E59A37BF1C | sidebar Long Names | long workflow, run and session names leave their action buttons reachable at the narrowest widths | `apps/praxis-desktop/main/e2e/sidebarLongNames.spec.ts:52` |
 | PT-0753F0246D | sidebar Sticky Headers | tree headers stick nested beneath their parents as the top sidebar panel scrolls | `apps/praxis-desktop/main/e2e/sidebarStickyHeaders.spec.ts:27` |
-| PT-53AB1FCF37 | sidebar Sticky Headers | session categories stack below Sessions and hand over within their own lists | `apps/praxis-desktop/main/e2e/sidebarStickyHeaders.spec.ts:152` |
+| PT-856185D4D7 | sidebar Sticky Headers | recency buckets stack below the project row and hand over within their own lists | `apps/praxis-desktop/main/e2e/sidebarStickyHeaders.spec.ts:161` |
 | PT-750ACA1C1D | sidebar Tree Alignment | rows at the same depth of the project tree share an icon column and a label column | `apps/praxis-desktop/main/e2e/sidebarTreeAlignment.spec.ts:25` |
 | PT-A370DC483D | standalone Conversations | detached-chat IPC refuses a window outside the trusted renderer | `apps/praxis-desktop/main/e2e/standaloneConversations.spec.ts:9` |
 | PT-B82F563EB2 | standalone Conversations | standalone conversation persists and resumes across floating-window pop-in, close and app restart | `apps/praxis-desktop/main/e2e/standaloneConversations.spec.ts:29` |
-| PT-A21E3FDD8F | startup Experience | first launch offers one folder-first workspace entry flow | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:16` |
-| PT-A35C1F2EBD | startup Experience | opening an existing folder creates a portable workspace and file-only project | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:39` |
-| PT-C830C9989C | startup Experience | workspace setup can be skipped to the empty Praxis shell | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:96` |
-| PT-1B93A7E22D | startup Experience | workspace setup offers project handoff and cancelling the wizard opens the empty shell | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:116` |
-| PT-CCD26C2CF1 | startup Experience | workspace Add Project opens a folder without a board and adds planning later | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:148` |
-| PT-F9609B37B1 | startup Experience | advanced project setup remains available without forcing a board | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:212` |
-| PT-638E30E516 | startup Experience | reopens a validated workspace and its last durable route | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:271` |
-| PT-5EA9DB4BA4 | startup Experience | disabled restoration and a missing saved workspace both fail safely to Getting Started | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:293` |
-| PT-734A6AC91D | startup Experience | Getting Started remains usable in a narrow reduced-motion window and light theme | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:317` |
-| PT-F28949A7D1 | startup Experience | recent workspaces follow actual opens, show five, and expose View all | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:331` |
+| PT-A21E3FDD8F | startup Experience | first launch offers one folder-first workspace entry flow | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:17` |
+| PT-A35C1F2EBD | startup Experience | opening an existing folder creates a portable workspace and file-only project | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:40` |
+| PT-C830C9989C | startup Experience | workspace setup can be skipped to the empty Praxis shell | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:97` |
+| PT-1B93A7E22D | startup Experience | workspace setup offers project handoff and cancelling the wizard opens the empty shell | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:117` |
+| PT-CCD26C2CF1 | startup Experience | workspace Add Project opens a folder without a board and adds planning later | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:149` |
+| PT-F9609B37B1 | startup Experience | advanced project setup remains available without forcing a board | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:213` |
+| PT-638E30E516 | startup Experience | reopens a validated workspace and its last durable route | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:272` |
+| PT-5EA9DB4BA4 | startup Experience | disabled restoration and a missing saved workspace both fail safely to Getting Started | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:294` |
+| PT-734A6AC91D | startup Experience | Getting Started remains usable in a narrow reduced-motion window and light theme | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:318` |
+| PT-F28949A7D1 | startup Experience | recent workspaces follow actual opens, show five, and expose View all | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:332` |
 | PT-96C9B65554 | surface Packs | ships default-on with the Parchment surface over the Praxis theme | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:64` |
 | PT-D3B6ABACF1 | surface Packs | the pack renders its hexagon watermark on every pane and the tile actually loads | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:75` |
 | PT-49CDF1858D | surface Packs | built-in surfaces use their intended default pattern | `apps/praxis-desktop/main/e2e/surfacePacks.spec.ts:91` |
@@ -507,6 +513,9 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-0D89836F29 | terminal | creates and kills terminal sessions from the panel toolbar | `apps/praxis-desktop/main/e2e/terminal.spec.ts:59` |
 | PT-B16C06BF15 | terminal | opens per-terminal settings and applies an active-session override | `apps/praxis-desktop/main/e2e/terminal.spec.ts:71` |
 | PT-249786566B | terminal | detects installed shell profiles and launches a selected profile | `apps/praxis-desktop/main/e2e/terminal.spec.ts:87` |
+| PT-A78EE346F5 | test App Cleanup | normal teardown exits Electron and removes its isolated profile | `apps/praxis-desktop/main/e2e/testAppCleanup.spec.ts:5` |
+| PT-95EBB52521 | test App Cleanup | stalled renderer cleanup is bounded and reported after terminating its app | `apps/praxis-desktop/main/e2e/testAppCleanup.spec.ts:15` |
+| PT-CEBD73E498 | test App Cleanup | vetoed Electron shutdown is bounded and remains a failure | `apps/praxis-desktop/main/e2e/testAppCleanup.spec.ts:31` |
 | PT-12759B4DF5 | theme Looks | ships the four built-in Looks with Parchment active | `apps/praxis-desktop/main/e2e/themeLooks.spec.ts:49` |
 | PT-E667F1ABE8 | theme Looks | selecting a Look swaps theme + surface together and persists | `apps/praxis-desktop/main/e2e/themeLooks.spec.ts:57` |
 | PT-3A65DBB9C9 | theme Looks | editing a dial while a Look is active is folded into that Look | `apps/praxis-desktop/main/e2e/themeLooks.spec.ts:69` |
@@ -515,10 +524,10 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-049E5F19E5 | theme Looks | factory appearance reset restores the theme, Look, surface, and libraries | `apps/praxis-desktop/main/e2e/themeLooks.spec.ts:127` |
 | PT-1B0F699E2E | verify marketplace | VERIFY: Marketplace loads and displays real GitHub packages | `apps/praxis-desktop/main/e2e/verify-marketplace.spec.ts:10` |
 | PT-A17BEBD0BC | walkthrough | walks the shell, rings each control, and remembers it was seen | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:68` |
-| PT-3FCE413FDD | walkthrough | the ring is visibly not a control, and not the focus ring | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:102` |
-| PT-872EAC1D71 | walkthrough | the ring never blocks the control it highlights | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:145` |
-| PT-953FE9CFAB | walkthrough | Escape dismisses the tour, and that counts as seen | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:159` |
-| PT-5D746924EB | walkthrough | a stop whose target disappears mid-tour is skipped, not shown empty | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:171` |
+| PT-3FCE413FDD | walkthrough | the ring is visibly not a control, and not the focus ring | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:99` |
+| PT-872EAC1D71 | walkthrough | the ring never blocks the control it highlights | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:142` |
+| PT-953FE9CFAB | walkthrough | Escape dismisses the tour, and that counts as seen | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:156` |
+| PT-5D746924EB | walkthrough | a stop whose target disappears mid-tour is skipped, not shown empty | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:168` |
 | PT-81822F8874 | what Changed | What Changed records every source, says who made each change, and opens each in one click | `apps/praxis-desktop/main/e2e/whatChanged.spec.ts:45` |
 | PT-7609557DB7 | what Changed | a week of several hundred changes renders and filters without a long main-thread task | `apps/praxis-desktop/main/e2e/whatChanged.spec.ts:171` |
 | PT-D5A9FA2834 | whats New | What's new opens over the workspace and provides version history | `apps/praxis-desktop/main/e2e/whatsNew.spec.ts:13` |
@@ -533,22 +542,24 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-E049A4DE12 | workflow Designer | blocks save while the graph is invalid and announces the errors | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:124` |
 | PT-37B15BC378 | workflow Designer | the canvas moves a stage with the keyboard and selects it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:140` |
 | PT-2576004142 | workflow Designer | auto arrange lays out workflow stages in dependency order without overlap | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:158` |
-| PT-814CF4A563 | workflow Designer | nudging a stage past the canvas edge clamps its position instead of losing it off-screen | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:199` |
-| PT-D7BA2AF937 | workflow Designer | builds an agent handoff stage from the palette and attaches a specialist skill | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:217` |
-| PT-B1FCE4E164 | workflow Designer | a folder-backed project commits its workflow to .praxis/workflows and reloads it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:244` |
-| PT-C90D5C8EDD | workflow Designer | instantiating Full SDLC (.NET) identifies and installs missing agent dependencies automatically | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:295` |
-| PT-9B225D3890 | workflow Designer | validates workflow connections, flow, and configuration via validate workflow button | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:324` |
-| PT-4B8346DC79 | workflow Designer | clicking a connection on the canvas selects it and deletes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:376` |
-| PT-D0F572C234 | workflow Designer | selecting a connection and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:397` |
-| PT-2CBC383956 | workflow Designer | clicking delete on an agent task removes it from the canvas | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:414` |
-| PT-1748C28492 | workflow Designer | selecting an agent task and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:428` |
-| PT-AA92BCD6EA | workflow Designer | a stage can run on its own AI and model, chosen from the AIs that are set up | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:443` |
-| PT-91A53C6CCE | workflow Designer | stage skills are added from the picker dialog and removed from their chip | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:497` |
-| PT-FA495A15F3 | workflow Designer | a connection selected on the canvas is edited in the inspector, with no separate tab | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:524` |
-| PT-05295BB166 | workflow Designer | floating toolbar provides stage tools, canvas tools, and deletion | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:547` |
-| PT-693476E991 | workflow Designer | clicking and dragging on the designer surface pans the canvas without changing zoom | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:615` |
-| PT-7AF3949BE5 | workflow Designer | floating toolbar provides agent and skill submenus with scrolling list, icon, and text | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:650` |
-| PT-44E72F938B | workflow Designer | submenu displays search box when items exceed 10, filters real-time, and clears on escape or button click | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:773` |
+| PT-0B66AF09D4 | workflow Designer | auto arrange vertical lays out workflow stages top to bottom in dependency order without overlap | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:199` |
+| PT-814CF4A563 | workflow Designer | nudging a stage past the canvas edge clamps its position instead of losing it off-screen | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:238` |
+| PT-D7BA2AF937 | workflow Designer | builds an agent handoff stage from the palette and attaches a specialist skill | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:256` |
+| PT-B1FCE4E164 | workflow Designer | a folder-backed project commits its workflow to .praxis/workflows and reloads it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:283` |
+| PT-C90D5C8EDD | workflow Designer | instantiating Full SDLC (.NET) identifies and installs missing agent dependencies automatically | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:334` |
+| PT-9B225D3890 | workflow Designer | validates workflow connections, flow, and configuration via validate workflow button | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:363` |
+| PT-4B8346DC79 | workflow Designer | clicking a connection on the canvas selects it and deletes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:415` |
+| PT-D0F572C234 | workflow Designer | selecting a connection and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:436` |
+| PT-2CBC383956 | workflow Designer | clicking delete on an agent task removes it from the canvas | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:453` |
+| PT-1748C28492 | workflow Designer | selecting an agent task and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:467` |
+| PT-AA92BCD6EA | workflow Designer | a stage can run on its own AI and model, chosen from the AIs that are set up | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:482` |
+| PT-91A53C6CCE | workflow Designer | stage skills are added from the picker dialog and removed from their chip | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:536` |
+| PT-FA495A15F3 | workflow Designer | a connection selected on the canvas is edited in the inspector, with no separate tab | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:563` |
+| PT-05295BB166 | workflow Designer | floating toolbar provides stage tools, canvas tools, and deletion | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:586` |
+| PT-693476E991 | workflow Designer | clicking and dragging on the designer surface pans the canvas without changing zoom | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:655` |
+| PT-7AF3949BE5 | workflow Designer | floating toolbar provides agent and skill submenus with scrolling list, icon, and text | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:690` |
+| PT-44E72F938B | workflow Designer | submenu displays search box when items exceed 10, filters real-time, and clears on escape or button click | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:813` |
+| PT-F895248CB0 | workflow Designer | walks the workflow designer, rings each area, and directs the user through all steps | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:882` |
 | PT-2CA87FB459 | workflow Environment Pause | a registry that cannot audit pauses the run instead of failing it; siblings finish and Resume completes it | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:126` |
 | PT-4B8D3275C8 | workflow Environment Pause | a genuine audit finding still fails the run, and the sibling it left running is stopped and recorded | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:175` |
 | PT-F5764CCA2F | workflow Install Deps | without an install stage a fresh run worktree cannot load the dependency, so QA fails — however good the change is | `apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts:111` |
@@ -583,22 +594,22 @@ This catalogue describes **603 Playwright tests** under `apps/praxis-desktop/mai
 | PT-5CE920C30E | workflow Run Work | ticking the option deletes the run's branch and worktree too — and only those | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:135` |
 | PT-4F95DF8F4A | workflow Run Work | cancelling the confirm deletes nothing | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:156` |
 | PT-93F88A4EA2 | workflow Run Workspace | a controller session starts a project run and its stage session fills the run workspace | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:180` |
-| PT-B6EB737E60 | workflow Run Workspace | deleting a live run cancels it first, then removes it | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:285` |
-| PT-B1E9275BF7 | workflow Run Workspace | an automation run can be renamed and the name persists after reload | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:311` |
-| PT-DD166C47F2 | workflow Run Workspace | the start-run dialog opens from a workflow row with that workflow preselected, and lands on the new run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:360` |
-| PT-259EE959B0 | workflow Run Workspace | the Automations header opens a new workflow run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:379` |
-| PT-CCE9452AFD | workflow Run Workspace | a long automation uses a bounded dot rail and exposes every step in the workflow sheet | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:414` |
-| PT-D18B652AC9 | workflow Run Workspace | a dirty checkout offers to include its changes: the run sees them, the checkout is untouched | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:501` |
-| PT-63B5C57146 | workflow Run Workspace | a dirty checkout can instead start from the last commit without its changes | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:514` |
-| PT-AC2482A561 | workflow Run Workspace | a dirty checkout can commit its changes, then the run starts from that commit | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:522` |
-| PT-26466F3922 | workflow Run Workspace | starting a run against a workspace folder that is no longer a Git repository shows an actionable message, not raw git plumbing output | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:532` |
-| PT-59D76BB99D | workflow Run Workspace | an out-of-credits provider pauses the run instead of failing it, and resumes once credits are back | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:560` |
-| PT-3C9A1A5834 | workflow Run Workspace | a stage whose AI ran out can be switched to another AI and carries on | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:627` |
-| PT-522BA7819F | workflow Run Workspace | with "Switch AI automatically" the stage moves to another AI without asking | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:667` |
-| PT-951522F605 | workflow Run Workspace | with "Stop the run" the run ends saying which AI ran out, and can still carry on with another AI | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:681` |
-| PT-5C5F154311 | workflow Run Workspace | a run in Ask mode stops the stage for a tool permission; the same run in Auto-approve mode does not | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:707` |
-| PT-05BE089E81 | workflow Run Workspace | auto-approve does not widen a stage: a read-only stage still cannot write | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:777` |
-| PT-79DD10EF59 | workflow Run Workspace | a terminal run can be archived, removing it from the sidebar and listing it in the workflow runs browser | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:800` |
+| PT-B6EB737E60 | workflow Run Workspace | deleting a live run cancels it first, then removes it | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:299` |
+| PT-B1E9275BF7 | workflow Run Workspace | an automation run can be renamed and the name persists after reload | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:325` |
+| PT-DD166C47F2 | workflow Run Workspace | the start-run dialog opens from a workflow row with that workflow preselected, and lands on the new run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:374` |
+| PT-259EE959B0 | workflow Run Workspace | the Automations header opens a new workflow run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:393` |
+| PT-CCE9452AFD | workflow Run Workspace | a long automation uses a bounded dot rail and exposes every step in the workflow sheet | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:428` |
+| PT-D18B652AC9 | workflow Run Workspace | a dirty checkout offers to include its changes: the run sees them, the checkout is untouched | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:515` |
+| PT-63B5C57146 | workflow Run Workspace | a dirty checkout can instead start from the last commit without its changes | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:528` |
+| PT-AC2482A561 | workflow Run Workspace | a dirty checkout can commit its changes, then the run starts from that commit | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:536` |
+| PT-26466F3922 | workflow Run Workspace | starting a run against a workspace folder that is no longer a Git repository shows an actionable message, not raw git plumbing output | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:546` |
+| PT-59D76BB99D | workflow Run Workspace | an out-of-credits provider pauses the run instead of failing it, and resumes once credits are back | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:574` |
+| PT-3C9A1A5834 | workflow Run Workspace | a stage whose AI ran out can be switched to another AI and carries on | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:641` |
+| PT-522BA7819F | workflow Run Workspace | with "Switch AI automatically" the stage moves to another AI without asking | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:681` |
+| PT-951522F605 | workflow Run Workspace | with "Stop the run" the run ends saying which AI ran out, and can still carry on with another AI | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:695` |
+| PT-5C5F154311 | workflow Run Workspace | a run in Ask mode stops the stage for a tool permission; the same run in Auto-approve mode does not | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:721` |
+| PT-05BE089E81 | workflow Run Workspace | auto-approve does not widen a stage: a read-only stage still cannot write | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:791` |
+| PT-79DD10EF59 | workflow Run Workspace | a terminal run can be archived, removing it from the sidebar and listing it in the workflow runs browser | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:814` |
 | PT-839FD63748 | workflow Session Chips | an existing project session selects and starts governed workflows from one chat chip | `apps/praxis-desktop/main/e2e/workflowSessionChips.spec.ts:43` |
 | PT-8B8CDC8743 | workflow Template Addon | the Security Review add-on installs and creates a workflow from its template | `apps/praxis-desktop/main/e2e/workflowTemplateAddon.spec.ts:28` |
 | PT-713053459D | workflow Themes | the designer and run monitor hold up on a dark theme | `apps/praxis-desktop/main/e2e/workflowThemes.spec.ts:63` |

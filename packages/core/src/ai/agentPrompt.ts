@@ -1,6 +1,7 @@
 import type { IssueDetails } from '../types';
 import type { AgentTaskDefinition } from './agentTypes';
 import { TICKET_REVIEW_SESSION_PROMPT, reviewedIssueKey } from './ticketReview';
+import { HUMAN_REVIEW_SESSION_PROMPT } from './humanReview';
 
 const PLANNING_SYSTEM_PROMPT = `You are an autonomous coding agent operating under strict contracts.
 
@@ -196,7 +197,9 @@ function buildTaskSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): 
       ? ANALYSIS_SESSION_SYSTEM_PROMPT
       : task.kind === 'ticket-review'
         ? TICKET_REVIEW_SESSION_PROMPT
-        : PLANNING_SYSTEM_PROMPT;
+        : task.kind === 'human-review'
+          ? HUMAN_REVIEW_SESSION_PROMPT
+          : PLANNING_SYSTEM_PROMPT;
 
   if (task.sessionMode === 'chat') {
     return `${sessionPrompt}

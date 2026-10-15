@@ -417,11 +417,43 @@ export function WorkflowCanvas({
     if (!source || !target) return null;
     const fromNode = definition.nodes.find(n => n.id === edge.from);
     const toNode = definition.nodes.find(n => n.id === edge.to);
-    const badge = edge.loop
-      ? `↺ up to ${edge.loop.maxIterations}×${edge.on === 'findings' ? ' on findings' : edge.on === 'failure' ? ' on failure' : ''}`
-      : edge.on === 'findings'
+    const isFindings = edge.on === 'findings';
+    const isFailure = edge.on === 'failure';
+    const isLoop = !!edge.loop;
+
+    const badge = isLoop
+      ? `↺ up to ${edge.loop!.maxIterations}×${isFindings ? ' on findings' : isFailure ? ' on failure' : ''}`
+      : isFindings
         ? 'on findings'
-        : undefined;
+        : isFailure
+          ? 'on failure'
+          : undefined;
+
+    let tooltip: string | undefined = undefined;
+    if (isLoop) {
+      const cond = isFindings
+        ? `findings${edge.when?.severity ? ` (severity ≥ ${edge.when.severity})` : ''}`
+        : isFailure
+          ? 'failure'
+          : 'success';
+      tooltip = `Condition: On ${cond} — loops back to ${toNode?.name ?? edge.to} (budget: up to ${edge.loop!.maxIterations}×). Click to edit condition in sidebar.`;
+    } else if (isFindings) {
+      tooltip = `Condition: On findings${edge.when?.severity ? ` (severity ≥ ${edge.when.severity})` : ''} — routes to ${toNode?.name ?? edge.to}. Click to edit in sidebar.`;
+    } else if (isFailure) {
+      tooltip = `Condition: On failure — routes to ${toNode?.name ?? edge.to}. Click to edit in sidebar.`;
+    }
+
+    const issues = issuesByEdge[edge.id] ?? 0;
+    const badgeIcon: IconName | undefined = issues > 0
+      ? 'warning'
+      : isLoop
+        ? undefined
+        : isFindings
+          ? 'shield'
+          : isFailure
+            ? 'warning'
+            : undefined;
+
     if (edge.loop) {
       // A way back is drawn under both stages: out of the source's bottom, round, and up
       // into the target's — never on top of the forward path it returns along.
@@ -436,6 +468,8 @@ export function WorkflowCanvas({
         dead: false,
         loop: true,
         badge,
+        badgeIcon,
+        tooltip,
         fromName: fromNode?.name ?? edge.from,
         toName: toNode?.name ?? edge.to
       };
@@ -451,6 +485,8 @@ export function WorkflowCanvas({
       dead: edge.on === 'failure',
       loop: false,
       badge,
+      badgeIcon,
+      tooltip,
       fromName: fromNode?.name ?? edge.from,
       toName: toNode?.name ?? edge.to
     };
@@ -612,14 +648,15 @@ export function WorkflowCanvas({
                 className={`wf-edge-badge${edge!.loop ? ' is-loop' : ''}${issues > 0 ? ' has-issue' : ''}`}
                 style={{ left: edge!.midX, top: edge!.midY }}
                 data-testid={`wf-edge-badge-${edge!.id}`}
-                aria-label={`${edge!.loop ? 'Loop' : 'Connection'} from ${edge!.fromName} to ${edge!.toName}: ${edge!.badge ?? `${issues} issue${issues === 1 ? '' : 's'}`}`}
+                title={edge!.tooltip}
+                aria-label={`${edge!.loop ? 'Loop' : 'Connection'} from ${edge!.fromName} to ${edge!.toName}: ${edge!.badge ?? `${issues} issue${issues === 1 ? '' : 's'}`}${edge!.tooltip ? `. ${edge!.tooltip}` : ''}`}
                 onPointerDown={event => event.stopPropagation()}
                 onClick={event => {
                   event.stopPropagation();
                   setSelectedEdgeId(edge!.id);
                 }}
               >
-                {issues > 0 && <Icon name="warning" size={10} />}
+                {edge!.badgeIcon && <Icon name={edge!.badgeIcon} size={10} />}
                 {edge!.badge ?? `${issues} issue${issues === 1 ? '' : 's'}`}
               </button>
             );

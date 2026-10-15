@@ -235,6 +235,22 @@ test('auto arrange vertical lays out workflow stages top to bottom in dependency
   expect(layout.every(node => node.id)).toBe(true);
 });
 
+test('edge badge shows condition tooltip and opens edge inspector in sidebar when clicked', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Governed delivery');
+
+  const canvas = canvasOf(page);
+  const badge = canvas.getByTestId('wf-edge-badge-e-review-fix');
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveAttribute('title', /Condition: On findings \(severity ≥ high\) — loops back to Implement/);
+
+  await badge.click();
+  const inspector = inspectorOf(page);
+  await expect(inspector.getByRole('heading', { name: 'Connection' })).toBeVisible();
+  await expect(inspector.getByTestId('wf-edge-outcome')).toHaveAttribute('data-value', 'findings');
+  await expect(inspector.getByTestId('wf-edge-loop-toggle')).toBeChecked();
+});
+
 test('nudging a stage past the canvas edge clamps its position instead of losing it off-screen', async () => {
   const page = app.window;
   await newWorkflow(page, 'Governed delivery');

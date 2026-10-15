@@ -54,6 +54,7 @@ export * from './ai/mcp/mcpServerConfig';
 export * from './ai/mcp/mcpToolBridge';
 export * from './ai/aiReviewService';
 export * from './ai/ticketReview';
+export * from './ai/humanReview';
 export * from './ai/aiUsageLog';
 export * from './ai/aiUsageStats';
 export * from './ai/providerUsage';

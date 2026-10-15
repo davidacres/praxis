@@ -13,11 +13,12 @@ import { parseReviewFindings } from '../aiReviewService';
 
 test('TASK-247: getBundledAgentManifests returns trusted global agents', () => {
   const bundled = getBundledAgentManifests();
-  assert.strictEqual(bundled.length, 7);
+  assert.strictEqual(bundled.length, 8);
 
   const ids = bundled.map(a => a.manifest.id).sort();
   assert.deepStrictEqual(ids, [
     'praxis-addon-builder',
+    'praxis-human-reviewer',
     'praxis-implementer',
     'praxis-planner',
     'praxis-reviewer',
