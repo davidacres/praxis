@@ -110,6 +110,42 @@ public sealed class ModelTests
     }
 
     [LocalModelFact]
+    public void CurrentVectorsAreNotRewrittenButCorruptSourceMetadataIsRepaired()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "praxis-current-vectors-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var database = new IndexDatabase(Path.Combine(root, "data", "index.db")); database.Initialize();
+            File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { int Run() => 1; }");
+            var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root); indexer.Index(repository);
+            using var store = new ModelStore(database, Path.Combine(root, "models"));
+            var profile = store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!); store.Activate(repository, profile, CancellationToken.None);
+            using (var write = database.Open())
+            using (var command = write.CreateCommand())
+            {
+                command.CommandText = "CREATE TRIGGER forbid_rewrite BEFORE DELETE ON embedding_sets BEGIN SELECT RAISE(ABORT,'unchanged vector rewrite'); END";
+                command.ExecuteNonQuery();
+            }
+            store.Activate(repository, profile, CancellationToken.None);
+            using (var write = database.Open())
+            using (var command = write.CreateCommand())
+            {
+                command.CommandText = "DROP TRIGGER forbid_rewrite; UPDATE embedding_sets SET state='stale'; UPDATE vectors SET spans_json=json_set(spans_json,'$.Sources[0].ContentHash','corrupt') WHERE json_array_length(spans_json,'$.Sources')>0; UPDATE embedding_sets SET state='ready'";
+                command.ExecuteNonQuery();
+            }
+            store.Activate(repository, profile, CancellationToken.None);
+            using (var read = database.Open(readOnly: true))
+            using (var command = read.CreateCommand())
+            {
+                command.CommandText = "SELECT count(*) FROM vectors WHERE json_extract(spans_json,'$.Sources[0].ContentHash')='corrupt'";
+                Assert.Equal(0L, command.ExecuteScalar());
+            }
+            Assert.Empty(database.Check());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [LocalModelFact]
     public void RealOnnxInstallActivationAndVectorRetrievalAreOfflineAndRevisionScoped()
     {
         var root = Path.Combine(Path.GetTempPath(), "praxis-model-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
