@@ -41,6 +41,19 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
     setResponse(undefined); setStatus(undefined);
     if (repositoryId) void work(async () => setStatus(await call({ action: 'query', tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: 8000 } })));
   }, [repositoryId]);
+  useEffect(() => {
+    if (!repositoryId) return;
+    let disposed = false; let inFlight = false;
+    const timer = window.setInterval(() => {
+      if (busy || inFlight) return;
+      inFlight = true;
+      void call({ action: 'query', tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: 8000 } })
+        .then(next => { if (!disposed) setStatus(next); })
+        .catch(() => { /* Explicit actions report errors; background status polling preserves the last result. */ })
+        .finally(() => { inFlight = false; });
+    }, 3000);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [repositoryId, busy]);
   async function runTool(tool: string, arguments_: ObjectValue): Promise<void> {
     setResponse(await call({ action: 'query', tool, arguments: { ...arguments_, repositoryId, responseBudgetTokens: 8000 } }));
   }
@@ -81,6 +94,11 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
         onChange={setRepositoryId} placeholder="No registered repositories" />
       {selected && <>
         <p className="settings-hint">{selected.state} · Generation {selected.generation} · {status?.freshness?.state || 'Coverage unavailable'}</p>
+        {(Number(record(record(status?.data).jobsByState).pending) > 0 || Number(record(record(status?.data).jobsByState).leased) > 0) &&
+          <p className="settings-hint" role="status">Background work: {String(record(record(status?.data).jobsByState).pending)} queued · {String(record(record(status?.data).jobsByState).leased)} running</p>}
+        {items(record(status?.data).models).map(value => { const model = record(value); const coverage = record(model.coverage); return <p className="settings-hint" key={String(model.fingerprint)}>
+          Local model: {String(model.state)} · {String(coverage.current)}/{String(coverage.eligible)} current vectors
+        </p>; })}
         <div className="code-intelligence-actions">
           <button className="btn" type="button" disabled={busy} onClick={() => void work(async () => {
             await call({ action: 'index', repositoryId }); await refresh(); setStatus(await call({ action: 'query', tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: 8000 } }));
