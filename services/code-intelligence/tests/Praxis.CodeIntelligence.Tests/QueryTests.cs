@@ -34,6 +34,26 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public async Task SearchCountsRespectFiltersAndNewStructuralSnapshotsUnderConcurrentReads()
+    {
+        long Count(string kind, string? project = null) => Query("search_code", new()
+        {
+            ["query"] = "Example", ["mode"] = "lexical", ["filters"] = new JsonObject
+            { ["kinds"] = new JsonArray(kind), ["projectIds"] = project is null ? new JsonArray() : new JsonArray(project) }
+        })["data"]!["eligibleSymbolCount"]!.GetValue<long>();
+        Assert.Equal(1, Count("type")); Assert.Equal(4, Count("method"));
+        Assert.Equal(0, Count("type", "missing-project"));
+        File.AppendAllText(Path.Combine(root, "Example.cs"), " class AnotherType {} "); indexer.Index(repository);
+        var counts = await Task.WhenAll(Enumerable.Range(0, 8).Select(index => Task.Run(() => Count(index % 2 == 0 ? "type" : "method"))));
+        for (var index = 0; index < counts.Length; index++) Assert.Equal(index % 2 == 0 ? 2 : 4, counts[index]);
+        Assert.Equal(0, Count("type", "missing-project"));
+        // Policy changes revoke facts before a new structural generation exists.
+        indexer.Register(root, new(Excludes: ["private"]));
+        Assert.Equal(0, Count("type")); Assert.Equal(0, Count("method"));
+        indexer.Index(repository); Assert.Equal(2, Count("type"));
+    }
+
+    [Fact]
     public void NormativeDefaultLimitsAndEmptyRelationFiltersAreApplied()
     {
         var types = string.Join(" ", Enumerable.Range(0, 15).Select(i => "class DefaultEntry" + i + " {}"));

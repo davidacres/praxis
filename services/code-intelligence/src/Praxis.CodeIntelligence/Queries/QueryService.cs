@@ -10,7 +10,26 @@ namespace Praxis.CodeIntelligence.Queries;
 
 public sealed class QueryService(IndexDatabase database, ModelStore? models = null)
 {
+    public const int SearchCountCacheVersion = 1;
+    public const int SearchPlanVersion = 2;
     private readonly CursorCodec cursors = new();
+    private sealed record SearchCountKey(string Repository, long Generation, long Epoch, string? Context, string? Kinds, string? Projects, string? Profile);
+    private readonly Dictionary<SearchCountKey, long> searchCounts = new();
+    private readonly object searchCountLock = new();
+
+    private long SnapshotCount(SearchCountKey key, Func<long> read)
+    {
+        lock (searchCountLock) if (searchCounts.TryGetValue(key, out var count)) return count;
+        // The key comes from the caller's read transaction. Only scalar counts
+        // survive; neither connections nor old source/compiler snapshots are retained.
+        var value = read();
+        lock (searchCountLock)
+        {
+            if (searchCounts.Count >= 128) searchCounts.Clear();
+            searchCounts[key] = value;
+        }
+        return value;
+    }
     private static readonly JsonSerializerOptions Camel = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public JsonObject Execute(string tool, JsonObject arguments, IReadOnlySet<string> allowedRepositories, CancellationToken cancellationToken = default)
@@ -124,7 +143,9 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     if (string.IsNullOrWhiteSpace(query)) throw new QueryException("INVALID_ARGUMENT", "Search query cannot be blank.");
                     var tokens = query.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Take(32).Select(t => "\"" + t.Replace("\"", "\"\"") + "\"");
                     var fts = string.Join(" OR ", tokens);
-                    var rows = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(SELECT d.symbol_id,bm25(symbol_fts,10.0,3.0,2.0,1.0) AS score FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0) SELECT s.*,r.score FROM ranked r JOIN symbols s ON s.symbol_id=r.symbol_id WHERE s.repository_id=$1 AND ($2 IS NULL OR s.defining_context_id=$2) ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 300", fts, repositoryId, contextId, query);
+                    // Pin the matched-candidate side first. Otherwise SQLite may
+                    // walk every repository symbol and probe the tiny ranked set.
+                    var rows = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(SELECT d.symbol_id,bm25(symbol_fts,10.0,3.0,2.0,1.0) AS score FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0) SELECT s.*,r.score FROM ranked r CROSS JOIN symbols s ON s.symbol_id=r.symbol_id WHERE s.repository_id=$1 AND ($2 IS NULL OR s.defining_context_id=$2) ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 300", fts, repositoryId, contextId, query);
                     bool Eligible(JsonObject row)
                     {
                         var filters = arguments["filters"] as JsonObject;
@@ -211,10 +232,11 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     var languageFilter = (arguments["filters"] as JsonObject)?["languages"]?.AsArray();
                     var hasLanguage = languageFilter is null or { Count: 0 } || languageFilter.Any(x => x!.GetValue<string>() == "csharp");
                     const string scope = "s.repository_id=$0 AND s.external=0 AND ($1 IS NULL OR s.defining_context_id=$1) AND ($2 IS NULL OR s.kind IN(SELECT value FROM json_each($2))) AND ($3 IS NULL OR c.project_id IN(SELECT value FROM json_each($3)))";
-                    var eligible = hasLanguage ? Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE " + scope, repositoryId, contextId, kindsJson, projectsJson)) : 0L;
-                    var covered = embedded is null || !hasLanguage ? 0L : Convert.ToInt64(connection.Scalar(transaction,
+                    var countKey = new SearchCountKey(repositoryId, generation.Value, epoch.Value, contextId, kindsJson, projectsJson, null);
+                    var eligible = hasLanguage ? SnapshotCount(countKey, () => Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE " + scope, repositoryId, contextId, kindsJson, projectsJson))) : 0L;
+                    var covered = embedded is null || !hasLanguage ? 0L : SnapshotCount(countKey with { Profile = embedded.Fingerprint }, () => Convert.ToInt64(connection.Scalar(transaction,
                         "SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id JOIN contexts c ON c.context_id=s.defining_context_id JOIN representation_targets r ON r.symbol_id=s.symbol_id AND r.model_fingerprint=e.model_fingerprint WHERE " + scope
-                        + " AND e.model_fingerprint=$4 AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND (SELECT count(*) FROM vectors v WHERE v.set_id=e.set_id)=e.expected_chunks", repositoryId, contextId, kindsJson, projectsJson, embedded.Fingerprint));
+                        + " AND e.model_fingerprint=$4 AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND (SELECT count(*) FROM vectors v WHERE v.set_id=e.set_id)=e.expected_chunks", repositoryId, contextId, kindsJson, projectsJson, embedded.Fingerprint)));
                     if (embedded is not null && covered < eligible) warnings.Add(new JsonObject { ["code"] = "INDEX_STALE", ["message"] = "Vector coverage is incomplete; only complete current vector sets are eligible." });
                     data = new() { ["matches"] = matches, ["channelsUsed"] = channels, ["eligibleSymbolCount"] = eligible, ["vectorCoveredSymbolCount"] = covered }; break;
                 }

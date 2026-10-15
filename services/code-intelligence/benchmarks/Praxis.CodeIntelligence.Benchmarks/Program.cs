@@ -112,7 +112,7 @@ try
     };
     var report = new
     {
-        Version = 1, ThresholdDefinitionVersion = 2, VectorScorerVersion = ModelStore.VectorScorerVersion, StorageSchemaVersion = IndexDatabase.SchemaVersion, AdapterVersion = RoslynAnalyzer.AdapterVersion, OnnxInterOpThreads = 1, OnnxIntraOpThreads = Math.Clamp(Environment.ProcessorCount, 1, 4), TimestampUtc = DateTimeOffset.UtcNow, ExecutionMode = "Direct service API; owner/MCP transport excluded",
+        Version = 1, ThresholdDefinitionVersion = 2, SearchCountCacheVersion = QueryService.SearchCountCacheVersion, SearchPlanVersion = QueryService.SearchPlanVersion, VectorScorerVersion = ModelStore.VectorScorerVersion, StorageSchemaVersion = IndexDatabase.SchemaVersion, AdapterVersion = RoslynAnalyzer.AdapterVersion, OnnxInterOpThreads = 1, OnnxIntraOpThreads = Math.Clamp(Environment.ProcessorCount, 1, 4), TimestampUtc = DateTimeOffset.UtcNow, ExecutionMode = "Direct service API; owner/MCP transport excluded",
 #if DEBUG
         BuildConfiguration = "Debug",
 #else

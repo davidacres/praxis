@@ -134,6 +134,12 @@ The packaged IPC smoke now sends actual length-prefixed frames directly to the o
 
 The first real-model macOS arm64 50k synthetic direct-service run fails lexical/hybrid latency: p95 204.2217/1732.5997 ms against 100/500 ms. Independently measured maximum resident size is 1308540928 bytes, below 2 GiB. Full raw observations and protocol limits are in `docs/benchmarks/macos-arm64-50000-v5-hybrid.praxis.json` and the benchmark README. This failure leaves scale acceptance open; the prior passing 5k observations do not establish 50k behavior.
 
+## Search-count and lexical-plan checkpoint (15 October)
+
+Search counts are bounded scalar-only snapshot entries keyed by repository/generation/epoch/context/filters/profile. They invalidate for immediate policy clearing and vector refresh as well as structural edits. Candidate-first FTS joining removes a repository-wide symbol scan while preserving predicates and rank ordering.
+
+**94 C# tests passed, zero failures/skips; 109 actual responses validate across all 11 schemas.** The same 50k lexical-only fixture measured p95 100.806 ms with count reuse alone and **3.9272 ms** after the join-plan fix. Both raw reports and the failed intermediate run are retained in `docs/benchmarks`. This establishes a local single-run lexical improvement; model-enabled hybrid, full protocol and relevance acceptance remain open.
+
 ## Remaining code and acceptance work
 
 1. Execute the independent golden tokenizer/vector and representation source-span fixtures on Windows; macOS arm64 now passes these fixtures. Exact persisted chunk spans and selected source excerpts are implemented. Linux x64 passes the checked-in Python-reference fixture (10 token/span cases, 4 full vectors, absolute tolerance 1e-5/cosine >= 0.99999).

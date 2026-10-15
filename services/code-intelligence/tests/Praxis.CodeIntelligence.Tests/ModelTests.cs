@@ -203,6 +203,10 @@ public sealed class ModelTests
             var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root); indexer.Index(repository);
             using var store = new ModelStore(database, Path.Combine(root, "models"));
             var profile = store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!); store.Activate(repository, profile, CancellationToken.None);
+            var queries = new QueryService(database, store);
+            JsonObject Search() => queries.Execute("search_code", new JsonObject { ["repositoryId"] = repository, ["query"] = "Keep Run", ["mode"] = "vector" }, new HashSet<string> { repository });
+            var before = Search(); Assert.Null(before["error"]);
+            Assert.Equal(before["data"]!["eligibleSymbolCount"]!.GetValue<long>(), before["data"]!["vectorCoveredSymbolCount"]!.GetValue<long>());
             using (var connection = database.Open())
             using (var command = connection.CreateCommand())
             {
@@ -212,6 +216,8 @@ public sealed class ModelTests
             }
             File.WriteAllText(Path.Combine(root, "Changed.cs"), "class Changed { int Run() => 3; }");
             Assert.True(indexer.Index(repository).Changed);
+            var stale = Search(); Assert.Null(stale["error"]);
+            Assert.True(stale["data"]!["vectorCoveredSymbolCount"]!.GetValue<long>() < stale["data"]!["eligibleSymbolCount"]!.GetValue<long>());
             using (var connection = database.Open(readOnly: true))
             using (var command = connection.CreateCommand())
             {
@@ -223,6 +229,8 @@ public sealed class ModelTests
                 Assert.Equal(1L, command.ExecuteScalar());
             }
             store.Activate(repository, profile, CancellationToken.None);
+            var refreshed = Search(); Assert.Null(refreshed["error"]);
+            Assert.Equal(refreshed["data"]!["eligibleSymbolCount"]!.GetValue<long>(), refreshed["data"]!["vectorCoveredSymbolCount"]!.GetValue<long>());
             Assert.Empty(database.Check());
         }
         finally { Directory.Delete(root, recursive: true); }
