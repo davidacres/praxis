@@ -83,7 +83,7 @@ public static class OwnerService
                     { await Framing.WriteAsync(pipe, ServiceRuntime.Error("ACCESS_DENIED", "Owner authentication failed."), Framing.MaximumResponseBytes, deadline.Token); return; }
                     var request = frame["request"]!.AsObject(); var query = request["action"]?.GetValue<string>() == "query";
                     var repository = request["arguments"]?["repositoryId"]?.GetValue<string>() ?? request["repositoryId"]?.GetValue<string>() ?? "local";
-                    if (request["action"]?.GetValue<string>() is "pause" or "unregister") runtime.CancelRepositoryWork(repository);
+                    if (request["action"]?.GetValue<string>() is "pause" or "unregister" or "rebuild" or "relocate") runtime.CancelRepositoryWork(repository);
                     var admission = admissions.GetOrAdd(repository, _ => new Admission());
                     if (Interlocked.Increment(ref admission.Waiting) > 32)
                     {
