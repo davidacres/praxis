@@ -173,6 +173,63 @@ public sealed class IndexingTests : IDisposable
         Assert.NotEqual(call.ContextId, constructor.ContextId); Assert.Equal("resolved", call.Resolution);
     }
 
+    [Fact]
+    public void EditedPublicationMatchesACleanIndexAcrossCompilerContexts()
+    {
+        var sourceRoot = System.IO.Path.Combine(root, "source"); Directory.CreateDirectory(sourceRoot);
+        void SourceFile(string path, string text) => File.WriteAllText(System.IO.Path.Combine(sourceRoot, path), text);
+        var metadataPath = typeof(object).Assembly.Location;
+        var metadata = new MetadataInput(metadataPath, SourceFiles.Hash(File.ReadAllBytes(metadataPath)));
+        var manifest = new PassiveManifest(1, [new("library", "Library", ["Library.cs", "Partial.cs"], Metadata: [metadata]),
+            new("caller", "Caller", ["Caller.cs"], ["library"], [metadata])]);
+        SourceFile("Library.cs", "namespace App; public partial class Library { public static int Target(int value) => value; }");
+        SourceFile("Partial.cs", "namespace App; public partial class Library {}");
+        SourceFile("Caller.cs", "namespace App; class Caller { int Run() => Library.Target(1); }");
+        SourceFile("context.praxis.json", JsonSerializer.Serialize(manifest));
+        var edited = new RepositoryIndexer(database); var id = edited.Register(sourceRoot, new("context.praxis.json")); edited.Index(id);
+        SourceFile("Library.cs", "namespace App; public partial class Library { public static int Target(int renamed) => renamed + 2; }");
+        SourceFile("Addition.cs", "namespace App; public class Addition : Library {}");
+        File.Delete(System.IO.Path.Combine(sourceRoot, "Partial.cs"));
+        SourceFile("Caller.cs", "namespace App; class Caller { int Run() { System.Func<int> next = () => Library.Target(3); return next(); } }");
+        manifest = manifest with { Projects = [manifest.Projects[0] with { Sources = ["Library.cs", "Addition.cs"] }, manifest.Projects[1]] };
+        SourceFile("context.praxis.json", JsonSerializer.Serialize(manifest));
+        Assert.Equal(2, edited.Index(id).Generation);
+        var cleanDatabase = new IndexDatabase(System.IO.Path.Combine(root, "clean", "index.db")); cleanDatabase.Initialize();
+        using (var connection = cleanDatabase.Open())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "INSERT INTO repositories(repository_id,canonical_root,path_policy,config_json) VALUES($id,$root,$policy,$config)";
+            command.Parameters.AddWithValue("$id", id); command.Parameters.AddWithValue("$root", SourceFiles.CanonicalDirectory(sourceRoot));
+            command.Parameters.AddWithValue("$policy", OperatingSystem.IsWindows() ? "caseInsensitive" : "caseSensitive");
+            command.Parameters.AddWithValue("$config", JsonSerializer.Serialize(new RepositoryConfig("context.praxis.json"))); command.ExecuteNonQuery();
+        }
+        Assert.Equal(1, new RepositoryIndexer(cleanDatabase).Index(id).Generation);
+        Assert.Equal(StructuralSnapshot(cleanDatabase), StructuralSnapshot(database));
+        Assert.Empty(database.Check()); Assert.Empty(cleanDatabase.Check());
+    }
+
+    private static string StructuralSnapshot(IndexDatabase database)
+    {
+        string[] queries = [
+            "SELECT symbol_id,defining_context_id,descriptor_json,kind,name,qualified_name,signature,revision,external,resolution,containment_id FROM symbols",
+            "SELECT project_id,project_key,relative_path,language FROM projects",
+            "SELECT context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,resolution,capabilities_json FROM contexts",
+            "SELECT relative_path,path_key,observed_hash,size_bytes,language,role,state FROM files",
+            "SELECT l.symbol_id,l.context_id,f.relative_path,l.content_hash,l.start_offset,l.end_offset,l.start_line,l.start_character,l.end_line,l.end_character,l.role FROM locations l JOIN files f ON f.file_id=l.file_id",
+            "SELECT o.occurrence_id,o.context_id,f.relative_path,o.owner_symbol_id,o.target_symbol_id,o.content_hash,o.start_offset,o.end_offset,o.range_json,o.resolution FROM occurrences o JOIN files f ON f.file_id=o.file_id",
+            "SELECT e.edge_id,e.owner_context_id,f.relative_path,e.source_symbol_id,e.target_symbol_id,e.occurrence_id,e.kind,e.provenance,e.resolution,e.input_revision,e.evidence_key FROM edges e LEFT JOIN files f ON f.file_id=e.owner_file_id",
+            "SELECT symbol_id,input_revision,name,signature,documentation,description FROM search_documents",
+            "SELECT d.context_id,f.relative_path,d.code,d.severity,d.message,d.range_json FROM diagnostics d LEFT JOIN files f ON f.file_id=d.file_id"
+        ];
+        var rows = new List<string>(); using var connection = database.Open(readOnly: true);
+        for (var query = 0; query < queries.Length; query++)
+        {
+            using var command = connection.CreateCommand(); command.CommandText = queries[query]; using var reader = command.ExecuteReader();
+            while (reader.Read()) rows.Add(query + ":" + JsonSerializer.Serialize(Enumerable.Range(0, reader.FieldCount).Select(column => reader.IsDBNull(column) ? null : reader.GetValue(column)).ToArray()));
+        }
+        return string.Join("\n", rows.Order(StringComparer.Ordinal));
+    }
+
     private static SourceInput Source(string path, string text) { var bytes = Encoding.UTF8.GetBytes(text); return new(path, SourceFiles.Hash(bytes), bytes, text); }
     public void Dispose() => Directory.Delete(root, recursive: true);
 }
