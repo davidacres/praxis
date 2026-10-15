@@ -64,7 +64,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         transaction.Commit();
     }
 
-    public IndexResult Index(string id, CancellationToken cancellationToken = default)
+    public IndexResult Index(string id, CancellationToken cancellationToken = default, string? leaseToken = null)
     {
         var repository = Get(id);
         if (repository.State == "paused") throw new InvalidOperationException("INDEX_BUSY: repository is paused.");
@@ -93,6 +93,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             throw;
         }
         using var connection = database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
+        if (leaseToken is not null) Host.DurableScheduler.AssertLease(connection, transaction, leaseToken);
         if (Convert.ToInt64(connection.Scalar(transaction, "SELECT query_epoch FROM repositories WHERE repository_id=$0", id)) != repository.QueryEpoch)
             throw new InvalidOperationException("INDEX_STALE: repository state changed during analysis.");
         var oldHash = string.Join("|", ReadContextHashes(connection, transaction, id));
@@ -147,6 +148,18 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 diagnostic.Code, diagnostic.Severity, diagnostic.Message, diagnostic.Range is null ? null : JsonSerializer.Serialize(diagnostic.Range), generation);
         connection.Execute(transaction, "UPDATE repositories SET structural_generation=$0,desired_revision=$0,query_epoch=query_epoch+1,state='ready',last_reconciled_utc=$1 WHERE repository_id=$2",
             generation, DateTimeOffset.UtcNow.ToString("O"), id);
+        // Structural facts and refresh work commit together: a crash cannot strand an active profile without a job.
+        connection.Execute(transaction, "UPDATE jobs SET state='obsolete',lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL WHERE repository_id=$0 AND kind='embed' AND state IN('pending','leased')", id);
+        var profiles = new List<string>();
+        using (var command = connection.Command(transaction, "SELECT model_fingerprint FROM repository_models WHERE repository_id=$0 AND state IN('active','building')", id))
+        using (var reader = command.ExecuteReader()) while (reader.Read()) profiles.Add(reader.GetString(0));
+        foreach (var profile in profiles)
+        {
+            var key = Identity.Id("", profile, generation);
+            connection.Execute(transaction, "INSERT INTO jobs(job_id,repository_id,kind,input_key,payload_json,desired_revision,state,available_utc) VALUES($0,$1,'embed',$2,$3,$4,'pending',$5) ON CONFLICT(repository_id,kind,input_key) DO NOTHING",
+                Identity.Id("pci:job:", id, "embed", key), id, key, JsonSerializer.Serialize(new { fingerprint = profile }), generation, DateTimeOffset.UtcNow.ToString("O"));
+        }
+        if (leaseToken is not null) Host.DurableScheduler.AssertLease(connection, transaction, leaseToken);
         cancellationToken.ThrowIfCancellationRequested(); transaction.Commit();
         return new(id, generation, sources.Count, analysis.Symbols.Count, true);
     }
