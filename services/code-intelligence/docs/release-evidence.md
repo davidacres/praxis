@@ -1,10 +1,10 @@
 # Release evidence and remaining gates
 
-Updated 15 October 2026. M3 implementation is in progress; this document is not a release approval.
+Updated 16 October 2026. M3 implementation is in progress; this document is not a release approval.
 
 | Check | Evidence | Result |
 |---|---|---|
-| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 97 local / 96 native CI passed,0 failed,0 skipped |
+| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 97 local and on each native CI host passed,0 failed,0 skipped |
 | Source/context | Raw UTF16 hashes, path policy, passive no-execution, SDK capture, generated support and stale/deleted inputs | Covered by targeted tests |
 | Durable jobs | Coalescing, backoff, heartbeat, expired owner recovery, wrong-token publication, pause and atomic refresh enqueue | Covered by targeted tests |
 | Automatic embeddings | Runtime registration/index, queued activation, real inference, edit, empty stale vector results, background refresh | Covered by native model fixture |
@@ -22,9 +22,9 @@ Updated 15 October 2026. M3 implementation is in progress; this document is not 
 
 | Target | Configured | Executed evidence |
 |---|---|---|
-| Linux x64 | Yes | 94 C# tests, 109 schema responses, native ONNX, self-contained package and owner-process IPC |
-| Windows x64 | Yes | 94 C# tests, 109 schema responses, native ONNX, self-contained package and owner-process IPC |
-| macOS arm64 | Yes | 94 C# tests, 109 schema responses, golden/native ONNX, self-contained package and owner-process IPC |
+| Linux x64 | Yes | 97 C# tests, 109 schema responses, native ONNX, self-contained package and owner-process IPC |
+| Windows x64 | Yes | 97 C# tests, 109 schema responses, native ONNX, self-contained package and owner-process IPC |
+| macOS arm64 | Yes | 97 C# tests, 109 schema responses, golden/native ONNX, self-contained package and owner-process IPC |
 | Linux arm64/macOS x64 | Additional build targets | None in this environment |
 | Claude Code/Codex/Copilot/Antigravity | Existing MCP routing plus explicit destination grants | Real native stdio MCP SDK invocation passes on macOS; actual agent adapters remain unqualified |
 
@@ -182,3 +182,11 @@ Read-mapping version 1 requests at most **128 MiB** of file-backed SQLite mappin
 [CI run 38821489666](https://github.com/davidacres/praxis/actions/runs/38821489666) at `d788beb7` passed Windows x64, Linux x64 and macOS arm64 with 97 C# tests, 109 schema responses, native package/owner lifecycle and the 10 evaluator checks on each host. The mapping change is natively verified; the 50k latency rerun is still pending.
 
 The actual Maze local-model run has complete current vector coverage for 14,298 source symbols and a stable snapshot across 80 searches. The 35 positive tuning queries have macro Recall@10 0.80 hybrid versus 0.4571428571 lexical; five negative cases are excluded from recall. All labels remain unreviewed tuning data, the compiler context is syntax-only, and no held-out or cross-project acceptance is claimed. See `evaluations/maze-model-tuning-results.praxis.json` for the actual per-case results and failed declared gates.
+
+## Final bounded-mapping measurement and handover — 16 October
+
+`benchmarks/macos-arm64-50000-mmap1-hybrid.praxis.json` records the final same-corpus/model/reference 50k run: lexical p95 **3.7177 ms**, hybrid p95 **681.9115 ms**, direct body edit **14931.5108 ms**, semantic refresh **1898.8956 ms**. Independent maximum RSS is **1623851008 bytes**, below 2 GiB; runtime RSS remains null. Hybrid still **fails** 500 ms. Observed p95 was 1117.9363 ms before scorer/mapping changes, 1026.5347 ms with scorer 3, and 681.9115 ms with bounded mapping; these individual observations do not establish a repeated-run causal estimate or full protocol acceptance.
+
+Cold vector construction overlapped the separate Maze model run and was explicitly paused until Maze finished. Therefore initial vector/build elapsed times are preserved as raw observations but are **not controlled cold-start comparisons**. Capacity warmups and timed query/edit phases ran after Maze and other local builds/tests had finished. No production process remains paused; the benchmark and temporary Maze owner exited.
+
+All implementation changes are pushed to `codex/code-intelligence-recovery`. Last implementation commit `d788beb7` has green three-host CI (97 C# tests, 109 responses and 10 evaluator checks per host); later commits preserve documentation/corpus evidence. M3 is **not complete**. Immediate work remains: close the 500 ms hybrid target under the full repeated/category protocol; independently prepare/freeze 80 held-out Maze queries and review all labels/split leakage; obtain complete trusted compiler contexts and exercise cross-project/stale scenarios; perform abstention and 30 explanation reviews. Targeted API/dependency invalidation, configuration-only project/package dependencies, full UI/platform/accessibility and actual provider-adapter qualification remain broader release gates described above.

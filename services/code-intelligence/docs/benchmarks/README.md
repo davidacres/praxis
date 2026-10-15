@@ -65,3 +65,9 @@ Both fixtures have corpus hash `sha256:f14bc8736fbc2bbcf4c984a76c488edf6c55324d0
 ## Exact scorer version 3 — 16 October
 
 `macos-arm64-50000-scorer3-hybrid.praxis.json` preserves the same corpus/model/reference fixture with hardware-accelerated exact scoring. Lexical p95 is 3.6989 ms and hybrid p95 is 1026.5347 ms: hybrid still **fails** 500 ms. Independent maximum RSS is 1783087104 bytes (below 2 GiB); runtime RSS remains null. Initial index 17409.7693 ms, initial vectors 532400.1504 ms, body edit 16202.3371 ms and vector refresh 2157.7971 ms are raw observations. This precedes bounded SQLite reader mapping. Cold vectors overlapped focused local test builds and Maze tuning preparation; timed search/edit phases were quiet. This one synthetic run does not establish five-run/category/watcher-inclusive/real-repository acceptance.
+
+## Bounded reader mapping — 16 October
+
+`macos-arm64-50000-mmap1-hybrid.praxis.json` records read-mapping version 1 (requested maximum 134217728 bytes), scorer 3, search plan 2 and count cache 1 on the same 50k corpus/model/reference. Lexical p95 is **3.7177 ms**; hybrid p95 is **681.9115 ms**, still **fails** 500 ms. Independent maximum RSS is **1623851008 bytes** (below 2 GiB); runtime RSS remains null. Body edit 14931.5108 ms and semantic refresh 1898.8956 ms are direct 50k observations, not the 5k watcher-inclusive thresholds.
+
+Cold vector construction overlapped the separate Maze model preparation and was explicitly paused to let that workload finish. Initial index/vector values remain raw observations and must not be used as controlled cold-start comparisons. Timed capacity warmups, queries and edit/refresh phases ran afterward without other model/build/test workloads. The benchmark exited and its fixture was removed. This is one synthetic exact-name four-reader run, not full five-run/category/concurrent-edit or held-out-relevance acceptance.
