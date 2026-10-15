@@ -12,7 +12,7 @@
     "check-secrets": "scripts/check-secrets.sh --tree",
     "hooks:install": "git config core.hooksPath .githooks",
     "check-types": "npm run check-types --workspaces --if-present",
-    "build": "npm run build:core && npm run build:mobile-protocol && npm run build:mobile-relay && npm run build:renderer && npm run desktop:copy-renderer && npm run build:desktop",
+    "build": "npm run build:core && npm run build:code-intelligence && npm run build:mobile-protocol && npm run build:mobile-relay && npm run build:renderer && npm run desktop:copy-renderer && npm run build:desktop",
     "test": "npm run build && npm run test:core && npm run test:skills && npm run test:antigravity-consent && npm run test:praxis-contracts && npm run test:mobile-protocol && npm run test:mobile-relay && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop:mobile && npm run test:desktop && npm run test:desktop:themes",
     "build:core": "npm run compile --workspace=@praxis/core",
     "test:core": "npm test --workspace=@praxis/core",
@@ -67,7 +67,10 @@
     "release:local:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-signed-installer.ps1",
     "release:local:upload": "./scripts/publish-desktop-release.sh",
     "publish:packages": "npm publish --workspace=@praxis/core --workspace=@praxis/mobile-protocol",
-    "release:create": "node scripts/create-release.mjs"
+    "release:create": "node scripts/create-release.mjs",
+    "build:code-intelligence": "node scripts/build-service.mjs",
+    "test:code-intelligence": "node scripts/build-service.mjs --test",
+    "package:code-intelligence": "node scripts/build-service.mjs --package"
   },
   "overrides": {
     "diff": "^8.0.4",
@@ -81,7 +84,7 @@
     "proxy-addr": "^2.0.8",
     "source-map-js": "^1.2.2"
   },
-  "//optionalDependencies": "vite 8 bundles with rolldown and minifies CSS with lightningcss — both load a native binding. npm prunes the non-host platform bindings of TRANSITIVE optional deps from a lockfile generated on one OS (npm/cli#4828), so a lockfile regenerated on macOS left `npm ci` on the Linux CI runner with no binding to load and `vite build` crashed with 'Cannot find native binding'. Declaring the bindings here as direct optional deps forces every listed platform into package-lock.json regardless of the OS the lockfile is regenerated on; npm still skips installing the ones that do not match the host. Keep these versions matched to the resolved `rolldown` / `lightningcss` in the lockfile — a mismatch fails `npm ci` loudly instead of silently.",
+  "//optionalDependencies": "vite 8 bundles with rolldown and minifies CSS with lightningcss \u2014 both load a native binding. npm prunes the non-host platform bindings of TRANSITIVE optional deps from a lockfile generated on one OS (npm/cli#4828), so a lockfile regenerated on macOS left `npm ci` on the Linux CI runner with no binding to load and `vite build` crashed with 'Cannot find native binding'. Declaring the bindings here as direct optional deps forces every listed platform into package-lock.json regardless of the OS the lockfile is regenerated on; npm still skips installing the ones that do not match the host. Keep these versions matched to the resolved `rolldown` / `lightningcss` in the lockfile \u2014 a mismatch fails `npm ci` loudly instead of silently.",
   "optionalDependencies": {
     "@rolldown/binding-darwin-arm64": "1.2.5",
     "@rolldown/binding-darwin-x64": "1.2.5",
