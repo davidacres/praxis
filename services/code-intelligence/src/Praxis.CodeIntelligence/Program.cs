@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Praxis.CodeIntelligence.Host;
 using Praxis.CodeIntelligence.Storage;
+using Praxis.CodeIntelligence.Indexing;
 
 var arguments = args.ToList();
 string? Option(string name)
@@ -13,6 +14,7 @@ try
 {
     var directory = Option("--data") ?? HostPaths.DefaultDataDirectory();
     var manifest = Option("--manifest"); var excludes = Option("--exclude"); var client = Option("--client");
+    var output = Option("--output"); var configuration = Option("--configuration"); var framework = Option("--framework"); var restore = arguments.Remove("--restore");
     if (arguments.Count == 0 || arguments[0] is "help" or "--help")
     {
         Console.WriteLine("Praxis Code Intelligence\n" +
@@ -21,10 +23,19 @@ try
             "status <repository> | search <repository> <query> | query <tool> <JSON arguments>\n" +
             "grant <repository> --client <provider> | revoke <repository> --client <provider>\n" +
             "rpc --client <provider> (one tool/arguments JSON object on stdin)\n" +
-            "doctor | backup <destination> | serve\nAll commands accept --data <private directory>. No implicit builds or restore."); return 0;
+            "capture <root> <relative.csproj> [--output context.praxis.json] [--configuration Debug] [--framework net10.0] [--restore]\n" +
+            "model-install <bundle> | model-activate <repository> <fingerprint>\n" +
+            "alias <repository> <symbolId> <phrase>\n" +
+            "doctor | backup <destination> | serve\nAll commands accept --data <private directory>. Normal indexing never builds or restores projects."); return 0;
     }
     if (arguments[0] == "init" && arguments.Count == 2) { new IndexDatabase(arguments[1]).Initialize(); Console.WriteLine("Index initialized."); return 0; }
     using var cancellation = new CancellationTokenSource(); Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
+    if (arguments[0] == "capture" && arguments.Count == 3)
+    {
+        Console.Error.WriteLine("Explicit context capture evaluates projects and MSBuild targets and may execute project code." + (restore ? " Restore is enabled and may contact configured package feeds." : " Restore is disabled."));
+        var captured = await ContextCapture.CaptureAsync(arguments[1], arguments[2], output ?? "context.praxis.json", configuration ?? "Debug", framework, restore, cancellation.Token);
+        Console.WriteLine(new JsonObject { ["manifest"] = captured }.ToJsonString()); return 0;
+    }
     if (arguments[0] == "serve") { await OwnerService.RunAsync(directory, cancellation.Token); return 0; }
     JsonObject request = arguments[0] switch
     {
@@ -38,6 +49,7 @@ try
         "backup" when arguments.Count == 2 => new() { ["action"] = "backup", ["destination"] = arguments[1] },
         "model-install" when arguments.Count == 2 => new() { ["action"] = "model-install", ["bundle"] = arguments[1] },
         "model-activate" when arguments.Count == 3 => new() { ["action"] = "model-activate", ["repositoryId"] = arguments[1], ["fingerprint"] = arguments[2] },
+        "alias" when arguments.Count == 4 => new() { ["action"] = "alias", ["repositoryId"] = arguments[1], ["symbolId"] = arguments[2], ["phrase"] = arguments[3] },
         "rpc" when arguments.Count == 1 && client is not null => await ReadRpc(client),
         "local-rpc" when arguments.Count == 1 => await ReadRpc(null),
         _ => throw new ArgumentException("Invalid command or arguments; run help.")
