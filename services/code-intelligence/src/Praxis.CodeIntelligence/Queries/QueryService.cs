@@ -38,7 +38,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             var contextId = Text(arguments, "contextId");
             var offset = Text(arguments, "cursor") is string cursor ? cursors.Read(cursor, tool, arguments, epoch.Value) : 0;
             var limit = Number(arguments, "limit", tool is "search_code" or "find_symbol" ? 20 : 100);
-            var more = false;
+            var more = false; var contentTruncated = false;
             JsonObject Symbol(string symbolId)
             {
                 var row = Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND symbol_id=$1", repositoryId, symbolId).SingleOrDefault()
@@ -48,6 +48,12 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 var locations = Rows(connection, transaction, "SELECT l.*,f.relative_path FROM locations l JOIN files f ON f.file_id=l.file_id WHERE symbol_id=$0 ORDER BY f.relative_path,start_offset LIMIT 1000", symbolId);
                 foreach (var location in locations) AddEvidence(location);
                 var resolution = row["resolution"]!.GetValue<string>();
+                if (row["external"]!.GetValue<long>() == 1)
+                {
+                    var evidenceId = Identity.Id("pci:metadata:", symbolId);
+                    evidence[evidenceId] = new JsonObject { ["id"] = evidenceId, ["provenance"] = "metadata", ["resolution"] = resolution,
+                        ["referenceIdentity"] = row["descriptor_json"]!.DeepClone(), ["description"] = row["signature"]!.DeepClone() };
+                }
                 return new JsonObject
                 {
                     ["symbolId"] = symbolId, ["contextId"] = row["defining_context_id"]?.DeepClone(), ["kind"] = row["kind"]!.DeepClone(),
@@ -206,7 +212,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     var fragments = new JsonArray(); var remainingLines = Number(arguments, "maxLines", 80);
                     foreach (var location in locations)
                     {
-                        if (remainingLines <= 0) break; cancellationToken.ThrowIfCancellationRequested();
+                        if (remainingLines <= 0) { contentTruncated = true; break; } cancellationToken.ThrowIfCancellationRequested();
                         var source = SourceFiles.Read(repository["canonical_root"]!.GetValue<string>(), Text(location, "relative_path")!, cancellationToken);
                         var expected = Text(arguments, "expectedContentHash") ?? Text(location, "content_hash");
                         if (source.Hash != expected || source.Hash != Text(location, "content_hash")) throw new QueryException("SOURCE_CHANGED", "Source changed since indexing. Reindex and refresh the location.");
@@ -216,6 +222,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         var lineStart = range["start"]!["line"]!.GetValue<int>(); var lineEnd = range["end"]!["line"]!.GetValue<int>();
                         if (lineEnd - lineStart + 1 > remainingLines)
                         {
+                            contentTruncated = true;
                             end = sourceText.Lines[lineStart + remainingLines - 1].EndIncludingLineBreak;
                             var position = sourceText.Lines.GetLinePosition(end); range["end"] = new JsonObject { ["line"] = position.Line, ["character"] = position.Character };
                         }
@@ -231,7 +238,8 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 case "explain_symbol":
                 {
                     var symbol = Symbol(Text(arguments, "symbolId")!); var declarations = symbol["declarations"]!.AsArray();
-                    var provenance = Text(symbol, "resolution") == "syntaxOnly" ? "syntax" : "compiler";
+                    var provenance = symbol["external"]!.GetValue<bool>() ? "metadata" : Text(symbol, "resolution") == "syntaxOnly" ? "syntax" : "compiler";
+                    if (symbol["external"]!.GetValue<bool>()) declarations = new JsonArray(Identity.Id("pci:metadata:", Text(symbol, "symbolId")));
                     data = new() { ["facts"] = new JsonArray(new JsonObject { ["kind"] = "declaration", ["text"] = symbol["signature"]!.DeepClone(),
                             ["evidenceIds"] = declarations.DeepClone(), ["provenance"] = provenance, ["resolution"] = symbol["resolution"]!.DeepClone(), ["sourceRevision"] = symbol["symbolRevision"]!.DeepClone() }),
                         ["description"] = new JsonObject { ["text"] = "Declared " + Text(symbol, "kind") + " " + Text(symbol, "qualifiedName") + ". " + Text(symbol, "signature"),
@@ -270,7 +278,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                             if (arguments["edgeKinds"] is JsonArray kinds && !kinds.Any(k => k!.GetValue<string>() == Text(row, "kind"))) continue;
                             var next = Text(row, incoming ? "source_symbol_id" : "target_symbol_id")!;
                             if (edges.Count >= maxEdges || (!nodes.ContainsKey(next) && nodes.Count >= maxNodes))
-                            { boundaries[item.Id] = new() { ["symbolId"] = item.Id, ["reason"] = "graphBudget" }; continue; }
+                            { contentTruncated = true; boundaries[item.Id] = new() { ["symbolId"] = item.Id, ["reason"] = "graphBudget" }; continue; }
                             if (!nodes.ContainsKey(next)) { nodes[next] = Symbol(next); queue.Enqueue((next, item.Depth + 1)); }
                             edges[Text(row, "edge_id")!] = Relation(row);
                         }
@@ -318,11 +326,87 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 ["schemaVersion"] = "1.2", ["repositoryId"] = repositoryId, ["indexGeneration"] = generation, ["queryEpoch"] = epoch,
                 ["freshness"] = new JsonObject { ["state"] = state == "ready" ? (HasSyntax(connection, transaction, repositoryId) ? "partial" : "current") : state == "unknown" ? "unknown" : "stale",
                     ["lastReconciledUtc"] = repository["last_reconciled_utc"]?.DeepClone(), ["pendingContextCount"] = state == "ready" ? 0 : 1, ["basis"] = "observedSnapshot" },
-                ["data"] = data, ["evidence"] = Array(evidence.Values.Select(v => (JsonNode?)v)), ["warnings"] = warnings, ["truncated"] = more,
+                ["data"] = data, ["evidence"] = Array(evidence.Values.Select(v => (JsonNode?)v)), ["warnings"] = warnings, ["truncated"] = more || contentTruncated,
                 ["nextCursor"] = more ? cursors.Create(tool, arguments, epoch.Value, offset + limit) : null
             };
-            if (Encoding.UTF8.GetByteCount(envelope.ToJsonString()) > Math.Min(60_000, Number(arguments, "responseBudgetTokens", 4000) * 3))
-                throw new QueryException("INPUT_TOO_LARGE", "Response exceeds the requested budget; reduce limit, maxLines, or graph bounds.");
+            var budget = Math.Min(60_000, Number(arguments, "responseBudgetTokens", 4000) * 3);
+            var collection = tool == "search_code" ? data["matches"] as JsonArray
+                : tool is "find_symbol" or "get_callers" or "get_callees" or "find_related" ? data["items"] as JsonArray : null;
+            var budgetTrimmed = false;
+            while (Encoding.UTF8.GetByteCount(envelope.ToJsonString()) > budget && collection is { Count: > 1 })
+            {
+                collection.RemoveAt(collection.Count - 1);
+                if (!budgetTrimmed)
+                    warnings.Add(new JsonObject { ["code"] = "RESPONSE_TRUNCATED", ["message"] = "Page reduced to fit the response budget; continue with nextCursor.", ["retryable"] = false });
+                budgetTrimmed = true;
+                envelope["truncated"] = true;
+                envelope["nextCursor"] = cursors.Create(tool, arguments, epoch.Value, offset + collection.Count);
+                // Declaration and relation evidence must stay complete for every retained item.
+                // Remove evidence belonging only to omitted items, never a referenced record.
+                var referenced = new HashSet<string>(StringComparer.Ordinal);
+                CollectStrings(data, referenced);
+                envelope["evidence"] = Array(evidence.Where(pair => referenced.Contains(pair.Key)).Select(pair => (JsonNode?)pair.Value.DeepClone()));
+            }
+            if (tool == "trace_flow" && data["nodes"] is JsonArray graphNodes && data["edges"] is JsonArray graphEdges)
+            {
+                var boundaries = data["boundaries"]!.AsArray();
+                var unresolved = data["unresolvedOccurrences"]!.AsArray();
+                var rootId = Text(arguments, "symbolId")!;
+                var graphTrimmed = false;
+                while (Encoding.UTF8.GetByteCount(envelope.ToJsonString()) > budget)
+                {
+                    if (graphNodes.Count > 1)
+                    {
+                        var removed = graphNodes[^1]!["symbolId"]!.GetValue<string>();
+                        graphNodes.RemoveAt(graphNodes.Count - 1);
+                        for (var i = graphEdges.Count - 1; i >= 0; i--)
+                            if (Text(graphEdges[i]!.AsObject(), "sourceSymbolId") == removed || Text(graphEdges[i]!.AsObject(), "targetSymbolId") == removed) graphEdges.RemoveAt(i);
+                        for (var i = boundaries.Count - 1; i >= 0; i--)
+                            if (Text(boundaries[i]!.AsObject(), "symbolId") == removed) boundaries.RemoveAt(i);
+                    }
+                    else if (graphEdges.Count > 0) graphEdges.RemoveAt(graphEdges.Count - 1);
+                    else if (unresolved.Count > 0) unresolved.RemoveAt(unresolved.Count - 1);
+                    else break;
+                    if (!graphTrimmed)
+                    {
+                        warnings.Add(new JsonObject { ["code"] = "RESPONSE_TRUNCATED", ["message"] = "Graph reduced to fit the response budget; request narrower bounds for additional paths.", ["retryable"] = false });
+                        if (!boundaries.Any(b => b!["symbolId"]!.GetValue<string>() == rootId))
+                            boundaries.Add(new JsonObject { ["symbolId"] = rootId, ["reason"] = "graphBudget" });
+                    }
+                    graphTrimmed = true; envelope["truncated"] = true;
+                    var referenced = new HashSet<string>(StringComparer.Ordinal); CollectStrings(data, referenced);
+                    envelope["evidence"] = Array(evidence.Where(pair => referenced.Contains(pair.Key)).Select(pair => (JsonNode?)pair.Value.DeepClone()));
+                }
+            }
+            if (tool == "get_source" && data["fragments"] is JsonArray sourceFragments)
+            {
+                while (Encoding.UTF8.GetByteCount(envelope.ToJsonString()) > budget && sourceFragments.Count > 0)
+                {
+                    var fragment = sourceFragments[^1]!.AsObject();
+                    var text = fragment["text"]!.GetValue<string>();
+                    if (text.Length <= 1)
+                    {
+                        if (sourceFragments.Count == 1) break;
+                        sourceFragments.RemoveAt(sourceFragments.Count - 1);
+                    }
+                    else
+                    {
+                        var length = text.Length / 2;
+                        if (length > 0 && char.IsHighSurrogate(text[length - 1])) length--;
+                        if (length == 0) break;
+                        text = text[..length];
+                        fragment["text"] = text;
+                        var position = Microsoft.CodeAnalysis.Text.SourceText.From(text).Lines.GetLinePosition(length);
+                        var start = fragment["range"]!["start"]!;
+                        fragment["range"]!["end"] = new JsonObject {
+                            ["line"] = start["line"]!.GetValue<int>() + position.Line,
+                            ["character"] = position.Line == 0 ? start["character"]!.GetValue<int>() + position.Character : position.Character };
+                    }
+                    envelope["truncated"] = true;
+                }
+            }
+            if (Encoding.UTF8.GetByteCount(envelope.ToJsonString()) > budget)
+                throw new QueryException("INPUT_TOO_LARGE", "A response item exceeds the requested budget; increase the budget or reduce source/graph bounds.");
             transaction.Commit(); return envelope;
         }
         catch (Exception ex) when (ex is QueryException or KeyNotFoundException or IOException or UnauthorizedAccessException or OperationCanceledException or DecoderFallbackException)
@@ -331,6 +415,18 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             return new JsonObject { ["schemaVersion"] = "1.2", ["repositoryId"] = repositoryId, ["indexGeneration"] = generation, ["queryEpoch"] = epoch,
                 ["error"] = new JsonObject { ["code"] = code, ["message"] = ex is QueryException ? ex.Message : "Requested source or operation is unavailable.", ["retryable"] = code is "CANCELLED" or "INDEX_STALE" } };
         }
+    }
+
+    private static void CollectStrings(JsonNode? node, HashSet<string> values)
+    {
+        if (node is JsonObject obj)
+        {
+            if (obj["external"] is JsonValue external && external.TryGetValue<bool>(out var isExternal) && isExternal && Text(obj, "symbolId") is string symbolId)
+                values.Add(Identity.Id("pci:metadata:", symbolId));
+            foreach (var item in obj) CollectStrings(item.Value, values);
+        }
+        else if (node is JsonArray array) foreach (var item in array) CollectStrings(item, values);
+        else if (node is JsonValue value && value.TryGetValue<string>(out var text)) values.Add(text);
     }
 
     private static List<JsonObject> Rows(SqliteConnection connection, SqliteTransaction transaction, string sql, params object?[] arguments)
