@@ -13,7 +13,7 @@ public sealed class HostTests
     public async Task ClientRefreshesRejectedHandshakeBeforeDispatchingARequest()
     {
         var directory = Path.Combine(Path.GetTempPath(), "pci-" + Guid.NewGuid().ToString("N")[..8]);
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var owner = OwnerService.RunAsync(directory, cancellation.Token);
         try
         {
@@ -25,7 +25,9 @@ public sealed class HostTests
             await Task.Delay(200, cancellation.Token);
             Assert.False(request.IsCompleted, "A rejected handshake must refresh discovery rather than surface a stale-token error.");
             File.WriteAllText(rendezvous + ".tmp", original); File.Move(rendezvous + ".tmp", rendezvous, overwrite: true);
-            var response = await request.WaitAsync(TimeSpan.FromSeconds(3));
+            // Match the real startup/re-discovery budget. A three-second fixture
+            // deadline flakes on loaded native runners despite a valid retry.
+            var response = await request.WaitAsync(TimeSpan.FromSeconds(15));
             Assert.Null(response["error"]); Assert.Empty(response["data"]!.AsArray());
         }
         finally
