@@ -11,11 +11,17 @@ public sealed class RepositoryMonitor : IDisposable
     private readonly Dictionary<string, DateTimeOffset> retryAfter = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> reconciled = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Dirty> dirty = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> broken = new(StringComparer.Ordinal);
 
     public IReadOnlyList<string> Poll(IReadOnlyList<RepositoryRecord> repositories)
     {
         var now = DateTimeOffset.UtcNow; var live = repositories.Where(r => r.State != "paused").ToDictionary(r => r.Id, StringComparer.Ordinal);
-        foreach (var id in watchers.Keys.Where(id => !live.ContainsKey(id)).ToArray()) { watchers[id].Dispose(); watchers.Remove(id); }
+        foreach (var id in watchers.Keys.Where(id => !live.TryGetValue(id, out var repository)
+            || watchers[id].Path != repository.Root || !Directory.Exists(repository.Root) || broken.ContainsKey(id)).ToArray())
+        {
+            watchers[id].Dispose(); watchers.Remove(id); broken.TryRemove(id, out _);
+            retryAfter.Remove(id); reconciled.Remove(id); dirty.TryRemove(id, out _);
+        }
         foreach (var id in reconciled.Keys.Where(id => !live.ContainsKey(id)).ToArray()) { reconciled.Remove(id); retryAfter.Remove(id); dirty.TryRemove(id, out _); }
         foreach (var repository in live.Values)
         {
@@ -26,7 +32,7 @@ public sealed class RepositoryMonitor : IDisposable
                     var watcher = new FileSystemWatcher(repository.Root) { IncludeSubdirectories = true, NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size };
                     watcher.Changed += (_, e) => Changed(repository, e.FullPath); watcher.Created += (_, e) => Changed(repository, e.FullPath);
                     watcher.Deleted += (_, e) => Changed(repository, e.FullPath); watcher.Renamed += (_, e) => { Changed(repository, e.OldFullPath); Changed(repository, e.FullPath); };
-                    watcher.Error += (_, _) => Mark(repository.Id);
+                    watcher.Error += (_, _) => { broken[repository.Id] = 0; Mark(repository.Id); };
                     watcher.EnableRaisingEvents = true; watchers[repository.Id] = watcher; retryAfter.Remove(repository.Id); Mark(repository.Id);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
