@@ -174,9 +174,9 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         {
             var projectId = Identity.Id("pci:project:", id, context.Key);
             batch.Execute("INSERT INTO projects VALUES($0,$1,$2,$3,'csharp')", projectId, id, context.Key, context.ProjectPath);
-            batch.Execute("INSERT INTO contexts(context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,desired_revision,published_revision,state,resolution,capabilities_json) VALUES($0,$1,$2,$3,$3,'roslyn-5.9/v1','{}',$4,$4,'ready',$5,$6)",
+            batch.Execute("INSERT INTO contexts(context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,desired_revision,published_revision,state,resolution,capabilities_json) VALUES($0,$1,$2,$3,$3,$7,'{}',$4,$4,'ready',$5,$6)",
                 context.Id, projectId, context.Key, context.Hash, generation, context.Resolution,
-                JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls" }));
+                JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls", "references", "accesses", "typeDependencies" }), RoslynAnalyzer.AdapterVersion);
             foreach (var source in context.Sources)
                 batch.Execute("INSERT INTO context_files VALUES($0,$1,$2,$3)", context.Id, fileIds[source.Path], source.Hash, generation);
         }
@@ -198,7 +198,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             if (connection.Scalar(transaction, "SELECT symbol_id FROM symbols WHERE symbol_id=$0", alias.SymbolId) is not null
                 && (alias.ProjectId is null || connection.Scalar(transaction, "SELECT project_id FROM projects WHERE project_id=$0", alias.ProjectId) is not null))
                 batch.Execute("INSERT INTO aliases VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8)", alias.Id, id, alias.ProjectId, alias.SymbolId, alias.Phrase, alias.Key, alias.Origin, alias.Enabled, alias.Created);
-        foreach (var call in analysis.Calls)
+        foreach (var call in analysis.Calls.Concat(analysis.Relationships))
         {
             batch.Execute("INSERT INTO occurrences(occurrence_id,context_id,file_id,owner_symbol_id,target_symbol_id,content_hash,start_offset,end_offset,range_json,resolution) VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8,$9)",
                 call.Id, call.ContextId, fileIds[call.FilePath], call.OwnerId, call.TargetId, call.Hash, call.Start, call.End, JsonSerializer.Serialize(call.Range), call.Resolution);
