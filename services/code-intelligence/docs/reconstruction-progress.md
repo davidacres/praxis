@@ -17,16 +17,18 @@ Updated 15 October 2026. Branch: codex/code-intelligence-recovery. Feature remai
 - Watcher hints with debounce, overflow handling, retry cooldown and periodic reconciliation. Pause/unregister obsoletes work.
 - Git ignore evaluation filters paths before decoding, disables fsmonitor execution and bounds subprocess time/output.
 
+- Explicit capture and semantic-support roles pass the SDK/source-role fixtures. Operational instructions, integration/capability matrix and26parser-verified plan records are present.
+- Self-contained Linux package passes CLI help, SQLite initialization and actual native ONNX inference.
+- Argument-hashed cursors remain within wire limits even for large valid filters.
+
 ## Verification evidence
 
-15 October: C#37 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution. Explicit SDK capture, stale/deleted inputs, generated support non-disclosure and alias preservation also pass.
+15 October: C#38 passed,0 failed,0 skipped with provisioned pinned model assets. Includes real ONNX inference, offline model installation/activation, durable automatic vector refresh after source publication, coalescing/backoff, expiry recovery, stale-token publication rejection, heartbeat and pause, Git-ignore privacy and no fsmonitor execution. Explicit SDK capture, stale/deleted inputs, generated support non-disclosure and alias preservation also pass.
 14 October: full desktop build passed including renderer core-import and trusted-IPC guards;2 MCP SDK/provider-isolation tests passed;24 responses across all11 tools validated with JSON Schema2020-12.
-Full application build including the service passed; Linux self-contained publish/help smoke passed, with a final source republish after context capture.46focused MCP/settings tests passed. Parser counts moved53/160/345/18to54/164/366/18(features/stories/tasks/bugs). Do not treat historical results as verification of later changes.
+Full application build including the service passed; Linux self-contained publish/CLI/SQLite/native-model checks passed after context capture.30fresh responses across all11tools validate against the normative schemas.46focused MCP/settings tests passed. Parser counts moved53/160/345/18to54/164/366/18(features/stories/tasks/bugs). Do not treat historical results as verification of later changes.
 
 ## Remaining implementation/release work
 
-- Explicit context capture and semantic-support roles now pass the SDK/source-role fixtures.
-- Operational instructions, integration/capability matrix and26parser-verified Praxis plan records are now present; final platform/UI verification remains.
 - Independent golden tokenizer/vector fixture and representation chunk spans/source excerpts.
 - Semantic API-stamp/affected-context optimization, possible dispatch/type relationships, synthetic top-level/lambda ownership.
 - Complete line-budget truncation/pagination behavior and hardened source-handle checks on Windows/macOS.
