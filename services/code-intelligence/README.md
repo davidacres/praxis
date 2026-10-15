@@ -113,8 +113,10 @@ Unchanged representations reuse complete, normalized current-profile vector sets
 
 ### Storage upgrade and reconciliation
 
-The service initializes SQLite schema 2. Migration 1 is unchanged; migration 2 adds foreign-key lookup indexes for bounded cascading publication/removal. Existing schema-1 databases upgrade atomically after their migration history/checksum is validated. Incompatible/newer schemas and changed migration history are refused. Older service binaries cannot open schema 2; use a verified backup when retaining rollback options.
+The service initializes SQLite schema 2. Migration 1 is unchanged; migration 2 adds foreign-key lookup indexes for bounded cascading publication/removal. Existing schema-1 databases upgrade atomically after their migration history/checksum is validated. Incompatible/newer schemas and changed migration history are refused. Older service binaries cannot open schema 2; a verified private schema-1 backup is preserved beside the database before upgrade writes. Backup failure prevents migration.
 
 Unchanged reconciliation validates source bytes, support roles, captured manifest/project inputs and metadata before using an adapter-versioned snapshot in context metadata. It preserves structural generation and query epoch when facts are unchanged. Missing legacy snapshots are backfilled after full analysis. Force rebuild bypasses this optimization. This does not implement semantic API stamps or targeted body-edit invalidation.
 
 Model activation retains complete current vector sets only after value validation and exact regenerated source metadata agreement. Mismatched/corrupt sets or mappings are repaired; input/source/lease checks remain mandatory before committing.
+
+Native CI is defined in `.github/workflows/code-intelligence.yml` for scoped PRs/manual dispatch. It has a Linux/Windows/macOS matrix and an optional Linux real-model benchmark. Adding the workflow is not evidence that those platform runs have passed.
