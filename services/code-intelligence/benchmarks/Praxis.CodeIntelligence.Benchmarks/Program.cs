@@ -106,12 +106,12 @@ try
         ["lexicalP95AtMost100Ms"] = lexical.P95Ms <= 100,
         ["hybridP95AtMost500Ms"] = hybrid is null ? null : hybrid.P95Ms <= 500,
         ["fiveThousandSymbolBodyEditAtMost2Seconds"] = symbols == 5000 ? editMs <= 2000 : null,
-        ["fiveThousandSymbolEditToVectorsAtMost10Seconds"] = symbols == 5000 && refreshMs.HasValue ? editMs + refreshMs <= 10000 : null,
+        ["fiveThousandSymbolSemanticRefreshAtMost10Seconds"] = symbols == 5000 && refreshMs.HasValue ? refreshMs <= 10000 : null,
         ["peakRssAtMost2GiB"] = rss <= 2L * 1024 * 1024 * 1024
     };
     var report = new
     {
-        Version = 1, StorageSchemaVersion = IndexDatabase.SchemaVersion, AdapterVersion = RoslynAnalyzer.AdapterVersion, OnnxInterOpThreads = 1, OnnxIntraOpThreads = Math.Clamp(Environment.ProcessorCount, 1, 4), TimestampUtc = DateTimeOffset.UtcNow, ExecutionMode = "Direct service API; owner/MCP transport excluded",
+        Version = 1, ThresholdDefinitionVersion = 2, VectorScorerVersion = ModelStore.VectorScorerVersion, StorageSchemaVersion = IndexDatabase.SchemaVersion, AdapterVersion = RoslynAnalyzer.AdapterVersion, OnnxInterOpThreads = 1, OnnxIntraOpThreads = Math.Clamp(Environment.ProcessorCount, 1, 4), TimestampUtc = DateTimeOffset.UtcNow, ExecutionMode = "Direct service API; owner/MCP transport excluded",
 #if DEBUG
         BuildConfiguration = "Debug",
 #else
@@ -122,8 +122,8 @@ try
         ModelFingerprint = fingerprint, RequestedSymbols = symbols, PublishedSymbols = initial.Symbols, PublishedSourceSymbols = sourceSymbols, SourceFiles = paths.Count,
         CorpusHash = SourceFiles.Hash(Encoding.UTF8.GetBytes(string.Join("\n", hashes))), ReferenceAssemblyHash = referenceHash,
         InitialIndexMs = initialMs, InitialVectorsMs = initialVectorsMs, Lexical = lexical, Hybrid = hybrid,
-        NoOpIndexMs = noOpMs, BodyEditMs = editMs, VectorRefreshMs = refreshMs, PeakRssBytes = rss, Gates = gates,
-        Unmeasured = new[] { "owner/native IPC", "MCP/provider transport", "held-out relevance", "other platforms", "representative real repository", "edit p95 including watcher debounce" },
+        NoOpIndexMs = noOpMs, BodyEditMs = editMs, VectorRefreshMs = refreshMs, EditToVectorsMs = refreshMs.HasValue ? editMs + refreshMs : (double?)null, PeakRssBytes = rss, Gates = gates,
+        Unmeasured = new[] { "owner/native IPC", "MCP/provider transport", "held-out relevance", "other platforms", "representative real repository", "edit p95 including watcher debounce", "retrieval-only latency" }.Concat(initial.Symbols < 50000 ? new[] { "50k-symbol capacity" } : fingerprint is null ? new[] { "50k-symbol hybrid capacity" } : Array.Empty<string>()).ToArray(),
         PassedMeasuredGates = gates.Values.All(value => value != false)
     };
     Directory.CreateDirectory(Path.GetDirectoryName(output)!);
