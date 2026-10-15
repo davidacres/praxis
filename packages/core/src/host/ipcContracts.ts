@@ -791,7 +791,7 @@ export interface AiSessionModelInput {
  * over the `ai:sessionChanged` push channel.
  */
 export interface CodeIntelligenceRequest {
-  action: 'list' | 'register' | 'index' | 'pause' | 'resume' | 'unregister' | 'query' | 'connect' | 'revoke' | 'model-install' | 'model-activate';
+  action: 'list' | 'register' | 'index' | 'rebuild' | 'relocate' | 'pause' | 'resume' | 'unregister' | 'query' | 'connect' | 'revoke' | 'model-install' | 'model-activate';
   repositoryId?: string;
   root?: string;
   manifest?: string;
@@ -803,6 +803,10 @@ export interface CodeIntelligenceRequest {
   fingerprint?: string;
 }
 export interface CodeIntelligenceResponse {
+  indexGeneration?: number | null;
+  queryEpoch?: number | null;
+  nextCursor?: string | null;
+  truncated?: boolean;
   data?: unknown;
   error?: { code: string; message: string; retryable?: boolean };
   mcpServer?: McpServerConfig;
