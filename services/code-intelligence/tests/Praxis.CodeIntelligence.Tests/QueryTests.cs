@@ -34,6 +34,53 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public void OptionalGraphExpansionKeepsDirectMatchesFirstAndPreservesEdgeEvidence()
+    {
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { int Related() => 1; int UniqueSeed() => Related(); }"); indexer.Index(repository);
+        var direct = Query("search_code", new() { ["query"] = "UniqueSeed", ["mode"] = "lexical" });
+        Assert.Single(direct["data"]!["matches"]!.AsArray());
+        var expanded = Query("search_code", new() { ["query"] = "UniqueSeed", ["mode"] = "lexical", ["expandGraph"] = true });
+        Assert.Null(expanded["error"]); var matches = expanded["data"]!["matches"]!.AsArray(); Assert.Equal(2, matches.Count);
+        Assert.Equal("Example.UniqueSeed()", matches[0]!["symbol"]!["qualifiedName"]!.GetValue<string>());
+        Assert.Equal("Example.Related()", matches[1]!["symbol"]!["qualifiedName"]!.GetValue<string>());
+        Assert.Contains(matches[1]!["reasons"]!.AsArray(), reason => reason!.GetValue<string>() == "graph");
+        Assert.Contains(expanded["data"]!["channelsUsed"]!.AsArray(), channel => channel!.GetValue<string>() == "graph");
+        foreach (var evidenceId in matches[1]!["evidenceIds"]!.AsArray())
+            Assert.Contains(expanded["evidence"]!.AsArray(), evidence => evidence!["id"]!.GetValue<string>() == evidenceId!.GetValue<string>());
+        Assert.Contains(expanded["evidence"]!.AsArray(), evidence => evidence!["id"]!.GetValue<string>().StartsWith("pci:occ:", StringComparison.Ordinal));
+        var filtered = Query("search_code", new() { ["query"] = "UniqueSeed", ["mode"] = "lexical", ["expandGraph"] = true, ["filters"] = new JsonObject { ["kinds"] = new JsonArray("type") } });
+        Assert.Empty(filtered["data"]!["matches"]!.AsArray());
+    }
+
+    [Fact]
+    public void UnresolvedTraceOccurrencesCarrySourceEvidence()
+    {
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { void Caller() { MissingTarget(); } }"); indexer.Index(repository);
+        var caller = Symbol("Caller");
+        var trace = Query("trace_flow", new() { ["symbolId"] = caller["symbolId"]!.DeepClone() }); Assert.Null(trace["error"]);
+        var occurrence = Assert.Single(trace["data"]!["unresolvedOccurrences"]!.AsArray())!.GetValue<string>();
+        var evidence = Assert.Single(trace["evidence"]!.AsArray(), item => item!["id"]!.GetValue<string>() == occurrence)!;
+        Assert.Equal("unresolved", evidence["resolution"]!.GetValue<string>());
+        Assert.Equal("Example.cs", evidence["path"]!.GetValue<string>()); Assert.NotNull(evidence["range"]);
+    }
+
+    [Fact]
+    public void StatusAndProjectSummaryTrimLargeCollectionsWithHonestCoverage()
+    {
+        File.WriteAllText(Path.Combine(root, "Example.cs"), string.Join("\n", Enumerable.Range(0, 200).Select(i => "class Component" + i + " { Unknown" + i + " field; }"))); indexer.Index(repository);
+        var status = Query("get_index_status", new() { ["responseBudgetTokens"] = 512 });
+        Assert.Null(status["error"]); Assert.True(status["truncated"]!.GetValue<bool>()); Assert.Null(status["nextCursor"]);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(status.ToJsonString()) <= 1536);
+        Assert.Single(status["data"]!["contexts"]!.AsArray());
+        using var read = database.Open(readOnly: true); using var command = read.CreateCommand(); command.CommandText = "SELECT project_id FROM projects";
+        var summary = Query("summarize_project", new() { ["projectId"] = (string)command.ExecuteScalar()!, ["responseBudgetTokens"] = 1500 });
+        Assert.Null(summary["error"]); Assert.True(summary["truncated"]!.GetValue<bool>()); Assert.Null(summary["nextCursor"]);
+        Assert.InRange(summary["data"]!["components"]!.AsArray().Count, 1, 99);
+        Assert.Equal(200, summary["data"]!["coverage"]!["eligible"]!.GetValue<int>());
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(summary.ToJsonString()) <= 4500);
+    }
+
+    [Fact]
     public void ExternalSymbolsHaveMetadataEvidenceAndNoInventedSourceDeclaration()
     {
         File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { bool Caller() => object.ReferenceEquals(null, null); }"); indexer.Index(repository);
