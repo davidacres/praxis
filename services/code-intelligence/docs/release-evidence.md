@@ -532,3 +532,33 @@ Result after the fixes (`evaluations/macos-arm64-actual-disk-full.praxis.json`),
 `DiskFullTests` adds classification checks and a cross-platform `SQLITE_FULL` scenario: a page cap set through the internal test hook makes SQLite fail exactly as it does on a full volume. That scenario covers a direct action, background maintenance, the preserved committed state and recovery. Mutation checks: disabling the no-backoff `DISK_FULL` rule fails it. Disabling the outer maintenance catch does not fail the unit test, because the page cap cannot deterministically fail small scheduling writes; the actual-volume run is what covers that path.
 
 Verification: 116 C# tests, zero skipped; 13 evaluator tests through the packaged owner; 4 MCP SDK/stdio tests, zero skipped; native IPC packaging smoke. The actual-volume script is macOS-only (it uses `hdiutil`). Windows and Linux actual-volume runs remain open.
+
+## Native CI for disk-full handling — 16 October
+
+Run [38930087096](https://github.com/davidacres/praxis/actions/runs/38930087096) at `10aae5b2` **failed on Windows**: `HostTests.PersistedRepositoryClientGrantsAreExplicitAndRevocable` could not delete its temporary `index.db`. The test never disposed its two `ServiceRuntime` instances, and the new keep-alive connection holds the database open for a runtime's lifetime (production disposes it via `using`). After the test fix (`71f10163`), run [38930496865](https://github.com/davidacres/praxis/actions/runs/38930496865) passed on Windows, Linux and macOS.
+
+## Concurrent-edit memory attribution — 16 October
+
+A repeat 50k concurrent run with 10 edits (`benchmarks/macos-arm64-50000-concurrent-rss-attribution/`: report, phase starts, RSS sampled once a second) again failed the budget: `/usr/bin/time` peak 2,623,160,320 bytes. Resident memory by phase:
+
+| Phase | Peak RSS sampled | RSS at phase end |
+|---|---|---|
+| Index 50k | 0.77 GiB | 0.77 GiB |
+| Model install and vectors | 0.79 GiB | 0.73 GiB |
+| Four-reader hybrid queries | 1.81 GiB | 0.74 GiB |
+| Single body edit | 1.62 GiB | 1.25 GiB |
+| Queries during 10 edits | 2.29 GiB (1 s sampling misses the 2.44 GiB peak) | 1.16 GiB |
+
+Concurrent readers add about 1.07 GiB, and the writer adds up to about 0.9 GiB, part of which stays resident after publication. The two overlap during concurrent edits.
+
+Query-only reader-policy frontier on the retained schema-5 fixture: four readers, 100 queries each, one run per cell, `/usr/bin/time` RSS. Raw reports are in `benchmarks/macos-arm64-50000-reader-memory-frontier-runs/`.
+
+| Read map / page cache | Terminology RSS · hybrid p95 · retrieval p95 | Exact RSS · hybrid p95 |
+|---|---|---|
+| 512 MiB / 64 MiB (current, mapping v6) | 1.19 GiB · 257.8 · 238.0 ms | 1.13 GiB · 193.2 ms |
+| 256 MiB / 16 MiB | 0.98 GiB · 240.6 · 229.2 ms | 0.92 GiB · 179.8 ms |
+| 128 MiB / 16 MiB | 0.85 GiB · 249.6 · 238.2 ms | 0.80 GiB · 190.4 ms |
+| 128 MiB / 8 MiB | 0.90 GiB · 252.9 · 243.2 ms | 0.76 GiB · 190.7 ms |
+| 64 MiB / 16 MiB | 0.71 GiB · 281.8 · 270.1 ms | 0.63 GiB · 213.1 ms |
+
+With the dense `vector_scan` table, a 128 MiB map and 16 MiB cache saves about 0.33 GiB of query RSS with no measurable latency cost (single runs). That alone does not close a roughly 0.45 GiB overrun, so writer-side retention is being measured next. No policy has been adopted yet.

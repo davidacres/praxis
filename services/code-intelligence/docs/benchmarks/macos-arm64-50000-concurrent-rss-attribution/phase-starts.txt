@@ -1,0 +1,7 @@
+1792167166 Indexing 49999 generated symbols.
+1792167184 Installing model and building vectors.
+1792167700 Measuring four-reader lexical queries.
+1792167703 Measuring four-reader hybrid queries.
+1792167783 Measuring body edit publication.
+1792167804 Measuring queries during 10 concurrent edits.
+1792168169           2623160320  maximum resident set size
