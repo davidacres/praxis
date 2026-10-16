@@ -11,6 +11,8 @@ public sealed class IndexDatabase
 {
     public const int SchemaVersion = 2;
     public const int ReadMappingVersion = 1;
+    public const int ReadPageCacheVersion = 1;
+    public const int ReadPageCacheKiB = 16 * 1024;
     public const long MaximumReadMappingBytes = 128L * 1024 * 1024;
     private static readonly (string Sql, string Checksum)[] Migrations = Enumerable.Range(1, SchemaVersion).Select(version =>
     {
@@ -37,7 +39,7 @@ public sealed class IndexDatabase
             Validate(connection);
             // Bound file-backed read mappings; SQLite retains WAL snapshot and
             // locking semantics and falls back to its pager where unsupported.
-            if (readOnly) Execute(connection, $"PRAGMA mmap_size={MaximumReadMappingBytes};");
+            if (readOnly) Execute(connection, $"PRAGMA mmap_size={MaximumReadMappingBytes}; PRAGMA cache_size=-{ReadPageCacheKiB};");
             return connection;
         }
         catch { connection.Dispose(); throw; }
