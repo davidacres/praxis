@@ -12,7 +12,7 @@ using Praxis.CodeIntelligence.Storage;
 var options = new Dictionary<string, string>(StringComparer.Ordinal);
 if (args.Length % 2 != 0) throw new ArgumentException("Expected flag/value pairs.");
 for (var i = 0; i < args.Length; i += 2)
-    if (args[i] is not ("--symbols" or "--queries" or "--output" or "--model" or "--retain-fixture" or "--reuse-fixture" or "--readers" or "--runs" or "--category") || !options.TryAdd(args[i], args[i + 1]))
+    if (args[i] is not ("--symbols" or "--queries" or "--output" or "--model" or "--retain-fixture" or "--reuse-fixture" or "--readers" or "--runs" or "--category" or "--concurrent-edits") || !options.TryAdd(args[i], args[i + 1]))
         throw new ArgumentException("Unknown or duplicate flag.");
 var symbols = int.Parse(options.GetValueOrDefault("--symbols", "5000"));
 var queries = int.Parse(options.GetValueOrDefault("--queries", "100"));
@@ -22,6 +22,10 @@ if (!output.EndsWith(".praxis.json", StringComparison.Ordinal)) throw new Argume
 var category = options.GetValueOrDefault("--category", "exact");
 if (category is not ("exact" or "terminology" or "behaviour" or "negative")) throw new ArgumentException("Unsupported query category.");
 if (options.ContainsKey("--category") && !options.ContainsKey("--reuse-fixture")) throw new ArgumentException("Query categories require a retained fixture.");
+var concurrentEdits = int.Parse(options.GetValueOrDefault("--concurrent-edits", "0"));
+if (concurrentEdits is not 0 and (< 5 or > 100)) throw new ArgumentException("--concurrent-edits expects 5–100.");
+if (concurrentEdits > 0 && (options.ContainsKey("--reuse-fixture") || !options.ContainsKey("--model")))
+    throw new ArgumentException("Concurrent edits need a fresh fixture with a model; retained fixtures are never edited.");
 var readers = int.Parse(options.GetValueOrDefault("--readers", "4"));
 var runs = int.Parse(options.GetValueOrDefault("--runs", "1"));
 if (readers is not (1 or 4) || runs is < 1 or > 5) throw new ArgumentException("Readers must be 1 or 4; runs 1–5.");
@@ -105,6 +109,77 @@ try
     if (!edited.Changed || edited.Generation != initial.Generation + 1) throw new InvalidOperationException("Edit failed to publish.");
     double? refreshMs = null;
     if (fingerprint is not null) { watch.Restart(); models.Activate(repository, fingerprint, CancellationToken.None); refreshMs = watch.Elapsed.TotalMilliseconds; }
+    object? concurrent = null; bool? concurrentPassed = null;
+    if (concurrentEdits > 0)
+    {
+        // Real edits publish and refresh vectors while four readers alternate
+        // lexical/hybrid queries until the writer finishes. Coverage may dip
+        // during refresh; any query error or missing channel is a failure.
+        Console.Error.WriteLine($"Measuring queries during {concurrentEdits} concurrent edits.");
+        var times = new[] { new ConcurrentBag<double>(), new ConcurrentBag<double>() };
+        var failures = new ConcurrentQueue<string>(); int errors = 0; long minimumCoverage = long.MaxValue;
+        var edits = new List<object>(); var writerDone = 0;
+        void Fail(Exception error) { Interlocked.Increment(ref errors); if (failures.Count < 10) failures.Enqueue(error.GetType().Name + ": " + error.Message); }
+        void ConcurrentSearch(string mode, int index)
+        {
+            var response = service.Execute("search_code", new JsonObject { ["repositoryId"] = repository, ["query"] = names[index % names.Count], ["mode"] = mode, ["limit"] = 10, ["responseBudgetTokens"] = 8000 }, allowed);
+            if (response["error"] is not null || response["data"]?["matches"] is not JsonArray { Count: > 0 })
+                throw new InvalidOperationException("Search failed: " + response.ToJsonString());
+            if (mode != "hybrid") return;
+            if (response["data"]?["channelsUsed"] is not JsonArray channels || !channels.Any(channel => channel?.GetValue<string>() == "vector"))
+                throw new InvalidOperationException("Hybrid query lost the vector channel during edits.");
+            var covered = response["data"]?["vectorCoveredSymbolCount"]?.GetValue<long>() ?? 0;
+            long seen; do seen = Interlocked.Read(ref minimumCoverage); while (covered < seen && Interlocked.CompareExchange(ref minimumCoverage, covered, seen) != seen);
+        }
+        var writer = Task.Run(() =>
+        {
+            try
+            {
+                for (var edit = 1; edit <= concurrentEdits; edit++)
+                {
+                    var file = Path.Combine(root, paths[edit % paths.Count]); var text = File.ReadAllText(file);
+                    var marker = text.IndexOf("=> value + ", StringComparison.Ordinal); var end = text.IndexOf(';', marker);
+                    var changed = text[..(marker + 11)] + (long.Parse(text[(marker + 11)..end]) + 1_000_000) + text[end..];
+                    File.WriteAllText(file, changed);
+                    var timer = Stopwatch.StartNew(); var published = indexer.Index(repository); var publishMs = timer.Elapsed.TotalMilliseconds;
+                    if (!published.Changed) throw new InvalidOperationException("Concurrent edit did not publish.");
+                    timer.Restart(); models.Activate(repository, fingerprint!, CancellationToken.None);
+                    lock (edits) edits.Add(new { Edit = edit, PublishMs = publishMs, RefreshMs = timer.Elapsed.TotalMilliseconds });
+                }
+            }
+            catch (Exception error) when (error is not OutOfMemoryException) { Fail(error); }
+            finally { Volatile.Write(ref writerDone, 1); }
+        });
+        metrics.Begin();
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(reader => Task.Run(() =>
+        {
+            for (var i = 0; Volatile.Read(ref writerDone) == 0; i++)
+            {
+                var mode = i % 2 == 0 ? "lexical" : "hybrid"; var timer = Stopwatch.StartNew();
+                try { ConcurrentSearch(mode, (i * 4 + reader) * 17); }
+                catch (Exception error) when (error is not OutOfMemoryException) { Fail(error); }
+                finally { times[i % 2].Add(timer.Elapsed.TotalMilliseconds); }
+            }
+        })));
+        await writer; var phases = metrics.End();
+        object Summary(ConcurrentBag<double> bag)
+        {
+            var values = bag.Order().ToArray(); double? At(double fraction) => values.Length == 0 ? null : values[(int)Math.Ceiling(values.Length * fraction) - 1];
+            return new { Count = values.Length, P50Ms = At(.5), P95Ms = At(.95), P99Ms = At(.99), MaximumMs = At(1) };
+        }
+        double? P95(ConcurrentBag<double> bag) { var values = bag.Order().ToArray(); return values.Length == 0 ? null : values[(int)Math.Ceiling(values.Length * .95) - 1]; }
+        var concurrentGates = new Dictionary<string, bool>
+        {
+            ["allEditsPublishedAndRefreshed"] = edits.Count == concurrentEdits,
+            ["noQueryErrors"] = errors == 0,
+            ["lexicalP95AtMost100Ms"] = P95(times[0]) <= 100,
+            ["hybridP95AtMost500Ms"] = P95(times[1]) <= 500
+        };
+        concurrentPassed = concurrentGates.Values.All(value => value);
+        concurrent = new { Basis = "Four readers alternate lexical/hybrid with stride-17 exact names while one writer edits, publishes and refreshes vectors; queries stop when the writer finishes. Mixed-mode phases are combined.",
+            Edits = edits, Errors = errors, ErrorMessages = failures.ToArray(), Lexical = Summary(times[0]), Hybrid = Summary(times[1]),
+            MinimumVectorCoveredSymbols = minimumCoverage == long.MaxValue ? (long?)null : minimumCoverage, QueryPhases = phases, Gates = concurrentGates };
+    }
     using var process = Process.GetCurrentProcess(); process.Refresh();
     long? rss = process.PeakWorkingSet64 > 0 ? process.PeakWorkingSet64 : null;
     using var connection = database.Open(readOnly: true); using var command = connection.CreateCommand(); command.CommandText = "SELECT sqlite_version()";
@@ -116,7 +191,8 @@ try
         ["retrievalOnlyP95TargetAtMost250Ms"] = hybrid?.QueryPhases?.Retrieval.P95Ms is double retrievalP95 ? retrievalP95 <= 250 : null,
         ["fiveThousandSymbolBodyEditAtMost2Seconds"] = symbols == 5000 ? editMs <= 2000 : null,
         ["fiveThousandSymbolSemanticRefreshAtMost10Seconds"] = symbols == 5000 && refreshMs.HasValue ? refreshMs <= 10000 : null,
-        ["peakRssAtMost2GiB"] = rss.HasValue ? rss <= 2L * 1024 * 1024 * 1024 : null
+        ["peakRssAtMost2GiB"] = rss.HasValue ? rss <= 2L * 1024 * 1024 * 1024 : null,
+        ["concurrentEditWorkload"] = concurrentPassed
     };
     var report = new
     {
@@ -131,7 +207,7 @@ try
         ModelFingerprint = fingerprint, RequestedSymbols = symbols, PublishedSymbols = initial.Symbols, PublishedSourceSymbols = sourceSymbols, SourceFiles = paths.Count,
         CorpusHash = SourceFiles.Hash(Encoding.UTF8.GetBytes(string.Join("\n", hashes))), ReferenceAssemblyHash = referenceHash,
         InitialIndexMs = initialMs, InitialVectorsMs = initialVectorsMs, Lexical = lexical, Hybrid = hybrid,
-        NoOpIndexMs = noOpMs, BodyEditMs = editMs, VectorRefreshMs = refreshMs, EditToVectorsMs = refreshMs.HasValue ? editMs + refreshMs : (double?)null, PeakRssBytes = rss, Gates = gates,
+        NoOpIndexMs = noOpMs, BodyEditMs = editMs, VectorRefreshMs = refreshMs, EditToVectorsMs = refreshMs.HasValue ? editMs + refreshMs : (double?)null, ConcurrentEdits = concurrent, PeakRssBytes = rss, Gates = gates,
         Unmeasured = new[] { "owner/native IPC", "MCP/provider transport", "held-out relevance", "other platforms", "representative real repository", "edit p95 including watcher debounce", "owner admission queue and wire serialization latency" }.Concat(rss.HasValue ? Array.Empty<string>() : new[] { "peak RSS unavailable from this runtime" }).Concat(initial.Symbols < 50000 ? new[] { "50k-symbol capacity" } : fingerprint is null ? new[] { "50k-symbol hybrid capacity" } : Array.Empty<string>()).ToArray(),
         PassedMeasuredGates = gates.Values.All(value => value != false)
     };
