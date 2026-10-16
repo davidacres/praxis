@@ -12,7 +12,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Application/native packaging | Full application build and current native owner/SQLite/ONNX/IPC packaging smoke pass locally | Latest release-wide platform/UI matrix remains open |
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
 | Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
-| 50k latency and memory | Full mapping-576 run: lexical p95 6.661 ms; hybrid p95 506.908 ms **fails** 500 ms; independent peak RSS 1915731968 bytes passes 2 GiB | Streaming scorer v4 is implemented/tested but awaits fresh isolated measurement; complete category/repeat/concurrent-edit protocol remains open |
+| 50k latency and memory | Final mapping-v6/scorer-v4 full process: lexical p95 5.895 ms, hybrid p95 434.591 ms, independent peak RSS 2004254720 bytes; main limits pass | Retrieval-only p95 414.348 ms fails 250 ms; complete category/repeat/concurrent-edit/reference-machine protocol remains open |
 | Query-matrix tooling | Eight independent 100-symbol smoke processes pass; phase samples, reader schedules, failure retention and fixture containment verified | This is harness proof, not 50k qualification |
 | Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Final mapping-v6 run 38904504214 passes Windows/macOS/Linux (112 tests per host, schemas, native packaging, retained/matrix safeguards and watcher smoke) |
 
@@ -362,3 +362,7 @@ The adapter-v8/scorer-v4 native package (before this mapping-only change) comple
 ## Final mapping-v6 native verification
 
 [CI 38904504214](https://github.com/davidacres/praxis/actions/runs/38904504214) passes Windows/macOS/Linux for the selected 512 MiB mapping and streaming scorer v4. Each host passes 112 C# tests, schemas, retained/matrix safeguards, native packaging/ONNX/IPC and watcher smoke. The final local native package also passes all four MCP and 13 evaluator fixtures. Full local capacity RSS measurement is still pending; this CI result does not replace performance or live-provider qualification.
+
+## Selected configuration — full main latency/RSS limits pass
+
+The immutable selected adapter-v8/scorer-v4/mapping-v6 binary completed the fresh full process: initial 50k indexing, real local inference, 400 exact queries per mode, body-edit publication and refresh. Lexical p95 **5.8947 ms**, hybrid **434.5913 ms**, zero warmup/query errors and independent maximum RSS **2004254720 bytes (1.867 GiB)** pass the main 100/500 ms and 2 GiB limits together. Raw and independent-process records include binary hashes and the implementation commit. These are exact-query, one-run measurements on this Mac, not the complete reference-machine performance protocol. Retrieval-only p95 **414.3476 ms** still fails 250 ms; the raw `PassedMeasuredGates` therefore remains false. Previous failed configurations remain preserved.
