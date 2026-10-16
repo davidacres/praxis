@@ -1,10 +1,10 @@
 # Release evidence and remaining gates
 
-Updated 16 October 2026. M3 implementation is in progress; this document is not a release approval.
+Updated 16 October 2026. M3 implementation is in progress; this document is not a release approval. Current local performance state: the plan-5 query matrix passes 40/40 and the 25-edit concurrent run passes within 2 GiB with pressure admission, both on a 12-core Mac only.
 
 | Check | Current evidence | Remaining qualification |
 |---|---|---|
-| C# compiler/storage/model suite | 114 passed, zero failures/skips with SDK/model fixtures (schema 5, vector plan 4, search plan 6) | Run [38918489261](https://github.com/davidacres/praxis/actions/runs/38918489261) at `d8487df1` passes on Windows/macOS/Linux |
+| C# compiler/storage/model suite | 118 passed, zero failures/skips with SDK/model fixtures (schema 5, vector plan 5, search plan 6, mapping v7, disk-full and memory-pressure handling) | Run [38951588768](https://github.com/davidacres/praxis/actions/runs/38951588768) at `c7de5418` passes on Windows/macOS/Linux |
 | Source/context and dependency graph | Source identity/evidence, cross-project source uses, captured project/assembly references and configuration withdrawal tested | General runtime delegate flow is explicitly unresolved; no NuGet-name inference |
 | Durable work and edit updates | Real 5k watcher: 25 edits, structural p95 1.676 s, semantic upper-bound p95 0.620 s, no errors | This measurement predates adapter v8; five-run/concurrent-edit protocol remains open |
 | MCP | Four local SDK/stdio tests pass, including native grants/errors and controlled in-flight child cancellation | Actual live provider adapter/inference cancellation qualification remains open |
