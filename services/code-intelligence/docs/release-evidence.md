@@ -236,3 +236,7 @@ The real four-context Maze model pilot has complete compiler/vector coverage and
 ## Filtered retrieval and query-bound correction — 16 October
 
 Search now applies language, kind and project filters before the lexical, exact and alias candidate limits. Alias rows are deduplicated before ranking. A 350-decoy regression verifies that a valid selected project/type cannot disappear behind the unfiltered lexical cap. Queries support up to 64 literal terms; longer requests return `INVALID_ARGUMENT` before model inference rather than silently discarding terms after 32. The full provisioned-model/SDK suite passed 105 tests with zero failures/skips. The earlier 50k performance reports predate this change; fresh timing is required.
+
+## Model activation disk reserve — 16 October
+
+Model activation now checks available space on the SQLite database volume before inference/publication, requiring the larger of 1 GiB or twice a conservative projected four-chunk profile (float32 payload plus span/index overhead). This is a preflight rather than a reservation; transactional publication still protects against later write failure. A real-model fault fixture injects zero available bytes without filling the host disk and verifies the previous vector results and query epoch remain unchanged. All 106 service tests passed with the pinned model and SDK enabled. Actual operating-system disk exhaustion remains a separate recovery scenario.

@@ -13,6 +13,10 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
 {
     public const int VectorScorerVersion = 3;
     public const int VectorQueryPlanVersion = 3;
+    // Queried on the database volume, where both profiles and the SQLite WAL
+    // may coexist during activation. Injectable only for deterministic fault tests.
+    internal Func<string, long> AvailableDiskBytes { get; set; } = path => new DriveInfo(path).AvailableFreeSpace;
+    private const long MinimumDiskReserve = 1024L * 1024 * 1024;
     private readonly object queryLock = new(); private LocalModel? cached; private string? cachedFingerprint;
     private string ProfileDirectory(string fingerprint)
     {
@@ -74,6 +78,14 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
                 if (inputs.Count > 50_000) throw new InvalidOperationException("VECTOR_CAPACITY_EXCEEDED");
             }
         }
+        // Four chunks per symbol, float32 payload plus bounded span/index
+        // overhead. Keep the larger of 1 GiB or twice the projected profile.
+        // This preflight is advisory; publication remains transactional if disk
+        // space disappears after the check.
+        var projectedProfileBytes = checked(inputs.Count * 4L * (LocalModel.Dimensions * sizeof(float) + 4096));
+        var requiredFreeBytes = Math.Max(MinimumDiskReserve, checked(2 * projectedProfileBytes));
+        if (AvailableDiskBytes(Path.GetDirectoryName(Path.GetFullPath(database.Path))!) < requiredFreeBytes)
+            throw new IOException("INSUFFICIENT_DISK_SPACE: model activation requires disk headroom for the new profile and recovery.");
         Dictionary<(string Symbol, string Profile), ReusableEmbedding> reusable;
         using (var read = database.Open(readOnly: true)) reusable = EmbeddingReuse.Capture(read, null, repositoryId, cancellationToken, fingerprint);
         var embeddings = new List<(string Id, string Revision, SymbolRepresentation Representation, IReadOnlyList<EmbeddedChunk> Chunks)>();

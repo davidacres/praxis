@@ -14,6 +14,35 @@ public sealed class LocalModelFactAttribute : FactAttribute
 }
 public sealed class ModelTests
 {
+    [LocalModelFact]
+    public void LowDiskActivationPreservesTheUsableProfileAndPublishedVectors()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pci-low-disk-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var database = new IndexDatabase(Path.Combine(root, "data", "index.db")); database.Initialize();
+            File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { int Preserve() => 1; }");
+            var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root); indexer.Index(repository);
+            using var store = new ModelStore(database, Path.Combine(root, "models"));
+            var profile = store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!);
+            store.Activate(repository, profile, CancellationToken.None);
+            var queries = new QueryService(database, store);
+            JsonObject Search() => queries.Execute("search_code", new() { ["repositoryId"] = repository, ["query"] = "Preserve", ["mode"] = "vector" }, new HashSet<string> { repository });
+            var before = Search(); Assert.Null(before["error"]);
+            // Never create a low-space host condition: fail the volume preflight
+            // deterministically while exercising actual model/SQLite state.
+            string? checkedVolume = null;
+            store.AvailableDiskBytes = path => { checkedVolume = path; return 0; };
+            Assert.Contains("INSUFFICIENT_DISK_SPACE", Assert.Throws<IOException>(() => store.Activate(repository, profile, CancellationToken.None)).Message);
+            Assert.Equal(Path.GetDirectoryName(database.Path), checkedVolume);
+            var after = Search(); Assert.Null(after["error"]);
+            Assert.Equal(before["queryEpoch"]!.GetValue<long>(), after["queryEpoch"]!.GetValue<long>());
+            Assert.Equal(before["data"]!.ToJsonString(), after["data"]!.ToJsonString());
+            Assert.Empty(database.Check());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void RepresentationPrioritizesIdentityAndRecordsBoundedSourceCoordinates()
     {
