@@ -12,7 +12,7 @@ using Praxis.CodeIntelligence.Storage;
 var options = new Dictionary<string, string>(StringComparer.Ordinal);
 if (args.Length % 2 != 0) throw new ArgumentException("Expected flag/value pairs.");
 for (var i = 0; i < args.Length; i += 2)
-    if (args[i] is not ("--symbols" or "--queries" or "--output" or "--model" or "--retain-fixture" or "--reuse-fixture" or "--readers" or "--runs" or "--category" or "--concurrent-edits") || !options.TryAdd(args[i], args[i + 1]))
+    if (args[i] is not ("--symbols" or "--queries" or "--output" or "--model" or "--retain-fixture" or "--reuse-fixture" or "--readers" or "--runs" or "--category" or "--concurrent-edits" or "--projects") || !options.TryAdd(args[i], args[i + 1]))
         throw new ArgumentException("Unknown or duplicate flag.");
 var symbols = int.Parse(options.GetValueOrDefault("--symbols", "5000"));
 var queries = int.Parse(options.GetValueOrDefault("--queries", "100"));
@@ -26,6 +26,9 @@ var concurrentEdits = int.Parse(options.GetValueOrDefault("--concurrent-edits", 
 if (concurrentEdits is not 0 and (< 5 or > 100)) throw new ArgumentException("--concurrent-edits expects 5–100.");
 if (concurrentEdits > 0 && (options.ContainsKey("--reuse-fixture") || !options.ContainsKey("--model")))
     throw new ArgumentException("Concurrent edits need a fresh fixture with a model; retained fixtures are never edited.");
+var projectCount = int.Parse(options.GetValueOrDefault("--projects", "1"));
+if (projectCount is < 1 or > 16) throw new ArgumentException("--projects expects 1–16.");
+if (projectCount > 1 && options.ContainsKey("--reuse-fixture")) throw new ArgumentException("--projects applies to fresh fixtures only.");
 var readers = int.Parse(options.GetValueOrDefault("--readers", "4"));
 var runs = int.Parse(options.GetValueOrDefault("--runs", "1"));
 if (readers is not (1 or 4) || runs is < 1 or > 5) throw new ArgumentException("Readers must be 1 or 4; runs 1–5.");
@@ -49,7 +52,12 @@ var root = Path.Combine(temporary, "source"); Directory.CreateDirectory(root);
 try
 {
     var paths = new List<string>(); var names = new List<string>(); var hashes = new List<string>();
-    var remaining = symbols - 1; var ordinal = 0;
+    // Each project contributes one synthetic project-root symbol.
+    var remaining = symbols - projectCount; var ordinal = 0;
+    // Multi-project corpora assign files round-robin; each file's first method
+    // calls the preceding file's first method, which lives in the previous
+    // project, giving real cross-project relationships at the same symbol count.
+    var firstMethods = new List<(string Class, string Method)>();
     while (remaining > 0)
     {
         var name = $"Corpus{paths.Count:D4}"; var path = name + ".cs";
@@ -58,14 +66,21 @@ try
         for (var i = 0; i < count; i++)
         {
             var method = $"TokenParser{ordinal:D5}"; names.Add(method);
-            text.Append($"/// <summary>Parse authentication token category {ordinal}.</summary>\npublic static int {method}(int value) => value + {ordinal};\n"); ordinal++;
+            var body = i == 0 && projectCount > 1 && paths.Count % projectCount != 0
+                ? $"{firstMethods[^1].Class}.{firstMethods[^1].Method}(value) + {ordinal}" : $"value + {ordinal}";
+            if (i == 0) firstMethods.Add((name, method));
+            text.Append($"/// <summary>Parse authentication token category {ordinal}.</summary>\npublic static int {method}(int value) => {body};\n"); ordinal++;
         }
         text.Append("}\n"); var source = text.ToString();
         File.WriteAllText(Path.Combine(root, path), source); paths.Add(path);
         hashes.Add(path + ":" + SourceFiles.Hash(Encoding.UTF8.GetBytes(source))); remaining -= count + 1;
     }
     var assembly = typeof(object).Assembly.Location; var referenceHash = SourceFiles.Hash(File.ReadAllBytes(assembly));
-    var manifest = new PassiveManifest(1, [new("benchmark", "Benchmark", paths.ToArray(), Metadata: [new(assembly, referenceHash)])]);
+    var manifest = projectCount == 1
+        ? new PassiveManifest(1, [new("benchmark", "Benchmark", paths.ToArray(), Metadata: [new(assembly, referenceHash)])])
+        : new PassiveManifest(1, Enumerable.Range(0, projectCount).Select(project => new PassiveProject($"benchmark{project:D2}", $"Benchmark{project:D2}",
+            paths.Where((_, index) => index % projectCount == project).ToArray(), project == 0 ? null : [$"benchmark{project - 1:D2}"],
+            Metadata: [new(assembly, referenceHash)])).ToArray());
     File.WriteAllText(Path.Combine(root, "context.praxis.json"), JsonSerializer.Serialize(manifest));
     var database = new IndexDatabase(Path.Combine(temporary, "data", "index.db")); database.Initialize();
     var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root, new("context.praxis.json"));
@@ -100,6 +115,31 @@ try
     Console.Error.WriteLine("Measuring four-reader lexical queries."); var lexical = await RetainedBenchmark.Measure(Search, "lexical", queries, metrics: metrics);
     Timing? hybrid = null;
     if (fingerprint is not null) { Console.Error.WriteLine("Measuring four-reader hybrid queries."); hybrid = await RetainedBenchmark.Measure(Search, "hybrid", queries, metrics: metrics); }
+    Timing? projectFiltered = null; long? filteredProjectSymbols = null;
+    if (projectCount > 1 && fingerprint is not null)
+    {
+        // One project of N: most vector candidates fail the filter, exercising
+        // the project join in validation and the exhaustive fallback.
+        string projectId;
+        using (var read = database.Open(readOnly: true))
+        using (var lookup = read.CreateCommand())
+        {
+            lookup.CommandText = "SELECT project_id FROM projects WHERE project_key='benchmark01'"; projectId = (string)lookup.ExecuteScalar()!;
+            lookup.CommandText = "SELECT count(*) FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE s.external=0 AND c.project_id=$project";
+            lookup.Parameters.AddWithValue("$project", projectId); filteredProjectSymbols = Convert.ToInt64(lookup.ExecuteScalar());
+        }
+        void FilteredSearch(string mode, int index)
+        {
+            var response = service.Execute("search_code", new JsonObject { ["repositoryId"] = repository, ["query"] = names[index % names.Count], ["mode"] = mode, ["limit"] = 10,
+                ["responseBudgetTokens"] = 8000, ["filters"] = new JsonObject { ["projectIds"] = new JsonArray(projectId) } }, allowed);
+            if (response["error"] is not null || response["data"]?["matches"] is not JsonArray)
+                throw new InvalidOperationException("Filtered search failed: " + response.ToJsonString());
+            if (response["data"]?["channelsUsed"] is not JsonArray channels || !channels.Any(channel => channel?.GetValue<string>() == "vector"))
+                throw new InvalidOperationException("Filtered hybrid query lost the vector channel.");
+        }
+        Console.Error.WriteLine($"Measuring four-reader hybrid queries filtered to one of {projectCount} projects.");
+        projectFiltered = await RetainedBenchmark.Measure(FilteredSearch, "hybrid", queries, metrics: metrics);
+    }
     watch.Restart(); var unchanged = indexer.Index(repository); var noOpMs = watch.Elapsed.TotalMilliseconds;
     if (unchanged.Changed) throw new InvalidOperationException("Unchanged index republished.");
     var first = Path.Combine(root, paths[0]); var before = File.ReadAllText(first); var after = before.Replace("=> value + 0;", "=> value + 2;", StringComparison.Ordinal);
@@ -192,7 +232,10 @@ try
         ["fiveThousandSymbolBodyEditAtMost2Seconds"] = symbols == 5000 ? editMs <= 2000 : null,
         ["fiveThousandSymbolSemanticRefreshAtMost10Seconds"] = symbols == 5000 && refreshMs.HasValue ? refreshMs <= 10000 : null,
         ["peakRssAtMost2GiB"] = rss.HasValue ? rss <= 2L * 1024 * 1024 * 1024 : null,
-        ["concurrentEditWorkload"] = concurrentPassed
+        ["concurrentEditWorkload"] = concurrentPassed,
+        ["projectFilteredNoErrors"] = projectFiltered is null ? null : projectFiltered.Errors == 0 && projectFiltered.WarmupErrors == 0,
+        ["projectFilteredHybridP95AtMost500Ms"] = projectFiltered is null ? null : projectFiltered.P95Ms <= 500,
+        ["projectFilteredRetrievalOnlyP95TargetAtMost250Ms"] = projectFiltered?.QueryPhases?.Retrieval.P95Ms is double filteredRetrieval ? filteredRetrieval <= 250 : null
     };
     var report = new
     {
@@ -207,7 +250,7 @@ try
         ModelFingerprint = fingerprint, RequestedSymbols = symbols, PublishedSymbols = initial.Symbols, PublishedSourceSymbols = sourceSymbols, SourceFiles = paths.Count,
         CorpusHash = SourceFiles.Hash(Encoding.UTF8.GetBytes(string.Join("\n", hashes))), ReferenceAssemblyHash = referenceHash,
         InitialIndexMs = initialMs, InitialVectorsMs = initialVectorsMs, Lexical = lexical, Hybrid = hybrid,
-        NoOpIndexMs = noOpMs, BodyEditMs = editMs, VectorRefreshMs = refreshMs, EditToVectorsMs = refreshMs.HasValue ? editMs + refreshMs : (double?)null, ConcurrentEdits = concurrent, PeakRssBytes = rss, Gates = gates,
+        NoOpIndexMs = noOpMs, BodyEditMs = editMs, VectorRefreshMs = refreshMs, EditToVectorsMs = refreshMs.HasValue ? editMs + refreshMs : (double?)null, ConcurrentEdits = concurrent, ProjectCount = projectCount, FilteredProjectSourceSymbols = filteredProjectSymbols, ProjectFilteredHybrid = projectFiltered, PeakRssBytes = rss, Gates = gates,
         Unmeasured = new[] { "owner/native IPC", "MCP/provider transport", "held-out relevance", "other platforms", "representative real repository", "edit p95 including watcher debounce", "owner admission queue and wire serialization latency" }.Concat(rss.HasValue ? Array.Empty<string>() : new[] { "peak RSS unavailable from this runtime" }).Concat(initial.Symbols < 50000 ? new[] { "50k-symbol capacity" } : fingerprint is null ? new[] { "50k-symbol hybrid capacity" } : Array.Empty<string>()).ToArray(),
         PassedMeasuredGates = gates.Values.All(value => value != false)
     };
