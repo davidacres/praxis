@@ -51,6 +51,18 @@ def owner(semantic=True, change_epoch=False, miss=False, resolution="complete"):
 
 
 class EvaluationTests(unittest.TestCase):
+    def test_generated_explanation_review_is_conditional_on_explicit_m3_scope(self):
+        draft = corpus()
+        self.assertFalse(retrieval.evaluate(draft, owner())['gates']['thirtyExplanationsReviewDeclared'])
+        draft.update(releaseMilestone='M3', generatedExplanationsInScope=False)
+        report = retrieval.evaluate(draft, owner())
+        self.assertNotIn('thirtyExplanationsReviewDeclared', report['gates'])
+        self.assertFalse(report['generatedExplanationsInScope'])
+        self.assertTrue(report['notApplicable'])
+        draft['releaseMilestone'] = 'M5'
+        with self.assertRaises(ValueError):
+            retrieval.evaluate(draft, owner())
+
     def test_ambiguous_exact_queries_require_explicit_labels_and_complete_retrieval(self):
         draft = corpus()
         case = next(case for case in draft['queries'] if case['category'] == 'exact' and case['split'] == 'heldOut')

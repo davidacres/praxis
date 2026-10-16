@@ -1,0 +1,8 @@
+{
+  "implementationCommit": "b3041795",
+  "measurement": "macOS /usr/bin/time -l; full process including indexing, compiler, model and query phases",
+  "maximumResidentSetBytes": 2181988352,
+  "limitBytes": 2147483648,
+  "peakRssAtMost2GiB": false,
+  "rawReport": "macos-arm64-50000-search-plan3-map640-full.praxis.json"
+}

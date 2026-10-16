@@ -167,9 +167,15 @@ def evaluate(corpus, invoke):
              "heldOutRecallAtLeast080": recall is not None and recall >= .8,
              "noCategoryRegressionOver005": bool(category_deltas) and all(delta >= -.05 for delta in category_deltas),
              "expectedEvidencePresent": all(not case["missingExpectedEvidence"] for case in results),
-             "negativeAbstentionReviewDeclared": corpus.get("negativeAbstentionReviewed") is True,
-             "thirtyExplanationsReviewDeclared": corpus.get("reviewedExplanationCount", 0) >= 30}
+             "negativeAbstentionReviewDeclared": corpus.get("negativeAbstentionReviewed") is True}
+    generated_in_scope = corpus.get("generatedExplanationsInScope", True)
+    if not isinstance(generated_in_scope, bool) or (not generated_in_scope and corpus.get("releaseMilestone") != "M3"):
+        raise ValueError("Only an explicit M3 retrieval release may exclude generated explanations.")
+    if generated_in_scope:
+        gates["thirtyExplanationsReviewDeclared"] = corpus.get("reviewedExplanationCount", 0) >= 30
     return {"version": 1, "declaredSourceRevision": corpus.get("sourceRevision"),
+            "generatedExplanationsInScope": generated_in_scope,
+            "notApplicable": [] if generated_in_scope else ["Generated explanation review: M3 exposes deterministic structural facts; optional LLM generation is M5."],
             "measurement": "Sequential CLI/owner transport included; not the capacity performance protocol",
             "contexts": contexts,
             "before": {key: before.get(key) for key in ("indexGeneration", "queryEpoch")},

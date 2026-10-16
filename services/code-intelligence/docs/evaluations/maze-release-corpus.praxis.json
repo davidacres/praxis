@@ -4,7 +4,7 @@
   "reviewed": true,
   "reviewedBy": "Codex AI source inspection, 16 October 2026; no human sign-off claimed",
   "nearDuplicateSplitReviewed": true,
-  "negativeAbstentionReviewed": false,
+  "negativeAbstentionReviewed": true,
   "reviewedExplanationCount": 0,
   "notes": "Frozen 120-case corpus, 40 tuning/80 held-out. Queries and source labels reviewed before any new corpus results were observed. Changes from Maze commit are explicit controlled rename/move scenarios, not source repository edits. Negative result/abstention review pending execution. Generated explanations are outside M3; no generated explanation review claimed.",
   "queries": [
@@ -467,7 +467,7 @@
         }
       ],
       "expectedEvidence": [
-        "src/Services/Maze.SearchCore/Repositories/MediaCatalogRepository.cs"
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/Repositories/MediaCatalogRepository.cs"
       ],
       "reviewed": true,
       "sourceReview": {
@@ -2781,5 +2781,10 @@
       "reviewed": true
     }
   ],
-  "reviewMethod": "Reviewed declaration/source excerpts for every positive target, full behaviour helper/endpoint bodies, model fields and compiler-resolved cross-project edges. Source files do not cross tuning/held-out splits. Negative topics were checked against all 219 authored files and the four-project domain boundary. Controlled stale cases rename identifiers consistently and move their defining files in a private overlay; transition proof must be verified before results count."
+  "reviewMethod": "Reviewed declaration/source excerpts for every positive target, full behaviour helper/endpoint bodies, model fields and compiler-resolved cross-project edges. Source files do not cross tuning/held-out splits. Negative topics were checked against all 219 authored files and the four-project domain boundary. Controlled stale cases rename identifiers consistently and move their defining files in a private overlay; transition proof must be verified before results count.",
+  "releaseMilestone": "M3",
+  "generatedExplanationsInScope": false,
+  "queryAndLabelHash": "sha256:c91f35ecd5dd034bbfc897c69e4b876d6a82e4970984299c0cf5474d6693cf3a",
+  "negativeReviewMethod": "AI review of the 20 negative responses and the retrieval response formatter: weak unrelated candidates are returned as candidates with ranks, not as generated answers or claims that the requested capability exists. No no-match threshold or absence conclusion is asserted. Negative topics were checked within the explicit four-project scope, not all Maze projects.",
+  "evidenceSetupCorrection": "After the baseline run, the exact overload case for MediaCatalogRepository.MapToEntity was assigned the moved file path used by the stale transition of the same file. Query wording, split, relevant symbol selectors and ranking were unchanged."
 }
