@@ -19,7 +19,7 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
   const [repositoryId, setRepositoryId] = useState('');
   const [root, setRoot] = useState(''); const [manifest, setManifest] = useState(''); const [excludes, setExcludes] = useState('');
   const [searchArguments, setSearchArguments] = useState<ObjectValue>();
-  const [query, setQuery] = useState(''); const [provider, setProvider] = useState('');
+  const [query, setQuery] = useState(''); const [provider, setProvider] = useState(''); const [mode, setMode] = useState('hybrid');
   const [bundle, setBundle] = useState(''); const [fingerprint, setFingerprint] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [response, setResponse] = useState<CodeIntelligenceResponse>(); const [status, setStatus] = useState<CodeIntelligenceResponse>();
@@ -65,11 +65,11 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
   return (
     <section className="code-intelligence-panel" data-testid="code-intelligence-panel" aria-busy={busy}>
       <h4 className="settings-subsection-title">Code intelligence</h4>
-      <p className="settings-hint">Index C# locally for source search and static navigation. Registration never builds projects, restores packages, or downloads models. Search uses saved files; unsaved editor changes are not indexed.</p>
+      <p className="settings-hint">Index C# locally for source search and static navigation. Project files and existing restore output are read to resolve symbols across projects; nothing in the repository is built, restored or run, and no model is downloaded. Search uses saved files; unsaved editor changes are not indexed.</p>
       <fieldset disabled={busy}>
         <legend>Register a repository</legend>
         <label>Repository folder<input className="input" value={root} onChange={event => setRoot(event.target.value)} placeholder="Absolute repository path" /></label>
-        <label>Passive context manifest (optional)<input className="input" value={manifest} onChange={event => setManifest(event.target.value)} placeholder="context.praxis.json" /></label>
+        <label>Captured context manifest (optional; replaces automatic project detection)<input className="input" value={manifest} onChange={event => setManifest(event.target.value)} placeholder="context.praxis.json" /></label>
         <label>Excluded folders<input className="input" value={excludes} onChange={event => setExcludes(event.target.value)} placeholder="private;secrets" /></label>
         <div className="code-intelligence-actions">
           <button className="btn" type="button" disabled={!root.trim()} onClick={() => void work(async () => {
@@ -81,7 +81,7 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
       </fieldset>
       <fieldset disabled={busy}>
         <legend>Local embedding model</legend>
-        <p className="settings-hint">Install a provisioned MiniLM bundle. Its model and tokenizer checksums are verified locally.</p>
+        <p className="settings-hint">Install a provisioned MiniLM bundle (prepared once with the code intelligence <code>prepare-model.py</code> script). Its model and tokenizer checksums are verified locally. Without a model, search uses keywords only.</p>
         <label>Model bundle folder<input className="input" value={bundle} onChange={event => setBundle(event.target.value)} /></label>
         <button className="btn" type="button" disabled={!bundle.trim()} onClick={() => void work(async () => {
           const result = await call({ action: 'model-install', bundle: bundle.trim() }); setFingerprint(String(record(result.data).fingerprint));
@@ -111,7 +111,7 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
           })}>Rebuild index</button>
           <button className="btn" type="button" disabled={busy} onClick={() => void work(async () => {
             const destination = await prompt({ title: 'Relocate repository', label: 'New repository folder', initialValue: selected.root,
-              message: 'This clears the old index and revokes all provider access. Exclusions are preserved. Capture a new passive manifest after moving, then register it for this folder. Source files are preserved.',
+              message: 'This clears the old index and revokes all provider access. Exclusions are preserved and projects are detected again in the new folder; if you use a captured manifest, capture it again there. Source files are preserved.',
               confirmLabel: 'Relocate repository', validate: value => !value.trim() ? 'Enter the new repository folder.' : value.trim() === selected.root ? 'Choose the new folder.' : undefined });
             if (!destination) return;
             await call({ action: 'relocate', repositoryId, root: destination.trim() });
@@ -127,7 +127,11 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
         </div>
         {contexts.length > 0 && <ul className="code-intelligence-contexts">{contexts.map(value => { const context = record(value); return <li key={String(context.contextId)}>{String(context.resolution)} · {String(context.state)} · {items(context.capabilities).map(String).join(', ')}</li>; })}</ul>}
         {items(record(status?.data).diagnostics).length > 0 && <details><summary>Index diagnostics</summary><pre>{JSON.stringify(record(status?.data).diagnostics, null, 2)}</pre></details>}
-        <form onSubmit={event => { event.preventDefault(); void work(() => runTool('search_code', { query, limit: 20, mode: 'hybrid' })); }}>
+        <form onSubmit={event => { event.preventDefault(); void work(() => runTool('search_code', { query, limit: 20, mode })); }}>
+          <label className="code-intelligence-mode">Search mode<ChipSelect ariaLabel="Search mode" block value={mode} onChange={setMode} options={[
+            { value: 'hybrid', label: 'Hybrid', meta: 'names first, then meaning' },
+            { value: 'lexical', label: 'Keyword', meta: 'names and text only' },
+            { value: 'vector', label: 'Semantic', meta: 'meaning only; needs the local model' }]} /></label>
           <label>Search source<input className="input" value={query} onChange={event => setQuery(event.target.value)} placeholder="Symbol name or description" /></label>
           <button className="btn" type="submit" disabled={busy || !query.trim()}>Search code</button>
         </form>

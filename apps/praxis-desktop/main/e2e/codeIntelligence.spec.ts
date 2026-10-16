@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { chooseOption } from './chipSelect';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
@@ -18,6 +19,8 @@ async function openPanel() {
       if (request.action === 'query') {
         const args = request.arguments as Record<string, unknown>;
         if (request.tool === 'get_index_status') return { indexGeneration: generation, freshness: { state: 'current' }, data: { contexts: [], diagnostics: [], models: [], jobsByState: {} } };
+        if (request.tool === 'search_code' && args.query === 'mode probe')
+          return { data: { matches: [{ symbol: { symbolId: 'probe', qualifiedName: `Mode ${String(args.mode)}`, signature: 'void Run()', resolution: 'resolved' } }] } };
         if (request.tool === 'search_code') {
           const next = args.cursor === 'next-page';
           return { truncated: !next, nextCursor: next ? null : 'next-page', data: { matches: [{ symbol: { symbolId: next ? 'second' : 'first', qualifiedName: next ? 'SecondResult' : 'FirstResult', signature: 'void Run()', resolution: 'resolved' } }] } };
@@ -52,6 +55,19 @@ test('rebuild and relocation use the themed recovery flow and refresh status', a
   await expect(panel).toContainText('/fixture/moved');
   await expect(panel).toContainText('Generation 3');
   await panel.screenshot({ path: testInfo.outputPath('code-intelligence-recovery.png') });
+});
+
+test('search sends the chosen mode, defaulting to hybrid', async () => {
+  const { panel } = await openPanel();
+  await expect(panel).toContainText('nothing in the repository is built, restored or run');
+  await panel.getByLabel('Search source').fill('mode probe');
+  await panel.getByRole('button', { name: 'Search code', exact: true }).click();
+  await expect(panel.locator('.code-intelligence-match strong')).toHaveText('Mode hybrid');
+  for (const [value, expected] of [['vector', 'Mode vector'], ['lexical', 'Mode lexical']] as const) {
+    await chooseOption(panel.getByRole('button', { name: 'Search mode' }), value);
+    await panel.getByRole('button', { name: 'Search code', exact: true }).click();
+    await expect(panel.locator('.code-intelligence-match strong')).toHaveText(expected);
+  }
 });
 
 test('budget-truncated search offers the returned cursor and shows the next page', async () => {
