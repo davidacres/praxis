@@ -19,6 +19,7 @@ import type {
 } from '@praxis/core';
 import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
 import { fetchModelOptions, hasModelCatalog, isApiModelProvider, providerLabel } from '../ai/modelProviders';
+import { formatContextLength, formatModelCost, getKnownContextLength, modelPriceLabel } from '../ai/sessionNav';
 import { ChipSelect, type ChipSelectOption } from '../ui/ChipSelect';
 import { Icon, type IconName } from '../ui/Icon';
 import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
@@ -1167,7 +1168,16 @@ function AgentStageFields({
     setModelsLoading(true);
     fetchModelOptions(stageAi as AiProvider, false)
       .then(result => {
-        if (!cancelled) setStageModels(result?.options.map(option => ({ value: option.value, label: option.name, description: option.description })));
+        if (cancelled) return;
+        setStageModels(result?.options.map(option => ({
+          value: option.value,
+          label: option.name,
+          description: option.description,
+          meta: [
+            formatContextLength(option.contextLength ?? getKnownContextLength(option.value, stageAi as AiProvider)) ?? option.contextLabel,
+            modelPriceLabel(option.pricingLabel ?? formatModelCost(option.pricing))
+          ].filter(Boolean).join(' · ') || undefined
+        })));
       })
       .catch(() => undefined)
       .finally(() => {
