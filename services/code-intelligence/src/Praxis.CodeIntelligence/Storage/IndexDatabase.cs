@@ -10,10 +10,10 @@ namespace Praxis.CodeIntelligence.Storage;
 public sealed class IndexDatabase
 {
     public const int SchemaVersion = 4;
-    public const int ReadMappingVersion = 5;
+    public const int ReadMappingVersion = 6;
     public const int ReadPageCacheVersion = 2;
     public const int ReadPageCacheKiB = 64 * 1024;
-    public const long MaximumReadMappingBytes = 576L * 1024 * 1024;
+    public const long MaximumReadMappingBytes = 512L * 1024 * 1024;
     private static readonly (string Sql, string Checksum)[] Migrations = Enumerable.Range(1, SchemaVersion).Select(version =>
     {
         var sql = ReadMigration(version);

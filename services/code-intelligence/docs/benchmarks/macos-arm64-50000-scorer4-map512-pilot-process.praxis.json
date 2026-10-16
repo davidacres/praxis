@@ -1,0 +1,13 @@
+{
+  "implementationCommit": "661f546b plus reader-mapping-v6 configuration",
+  "measurement": "Query-only /usr/bin/time -l, current adapter-v8 retained snapshot; four readers, 200 timed queries/mode",
+  "maximumResidentSetBytes": 1289863168,
+  "limitBytes": 2147483648,
+  "peakRssAtMost2GiB": true,
+  "rawReport": "macos-arm64-50000-scorer4-map512-pilot.praxis.json",
+  "limitations": [
+    "Pilot rather than full-process RSS",
+    "Retrieval-only target remains failed",
+    "Single exact-query run"
+  ]
+}

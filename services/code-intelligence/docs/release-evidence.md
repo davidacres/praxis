@@ -352,3 +352,9 @@ The code-intelligence panel now explicitly says saved files are searched and uns
 ## Full adapter-v8/scorer-v4 result — RSS failure preserved
 
 The immutable current-build full run completed indexing, real inference, 400 queries per mode and edit/refresh with zero query errors. Lexical p95 **5.8004 ms** and hybrid **405.6300 ms** pass the main latency limits. Retrieval-only p95 **383.2350 ms** still fails 250 ms. Independent peak RSS **2235957248 bytes** fails 2 GiB, despite the separate query-only process passing it. Both raw and independent-process records, including binary hashes, are preserved. Reader mapping is being reduced to 512 MiB (version 6); its latency and full-process memory must be measured afresh. No current release pass is claimed.
+
+## Reader mapping v6 and current graph/scorer watcher result
+
+Reader mapping v6 selects 512 MiB. All 112 provisioned C# tests pass, with zero skips. Its isolated adapter-v8 retained-snapshot pilot measured 200 exact queries per mode with four readers: lexical p95 **6.2081 ms**, hybrid **420.2002 ms**, zero query/warmup errors and independent query-process peak RSS **1289863168 bytes**. The main latency/RSS pilot limits pass; retrieval-only still fails 250 ms and full-process memory remains pending. Raw and independent-process reports are preserved.
+
+The adapter-v8/scorer-v4 native package (before this mapping-only change) completed all 25 actual-watcher 5k edits with zero errors: structural p95 **1675.3390 ms**, semantic-refresh conservative upper-bound p95 **609.0794 ms**. Both update gates pass. The new source/configuration graph and streaming selector therefore retain update performance in this run; repeated/concurrent-load qualification remains open.
