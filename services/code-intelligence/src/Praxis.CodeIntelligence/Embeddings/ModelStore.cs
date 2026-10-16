@@ -12,7 +12,7 @@ public sealed record VectorCandidate(string SymbolId, double Score);
 public sealed class ModelStore(IndexDatabase database, string directory) : IDisposable
 {
     public const int VectorScorerVersion = 4;
-    public const int VectorQueryPlanVersion = 4;
+    public const int VectorQueryPlanVersion = 5;
     // Queried on the database volume, where both profiles and the SQLite WAL
     // may coexist during activation. Injectable only for deterministic fault tests.
     internal Func<string, long> AvailableDiskBytes { get; set; } = path => new DriveInfo(path).AvailableFreeSpace;
@@ -168,19 +168,30 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         // this path avoids), so it is only valid when every vector is this repository's.
         if (Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM repositories")) != 1)
             return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks);
-        using (var scan = connection.Command(transaction,
-            "SELECT symbol_id,values_blob FROM vector_scan WHERE model_fingerprint=$0 AND ready=1 AND dimensions=384 AND length(values_blob)=1536", query.Fingerprint))
-        using (var reader = scan.ExecuteReader())
+        // Stepped through SQLite directly and scored from SQLite's own row buffer:
+        // the ADO.NET reader's per-row overhead and blob copy cost more than the
+        // scoring itself. The statement runs inside the caller's read transaction.
+        var overflow = false;
         {
-            while (reader.Read())
+            if (connection.Handle is not { } handle) throw new InvalidOperationException("Connection is not open.");
+            ThrowOnError(handle, SQLitePCL.raw.sqlite3_prepare_v2(handle,
+                "SELECT symbol_id,values_blob FROM vector_scan WHERE model_fingerprint=?1 AND ready=1 AND dimensions=384 AND length(values_blob)=1536", out var scan));
+            using (scan)
             {
-                if (++scanned > maximumChunks) return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks);
-                if ((scanned & 127) == 0) cancellationToken.ThrowIfCancellationRequested();
-                if (reader.GetBytes(1, 0, bytes, 0, bytes.Length) != bytes.Length) continue;
-                if (!VectorScoring.TryScore(bytes, query.Vector, out var score)) continue;
-                if (window.CanImprove(score)) window.Add(reader.GetString(0), score);
+                ThrowOnError(handle, SQLitePCL.raw.sqlite3_bind_text(scan, 1, query.Fingerprint));
+                int step;
+                while ((step = SQLitePCL.raw.sqlite3_step(scan)) == SQLitePCL.raw.SQLITE_ROW)
+                {
+                    if (++scanned > maximumChunks) { overflow = true; break; }
+                    if ((scanned & 127) == 0) cancellationToken.ThrowIfCancellationRequested();
+                    var values = SQLitePCL.raw.sqlite3_column_blob(scan, 1);
+                    if (values.Length != bytes.Length || !VectorScoring.TryScore(values, query.Vector, out var score)) continue;
+                    if (window.CanImprove(score)) window.Add(SQLitePCL.raw.sqlite3_column_text(scan, 0).utf8_to_string(), score);
+                }
+                if (!overflow && step != SQLitePCL.raw.SQLITE_DONE) ThrowOnError(handle, step);
             }
         }
+        if (overflow) return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks);
         cancellationToken.ThrowIfCancellationRequested();
         var ranked = window.Results();
         // Fewer scored chunks than the window cannot have evicted anything,
@@ -221,6 +232,12 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         return windowSaturated
             ? ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks)
             : current;
+    }
+
+    private static void ThrowOnError(SQLitePCL.sqlite3 handle, int code)
+    {
+        if (code is not (SQLitePCL.raw.SQLITE_OK or SQLitePCL.raw.SQLITE_ROW or SQLitePCL.raw.SQLITE_DONE))
+            throw new SqliteException(SQLitePCL.raw.sqlite3_errmsg(handle).utf8_to_string(), code);
     }
 
     internal static IReadOnlyList<VectorCandidate> ExhaustiveCandidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000)

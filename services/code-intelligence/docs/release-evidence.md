@@ -595,3 +595,25 @@ The single-run frontier did not show this cost. Over five runs the smaller reade
 - Edits under load: publish p50/max 27.7/34.0 s, refresh p50/max 3.5/9.9 s.
 
 **Trade-off as it stands:** mapping v7 fixes the memory failure and introduces four marginal retrieval-only failures in broad four-reader workloads. Making broad retrieval itself cheaper is the next step, rather than trading memory for latency.
+
+## Native score pass (vector query plan 5) — 16 October
+
+Instrumenting the score pass on the retained fixture (terminology queries) showed the cost was ADO.NET, not scoring:
+
+| Readers | `Read()` step | `GetBytes` copy | Scoring | Total |
+|---|---|---|---|---|
+| 1 | 29.6 ms | 32.2 ms | 7.8 ms | 71.6 ms |
+| 4 | 62.9 ms | 54.8 ms | 12.3 ms | 134.5 ms |
+
+The score pass now prepares and steps its statement through SQLitePCL on the connection's own handle, inside the caller's read transaction. It scores directly from SQLite's row buffer (`sqlite3_column_blob`) and reads the symbol ID string only for rows that can enter the window. It uses the same SQL filters, the same bytes and the same scorer, so scores are identical. Capacity overflow still hands the query to the exhaustive scan, and SQLite errors surface as `SqliteException`. SQLitePCLRaw was already a locked transitive dependency; no package changed. 116 C# tests pass, zero skipped, including window equivalence, drift, malformed-blob and cancellation cases.
+
+Single-run pilot, terminology and behaviour categories (`benchmarks/macos-arm64-50000-native-scan-pilot*`), zero errors:
+
+| Run | Hybrid p95 | Retrieval p95 | Vector scan p95 | Lexical p95 |
+|---|---|---|---|---|
+| terminology, 1 reader | 120.0 ms | 116.5 ms | 39.5 ms | 53.9 ms |
+| terminology, 4 readers | 178.1 ms | **166.8 ms** | 67.4 ms | 80.7 ms |
+| behaviour, 1 reader | 122.1 ms | 118.3 ms | 40.3 ms | 47.8 ms |
+| behaviour, 4 readers | 185.9 ms | **175.5 ms** | 71.6 ms | 77.6 ms |
+
+Under mapping v7, four-reader retrieval had measured 245.9–270.4 ms. The full matrix and concurrent-edit run follow.
