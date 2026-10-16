@@ -219,7 +219,7 @@ export function ModelManagerPanel({
                 return (
                   <div className="model-manager-chip-row" key={option.value} data-testid="model-manager-chip-row">
                     <span className="model-manager-chip-name" title={option.value}>{option.name}</span>
-                    <span className="model-manager-chip-meta">
+                    <span className="model-manager-chip-meta" data-testid="model-badges">
                       {contextSize && <span className="composer-model-badge is-context">{contextSize}</span>}
                       {cost && <span className="composer-model-badge is-cost" title={modelPriceTitle(option.pricingLabel)}>{cost}</span>}
                     </span>
@@ -331,7 +331,7 @@ export function ModelManagerPanel({
                     data-testid={`model-manager-checkbox-${option.value}`}
                   />
                   <span className="model-manager-row-name">{option.name}</span>
-                  <span className="model-manager-chip-meta">
+                  <span className="model-manager-chip-meta" data-testid="model-badges">
                     {contextSize && <span className="composer-model-badge is-context">{contextSize}</span>}
                     {cost && <span className="composer-model-badge is-cost" title={modelPriceTitle(option.pricingLabel)}>{cost}</span>}
                   </span>
