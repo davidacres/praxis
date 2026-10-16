@@ -1,0 +1,14 @@
+{
+  "implementationCommit": "d8487df1",
+  "assemblyHashes": {
+    "Praxis.CodeIntelligence.dll": "sha256:",
+    "Praxis.CodeIntelligence.Benchmarks.dll": "sha256:"
+  },
+  "measurement": "Full process /usr/bin/time -l; cold process indexing, local inference, queries, edit publication and refresh",
+  "maximumResidentSetBytes": 2020671488,
+  "limitBytes": 2147483648,
+  "peakRssAtMost2GiB": true,
+  "mainLatencyAndRssLimitsPass": true,
+  "rawReport": "macos-arm64-50000-plan6-schema5-full.praxis.json",
+  "fullReleaseQualified": false
+}

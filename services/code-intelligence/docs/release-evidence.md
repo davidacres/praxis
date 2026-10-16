@@ -12,7 +12,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Application/native packaging | Full application build and current native owner/SQLite/ONNX/IPC packaging smoke pass locally | Latest release-wide platform/UI matrix remains open |
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
 | Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
-| 50k exact-query latency and memory | Final mapping-v6/scorer-v4 full process: lexical p95 5.895 ms, hybrid p95 434.591 ms, independent peak RSS 2004254720 bytes; main limits pass | Retrieval-only p95 414.348 ms fails 250 ms; complete category/repeat/concurrent-edit/reference-machine protocol remains open |
+| 50k exact-query latency and memory | Plan-6/schema-5 full process: lexical p95 6.467 ms, hybrid p95 211.053 ms, retrieval-only p95 191.841 ms, independent peak RSS 2020671488 bytes; all measured gates pass (previous plan-5 run: hybrid 434.591, retrieval 414.348 failing) | 50k body edit 17034 ms vs 14263 ms before (no 50k gate). Repeat/concurrent-edit/reference-machine protocol open |
 | Query matrix (plan 6) | Five runs × exact/terminology/behaviour/negative × one/four readers × 200 queries: 39/40 processes pass every gate; hybrid p95 max 322.743 ms; lexical p95 max 82.942 ms; zero errors | **Fails:** behaviour four-reader run 1 retrieval-only p95 301.9 ms; other four-reader terminology/behaviour runs 236–247 ms (thin margin). Concurrent edits, cross-project, owner/wire, full-process RSS, reference machine unmeasured |
 | Broader terminology performance (history) | (Superseded for the vector path by the ranked-validation checkpoint below: one-reader hybrid p95 228.496 ms, four-reader 365.737 ms, single pilot.) Two independent 50k processes, matched 200-query sets/mode: one reader lexical/hybrid p95 74.371/353.665 ms; four readers 98.664/507.817 ms; no errors | Four-reader hybrid fails 500 ms and retrieval-only fails 250 ms. Five repeats, other categories and concurrent edits remain open |
 | Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Final mapping-v6 run 38904504214 passes Windows/macOS/Linux (112 tests per host, schemas, native packaging, retained/matrix safeguards and watcher smoke) |
@@ -472,3 +472,20 @@ The packaged native owner, using the actual watcher, ran 25 edits on the same 5k
 | Edit to vectors | 2059.1 ms | 2215.3 ms |
 
 The duplicated vector writes cost roughly 5–8% at p95 in this single comparison; run-to-run noise was not measured. The structural margin to the 2 s gate falls from about 325 ms to about 237 ms.
+
+## Full-process 50k run, plan 6 / schema 5 — 16 October
+
+This is the same protocol as `scorer4-map512-full`: cold indexing of 49,999 source symbols (50,001 published), real local inference, 400 exact queries per mode, then body-edit publication and refresh, all under `/usr/bin/time -l`. Zero query or warmup errors. Raw files: `benchmarks/macos-arm64-50000-plan6-schema5-full.praxis.json` and `-process.praxis.json`.
+
+| Measure | Plan 5 / schema 4 | Plan 6 / schema 5 |
+|---|---|---|
+| Lexical p95 | 5.895 ms | 6.467 ms |
+| Hybrid p95 (≤500) | 434.591 ms | **211.053 ms** |
+| Retrieval-only p95 (≤250) | 414.348 ms (fails) | **191.841 ms (passes)** |
+| Vector scan p95 | 382.205 ms | 152.449 ms |
+| Peak RSS (≤2 GiB) | 2,004,254,720 | 2,020,671,488 (passes; about 127 MiB headroom) |
+| Initial index / vectors | 17,990 / 522,709 ms | 17,611 / 520,185 ms |
+| 50k body edit | 14,263 ms | 17,034 ms (+19%) |
+| Vector refresh | 1,685 ms | 1,777 ms |
+
+All measured gates pass in this run. That covers this process only: the four-reader broad-category matrix still has one retrieval failure and thin margins. The 50k body-edit regression is consistent with writing vector bytes twice plus trigger work, but its cause was not isolated. There is no 50k edit gate; the 5k watcher gate still passes.
