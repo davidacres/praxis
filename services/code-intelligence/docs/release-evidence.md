@@ -772,3 +772,28 @@ The M4 TypeScript and JavaScript language adapter (`ts-sidecar.mjs`, `TypeScript
 5. **Test evidence:**
    - 132 tests pass (0 failures, 0 skipped) under `PRAXIS_DOTNET` and `PRAXIS_MODEL_BUNDLE` via `npm run test:code-intelligence`.
    - Verified overloads, merging, parameter properties, call hierarchies, multi-project references, polyglot vector/hybrid searches, untrusted script rejection, and fallback.
+
+## Optional local LLM enrichment (M5 / CI-020 / TASK-460) — 17 October
+
+The M5 optional local LLM enrichment (`Praxis.CodeIntelligence.Enrichment`) was implemented and integrated on `feat/code-intelligence-local-llm`:
+
+1. **Loopback security guard (§17):**
+   - Strictly permits only verified loopback host addresses (`127.0.0.1`, `::1`, `localhost`).
+   - Rejects remote/external endpoints with `SecurityException`.
+   - Configures `SocketsHttpHandler` with `AllowAutoRedirect = false` and `UseProxy = false`.
+2. **OpenAI-compatible local LLM client (§2, §11):**
+   - Directs chat completions to `/v1/chat/completions` with temperature `0.0`, `max_tokens: 1024`, and an 8-second bounded timeout.
+   - Caps response bodies at 64 KiB.
+3. **Structured schema enforcement & evidence grounding (§11):**
+   - Requires JSON structure with `intent`, `inputs`, `outputs`, `sideEffects`, `uncertainties`, and `evidenceIds`.
+   - Strictly validates `evidenceIds` against the compiler-verified evidence set, throwing `GroundingException` on fabricated citations.
+   - Generates summary text labeled with `provenance: "generated"`.
+4. **Durable caching & targeted invalidation:**
+   - Stores cached symbol and project summaries in SQLite `descriptions` and `description_dependencies` tables.
+   - Clears stale entries when a symbol or dependency is modified.
+   - Employs dedicated writable SQLite connection for enrichment persistence while `QueryService` executes queries in read-only mode.
+5. **Aggregate project summaries (§29.3):**
+   - Generates aggregate project descriptions across child components in `summarize_project`, bounded at 50 child components.
+6. **Test evidence:**
+   - 137 tests pass (0 failures, 0 skipped) under `PRAXIS_DOTNET` and `PRAXIS_MODEL_BUNDLE` via `npm run test:code-intelligence`.
+   - All 5 dedicated enrichment tests in `EnrichmentTests.cs` pass covering loopback validation, schema grounding rejection, cached `explain_symbol` responses, aggregate `summarize_project` descriptions, and invalidation upon dependency edits.

@@ -3,6 +3,7 @@ using Praxis.CodeIntelligence.Indexing;
 using Praxis.CodeIntelligence.Queries;
 using Praxis.CodeIntelligence.Storage;
 using Praxis.CodeIntelligence.Embeddings;
+using Praxis.CodeIntelligence.Enrichment;
 using System.Text.Json;
 using System.Collections.Concurrent;
 
@@ -12,6 +13,7 @@ public sealed class ServiceRuntime : IDisposable
 {
     public IndexDatabase Database { get; }
     public RepositoryIndexer Indexer { get; }
+    public EnrichmentService Enrichment { get; } = new();
     private readonly QueryService queries;
     private readonly ModelStore models;
     public DurableScheduler Scheduler { get; }
@@ -34,7 +36,7 @@ public sealed class ServiceRuntime : IDisposable
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dataDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         this.dataDirectory = dataDirectory;
         Database = new(Path.Combine(dataDirectory, "index.db")); Database.Initialize(); keepAlive = Database.Open(); Indexer = new(Database);
-        models = new(Database, Path.Combine(dataDirectory, "models")); queries = new(Database, models);
+        models = new(Database, Path.Combine(dataDirectory, "models")); queries = new(Database, models, Enrichment);
         Scheduler = new(Database);
         grantsDirectory = Path.Combine(dataDirectory, "grants"); Directory.CreateDirectory(grantsDirectory);
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(grantsDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -100,6 +102,24 @@ public sealed class ServiceRuntime : IDisposable
                 case "model-install": return Result(new { fingerprint = models.Install(request["bundle"]!.GetValue<string>()) });
                 case "model-activate": QueueModel(repositoryId!, request["fingerprint"]!.GetValue<string>()); return Result(new { queued = true });
                 case "backup": Database.Backup(request["destination"]!.GetValue<string>()); return Result(new { backedUp = true });
+                case "enrichment-configure":
+                {
+                    var enabled = request["enabled"]?.GetValue<bool>() ?? false;
+                    var endpoint = request["endpoint"]?.GetValue<string>();
+                    var model = request["model"]?.GetValue<string>() ?? "default";
+                    if (enabled && endpoint is not null)
+                    {
+                        var uri = new Uri(endpoint);
+                        LoopbackSecurity.ValidateLoopbackUri(uri);
+                        var client = new LocalLlmClient(uri, model);
+                        Enrichment.Configure(client);
+                    }
+                    else
+                    {
+                        Enrichment.Configure(null);
+                    }
+                    return Result(new { enabled = Enrichment.IsEnabled, model = Enrichment.Client?.Model });
+                }
                 default: throw new ArgumentException("Unknown action.");
             }
         }

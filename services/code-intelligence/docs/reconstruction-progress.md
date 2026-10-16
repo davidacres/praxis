@@ -218,6 +218,16 @@ The M4 TypeScript and JavaScript compiler adapter is implemented via a bounded, 
 - **Packaging & Monitoring:** `ts-sidecar.mjs` and trusted TypeScript are packaged in the service distribution; the host watcher dirty detection monitors `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs`, `.cjs`, and `tsconfig.json` / `jsconfig.json` changes.
 - **Suite status:** 132 C# tests pass (zero failed, zero skipped) with model bundle and SDK configured.
 
+## Optional local LLM enrichment checkpoint (M5 / TASK-460 / CI-020 — 17 October)
+
+Optional local LLM enrichment is implemented for bounded, grounded symbol and project summaries (§2, §11, §17, §26.4, §29.3, §34):
+- **Disabled by default & loopback security guard (§17):** Enrichment is strictly opt-in and communicates exclusively with local OpenAI-compatible endpoints (`/v1/chat/completions`). `LoopbackSecurity` validates endpoint addresses, strictly permitting only verified loopback hosts (`127.0.0.1`, `::1`, `localhost`) and rejecting external or remote addresses with `SecurityException`. The underlying HTTP handler explicitly disables redirects (`AllowAutoRedirect = false`) and proxies (`UseProxy = false`).
+- **Structured output schema & evidence grounding (§11):** Enforces structured JSON output schema containing `intent`, `inputs`, `outputs`, `sideEffects`, `uncertainties`, and `evidenceIds`. Max 1,024 output tokens; text labeled `provenance: "generated"`. Strictly validates evidence IDs against compiler-verified evidence sets, rejecting fabricated citations with `GroundingException`.
+- **Durable caching & targeted invalidation:** Symbol and project summaries are cached in SQLite `descriptions` and `description_dependencies` tables. Modifying or invalidating a symbol clears dependent cached descriptions.
+- **Aggregate project descriptions (§29.3):** `summarize_project` generates aggregate summaries across child components capped at 50 child components.
+- **Preserves compiler truth:** Compiler-derived facts remain authoritative and are never overwritten with LLM-generated claims.
+- **Suite status:** 137 C# tests pass (zero failed, zero skipped) with model bundle and SDK configured.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.
@@ -225,7 +235,7 @@ The M4 TypeScript and JavaScript compiler adapter is implemented via a bounded, 
 - Irreducible single-item budget behavior and execution of Windows/macOS source-handle fixtures.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
-Current indexing performs full-context compiler analysis and atomically updates or replaces structural facts. It does not yet implement targeted API-stamp invalidation or establish complete performance/release acceptance. M4 (TypeScript and JavaScript language adapter, TASK-459 / CI-019) is implemented and verified with 132 tests passing. M5–M6 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
+Current indexing performs full-context compiler analysis and atomically updates or replaces structural facts. It does not yet implement targeted API-stamp invalidation or establish complete performance/release acceptance. M4 (TypeScript and JavaScript language adapter, TASK-459 / CI-019) and M5 (Optional local LLM enrichment, TASK-460 / CI-020) are implemented and verified with 137 tests passing. M6 (Evaluate ANN scaling federation and interoperability) and TASK-458 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
 
 ## Preservation policy
 

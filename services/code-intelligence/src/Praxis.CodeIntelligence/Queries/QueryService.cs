@@ -6,11 +6,18 @@ using Microsoft.Data.Sqlite;
 using Praxis.CodeIntelligence.Indexing;
 using Praxis.CodeIntelligence.Storage;
 using Praxis.CodeIntelligence.Embeddings;
+using Praxis.CodeIntelligence.Enrichment;
 
 namespace Praxis.CodeIntelligence.Queries;
 
-public sealed class QueryService(IndexDatabase database, ModelStore? models = null)
+public sealed class QueryService(IndexDatabase database, ModelStore? models = null, EnrichmentService? enrichment = null)
 {
+    public EnrichmentService? Enrichment { get; } = InitializeEnrichment(database, enrichment);
+    private static EnrichmentService? InitializeEnrichment(IndexDatabase db, EnrichmentService? service)
+    {
+        if (service is not null && service.Database is null) service.Database = db;
+        return service;
+    }
     public const int SearchCountCacheVersion = 1;
     public const int SearchPlanVersion = 6;
     public const string RankingProfile = "rrf-k60-lexical64-vector1-alias0.5-v3";
@@ -387,11 +394,35 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     var symbol = Symbol(Text(arguments, "symbolId")!); var declarations = symbol["declarations"]!.AsArray();
                     var provenance = symbol["external"]!.GetValue<bool>() ? "metadata" : Text(symbol, "resolution") == "syntaxOnly" ? "syntax" : "compiler";
                     if (symbol["external"]!.GetValue<bool>()) declarations = new JsonArray(Identity.Id("pci:metadata:", Text(symbol, "symbolId")));
-                    data = new() { ["facts"] = new JsonArray(new JsonObject { ["kind"] = "declaration", ["text"] = symbol["signature"]!.DeepClone(),
-                            ["evidenceIds"] = declarations.DeepClone(), ["provenance"] = provenance, ["resolution"] = symbol["resolution"]!.DeepClone(), ["sourceRevision"] = symbol["symbolRevision"]!.DeepClone() }),
-                        ["description"] = new JsonObject { ["text"] = "Declared " + Text(symbol, "kind") + " " + Text(symbol, "qualifiedName") + ". " + Text(symbol, "signature"),
-                            ["provenance"] = provenance, ["inputRevision"] = symbol["symbolRevision"]!.DeepClone(), ["evidenceIds"] = declarations.DeepClone(), ["state"] = "ready" },
-                        ["provenance"] = provenance, ["uncertainties"] = new JsonArray("Structural facts do not prove runtime behavior."), ["coverage"] = Coverage(1, 1) }; break;
+                    var facts = new JsonArray(new JsonObject { ["kind"] = "declaration", ["text"] = symbol["signature"]!.DeepClone(),
+                            ["evidenceIds"] = declarations.DeepClone(), ["provenance"] = provenance, ["resolution"] = symbol["resolution"]!.DeepClone(), ["sourceRevision"] = symbol["symbolRevision"]!.DeepClone() });
+                    JsonObject description;
+                    var uncertainties = new JsonArray("Structural facts do not prove runtime behavior.");
+                    var includeGenerated = arguments["includeGenerated"] is JsonValue ig && ig.TryGetValue<bool>(out var g) && g;
+                    if (includeGenerated && enrichment is not null && enrichment.IsEnabled)
+                    {
+                        var allowedEvidence = declarations.Select(d => d!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+                        var symbolId = Text(symbol, "symbolId")!;
+                        var enriched = enrichment.GetOrGenerateSymbolDescription(connection, transaction, repositoryId, symbolId, symbol, allowedEvidence, cancellationToken);
+                        if (enriched is not null)
+                        {
+                            description = enriched.Description;
+                            provenance = "generated";
+                            foreach (var u in enriched.Uncertainties) uncertainties.Add(u);
+                            foreach (var ev in enriched.CitedEvidence) evidence[ev.Key] = ev.Value;
+                        }
+                        else
+                        {
+                            description = new JsonObject { ["text"] = "Declared " + Text(symbol, "kind") + " " + Text(symbol, "qualifiedName") + ". " + Text(symbol, "signature"),
+                                ["provenance"] = provenance, ["inputRevision"] = symbol["symbolRevision"]!.DeepClone(), ["evidenceIds"] = declarations.DeepClone(), ["state"] = "ready" };
+                        }
+                    }
+                    else
+                    {
+                        description = new JsonObject { ["text"] = "Declared " + Text(symbol, "kind") + " " + Text(symbol, "qualifiedName") + ". " + Text(symbol, "signature"),
+                            ["provenance"] = provenance, ["inputRevision"] = symbol["symbolRevision"]!.DeepClone(), ["evidenceIds"] = declarations.DeepClone(), ["state"] = "ready" };
+                    }
+                    data = new() { ["facts"] = facts, ["description"] = description, ["provenance"] = provenance, ["uncertainties"] = uncertainties, ["coverage"] = Coverage(1, 1) }; break;
                 }
                 case "get_callers": case "get_callees":
                 {
@@ -450,9 +481,33 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     var componentCount = Convert.ToInt32(connection.Scalar(transaction, "SELECT count(*) FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE c.project_id=$0 AND s.kind='type'", projectId));
                     var components = Rows(connection, transaction, "SELECT symbol_id FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE c.project_id=$0 AND s.kind='type' ORDER BY qualified_name LIMIT 100", projectId);
                     contentTruncated |= componentCount > components.Count;
+                    var includeGenerated = arguments["includeGenerated"] is JsonValue ig && ig.TryGetValue<bool>(out var g) && g;
+                    JsonObject? projectDescription = null;
+                    var uncertainties = new JsonArray("Aggregate generated descriptions are unavailable.");
+                    if (includeGenerated && enrichment is not null && enrichment.IsEnabled)
+                    {
+                        var candidateIds = components.Select(r => Text(r, "symbol_id")!).ToArray();
+                        var aggResult = enrichment.GetOrGenerateProjectDescription(connection, transaction, repositoryId, projectId, candidateIds, cancellationToken);
+                        if (aggResult is not null)
+                        {
+                            projectDescription = aggResult.Description;
+                            uncertainties = new JsonArray();
+                            foreach (var u in aggResult.Uncertainties) uncertainties.Add(u);
+                            foreach (var ev in aggResult.CitedEvidence) evidence[ev.Key] = ev.Value;
+                        }
+                    }
                     data = new() { ["projectId"] = projectId, ["components"] = Array(components.Select(row =>
-                        { var symbol = Symbol(Text(row, "symbol_id")!); return (JsonNode?)new JsonObject { ["symbol"] = symbol, ["description"] = null, ["evidenceIds"] = symbol["declarations"]!.DeepClone() }; })),
-                        ["description"] = null, ["coverage"] = Coverage(componentCount, componentCount), ["uncertainties"] = new JsonArray("Aggregate generated descriptions are unavailable.") }; break;
+                        {
+                            var symId = Text(row, "symbol_id")!;
+                            var symbol = Symbol(symId);
+                            JsonObject? compDesc = null;
+                            if (includeGenerated && enrichment is not null && enrichment.IsEnabled)
+                            {
+                                compDesc = enrichment.GetCachedDescription(connection, transaction, symId);
+                            }
+                            return (JsonNode?)new JsonObject { ["symbol"] = symbol, ["description"] = compDesc, ["evidenceIds"] = symbol["declarations"]!.DeepClone() };
+                        })),
+                        ["description"] = projectDescription, ["coverage"] = Coverage(componentCount, componentCount), ["uncertainties"] = uncertainties }; break;
                 }
                 case "get_index_status":
                 {
