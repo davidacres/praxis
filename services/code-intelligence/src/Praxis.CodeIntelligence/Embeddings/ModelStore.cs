@@ -50,6 +50,12 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
 
     public void Activate(string repositoryId, string fingerprint, CancellationToken cancellationToken, string? leaseToken = null)
     {
+        try { ActivateCore(repositoryId, fingerprint, cancellationToken, leaseToken); }
+        finally { MemoryPressure.RelieveAfterWork(); }
+    }
+
+    private void ActivateCore(string repositoryId, string fingerprint, CancellationToken cancellationToken, string? leaseToken)
+    {
         using var model = new LocalModel(ProfileDirectory(fingerprint));
         if (model.Fingerprint != fingerprint) throw new IOException("Installed model fingerprint mismatch.");
         var repository = new RepositoryIndexer(database).Get(repositoryId);

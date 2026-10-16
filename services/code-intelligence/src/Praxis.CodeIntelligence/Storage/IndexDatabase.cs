@@ -45,7 +45,10 @@ public sealed class IndexDatabase
             Validate(connection);
             // Bound file-backed read mappings; SQLite retains WAL snapshot and
             // locking semantics and falls back to its pager where unsupported.
-            if (readOnly) Execute(connection, $"PRAGMA mmap_size={MaximumReadMappingBytes}; PRAGMA cache_size=-{ReadPageCacheKiB};");
+            if (readOnly)
+                Execute(connection, MemoryPressure.Active
+                    ? $"PRAGMA mmap_size=0; PRAGMA cache_size=-{MemoryPressure.PressureReadPageCacheKiB};"
+                    : $"PRAGMA mmap_size={MaximumReadMappingBytes}; PRAGMA cache_size=-{ReadPageCacheKiB};");
             else if (WritablePageLimit is long pages) Execute(connection, $"PRAGMA max_page_count={pages};");
             return connection;
         }

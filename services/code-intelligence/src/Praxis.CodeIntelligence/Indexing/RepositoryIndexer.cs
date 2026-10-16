@@ -95,6 +95,12 @@ public sealed class RepositoryIndexer(IndexDatabase database)
 
     public IndexResult Index(string id, CancellationToken cancellationToken = default, string? leaseToken = null, bool force = false)
     {
+        try { return IndexCore(id, cancellationToken, leaseToken, force); }
+        finally { MemoryPressure.RelieveAfterWork(); }
+    }
+
+    private IndexResult IndexCore(string id, CancellationToken cancellationToken, string? leaseToken, bool force)
+    {
         var repository = Get(id);
         if (repository.State == "paused") throw new InvalidOperationException("INDEX_BUSY: repository is paused.");
         IReadOnlyList<SourceInput> sources; RepositoryAnalysis analysis; string snapshotHash;

@@ -96,7 +96,7 @@ public sealed class ServiceRuntime : IDisposable
                         return queries.Execute(request["tool"]!.GetValue<string>(), arguments, new HashSet<string>(), cancellationToken);
                     return result;
                 }
-                case "doctor": return Result(new { checks = Database.Check(), storage = StorageStatus() });
+                case "doctor": return Result(new { checks = Database.Check(), storage = StorageStatus(), memory = MemoryPressure.Status() });
                 case "model-install": return Result(new { fingerprint = models.Install(request["bundle"]!.GetValue<string>()) });
                 case "model-activate": QueueModel(repositoryId!, request["fingerprint"]!.GetValue<string>()); return Result(new { queued = true });
                 case "backup": Database.Backup(request["destination"]!.GetValue<string>()); return Result(new { backedUp = true });
