@@ -214,3 +214,9 @@ The fixed-snapshot plan-1/plan-2 measurements are preserved in `benchmarks`: hyb
 Read page-cache version 1 requests 16 MiB per read connection, retaining the 128 MiB file-mapping request and normal connection disposal. Snapshot/WAL, filter and malformed-vector fixtures pass in the full 98-test local C# suite; all 109 response schemas validate. The fixed-snapshot result is hybrid p95 579.3655 ms versus plan 3's 636.7387 ms, with query-only maximum RSS 964886528 bytes. It still fails 500 ms and does not qualify cold/full-process RAM or repeated/category acceptance. Raw observations are under `benchmarks`.
 
 Read page-cache version 2 requests 64 MiB per read connection. The same 98-test suite and 109 schemas pass. Its fixed-snapshot hybrid p95 is 544.4594 ms with query-only maximum RSS 1153794048 bytes, still above the latency target. No whole-process memory qualification is inferred from that query-only value.
+
+## Selected mapping pilot
+
+Read mapping version 3 requests at most 640 MiB of file-backed mapping per read connection, with a 64 MiB SQLite page-cache request. The same-snapshot exact-query pilot measured **415.1196 ms hybrid p95**, **4.5717 ms lexical p95**, and query-only maximum RSS **1906245632 bytes**. A 1 GiB mapping pilot was faster (362.8384 ms) but had query-only RSS 2119991296 bytes; the smaller window leaves more headroom. Full-process/RSS, repeated/category/concurrent-edit and native CI qualification of this selected policy remain pending. All 98 local C# tests, 109 schemas and the retained real-model smoke pass.
+
+Review policy clarification: specification §32 asks for reviewed labels and recommends a second human sample where practical. Source review by Codex must be identified as AI review; it is not human approval. Existing draft artifacts remain unreviewed until actual review records are attached. This does not relax the numerical, evidence, abstention or explanation criteria.
