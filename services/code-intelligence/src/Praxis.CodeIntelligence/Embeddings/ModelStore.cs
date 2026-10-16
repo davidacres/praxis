@@ -12,7 +12,7 @@ public sealed record VectorCandidate(string SymbolId, double Score);
 public sealed class ModelStore(IndexDatabase database, string directory) : IDisposable
 {
     public const int VectorScorerVersion = 4;
-    public const int VectorQueryPlanVersion = 3;
+    public const int VectorQueryPlanVersion = 4;
     // Queried on the database volume, where both profiles and the SQLite WAL
     // may coexist during activation. Injectable only for deterministic fault tests.
     internal Func<string, long> AvailableDiskBytes { get; set; } = path => new DriveInfo(path).AvailableFreeSpace;
@@ -151,8 +151,10 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
     /// <summary>
     /// Exact top-100 of complete, current, eligible vectors. Validity (symbol
     /// revision, representation target, completeness, filters) is checked only
-    /// for candidates in rank order after a join-free score pass over ready
-    /// sets. If fewer than 100 candidates validate and the ranked window was
+    /// for candidates in rank order after a score pass over the dense
+    /// trigger-maintained vector_scan copy; each accepted set is rescored from
+    /// vectors, and any disagreement hands the query to the exhaustive scan.
+    /// If fewer than 100 candidates validate and the ranked window was
     /// saturated, or the chunk capacity is exceeded, the full validated scan
     /// decides instead, so the result never depends on the window size.
     /// </summary>
@@ -167,7 +169,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         if (Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM repositories")) != 1)
             return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks);
         using (var scan = connection.Command(transaction,
-            "SELECT e.symbol_id,v.values_blob FROM embedding_sets e JOIN vectors v ON v.set_id=e.set_id WHERE e.model_fingerprint=$0 AND e.state='ready' AND v.dimensions=384 AND length(v.values_blob)=1536", query.Fingerprint))
+            "SELECT symbol_id,values_blob FROM vector_scan WHERE model_fingerprint=$0 AND ready=1 AND dimensions=384 AND length(values_blob)=1536", query.Fingerprint))
         using (var reader = scan.ExecuteReader())
         {
             while (reader.Read())
@@ -194,14 +196,25 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         }
         var contextJoin = projectIds is { Count: > 0 } ? " JOIN contexts c ON c.context_id=s.defining_context_id" : "";
         using var validate = connection.Command(transaction,
-            "SELECT 1 FROM embedding_sets e JOIN representation_targets r ON r.symbol_id=e.symbol_id AND r.model_fingerprint=e.model_fingerprint JOIN symbols s ON s.symbol_id=e.symbol_id" + contextJoin + " WHERE e.symbol_id=$3 AND s.repository_id=$0 AND e.model_fingerprint=$1 AND ($2 IS NULL OR s.defining_context_id=$2) AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND r.eligibility='eligible' AND (SELECT count(*) FROM vectors complete WHERE complete.set_id=e.set_id)=e.expected_chunks" + filter, parameters.ToArray());
+            "SELECT e.set_id FROM embedding_sets e JOIN representation_targets r ON r.symbol_id=e.symbol_id AND r.model_fingerprint=e.model_fingerprint JOIN symbols s ON s.symbol_id=e.symbol_id" + contextJoin + " WHERE e.symbol_id=$3 AND s.repository_id=$0 AND e.model_fingerprint=$1 AND ($2 IS NULL OR s.defining_context_id=$2) AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND r.eligibility='eligible' AND (SELECT count(*) FROM vectors complete WHERE complete.set_id=e.set_id)=e.expected_chunks" + filter, parameters.ToArray());
         validate.Prepare();
+        using var source = connection.Command(transaction, "SELECT values_blob FROM vectors WHERE set_id=$0 AND dimensions=384 AND length(values_blob)=1536", (object?)null);
+        source.Prepare();
         var current = new List<VectorCandidate>(100);
         foreach (var candidate in ranked)
         {
             cancellationToken.ThrowIfCancellationRequested();
             validate.Parameters["$3"].Value = candidate.SymbolId;
-            if (validate.ExecuteScalar() is null) continue;
+            if (validate.ExecuteScalar() is not string set) continue;
+            // Same bytes and scorer give the identical double; anything else
+            // means vector_scan drifted from vectors, so trust neither.
+            source.Parameters["$0"].Value = set; double? best = null;
+            using (var reader = source.ExecuteReader())
+                while (reader.Read())
+                    if (reader.GetBytes(0, 0, bytes, 0, bytes.Length) == bytes.Length && VectorScoring.TryScore(bytes, query.Vector, out var score) && (best is null || score > best))
+                        best = score;
+            if (best != candidate.Score)
+                return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks);
             current.Add(candidate);
             if (current.Count == 100) return current;
         }

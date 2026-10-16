@@ -399,3 +399,20 @@ Investigated and not adopted:
 - Phase timing of the new score pass (single reader): about 90 ms SQLite row/blob delivery, about 8 ms scoring. The lexical arm (about 75 ms) is dominated by FTS5 `bm25` over about 49k broad matches (about 60 ms) plus symbol lookups (about 45 ms); only the lookups are avoidable.
 
 Still failing/open: four-reader retrieval-only p95 345.232 ms (> 250), full five-run/all-category/concurrent-edit protocol, full-process memory re-measure, reference hardware, provider/platform/accessibility, recovery/stress/disk-full, five native runtime identifiers, and the non-green broad desktop suite (unchanged; no desktop files touched).
+
+## Dense vector-scan table checkpoint (schema 5) — 16 October
+
+Schema 5 (`migration005.sql`) adds `vector_scan`: a dense copy of each chunk's set ID, chunk index, symbol, model fingerprint, ready flag, dimensions and vector bytes. The migration backfills it, and triggers on `vectors` (insert/update/delete, including FK cascades) and `embedding_sets` (set/symbol/model/state updates) keep it in the writing transaction. Vector query plan 4 scores this table, then validates candidates in rank order as before. It also rescores each accepted set from `vectors` and hands the query to the exhaustive scan if the two disagree. `IndexDatabase.Check()` now reports any row-level difference between the copy and `vectors` joined to `embedding_sets`. (The previous ranked-validation commit did not bump `VectorQueryPlanVersion`; its pilot reports say plan 3.)
+
+The window test now also covers: a schema-4 database migrated by backfill, an edit plus republish/reactivation, and a drifted copy. The drifted copy must fail `Check()` and still return exhaustive results. With the rescoring guard disabled, that case fails, so the guard is what keeps results exact. Existing lifecycle tests already run `Check()` after indexing, reuse, refresh, relocation and unregister, so they now also prove the copy stays in step. 113 C# tests pass, zero skipped. Limitation: a row *missing* from the copy (only possible through out-of-band writes that bypass the triggers) is caught by `Check()`, not at query time.
+
+The retained 50k fixture was migrated in place with the service's explicit `init`. Root, generation, epoch and sources are unchanged; the service kept its own schema-4 backup beside the database, and a separate byte copy was kept privately. Migration took about 3 s and grew the database from 808,898,560 to 918,982,656 bytes.
+
+Terminology pilot, same query-set hash, zero errors (`benchmarks/macos-arm64-50000-vector-scan-terminology-pilot*`):
+
+| Readers | Hybrid p95 | Retrieval p95 | Vector scan p95 | Lexical p95 |
+|---|---|---|---|---|
+| 1 | 173.3 ms | 167.4 ms (passes 250) | 69.4 ms (was 126.2) | 74.2 ms |
+| 4 | 280.9 ms | 260.2 ms (**fails 250**) | 140.8 ms (was 225.1) | 98.8 ms |
+
+Single run, one category. Edit-publication cost (vector bytes are now written twice) has not been re-measured.

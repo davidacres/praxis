@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Storage;
 /// <summary>Owns schema compatibility and connection policy; source files are never modified.</summary>
 public sealed class IndexDatabase
 {
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
     public const int ReadMappingVersion = 6;
     public const int ReadPageCacheVersion = 2;
     public const int ReadPageCacheKiB = 64 * 1024;
@@ -130,6 +130,20 @@ public sealed class IndexDatabase
             command.CommandText = "PRAGMA foreign_key_check;";
             using var reader = command.ExecuteReader();
             while (reader.Read()) errors.Add($"Foreign key violation in {reader.GetString(0)}.");
+        }
+        using (var command = connection.CreateCommand())
+        {
+            // vector_scan must mirror vectors joined to their set exactly.
+            command.CommandText = """
+                SELECT count(*) FROM (
+                  SELECT * FROM (SELECT v.set_id,v.chunk_index,e.symbol_id,e.model_fingerprint,e.state='ready',v.dimensions,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id
+                    EXCEPT SELECT set_id,chunk_index,symbol_id,model_fingerprint,ready,dimensions,values_blob FROM vector_scan)
+                  UNION ALL
+                  SELECT * FROM (SELECT set_id,chunk_index,symbol_id,model_fingerprint,ready,dimensions,values_blob FROM vector_scan
+                    EXCEPT SELECT v.set_id,v.chunk_index,e.symbol_id,e.model_fingerprint,e.state='ready',v.dimensions,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id))
+                """;
+            var drift = Convert.ToInt64(command.ExecuteScalar());
+            if (drift != 0) errors.Add($"Vector scan copy differs from vectors in {drift} rows.");
         }
         return errors;
     }

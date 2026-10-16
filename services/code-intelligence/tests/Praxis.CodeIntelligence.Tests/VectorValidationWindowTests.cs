@@ -34,6 +34,22 @@ public sealed class VectorValidationWindowTests
                 }
             }
             Compare("fresh");
+            Assert.Empty(database.Check());
+
+            // A schema-4 database gains vector_scan through the migration backfill.
+            using (var writer = database.Open())
+                writer.Execute(null, "DROP TRIGGER vector_scan_insert; DROP TRIGGER vector_scan_update; DROP TRIGGER vector_scan_delete; DROP TRIGGER vector_scan_set_update; DROP TABLE vector_scan; DELETE FROM schema_migrations WHERE version=5; PRAGMA user_version=4;");
+            database.Initialize();
+            Assert.Empty(database.Check());
+            Compare("upgraded");
+
+            // Republishing after an edit keeps the copy in step through reuse,
+            // stale marking and deletion.
+            File.AppendAllText(Path.Combine(root, "Many.cs"), "\npublic class Tokenizer { public int Split() => 0; }");
+            indexer.Index(repository);
+            models.Activate(repository, models.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!), CancellationToken.None);
+            Assert.Empty(database.Check());
+            Compare("edited");
 
             // Invalidate the best-ranked symbols so the window holds only stale
             // candidates and the exhaustive fallback must decide.
@@ -41,6 +57,16 @@ public sealed class VectorValidationWindowTests
             using (var connection = database.Open(readOnly: true)) using (var snapshot = connection.BeginTransaction(deferred: true))
                 top = ModelStore.ExhaustiveCandidates(connection, snapshot, repository, query, null, null, null).Select(candidate => candidate.SymbolId).ToArray();
             Assert.Equal(100, top.Length);
+            // Drift between vector_scan and vectors is detected: by rescoring at
+            // query time (the exhaustive scan then decides) and by Check().
+            using (var writer = database.Open())
+                writer.Execute(null, "UPDATE vector_scan SET values_blob=(SELECT values_blob FROM vector_scan WHERE symbol_id=$1 LIMIT 1) WHERE symbol_id=$0", top[0], top[^1]);
+            Assert.NotEmpty(database.Check());
+            Compare("drifted");
+            using (var writer = database.Open())
+                writer.Execute(null, "DELETE FROM vector_scan; INSERT INTO vector_scan SELECT v.set_id,v.chunk_index,e.symbol_id,e.model_fingerprint,e.state='ready',v.dimensions,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id");
+            Assert.Empty(database.Check());
+
             foreach (var count in new[] { 30, 100 })
             {
                 using (var writer = database.Open())
@@ -49,6 +75,7 @@ public sealed class VectorValidationWindowTests
                         writer.Execute(null, "UPDATE representation_targets SET eligibility='excluded', exclusion_reason='test' WHERE symbol_id=$0", symbol);
                 }
                 Compare($"excluded {count}");
+                Assert.Empty(database.Check());
             }
         }
         finally { Directory.Delete(root, recursive: true); }
