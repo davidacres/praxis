@@ -89,6 +89,23 @@ public sealed class DurableScheduler(IndexDatabase database, TimeProvider? timeP
         transaction.Commit();
     }
 
+    /// <summary>
+    /// Call only while holding the exclusive owner lock: any job still leased by
+    /// another owner then belongs to an owner that exited, so it is reclaimed now
+    /// rather than after its lease expires (§31.2). Attempts are kept, so a job
+    /// that keeps killing its owner still reaches the retry limit.
+    /// </summary>
+    public int ReclaimAbandonedLeases()
+    {
+        using var connection = database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
+        var repositories = new List<string>();
+        using (var command = connection.Command(transaction, "SELECT DISTINCT repository_id FROM jobs WHERE state='leased' AND lease_owner!=$0", owner))
+        using (var reader = command.ExecuteReader()) while (reader.Read()) repositories.Add(reader.GetString(0));
+        var reclaimed = connection.Execute(transaction, "UPDATE jobs SET state=CASE WHEN attempts>=6 THEN 'failed' ELSE 'pending' END,error_code='OWNER_EXITED',error_message='Previous owner exited during this job.',lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL,available_utc=$0 WHERE state='leased' AND lease_owner!=$1", Now, owner);
+        foreach (var repository in repositories) connection.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repository);
+        transaction.Commit(); return reclaimed;
+    }
+
     private void RecoverExpired(SqliteConnection connection, SqliteTransaction transaction)
     {
         var repositories = new List<string>();

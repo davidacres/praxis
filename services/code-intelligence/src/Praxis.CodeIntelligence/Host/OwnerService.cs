@@ -20,6 +20,7 @@ public static class OwnerService
         using var ownerLock = new FileStream(Path.Combine(directory, "owner.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var endpoint = Endpoint(directory); if (!OperatingSystem.IsWindows()) File.Delete(endpoint);
         var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32)); using var runtime = new ServiceRuntime(directory);
+        runtime.Scheduler.ReclaimAbandonedLeases(); // safe: this process holds the exclusive owner lock
         using var writer = new SemaphoreSlim(1, 1); using var clients = new SemaphoreSlim(16, 16);
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var admissions = new ConcurrentDictionary<string, Admission>(StringComparer.Ordinal);

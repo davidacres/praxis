@@ -38,6 +38,20 @@ public sealed class SchedulerTests : IDisposable
     }
 
     [Fact]
+    public void RestartedOwnerReclaimsAnAbandonedLeaseWithoutWaitingForExpiry()
+    {
+        var crashed = new DurableScheduler(database, clock); crashed.Schedule(repository, "index", "reconcile", "{}", 0);
+        var abandoned = Assert.IsType<LeasedJob>(crashed.LeaseNext());
+        var restarted = new DurableScheduler(database, clock);
+        Assert.Null(restarted.LeaseNext()); // the lease is still unexpired
+        Assert.Equal(1, restarted.ReclaimAbandonedLeases());
+        var resumed = Assert.IsType<LeasedJob>(restarted.LeaseNext()); Assert.Equal(abandoned.Id, resumed.Id); Assert.Equal(2, resumed.Attempts);
+        Assert.Equal(0, restarted.ReclaimAbandonedLeases()); // its own lease is never reclaimed
+        Assert.False(crashed.Complete(abandoned)); Assert.False(crashed.Heartbeat(abandoned));
+        Assert.True(restarted.Complete(resumed));
+    }
+
+    [Fact]
     public void ExpiredLeaseIsRecoveredAndOldWorkerCannotCompleteHeartbeatOrPublish()
     {
         var firstOwner = new DurableScheduler(database, clock); firstOwner.Schedule(repository, "index", "reconcile", "{}", 0);
