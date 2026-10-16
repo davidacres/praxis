@@ -140,10 +140,17 @@ try {
   }
 } catch (error) { failures.push(error.message); }
 finally {
-  if (owner?.pid && owner.exitCode === null) {
+  if (owner?.pid && owner.exitCode === null && owner.signalCode === null) {
+    // Signal-terminated children have a null exitCode even after close (Windows).
+    // Subscribe before signalling, and bound both waits so reports still persist.
+    const closed = new Promise(resolve => owner.once('close', resolve));
     owner.kill(process.platform === 'win32' ? 'SIGTERM' : 'SIGINT');
-    await Promise.race([new Promise(resolve => owner.once('close', resolve)), wait(5000)]);
-    if (owner.exitCode === null) { owner.kill('SIGKILL'); await new Promise(resolve => owner.once('close', resolve)); }
+    await Promise.race([closed, wait(5000)]);
+    if (owner.exitCode === null && owner.signalCode === null) {
+      owner.kill('SIGKILL');
+      await Promise.race([closed, wait(5000)]);
+      if (owner.exitCode === null && owner.signalCode === null) failures.push('Owned service did not stop after kill escalation');
+    }
   }
   const complete = samples.length === edits && samples.every(sample => !sample.errors) && failures.length === 0;
   const distribution = key => {

@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "generatorVersion": 1,
+  "timestampUtc": "2026-10-16T11:52:58.005Z",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "cpu": "Apple M3 Pro",
+  "logicalProcessors": 12,
+  "memoryBytes": 19327352832,
+  "symbols": 5000,
+  "edits": 25,
+  "corpusHash": "sha256:58795a77f4f92bfb22e35285a6b98213592bbc9512ea890360af4ad40e0e37aa",
+  "referenceHash": "sha256:b435af0b749740a312891b3ab0d014091b1b75573dfede5b1c3eff96c533332b",
+  "modelFingerprint": "sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba",
+  "serviceAssemblyHash": "sha256:cb335fc26b394236eaddf8d8b8c3ff30ab3c31118f6acf673455576f6a28d531",
+  "measurement": "Owned native service, actual watcher/durable jobs; no explicit indexing after timed writes. CLI observation/IPC costs included. Structural detection and semantic refresh are conservative upper bounds, not exact publication timestamps.",
+  "structural": {
+    "count": 25,
+    "p50Ms": 2001.357999999993,
+    "p95Ms": 2981.2814589999907,
+    "p99Ms": 3223.837542000001,
+    "maxMs": 3223.837542000001
+  },
+  "semanticRefresh": {
+    "count": 25,
+    "p50Ms": 537.9225410000072,
+    "p95Ms": 689.8445829999982,
+    "p99Ms": 771.8107089999976,
+    "maxMs": 771.8107089999976
+  },
+  "editToVectors": {
+    "count": 25,
+    "p50Ms": 2433.125457999995,
+    "p95Ms": 3479.099583000003,
+    "p99Ms": 3682.6424590000024,
+    "maxMs": 3682.6424590000024
+  },
+  "samples": [
+    {
+      "edit": 1,
+      "structuralUpperBoundMs": 2921.3804579999996,
+      "editToVectorsUpperBoundMs": 3479.099583000003,
+      "semanticRefreshUpperBoundMs": 689.8445829999982,
+      "expectedSourceHash": "sha256:cd16f0d8834de812feaf686ce72bbbfd9ea8d370233bd3d1dc64e7c4d0224393",
+      "errors": 0
+    },
+    {
+      "edit": 2,
+      "structuralUpperBoundMs": 3223.837542000001,
+      "editToVectorsUpperBoundMs": 3682.6424590000024,
+      "semanticRefreshUpperBoundMs": 581.0144169999985,
+      "expectedSourceHash": "sha256:a2f2662e842c6e6e81e7491ee48c29317c4359bae0ecdc19194452c1a4dd87a6",
+      "errors": 0
+    },
+    {
+      "edit": 3,
+      "structuralUpperBoundMs": 2327.7818329999936,
+      "editToVectorsUpperBoundMs": 2812.3427080000038,
+      "semanticRefreshUpperBoundMs": 611.01741700001,
+      "expectedSourceHash": "sha256:29d65d76ac51881bbd75d07e353a74e250eeabf15cdb1a6daf9ac48710753cbf",
+      "errors": 0
+    },
+    {
+      "edit": 4,
+      "structuralUpperBoundMs": 2423.9434579999943,
+      "editToVectorsUpperBoundMs": 2862.8127079999977,
+      "semanticRefreshUpperBoundMs": 560.9918330000073,
+      "expectedSourceHash": "sha256:fc1eb49f077441ce01b4b683d0f4559ee45078cdb043575a70150bcc719e198e",
+      "errors": 0
+    },
+    {
+      "edit": 5,
+      "structuralUpperBoundMs": 1848.6705839999922,
+      "editToVectorsUpperBoundMs": 2250.8724169999914,
+      "semanticRefreshUpperBoundMs": 523.3978329999954,
+      "expectedSourceHash": "sha256:a860cfa1a99796499391096c933f83c51bd4321d3bfb201ad8b3c5350d8e8271",
+      "errors": 0
+    },
+    {
+      "edit": 6,
+      "structuralUpperBoundMs": 1985.2947080000013,
+      "editToVectorsUpperBoundMs": 2396.5702499999898,
+      "semanticRefreshUpperBoundMs": 530.3686250000028,
+      "expectedSourceHash": "sha256:6bd5c0c224fe5a52bdb08f9390ea6e74d0f6d18cc47ebbdf55e35f7bd62b2d84",
+      "errors": 0
+    },
+    {
+      "edit": 7,
+      "structuralUpperBoundMs": 2003.4704999999958,
+      "editToVectorsUpperBoundMs": 2431.9297909999877,
+      "semanticRefreshUpperBoundMs": 546.8232079999871,
+      "expectedSourceHash": "sha256:293bea77ce507c6e91a2063fbe8dc61e30e609e9a8090447ac128c46ef312acd",
+      "errors": 0
+    },
+    {
+      "edit": 8,
+      "structuralUpperBoundMs": 1990.0325000000012,
+      "editToVectorsUpperBoundMs": 2436.130750000011,
+      "semanticRefreshUpperBoundMs": 574.5322920000035,
+      "expectedSourceHash": "sha256:42663c0f8c9ffa9426b0e6c5db671d578c77be1046bed6aeda3d36c9a8dc4a2d",
+      "errors": 0
+    },
+    {
+      "edit": 9,
+      "structuralUpperBoundMs": 2250.1011670000007,
+      "editToVectorsUpperBoundMs": 2677.8023339999927,
+      "semanticRefreshUpperBoundMs": 771.8107089999976,
+      "expectedSourceHash": "sha256:d77057596141b13f2fc7bf5635b241466a37757e11d78c2a9f45ddbf0f2f3d43",
+      "errors": 0
+    },
+    {
+      "edit": 10,
+      "structuralUpperBoundMs": 2115.2690839999996,
+      "editToVectorsUpperBoundMs": 2534.5996250000026,
+      "semanticRefreshUpperBoundMs": 536.632375000001,
+      "expectedSourceHash": "sha256:8bce13333fc6420cef6847d890924e0839ac09d4e7b9b59e9baa5046306e31de",
+      "errors": 0
+    },
+    {
+      "edit": 11,
+      "structuralUpperBoundMs": 2060.359666999997,
+      "editToVectorsUpperBoundMs": 2490.030249999996,
+      "semanticRefreshUpperBoundMs": 545.679999999993,
+      "expectedSourceHash": "sha256:be89d1cd3033e7fc9fb90550d0b805862854fd54ec8c6e8655fc0fc660ee6467",
+      "errors": 0
+    },
+    {
+      "edit": 12,
+      "structuralUpperBoundMs": 1820.4980000000069,
+      "editToVectorsUpperBoundMs": 2216.7887080000073,
+      "semanticRefreshUpperBoundMs": 512.9409160000068,
+      "expectedSourceHash": "sha256:82b420ebfc1661dda4eac8f901ce8572a99393d62423cba256f9cc06ddb10c95",
+      "errors": 0
+    },
+    {
+      "edit": 13,
+      "structuralUpperBoundMs": 2019.924417000002,
+      "editToVectorsUpperBoundMs": 2489.1493749999936,
+      "semanticRefreshUpperBoundMs": 589.175041999988,
+      "expectedSourceHash": "sha256:db178efa012d991416f8788efec2f479336633d008e0439278e16b7ef7722c66",
+      "errors": 0
+    },
+    {
+      "edit": 14,
+      "structuralUpperBoundMs": 2001.357999999993,
+      "editToVectorsUpperBoundMs": 2433.125457999995,
+      "semanticRefreshUpperBoundMs": 550.5100419999944,
+      "expectedSourceHash": "sha256:e460dcd8f10f7ab58f3fb8918d9f7244ef6e4edc05705225d268cb092e1cd6dd",
+      "errors": 0
+    },
+    {
+      "edit": 15,
+      "structuralUpperBoundMs": 1894.0411250000034,
+      "editToVectorsUpperBoundMs": 2317.8452090000064,
+      "semanticRefreshUpperBoundMs": 538.4235420000041,
+      "expectedSourceHash": "sha256:6b8b0fbe837a1bf5948bf528144a745f345ae007445b24bccb3e1c6c8b45974f",
+      "errors": 0
+    },
+    {
+      "edit": 16,
+      "structuralUpperBoundMs": 1982.4802090000012,
+      "editToVectorsUpperBoundMs": 2394.366458999997,
+      "semanticRefreshUpperBoundMs": 525.0603750000009,
+      "expectedSourceHash": "sha256:269e2ae05c058670b0ec0376442a36b3199963ed6d8bdc82240078c2a6b5d676",
+      "errors": 0
+    },
+    {
+      "edit": 17,
+      "structuralUpperBoundMs": 1957.470583000002,
+      "editToVectorsUpperBoundMs": 2374.0287080000126,
+      "semanticRefreshUpperBoundMs": 537.9225410000072,
+      "expectedSourceHash": "sha256:becb1a162cd23e32f3800f216d13093e6153ae95d34d5026f820fc361014b844",
+      "errors": 0
+    },
+    {
+      "edit": 18,
+      "structuralUpperBoundMs": 2102.1611249999987,
+      "editToVectorsUpperBoundMs": 2496.2865829999937,
+      "semanticRefreshUpperBoundMs": 511.3856659999874,
+      "expectedSourceHash": "sha256:daf3ab7c5da1d73bd3d3091b59159670aea62b76edc5edffac299e427081a38e",
+      "errors": 0
+    },
+    {
+      "edit": 19,
+      "structuralUpperBoundMs": 1967.5072910000017,
+      "editToVectorsUpperBoundMs": 2378.1768750000047,
+      "semanticRefreshUpperBoundMs": 526.0928750000021,
+      "expectedSourceHash": "sha256:747f90b2f638b951b14ea4be50b9fa9c74a974cf90dc312c82fdca5d3e0407bd",
+      "errors": 0
+    },
+    {
+      "edit": 20,
+      "structuralUpperBoundMs": 1973.079291999995,
+      "editToVectorsUpperBoundMs": 2397.188792000001,
+      "semanticRefreshUpperBoundMs": 546.4838750000054,
+      "expectedSourceHash": "sha256:825aee09c2919eb97c21bc7d2f30957e33e2772c278989559a2e569ab989407a",
+      "errors": 0
+    },
+    {
+      "edit": 21,
+      "structuralUpperBoundMs": 1985.2132920000004,
+      "editToVectorsUpperBoundMs": 2395.8571669999947,
+      "semanticRefreshUpperBoundMs": 528.2639170000039,
+      "expectedSourceHash": "sha256:913d35300057cc41f8defee47d7d872b109b3b5d6e90ed3e511bf3b66d713928",
+      "errors": 0
+    },
+    {
+      "edit": 22,
+      "structuralUpperBoundMs": 1978.984832999995,
+      "editToVectorsUpperBoundMs": 2374.6587080000027,
+      "semanticRefreshUpperBoundMs": 513.9207080000051,
+      "expectedSourceHash": "sha256:1f1442b387f8fac0586bfab5dab74b59bae316027b500b85ed1c7f07bcfd1c87",
+      "errors": 0
+    },
+    {
+      "edit": 23,
+      "structuralUpperBoundMs": 2156.317249999993,
+      "editToVectorsUpperBoundMs": 2568.278542,
+      "semanticRefreshUpperBoundMs": 531.4074169999949,
+      "expectedSourceHash": "sha256:b2c34f5d16e14de414afaa9481f02a18a3a8a91cae66aaaaee1ec36209febce1",
+      "errors": 0
+    },
+    {
+      "edit": 24,
+      "structuralUpperBoundMs": 1871.653708999991,
+      "editToVectorsUpperBoundMs": 2269.121749999991,
+      "semanticRefreshUpperBoundMs": 516.7592909999948,
+      "expectedSourceHash": "sha256:0ca68d72d799b6ed7ea2fc3eb2007710520dbc69248dc6433576b4df5f923ce8",
+      "errors": 0
+    },
+    {
+      "edit": 25,
+      "structuralUpperBoundMs": 2981.2814589999907,
+      "editToVectorsUpperBoundMs": 3375.2976669999916,
+      "semanticRefreshUpperBoundMs": 512.3315419999999,
+      "expectedSourceHash": "sha256:7c2b03fa36cd65df6b62fe275a6716de79a69519aeeb2e21833cfc644294e455",
+      "errors": 0
+    }
+  ],
+  "failures": [],
+  "gates": {
+    "noErrorsAndAllEditsMeasured": true,
+    "fiveThousandSymbolWatcherBodyP95AtMost2Seconds": false,
+    "fiveThousandSymbolSemanticRefreshP95AtMost10Seconds": true
+  },
+  "passedMeasuredGates": false,
+  "unmeasured": [
+    "full concurrent-edit query workload",
+    "initial indexing/embedding latency",
+    "queue/inference/SQL/serialization percentiles",
+    "process peak RSS",
+    "five independent process runs"
+  ]
+}
