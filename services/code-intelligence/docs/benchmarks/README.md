@@ -71,3 +71,18 @@ Both fixtures have corpus hash `sha256:f14bc8736fbc2bbcf4c984a76c488edf6c55324d0
 `macos-arm64-50000-mmap1-hybrid.praxis.json` records read-mapping version 1 (requested maximum 134217728 bytes), scorer 3, search plan 2 and count cache 1 on the same 50k corpus/model/reference. Lexical p95 is **3.7177 ms**; hybrid p95 is **681.9115 ms**, still **fails** 500 ms. Independent maximum RSS is **1623851008 bytes** (below 2 GiB); runtime RSS remains null. Body edit 14931.5108 ms and semantic refresh 1898.8956 ms are direct 50k observations, not the 5k watcher-inclusive thresholds.
 
 Cold vector construction overlapped the separate Maze model preparation and was explicitly paused to let that workload finish. Initial index/vector values remain raw observations and must not be used as controlled cold-start comparisons. Timed capacity warmups, queries and edit/refresh phases ran afterward without other model/build/test workloads. The benchmark exited and its fixture was removed. This is one synthetic exact-name four-reader run, not full five-run/category/concurrent-edit or held-out-relevance acceptance.
+
+## Retaining a fixed synthetic snapshot
+
+Add `--retain-fixture true` to a normal generated run to keep its temporary synthetic source, index and installed model after the edit/refresh phase. The harness prints the generated fixture path only after writing a versioned marker. Default runs still remove their fixtures. An incomplete run without a marker is removed even when retention was requested.
+
+```sh
+dotnet path/to/Praxis.CodeIntelligence.Benchmarks.dll --symbols 49999 --queries 100 --model /absolute/model --retain-fixture true --output initial.praxis.json
+dotnet path/to/Praxis.CodeIntelligence.Benchmarks.dll --reuse-fixture /absolute/generated-fixture --queries 100 --output retained-baseline.praxis.json
+```
+
+Reuse performs **queries only**: no indexing, model installation, embedding activation, source edits or cleanup. It checks flat source membership and every source/manifest hash, repository root, generation/epoch and active profile before measuring. Each response must retain that snapshot and real hybrid queries must have complete current coverage. Changed/invalid fixtures exit 3 without a measurement report. Query threshold failure still produces a report and exits 2.
+
+The retained snapshot is **after** the original body edit and vector refresh. Compare changes using the same reported `SnapshotHash`, generation, epoch and model/reference fingerprints; do not treat it as byte-identical to the earlier pre-edit query phase or compare its query-only RSS with initial indexing/embedding peaks. Reports explicitly leave cold startup, edit/refresh, full category/repeated/concurrent-edit and relevance protocols unmeasured. Warmups and the four-reader fixed query schedule are unchanged. The actual SQLite read-mapping size is reported alongside the requested cap.
+
+`PRAXIS_DOTNET=dotnet PRAXIS_MODEL_BUNDLE=/absolute/model node services/code-intelligence/scripts/smoke-retained-benchmark.mjs` exercises real creation/reuse, repeatable snapshot identity and rejection/restoration of changed source bytes, membership and epoch. It owns/removes its generated fixture and outputs, and is included in native CI. It checks function and isolation rather than asserting noisy smoke performance thresholds. Explicit retained fixtures are left for their caller to remove when no longer needed.

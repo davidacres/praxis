@@ -12,13 +12,26 @@ using Praxis.CodeIntelligence.Storage;
 var options = new Dictionary<string, string>(StringComparer.Ordinal);
 if (args.Length % 2 != 0) throw new ArgumentException("Expected flag/value pairs.");
 for (var i = 0; i < args.Length; i += 2)
-    if (args[i] is not ("--symbols" or "--queries" or "--output" or "--model") || !options.TryAdd(args[i], args[i + 1]))
+    if (args[i] is not ("--symbols" or "--queries" or "--output" or "--model" or "--retain-fixture" or "--reuse-fixture") || !options.TryAdd(args[i], args[i + 1]))
         throw new ArgumentException("Unknown or duplicate flag.");
 var symbols = int.Parse(options.GetValueOrDefault("--symbols", "5000"));
 var queries = int.Parse(options.GetValueOrDefault("--queries", "100"));
 if (symbols is < 100 or > 49999 || queries is < 10 or > 1000) throw new ArgumentException("Symbols must be 100–49999 source symbols (50000 total including metadata); queries 10–1000 per reader.");
 var output = Path.GetFullPath(options.GetValueOrDefault("--output", "benchmark.praxis.json"));
 if (!output.EndsWith(".praxis.json", StringComparison.Ordinal)) throw new ArgumentException("Output must end in .praxis.json.");
+var retain = options.GetValueOrDefault("--retain-fixture", "false");
+if (retain is not ("true" or "false")) throw new ArgumentException("--retain-fixture expects true or false.");
+if (options.TryGetValue("--reuse-fixture", out var existing))
+{
+    if (options.ContainsKey("--model") || options.ContainsKey("--symbols") || retain == "true")
+        throw new ArgumentException("Reuse accepts only a retained fixture, queries and output; it never republishes or installs models.");
+    try { return await RetainedBenchmark.Run(existing, queries, output); }
+    catch (Exception error) when (error is IOException or ArgumentException or JsonException
+        or UnauthorizedAccessException or InvalidOperationException or KeyNotFoundException)
+    {
+        Console.Error.WriteLine("Retained fixture rejected: " + error.Message); return 3;
+    }
+}
 var temporary = Path.Combine(Path.GetTempPath(), "praxis-benchmark-" + Guid.NewGuid().ToString("N"));
 var root = Path.Combine(temporary, "source"); Directory.CreateDirectory(root);
 try
@@ -72,24 +85,9 @@ try
             || response["data"]?["vectorCoveredSymbolCount"]?.GetValue<long>() != sourceSymbols))
             throw new InvalidOperationException("Hybrid benchmark requires complete real vector coverage.");
     }
-    async Task<object> Measure(string mode)
-    {
-        for (var i = 0; i < 20; i++) Search(mode, i);
-        var times = new ConcurrentBag<double>(); using var start = new Barrier(4);
-        await Task.WhenAll(Enumerable.Range(0, 4).Select(reader => Task.Run(() =>
-        {
-            start.SignalAndWait();
-            for (var i = 0; i < queries; i++)
-            {
-                var timer = Stopwatch.StartNew(); Search(mode, i * 17 + reader); times.Add(timer.Elapsed.TotalMilliseconds);
-            }
-        })));
-        var values = times.Order().ToArray();
-        return new Timing(4, values.Length, values[(int)Math.Ceiling(values.Length * .5) - 1], values[(int)Math.Ceiling(values.Length * .95) - 1], values[^1]);
-    }
-    Console.Error.WriteLine("Measuring four-reader lexical queries."); var lexical = (Timing)await Measure("lexical");
+    Console.Error.WriteLine("Measuring four-reader lexical queries."); var lexical = await RetainedBenchmark.Measure(Search, "lexical", queries);
     Timing? hybrid = null;
-    if (fingerprint is not null) { Console.Error.WriteLine("Measuring four-reader hybrid queries."); hybrid = (Timing)await Measure("hybrid"); }
+    if (fingerprint is not null) { Console.Error.WriteLine("Measuring four-reader hybrid queries."); hybrid = await RetainedBenchmark.Measure(Search, "hybrid", queries); }
     watch.Restart(); var unchanged = indexer.Index(repository); var noOpMs = watch.Elapsed.TotalMilliseconds;
     if (unchanged.Changed) throw new InvalidOperationException("Unchanged index republished.");
     var first = Path.Combine(root, paths[0]); var before = File.ReadAllText(first); var after = before.Replace("=> value + 0;", "=> value + 2;", StringComparison.Ordinal);
@@ -130,8 +128,14 @@ try
     Directory.CreateDirectory(Path.GetDirectoryName(output)!);
     File.WriteAllText(output, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }) + "\n");
     Console.WriteLine(output); Console.WriteLine(JsonSerializer.Serialize(gates));
+    if (retain == "true")
+    {
+        RetainedBenchmark.Save(temporary, indexer.Get(repository), names, sourceSymbols, fingerprint,
+            report.CorpusHash, referenceHash);
+        Console.Error.WriteLine("Retained synthetic fixture: " + temporary);
+    }
     return report.PassedMeasuredGates ? 0 : 2;
 }
-finally { Directory.Delete(temporary, recursive: true); }
+finally { if (retain != "true" || !File.Exists(Path.Combine(temporary, "benchmark-fixture.praxis.json"))) Directory.Delete(temporary, recursive: true); }
 
 internal sealed record Timing(int Readers, int Count, double P50Ms, double P95Ms, double MaximumMs);
