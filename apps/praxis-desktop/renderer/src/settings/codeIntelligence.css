@@ -5,7 +5,11 @@
 .code-intelligence-panel form .code-intelligence-mode { flex-basis: 100%; }
 .code-intelligence-panel form label { flex: 1; }
 .code-intelligence-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.code-intelligence-panel { min-width: 0; }
 .code-intelligence-match { display: grid; gap: 6px; padding: 10px 0; border-block-end: 1px solid var(--border); }
+/* Qualified names and signatures are long and unbroken; they must wrap, never widen the panel. */
+.code-intelligence-match > * { min-width: 0; overflow-wrap: anywhere; }
 .code-intelligence-panel code { overflow-wrap: anywhere; color: var(--text); }
 .code-intelligence-panel pre { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; background: var(--bg); color: var(--text); padding: 10px; border: 1px solid var(--border); }
-.code-intelligence-contexts { margin: 0; padding-inline-start: 20px; color: var(--text-muted); }
+.code-intelligence-contexts { color: var(--text-muted); }
+.code-intelligence-contexts ul { margin: 6px 0 0; padding-inline-start: 20px; }

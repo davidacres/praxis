@@ -38,7 +38,12 @@ test('native stdio MCP reads indexed source only with the selected provider gran
       args: [path.join(__dirname, 'mcpBridge.js'), executable, '-', data, repositoryId, 'codex', contractsPath], stderr: 'pipe' });
     transport.stderr?.on('data', () => { });
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 11);
+    const listed = (await client.listTools()).tools; assert.equal(listed.length, 11);
+    // The bridge fixes the repository, so agents are never asked for its opaque ID.
+    for (const tool of listed) {
+      assert.equal((tool.inputSchema.properties as Record<string, unknown> | undefined)?.repositoryId, undefined, tool.name);
+      assert.ok(!(tool.inputSchema.required ?? []).includes('repositoryId'), tool.name);
+    }
     const content = (response: unknown): Record<string, unknown> => {
       assert.ok(response && typeof response === 'object');
       const value = (response as Record<string, unknown>).structuredContent;
@@ -54,7 +59,7 @@ test('native stdio MCP reads indexed source only with the selected provider gran
     const found = await query(); assert.equal(found.isError, false);
     const matches = (content(found).data as { matches: Array<{ symbol: { symbolId: string; qualifiedName: string } }> }).matches;
     const type = matches.find(match => match.symbol.qualifiedName === 'McpNativeExample'); assert.ok(type);
-    const read = await client.callTool({ name: 'get_source', arguments: { repositoryId, symbolId: type.symbol.symbolId } });
+    const read = await client.callTool({ name: 'get_source', arguments: { symbolId: type.symbol.symbolId } }); // ID omitted, as an agent would
     assert.equal(read.isError, false);
     assert.match((content(read).data as { fragments: Array<{ text: string }> }).fragments[0].text, /public class McpNativeExample/);
     const otherRepository = await client.callTool({ name: 'get_index_status', arguments: { repositoryId: 'ungranted-repository' } });

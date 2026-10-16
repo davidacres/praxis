@@ -22,8 +22,9 @@ function failure(repositoryId: string, code: string, message: string): Record<st
 
 export function invokeCodeIntelligence(options: CodeIntelligenceBridgeOptions, tool: string, arguments_: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
   if (!options.contracts[tool]) return Promise.resolve(failure(options.repositoryId, 'INVALID_ARGUMENT', 'Unknown read-only tool.'));
-  if (arguments_.repositoryId !== options.repositoryId) return Promise.resolve(failure(options.repositoryId, 'ACCESS_DENIED', 'This bridge is scoped to one repository.'));
-  const payload = JSON.stringify({ tool, arguments: arguments_ });
+  // The bridge serves exactly one repository: an omitted ID means that one; any other ID is refused.
+  if (arguments_.repositoryId !== undefined && arguments_.repositoryId !== options.repositoryId) return Promise.resolve(failure(options.repositoryId, 'ACCESS_DENIED', 'This bridge is scoped to one repository.'));
+  const payload = JSON.stringify({ tool, arguments: { ...arguments_, repositoryId: options.repositoryId } });
   if (Buffer.byteLength(payload) > MAXIMUM_REQUEST) return Promise.resolve(failure(options.repositoryId, 'INPUT_TOO_LARGE', 'Query exceeds the request limit.'));
   if (signal?.aborted) return Promise.resolve(failure(options.repositoryId, 'CANCELLED', 'Query cancelled.'));
   return new Promise(resolve => {
@@ -54,11 +55,18 @@ export function invokeCodeIntelligence(options: CodeIntelligenceBridgeOptions, t
   });
 }
 
+// Agents cannot know the opaque repository ID, and the bridge already fixes it.
+function withoutRepository(schema: Record<string, unknown>): Record<string, unknown> {
+  const properties = { ...(schema.properties as Record<string, unknown> | undefined) }; delete properties.repositoryId;
+  const required = Array.isArray(schema.required) ? schema.required.filter(name => name !== 'repositoryId') : undefined;
+  return { ...schema, properties, ...(required ? { required } : {}) };
+}
+
 export function createCodeIntelligenceMcpServer(options: CodeIntelligenceBridgeOptions): Server {
   const server = new Server({ name: 'praxis-code-intelligence', version: '1.2.0' }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: Object.entries(options.contracts).map(([name, schemas]) => ({
     name, description: `Read-only ${name.replaceAll('_', ' ')} for the registered repository. Static facts do not prove runtime behavior.`,
-    inputSchema: { ...schemas.inputSchema, type: 'object' as const }, outputSchema: { ...schemas.outputSchema, type: 'object' as const },
+    inputSchema: { ...withoutRepository(schemas.inputSchema), type: 'object' as const }, outputSchema: { ...schemas.outputSchema, type: 'object' as const },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   })) }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {

@@ -125,7 +125,11 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
             await call({ action: 'unregister', repositoryId }); await refresh();
           })}>Unregister</button>
         </div>
-        {contexts.length > 0 && <ul className="code-intelligence-contexts">{contexts.map(value => { const context = record(value); return <li key={String(context.contextId)}>{String(context.resolution)} · {String(context.state)} · {items(context.capabilities).map(String).join(', ')}</li>; })}</ul>}
+        {contexts.length > 0 && <details className="code-intelligence-contexts">
+          <summary>Projects: {(['complete', 'partial', 'syntaxOnly'] as const).map(resolution => [resolution, contexts.filter(value => record(value).resolution === resolution).length] as const)
+            .filter(([, count]) => count > 0).map(([resolution, count]) => `${count} ${resolution === 'syntaxOnly' ? 'syntax-only' : resolution}`).join(' · ')}</summary>
+          <ul>{contexts.map(value => { const context = record(value); return <li key={String(context.contextId)}>{String(context.resolution)} · {String(context.state)} · {items(context.capabilities).map(String).join(', ')}</li>; })}</ul>
+        </details>}
         {items(record(status?.data).diagnostics).length > 0 && <details><summary>Index diagnostics</summary><pre>{JSON.stringify(record(status?.data).diagnostics, null, 2)}</pre></details>}
         <form onSubmit={event => { event.preventDefault(); void work(() => runTool('search_code', { query, limit: 20, mode })); }}>
           <label className="code-intelligence-mode">Search mode<ChipSelect ariaLabel="Search mode" block value={mode} onChange={setMode} options={[

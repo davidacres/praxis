@@ -20,7 +20,11 @@ async function openPanel() {
         const args = request.arguments as Record<string, unknown>;
         if (request.tool === 'get_index_status') return { indexGeneration: generation, freshness: { state: 'current' }, data: { contexts: [], diagnostics: [], models: [], jobsByState: {} } };
         if (request.tool === 'search_code' && args.query === 'mode probe')
-          return { data: { matches: [{ symbol: { symbolId: 'probe', qualifiedName: `Mode ${String(args.mode)}`, signature: 'void Run()', resolution: 'resolved' } }] } };
+          return { data: { matches: [
+            { symbol: { symbolId: 'probe', qualifiedName: `Mode ${String(args.mode)}`, signature: 'void Run()', resolution: 'resolved' } },
+            // Real qualified names and signatures are long and unbroken.
+            { symbol: { symbolId: 'long', qualifiedName: 'Maze.Authorization.MazePermissionAuthorizationHandler.HandleRequirementAsync(Microsoft.AspNetCore.Authorization.AuthorizationHandlerContext,Maze.Authorization.MazePermissionRequirement)',
+              signature: 'protected override System.Threading.Tasks.Task Maze.Authorization.MazePermissionAuthorizationHandler.HandleRequirementAsync(Microsoft.AspNetCore.Authorization.AuthorizationHandlerContext context, Maze.Authorization.MazePermissionRequirement requirement)', resolution: 'resolved' } }] } };
         if (request.tool === 'search_code') {
           const next = args.cursor === 'next-page';
           return { truncated: !next, nextCursor: next ? null : 'next-page', data: { matches: [{ symbol: { symbolId: next ? 'second' : 'first', qualifiedName: next ? 'SecondResult' : 'FirstResult', signature: 'void Run()', resolution: 'resolved' } }] } };
@@ -62,11 +66,12 @@ test('search sends the chosen mode, defaulting to hybrid', async () => {
   await expect(panel).toContainText('nothing in the repository is built, restored or run');
   await panel.getByLabel('Search source').fill('mode probe');
   await panel.getByRole('button', { name: 'Search code', exact: true }).click();
-  await expect(panel.locator('.code-intelligence-match strong')).toHaveText('Mode hybrid');
+  await expect(panel.locator('.code-intelligence-match strong').first()).toHaveText('Mode hybrid');
+  expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'long names must wrap, not widen the panel').toBe(true);
   for (const [value, expected] of [['vector', 'Mode vector'], ['lexical', 'Mode lexical']] as const) {
     await chooseOption(panel.getByRole('button', { name: 'Search mode' }), value);
     await panel.getByRole('button', { name: 'Search code', exact: true }).click();
-    await expect(panel.locator('.code-intelligence-match strong')).toHaveText(expected);
+    await expect(panel.locator('.code-intelligence-match strong').first()).toHaveText(expected);
   }
 });
 
