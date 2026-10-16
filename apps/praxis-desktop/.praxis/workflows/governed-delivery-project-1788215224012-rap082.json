@@ -8,7 +8,7 @@
     {
       "id": "plan",
       "name": "Plan",
-      "x": 40,
+      "x": 159,
       "y": 40,
       "inputs": [],
       "type": "agent-task",
@@ -35,8 +35,8 @@
     {
       "id": "implement",
       "name": "Implement",
-      "x": 300,
-      "y": 40,
+      "x": 159,
+      "y": 202,
       "inputs": [
         "plan-doc"
       ],
@@ -64,8 +64,8 @@
     {
       "id": "test-contracts",
       "name": "Praxis Test contracts",
-      "x": 560,
-      "y": 40,
+      "x": 159,
+      "y": 526,
       "inputs": [
         "change-diff"
       ],
@@ -96,11 +96,10 @@
     {
       "id": "review",
       "name": "Review",
-      "x": 820,
-      "y": 40,
+      "x": 159,
+      "y": 364,
       "inputs": [
-        "change-diff",
-        "test-contracts"
+        "change-diff"
       ],
       "type": "agent-task",
       "agent": {
@@ -131,8 +130,8 @@
     {
       "id": "install",
       "name": "Install dependencies",
-      "x": 820,
-      "y": 180,
+      "x": 40,
+      "y": 688,
       "inputs": [
         "change-diff"
       ],
@@ -158,8 +157,8 @@
     {
       "id": "build",
       "name": "Build",
-      "x": 1080,
-      "y": 40,
+      "x": 159,
+      "y": 850,
       "inputs": [
         "change-diff"
       ],
@@ -185,8 +184,8 @@
     {
       "id": "qa",
       "name": "QA",
-      "x": 1340,
-      "y": 40,
+      "x": 159,
+      "y": 1012,
       "inputs": [
         "change-diff",
         "test-contracts",
@@ -213,8 +212,8 @@
     {
       "id": "security",
       "name": "Security scan",
-      "x": 820,
-      "y": 320,
+      "x": 278,
+      "y": 688,
       "inputs": [
         "change-diff"
       ],
@@ -240,8 +239,8 @@
     {
       "id": "gates",
       "name": "Gates",
-      "x": 1600,
-      "y": 40,
+      "x": 159,
+      "y": 1174,
       "inputs": [],
       "type": "join",
       "mode": "all"
@@ -249,8 +248,8 @@
     {
       "id": "approve",
       "name": "Approve",
-      "x": 1860,
-      "y": 40,
+      "x": 159,
+      "y": 1336,
       "inputs": [
         "review-report",
         "test-contracts",
@@ -270,8 +269,8 @@
         "review": [
           {
             "type": "severity",
-            "severityLevel": "low",
-            "maxCount": 0
+            "maxCount": 0,
+            "severityLevel": "low"
           }
         ]
       }
@@ -286,16 +285,16 @@
       "required": true
     },
     {
-      "id": "e-impl-tests",
+      "id": "e-impl-review",
       "from": "implement",
-      "to": "test-contracts",
+      "to": "review",
       "on": "success",
       "required": true
     },
     {
-      "id": "e-tests-review",
-      "from": "test-contracts",
-      "to": "review",
+      "id": "e-review-tests",
+      "from": "review",
+      "to": "test-contracts",
       "on": "success",
       "required": true
     },
@@ -328,13 +327,6 @@
       "required": true
     },
     {
-      "id": "e-review-gates",
-      "from": "review",
-      "to": "gates",
-      "on": "success",
-      "required": true
-    },
-    {
       "id": "e-qa-gates",
       "from": "qa",
       "to": "gates",
@@ -356,51 +348,24 @@
       "required": true
     },
     {
-      "id": "e-test-contracts-repair",
-      "from": "test-contracts",
-      "to": "implement",
-      "on": "failure",
-      "required": true,
-      "loop": {
-        "maxIterations": 2
-      }
-    },
-    {
-      "id": "e-review-repair",
+      "id": "e-review-fix",
       "from": "review",
       "to": "implement",
-      "on": "failure",
+      "on": "findings",
       "required": true,
+      "when": {
+        "severity": "high"
+      },
       "loop": {
         "maxIterations": 2
       }
     },
     {
-      "id": "e-install-repair",
-      "from": "install",
-      "to": "implement",
-      "on": "failure",
-      "required": true,
-      "loop": {
-        "maxIterations": 2
-      }
-    },
-    {
-      "id": "e-build-repair",
-      "from": "build",
-      "to": "implement",
-      "on": "failure",
-      "required": true,
-      "loop": {
-        "maxIterations": 2
-      }
-    },
-    {
-      "id": "e-qa-repair",
+      "id": "e-qa-fix",
       "from": "qa",
       "to": "implement",
       "on": "failure",
-      "required": true,
+      "required": false,
       "loop": {
         "maxIterations": 2
       }
@@ -414,34 +379,11 @@
       "loop": {
         "maxIterations": 2
       }
-    },
-    {
-      "id": "e-approve-repair",
-      "from": "approve",
-      "to": "implement",
-      "on": "failure",
-      "required": true,
-      "loop": {
-        "maxIterations": 2
-      }
-    },
-    {
-      "id": "e-review-findings-repair",
-      "from": "review",
-      "to": "implement",
-      "on": "findings",
-      "required": true,
-      "when": {
-        "severity": "low"
-      },
-      "loop": {
-        "maxIterations": 2
-      }
     }
   ],
   "entryNodeId": "plan",
   "createdAt": "2026-09-23T23:26:52.387Z",
-  "updatedAt": "2026-10-14T00:00:14.642Z",
+  "updatedAt": "2026-10-15T15:20:54.019Z",
   "description": "Plan and implement, then converge test contracts, review, build, QA, and security before human approval. Failures and actionable review findings return to Implement with two automatic repair iterations per route; all downstream evidence is regenerated after repair.",
   "projectId": "project-1788215224012-rap082"
 }

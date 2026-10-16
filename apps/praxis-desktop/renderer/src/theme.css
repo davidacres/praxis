@@ -14486,21 +14486,60 @@ button.session-chat-attachment {
 .wf-canvas .wf-node-specialist > span:first-child { color: var(--text-secondary); font-weight: 600; }
 .wf-node-handle {
   position: absolute;
-  right: -10px;
-  top: 50%;
-  transform: translateY(-50%);
   display: grid;
   place-items: center;
   width: 18px;
   height: 18px;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: var(--radius-pill);
   background: var(--bg);
   color: var(--text-tertiary);
   font-size: var(--text-xs);
   line-height: 1;
   cursor: crosshair;
+  z-index: 5;
+  transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
+.wf-node-handle:hover,
+.wf-node-handle:focus-visible {
+  transform: scale(1.18);
+  outline: none;
+}
+.wf-node-handle--success {
+  bottom: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-color: var(--success);
+  color: var(--success);
+}
+.wf-node-handle--success:hover,
+.wf-node-handle--success:focus-visible {
+  transform: translateX(-50%) scale(1.18);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 8px var(--success);
+}
+.wf-node-handle--success.is-connected {
+  background: var(--success);
+  color: #ffffff;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 5px var(--success);
+}
+.wf-node-handle--failure {
+  right: -9px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.wf-node-handle--failure:hover,
+.wf-node-handle--failure:focus-visible {
+  transform: translateY(-50%) scale(1.18);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 8px var(--danger);
+}
+.wf-node-handle--failure.is-connected {
+  background: var(--danger);
+  color: #ffffff;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 5px var(--danger);
+}
+
 
 /* ── Workflow runs browser (centre pane) ──────────────────────────────── */
 .wf-runs-browser {

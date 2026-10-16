@@ -251,6 +251,30 @@ test('edge badge shows condition tooltip and opens edge inspector in sidebar whe
   await expect(inspector.getByTestId('wf-edge-loop-toggle')).toBeChecked();
 });
 
+test('workflow nodes display distinct green success and red failure handles and color-code connector strokes', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Governed delivery');
+
+  const canvas = canvasOf(page);
+
+  // Success handle at bottom and failure handle at right
+  const planSuccessHandle = canvas.getByTestId('wf-node-handle-success-plan');
+  const planFailureHandle = canvas.getByTestId('wf-node-handle-failure-plan');
+  await expect(planSuccessHandle).toBeVisible();
+  await expect(planFailureHandle).toBeVisible();
+  await expect(planSuccessHandle).toHaveClass(/wf-node-handle--success/);
+  await expect(planFailureHandle).toHaveClass(/wf-node-handle--failure/);
+
+  // Success path stroke (green) and failure/repair path stroke
+  const successEdgeLine = canvas.getByTestId('wf-canvas-edge-line-e-plan-impl');
+  await expect(successEdgeLine).toHaveAttribute('stroke', 'var(--success, #10b981)');
+  await expect(successEdgeLine).toHaveAttribute('marker-end', 'url(#wf-arrowhead-success)');
+
+  const failureEdgeLine = canvas.getByTestId('wf-canvas-edge-line-e-qa-repair');
+  await expect(failureEdgeLine).toHaveAttribute('stroke', 'var(--danger)');
+  await expect(failureEdgeLine).toHaveAttribute('marker-end', 'url(#wf-arrowhead-danger)');
+});
+
 test('nudging a stage past the canvas edge clamps its position instead of losing it off-screen', async () => {
   const page = app.window;
   await newWorkflow(page, 'Governed delivery');
@@ -262,7 +286,7 @@ test('nudging a stage past the canvas edge clamps its position instead of losing
   // Far more nudges than the stage can possibly have room for (20px each), so the test keeps holding
   // however the template lays the stage out — it is the clamp being tested, not the distance.
   for (let i = 0; i < 80; i += 1) await qaCard.press('Shift+ArrowLeft');
-  for (let i = 0; i < 40; i += 1) await qaCard.press('Shift+ArrowUp');
+  for (let i = 0; i < 80; i += 1) await qaCard.press('Shift+ArrowUp');
 
   await expect.poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.left)).toBe('0px');
   await expect.poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.top)).toBe('0px');

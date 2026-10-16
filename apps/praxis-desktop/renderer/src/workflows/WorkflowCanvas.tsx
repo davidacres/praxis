@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DiscoveredAgentProfile, DiscoveredSkill, WorkflowDefinition, WorkflowNode, WorkflowNodeType } from '@praxis/core';
+import type {
+  DiscoveredAgentProfile,
+  DiscoveredSkill,
+  TaskDesignerLinkHandleDirection,
+  WorkflowDefinition,
+  WorkflowEdgeOutcome,
+  WorkflowNode,
+  WorkflowNodeType
+} from '@praxis/core';
 import {
   anchorPoint,
   buildConnectorCurvePath,
@@ -260,7 +268,14 @@ export function WorkflowCanvas({
   const [drag, setDrag] = useState<
     | { kind: 'pan'; startX: number; startY: number; originX: number; originY: number }
     | { kind: 'node'; nodeId: string; offsetX: number; offsetY: number }
-    | { kind: 'link'; from: string; x: number; y: number }
+    | {
+        kind: 'link';
+        from: string;
+        outcome?: WorkflowEdgeOutcome;
+        fromDirection?: TaskDesignerLinkHandleDirection;
+        x: number;
+        y: number;
+      }
     | undefined
   >();
 
@@ -334,7 +349,9 @@ export function WorkflowCanvas({
       }
       if (drag?.kind === 'link') {
         const target = (event.target as HTMLElement).closest('[data-node-id]')?.getAttribute('data-node-id');
-        if (target && target !== drag.from) onChange(connectNodes(definition, { from: drag.from, to: target }));
+        if (target && target !== drag.from) {
+          onChange(connectNodes(definition, { from: drag.from, to: target, on: drag.outcome ?? 'success' }));
+        }
       }
       setDrag(undefined);
     },
@@ -455,17 +472,37 @@ export function WorkflowCanvas({
             : undefined;
 
     if (edge.loop) {
-      // A way back is drawn under both stages: out of the source's bottom, round, and up
-      // into the target's — never on top of the forward path it returns along.
+      if (target.y < source.y - 40) {
+        // Vertical back-edge: out of the source's right, round, and up into the target's right.
+        const from = anchorPoint(source, 'right');
+        const to = anchorPoint(target, 'right');
+        const bulge = Math.max(from.x, to.x) + 72;
+        return {
+          id: edge.id,
+          on: edge.on,
+          d: `M ${from.x} ${from.y} C ${bulge} ${from.y}, ${bulge} ${to.y}, ${to.x} ${to.y}`,
+          midX: bulge - 12,
+          midY: (from.y + to.y) / 2,
+          dead: isFailure,
+          loop: true,
+          badge,
+          badgeIcon,
+          tooltip,
+          fromName: fromNode?.name ?? edge.from,
+          toName: toNode?.name ?? edge.to
+        };
+      }
+      // Horizontal back-edge: out of the source's bottom, round, and up into the target's bottom.
       const from = anchorPoint(source, 'bottom');
       const to = anchorPoint(target, 'bottom');
       const dip = Math.max(from.y, to.y) + 56;
       return {
         id: edge.id,
+        on: edge.on,
         d: `M ${from.x} ${from.y} C ${from.x} ${dip}, ${to.x} ${dip}, ${to.x} ${to.y}`,
         midX: (from.x + to.x) / 2,
         midY: dip - 14,
-        dead: false,
+        dead: isFailure,
         loop: true,
         badge,
         badgeIcon,
@@ -474,15 +511,21 @@ export function WorkflowCanvas({
         toName: toNode?.name ?? edge.to
       };
     }
-    const dirs = resolveConnectorDirections(source, target);
+    const defaultSourceDir: TaskDesignerLinkHandleDirection | undefined = isFailure || isFindings
+      ? 'right'
+      : target.y > source.y + 20
+        ? 'bottom'
+        : undefined;
+    const dirs = resolveConnectorDirections(source, target, defaultSourceDir);
     const from = anchorPoint(source, dirs.sourceDirection);
     const to = anchorPoint(target, dirs.targetDirection);
     return {
       id: edge.id,
+      on: edge.on,
       d: buildConnectorCurvePath(from.x, from.y, to.x, to.y, dirs.sourceDirection, dirs.targetDirection),
       midX: (from.x + to.x) / 2,
       midY: (from.y + to.y) / 2,
-      dead: edge.on === 'failure',
+      dead: isFailure,
       loop: false,
       badge,
       badgeIcon,
@@ -495,11 +538,11 @@ export function WorkflowCanvas({
   const linkPreview =
     drag?.kind === 'link' && boxes[drag.from]
       ? buildConnectorCurvePath(
-          anchorPoint(boxes[drag.from], 'right').x,
-          anchorPoint(boxes[drag.from], 'right').y,
+          anchorPoint(boxes[drag.from], drag.fromDirection ?? (drag.outcome === 'failure' ? 'right' : 'bottom')).x,
+          anchorPoint(boxes[drag.from], drag.fromDirection ?? (drag.outcome === 'failure' ? 'right' : 'bottom')).y,
           drag.x,
           drag.y,
-          'right',
+          drag.fromDirection ?? (drag.outcome === 'failure' ? 'right' : 'bottom'),
           'left'
         )
       : undefined;
@@ -559,6 +602,28 @@ export function WorkflowCanvas({
                 <polygon points="0 0, 7 2.5, 0 5" fill="var(--accent)" />
               </marker>
               <marker
+                id="wf-arrowhead-success"
+                markerWidth={7}
+                markerHeight={5}
+                refX={6.5}
+                refY={2.5}
+                orient="auto"
+                markerUnits="userSpaceOnUse"
+              >
+                <polygon points="0 0, 7 2.5, 0 5" fill="var(--success, #10b981)" />
+              </marker>
+              <marker
+                id="wf-arrowhead-warning"
+                markerWidth={7}
+                markerHeight={5}
+                refX={6.5}
+                refY={2.5}
+                orient="auto"
+                markerUnits="userSpaceOnUse"
+              >
+                <polygon points="0 0, 7 2.5, 0 5" fill="var(--warning, #f59e0b)" />
+              </marker>
+              <marker
                 id="wf-arrowhead-danger"
                 markerWidth={7}
                 markerHeight={5}
@@ -574,18 +639,32 @@ export function WorkflowCanvas({
             {edgePaths.filter(Boolean).map(edge => {
               const isSelected = selectedEdgeId === edge!.id;
               const isHovered = hoveredEdgeId === edge!.id;
+              const isFailureEdge = edge!.on === 'failure';
+              const isFindingsEdge = edge!.on === 'findings';
+              const isSuccessEdge = edge!.on === 'success' || !edge!.on;
+
               const stroke = isSelected
                 ? 'var(--accent)'
-                : edge!.dead
-                  ? 'var(--danger)'
-                  : isHovered
-                    ? 'var(--accent)'
-                    : 'var(--border-strong, var(--text-dim))';
+                : isHovered
+                  ? 'var(--accent)'
+                  : isFailureEdge
+                    ? 'var(--danger)'
+                    : isFindingsEdge
+                      ? 'var(--warning, #f59e0b)'
+                      : isSuccessEdge
+                        ? 'var(--success, #10b981)'
+                        : 'var(--border-strong, var(--text-dim))';
               const marker = isSelected
                 ? 'url(#wf-arrowhead-selected)'
-                : edge!.dead
-                  ? 'url(#wf-arrowhead-danger)'
-                  : 'url(#wf-arrowhead)';
+                : isHovered
+                  ? 'url(#wf-arrowhead-selected)'
+                  : isFailureEdge
+                    ? 'url(#wf-arrowhead-danger)'
+                    : isFindingsEdge
+                      ? 'url(#wf-arrowhead-warning)'
+                      : isSuccessEdge
+                        ? 'url(#wf-arrowhead-success)'
+                        : 'url(#wf-arrowhead)';
               return (
                 <g
                   key={edge!.id}
@@ -631,7 +710,18 @@ export function WorkflowCanvas({
               );
             })}
             {linkPreview && (
-              <path d={linkPreview} fill="none" stroke="var(--accent)" strokeWidth={1.5} strokeDasharray="4 3" markerEnd="url(#wf-arrowhead-selected)" />
+              <path
+                d={linkPreview}
+                fill="none"
+                stroke={drag?.kind === 'link' && drag.outcome === 'failure' ? 'var(--danger)' : 'var(--success, #10b981)'}
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                markerEnd={
+                  drag?.kind === 'link' && drag.outcome === 'failure'
+                    ? 'url(#wf-arrowhead-danger)'
+                    : 'url(#wf-arrowhead-success)'
+                }
+              />
             )}
           </svg>
 
@@ -781,14 +871,53 @@ export function WorkflowCanvas({
                     {presentation.skills?.length ? <span>{presentation.skills.join(' · ')}</span> : <span>no skills</span>}
                   </div>
                 )}
+                {/* Success outcome node/handle (flows down) */}
                 <button
                   type="button"
-                  className="wf-node-handle"
-                  aria-label={`Connect from ${node.name}`}
+                  className={`wf-node-handle wf-node-handle--success${
+                    definition.edges.some(e => e.from === node.id && (e.on === 'success' || !e.on)) ? ' is-connected' : ''
+                  }`}
+                  title={`Success path from ${node.name} (flows down) — 1 connection`}
+                  aria-label={`Connect success path from ${node.name}`}
+                  data-testid={`wf-node-handle-success-${node.id}`}
                   onPointerDown={event => {
                     event.stopPropagation();
                     const point = toCanvas(event.clientX, event.clientY);
-                    setDrag({ kind: 'link', from: node.id, x: point.x, y: point.y });
+                    setDrag({
+                      kind: 'link',
+                      from: node.id,
+                      outcome: 'success',
+                      fromDirection: 'bottom',
+                      x: point.x,
+                      y: point.y
+                    });
+                  }}
+                >
+                  ▾
+                </button>
+
+                {/* Failure outcome node/handle (flows right) */}
+                <button
+                  type="button"
+                  className={`wf-node-handle wf-node-handle--failure${
+                    definition.edges.some(e => e.from === node.id && (e.on === 'failure' || e.on === 'findings'))
+                      ? ' is-connected'
+                      : ''
+                  }`}
+                  title={`Failure path from ${node.name} (flows right) — 1 connection`}
+                  aria-label={`Connect failure path from ${node.name}`}
+                  data-testid={`wf-node-handle-failure-${node.id}`}
+                  onPointerDown={event => {
+                    event.stopPropagation();
+                    const point = toCanvas(event.clientX, event.clientY);
+                    setDrag({
+                      kind: 'link',
+                      from: node.id,
+                      outcome: 'failure',
+                      fromDirection: 'right',
+                      x: point.x,
+                      y: point.y
+                    });
                   }}
                 >
                   ▸

@@ -134,6 +134,7 @@ export function autoArrange(
     indegree.set(node.id, 0);
   }
   for (const edge of definition.edges) {
+    if (edge.loop) continue;
     if (!byId.has(edge.from) || !byId.has(edge.to)) continue;
     outgoing.get(edge.from)!.push(edge.to);
     indegree.set(edge.to, (indegree.get(edge.to) ?? 0) + 1);
@@ -290,6 +291,18 @@ export function connectNodes(
   if (!definition.nodes.some(n => n.id === input.from) || !definition.nodes.some(n => n.id === input.to)) return definition;
 
   const loop = wouldCloseCycle(definition, input.from, input.to);
+  const fromNode = definition.nodes.find(n => n.id === input.from);
+
+  // Enforce 1 connection per outcome port on an agent-task (replaces existing connection for that outcome)
+  const existingEdges = fromNode?.type === 'agent-task'
+    ? definition.edges.filter(edge => {
+        if (edge.from !== input.from) return true;
+        if (on === 'success') return edge.on !== 'success';
+        if (on === 'failure' || on === 'findings') return edge.on !== 'failure' && edge.on !== 'findings';
+        return edge.on !== on;
+      })
+    : definition.edges;
+
   const edge: WorkflowEdge = {
     id: freshId('edge'),
     from: input.from,
@@ -298,7 +311,7 @@ export function connectNodes(
     required: input.required ?? true,
     ...(loop ? { loop: { maxIterations: DEFAULT_LOOP_ITERATIONS } } : {})
   };
-  return touch(definition, definition.nodes, [...definition.edges, edge]);
+  return touch(definition, definition.nodes, [...existingEdges, edge]);
 }
 
 export function disconnect(definition: WorkflowDefinition, edgeId: string): WorkflowDefinition {
