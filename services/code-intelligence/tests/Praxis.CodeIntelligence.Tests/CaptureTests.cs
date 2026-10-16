@@ -63,4 +63,27 @@ public sealed class CaptureTests
         }
         finally { Directory.Delete(root, recursive: true); }
     }
+
+    [SdkFact]
+    public async Task CompileItemsOutsideTheRootAreReportedAndLeftOutInsteadOfFailingCapture()
+    {
+        // Mirrors Microsoft.NET.Test.Sdk, which injects a generated entry point
+        // from the NuGet cache into every test project that uses it.
+        var root = Path.Combine(Path.GetTempPath(), "praxis-capture-external-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        var outside = Path.Combine(Path.GetTempPath(), "praxis-capture-outside-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(outside);
+        try
+        {
+            var external = Path.Combine(outside, "Injected.cs"); File.WriteAllText(external, "internal static class Injected { }");
+            File.WriteAllText(Path.Combine(root, "Example.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>"
+                + $"<ItemGroup><Compile Include=\"{external}\" /></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "Example.cs"), "public class Example { public int Run() => 1; }");
+            var skipped = new List<string>();
+            var output = await ContextCapture.CaptureAsync(root, "Example.csproj", restore: true, skippedExternalSources: skipped);
+            Assert.Equal(Path.GetFullPath(external), Path.GetFullPath(Assert.Single(skipped)));
+            var project = Assert.Single(PassiveManifest.Read(root, output).Projects);
+            Assert.Contains("Example.cs", project.Sources);
+            Assert.DoesNotContain(project.Sources.Concat(project.SupportSources ?? []), source => source.Contains("Injected", StringComparison.Ordinal));
+        }
+        finally { Directory.Delete(root, recursive: true); Directory.Delete(outside, recursive: true); }
+    }
 }

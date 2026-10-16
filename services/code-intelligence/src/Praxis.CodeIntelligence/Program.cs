@@ -41,8 +41,10 @@ try
     if (arguments[0] == "capture" && arguments.Count == 3)
     {
         Console.Error.WriteLine("Explicit context capture evaluates projects and MSBuild targets and may execute project code." + (restore ? " Restore is enabled and may contact configured package feeds." : " Restore is disabled."));
-        var captured = await ContextCapture.CaptureAsync(arguments[1], arguments[2], output ?? "context.praxis.json", configuration ?? "Debug", framework, restore, cancellation.Token);
-        Console.WriteLine(new JsonObject { ["manifest"] = captured }.ToJsonString()); return 0;
+        var skipped = new List<string>();
+        var captured = await ContextCapture.CaptureAsync(arguments[1], arguments[2], output ?? "context.praxis.json", configuration ?? "Debug", framework, restore, cancellation.Token, skipped);
+        Console.WriteLine(new JsonObject { ["manifest"] = captured,
+            ["skippedExternalCompileItems"] = new JsonArray(skipped.Select(path => (JsonNode?)JsonValue.Create(path)).ToArray()) }.ToJsonString()); return 0;
     }
     if (arguments[0] == "serve") { await OwnerService.RunAsync(directory, cancellation.Token); return 0; }
     JsonObject request = arguments[0] switch

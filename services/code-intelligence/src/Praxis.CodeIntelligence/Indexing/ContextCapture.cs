@@ -10,7 +10,8 @@ namespace Praxis.CodeIntelligence.Indexing;
 public static class ContextCapture
 {
     public static async Task<string> CaptureAsync(string root, string projectPath, string outputPath = "context.praxis.json",
-        string configuration = "Debug", string? framework = null, bool restore = false, CancellationToken cancellationToken = default)
+        string configuration = "Debug", string? framework = null, bool restore = false, CancellationToken cancellationToken = default,
+        ICollection<string>? skippedExternalSources = null)
     {
         root = SourceFiles.CanonicalDirectory(root);
         var destination = SourceFiles.Resolve(root, outputPath);
@@ -53,7 +54,13 @@ public static class ContextCapture
             var allSources = new List<string>(); var support = new List<string>();
             foreach (var item in items["Compile"]?.AsArray() ?? [])
             {
-                var path = ItemPath(item!, full); var relative = Relative(root, path); SourceFiles.Resolve(root, relative);
+                var path = ItemPath(item!, full);
+                // Packages can inject compile items from outside the repository
+                // (Microsoft.NET.Test.Sdk adds a generated test entry point). The
+                // manifest never references files outside the root, so they are
+                // reported and left out rather than failing the whole capture.
+                if (!Within(root, path)) { skippedExternalSources?.Add(path); continue; }
+                var relative = Relative(root, path); SourceFiles.Resolve(root, relative);
                 if (relative.Split('/').Any(part => part is "obj" or "bin") || relative.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)) support.Add(relative); else allSources.Add(relative);
             }
             var references = new List<string>(); var referencedDirectories = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -92,6 +99,11 @@ public static class ContextCapture
         }
     }
 
+    private static bool Within(string root, string path)
+    {
+        var relative = Path.GetRelativePath(root, path);
+        return relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) && !Path.IsPathRooted(relative);
+    }
     private static string Relative(string root, string path)
     {
         var relative = Path.GetRelativePath(root, path).Replace('\\', '/'); SourceFiles.Resolve(root, relative); return relative;
@@ -106,8 +118,16 @@ public static class ContextCapture
         {
             var output = ReadBounded(process.StandardOutput, 2 * 1024 * 1024, cancellationToken);
             var errors = ReadBounded(process.StandardError, 128 * 1024, cancellationToken);
-            await process.WaitForExitAsync(cancellationToken); var text = await output; _ = await errors;
-            if (process.ExitCode != 0) throw new IOException("Project context capture failed. Check SDK/references and explicitly choose --restore if needed.");
+            await process.WaitForExitAsync(cancellationToken); var text = await output; var errorText = await errors;
+            if (process.ExitCode != 0)
+            {
+                // MSBuild reports most failures on stdout; surface a bounded few.
+                var reasons = (text + "\n" + errorText).Split('\n').Select(line => line.Trim())
+                    .Where(line => Regex.IsMatch(line, @"\berror [A-Z]+[0-9]+:", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50)))
+                    .Distinct(StringComparer.Ordinal).Take(3).Select(line => line.Length > 400 ? line[..400] + "…" : line).ToArray();
+                throw new IOException("Project context capture failed. " + (reasons.Length > 0 ? string.Join(" | ", reasons)
+                    : "Check SDK/references and explicitly choose --restore if needed."));
+            }
             var first = text.IndexOf('{'); var last = text.LastIndexOf('}');
             if (first < 0 || last < first) throw new IOException("Project capture returned no bounded JSON metadata.");
             return JsonNode.Parse(text[first..(last + 1)])!.AsObject();
