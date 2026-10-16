@@ -4,7 +4,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 
 | Check | Current evidence | Remaining qualification |
 |---|---|---|
-| C# compiler/storage/model suite | 112 passed, zero failures/skips with SDK/model fixtures | Latest three-host follow-up is running |
+| C# compiler/storage/model suite | 112 passed, zero failures/skips with SDK/model fixtures | Final mapping-v6 run 38904504214 passes on Windows/macOS/Linux |
 | Source/context and dependency graph | Source identity/evidence, cross-project source uses, captured project/assembly references and configuration withdrawal tested | General runtime delegate flow is explicitly unresolved; no NuGet-name inference |
 | Durable work and edit updates | Real 5k watcher: 25 edits, structural p95 1.676 s, semantic upper-bound p95 0.620 s, no errors | This measurement predates adapter v8; five-run/concurrent-edit protocol remains open |
 | MCP | Four local SDK/stdio tests pass, including native grants/errors and controlled in-flight child cancellation | Actual live provider adapter/inference cancellation qualification remains open |
@@ -14,7 +14,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
 | 50k latency and memory | Full mapping-576 run: lexical p95 6.661 ms; hybrid p95 506.908 ms **fails** 500 ms; independent peak RSS 1915731968 bytes passes 2 GiB | Streaming scorer v4 is implemented/tested but awaits fresh isolated measurement; complete category/repeat/concurrent-edit protocol remains open |
 | Query-matrix tooling | Eight independent 100-symbol smoke processes pass; phase samples, reader schedules, failure retention and fixture containment verified | This is harness proof, not 50k qualification |
-| Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Run 38901354276 passes Windows/macOS/Linux (112 tests per host, schemas, native packaging, retained/matrix safeguards and watcher smoke) |
+| Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Final mapping-v6 run 38904504214 passes Windows/macOS/Linux (112 tests per host, schemas, native packaging, retained/matrix safeguards and watcher smoke) |
 
 ## Platform and provider claims
 
@@ -358,3 +358,7 @@ The immutable current-build full run completed indexing, real inference, 400 que
 Reader mapping v6 selects 512 MiB. All 112 provisioned C# tests pass, with zero skips. Its isolated adapter-v8 retained-snapshot pilot measured 200 exact queries per mode with four readers: lexical p95 **6.2081 ms**, hybrid **420.2002 ms**, zero query/warmup errors and independent query-process peak RSS **1289863168 bytes**. The main latency/RSS pilot limits pass; retrieval-only still fails 250 ms and full-process memory remains pending. Raw and independent-process reports are preserved.
 
 The adapter-v8/scorer-v4 native package (before this mapping-only change) completed all 25 actual-watcher 5k edits with zero errors: structural p95 **1675.3390 ms**, semantic-refresh conservative upper-bound p95 **609.0794 ms**. Both update gates pass. The new source/configuration graph and streaming selector therefore retain update performance in this run; repeated/concurrent-load qualification remains open.
+
+## Final mapping-v6 native verification
+
+[CI 38904504214](https://github.com/davidacres/praxis/actions/runs/38904504214) passes Windows/macOS/Linux for the selected 512 MiB mapping and streaming scorer v4. Each host passes 112 C# tests, schemas, retained/matrix safeguards, native packaging/ONNX/IPC and watcher smoke. The final local native package also passes all four MCP and 13 evaluator fixtures. Full local capacity RSS measurement is still pending; this CI result does not replace performance or live-provider qualification.
