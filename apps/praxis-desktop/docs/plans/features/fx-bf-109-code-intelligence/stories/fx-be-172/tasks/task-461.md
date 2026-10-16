@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-10-16T22:50:12.535Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-461
 type: Task
 status: Backlog

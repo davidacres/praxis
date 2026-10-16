@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-10-16T22:50:12.534Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-458
 type: Task
 status: To Do

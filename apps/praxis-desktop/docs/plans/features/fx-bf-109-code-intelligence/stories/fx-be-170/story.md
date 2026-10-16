@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-10-16T22:50:12.528Z
+**Type:** Story
+**Priority:** Medium
 id: FX-BE-170
 type: Story
 status: In Progress

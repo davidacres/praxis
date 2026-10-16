@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-10-16T22:50:12.529Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-441
 type: Task
 status: Done

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-10-16T22:50:12.531Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-447
 type: Task
 status: In Progress

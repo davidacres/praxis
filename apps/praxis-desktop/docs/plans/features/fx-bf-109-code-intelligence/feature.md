@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-10-16T22:50:12.412Z
+**Type:** Feature
+**Priority:** Medium
 id: FX-BF-109
 type: Feature
 status: In Progress
@@ -23,3 +27,9 @@ Implementation and release evidence must match services/code-intelligence/docs/r
 ## Comments
 
 Recreated from the preserved specification and recovery inventory. Remote checkpoints are required before ending work.
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
