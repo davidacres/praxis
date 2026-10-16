@@ -108,6 +108,29 @@ public sealed class ProjectInferenceTests : IDisposable
     }
 
     [Fact]
+    public void ProjectReferencesFlowTransitivelyUnlessAProjectOptsOut()
+    {
+        string Project(string reference, bool direct = false) => $"""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework>{(direct ? "<DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>" : "")}</PropertyGroup>
+              <ItemGroup>{reference}</ItemGroup>
+            </Project>
+            """;
+        Write("A/A.csproj", Project(""));
+        Write("A/Model.cs", "namespace A; public sealed class Model { }");
+        Write("B/B.csproj", Project("<ProjectReference Include=\"..\\A\\A.csproj\" />"));
+        Write("B/Service.cs", "namespace B; public sealed class Service { public A.Model Create() => new(); }");
+        Write("C/C.csproj", Project("<ProjectReference Include=\"..\\B\\B.csproj\" />"));
+        Write("C/Consumer.cs", "namespace C; public static class Consumer { public static A.Model Use() => new B.Service().Create(); }");
+        Write("D/D.csproj", Project("<ProjectReference Include=\"..\\B\\B.csproj\" />", direct: true));
+        Write("D/Consumer.cs", "namespace D; public static class Consumer { public static A.Model Use() => new B.Service().Create(); }");
+        var (_, _, query) = Index();
+        var status = query("get_index_status", new())["data"]!;
+        Assert.Equal(["complete", "complete", "complete", "partial"], status["contexts"]!.AsArray().Select(context => context!["resolution"]!.GetValue<string>()).Order().ToArray());
+        Assert.Contains(status["diagnostics"]!.AsArray(), diagnostic => diagnostic!["code"]!.GetValue<string>() == "CS0246");
+    }
+
+    [Fact]
     public void InferenceNeverExecutesProjectTargets()
     {
         var marker = Path.Combine(root, "executed.txt");

@@ -727,3 +727,15 @@ The retained 50k fixture was migrated from schema 5 to 6 with the service's expl
 | negative | 4 | 6.8–7.0 | 125.2–129.8 | 115.0–118.4 |
 
 The filter predicates in the score pass cost about 2–5 ms on unfiltered queries compared with plan 5, while project-filtered retrieval improved from 378.7 to 108.3 ms. CI [38959603040](https://github.com/davidacres/praxis/actions/runs/38959603040) at `e54a8a40` passed on Windows, Linux and macOS.
+
+## Usability trial on a real repository (Maze) — 16 October
+
+A scratch copy of the Maze repository (433 C# files, 13 SDK-style projects, restore output present, `.git` and `bin/` excluded) was registered through the packaged CLI with **no captured manifest**, as a user would from the desktop panel.
+
+**Before automatic project inference:** indexing was syntax-only. Search was lexical only ("search index documents" returned test classes named `Index…`), and callers and callees were empty. Capture, the only route to semantics, needed a CLI step the desktop does not offer and the `global.json`-pinned SDK, and failed on every project using `Microsoft.NET.Test.Sdk` (fixed in `db5209bc`). Two failures hid their real cause and now report it (`a91c1187`): an over-long data directory for the owner socket, and SDK resolution errors without an MSBuild error code.
+
+**With execution-free inference (`645ad62b`, transitive references below):** registration to an indexed repository took about 26 s. **9 of 13 projects compile with zero errors; the other 4 have 6 errors in total**, all from source generators that inference deliberately never runs (`[GeneratedRegex]`, Razor components, .NET 10's generated `public partial class Program`). The index held 25,157 call edges, 77,375 references and 2,102 implements edges (syntax-only: none). `find_related` on `IRoleoverPermissionClient` returned its implementation, the services and handler that depend on it, and the test stubs; `get_callers` returned compiler-resolved callers with evidence. Model activation covered all 13,314 eligible symbols in about 190 s.
+
+**Search-quality finding:** hybrid results were identical to lexical for all four natural-language queries tried, because the ranking profile `rrf-k60-lexical64-vector1-alias0.5-v3` weights lexical matches 64 to 1. Vector-only search found the right answer where lexical did not: "permission check for roles" → `MazePermissionAuthorizationHandler.HandleRequirementAsync` / `GetPermissionsAsync`, while hybrid ranked test stubs first. The semantic channel works but is effectively unused by hybrid ranking. Changing that affects the fixed-corpus quality gates and needs re-evaluation, so it is not changed here.
+
+Transitive project references: the SDK flows `ProjectReference` transitively unless `DisableTransitiveProjectReferences` is set; inference initially used direct references only, which left the test projects unable to see `Maze.Common`/`MazeHub.Shared` types. Inference now uses the transitive closure and honours the opt-out (new test). 126 C# tests pass, zero skipped.

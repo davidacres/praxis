@@ -43,6 +43,7 @@ public static class ProjectInference
         var keyByPath = projectPaths.ToDictionary(path => path, path => path[..^".csproj".Length], StringComparer.Ordinal);
         var projectDirectories = projectPaths.Select(path => DirectoryOf(path)).ToArray();
         var diagnostics = new List<IndexedDiagnostic>(); var support = new List<string>();
+        var directOnly = new HashSet<string>(StringComparer.Ordinal); // DisableTransitiveProjectReferences=true
         var projects = new List<PassiveProject>();
         foreach (var path in projectPaths)
         {
@@ -56,6 +57,10 @@ public static class ProjectInference
         var keys = projects.Select(project => project.Key).ToHashSet(StringComparer.Ordinal);
         projects = projects.Select(project => project with { References = (project.References ?? []).Where(keys.Contains).ToArray() }).ToList();
         projects = BreakCycles(projects);
+        // The SDK flows project references transitively unless a project opts out, so a
+        // test project sees types from the projects its references depend on.
+        var direct = projects.ToDictionary(project => project.Key, project => project.References ?? [], StringComparer.Ordinal);
+        projects = projects.Select(project => directOnly.Contains(project.Key) ? project : project with { References = Closure(project.Key) }).ToList();
         return new(new PassiveManifest(1, projects.OrderBy(project => project.Key, StringComparer.Ordinal).ToArray()), support.Distinct(StringComparer.Ordinal).ToArray(), diagnostics);
 
         PassiveProject Project(string path)
@@ -75,6 +80,7 @@ public static class ProjectInference
                 : Value("TargetFrameworks").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).OrderByDescending(FrameworkRank).FirstOrDefault() ?? "";
             properties["TargetFramework"] = framework;
             var assemblyName = Value("AssemblyName") is { Length: > 0 } named ? named : Path.GetFileNameWithoutExtension(path);
+            if (Value("DisableTransitiveProjectReferences").Equals("true", StringComparison.OrdinalIgnoreCase)) directOnly.Add(keyByPath[path]);
 
             // Compile items: SDK default glob unless disabled, then explicit Include/Remove.
             var members = new HashSet<string>(StringComparer.Ordinal);
@@ -197,6 +203,18 @@ public static class ProjectInference
         }
 
         IndexedDiagnostic Diagnostic(string code, string severity, string message) => new("", null, code, severity, message, null);
+
+        string[] Closure(string key)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal); var order = new List<string>(); var pending = new Stack<string>(direct[key].Reverse());
+            while (pending.TryPop(out var next))
+            {
+                if (next == key || !seen.Add(next)) continue;
+                order.Add(next);
+                if (!directOnly.Contains(next)) foreach (var child in direct[next].Reverse()) pending.Push(child);
+            }
+            return order.ToArray();
+        }
 
         // Project XML is untrusted repository content: bounded read, no DTD processing.
         XDocument Load(string relative)
