@@ -72,7 +72,7 @@ Open Settings → AI → Tools → Code intelligence. Register/index a root, ins
 
 Provider access is separate from local indexing. The consent dialog names the destination; only that provider receives the generated MCP server. Handover does not transfer another provider's grant. Revoke removes both the repository/client grant and its desktop MCP configuration. Existing provider navigation continues to work independently. Real adapter invocation is not yet claimed; the MCP SDK mock initialize/list/call and provider isolation checks pass.
 
-All eleven tools are read-only and described by `contracts.json`: `search_code`, `find_symbol`, `get_symbol`, `get_source`, `explain_symbol`, `get_callers`, `get_callees`, `trace_flow`, `find_related`, `summarize_project`, `get_index_status`. Static call edges are not execution guarantees. Possible-dispatch expansion and additional type relationships remain incomplete.
+All eleven tools are read-only and described by `contracts.json`: `search_code`, `find_symbol`, `get_symbol`, `get_source`, `explain_symbol`, `get_callers`, `get_callees`, `trace_flow`, `find_related`, `summarize_project`, `get_index_status`. Static call edges are not execution guarantees. Compiler-bound type/member relationships, bounded possible dispatch, namespace imports, events, explicit throws and observed cross-project dependencies are supported. General delegate points-to flow and configuration-only project/package dependency graph edges are not implemented; static facts do not establish runtime execution.
 
 ## Ownership, operations and recovery
 
@@ -87,7 +87,7 @@ dotnet path/to/Praxis.CodeIntelligence.dll alias REPOSITORY_ID SYMBOL_ID 'domain
 dotnet path/to/Praxis.CodeIntelligence.dll unregister REPOSITORY_ID
 ```
 
-Backups use SQLite backup and validate before publication; an existing destination is refused. Do not copy a live database without its WAL. Newer schema versions and mismatched migration checksums are rejected. For corruption, stop the owner, preserve the entire data directory, and restore a verified backup using the matching binary or build a fresh index in a new data directory. Source files must not be deleted for recovery. A dedicated rebuild/relocation workflow is not yet implemented.
+Backups use SQLite backup and validate before publication; an existing destination is refused. Do not copy a live database without its WAL. Newer schema versions and mismatched migration checksums are rejected. For corruption, stop the owner, preserve the entire data directory, and restore a verified backup using the matching binary or build a fresh index in a new data directory. Source files must not be deleted for recovery. Use the rebuild/relocation workflow below to recover an index without changing source.
 
 Jobs have 60-second leases and 20-second heartbeats. Retries use 1,5,30,120,300-second delays and terminate after six attempts; expired leases are recovered. Old tokens cannot publish. Pause/unregister obsolete queued work. Owner startup/process boundary and crash recovery still require platform-level verification.
 
@@ -119,10 +119,10 @@ Unchanged representations reuse complete, normalized current-profile vector sets
 
 ### Storage upgrade and reconciliation
 
-The service initializes SQLite schema 2. Migration 1 is unchanged; migration 2 adds foreign-key lookup indexes for bounded cascading publication/removal. Existing schema-1 databases upgrade atomically after their migration history/checksum is validated. Incompatible/newer schemas and changed migration history are refused. Older service binaries cannot open schema 2; a verified private schema-1 backup is preserved beside the database before upgrade writes. Backup failure prevents migration.
+The service initializes SQLite schema 4. Migration 1 is unchanged; migrations 2–4 add cascading-publication lookup indexes, exact-search indexes and guarded FTS updates. Existing schemas 1–3 upgrade atomically after their migration history/checksum is validated. Incompatible/newer schemas and changed history are refused. A verified private backup is preserved before upgrade writes; backup failure prevents migration. Older binaries refuse newer schemas. Revision-only search-document updates retain the token stream, while actual text changes update FTS atomically.
 
 Unchanged reconciliation validates source bytes, support roles, captured manifest/project inputs and metadata before using an adapter-versioned snapshot in context metadata. It preserves structural generation and query epoch when facts are unchanged. Missing legacy snapshots are backfilled after full analysis. Force rebuild bypasses this optimization. This does not implement semantic API stamps or targeted body-edit invalidation.
 
 Model activation retains complete current vector sets only after value validation and exact regenerated source metadata agreement. Mismatched/corrupt sets or mappings are repaired; input/source/lease checks remain mandatory before committing.
 
-Native CI is defined in `.github/workflows/code-intelligence.yml` for scoped PRs/manual dispatch. It has a Linux/Windows/macOS matrix and an optional Linux real-model benchmark. Adding the workflow is not evidence that those platform runs have passed.
+Native CI in `.github/workflows/code-intelligence.yml` executes Linux/Windows/macOS fixtures, schema validation, packaging and actual watcher smoke checks, with an optional Linux real-model benchmark. See the dated release evidence for exact runs and failures; hosted CI smoke is separate from performance and desktop/provider qualification.

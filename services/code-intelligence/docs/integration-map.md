@@ -2,7 +2,7 @@
 
 | Concern | Implementation | Integration decision |
 |---|---|---|
-| Storage/schema | `Storage/IndexDatabase.cs`, `migration001.sql`, `migration002.sql` | Own local database; no source writes; checksum migrations |
+| Storage/schema | `Storage/IndexDatabase.cs`, `migration001.sql`–`migration004.sql` | Own local database; no source writes; checksum migrations |
 | Source policy | `Indexing/SourceFiles.cs`, `SafeSourceHandle.cs`, `SourceScanner.cs`, `GitFilePolicy.cs` | Canonical roots, raw hashes, explicit excludes and Git policy |
 | Passive semantics | `Indexing/PassiveManifest.cs`, `RoslynAnalyzer.cs`, `RepositoryIndexer.cs` | Roslyn compilation from captured inputs; no implicit project evaluation |
 | Explicit evaluation | `Indexing/ContextCapture.cs`, CLI `capture` | Separate authorized MSBuild execution; bounded output/time; optional restore |
