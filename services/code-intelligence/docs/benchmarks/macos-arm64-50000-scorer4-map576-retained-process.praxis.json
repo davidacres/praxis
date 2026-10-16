@@ -1,0 +1,13 @@
+{
+  "implementationCommit": "1d3d1bb0",
+  "measurement": "Query-only /usr/bin/time -l, retained post-edit schema-4 snapshot; four readers and 400 timed queries/mode, schedule 2",
+  "maximumResidentSetBytes": 1865580544,
+  "limitBytes": 2147483648,
+  "peakRssAtMost2GiB": true,
+  "rawReport": "macos-arm64-50000-scorer4-map576-retained.praxis.json",
+  "limitations": [
+    "Retained index predates adapter-v8 configured references; query/scorer binary is current",
+    "One exact-query run, not the complete category/repeat/concurrent-edit protocol",
+    "Retrieval-only target remains failed"
+  ]
+}
