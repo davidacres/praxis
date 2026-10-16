@@ -104,17 +104,26 @@ export function moveNode(definition: WorkflowDefinition, nodeId: string, to: { x
   );
   return touch(definition, nodes, definition.edges);
 }
+export type WorkflowArrangeOrientation = 'horizontal' | 'vertical';
 
 /**
- * Lays the workflow out from left to right in dependency order.
+ * Lays out the workflow stages in topological dependency order without overlap.
  *
  * The designer cards are presentation only, so this deliberately changes no
  * edges or execution fields. A Kahn pass gives every reachable node a stable
- * column; nodes in the same column get separate rows. If a graph is currently
- * cyclic or has disconnected nodes, the remaining nodes are still placed in
- * deterministic columns rather than being left stacked on top of one another.
+ * tier; parallel nodes in the same tier get separate tracks.
+ * - 'horizontal' (default): dependency flow runs left to right; parallel branches
+ *   are stacked vertically.
+ * - 'vertical': dependency flow runs top to bottom; parallel branches are placed
+ *   side-by-side with each tier centered horizontally.
+ *
+ * If a graph is cyclic or has disconnected nodes, the remaining nodes are placed
+ * in deterministic positions at the end rather than being stacked on top of one another.
  */
-export function autoArrange(definition: WorkflowDefinition): WorkflowDefinition {
+export function autoArrange(
+  definition: WorkflowDefinition,
+  orientation: WorkflowArrangeOrientation = 'horizontal'
+): WorkflowDefinition {
   if (definition.nodes.length < 2) return definition;
 
   const byId = new Map(definition.nodes.map((node, index) => [node.id, { node, index }]));
@@ -125,6 +134,7 @@ export function autoArrange(definition: WorkflowDefinition): WorkflowDefinition 
     indegree.set(node.id, 0);
   }
   for (const edge of definition.edges) {
+    if (edge.loop) continue;
     if (!byId.has(edge.from) || !byId.has(edge.to)) continue;
     outgoing.get(edge.from)!.push(edge.to);
     indegree.set(edge.to, (indegree.get(edge.to) ?? 0) + 1);
@@ -155,22 +165,48 @@ export function autoArrange(definition: WorkflowDefinition): WorkflowDefinition 
     if (!level.has(node.id)) level.set(node.id, fallbackLevel++);
   }
 
-  const columns = new Map<number, Array<{ node: WorkflowNode; index: number }>>();
+  const tiers = new Map<number, Array<{ node: WorkflowNode; index: number }>>();
   for (const entry of byId.values()) {
-    const column = level.get(entry.node.id)!;
-    columns.set(column, [...(columns.get(column) ?? []), entry]);
+    const tier = level.get(entry.node.id)!;
+    tiers.set(tier, [...(tiers.get(tier) ?? []), entry]);
   }
-  for (const entries of columns.values()) {
-    entries.sort((a, b) => a.node.y - b.node.y || a.node.x - b.node.x || a.index - b.index);
+  for (const entries of tiers.values()) {
+    if (orientation === 'vertical') {
+      entries.sort((a, b) => a.node.x - b.node.x || a.node.y - b.node.y || a.index - b.index);
+    } else {
+      entries.sort((a, b) => a.node.y - b.node.y || a.node.x - b.node.x || a.index - b.index);
+    }
+  }
+
+  const NODE_WIDTH = 190;
+  const NODE_HEIGHT = 92;
+
+  if (orientation === 'vertical') {
+    const ROW_GAP = 70;
+    const COLUMN_GAP = 48;
+    const maxCols = Math.max(1, ...Array.from(tiers.values()).map(list => list.length));
+    const maxWidth = maxCols * NODE_WIDTH + (maxCols - 1) * COLUMN_GAP;
+
+    const nodes = definition.nodes.map(node => {
+      const row = level.get(node.id)!;
+      const tierEntries = tiers.get(row)!;
+      const col = tierEntries.findIndex(entry => entry.node.id === node.id);
+      const tierWidth = tierEntries.length * NODE_WIDTH + (tierEntries.length - 1) * COLUMN_GAP;
+      const tierStartX = 40 + Math.round((maxWidth - tierWidth) / 2);
+      return {
+        ...node,
+        x: tierStartX + col * (NODE_WIDTH + COLUMN_GAP),
+        y: 40 + row * (NODE_HEIGHT + ROW_GAP)
+      };
+    });
+    return { ...definition, nodes, updatedAt: new Date().toISOString() };
   }
 
   const COLUMN_GAP = 70;
   const ROW_GAP = 48;
-  const NODE_WIDTH = 190;
-  const NODE_HEIGHT = 92;
   const nodes = definition.nodes.map(node => {
     const column = level.get(node.id)!;
-    const row = columns.get(column)!.findIndex(entry => entry.node.id === node.id);
+    const row = tiers.get(column)!.findIndex(entry => entry.node.id === node.id);
     return {
       ...node,
       x: 40 + column * (NODE_WIDTH + COLUMN_GAP),
@@ -255,6 +291,18 @@ export function connectNodes(
   if (!definition.nodes.some(n => n.id === input.from) || !definition.nodes.some(n => n.id === input.to)) return definition;
 
   const loop = wouldCloseCycle(definition, input.from, input.to);
+  const fromNode = definition.nodes.find(n => n.id === input.from);
+
+  // Enforce 1 connection per outcome port on an agent-task (replaces existing connection for that outcome)
+  const existingEdges = fromNode?.type === 'agent-task'
+    ? definition.edges.filter(edge => {
+        if (edge.from !== input.from) return true;
+        if (on === 'success') return edge.on !== 'success';
+        if (on === 'failure' || on === 'findings') return edge.on !== 'failure' && edge.on !== 'findings';
+        return edge.on !== on;
+      })
+    : definition.edges;
+
   const edge: WorkflowEdge = {
     id: freshId('edge'),
     from: input.from,
@@ -263,7 +311,7 @@ export function connectNodes(
     required: input.required ?? true,
     ...(loop ? { loop: { maxIterations: DEFAULT_LOOP_ITERATIONS } } : {})
   };
-  return touch(definition, definition.nodes, [...definition.edges, edge]);
+  return touch(definition, definition.nodes, [...existingEdges, edge]);
 }
 
 export function disconnect(definition: WorkflowDefinition, edgeId: string): WorkflowDefinition {

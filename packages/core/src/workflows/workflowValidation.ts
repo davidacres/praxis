@@ -242,6 +242,7 @@ function normalizeNode(value: unknown): WorkflowNode {
         };
       }
       if (isText(raw.refutes)) node.refutes = raw.refutes.trim();
+      if (raw.interactive === true) node.interactive = true;
       return node;
     }
     case 'map': {

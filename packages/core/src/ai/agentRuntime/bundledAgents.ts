@@ -20,6 +20,7 @@ import type { AgentManifest, DiscoveredAgent } from './manifest';
 import {
   STRUCTURED_CODE_REVIEW_SYSTEM_PROMPT
 } from '../aiReviewService';
+import { HUMAN_REVIEW_SESSION_PROMPT } from '../humanReview';
 
 /**
  * The skeptic's brief (FX-BE-164). Its one job is to disprove: a finding survives only
@@ -248,6 +249,18 @@ Use the repository's validator/generator when available. Never claim coverage th
 You are the Praxis add-on development agent.
 You understand how to build, validate, package, and publish add-ons for Praxis (themes, surface-packs, agents, and workflow-templates).
 You construct valid npm package.json manifests with the praxis schema, assemble required payloads in addon/, and verify packaging integrity.`
+  },
+
+  'praxis-human-reviewer': {
+    manifest: {
+      schemaVersion: 1,
+      id: 'praxis-human-reviewer',
+      name: 'Praxis Human Reviewer',
+      type: 'gateway',
+      entry: 'gateway'
+    },
+    description: 'Conducts an interactive human review of completed work, walking through high-level features with multiple-choice questions and free text to verify requirements.',
+    brief: HUMAN_REVIEW_SESSION_PROMPT
   }
 };
 

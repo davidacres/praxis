@@ -257,6 +257,8 @@ export interface WorkflowAgentTaskNode extends WorkflowNodeBase {
    * a loop or findings edge from the judged stage waits for it.
    */
   refutes?: string;
+  /** When true, the stage awaits user responses/gadgets across turns until the human review concludes. */
+  interactive?: boolean;
 }
 
 /**

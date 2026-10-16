@@ -120,3 +120,34 @@ test('resolveTicketContext handles read-only mode directives', async () => {
   assert.match(context, /## Ticket Context Directives \(Read-Only Mode\)/);
   assert.match(context, /This session is read-only: do not transition tickets/);
 });
+
+test('resolveTicketContext handles workflow mode directives and suppresses tracker transitions', async () => {
+  const mainIssue: IssueDetails = {
+    key: 'PROJ-101',
+    summary: 'Deliver feature through governed pipeline',
+    issueType: 'Story',
+    status: 'In Progress',
+    description: 'Implement backend API and tests.',
+    projectKey: 'PROJ'
+  };
+
+  const transitions: WorkflowTransition[] = [
+    { id: 't-done', name: 'Complete', toStatus: 'Done' }
+  ];
+  const service = mockTrackerService({ 'PROJ-101': mainIssue }, transitions);
+
+  const context = await resolveTicketContext({
+    issue: mainIssue,
+    backendService: service,
+    toolMode: 'full',
+    directives: 'workflow'
+  });
+
+  assert.match(context, /## Active Ticket: PROJ-101 — Deliver feature through governed pipeline/);
+  assert.match(context, /## Ticket Context Directives \(Workflow Mode\)/);
+  assert.match(context, /Use the active ticket requirements, description, and related issues/);
+  assert.match(context, /Do not attempt to transition tickets or post tracker comments directly/);
+  assert.doesNotMatch(context, /tracker_transition_ticket/);
+  assert.doesNotMatch(context, /## Available Ticket Transitions/);
+});
+

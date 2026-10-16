@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 615,
+  "testCount": 624,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -4091,7 +4091,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
-        "line": 39,
+        "line": 46,
         "project": "functional"
       },
       "area": "code Intelligence",
@@ -4102,12 +4102,28 @@
       }
     },
     {
+      "id": "PT-8C7247F23D",
+      "title": "search sends the chosen mode, defaulting to hybrid",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
+        "line": 64,
+        "project": "functional"
+      },
+      "area": "code Intelligence",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "search sends the chosen mode, defaulting to hybrid",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-892AB10FFA",
       "title": "budget-truncated search offers the returned cursor and shows the next page",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
-        "line": 57,
+        "line": 78,
         "project": "functional"
       },
       "area": "code Intelligence",
@@ -4123,7 +4139,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
-        "line": 69,
+        "line": 90,
         "project": "functional"
       },
       "area": "code Intelligence",
@@ -5734,6 +5750,54 @@
       }
     },
     {
+      "id": "PT-E0F71811D0",
+      "title": "Manage models shows a context and price badge for every model the catalog prices",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/modelDisplayBadges.spec.ts",
+        "line": 75,
+        "project": "functional"
+      },
+      "area": "model Display Badges",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "Manage models shows a context and price badge for every model the catalog prices",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-F5B741CBE6",
+      "title": "a tier dropdown carries the same badges as Manage models, and omits them for unpriced models",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/modelDisplayBadges.spec.ts",
+        "line": 98,
+        "project": "functional"
+      },
+      "area": "model Display Badges",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a tier dropdown carries the same badges as Manage models, and omits them for unpriced models",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-3F41D6370B",
+      "title": "a settings row shows the model name and badges without a raw model id",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/modelDisplayBadges.spec.ts",
+        "line": 129,
+        "project": "functional"
+      },
+      "area": "model Display Badges",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a settings row shows the model name and badges without a raw model id",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-372C7E1F65",
       "title": "other AI tools’ agents, skills and instructions are discovered, approved, copied, and used in a session",
       "source": {
@@ -7170,6 +7234,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "teardown drains an ACP task even when the session list already reports completion",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-AEE8B7A3ED",
+      "title": "a session can add several team members; a lone reviewer offers a review",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionTeam.spec.ts",
+        "line": 19,
+        "project": "functional"
+      },
+      "area": "session Team",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a session can add several team members; a lone reviewer offers a review",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -8662,12 +8742,60 @@
       }
     },
     {
+      "id": "PT-0B66AF09D4",
+      "title": "auto arrange vertical lays out workflow stages top to bottom in dependency order without overlap",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
+        "line": 199,
+        "project": "functional"
+      },
+      "area": "workflow Designer",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "auto arrange vertical lays out workflow stages top to bottom in dependency order without overlap",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-5AFE08A88C",
+      "title": "edge badge shows condition tooltip and opens edge inspector in sidebar when clicked",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
+        "line": 238,
+        "project": "functional"
+      },
+      "area": "workflow Designer",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "edge badge shows condition tooltip and opens edge inspector in sidebar when clicked",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-81DBC1358A",
+      "title": "workflow nodes display distinct green success and red failure handles and color-code connector strokes",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
+        "line": 254,
+        "project": "functional"
+      },
+      "area": "workflow Designer",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "workflow nodes display distinct green success and red failure handles and color-code connector strokes",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-814CF4A563",
       "title": "nudging a stage past the canvas edge clamps its position instead of losing it off-screen",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 199,
+        "line": 278,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8683,7 +8811,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 217,
+        "line": 296,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8699,7 +8827,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 244,
+        "line": 323,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8715,7 +8843,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 295,
+        "line": 374,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8731,7 +8859,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 324,
+        "line": 403,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8747,7 +8875,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 376,
+        "line": 455,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8763,7 +8891,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 397,
+        "line": 476,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8779,7 +8907,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 414,
+        "line": 493,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8795,7 +8923,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 428,
+        "line": 507,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8811,7 +8939,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 443,
+        "line": 522,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8827,7 +8955,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 497,
+        "line": 576,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8843,7 +8971,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 524,
+        "line": 603,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8859,7 +8987,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 547,
+        "line": 626,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8875,7 +9003,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 615,
+        "line": 695,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8891,7 +9019,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 650,
+        "line": 730,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -8907,13 +9035,29 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 773,
+        "line": 853,
         "project": "functional"
       },
       "area": "workflow Designer",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "submenu displays search box when items exceed 10, filters real-time, and clears on escape or button click",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-F895248CB0",
+      "title": "walks the workflow designer, rings each area, and directs the user through all steps",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
+        "line": 922,
+        "project": "functional"
+      },
+      "area": "workflow Designer",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "walks the workflow designer, rings each area, and directs the user through all steps",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

@@ -17,6 +17,36 @@ and **Improve until target** (see [Improve until target](#improve-until-target))
 **Governed delivery**: `Plan → Implement → Praxis Test contracts → (Review ∥ (Install → Build → QA) ∥ Security) → Gates → Approve`,
 with review and security findings looping back to Implement (see [Fix loops](#fix-loops)).
 
+```mermaid
+flowchart TD
+    ticket["Selected Ticket (Jira / GitHub / GitLab / Folder)"] -.->|Context & Attachments| plan["Plan (Agent: read-only)"]
+    ticket -.->|Context & Attachments| impl["Implement (Agent: full)"]
+
+    plan -->|"plan-doc (plan)"| impl
+    impl -->|"change-diff (diff)"| test_contracts["Praxis Test contracts (Agent: full)"]
+
+    test_contracts -->|"change-diff"| review["Review (Agent: independent AI)"]
+    test_contracts -->|"change-diff"| install["Install dependencies (npm ci)"]
+    test_contracts -->|"change-diff"| sec["Security scan (npm audit)"]
+
+    install --> build["Build (npm run build)"]
+    build --> qa["QA (npm test)"]
+    qa -.->|on failure| qa_repair["Repair QA failures (Agent)"]
+    qa_repair -.->|retry repair| qa
+
+    review -->|"review-findings (findings)"| gates{"Gates (Join: all)"}
+    qa -->|"qa-results (test-results)"| gates
+    sec -->|"security-findings (findings)"| gates
+
+    gates --> approve["Approve (Human Sign-off)"]
+
+    %% Loop-back edges
+    review -.->|"↺ on high/critical findings (up to 2×)"| impl
+    sec -.->|"↺ on high findings (up to 1×)"| impl
+```
+
+
+
 | Stage | Kind | Tool Mode | Notes |
 | --- | --- | --- | --- |
 | Plan | agent | `read-only` | produces a `plan` artifact; inspects code without mutating |
@@ -64,6 +94,60 @@ panel and its sidebar row say so, listing the open findings, with three answers 
 (a reason is recorded; the approval's own gates still apply), **Allow one more pass** (never past 10),
 or **Stop the run** (a reason is recorded).
 
+### Fix loop sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Orch as Workflow Orchestrator
+    participant Impl as Implement (Coding Agent)
+    participant Verif as Checks (Build, QA, Security)
+    participant Rev as Review (Independent AI)
+    participant Gates as Gates / Approver
+
+    Note over Orch,Impl: Iteration 1: Implement Ticket
+    Orch->>Impl: Start stage (Ticket Context + Plan Doc)
+    Impl-->>Orch: Complete with change-diff (git commits)
+    
+    par Parallel Verification
+        Orch->>Verif: Run deterministic checks (ci, build, test, audit)
+        Verif-->>Orch: QA and Build pass
+    and Independent Review
+        Orch->>Rev: Inspect worktree & diff against requirements
+        Rev-->>Orch: Emit findings (e.g. 1 High severity finding)
+    end
+
+    Note over Orch,Impl: Fix Loop Triggered: e-review-fix (Iteration 2 of 2)
+    Orch->>Orch: Evaluate edge (severity >= high, iteration 1 <= budget 2)
+    Orch->>Impl: Reopen Implement with Iteration Context (findings, repeat indicators)
+    Note over Impl: Prioritizes addressing High severity findings
+    Impl-->>Orch: Complete with updated change-diff
+
+    par Re-verification
+        Orch->>Verif: Re-run build, QA, and security checks
+        Verif-->>Orch: All checks clean
+    and Re-review
+        Orch->>Rev: Re-evaluate new snapshot against findings
+        Rev-->>Orch: Findings resolved (clean review)
+    end
+
+    Note over Orch,Gates: All branches satisfied
+    Orch->>Gates: Aggregate branch artifacts
+    Gates->>Approver: Ready for final human sign-off
+```
+
+### Context and artifact flow across stages
+
+Agents in a workflow do not operate in a vacuum or have to rediscover problem context from scratch:
+
+1. **Ticket context**: When a run is started against a board item (Jira, GitHub, GitLab, or local Folder), the runner resolves the ticket (summary, description, comments, acceptance criteria, attachments) and injects it directly into stage agent sessions as high-priority context with workflow directives.
+2. **Artifact contracts**: Stages publish and consume typed artifacts. Upstream stages emit artifacts (`plan-doc`, `change-diff`, `qa-results`, `review-findings`); downstream stages bind those artifacts as inputs. For example, `Implement` consumes `plan-doc`, and `Review` inspects `change-diff` against the original plan.
+3. **Iteration context on loop-back**: When a loop edge fires, `formatIterationContext` constructs an iteration brief containing:
+   - The iteration attempt number and total allowed budget.
+   - Structured list of open findings sorted by severity (Critical $\rightarrow$ High $\rightarrow$ Medium), including file paths, lines, and explanations.
+   - Tracking flags indicating if a finding is new or has repeated across multiple attempts.
+   - Directives instructing the agent to fix the active findings before taking on any other work.
+
 ### Building your own loops
 
 In the designer, a connection can **route on findings** (Follow → *On findings*): it is taken when the
@@ -81,6 +165,52 @@ Other stage settings that keep a loop honest:
   findings stop counting toward gates and loops.
 - **Hold to its tests** (`guardTests`) — an attempt that deletes, skips or loosens existing tests, or
   lowers a coverage threshold, is undone and fails. Adding tests is always allowed.
+
+## Failure routing and fallback branches
+
+When a coding agent or check fails, it does not have to halt the entire delivery pipeline. In the Workflow Designer, connections can be routed based on outcome, directing failures to specialist recovery agents, fallback toolsets, alternative workflows, or human escalation.
+
+```mermaid
+flowchart TD
+    plan["Plan (Agent: read-only)"] -->|"On success"| impl["Implement (Coding Agent: standard tier)"]
+    
+    %% Branching on outcome
+    impl -->|"On success"| test_contracts["Praxis Test contracts / QA"]
+    impl -->|"On failure"| specialist["Specialist Agent (Senior Debugger: strong tier + debug skills)"]
+    
+    %% Specialist outcomes
+    specialist -->|"On success (repaired)"| test_contracts
+    specialist -.->|"↺ retry loop (up to 2×)"| impl
+    specialist -->|"On failure (unresolvable)"| escalate["Escalate to Human (Approval)"]
+```
+
+### Connection outcome modes (`Follow`)
+
+When selecting any connection curve on the canvas, the right-pane **Connection Inspector** exposes the **Follow** selector:
+
+- **On success** (`on: 'success'`): The default edge mode. Traversed only when the source stage exits cleanly or passes its contract.
+- **On failure** (`on: 'failure'`): Traversed when the source stage fails (such as an unhandled exception, syntax error, or non-zero exit code). If an attempt fails and an *On failure* edge exists, execution advances to the target fallback stage rather than stalling.
+- **Always** (`on: 'always'`): Traversed regardless of success or failure. Ideal for cleanup tasks, notification stages, or audit reports that must run in both cases.
+- **On findings** (`on: 'findings'`): Traversed when structured findings produced by the stage match criteria (such as minimum severity, category, or count).
+
+### Directing coding agent failures
+
+1. **Routing to a Specialist Agent**:
+   - Create an Agent stage (e.g. `Senior Debugger` or `Recovery Agent`).
+   - Draw a connection from the primary coding agent (`Implement`) to the specialist stage.
+   - Click the connection and set **Follow** to **On failure**.
+   - In the specialist stage's inspector, tailor its capabilities:
+     - **Specialist Profile**: Bind a dedicated agent profile from your Agent Hub with domain expertise (e.g., database specialist, architecture troubleshooter).
+     - **Stronger Model Tier**: Elevate the stage's **Model tier** to `strong` (e.g., Claude Opus or GPT-4o) so a higher-reasoning model steps in when a `fast` or `standard` model fails.
+     - **Specific Tool Modes & Skills**: Keep `toolMode: full` and attach specialized debugging or diagnostic skills from the toolbar's **Skills** menu.
+     - **Independence** (`independentOf`): Require the specialist to run on a different AI provider or model family to eliminate blind spots.
+
+2. **Rejoining or Looping**:
+   - **Rejoining the pipeline**: The specialist stage can emit an updated `change-diff` and connect via *On success* into test contracts, QA, or build.
+   - **Feedback loop**: The specialist can diagnose the failure, author suggestions, and loop back to `Implement` with a loop iteration budget.
+
+3. **Terminal Failure without Fallback**:
+   - If a stage has only *On success* downstream edges and fails, that branch becomes blocked. The stage offers an interactive **Retry stage** button in the run panel, where a user can inspect logs, change prompt/context or switch models, and trigger a fresh attempt.
 
 ## For each (map) stages
 

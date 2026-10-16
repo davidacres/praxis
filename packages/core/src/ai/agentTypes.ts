@@ -66,7 +66,7 @@ export interface AgentTaskAttachment {
 
 /** What the agent should do, with explicit guardrail boundaries. */
 export interface AgentTaskDefinition {
-  kind?: 'general' | 'analysis' | 'review' | 'ticket-review' | 'jira-delivery';
+  kind?: 'general' | 'analysis' | 'review' | 'ticket-review' | 'jira-delivery' | 'human-review';
   /** Explicit composer mode, when a task was created from a session composer. */
   sessionMode?: SessionMode;
   goal: string;

@@ -537,3 +537,28 @@ test('a merge stage keeps its declared paths and out-of-scope policy, and reject
   const issues = validateWorkflow(definition).errors.filter(issue => issue.path.includes('declaredPaths'));
   assert.deepEqual(issues.map(issue => issue.path), ['nodes[0].declaredPaths[2]', 'nodes[0].declaredPaths[3]']);
 });
+
+test('normalizeWorkflow preserves the interactive flag on an agent-task stage', () => {
+  const definition = normalizeWorkflow({
+    schemaVersion: 1,
+    id: 'interactive-wf',
+    name: 'Interactive Workflow',
+    entryNodeId: 'review',
+    nodes: [
+      {
+        type: 'agent-task',
+        id: 'review',
+        name: 'Human review',
+        agent: { agentId: 'praxis-human-reviewer', scope: 'global', toolMode: 'read-only' },
+        instructions: 'Conduct review.',
+        outputs: [],
+        mutatesWorktree: false,
+        interactive: true
+      }
+    ],
+    edges: []
+  });
+
+  const node = definition.nodes[0] as Extract<WorkflowDefinition['nodes'][number], { type: 'agent-task' }>;
+  assert.equal(node.interactive, true);
+});

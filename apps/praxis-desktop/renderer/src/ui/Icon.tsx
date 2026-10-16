@@ -36,6 +36,7 @@ export type IconName =
   | 'mic'
   | 'arrow-up'
   | 'check-square'
+  | 'close-square'
   | 'shield'
   | 'info'
   | 'warning'
@@ -66,6 +67,7 @@ export type IconName =
   | 'package'
   // board / work types
   | 'columns'
+  | 'rows'
   | 'list'
   | 'target'
   | 'rocket'
@@ -93,6 +95,7 @@ export type IconName =
   | 'pin'
   | 'layers'
   | 'feather'
+  | 'users'
   // AI provider identity — original glyphs in this set's own idiom, not
   // reproductions of each company's actual trademarked logo. Distinguishes
   // providers by shape, not just the `--tone-*` color they're paired with
@@ -154,6 +157,7 @@ const PATHS: Record<IconName, string | string[]> = {
   mic: ['M8 2.2a1.9 1.9 0 0 1 1.9 1.9v3.6a1.9 1.9 0 0 1-3.8 0V4.1A1.9 1.9 0 0 1 8 2.2z', 'M4.4 7.6a3.6 3.6 0 0 0 7.2 0M8 11.2v2.6'],
   'arrow-up': 'M8 12.6V3.6M4.4 7.2 8 3.6l3.6 3.6',
   'check-square': ['M3.4 2.6h9.2a.8.8 0 0 1 .8.8v9.2a.8.8 0 0 1-.8.8H3.4a.8.8 0 0 1-.8-.8V3.4a.8.8 0 0 1 .8-.8z', 'M5.2 8.1 7.2 10l3.6-3.9'],
+  'close-square': ['M3.4 2.6h9.2a.8.8 0 0 1 .8.8v9.2a.8.8 0 0 1-.8.8H3.4a.8.8 0 0 1-.8-.8V3.4a.8.8 0 0 1 .8-.8z', 'M5.6 5.6 10.4 10.4M10.4 5.6 5.6 10.4'],
   shield: 'M8 1.9 13 3.7v4c0 3-2.1 5.3-5 6.4-2.9-1.1-5-3.4-5-6.4v-4z',
   info: ['M8 1.9a6.1 6.1 0 1 0 0 12.2A6.1 6.1 0 0 0 8 1.9z', 'M8 7.2v4M8 4.9v.1'],
   warning: ['M8 1.7 14.2 13H1.8z', 'M8 5.3v4.1M8 11.6v.1'],
@@ -184,6 +188,7 @@ const PATHS: Record<IconName, string | string[]> = {
   tools: ['M9.6 3.4a2.9 2.9 0 0 1 3.9 3.6l-8.4 6.4a1.5 1.5 0 0 1-2-2.2z', 'M2.6 3.1l3.4 3.4'],
   package: ['M8 1.8 13.5 5 8 8.2 2.5 5z', 'M2.5 5v5.8L8 14.2l5.5-3.4V5', 'M8 8.2v6'],
   columns: ['M2.1 2.9h3.4v10.2H2.1zM6.3 2.9h3.4v10.2H6.3zM10.5 2.9h3.4v10.2h-3.4z'],
+  rows: ['M2.9 2.1h10.2v3.4H2.9zM2.9 6.3h10.2v3.4H2.9zM2.9 10.5h10.2v3.4H2.9z'],
   trash: ['M3.2 4.4h9.6', 'M5.4 4.4V2.9h5.2v1.5', 'M4.4 4.4l.7 8.7h5.8l.7-8.7'],
   ellipsis: ['M3.4 8h.01', 'M8 8h.01', 'M12.6 8h.01'],
   refresh: ['M14 8a6 6 0 1 1-6-6c1.68 0 3.29.67 4.49 1.83L14 5.33', 'M14 2v3.33h-3.33'],
@@ -222,6 +227,7 @@ const PATHS: Record<IconName, string | string[]> = {
     'M13.8 2.2a5.2 5.2 0 0 0-7.4 0L2.8 5.8c-.3 3.5 1.8 6.8 5 7.8l.9-.9c-.6-1.5-.7-2.6-.4-3.5l3.2-3.2c.8-.8 1.4-1.7 2.3-3.8z',
     'M2.5 13.5l5.2-5.2'
   ],
+  users: ['M6 2.8a2.3 2.3 0 1 0 0 4.6 2.3 2.3 0 0 0 0-4.6z', 'M1.9 13.2a4.1 4.1 0 0 1 8.2 0z', 'M10.4 3.2a2 2 0 0 1 0 3.9M11.6 9.3a3.7 3.7 0 0 1 2.5 3.9h-2.2'],
   'provider-openai': 'M13.2 8 10.6 3.5 5.4 3.5 2.8 8 5.4 12.5 10.6 12.5z',
   'provider-claude': 'M8 2.6V13.4M12.68 5.3 3.32 10.7M12.68 10.7 3.32 5.3',
   'provider-codex': 'M6.2 4.4 2.8 8l3.4 3.6M9.8 4.4 13.2 8l-3.4 3.6',

@@ -8,6 +8,7 @@ import { formatCost, isLatestEditToPath, isLimitNoticeReply, liveActivity } from
 import { providerIconName, providerLabel } from '../../ai/modelProviders';
 import { ToolExecutionCard } from './ToolExecutionCard';
 import { SessionChatThread } from '../../ai/SessionChatThread';
+import { SessionTeamMessages } from '../../ai/SessionTeamMessages';
 
 export interface AgentActivityFeedProps {
   session: AgentSessionRecord;
@@ -471,6 +472,7 @@ export function AgentActivityFeed({
 
           return null;
         })}
+        <SessionTeamMessages sessionKey={session.issueKey} />
       </div>
     </div>
   );

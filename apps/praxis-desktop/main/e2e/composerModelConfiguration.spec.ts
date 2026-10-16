@@ -17,12 +17,12 @@ test.afterEach(async () => {
 // Proven with the composer cog removed: the entry-point visibility assertion fails.
 test('composer model settings curate provider chips and preserve the conversation draft', async () => {
   mock = await startMockGatewayServer({ mode: 'complete', models: [
-    { id: 'mock/model', name: 'Default model' },
-    { id: 'mock/fast', name: 'Fast model' },
-    { id: 'mock/strong', name: 'Strong model' }
+    { id: 'mock/nimbus-4', name: 'Nimbus 4' },
+    { id: 'mock/nimbus-4-mini', name: 'Nimbus 4 Mini' },
+    { id: 'mock/nimbus-4-pro', name: 'Nimbus 4 Pro' }
   ] });
   app = await launchTestApp({ ai: {
-    activeProvider: 'vercel-gateway', defaultModel: 'mock/model',
+    activeProvider: 'vercel-gateway', defaultModel: 'mock/nimbus-4',
     providers: { openai: { enabledModelIds: ['other-provider-model'] } }
   } }, undefined, { AI_GATEWAY_API_KEY: 'model-settings-test', AI_GATEWAY_URL: mock.baseUrl }, { demoMode: false });
   const page = app.window;
@@ -30,7 +30,7 @@ test('composer model settings curate provider chips and preserve the conversatio
   const draft = page.getByTestId('new-session-view').locator('textarea');
   await draft.fill('Keep this conversation draft.');
   const modelChip = page.getByTestId('new-session-model-chip');
-  await expect(modelChip).toHaveText('Default model');
+  await expect(modelChip).toHaveText('Nimbus 4');
   await expect(modelChip.locator('.composer-chip-meta')).toHaveCount(0);
   await expect(page.getByTestId('new-session-git-branch-chip')).toBeVisible();
   await modelChip.click();
@@ -46,33 +46,33 @@ test('composer model settings curate provider chips and preserve the conversatio
   const dialog = page.getByRole('dialog', { name: 'Vercel AI Gateway model configuration' });
   await expect(dialog.getByRole('switch')).toHaveCount(3);
   await expect(page.getByRole('listbox', { name: 'Model', exact: true })).toHaveCount(0);
-  await dialog.getByTestId('model-manager-toggle-mock/fast').click();
-  await dialog.getByTestId('model-manager-toggle-mock/strong').click();
-  await expect(dialog.getByTestId('model-manager-toggle-mock/fast')).toHaveAttribute('aria-checked', 'false');
+  await dialog.getByTestId('model-manager-toggle-mock/nimbus-4-mini').click();
+  await dialog.getByTestId('model-manager-toggle-mock/nimbus-4-pro').click();
+  await expect(dialog.getByTestId('model-manager-toggle-mock/nimbus-4-mini')).toHaveAttribute('aria-checked', 'false');
   await expect(dialog.getByTestId('model-manager-count')).toHaveText('1 of 3 selected');
   await expect.poll(() => page.evaluate(async () => (await window.praxis.settings.get()).ai.providers['vercel-gateway']?.enabledModelIds))
-    .toEqual(['mock/model']);
+    .toEqual(['mock/nimbus-4']);
   expect(await page.evaluate(async () => (await window.praxis.settings.get()).ai.providers.openai?.enabledModelIds))
     .toEqual(['other-provider-model']);
-  await dialog.getByTestId('model-manager-filter').fill('fast');
+  await dialog.getByTestId('model-manager-filter').fill('mini');
   await expect(dialog.getByRole('switch')).toHaveCount(1);
-  await dialog.getByTestId('model-manager-toggle-mock/fast').click();
+  await dialog.getByTestId('model-manager-toggle-mock/nimbus-4-mini').click();
   await dialog.getByTestId('model-manager-filter').fill('');
   await expect(dialog.getByTestId('model-manager-count')).toHaveText('2 of 3 selected');
   await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/composer-model-configuration.png') });
-  await dialog.getByTestId('model-manager-toggle-mock/strong').focus();
+  await dialog.getByTestId('model-manager-toggle-mock/nimbus-4-pro').focus();
   await page.keyboard.press('Tab');
-  await expect(dialog.getByTestId('model-manager-select-all')).toBeFocused();
+  await expect(dialog.getByTestId('model-manager-done')).toBeFocused();
   await page.keyboard.press('Shift+Tab');
-  await expect(dialog.getByTestId('model-manager-toggle-mock/strong')).toBeFocused();
-  await dialog.getByTestId('model-manager-back').click();
+  await expect(dialog.getByTestId('model-manager-toggle-mock/nimbus-4-pro')).toBeFocused();
+  await dialog.getByTestId('model-manager-done').click();
   await expect(draft).toHaveValue('Keep this conversation draft.');
   await expect(page.getByTestId('new-session-model-chip')).toBeFocused();
   await page.getByTestId('new-session-model-chip').click();
-  await expect(page.getByTestId('new-session-model-option-mock/fast')).toBeVisible();
-  await expect(page.getByTestId('new-session-model-option-mock/strong')).toHaveCount(0);
+  await expect(page.getByTestId('new-session-model-option-mock/nimbus-4-mini')).toBeVisible();
+  await expect(page.getByTestId('new-session-model-option-mock/nimbus-4-pro')).toHaveCount(0);
   await page.getByTestId('new-session-model-settings').click();
-  await expect(dialog.getByTestId('model-manager-toggle-mock/strong')).toHaveAttribute('aria-checked', 'false');
+  await expect(dialog.getByTestId('model-manager-toggle-mock/nimbus-4-pro')).toHaveAttribute('aria-checked', 'false');
   await dialog.getByTestId('model-manager-select-none').click();
   await expect.poll(() => page.evaluate(async () => (await window.praxis.settings.get()).ai.providers['vercel-gateway']?.enabledModelIds))
     .toEqual([]);
@@ -84,7 +84,7 @@ test('composer model settings curate provider chips and preserve the conversatio
   await page.reload();
   await page.getByTestId('conversations-new-btn').click();
   await page.getByTestId('new-session-model-chip').click();
-  await expect(page.getByTestId('new-session-model-option-mock/strong')).toBeVisible();
+  await expect(page.getByTestId('new-session-model-option-mock/nimbus-4-pro')).toBeVisible();
 });
 
 test('an existing session configures its selected provider rather than the app default', async () => {
@@ -119,7 +119,7 @@ test('an existing session configures its selected provider rather than the app d
     .toEqual(['mock/model']);
   expect(await page.evaluate(async () => (await window.praxis.settings.get()).ai.providers['vercel-gateway']?.enabledModelIds))
     .toBeUndefined();
-  await dialog.getByTestId('model-manager-back').click();
+  await dialog.getByTestId('model-manager-done').click();
   await expect(page.getByTestId('session-model-menu')).toBeVisible();
   await expect(page.getByTestId('session-model-option-mock/other')).toHaveCount(0);
 });

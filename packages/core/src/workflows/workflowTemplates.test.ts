@@ -9,7 +9,8 @@ import {
   fullSdlcTemplate,
   instantiateTemplateForProject,
   promoteWorkflowPackToTemplate,
-  quickChangeTemplate
+  quickChangeTemplate,
+  humanReviewNode
 } from './workflowTemplates';
 import { validateWorkflow } from './workflowValidation';
 import { resolveWorkflowCatalog } from './workflowStore';
@@ -272,6 +273,8 @@ test('governed delivery installs dependencies and builds before QA, and validate
   assert.equal(install.satisfiesGate, undefined);
 
   const parents = (id: string) => template.edges.filter(edge => edge.to === id).map(edge => edge.from);
+  assert.deepEqual(parents('review'), ['implement']);
+  assert.deepEqual(parents('test-contracts'), ['review']);
   assert.deepEqual(parents('install'), ['test-contracts']);
 
   // A run worktree has no build output either (gitignored), so anything that runs the built product —
@@ -287,5 +290,20 @@ test('governed delivery installs dependencies and builds before QA, and validate
   // QA waits for the build; the security scan reads the lockfile and does not.
   assert.deepEqual(parents('qa'), ['build']);
   assert.deepEqual(parents('security'), ['test-contracts']);
-  assert.deepEqual(parents('review'), ['test-contracts']);
+});
+
+test('humanReviewNode creates an interactive human review agent-task stage', () => {
+  const node = humanReviewNode(1000, 200);
+  assert.equal(node.type, 'agent-task');
+  assert.equal(node.id, 'human-review');
+  assert.equal(node.name, 'Human review');
+  assert.equal(node.agent.agentId, 'praxis-human-reviewer');
+  assert.equal(node.agent.toolMode, 'read-only');
+  assert.equal(node.mutatesWorktree, false);
+  assert.equal(node.satisfiesGate, 'review');
+  assert.equal(node.interactive, true);
+  assert.match(node.instructions, /summary of the completed work/i);
+  assert.match(node.instructions, /multiple choice options as much as possible/i);
+  assert.match(node.instructions, /free text/i);
+  assert.equal(node.outputs[0].kind, 'report');
 });

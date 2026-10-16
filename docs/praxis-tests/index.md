@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **615 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **624 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -259,9 +259,10 @@ This catalogue describes **615 Playwright tests** under `apps/praxis-desktop/mai
 | PT-7134E97BD0 | chat Gadgets | a conflict gadget refuses to resolve until every side is chosen | `apps/praxis-desktop/main/e2e/chatGadgets.spec.ts:738` |
 | PT-3EDDE51138 | chat Project Assignment.visual | assign chat picker and project session placement | `apps/praxis-desktop/main/e2e/chatProjectAssignment.visual.spec.ts:16` |
 | PT-CDB77B83E7 | chat Project Assignment.visual | assign chat ticket field lists tickets for a folder-backed project | `apps/praxis-desktop/main/e2e/chatProjectAssignment.visual.spec.ts:111` |
-| PT-DCF22F6C16 | code Intelligence | rebuild and relocation use the themed recovery flow and refresh status | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:39` |
-| PT-892AB10FFA | code Intelligence | budget-truncated search offers the returned cursor and shows the next page | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:57` |
-| PT-9231FEA5A4 | code Intelligence | source search and recovery remain keyboard accessible in light and dark themes | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:69` |
+| PT-DCF22F6C16 | code Intelligence | rebuild and relocation use the themed recovery flow and refresh status | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:46` |
+| PT-8C7247F23D | code Intelligence | search sends the chosen mode, defaulting to hybrid | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:64` |
+| PT-892AB10FFA | code Intelligence | budget-truncated search offers the returned cursor and shows the next page | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:78` |
+| PT-9231FEA5A4 | code Intelligence | source search and recovery remain keyboard accessible in light and dark themes | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:90` |
 | PT-C0D616E5B7 | code Intelligence Native | packaged service supports desktop source navigation and repository recovery | `apps/praxis-desktop/main/e2e/codeIntelligenceNative.spec.ts:9` |
 | PT-59DA0C8AD7 | command Palette | opens with the shortcut, filters, and navigates on Enter | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:21` |
 | PT-FA69F53102 | command Palette | closes on Escape without navigating | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:39` |
@@ -362,6 +363,9 @@ This catalogue describes **615 Playwright tests** under `apps/praxis-desktop/mai
 | PT-95E35930BA | mobile Access | creating a pairing code shows a single-use token and never a private key | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:33` |
 | PT-C909B8DB44 | mobile Access | resetting the host key asks for confirmation in-app | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:48` |
 | PT-112E148947 | mobile Access | an allowed-subnet entry the policy cannot match is rejected inline, and a legacy prefix migrates | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:57` |
+| PT-E0F71811D0 | model Display Badges | Manage models shows a context and price badge for every model the catalog prices | `apps/praxis-desktop/main/e2e/modelDisplayBadges.spec.ts:75` |
+| PT-F5B741CBE6 | model Display Badges | a tier dropdown carries the same badges as Manage models, and omits them for unpriced models | `apps/praxis-desktop/main/e2e/modelDisplayBadges.spec.ts:98` |
+| PT-3F41D6370B | model Display Badges | a settings row shows the model name and badges without a raw model id | `apps/praxis-desktop/main/e2e/modelDisplayBadges.spec.ts:129` |
 | PT-372C7E1F65 | native Sources | other AI tools’ agents, skills and instructions are discovered, approved, copied, and used in a session | `apps/praxis-desktop/main/e2e/nativeSources.spec.ts:49` |
 | PT-7EA609AC58 | native Sources | an agent from another AI tool can be placed on a workflow stage and bound to its skill | `apps/praxis-desktop/main/e2e/nativeSources.spec.ts:160` |
 | PT-F027143814 | new Issue | creating a demo issue with the full field set shows it on the board | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:69` |
@@ -452,6 +456,7 @@ This catalogue describes **615 Playwright tests** under `apps/praxis-desktop/mai
 | PT-0FBAAEEA42 | session Recovery | keyboard focus stays in recovery, and Escape leaves sessions stopped | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:85` |
 | PT-0F10648F67 | session Recovery | interrupted CLI sessions also wait for selection and resume through ACP | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:99` |
 | PT-75B0F93373 | session Recovery | teardown drains an ACP task even when the session list already reports completion | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:110` |
+| PT-AEE8B7A3ED | session Team | a session can add several team members; a lone reviewer offers a review | `apps/praxis-desktop/main/e2e/sessionTeam.spec.ts:19` |
 | PT-1EF3C80135 | session Usage Quota | composer usage panel draws provider quota windows as bars with a collapsed meter | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:42` |
 | PT-67020F5525 | settings Reset | reset to defaults asks separately before clearing saved AI session data | `apps/praxis-desktop/main/e2e/settingsReset.spec.ts:22` |
 | PT-3BA46A8FF8 | settings Reset | clears app-owned project, workspace, and board data without deleting shared connections | `apps/praxis-desktop/main/e2e/settingsReset.spec.ts:38` |
@@ -545,22 +550,26 @@ This catalogue describes **615 Playwright tests** under `apps/praxis-desktop/mai
 | PT-E049A4DE12 | workflow Designer | blocks save while the graph is invalid and announces the errors | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:124` |
 | PT-37B15BC378 | workflow Designer | the canvas moves a stage with the keyboard and selects it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:140` |
 | PT-2576004142 | workflow Designer | auto arrange lays out workflow stages in dependency order without overlap | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:158` |
-| PT-814CF4A563 | workflow Designer | nudging a stage past the canvas edge clamps its position instead of losing it off-screen | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:199` |
-| PT-D7BA2AF937 | workflow Designer | builds an agent handoff stage from the palette and attaches a specialist skill | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:217` |
-| PT-B1FCE4E164 | workflow Designer | a folder-backed project commits its workflow to .praxis/workflows and reloads it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:244` |
-| PT-C90D5C8EDD | workflow Designer | instantiating Full SDLC (.NET) identifies and installs missing agent dependencies automatically | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:295` |
-| PT-9B225D3890 | workflow Designer | validates workflow connections, flow, and configuration via validate workflow button | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:324` |
-| PT-4B8346DC79 | workflow Designer | clicking a connection on the canvas selects it and deletes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:376` |
-| PT-D0F572C234 | workflow Designer | selecting a connection and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:397` |
-| PT-2CBC383956 | workflow Designer | clicking delete on an agent task removes it from the canvas | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:414` |
-| PT-1748C28492 | workflow Designer | selecting an agent task and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:428` |
-| PT-AA92BCD6EA | workflow Designer | a stage can run on its own AI and model, chosen from the AIs that are set up | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:443` |
-| PT-91A53C6CCE | workflow Designer | stage skills are added from the picker dialog and removed from their chip | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:497` |
-| PT-FA495A15F3 | workflow Designer | a connection selected on the canvas is edited in the inspector, with no separate tab | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:524` |
-| PT-05295BB166 | workflow Designer | floating toolbar provides stage tools, canvas tools, and deletion | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:547` |
-| PT-693476E991 | workflow Designer | clicking and dragging on the designer surface pans the canvas without changing zoom | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:615` |
-| PT-7AF3949BE5 | workflow Designer | floating toolbar provides agent and skill submenus with scrolling list, icon, and text | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:650` |
-| PT-44E72F938B | workflow Designer | submenu displays search box when items exceed 10, filters real-time, and clears on escape or button click | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:773` |
+| PT-0B66AF09D4 | workflow Designer | auto arrange vertical lays out workflow stages top to bottom in dependency order without overlap | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:199` |
+| PT-5AFE08A88C | workflow Designer | edge badge shows condition tooltip and opens edge inspector in sidebar when clicked | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:238` |
+| PT-81DBC1358A | workflow Designer | workflow nodes display distinct green success and red failure handles and color-code connector strokes | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:254` |
+| PT-814CF4A563 | workflow Designer | nudging a stage past the canvas edge clamps its position instead of losing it off-screen | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:278` |
+| PT-D7BA2AF937 | workflow Designer | builds an agent handoff stage from the palette and attaches a specialist skill | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:296` |
+| PT-B1FCE4E164 | workflow Designer | a folder-backed project commits its workflow to .praxis/workflows and reloads it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:323` |
+| PT-C90D5C8EDD | workflow Designer | instantiating Full SDLC (.NET) identifies and installs missing agent dependencies automatically | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:374` |
+| PT-9B225D3890 | workflow Designer | validates workflow connections, flow, and configuration via validate workflow button | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:403` |
+| PT-4B8346DC79 | workflow Designer | clicking a connection on the canvas selects it and deletes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:455` |
+| PT-D0F572C234 | workflow Designer | selecting a connection and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:476` |
+| PT-2CBC383956 | workflow Designer | clicking delete on an agent task removes it from the canvas | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:493` |
+| PT-1748C28492 | workflow Designer | selecting an agent task and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:507` |
+| PT-AA92BCD6EA | workflow Designer | a stage can run on its own AI and model, chosen from the AIs that are set up | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:522` |
+| PT-91A53C6CCE | workflow Designer | stage skills are added from the picker dialog and removed from their chip | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:576` |
+| PT-FA495A15F3 | workflow Designer | a connection selected on the canvas is edited in the inspector, with no separate tab | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:603` |
+| PT-05295BB166 | workflow Designer | floating toolbar provides stage tools, canvas tools, and deletion | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:626` |
+| PT-693476E991 | workflow Designer | clicking and dragging on the designer surface pans the canvas without changing zoom | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:695` |
+| PT-7AF3949BE5 | workflow Designer | floating toolbar provides agent and skill submenus with scrolling list, icon, and text | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:730` |
+| PT-44E72F938B | workflow Designer | submenu displays search box when items exceed 10, filters real-time, and clears on escape or button click | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:853` |
+| PT-F895248CB0 | workflow Designer | walks the workflow designer, rings each area, and directs the user through all steps | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:922` |
 | PT-2CA87FB459 | workflow Environment Pause | a registry that cannot audit pauses the run instead of failing it; siblings finish and Resume completes it | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:126` |
 | PT-4B8D3275C8 | workflow Environment Pause | a genuine audit finding still fails the run, and the sibling it left running is stopped and recorded | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:175` |
 | PT-F5764CCA2F | workflow Install Deps | without an install stage a fresh run worktree cannot load the dependency, so QA fails — however good the change is | `apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts:111` |

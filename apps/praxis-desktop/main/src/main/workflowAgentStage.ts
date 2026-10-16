@@ -28,9 +28,13 @@ import {
   type ChangedFile,
   formatIterationContext,
   formatRunParameters,
+  resolveTicketContext,
   type FinishedStageSession,
   type AiProvider,
+  type AgentToolMode,
+  type AgentTaskAttachment,
   type IssueDetails,
+  type IssueTrackerService,
   type StageDispatchContext,
   type StageOutcome,
   type WorkflowAgentTaskNode,
@@ -46,6 +50,7 @@ import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { getWorkflowPolicyStore } from './workflowStoreInstance';
 import { getProjectStore } from './projectStoreInstance';
+import { getConnectionStore } from './connectionStoreInstance';
 import { getServiceForConnection } from './serviceRegistry';
 import { workflowLogSink } from './workflowLogSink';
 import { launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
@@ -132,6 +137,54 @@ export interface MapItemLaunch {
   brief: string;
 }
 
+/**
+ * Resolves the active ticket's context and attachments when a run is bound to a ticket.
+ * Stages receive the ticket's full description, comments, dependencies, and boundary directives,
+ * while lifecycle transitions remain managed by the workflow engine.
+ */
+export async function resolveStageTicketContext(
+  run: Pick<WorkflowRun, 'issueKey' | 'issueConnectionId' | 'projectId' | 'runId'>,
+  toolMode: AgentToolMode,
+  ports?: {
+    getConnection?: (connectionId: string | undefined, projectId: string) => string | undefined;
+    getService?: (connectionId: string | undefined) => Promise<IssueTrackerService>;
+  }
+): Promise<{ ticketContext?: string; attachments?: AgentTaskAttachment[] }> {
+  if (!run.issueKey) return {};
+  try {
+    const connectionId = ports?.getConnection
+      ? ports.getConnection(run.issueConnectionId, run.projectId)
+      : (run.issueConnectionId ??
+        getConnectionStore().getConnections().find(c => c.settings.projectId === run.projectId)?.id ??
+        projectConnectionId(run.projectId));
+    const service = ports?.getService
+      ? await ports.getService(connectionId)
+      : await getServiceForConnection(connectionId);
+    const ticketIssue = await service.getIssue(run.issueKey);
+    const ticketContext = await resolveTicketContext({
+      issue: ticketIssue,
+      backendService: service,
+      toolMode,
+      directives: 'workflow'
+    });
+    const attachments = ticketIssue.attachments?.length
+      ? ticketIssue.attachments.map(att => ({
+          fileName: att.fileName,
+          localPath: '',
+          mediaType: att.mimeType,
+          sizeBytes: att.sizeBytes,
+          sourceUrl: att.contentUrl
+        }))
+      : undefined;
+    return { ticketContext, attachments };
+  } catch (error) {
+    workflowLogSink.appendLine(
+      `[workflow ${run.runId}] Could not resolve ticket context for ${run.issueKey}: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return {};
+  }
+}
+
 export async function runWorkflowAgentStage(
   node: WorkflowAgentTaskNode,
   dispatch: StageDispatchContext,
@@ -186,7 +239,14 @@ export async function runWorkflowAgentStage(
   let provider = (item
     ? workflowRun.stageProviders?.[recordNodeId] ?? (node.agent.providerId?.trim() || undefined) ?? runProvider
     : stageProvider(workflowRun, node.id, runProvider)) as AiProvider;
+  const toolMode = preflight.binding.toolMode;
   const taskDefinition = buildStageTaskDefinition(stageContext);
+
+  if (workflowRun.issueKey && !taskDefinition.ticketContext) {
+    const { ticketContext, attachments } = await resolveStageTicketContext(workflowRun, toolMode);
+    if (ticketContext) taskDefinition.ticketContext = ticketContext;
+    if (attachments && !taskDefinition.attachments?.length) taskDefinition.attachments = attachments;
+  }
 
   // What the person who started the run asked for (goal, target …), as plain prose.
   const parameters = formatRunParameters(workflowRun);
@@ -297,7 +357,6 @@ export async function runWorkflowAgentStage(
     projectKey: 'WORKFLOW'
   } as IssueDetails;
 
-  const toolMode = preflight.binding.toolMode;
   // Where the tree stood before this stage, so a test-guarded stage's change can be read whole.
   const baseRef = node.guardTests && node.mutatesWorktree ? await headOf(worktreePath) : undefined;
   const settled = waitForSession(issueKey);

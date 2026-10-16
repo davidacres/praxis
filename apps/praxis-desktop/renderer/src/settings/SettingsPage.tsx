@@ -40,6 +40,7 @@ import { ChipSelect } from '../ui/ChipSelect';
 import { ModelManagerPanel } from '../ai/ModelManagerPanel';
 import { AiUsageStatsSection } from './AiUsageStatsSection';
 import { fetchModelOptions, hasModelCatalog, providerIconName } from '../ai/modelProviders';
+import { formatContextLength, formatModelCost, getKnownContextLength, modelPriceLabel } from '../ai/sessionNav';
 import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { AddProviderDialog, CustomEndpointForm, endpointDisplayUrl, type BuiltInCatalogEntry } from './AiProviderCatalog';
 import { RemoveProviderDialog } from './RemoveProviderDialog';
@@ -5814,7 +5815,12 @@ function ProviderModelTiers({
                   ...catalog!.map(choice => ({
                     value: choice.value,
                     label: choice.name || choice.value,
-                    description: choice.name && choice.name !== choice.value ? choice.value : undefined
+                    description: choice.name && choice.name !== choice.value ? choice.value : undefined,
+                    meta: [
+                      formatContextLength(choice.contextLength ?? getKnownContextLength(choice.value, provider))
+                        ?? choice.contextLabel,
+                      modelPriceLabel(choice.pricingLabel ?? formatModelCost(choice.pricing))
+                    ].filter(Boolean).join(' · ') || undefined
                   })),
                   { value: CUSTOM_MODEL, label: 'Other model id…', icon: 'pencil' as const }
                 ]}

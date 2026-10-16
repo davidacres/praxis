@@ -69,6 +69,8 @@ export interface WorkflowStageContext {
   binding?: StageAgentBinding;
   /** Present when the node declares a workspace workflow pack. */
   workflowPack?: WorkflowPackContext;
+  /** Active ticket details for runs started from or bound to a ticket. */
+  ticketContext?: string;
 }
 
 /**

@@ -9,6 +9,8 @@ import type {
   GadgetActionValue,
   WireImageAttachment
 } from '@praxis/core';
+import { SessionTeamMessages } from './SessionTeamMessages';
+import { useSessionTeam } from './sessionTeamStore';
 import { Icon } from '../ui/Icon';
 import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { Markdown } from '../ui/Markdown';
@@ -158,6 +160,7 @@ export function SessionChatThread({
   onSubmitGadgetAction: propOnSubmitGadgetAction
 }: SessionChatThreadProps) {
   const { confirm } = useDialogs();
+  const team = useSessionTeam(session.issueKey);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [branchError, setBranchError] = useState<string>();
 
@@ -704,7 +707,9 @@ export function SessionChatThread({
         </div>
       )}
 
-      {!isExecuting && !visibleResponseText && conversationEvents.length === 0 && !isSelectedFailed && (
+      <SessionTeamMessages sessionKey={session.issueKey} />
+
+      {!isExecuting && !visibleResponseText && conversationEvents.length === 0 && !isSelectedFailed && team.messages.length === 0 && (
         <span className="placeholder-text">Waiting for the agent to respond…</span>
       )}
     </div>

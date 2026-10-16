@@ -196,6 +196,85 @@ test('auto arrange lays out workflow stages in dependency order without overlap'
   expect(layout.every(node => node.id)).toBe(true);
 });
 
+test('auto arrange vertical lays out workflow stages top to bottom in dependency order without overlap', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Governed delivery');
+
+  const canvas = canvasOf(page);
+  const arrangeVertical = page.getByTestId('wf-auto-arrange-vertical');
+  await expect(arrangeVertical).toBeEnabled();
+  await arrangeVertical.click();
+
+  const layout = await canvas.locator('[data-node-id]').evaluateAll(elements =>
+    elements.map(element => {
+      const rect = element.getBoundingClientRect();
+      return {
+        id: element.getAttribute('data-node-id'),
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom
+      };
+    })
+  );
+  expect(layout.length).toBeGreaterThan(1);
+  for (let i = 0; i < layout.length; i += 1) {
+    for (let j = i + 1; j < layout.length; j += 1) {
+      const a = layout[i];
+      const b = layout[j];
+      expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(true);
+    }
+  }
+
+  const top = async (name: string) =>
+    Number(await canvas.getByRole('button', { name: new RegExp(`^${name} \\(`) }).evaluate(element => (element as HTMLElement).style.top.replace('px', '')));
+  expect(await top('Plan')).toBeLessThan(await top('Implement'));
+  expect(await top('Implement')).toBeLessThan(await top('QA'));
+  expect(await top('QA')).toBeLessThan(await top('Approve'));
+
+  expect(layout.every(node => node.id)).toBe(true);
+});
+
+test('edge badge shows condition tooltip and opens edge inspector in sidebar when clicked', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Governed delivery');
+
+  const canvas = canvasOf(page);
+  const badge = canvas.getByTestId('wf-edge-badge-e-review-fix');
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveAttribute('title', /Condition: On findings \(severity ≥ high\) — loops back to Implement/);
+
+  await badge.click();
+  const inspector = inspectorOf(page);
+  await expect(inspector.getByRole('heading', { name: 'Connection' })).toBeVisible();
+  await expect(inspector.getByTestId('wf-edge-outcome')).toHaveAttribute('data-value', 'findings');
+  await expect(inspector.getByTestId('wf-edge-loop-toggle')).toBeChecked();
+});
+
+test('workflow nodes display distinct green success and red failure handles and color-code connector strokes', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Governed delivery');
+
+  const canvas = canvasOf(page);
+
+  // Success handle at bottom and failure handle at right
+  const planSuccessHandle = canvas.getByTestId('wf-node-handle-success-plan');
+  const planFailureHandle = canvas.getByTestId('wf-node-handle-failure-plan');
+  await expect(planSuccessHandle).toBeVisible();
+  await expect(planFailureHandle).toBeVisible();
+  await expect(planSuccessHandle).toHaveClass(/wf-node-handle--success/);
+  await expect(planFailureHandle).toHaveClass(/wf-node-handle--failure/);
+
+  // Success path stroke (green) and failure/repair path stroke
+  const successEdgeLine = canvas.getByTestId('wf-canvas-edge-line-e-plan-impl');
+  await expect(successEdgeLine).toHaveAttribute('stroke', 'var(--success, #10b981)');
+  await expect(successEdgeLine).toHaveAttribute('marker-end', 'url(#wf-arrowhead-success)');
+
+  const failureEdgeLine = canvas.getByTestId('wf-canvas-edge-line-e-qa-repair');
+  await expect(failureEdgeLine).toHaveAttribute('stroke', 'var(--danger)');
+  await expect(failureEdgeLine).toHaveAttribute('marker-end', 'url(#wf-arrowhead-danger)');
+});
+
 test('nudging a stage past the canvas edge clamps its position instead of losing it off-screen', async () => {
   const page = app.window;
   await newWorkflow(page, 'Governed delivery');
@@ -207,7 +286,7 @@ test('nudging a stage past the canvas edge clamps its position instead of losing
   // Far more nudges than the stage can possibly have room for (20px each), so the test keeps holding
   // however the template lays the stage out — it is the clamp being tested, not the distance.
   for (let i = 0; i < 80; i += 1) await qaCard.press('Shift+ArrowLeft');
-  for (let i = 0; i < 40; i += 1) await qaCard.press('Shift+ArrowUp');
+  for (let i = 0; i < 80; i += 1) await qaCard.press('Shift+ArrowUp');
 
   await expect.poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.left)).toBe('0px');
   await expect.poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.top)).toBe('0px');
@@ -570,6 +649,7 @@ test('floating toolbar provides stage tools, canvas tools, and deletion', async 
     'wf-tool-agents',
     'wf-tool-skills',
     'wf-auto-arrange',
+    'wf-auto-arrange-vertical',
     'wf-tool-zoom-in',
     'wf-tool-zoom-out',
     'wf-tool-reset-view',
@@ -838,3 +918,46 @@ test('submenu displays search box when items exceed 10, filters real-time, and c
   await searchInput.press('Escape');
   await expect(agentsSubmenu).not.toBeVisible();
 });
+
+test('walks the workflow designer, rings each area, and directs the user through all steps', async () => {
+  const page = app.window;
+  await newWorkflow(page, 'Governed delivery');
+
+  // Trigger tutorial via header tour button
+  await page.getByTestId('wf-tour-btn').click();
+  const callout = page.getByTestId('walkthrough-callout');
+  await expect(callout).toBeVisible();
+  await expect(callout).toContainText('Visual stage graph');
+  await expect(page.locator('.walkthrough-ring')).toHaveCount(1);
+
+  // Step 2: Toolbar
+  await page.getByTestId('walkthrough-next').click();
+  await expect(callout).toContainText('Add stages and controls');
+  await expect(page.getByTestId('wf-designer-toolbar')).toBeVisible();
+
+  // Step 3: Agents and skills
+  await page.getByTestId('walkthrough-next').click();
+  await expect(callout).toContainText('Assign specialist agents and skills');
+
+  // Step 4: Stage inspector
+  await page.getByTestId('walkthrough-next').click();
+  await expect(callout).toContainText('Configure stages and review fix loops');
+
+  // Step 5: Real-time validation and save
+  await page.getByTestId('walkthrough-next').click();
+  await expect(callout).toContainText('Continuous validation and save');
+
+  // Final step has "Got it" button
+  await expect(page.getByTestId('walkthrough-next')).toHaveCount(0);
+  await page.getByTestId('walkthrough-done').click();
+  await expect(callout).toHaveCount(0);
+  await expect(page.locator('.walkthrough-ring')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('praxis-workflow-tutorial-seen'))).toBe('1');
+
+  // Canvas toolbar help button also triggers the tutorial
+  await page.getByTestId('wf-tool-help').click();
+  await expect(page.getByTestId('walkthrough-callout')).toBeVisible();
+  await page.getByTestId('walkthrough-skip').click();
+  await expect(page.getByTestId('walkthrough-callout')).toHaveCount(0);
+});
+

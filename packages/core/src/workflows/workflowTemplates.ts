@@ -13,7 +13,7 @@
  * registers it as the delivery default and adds the run-monitor around it.
  */
 
-import { WORKFLOW_SCHEMA_VERSION, isAgentTaskNode, type WorkflowCheckNode, type WorkflowDefinition } from './workflowTypes';
+import { WORKFLOW_SCHEMA_VERSION, isAgentTaskNode, type WorkflowAgentTaskNode, type WorkflowCheckNode, type WorkflowDefinition } from './workflowTypes';
 import type { AgentWorkflowReference } from '../ai/agentTypes';
 import { validateWorkflow } from './workflowValidation';
 import type { AgentCatalogSnapshot } from './workflowPreflight';
@@ -127,6 +127,49 @@ function buildNode(x: number, y: number): WorkflowCheckNode {
 }
 
 /**
+ * Creates an interactive human review agent-task node for workflows.
+ *
+ * Prompts the user for responses about completed work: explains a summary
+ * of the completed work, breaks down into high-level features, and works through
+ * each feature interactively using multiple-choice options with free text.
+ */
+export function humanReviewNode(
+  x = 1200,
+  y = 0,
+  options: {
+    id?: string;
+    name?: string;
+    inputs?: string[];
+    outputId?: string;
+  } = {}
+): WorkflowAgentTaskNode {
+  const id = options.id ?? 'human-review';
+  return {
+    type: 'agent-task',
+    id,
+    name: options.name ?? 'Human review',
+    x,
+    y,
+    inputs: options.inputs ?? ['plan-doc', 'change-diff'],
+    agent: {
+      agentId: 'praxis-human-reviewer',
+      profileId: 'praxis-human-reviewer',
+      hostId: 'praxis-human-reviewer',
+      scope: 'global',
+      toolMode: 'read-only'
+    },
+    instructions:
+      'Explain a summary of the completed work then break down into features at a high level and work through them with the user, ensuring that the completed functionality is what was required. Provide multiple choice options as much as possible, with the additional option of free text.',
+    outputs: [
+      { id: options.outputId ?? `${id}-report`, kind: 'report', required: true, description: 'Human review verification report.' }
+    ],
+    mutatesWorktree: false,
+    satisfiesGate: 'review',
+    interactive: true
+  };
+}
+
+/**
  * Plan → Implement → Praxis Tests → (Review ∥ Security ∥ Install → Build → QA) → Gates → Approve,
  * with review and security findings looping back to Implement (FX-BF-108).
  *
@@ -158,8 +201,8 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         type: 'agent-task',
         id: 'plan',
         name: 'Plan',
-        x: 0,
-        y: 160,
+        x: 160,
+        y: 40,
         inputs: [],
         agent: { agentId: 'praxis-planner', profileId: 'praxis-planner', hostId: 'praxis-planner', scope: 'global', toolMode: 'read-only' },
         instructions: 'Produce an implementation plan for the assigned task.',
@@ -170,8 +213,8 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         type: 'agent-task',
         id: 'implement',
         name: 'Implement',
-        x: 240,
-        y: 160,
+        x: 160,
+        y: 200,
         inputs: ['plan-doc'],
         agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full', skillNames: ['verification-report', 'visual-verification'] },
         instructions: 'Implement the plan. Run automated tests to verify your changes, fix any broken or outdated tests, commit the clean change, and report the ref. On a later iteration, fix the findings you are handed before anything else, and say how each was addressed.',
@@ -181,24 +224,11 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
       },
       {
         type: 'agent-task',
-        id: 'test-contracts',
-        name: 'Praxis Test contracts',
-        x: 480,
-        y: 160,
-        inputs: ['change-diff'],
-        agent: { agentId: 'praxis-test-author', profileId: 'praxis-test-author', hostId: 'praxis-test-author', scope: 'global', toolMode: 'full', skillNames: ['praxis-test-contracts'] },
-        instructions: 'Inventory the automated QA tests, author or update the structured English Praxis Test catalog, and run its deterministic validator. Ensure automated tests pass and report the exact test count, coverage links, and any stale or ambiguous contracts.',
-        outputs: [{ id: 'test-contracts', kind: 'report', required: true, description: 'The validated Praxis Test catalog and coverage report.' }],
-        mutatesWorktree: true,
-        maxAttempts: 2
-      },
-      {
-        type: 'agent-task',
         id: 'review',
         name: 'Review',
-        x: 720,
-        y: 0,
-        inputs: ['plan-doc', 'change-diff', 'test-contracts'],
+        x: 160,
+        y: 360,
+        inputs: ['plan-doc', 'change-diff'],
         agent: { agentId: 'praxis-reviewer', profileId: 'praxis-reviewer', hostId: 'praxis-reviewer', scope: 'global', toolMode: 'read-only' },
         instructions:
           'Review the implementation snapshot for correctness, quality and security using the change-diff input artifact and read-only file access. ' +
@@ -211,14 +241,27 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         // The reviewer marks someone else's work: on another AI or model when one is set up.
         independentOf: 'implement'
       },
-      installDependenciesNode(720, 240),
-      buildNode(960, 240),
+      {
+        type: 'agent-task',
+        id: 'test-contracts',
+        name: 'Praxis Test contracts',
+        x: 160,
+        y: 520,
+        inputs: ['change-diff'],
+        agent: { agentId: 'praxis-test-author', profileId: 'praxis-test-author', hostId: 'praxis-test-author', scope: 'global', toolMode: 'full', skillNames: ['praxis-test-contracts'] },
+        instructions: 'Inventory the automated QA tests, author or update the structured English Praxis Test catalog, and run its deterministic validator. Ensure automated tests pass and report the exact test count, coverage links, and any stale or ambiguous contracts.',
+        outputs: [{ id: 'test-contracts', kind: 'report', required: true, description: 'The validated Praxis Test catalog and coverage report.' }],
+        mutatesWorktree: true,
+        maxAttempts: 2
+      },
+      installDependenciesNode(40, 680),
+      buildNode(40, 840),
       {
         type: 'agent-task',
         id: 'qa-repair-agent',
         name: 'Repair QA failures',
-        x: 1200,
-        y: 400,
+        x: 280,
+        y: 1000,
         inputs: ['change-diff', 'qa-results'],
         agent: { agentId: 'praxis-implementer', profileId: 'praxis-implementer', hostId: 'praxis-implementer', scope: 'global', toolMode: 'full', skillNames: ['verification-report'] },
         instructions: 'Inspect the failed QA evidence, diagnose the smallest safe fix, implement it in the worktree, and commit the repair. Do not weaken, remove, or bypass tests.',
@@ -230,8 +273,8 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         type: 'check',
         id: 'qa',
         name: 'QA',
-        x: 1200,
-        y: 240,
+        x: 40,
+        y: 1000,
         inputs: ['change-diff', 'test-contracts', 'install-log'],
         command: 'npm',
         args: ['test'],
@@ -246,8 +289,8 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         type: 'check',
         id: 'security',
         name: 'Security scan',
-        x: 720,
-        y: 400,
+        x: 280,
+        y: 680,
         inputs: ['change-diff'],
         command: 'npm',
         // Audited against the public registry on purpose. `npm audit` asks the *configured* registry
@@ -262,13 +305,13 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         outputs: [{ id: 'security-findings', kind: 'findings', required: true }],
         satisfiesGate: 'security'
       },
-      { type: 'join', id: 'gates', name: 'Gates', x: 1440, y: 160, inputs: [], mode: 'all' },
+      { type: 'join', id: 'gates', name: 'Gates', x: 160, y: 1160, inputs: [], mode: 'all' },
       {
         type: 'approval',
         id: 'approve',
         name: 'Approve',
-        x: 1680,
-        y: 160,
+        x: 160,
+        y: 1320,
         inputs: ['review-findings', 'test-contracts', 'qa-results', 'security-findings'],
         prompt: 'Review, QA, and security have passed. Approve this change for delivery?',
         requiredGates: ['review', 'qa', 'security'],
@@ -281,8 +324,8 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
     ],
     edges: [
       { id: 'e-plan-impl', from: 'plan', to: 'implement', on: 'success', required: true },
-      { id: 'e-impl-tests', from: 'implement', to: 'test-contracts', on: 'success', required: true },
-      { id: 'e-tests-review', from: 'test-contracts', to: 'review', on: 'success', required: true },
+      { id: 'e-impl-review', from: 'implement', to: 'review', on: 'success', required: true },
+      { id: 'e-review-tests', from: 'review', to: 'test-contracts', on: 'success', required: true },
       { id: 'e-tests-install', from: 'test-contracts', to: 'install', on: 'success', required: true },
       { id: 'e-install-build', from: 'install', to: 'build', on: 'success', required: true },
       { id: 'e-build-qa', from: 'build', to: 'qa', on: 'success', required: true },
