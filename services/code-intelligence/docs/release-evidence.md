@@ -739,3 +739,17 @@ A scratch copy of the Maze repository (433 C# files, 13 SDK-style projects, rest
 **Search-quality finding:** hybrid results were identical to lexical for all four natural-language queries tried, because the ranking profile `rrf-k60-lexical64-vector1-alias0.5-v3` weights lexical matches 64 to 1. Vector-only search found the right answer where lexical did not: "permission check for roles" → `MazePermissionAuthorizationHandler.HandleRequirementAsync` / `GetPermissionsAsync`, while hybrid ranked test stubs first. The semantic channel works but is effectively unused by hybrid ranking. Changing that affects the fixed-corpus quality gates and needs re-evaluation, so it is not changed here.
 
 Transitive project references: the SDK flows `ProjectReference` transitively unless `DisableTransitiveProjectReferences` is set; inference initially used direct references only, which left the test projects unable to see `Maze.Common`/`MazeHub.Shared` types. Inference now uses the transitive closure and honours the opt-out (new test). 126 C# tests pass, zero skipped.
+
+## Desktop and agent walkthrough on Maze — 16 October
+
+**Ranking.** Not retuned: on the reviewed corpus every more-semantic profile regressed held-out quality. Equal weights scored all-category recall 0.76 against 0.89, with cross-project recall 0.31 against 0.92; lexical ×4 scored 0.83, with cross-project recall 0.77. The lexical-weighted hybrid default stays. The desktop panel now offers **Hybrid / Keyword / Semantic**, and agents can already request `mode: "vector"`.
+
+**Real-app walkthrough.** A temporary local Playwright spec, not committed because it depends on the user's repository and the downloaded model, drove the real desktop app with the packaged service against the Maze copy. Registration to indexed took 26.5 s. Model install and activation from the panel reached 13,314/13,314 vectors in 191 s. Keyword and Semantic searches ran; Semantic ranked `MazePermissionAuthorizationHandler.HandleRequirementAsync` first for "permission check for roles"; Callers opened; provider consent completed. The MCP server written to settings was then started exactly as an agent host would start it, listed 11 tools and answered `search_code`.
+
+**Defects found and fixed during the walkthrough:**
+1. **Repository ID (`b85ed2c4`).** The MCP bridge advertised `repositoryId` as required while nothing told the agent its opaque value, so every agent call failed with `ACCESS_DENIED`. The bridge now hides it from the advertised schemas and fills it in; a different ID is still refused.
+2. **Overflow.** Long qualified names and signatures from a real repository widened the settings panel. A new e2e assertion fails without the wrapping fix and passes with it.
+3. **Project summary.** Fourteen anonymous context lines became "Projects: 9 complete · 4 partial · 1 syntax-only", with details on demand.
+4. **Wording.** Panel and relocation copy describe automatic project detection.
+
+All five desktop code-intelligence specs pass, the packaged-service one included; there are 4 MCP tests (zero skipped) and 126 C# tests. CI [38969353019](https://github.com/davidacres/praxis/actions/runs/38969353019) passed on Windows, Linux and macOS after one rerun. The first Windows attempt hit a transient `EPERM` on a just-exited owner's DLL during package cleanup, now retried (`8cb9a40d`).
