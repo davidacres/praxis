@@ -7,6 +7,27 @@ namespace Praxis.CodeIntelligence.Tests;
 public sealed class VectorScoringTests
 {
     [Fact]
+    public void StreamingSelectionMatchesExhaustiveMaximaIncludingTiesAndLateChunks()
+    {
+        var random = new Random(41981);
+        for (var sample = 0; sample < 10; sample++)
+        {
+            var chunks = Enumerable.Range(0, 1000).SelectMany(symbol => Enumerable.Range(0, 4)
+                .Select(_ => new VectorCandidate($"symbol-{symbol:D4}", random.Next(-100, 101) / 100.0)))
+                .OrderBy(_ => random.Next()).ToArray();
+            var expected = chunks.GroupBy(chunk => chunk.SymbolId).Select(group => new VectorCandidate(group.Key, group.Max(chunk => chunk.Score)))
+                .OrderByDescending(candidate => candidate.Score).ThenBy(candidate => candidate.SymbolId, StringComparer.Ordinal).Take(100).ToArray();
+            var actual = new VectorTopCandidates();
+            foreach (var chunk in chunks)
+            {
+                if (actual.CanImprove(chunk.Score)) actual.Add(chunk.SymbolId, chunk.Score);
+                Assert.InRange(actual.Count, 1, 100);
+            }
+            Assert.Equal(expected, actual.Results());
+        }
+    }
+
+    [Fact]
     public void AcceleratedAndPortableScoresMatchIndependentFloatProducts()
     {
         var random = new Random(41981);
