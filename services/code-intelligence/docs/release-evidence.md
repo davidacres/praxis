@@ -13,7 +13,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
 | Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
 | 50k exact-query latency and memory | Final mapping-v6/scorer-v4 full process: lexical p95 5.895 ms, hybrid p95 434.591 ms, independent peak RSS 2004254720 bytes; main limits pass | Retrieval-only p95 414.348 ms fails 250 ms; complete category/repeat/concurrent-edit/reference-machine protocol remains open |
-| Broader terminology performance | Two independent 50k processes, matched 200-query sets/mode: one reader lexical/hybrid p95 74.371/353.665 ms; four readers 98.664/507.817 ms; no errors | Four-reader hybrid fails 500 ms and retrieval-only fails 250 ms. Five repeats, other categories and concurrent edits remain open |
+| Broader terminology performance | (Superseded for the vector path by the ranked-validation checkpoint below: one-reader hybrid p95 228.496 ms, four-reader 365.737 ms, single pilot.) Two independent 50k processes, matched 200-query sets/mode: one reader lexical/hybrid p95 74.371/353.665 ms; four readers 98.664/507.817 ms; no errors | Four-reader hybrid fails 500 ms and retrieval-only fails 250 ms. Five repeats, other categories and concurrent edits remain open |
 | Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Final mapping-v6 run 38904504214 passes Windows/macOS/Linux (112 tests per host, schemas, native packaging, retained/matrix safeguards and watcher smoke) |
 
 ## Platform and provider claims
@@ -389,3 +389,13 @@ Single terminology pilot, same retained 50k fixture and query set hash as the ea
 | 4 | 507.817 → 365.737 ms | 345.232 ms (**fails 250**) | 225.112 ms |
 
 One run, terminology only: not the five-run/all-category/concurrent-edit protocol, and not yet re-measured on the full-process memory run. Four-reader retrieval-only still fails; the lexical arm (74–98 ms p95) is now the next largest component.
+
+Query-only peak RSS of the four-reader benchmark process (`/usr/bin/time -l`, 50 queries per reader, one run each; not the full compiler/model process): exact 1,266,696,192 bytes, terminology 1,335,672,832 bytes. The 2 GiB full-process gate has not been re-measured with this change.
+
+Investigated and not adopted:
+- Covering indexes on `symbols` / `representation_targets` (~25 ms in a private copy; planner ignores them without `INDEXED BY`).
+- Removing the 512 MiB read mapping (four-reader hybrid p95 397.9 vs 377.0 ms, no scaling benefit).
+- A resident vector matrix keyed by `query_epoch` would cut the 126–225 ms scan to roughly scoring time (about 8 ms measured) but retains a detached vector cache, which this design deliberately does not have, and would stop detecting out-of-band vector corruption between epoch bumps (an existing regression test relies on that). Not implemented; needs an explicit decision.
+- Phase timing of the new score pass (single reader): about 90 ms SQLite row/blob delivery, about 8 ms scoring. The lexical arm (about 75 ms) is dominated by FTS5 `bm25` over about 49k broad matches (about 60 ms) plus symbol lookups (about 45 ms); only the lookups are avoidable.
+
+Still failing/open: four-reader retrieval-only p95 345.232 ms (> 250), full five-run/all-category/concurrent-edit protocol, full-process memory re-measure, reference hardware, provider/platform/accessibility, recovery/stress/disk-full, five native runtime identifiers, and the non-green broad desktop suite (unchanged; no desktop files touched).
