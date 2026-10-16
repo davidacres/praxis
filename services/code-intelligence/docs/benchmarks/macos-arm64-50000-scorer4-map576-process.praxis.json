@@ -1,0 +1,12 @@
+{
+  "implementationCommit": "e69274b0b106d4bba5e4ee4a5fcb672751f2e7a5",
+  "assemblyHashes": {
+    "Praxis.CodeIntelligence.dll": "sha256:b714ad2d7b19b6134473cf4bf5d5224993d70ea4b3367bd73e9a18a69b1ab0b4",
+    "Praxis.CodeIntelligence.Benchmarks.dll": "sha256:c9d1d7561d6a203d0a4d547bfea8c05c0b095015756a9604d807730e6e82fabc"
+  },
+  "measurement": "Full process /usr/bin/time -l; cold process indexing, local inference, queries, edit publication and refresh",
+  "maximumResidentSetBytes": 2235957248,
+  "limitBytes": 2147483648,
+  "peakRssAtMost2GiB": false,
+  "rawReport": "macos-arm64-50000-scorer4-map576-full.praxis.json"
+}

@@ -348,3 +348,7 @@ The current exact streaming scorer completed 400 timed exact queries per mode wi
 ## Saved-files UI scope notice
 
 The code-intelligence panel now explicitly says saved files are searched and unsaved editor changes are not indexed, as required by §26.2. All four recovery/search/light-dark-keyboard/native-service tests pass on the rebuilt renderer; a separate capture rerun verifies the visible notice and its layout. The updated 615-entry catalogue contract passes. This text-only follow-up does not turn the earlier full desktop run into a green suite; its wider baseline-reproduced failures remain open.
+
+## Full adapter-v8/scorer-v4 result — RSS failure preserved
+
+The immutable current-build full run completed indexing, real inference, 400 queries per mode and edit/refresh with zero query errors. Lexical p95 **5.8004 ms** and hybrid **405.6300 ms** pass the main latency limits. Retrieval-only p95 **383.2350 ms** still fails 250 ms. Independent peak RSS **2235957248 bytes** fails 2 GiB, despite the separate query-only process passing it. Both raw and independent-process records, including binary hashes, are preserved. Reader mapping is being reduced to 512 MiB (version 6); its latency and full-process memory must be measured afresh. No current release pass is claimed.
