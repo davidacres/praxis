@@ -4,7 +4,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 
 | Check | Current evidence | Remaining qualification |
 |---|---|---|
-| C# compiler/storage/model suite | 118 passed, zero failures/skips with SDK/model fixtures (schema 5, vector plan 5, search plan 6, mapping v7, disk-full and memory-pressure handling) | Run [38951588768](https://github.com/davidacres/praxis/actions/runs/38951588768) at `c7de5418` passes on Windows/macOS/Linux |
+| C# compiler/storage/model suite | 120 passed, zero failures/skips with SDK/model fixtures (schema 6, vector plan 6, search plan 6, mapping v7, disk-full, memory-pressure, start-up reclaim and reconciliation) | Run [38959603040](https://github.com/davidacres/praxis/actions/runs/38959603040) at `e54a8a40` passes on Windows/macOS/Linux |
 | Source/context and dependency graph | Source identity/evidence, cross-project source uses, captured project/assembly references and configuration withdrawal tested | General runtime delegate flow is explicitly unresolved; no NuGet-name inference |
 | Durable work and edit updates | Real 5k watcher: 25 edits, structural p95 1.676 s, semantic upper-bound p95 0.620 s, no errors | This measurement predates adapter v8; five-run/concurrent-edit protocol remains open |
 | MCP | Four local SDK/stdio tests pass, including native grants/errors and controlled in-flight child cancellation | Actual live provider adapter/inference cancellation qualification remains open |
@@ -19,6 +19,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Query matrix (plan 6) | Five runs × exact/terminology/behaviour/negative × one/four readers × 200 queries: 39/40 processes pass every gate; hybrid p95 max 322.743 ms; lexical p95 max 82.942 ms; zero errors | **Fails:** behaviour four-reader run 1 retrieval-only p95 301.9 ms; other four-reader terminology/behaviour runs 236–247 ms (thin margin). Concurrent edits, cross-project, owner/wire, full-process RSS, reference machine unmeasured |
 | Query matrix (mapping v7) | Same protocol after the memory fix: complete, zero errors, all lexical/hybrid p95 pass; 36/40 processes pass every gate | **Fails:** four-reader retrieval-only behaviour runs 1–3 (261.2/261.2/270.4 ms) and terminology run 4 (250.2 ms); the memory fix costs about 5–25 ms on broad four-reader retrieval |
 | Query matrix (vector plan 5, native scan) | Five runs × four categories × one/four readers × 200 queries: **40/40 processes pass every gate**, zero errors; four-reader retrieval-only p95 max 172.0 ms, hybrid p95 max 182.8 ms, lexical p95 max 85.1 ms | 12-core Mac only; reference 8-core/16 GiB machine, cross-project and owner/wire latency unmeasured |
+| Query matrix (schema 6, vector plan 6) | Same protocol on the retained fixture migrated to schema 6: **40/40 pass**, zero errors; four-reader retrieval-only p95 max 177.0 ms, hybrid max 189.8 ms, lexical max 82.9 ms | 12-core Mac only |
 | Owner protocol queries | 50k via the native owner's socket protocol (connect, token handshake, admission, dispatch, framing): zero errors; hybrid p95 82.8/152.1 ms (exact, 1/4 clients), 125.0/193.0 ms (terminology); owner sampled peak RSS 1.51 GB through its own indexing, vectors and queries | Single run; Windows named pipes and MCP stdio framing not timed; exact 4-client hybrid p99 410 ms |
 | Broader terminology performance (history) | (Superseded for the vector path by the ranked-validation checkpoint below: one-reader hybrid p95 228.496 ms, four-reader 365.737 ms, single pilot.) Two independent 50k processes, matched 200-query sets/mode: one reader lexical/hybrid p95 74.371/353.665 ms; four readers 98.664/507.817 ms; no errors | Four-reader hybrid fails 500 ms and retrieval-only fails 250 ms. Five repeats, other categories and concurrent edits remain open |
 | Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Final mapping-v6 run 38904504214 passes Windows/macOS/Linux (112 tests per host, schemas, native packaging, retained/matrix safeguards and watcher smoke) |
@@ -709,3 +710,20 @@ Fixes:
 New `SchedulerTests` and `HostTests` cases cover both. 120 C# tests pass, zero skipped. The stress rerun against the fixed package follows.
 
 Stress rerun against the fixed package (`evaluations/macos-arm64-crash-recovery.praxis.json`, same seed and protocol): **all four gates pass**. All 20 kills hit a live owner; integrity was clean after every restart and recovery; every edit was published, including short-delay kills; and recovery took p50 821 ms, p95 2,090 ms, max 2,092 ms (before: 11 of 20 about 60 s, 3 of 20 stale).
+
+## Schema-6 query matrix — 16 October
+
+The retained 50k fixture was migrated from schema 5 to 6 with the service's explicit `init`; root, generation, epoch and sources are unchanged. The service kept `index.db.schema5.*.praxis.db` beside the schema-4 backup, and the backfill populated context and kind for all 51,499 rows. The full matrix (`benchmarks/macos-arm64-50000-plan6-filtered-query-matrix*`) is complete with zero errors and **all 40 processes pass every gate**. Ranges over five runs (ms):
+
+| Category | Readers | Lexical p95 | Hybrid p95 | Retrieval-only p95 |
+|---|---|---|---|---|
+| exact | 1 | 1.6–1.7 | 79.5–83.7 | 75.7–80.0 |
+| exact | 4 | 7.0–8.1 | 124.1–131.8 | 113.9–119.3 |
+| terminology | 1 | 46.8–48.9 | 121.1–121.6 | 117.5–118.0 |
+| terminology | 4 | 75.8–80.9 | 183.1–185.8 | 171.8–174.1 |
+| behaviour | 1 | 47.4–50.1 | 122.3–124.0 | 118.6–120.2 |
+| behaviour | 4 | 77.7–82.9 | 184.7–189.8 | 172.7–177.0 |
+| negative | 1 | 1.6–1.7 | 79.9–83.2 | 76.4–79.1 |
+| negative | 4 | 6.8–7.0 | 125.2–129.8 | 115.0–118.4 |
+
+The filter predicates in the score pass cost about 2–5 ms on unfiltered queries compared with plan 5, while project-filtered retrieval improved from 378.7 to 108.3 ms. CI [38959603040](https://github.com/davidacres/praxis/actions/runs/38959603040) at `e54a8a40` passed on Windows, Linux and macOS.
