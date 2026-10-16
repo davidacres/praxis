@@ -12,7 +12,7 @@ public sealed record VectorCandidate(string SymbolId, double Score);
 public sealed class ModelStore(IndexDatabase database, string directory) : IDisposable
 {
     public const int VectorScorerVersion = 4;
-    public const int VectorQueryPlanVersion = 5;
+    public const int VectorQueryPlanVersion = 6;
     // Queried on the database volume, where both profiles and the SQLite WAL
     // may coexist during activation. Injectable only for deterministic fault tests.
     internal Func<string, long> AvailableDiskBytes { get; set; } = path => new DriveInfo(path).AvailableFreeSpace;
@@ -180,11 +180,19 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         var overflow = false;
         {
             if (connection.Handle is not { } handle) throw new InvalidOperationException("Connection is not open.");
-            ThrowOnError(handle, SQLitePCL.raw.sqlite3_prepare_v2(handle,
-                "SELECT symbol_id,values_blob FROM vector_scan WHERE model_fingerprint=?1 AND ready=1 AND dimensions=384 AND length(values_blob)=1536", out var scan));
+            // The copy's context and kind apply the same filters as validation, so
+            // the ranked window holds only candidates that can pass; validation
+            // below still checks every candidate against the source tables.
+            var scanValues = new List<string?> { query.Fingerprint, contextId };
+            var scanSql = new StringBuilder("SELECT symbol_id,values_blob FROM vector_scan WHERE model_fingerprint=?1 AND ready=1 AND dimensions=384 AND length(values_blob)=1536 AND (?2 IS NULL OR context_id=?2)");
+            string Parameters(IReadOnlyList<string> values) => string.Join(',', values.Select(value => { scanValues.Add(value); return "?" + scanValues.Count; }));
+            if (kinds is { Count: > 0 }) scanSql.Append(" AND kind IN(").Append(Parameters(kinds)).Append(')');
+            if (projectIds is { Count: > 0 }) scanSql.Append(" AND context_id IN(SELECT context_id FROM contexts WHERE project_id IN(").Append(Parameters(projectIds)).Append("))");
+            ThrowOnError(handle, SQLitePCL.raw.sqlite3_prepare_v2(handle, scanSql.ToString(), out var scan));
             using (scan)
             {
-                ThrowOnError(handle, SQLitePCL.raw.sqlite3_bind_text(scan, 1, query.Fingerprint));
+                for (var index = 0; index < scanValues.Count; index++)
+                    ThrowOnError(handle, scanValues[index] is string value ? SQLitePCL.raw.sqlite3_bind_text(scan, index + 1, value) : SQLitePCL.raw.sqlite3_bind_null(scan, index + 1));
                 int step;
                 while ((step = SQLitePCL.raw.sqlite3_step(scan)) == SQLitePCL.raw.SQLITE_ROW)
                 {

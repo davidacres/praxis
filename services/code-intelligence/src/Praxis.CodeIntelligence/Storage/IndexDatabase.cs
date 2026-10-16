@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Storage;
 /// <summary>Owns schema compatibility and connection policy; source files are never modified.</summary>
 public sealed class IndexDatabase
 {
-    public const int SchemaVersion = 5;
+    public const int SchemaVersion = 6;
     // Version 7/3: with the dense vector_scan table, a 128 MiB map and 16 MiB
     // cache per reader match the 512/64 MiB latency while keeping concurrent
     // edits within the 2 GiB budget (see release evidence, 16 October).
@@ -146,11 +146,11 @@ public sealed class IndexDatabase
             // vector_scan must mirror vectors joined to their set exactly.
             command.CommandText = """
                 SELECT count(*) FROM (
-                  SELECT * FROM (SELECT v.set_id,v.chunk_index,e.symbol_id,e.model_fingerprint,e.state='ready',v.dimensions,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id
-                    EXCEPT SELECT set_id,chunk_index,symbol_id,model_fingerprint,ready,dimensions,values_blob FROM vector_scan)
+                  SELECT * FROM (SELECT v.set_id,v.chunk_index,e.symbol_id,e.model_fingerprint,e.state='ready',s.defining_context_id,s.kind,v.dimensions,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id LEFT JOIN symbols s ON s.symbol_id=e.symbol_id
+                    EXCEPT SELECT set_id,chunk_index,symbol_id,model_fingerprint,ready,context_id,kind,dimensions,values_blob FROM vector_scan)
                   UNION ALL
-                  SELECT * FROM (SELECT set_id,chunk_index,symbol_id,model_fingerprint,ready,dimensions,values_blob FROM vector_scan
-                    EXCEPT SELECT v.set_id,v.chunk_index,e.symbol_id,e.model_fingerprint,e.state='ready',v.dimensions,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id))
+                  SELECT * FROM (SELECT set_id,chunk_index,symbol_id,model_fingerprint,ready,context_id,kind,dimensions,values_blob FROM vector_scan
+                    EXCEPT SELECT v.set_id,v.chunk_index,e.symbol_id,e.model_fingerprint,e.state='ready',s.defining_context_id,s.kind,v.dimensions,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id LEFT JOIN symbols s ON s.symbol_id=e.symbol_id))
                 """;
             var drift = Convert.ToInt64(command.ExecuteScalar());
             if (drift != 0) errors.Add($"Vector scan copy differs from vectors in {drift} rows.");
