@@ -35,16 +35,19 @@ try {
   assert.equal(first.Generation, metadata.Generation); assert.equal(first.QueryEpoch, metadata.QueryEpoch);
   assert.equal(second.Generation, first.Generation); assert.equal(second.QueryEpoch, first.QueryEpoch);
   assert.equal(first.Lexical.Count, 40);
+  assert.equal(first.Lexical.QueryPhases.Count, 40);
+  assert.equal(first.QueryScheduleVersion, 2);
   if (process.env.PRAXIS_MODEL_BUNDLE) assert.equal(first.Hybrid.Count, 40);
   assert.ok(first.Unmeasured.includes('cold startup/index/embedding'));
   const repeatedPath = path.join(output, 'repeated.praxis.json');
-  const repeatedRun = await invoke(['--reuse-fixture', fixture, '--readers', '1', '--runs', '2', '--queries', '10', '--output', repeatedPath]);
+  const repeatedRun = await invoke(['--reuse-fixture', fixture, '--readers', '1', '--runs', '2', '--queries', '40', '--output', repeatedPath]);
   assert.ok(repeatedRun.code === 0 || repeatedRun.code === 2, repeatedRun.stderr);
   const repeated = JSON.parse(await readFile(repeatedPath, 'utf8'));
   assert.equal(repeated.Readers, 1); assert.equal(repeated.RunCount, 2); assert.equal(repeated.Measurements.length, 2);
   assert.equal(repeated.QuerySetHash, first.QuerySetHash); assert.equal(repeated.QueryScheduleVersion, 2);
   for (const sample of repeated.Measurements) {
-    assert.equal(sample.Lexical.Count, 10); assert.equal(sample.Lexical.Errors, 0);
+    assert.equal(sample.Lexical.Count, 40); assert.equal(sample.Lexical.Errors, 0);
+    assert.equal(sample.Lexical.QueryPhases.Count, 40);
     assert.ok(sample.Lexical.P99Ms >= sample.Lexical.P95Ms);
   }
   try {

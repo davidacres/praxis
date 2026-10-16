@@ -18,7 +18,15 @@ public sealed class GitPolicyTests
                 foreach (var argument in arguments) start.ArgumentList.Add(argument);
                 using var process = Process.Start(start)!;
                 var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
-                Assert.True(process.WaitForExit(5000)); Task.WaitAll(output, error); Assert.Equal(0, process.ExitCode);
+                var exited = process.WaitForExit(15_000);
+                if (!exited)
+                {
+                    process.Kill(entireProcessTree: true);
+                    Assert.True(process.WaitForExit(5000), "Timed-out fixture Git process did not exit after kill.");
+                }
+                Assert.True(Task.WaitAll([output, error], 5000), "Fixture Git output did not drain.");
+                Assert.True(exited, "Fixture Git setup exceeded 15 seconds.");
+                Assert.Equal(0, process.ExitCode);
             }
             Git("init"); Git("config", "core.fsmonitor", "!touch should-not-exist");
             Directory.CreateDirectory(Path.Combine(root, "private"));
