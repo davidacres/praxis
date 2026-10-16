@@ -11,7 +11,9 @@ namespace Praxis.CodeIntelligence.Queries;
 public sealed class QueryService(IndexDatabase database, ModelStore? models = null)
 {
     public const int SearchCountCacheVersion = 1;
-    public const int SearchPlanVersion = 3;
+    public const int SearchPlanVersion = 4;
+    public const string RankingProfile = "rrf-k60-lexical4-vector1-alias1-v2";
+    public const double LexicalWeight = 4.0;
     internal int VectorChunkLimit { get; init; } = 200_000;
     private readonly CursorCodec cursors = new();
     private sealed record SearchCountKey(string Repository, long Generation, long Epoch, string? Context, string? Kinds, string? Projects, string? Profile);
@@ -177,7 +179,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         if (!candidates.TryGetValue(candidateId, out var candidate)) candidate = (row, new(), new(), 0);
                         if (channel != "graph" && candidate.Ranks.ContainsKey(channel)) return;
                         if (channel != "graph") candidate.Ranks[channel] = position;
-                        candidate.Reasons.Add(channel); candidate.Score += 1.0 / (60 + position); candidates[candidateId] = candidate;
+                        candidate.Reasons.Add(channel); candidate.Score += (channel == "lexical" ? LexicalWeight : 1.0) / (60 + position); candidates[candidateId] = candidate;
                     }
                     for (var index = 0; index < rows.Count; index++) Add(rows[index], "lexical", index + 1);
                     if (mode != "vector")
