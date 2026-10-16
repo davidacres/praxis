@@ -99,6 +99,19 @@ public sealed class RelationshipTests
         var unusedReference = new RoslynAnalyzer().Analyze("repo", sources, manifest);
         Assert.DoesNotContain(unusedReference.Relationships, edge => edge.Kind == "depends_on"
             && !unusedReference.Symbols.Single(symbol => symbol.Id == edge.TargetId).External);
+        var captured = Assert.Single(unusedReference.ConfiguredDependencies, dependency => dependency.TargetContextId == library.Id);
+        Assert.Equal(caller.Id, captured.ContextId); Assert.Equal("resolved", captured.Resolution);
+        Assert.Equal(unusedReference.Contexts.Single(context => context.Key == "library").Hash, captured.RequiredContextHash);
+        Assert.Contains("compilerReference", captured.ReferenceIdentity);
+        var metadataDependencies = unusedReference.ConfiguredDependencies.Where(dependency => dependency.TargetContextId is null).ToArray();
+        Assert.Equal(2, metadataDependencies.Length);
+        Assert.All(metadataDependencies, dependency =>
+        {
+            Assert.Contains(typeof(object).Assembly.GetName().FullName!, dependency.ReferenceIdentity);
+            Assert.Contains(metadata[0].ContentHash, dependency.ReferenceIdentity);
+            Assert.True(unusedReference.Symbols.Single(symbol => symbol.Id == dependency.TargetId).External);
+        });
+        Assert.Empty(Analyze("class Example {}", semantic: false).ConfiguredDependencies);
     }
 
     [Fact]

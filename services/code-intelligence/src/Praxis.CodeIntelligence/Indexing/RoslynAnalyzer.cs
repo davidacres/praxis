@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Indexing;
 /// <summary>In-memory compiler analysis from explicit inputs. Never evaluates a project or executes generators.</summary>
 public sealed class RoslynAnalyzer
 {
-    public const string AdapterVersion = "roslyn-5.9/v7";
+    public const string AdapterVersion = "roslyn-5.9/v8";
     private sealed record CompilationInput(PassiveProject Project, IndexedContext Context, CSharpCompilation Compilation, IReadOnlyList<Diagnostic> Diagnostics);
     private static readonly SymbolDisplayFormat SignatureFormat = SymbolDisplayFormat.CSharpErrorMessageFormat
         .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType | SymbolDisplayMemberOptions.IncludeType
@@ -372,11 +372,7 @@ public sealed class RoslynAnalyzer
                 // its first deterministic occurrence instead of multiplying every
                 // primitive-type use into another dependency edge.
                 if (!assemblyDependencies.Add((fact.ContextId, assembly))) continue;
-                var identity = Identity.Json(1, "external", repositoryId, "csharp", assembly, "module", "assemblyRoot");
-                targetRoot = "pci:sym:" + SourceFiles.Hash(Encoding.UTF8.GetBytes(identity))[7..];
-                symbols.TryAdd(targetRoot, new(targetRoot, identity, "", "module", assembly, assembly,
-                    "External assembly " + assembly, SourceFiles.Hash(Encoding.UTF8.GetBytes(identity)), "resolved", null, true,
-                    "Compiler-bound assembly dependency; no local declaration or package-name inference.", []));
+                targetRoot = AssemblyRoot(assembly);
             }
             else
             {
@@ -391,8 +387,45 @@ public sealed class RoslynAnalyzer
                 throw new IOException("INPUT_TOO_LARGE: semantic fact limit exceeded.");
         }
         relationships.AddRange(projectDependencies.Values);
+        var configured = new Dictionary<string, IndexedDependency>(StringComparer.Ordinal);
+        foreach (var input in inputs.Values.Where(input => input.Context.Resolution != "syntaxOnly"))
+        {
+            foreach (var reference in input.Project.References ?? [])
+            {
+                var target = inputs[reference];
+                var identity = Identity.Json("compilerReference", "project", input.Context.Id, input.Context.Hash, target.Context.Id, target.Context.Hash);
+                var id = Identity.Id("pci:dependency:", identity);
+                configured[id] = new(id, input.Context.Id, projectRoots[input.Context.Id], projectRoots[target.Context.Id], input.Context.Hash,
+                    input.Context.Resolution == "complete" && target.Context.Resolution == "complete" ? "resolved" : "possible",
+                    identity, target.Context.Id, target.Context.Hash);
+            }
+            var metadata = input.Project.Metadata ?? [];
+            var compilerReferences = input.Compilation.References.Take(metadata.Length).ToArray();
+            for (var index = 0; index < metadata.Length; index++)
+            {
+                if (input.Compilation.GetAssemblyOrModuleSymbol(compilerReferences[index]) is not IAssemblySymbol assembly) continue;
+                var identity = Identity.Json("compilerReference", "assembly", input.Context.Id, input.Context.Hash,
+                    assembly.Identity.ToString(), metadata[index].ContentHash);
+                var id = Identity.Id("pci:dependency:", identity);
+                configured[id] = new(id, input.Context.Id, projectRoots[input.Context.Id], AssemblyRoot(assembly.Identity.ToString()),
+                    input.Context.Hash, input.Context.Resolution == "complete" ? "resolved" : "possible", identity);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            if (calls.Count + relationships.Count + configured.Count > 200_000)
+                throw new IOException("INPUT_TOO_LARGE: semantic fact limit exceeded.");
+        }
         return new(inputs.Values.Select(x => x.Context).ToArray(), symbols.Values.OrderBy(x => x.Id, StringComparer.Ordinal).ToArray(), calls, diagnostics)
-            { Relationships = relationships };
+            { Relationships = relationships, ConfiguredDependencies = configured.Values.OrderBy(dependency => dependency.Id, StringComparer.Ordinal).ToArray() };
+
+        string AssemblyRoot(string assembly)
+        {
+            var identity = Identity.Json(1, "external", repositoryId, "csharp", assembly, "module", "assemblyRoot");
+            var id = "pci:sym:" + SourceFiles.Hash(Encoding.UTF8.GetBytes(identity))[7..];
+            symbols.TryAdd(id, new(id, identity, "", "module", assembly, assembly, "External assembly " + assembly,
+                SourceFiles.Hash(Encoding.UTF8.GetBytes(identity)), "resolved", null, true,
+                "Compiler-bound assembly dependency; no local declaration or package-name inference.", []));
+            return id;
+        }
 
         static IEnumerable<IOperation> Ancestors(IOperation operation)
         {

@@ -127,6 +127,14 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     AddOccurrenceEvidence(occurrenceId, Text(row, "provenance")!, Text(row, "resolution")!);
                     evidenceIds.Add(occurrenceId);
                 }
+                else if (Text(row, "evidence_key") is string reference)
+                {
+                    var evidenceId = Identity.Id("pci:configuration:", reference);
+                    evidence[evidenceId] = new JsonObject { ["id"] = evidenceId, ["provenance"] = "metadata",
+                        ["resolution"] = row["resolution"]!.DeepClone(), ["referenceIdentity"] = reference,
+                        ["description"] = "Compiler reference from validated captured inputs; not a source-use occurrence or runtime call." };
+                    evidenceIds.Add(evidenceId);
+                }
                 return new JsonObject { ["edgeId"] = row["edge_id"]!.DeepClone(), ["sourceSymbolId"] = row["source_symbol_id"]!.DeepClone(),
                     ["targetSymbolId"] = row["target_symbol_id"]!.DeepClone(), ["kind"] = row["kind"]!.DeepClone(), ["provenance"] = row["provenance"]!.DeepClone(),
                     ["resolution"] = row["resolution"]!.DeepClone(), ["evidenceIds"] = evidenceIds };

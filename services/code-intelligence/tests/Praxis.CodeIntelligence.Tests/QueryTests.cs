@@ -453,12 +453,38 @@ public sealed class QueryTests : IDisposable
             Assert.All(evidenceIds, id => Assert.Contains(trace["evidence"]!.AsArray(), evidence => evidence!["id"]!.GetValue<string>() == id));
             var owner = Assert.Single(trace["data"]!["nodes"]!.AsArray(), node => node!["symbolId"]!.GetValue<string>() == edge["sourceSymbolId"]!.GetValue<string>());
             var expectedPath = owner!["qualifiedName"]!.GetValue<string>() == "Library [synthetic projectRoot]" ? "Library.cs" : "Example.cs";
-            Assert.Contains(trace["evidence"]!.AsArray(), evidence => evidenceIds.Contains(evidence!["id"]!.GetValue<string>())
-                && evidence["path"]?.GetValue<string>() == expectedPath);
+            var proofs = trace["evidence"]!.AsArray().Where(evidence => evidenceIds.Contains(evidence!["id"]!.GetValue<string>())).ToArray();
+            if (proofs.Any(proof => proof!["fileId"] is not null))
+                Assert.Contains(proofs, evidence => evidence!["path"]?.GetValue<string>() == expectedPath);
+            else Assert.All(proofs, proof =>
+            {
+                Assert.Equal("metadata", proof!["provenance"]!.GetValue<string>());
+                Assert.Contains("compilerReference", proof["referenceIdentity"]!.GetValue<string>());
+                Assert.Null(proof["fileId"]);
+            });
         });
         File.WriteAllText(Path.Combine(root, "Example.cs"), "class Caller { int Run() => 1; }"); indexer.Index(repository);
         var after = Query("trace_flow", input);
-        Assert.DoesNotContain(after["data"]!["nodes"]!.AsArray(), node => node!["qualifiedName"]!.GetValue<string>() == "Library [synthetic projectRoot]");
+        Assert.Contains(after["data"]!["nodes"]!.AsArray(), node => node!["qualifiedName"]!.GetValue<string>() == "Library [synthetic projectRoot]");
+        // The unused compiler reference remains a configuration dependency, with
+        // metadata evidence rather than a fabricated source occurrence.
+        using (var read = database.Open(readOnly: true))
+        using (var command = read.CreateCommand())
+        {
+            command.CommandText = "SELECT count(*) FROM context_dependencies";
+            Assert.Equal(1L, command.ExecuteScalar());
+        }
+        File.WriteAllText(Path.Combine(root, "context.praxis.json"), JsonSerializer.Serialize(new PassiveManifest(1,
+            [new("library", "Library", ["Library.cs"], Metadata: references), new("project", "Caller", ["Example.cs"], Metadata: references)])));
+        indexer.Index(repository);
+        Assert.DoesNotContain(Query("trace_flow", input)["data"]!["nodes"]!.AsArray(), node => node!["qualifiedName"]!.GetValue<string>() == "Library [synthetic projectRoot]");
+        using (var read = database.Open(readOnly: true))
+        using (var command = read.CreateCommand())
+        {
+            command.CommandText = "SELECT count(*) FROM context_dependencies";
+            Assert.Equal(0L, command.ExecuteScalar());
+        }
+        Assert.False(indexer.Index(repository).Changed);
         Assert.Empty(database.Check());
     }
 

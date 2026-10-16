@@ -10,12 +10,15 @@ public sealed record IndexedSymbol(string Id, string Identity, string ContextId,
     IReadOnlyList<IndexedLocation> Locations);
 public sealed record IndexedCall(string Id, string ContextId, string FilePath, string Hash, string OwnerId, string? TargetId,
     int Start, int End, SourceRange Range, string Resolution, string Kind = "calls");
+public sealed record IndexedDependency(string Id, string ContextId, string OwnerId, string TargetId,
+    string InputRevision, string Resolution, string ReferenceIdentity, string? TargetContextId = null, string? RequiredContextHash = null);
 public sealed record IndexedDiagnostic(string ContextId, string? FilePath, string Code, string Severity, string Message, SourceRange? Range);
 public sealed record IndexedContext(string Key, string ProjectPath, string Id, string Hash, string Resolution, IReadOnlyList<SourceInput> Sources);
 public sealed record RepositoryAnalysis(IReadOnlyList<IndexedContext> Contexts, IReadOnlyList<IndexedSymbol> Symbols,
     IReadOnlyList<IndexedCall> Calls, IReadOnlyList<IndexedDiagnostic> Diagnostics)
 {
     public IReadOnlyList<IndexedCall> Relationships { get; init; } = [];
+    public IReadOnlyList<IndexedDependency> ConfiguredDependencies { get; init; } = [];
 }
 
 public static class Identity

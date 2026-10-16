@@ -248,6 +248,15 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                     Identity.Id("pci:edge:", call.Id, call.TargetId), call.ContextId, fileIds[call.FilePath], call.OwnerId, call.TargetId, call.Id,
                     call.Resolution, call.Hash, call.Id, call.Kind);
         }
+        foreach (var dependency in analysis.ConfiguredDependencies)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            batch.Execute("INSERT INTO edges VALUES($0,$1,NULL,$2,$3,NULL,'depends_on','compiler',$4,$5,$6)",
+                dependency.Id, dependency.ContextId, dependency.OwnerId, dependency.TargetId, dependency.Resolution,
+                dependency.InputRevision, dependency.ReferenceIdentity);
+            if (dependency.TargetContextId is not null)
+                batch.Execute("INSERT INTO context_dependencies VALUES($0,$1,$2)", dependency.ContextId, dependency.TargetContextId, dependency.RequiredContextHash);
+        }
         foreach (var diagnostic in analysis.Diagnostics)
             batch.Execute("INSERT INTO diagnostics VALUES($0,$1,$2,$3,$4,$5,$6,$7,$8)", "pci:diag:" + Guid.NewGuid().ToString("N"), id,
                 diagnostic.ContextId.Length == 0 ? null : diagnostic.ContextId, diagnostic.FilePath is null ? null : fileIds.GetValueOrDefault(diagnostic.FilePath),
@@ -363,7 +372,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 else { occurrences.Remove(id); removeCalls.Add(id); }
             }
         foreach (var id in removeCalls) batch.Execute("DELETE FROM occurrences WHERE occurrence_id=$0", id);
-        // Edges without occurrences are not emitted by this analyzer and must not survive.
+        // Captured configuration edges are replaced atomically from the new compiler inputs.
         batch.Execute("DELETE FROM edges WHERE occurrence_id IS NULL AND owner_context_id IN(SELECT c.context_id FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0)", repositoryId);
         return (locations, occurrences);
     }

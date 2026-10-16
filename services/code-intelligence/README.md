@@ -72,7 +72,7 @@ Open Settings → AI → Tools → Code intelligence. Register/index a root, ins
 
 Provider access is separate from local indexing. The consent dialog names the destination; only that provider receives the generated MCP server. Handover does not transfer another provider's grant. Revoke removes both the repository/client grant and its desktop MCP configuration. Existing provider navigation continues to work independently. Real adapter invocation is not yet claimed; the MCP SDK mock initialize/list/call and provider isolation checks pass.
 
-All eleven tools are read-only and described by `contracts.json`: `search_code`, `find_symbol`, `get_symbol`, `get_source`, `explain_symbol`, `get_callers`, `get_callees`, `trace_flow`, `find_related`, `summarize_project`, `get_index_status`. Static call edges are not execution guarantees. Compiler-bound type/member relationships, bounded possible dispatch, namespace imports, events, explicit throws and observed cross-project dependencies are supported. General delegate points-to flow and configuration-only project/package dependency graph edges are not implemented; static facts do not establish runtime execution.
+All eleven tools are read-only and described by `contracts.json`: `search_code`, `find_symbol`, `get_symbol`, `get_source`, `explain_symbol`, `get_callers`, `get_callees`, `trace_flow`, `find_related`, `summarize_project`, `get_index_status`. Static call edges are not execution guarantees. Compiler-bound type/member relationships, bounded possible dispatch, namespace imports, events, explicit throws and observed cross-project dependencies are supported. Captured project and assembly references also have configuration-backed dependency edges with metadata evidence, including unused references. General delegate points-to flow and NuGet package-name inference remain unsupported; static facts do not establish runtime execution.
 
 ## Ownership, operations and recovery
 
@@ -140,3 +140,7 @@ node services/code-intelligence/scripts/benchmark-query-matrix.mjs \
 ```
 
 The output parent must exist and be outside the retained fixture. Existing output or raw-run directories are refused. Use `--runs 1 --categories exact` for a pilot; this does not satisfy the five-run protocol. Actual watcher edit timing has a separate `benchmark-watcher.mjs` runner; neither runner implies concurrent-edit or reference-machine qualification.
+
+### Configuration dependency evidence
+
+A `depends_on` edge may describe an observed source use or a compiler reference from validated captured inputs. Source-use edges retain the exact occurrence/hash/range. Configuration edges instead return metadata evidence containing context/reference hashes and the defining project or actual assembly identity; they have no fabricated file, range or source-use claim. Unused references remain configuration dependencies until the captured reference is removed. Assembly identity includes version/culture/public-key identity and does not infer a NuGet package name. Compiler project references also persist the target's conservative full-context dependency stamp, published atomically with the graph. Syntax-only contexts do not emit configured compiler dependencies; partial contexts label them possible.

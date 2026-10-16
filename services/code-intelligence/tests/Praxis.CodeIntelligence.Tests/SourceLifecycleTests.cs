@@ -82,7 +82,14 @@ public sealed class SourceLifecycleTests
             Assert.Equal("SYMBOL_NOT_FOUND", Source(current)["error"]!["code"]!.GetValue<string>());
             store.Activate(repository, profile, CancellationToken.None); AssertCoverageAndNoGhosts(current);
             using var connection = database.Open(readOnly: true); using var command = connection.CreateCommand();
-            command.CommandText = "SELECT (SELECT count(*) FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.name IN('Before','After','Caller','Example'))+(SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.name IN('Before','After','Caller','Example'))+(SELECT count(*) FROM edges)+(SELECT count(*) FROM aliases)+(SELECT count(*) FROM locations)";
+            command.CommandText = "SELECT (SELECT count(*) FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.name IN('Before','After','Caller','Example'))+(SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.name IN('Before','After','Caller','Example'))+(SELECT count(*) FROM edges WHERE occurrence_id IS NOT NULL)+(SELECT count(*) FROM aliases)+(SELECT count(*) FROM locations)";
+            Assert.Equal(0L, command.ExecuteScalar());
+            command.CommandText = "SELECT count(*) FROM edges WHERE occurrence_id IS NULL AND kind='depends_on'";
+            Assert.Equal(1L, command.ExecuteScalar()); // The captured CoreLib reference is still configured.
+            File.WriteAllText(Path.Combine(root, "context.praxis.json"), JsonSerializer.Serialize(new PassiveManifest(1,
+                [new("project", "Project", [])])));
+            Assert.True(indexer.Index(repository).Changed);
+            command.CommandText = "SELECT count(*) FROM edges";
             Assert.Equal(0L, command.ExecuteScalar()); Assert.Empty(database.Check());
         }
         finally { Directory.Delete(temporary, recursive: true); }
