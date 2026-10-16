@@ -33,14 +33,15 @@ public sealed class DurableScheduler(IndexDatabase database, TimeProvider? timeP
         transaction.Commit(); return id;
     }
 
-    public LeasedJob? LeaseNext()
+    // includeEmbedding=false leaves embedding jobs pending (memory pressure).
+    public LeasedJob? LeaseNext(bool includeEmbedding = true)
     {
         using var connection = database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
         RecoverExpired(connection, transaction);
         LeasedJob? job;
         using (var command = connection.Command(transaction,
             "SELECT j.job_id,j.repository_id,j.kind,j.payload_json,j.desired_revision,j.attempts FROM jobs j JOIN repositories r ON r.repository_id=j.repository_id "
-            + "WHERE j.state='pending' AND j.available_utc<=$0 AND r.state!='paused' ORDER BY CASE j.kind WHEN 'index' THEN 0 ELSE 1 END,j.available_utc,j.job_id LIMIT 1", Now))
+            + "WHERE j.state='pending' AND j.available_utc<=$0 AND r.state!='paused' AND ($1 OR j.kind!='embed') ORDER BY CASE j.kind WHEN 'index' THEN 0 ELSE 1 END,j.available_utc,j.job_id LIMIT 1", Now, includeEmbedding))
         using (var reader = command.ExecuteReader())
             job = reader.Read() ? new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetInt64(4), Guid.NewGuid().ToString("N"), reader.GetInt32(5) + 1) : null;
         if (job is not null)

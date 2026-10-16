@@ -51,4 +51,35 @@ public sealed class MemoryPressureTests
         }
         finally { MemoryPressure.ResidentBytes = original; Directory.Delete(root, recursive: true); }
     }
+
+    [LocalModelFact]
+    public async Task PressureDefersBackgroundInferenceUntilMemoryFalls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pci-memory-inference-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        var original = MemoryPressure.ResidentBytes;
+        try
+        {
+            var source = Path.Combine(root, "source"); Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "Example.cs"), "public class Example { public int Run() => 1; }");
+            using var runtime = new ServiceRuntime(Path.Combine(root, "data"));
+            var id = runtime.Indexer.Register(source); runtime.Indexer.Index(id);
+            var fingerprint = runtime.Dispatch(new JsonObject { ["action"] = "model-install", ["bundle"] = Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE") }, CancellationToken.None)["data"]!["fingerprint"]!.GetValue<string>();
+            string ModelState()
+            {
+                using var read = runtime.Database.Open(readOnly: true); using var command = read.CreateCommand();
+                command.CommandText = "SELECT state FROM repository_models WHERE model_fingerprint=$fingerprint"; command.Parameters.AddWithValue("$fingerprint", fingerprint);
+                return (string)command.ExecuteScalar()!;
+            }
+            MemoryPressure.ResidentBytes = () => MemoryPressure.SoftLimitBytes;
+            Assert.Null(runtime.Dispatch(new JsonObject { ["action"] = "model-activate", ["repositoryId"] = id, ["fingerprint"] = fingerprint }, CancellationToken.None)["error"]);
+            await runtime.MaintainAsync(CancellationToken.None); await runtime.MaintainAsync(CancellationToken.None);
+            Assert.Equal("building", ModelState());
+
+            MemoryPressure.ResidentBytes = () => MemoryPressure.SoftLimitBytes - 1;
+            await runtime.MaintainAsync(CancellationToken.None);
+            Assert.Equal("active", ModelState());
+            Assert.Empty(runtime.Database.Check());
+        }
+        finally { MemoryPressure.ResidentBytes = original; Directory.Delete(root, recursive: true); }
+    }
 }

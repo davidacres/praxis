@@ -214,7 +214,8 @@ public sealed class ServiceRuntime : IDisposable
 
     private async Task RunNextJobAsync(CancellationToken cancellationToken)
     {
-        var job = Scheduler.LeaseNext(); if (job is null) return;
+        // §31.3: at the memory soft limit, do not start background inference.
+        var job = Scheduler.LeaseNext(includeEmbedding: !MemoryPressure.Active); if (job is null) return;
         using var work = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); activeJobs[job.RepositoryId] = work;
         using var heartbeatCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var heartbeat = Task.Run(async () =>

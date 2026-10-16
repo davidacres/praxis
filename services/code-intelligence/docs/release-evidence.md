@@ -661,3 +661,5 @@ Faster queries meant about 45% more queries ran during the edits, overlapping mo
 - Edits under load: publish p50/max 25.6/33.3 s, refresh p50/max 3.6/11.1 s.
 
 Query-only workloads peak around 0.85 GiB and never reach the soft limit, so the 40/40 plan-5 query matrix is unaffected. Admission does not cap Roslyn analysis itself; §31.3 allows large projects to exceed the reference profile with reported degraded capacity. That reporting, and stopping background inference at the soft limit, are not implemented.
+
+Background inference deferral (§31.3): at or above the memory soft limit the scheduler leases only non-embedding jobs, so queued model activation and vector refresh stay pending (repository model `building`) until resident memory falls; indexing continues. `MemoryPressureTests.PressureDefersBackgroundInferenceUntilMemoryFalls` uses the real model and fails if the gate is removed. 118 C# tests pass, zero skipped.
