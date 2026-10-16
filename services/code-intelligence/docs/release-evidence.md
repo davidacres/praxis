@@ -9,6 +9,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Durable work and edit updates | Real 5k watcher: 25 edits, structural p95 1.676 s, semantic upper-bound p95 0.620 s, no errors | This measurement predates adapter v8; five-run/concurrent-edit protocol remains open |
 | MCP | Four local SDK/stdio tests pass, including native grants/errors and controlled in-flight child cancellation | Actual live provider adapter/inference cancellation qualification remains open |
 | Disk full | Actual full-volume qualification on macOS (64 MiB APFS image filled to ENOSPC): retryable `DISK_FULL`, reads keep serving the committed index, `doctor` reports paused writes with zero integrity findings, automatic recovery about 31 s after space returns; `SQLITE_FULL` fault test on every platform | Windows/Linux actual-volume runs; owner-start-on-already-full volume relies on the nearly-full heuristic |
+| Crash recovery | 20 SIGKILLs at seeded random points 0–2.5 s after an edit (2,000 symbols with vectors): integrity clean after every restart, every edit published, full vector coverage; recovery p50 0.8 s, max 2.1 s | macOS only (SIGKILL); a first run failed (60 s lease waits; stale index reported current) and is retained |
 | JSON Schema | Fresh final-code batch: 132 responses across all 11 tools validate | Repeat for future wire changes |
 | Application/native packaging | Full application build and current native owner/SQLite/ONNX/IPC packaging smoke pass locally | Latest release-wide platform/UI matrix remains open |
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
@@ -706,3 +707,5 @@ Fixes:
 - Before publishing its endpoint, the owner queues reconciliation for every unpaused repository (`ScheduleStartupReconciliation`), so status shows pending work from the first request.
 
 New `SchedulerTests` and `HostTests` cases cover both. 120 C# tests pass, zero skipped. The stress rerun against the fixed package follows.
+
+Stress rerun against the fixed package (`evaluations/macos-arm64-crash-recovery.praxis.json`, same seed and protocol): **all four gates pass**. All 20 kills hit a live owner; integrity was clean after every restart and recovery; every edit was published, including short-delay kills; and recovery took p50 821 ms, p95 2,090 ms, max 2,092 ms (before: 11 of 20 about 60 s, 3 of 20 stale).

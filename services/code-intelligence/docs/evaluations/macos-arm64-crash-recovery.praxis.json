@@ -1,0 +1,219 @@
+{
+  "version": 1,
+  "platform": "darwin",
+  "architecture": "arm64",
+  "timestampUtc": "2026-10-16T20:04:51.083Z",
+  "symbols": 2000,
+  "iterations": 20,
+  "seed": 4211,
+  "measurement": "Packaged CLI and auto-started owner; SIGKILL at a random delay (0–2.5 s) after each source edit",
+  "samples": [
+    {
+      "iteration": 1,
+      "delayMs": 2207,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 590.6499580000018,
+      "currentHash": "sha256:fc9e6f425a8afd21d04de24f89a9e3c858eacbf46d7fd49e5a61d098011abf99",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 2,
+      "delayMs": 2120,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 592.098750000001,
+      "currentHash": "sha256:945978a065ccf3011f71d137e1d9f0b516d75168183acd4c539807975ff43703",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 3,
+      "delayMs": 1550,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 2092.2525000000023,
+      "currentHash": "sha256:e7aa6ffa03335702faf508b82d0ba11f29c125bf58d997f5b9bd8948c9fc88f3",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 4,
+      "delayMs": 171,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 2080.374582999997,
+      "currentHash": "sha256:560d01281fe30a575f82ba9cff01fa1417788238244e271e7e8f02b21528c9c2",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 5,
+      "delayMs": 884,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 2086.310833000003,
+      "currentHash": "sha256:7af947b78cfb0e7089d557474fa6187f4d2faef4e1ad7f501a8b8d3732195b6b",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 6,
+      "delayMs": 2100,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 600.0577080000003,
+      "currentHash": "sha256:8d204a67449579f96e6971aa2bcda53c937f190993b050da99952c4bdb400ecb",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 7,
+      "delayMs": 1868,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 590.0317090000026,
+      "currentHash": "sha256:b29672e939448bd76fecf92f3280463532053706e266371c17ce3a85e9e19fb8",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 8,
+      "delayMs": 475,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 2090.084750000002,
+      "currentHash": "sha256:764da1de7a5b37bc99f95ec262be8112de99224bf737391d741e02923f320c5f",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 9,
+      "delayMs": 934,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 2015.036374999996,
+      "currentHash": "sha256:f8f731792a3fb194362cabc35e5119711870014bd8dc12f6837879bef36c4c53",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 10,
+      "delayMs": 755,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 2013.0307079999984,
+      "currentHash": "sha256:ede6bb0abb4ee777c84a4ea0a6448b435bde9db4972e3a4fdb0c7eeedb53e586",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 11,
+      "delayMs": 772,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 2081.800374999999,
+      "currentHash": "sha256:785739617ec320a5c3f4c2e2d92e5d3a6994ffaf6857342806959d29413b9329",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 12,
+      "delayMs": 1861,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 605.8019589999894,
+      "currentHash": "sha256:8513d960157f69767d07a08f4cb133f18729b12cde0d09abd7aaf755fb297dd7",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 13,
+      "delayMs": 1686,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 820.9318340000027,
+      "currentHash": "sha256:bb41f14f61282596fe6ed8cc2536cbb536fd9e91bbfad5f58ceda3c87c6f0f98",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 14,
+      "delayMs": 1270,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 2006.9214159999974,
+      "currentHash": "sha256:8d3ef7f76543874d26bafab79aad7a8a985ba35bccea05a5628a9fc675e5160e",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 15,
+      "delayMs": 1696,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 608.4817080000066,
+      "currentHash": "sha256:261caea32bb481ee895c2f2f915cc7daa5700875ff4a44ad78fe3591d37145ae",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 16,
+      "delayMs": 1228,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 2085.835459000009,
+      "currentHash": "sha256:d1d25de6ef19380a62d57691e659b217b1f15c34511e952800f125c61fd6e085",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 17,
+      "delayMs": 2176,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 592.3594589999993,
+      "currentHash": "sha256:fcab1da45bb06971870bd97247e1441bb0ca05c12d72d475a8e45c88a9ed8177",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 18,
+      "delayMs": 2099,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 597.8953330000077,
+      "currentHash": "sha256:71e7e190421cc03ee7381dea59bb32dc8e78ec6d8af6c3d58f12e5c0b6264f85",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 19,
+      "delayMs": 1596,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 821.2777090000018,
+      "currentHash": "sha256:f0c4cd052ea7a0445b8c4c2567c0eefba0ec73e9afd8d523898e1b3162aade6e",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    },
+    {
+      "iteration": 20,
+      "delayMs": 113,
+      "killed": true,
+      "integrityAfterRestart": [],
+      "recoveredMs": 2029.3489160000026,
+      "currentHash": "sha256:99c89e981d5ed38b5783ca4f8874067ca5898afaec15ee32da7979756d329a54",
+      "contentCurrent": true,
+      "integrityAfterRecovery": []
+    }
+  ],
+  "gates": {
+    "everyIterationKilledAnOwner": true,
+    "integrityCleanAfterEveryRestart": true,
+    "everyIterationRecovered": true,
+    "editedContentPublished": true
+  },
+  "passed": true
+}
