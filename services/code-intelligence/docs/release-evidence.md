@@ -374,3 +374,18 @@ The selected mapping-v6/scorer-v4 binary completed independent one-reader and fo
 Implemented coding gaps closed in this continuation: guarded FTS publication and watcher scheduling, exact bounded top-k ranking, source-observed and captured configuration project/assembly dependencies with distinct evidence, in-flight MCP/error tests, shared recovery-dialog keyboard handling and saved-file UI scope. The latest service suite is 112/0/0, final native CI is green on all three hosts, four focused desktop tests pass, and fixed-corpus quality passes without a semantic-recall-gain claim.
 
 **M3 remains incomplete.** Remaining work is performance improvement for broad four-reader queries and the 250 ms retrieval-only target; full repeated/category/concurrent-edit/reference-machine qualification; live provider-adapter/platform/accessibility qualification; and the wider desktop failures recorded in the baseline comparison. No later language or generated-explanation milestone is required for this C# scope. All completed changes and failed/successful evidence are committed; no local timed service/benchmark is intentionally left running.
+
+## Ranked-validation vector search checkpoint — 16 October
+
+`ModelStore.Candidates` now scores ready vectors with no symbol/target joins, keeps a ranked window of 1024 symbols, and validates candidates in rank order (symbol revision, representation target, set completeness, context/kind/project filters) with a prepared point query until 100 validate. If fewer than 100 validate and the window was saturated, if the chunk capacity is exceeded, or if the database holds more than one repository, the previous exhaustive validated scan (`ExhaustiveCandidates`, unchanged) decides. Results are therefore identical to the exhaustive scan for any window size; a new real-model test compares both paths across filters, windows (100/128/1024) and with the 30 and 100 best-ranked symbols made ineligible (forcing fallback). 113 C# tests pass, zero skipped, with SDK and model.
+
+Motivation (private immutable copy, sqlite3): the symbols/representation_targets point lookups, not scoring or blob reads, dominated the old scan (~310 ms of the join vs ~39 ms for vector blobs alone). Covering indexes on those tables gave only ~25 ms and were not adopted; no schema change.
+
+Single terminology pilot, same retained 50k fixture and query set hash as the earlier pilot (`benchmarks/macos-arm64-50000-ranked-validation-terminology-pilot*`), zero errors:
+
+| Readers | Hybrid p95 before → after | Retrieval p95 (after) | Vector scan p95 (after) |
+|---|---|---|---|
+| 1 | 353.665 → 228.496 ms | 221.922 ms (passes 250) | 126.157 ms |
+| 4 | 507.817 → 365.737 ms | 345.232 ms (**fails 250**) | 225.112 ms |
+
+One run, terminology only: not the five-run/all-category/concurrent-edit protocol, and not yet re-measured on the full-process memory run. Four-reader retrieval-only still fails; the lexical arm (74–98 ms p95) is now the next largest component.

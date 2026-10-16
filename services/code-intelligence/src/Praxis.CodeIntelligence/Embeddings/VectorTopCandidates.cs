@@ -8,7 +8,8 @@ internal sealed class VectorTopCandidates(int capacity = 100)
         var score = left.Score.CompareTo(right.Score);
         return score != 0 ? score : StringComparer.Ordinal.Compare(right.SymbolId, left.SymbolId);
     });
-    private readonly int limit = capacity is >= 1 and <= 100 ? capacity : throw new ArgumentOutOfRangeException(nameof(capacity));
+    internal const int MaximumCapacity = 4096;
+    private readonly int limit = capacity is >= 1 and <= MaximumCapacity ? capacity : throw new ArgumentOutOfRangeException(nameof(capacity));
     private readonly SortedSet<VectorCandidate> ranked = new(Order);
     private readonly Dictionary<string, VectorCandidate> members = new(StringComparer.Ordinal);
     internal int Count => members.Count;

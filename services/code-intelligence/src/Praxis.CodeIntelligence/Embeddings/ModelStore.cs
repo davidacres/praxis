@@ -146,7 +146,71 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         }
     }
 
-    public static IReadOnlyList<VectorCandidate> Candidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000)
+    internal const int DefaultValidationWindow = 1024;
+
+    /// <summary>
+    /// Exact top-100 of complete, current, eligible vectors. Validity (symbol
+    /// revision, representation target, completeness, filters) is checked only
+    /// for candidates in rank order after a join-free score pass over ready
+    /// sets. If fewer than 100 candidates validate and the ranked window was
+    /// saturated, or the chunk capacity is exceeded, the full validated scan
+    /// decides instead, so the result never depends on the window size.
+    /// </summary>
+    public static IReadOnlyList<VectorCandidate> Candidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000, int validationWindow = DefaultValidationWindow)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LocalModel.ValidateVector(query.Vector);
+        var window = new VectorTopCandidates(Math.Clamp(validationWindow, 100, VectorTopCandidates.MaximumCapacity));
+        var scanned = 0; var bytes = new byte[LocalModel.Dimensions * 4];
+        // The score pass has no repository predicate (that needs the symbols join
+        // this path avoids), so it is only valid when every vector is this repository's.
+        if (Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM repositories")) != 1)
+            return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks);
+        using (var scan = connection.Command(transaction,
+            "SELECT e.symbol_id,v.values_blob FROM embedding_sets e JOIN vectors v ON v.set_id=e.set_id WHERE e.model_fingerprint=$0 AND e.state='ready' AND v.dimensions=384 AND length(v.values_blob)=1536", query.Fingerprint))
+        using (var reader = scan.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                if (++scanned > maximumChunks) return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks);
+                if ((scanned & 127) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if (reader.GetBytes(1, 0, bytes, 0, bytes.Length) != bytes.Length) continue;
+                if (!VectorScoring.TryScore(bytes, query.Vector, out var score)) continue;
+                if (window.CanImprove(score)) window.Add(reader.GetString(0), score);
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var ranked = window.Results();
+        // Fewer scored chunks than the window cannot have evicted anything,
+        // so exhausting the ranking enumerates every possible candidate.
+        var windowSaturated = window.Count >= Math.Clamp(validationWindow, 100, VectorTopCandidates.MaximumCapacity);
+        var parameters = new List<object?> { repositoryId, query.Fingerprint, contextId, null };
+        var filter = "";
+        foreach (var (column, values) in new[] { ("s.kind", kinds), ("c.project_id", projectIds) })
+        {
+            if (values is null || values.Count == 0) continue;
+            var names = values.Select(value => { var parameter = "$" + parameters.Count; parameters.Add(value); return parameter; });
+            filter += " AND " + column + " IN(" + string.Join(',', names) + ")";
+        }
+        var contextJoin = projectIds is { Count: > 0 } ? " JOIN contexts c ON c.context_id=s.defining_context_id" : "";
+        using var validate = connection.Command(transaction,
+            "SELECT 1 FROM embedding_sets e JOIN representation_targets r ON r.symbol_id=e.symbol_id AND r.model_fingerprint=e.model_fingerprint JOIN symbols s ON s.symbol_id=e.symbol_id" + contextJoin + " WHERE e.symbol_id=$3 AND s.repository_id=$0 AND e.model_fingerprint=$1 AND ($2 IS NULL OR s.defining_context_id=$2) AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND r.eligibility='eligible' AND (SELECT count(*) FROM vectors complete WHERE complete.set_id=e.set_id)=e.expected_chunks" + filter, parameters.ToArray());
+        validate.Prepare();
+        var current = new List<VectorCandidate>(100);
+        foreach (var candidate in ranked)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            validate.Parameters["$3"].Value = candidate.SymbolId;
+            if (validate.ExecuteScalar() is null) continue;
+            current.Add(candidate);
+            if (current.Count == 100) return current;
+        }
+        return windowSaturated
+            ? ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks)
+            : current;
+    }
+
+    internal static IReadOnlyList<VectorCandidate> ExhaustiveCandidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000)
     {
         cancellationToken.ThrowIfCancellationRequested();
         LocalModel.ValidateVector(query.Vector); var parameters = new List<object?> { repositoryId, query.Fingerprint, contextId };
