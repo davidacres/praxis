@@ -286,3 +286,9 @@ Mapping version 5 selects 576 MiB. A retained post-edit 50k snapshot on schema 4
 The pre-optimization native 5k actual-watcher baseline completed all 25 edits without error: structural p95 2981.2815 ms fails 2 seconds; semantic-refresh upper-bound p95 689.8446 ms passes 10 seconds. Its raw report is retained. Schema-4 comparison remains pending.
 
 CI 38896614816 passed macOS/Linux. Windows completed every watcher sample, then failed benchmark shutdown because a signal-terminated child retains null `exitCode`. Cleanup now checks both exit and signal status, subscribes before signalling and bounds escalation waits so failure evidence can still be saved. This is a benchmark cleanup fix, not a Windows watcher failure. A fresh three-host run is required.
+
+## Watcher scheduling and in-flight MCP verification
+
+The schema-4 FTS optimization completed 25 actual-watcher edits on 5k symbols without errors. Structural p95 fell from 2981.2815 ms to 2127.0310 ms, still failing 2 seconds; semantic refresh p95 was 634.9363 ms. Raw `macos-arm64-5000-watcher-fts-guard.praxis.json` preserves that failure. The owner now checks maintenance every 100 ms instead of 500 ms and watcher debounce is 350 ms (within the specification’s 300–750 ms interval), retaining the 2-second maximum coalescing window and 60-second reconciliation. Timed qualification follows separately.
+
+All 109 provisioned-model/SDK service tests pass; 131 captured responses validate across all 11 schemas. Core compilation and all four MCP fixtures pass with zero skips. The real native stdio fixture now verifies invalid arguments and successful subsequent queries. A separate real stdio/SDK fixture waits for an RPC child to start, cancels the in-flight request through MCP, verifies process termination and checks that error/list requests still work. Its child service is deliberately controlled, so this proves bridge cancellation, not paid/live provider or native inference cancellation under load.

@@ -34,7 +34,8 @@ public static class OwnerService
             File.Move(staging, rendezvous, overwrite: true);
             var maintenance = Task.Run(async () =>
             {
-                using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(500));
+                // Keep scheduler quantization below the watcher debounce budget.
+                using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
                 while (await timer.WaitForNextTickAsync(lifetime.Token))
                 {
                     if (active.IsEmpty && DateTimeOffset.UtcNow - lastActivity > TimeSpan.FromMinutes(5)) { lifetime.Cancel(); break; }

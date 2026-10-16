@@ -43,7 +43,7 @@ public sealed class RepositoryMonitor : IDisposable
         }
         var ready = new List<string>();
         foreach (var item in dirty)
-            if (live.ContainsKey(item.Key) && (now - item.Value.Last >= TimeSpan.FromMilliseconds(500) || now - item.Value.First >= TimeSpan.FromSeconds(2)))
+            if (live.ContainsKey(item.Key) && (now - item.Value.Last >= TimeSpan.FromMilliseconds(350) || now - item.Value.First >= TimeSpan.FromSeconds(2)))
                 if (((ICollection<KeyValuePair<string, Dirty>>)dirty).Remove(item)) ready.Add(item.Key);
         return ready;
     }

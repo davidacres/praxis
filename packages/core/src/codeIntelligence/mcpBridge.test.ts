@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
@@ -60,6 +60,10 @@ test('native stdio MCP reads indexed source only with the selected provider gran
     const otherRepository = await client.callTool({ name: 'get_index_status', arguments: { repositoryId: 'ungranted-repository' } });
     assert.equal(otherRepository.isError, true);
     assert.equal((content(otherRepository).error as { code: string }).code, 'ACCESS_DENIED');
+    const invalid = await client.callTool({ name: 'search_code', arguments: { repositoryId, query: 'McpNativeExample', mode: 'unsupported' } });
+    assert.equal(invalid.isError, true);
+    assert.equal((content(invalid).error as { code: string }).code, 'INVALID_ARGUMENT');
+    assert.equal((await query()).isError, false, 'An invalid request must not break the native MCP session');
     await invoke('revoke', repositoryId, '--client', 'codex');
     const revoked = await query(); assert.equal(revoked.isError, true);
     assert.equal((content(revoked).error as { code: string }).code, 'ACCESS_DENIED');
@@ -105,4 +109,50 @@ test('provider handover cannot inherit a different code egress grant', () => {
   assert.equal(mcpServerAppliesToProvider(scoped, 'codex'), true); assert.equal(mcpServerAppliesToProvider(scoped, 'claude-code'), false);
   assert.equal(mcpServerAppliesToProvider({ ...scoped, env: undefined }, 'codex'), false);
   assert.equal(mcpServerAppliesToProvider({ ...generic, args: ['/code/codeIntelligence/mcpBridge.js'] }, 'codex'), false);
+});
+
+
+test('stdio MCP cancellation stops an in-flight RPC child and preserves the session', { timeout: 20_000 }, async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'pci-cancel-'));
+  const mock = path.join(directory, 'rpc.cjs');
+  const marker = path.join(directory, 'active.praxis.json');
+  await writeFile(mock, `const fs=require('node:fs');let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>{const request=JSON.parse(input);if(request.tool==='search_code'){fs.writeFileSync(${JSON.stringify(marker)},JSON.stringify({pid:process.pid}));setInterval(()=>{},1000);}else console.log(JSON.stringify({schemaVersion:'1.2',repositoryId:'repo',indexGeneration:null,queryEpoch:null,error:{code:'INVALID_ARGUMENT',message:'Fixture rejection',retryable:false}}));});`);
+  const contractsPath = path.resolve(__dirname, '../../../../services/code-intelligence/contracts.json');
+  const client = new Client({ name: 'cancellation-fixture', version: '1.0' });
+  const transport = new StdioClientTransport({ command: process.execPath,
+    args: [path.join(__dirname, 'mcpBridge.js'), process.execPath, mock, directory, 'repo', 'codex', contractsPath], stderr: 'pipe' });
+  transport.stderr?.on('data', () => {});
+  let pid: number | undefined;
+  const running = (): boolean => {
+    if (pid === undefined) return false;
+    try { process.kill(pid, 0); return true; } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+      throw error;
+    }
+  };
+  try {
+    await client.connect(transport);
+    const controller = new AbortController();
+    const request = client.callTool({ name: 'search_code', arguments: { repositoryId: 'repo', query: 'wait', mode: 'lexical' } }, undefined, { signal: controller.signal });
+    const rejected = assert.rejects(request, /abort|cancel/i);
+    for (let attempt = 0; attempt < 100; attempt++) {
+      try { pid = (JSON.parse(await readFile(marker, 'utf8')) as { pid: number }).pid; break; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.ok(pid, 'Cancellation must occur after the RPC child starts');
+    assert.ok(running());
+    controller.abort();
+    await rejected;
+    for (let attempt = 0; attempt < 100 && running(); attempt++) await new Promise(resolve => setTimeout(resolve, 25));
+    assert.equal(running(), false, 'MCP cancellation must terminate the in-flight RPC child');
+    const response = await client.callTool({ name: 'get_index_status', arguments: { repositoryId: 'repo' } });
+    assert.equal(response.isError, true);
+    assert.equal(((response.structuredContent as Record<string, unknown>).error as { code: string }).code, 'INVALID_ARGUMENT');
+    assert.equal((await client.listTools()).tools.length, 11);
+  } finally {
+    await client.close();
+    if (running()) process.kill(pid!, 'SIGKILL');
+    await rm(directory, { recursive: true, force: true });
+  }
 });
