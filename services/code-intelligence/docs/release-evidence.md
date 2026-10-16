@@ -460,3 +460,15 @@ Still open:
 - Recovery, stress and disk-full qualification.
 - The two runtime identifiers with no execution evidence (Linux arm64, macOS x64).
 - The broader desktop suite.
+
+## Schema-5 edit-publication cost — 16 October
+
+The packaged native owner, using the actual watcher, ran 25 edits on the same 5k corpus hash as `macos-arm64-5000-watcher-v8-scorer4` (earlier today, same Mac), with zero errors. The packaging step's native IPC smoke passed. Result: `benchmarks/macos-arm64-5000-watcher-schema5.praxis.json`.
+
+| Upper bound | v8/scorer-4 p95 | Schema 5 p95 |
+|---|---|---|
+| Structural detection (gate ≤2 s) | 1675.3 ms | 1763.3 ms (passes) |
+| Semantic refresh (gate ≤10 s) | 609.1 ms | 642.8 ms (passes) |
+| Edit to vectors | 2059.1 ms | 2215.3 ms |
+
+The duplicated vector writes cost roughly 5–8% at p95 in this single comparison; run-to-run noise was not measured. The structural margin to the 2 s gate falls from about 325 ms to about 237 ms.
