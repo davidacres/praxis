@@ -1,0 +1,163 @@
+{
+  "Version": 1,
+  "ThresholdDefinitionVersion": 2,
+  "ReadMappingVersion": 6,
+  "ReadPageCacheVersion": 2,
+  "ReadPageCacheKiB": 65536,
+  "MaximumReadMappingBytes": 536870912,
+  "SearchCountCacheVersion": 1,
+  "SearchPlanVersion": 6,
+  "RankingProfile": "rrf-k60-lexical64-vector1-alias0.5-v3",
+  "LexicalWeight": 64,
+  "AliasWeight": 0.5,
+  "VectorScorerVersion": 4,
+  "VectorQueryPlanVersion": 4,
+  "StorageSchemaVersion": 5,
+  "AdapterVersion": "roslyn-5.9/v8",
+  "OnnxInterOpThreads": 1,
+  "OnnxIntraOpThreads": 4,
+  "TimestampUtc": "2026-10-16T15:18:02.363464+00:00",
+  "ExecutionMode": "Direct service API; owner/MCP transport excluded",
+  "BuildConfiguration": "Release",
+  "OperatingSystem": "macOS 26.6.0",
+  "Architecture": "Arm64",
+  "LogicalProcessors": 12,
+  "Runtime": ".NET 10.0.13",
+  "Sqlite": "3.53.3",
+  "ModelFingerprint": "sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba",
+  "RequestedSymbols": 49999,
+  "PublishedSymbols": 50001,
+  "PublishedSourceSymbols": 49999,
+  "SourceFiles": 500,
+  "CorpusHash": "sha256:f14bc8736fbc2bbcf4c984a76c488edf6c55324d0cadd3b0a0f2581ba2a99993",
+  "ReferenceAssemblyHash": "sha256:b435af0b749740a312891b3ab0d014091b1b75573dfede5b1c3eff96c533332b",
+  "InitialIndexMs": 17611.3716,
+  "InitialVectorsMs": 520184.6153,
+  "Lexical": {
+    "Readers": 4,
+    "Count": 1600,
+    "P50Ms": 5.575,
+    "P95Ms": 6.4671,
+    "MaximumMs": 7.7667,
+    "P99Ms": 7.0158,
+    "Errors": 0,
+    "WarmupErrors": 0,
+    "ErrorMessages": [],
+    "QueryPhases": {
+      "Basis": "Direct API phases; no owner admission queue or wire serialization. Model query includes model lookup and inference-lock wait. Retrieval includes SQL/vector/ranking/evidence. Response preparation includes budget serialization. Vector scan is a retrieval subcomponent.",
+      "Count": 1600,
+      "Errors": 0,
+      "ModelQueryIncludingLock": {
+        "Count": 1600,
+        "P50Ms": 9.999999999999983E-05,
+        "P95Ms": 0.00010000000000000026,
+        "P99Ms": 0.0002000000000000001,
+        "MaximumMs": 0.0004000000000000002
+      },
+      "Retrieval": {
+        "Count": 1600,
+        "P50Ms": 5.1383,
+        "P95Ms": 5.9644,
+        "P99Ms": 6.4873,
+        "MaximumMs": 7.273599999999999
+      },
+      "ExactVectorScan": {
+        "Count": 1600,
+        "P50Ms": 0,
+        "P95Ms": 0,
+        "P99Ms": 0,
+        "MaximumMs": 0
+      },
+      "ResponsePreparation": {
+        "Count": 1600,
+        "P50Ms": 0.4546000000000001,
+        "P95Ms": 0.593,
+        "P99Ms": 0.7391999999999994,
+        "MaximumMs": 1.7492999999999999
+      },
+      "Total": {
+        "Count": 1600,
+        "P50Ms": 5.5736,
+        "P95Ms": 6.4645,
+        "P99Ms": 7.0146,
+        "MaximumMs": 7.766
+      }
+    }
+  },
+  "Hybrid": {
+    "Readers": 4,
+    "Count": 1600,
+    "P50Ms": 195.6333,
+    "P95Ms": 211.0528,
+    "MaximumMs": 790.2742,
+    "P99Ms": 244.4207,
+    "Errors": 0,
+    "WarmupErrors": 0,
+    "ErrorMessages": [],
+    "QueryPhases": {
+      "Basis": "Direct API phases; no owner admission queue or wire serialization. Model query includes model lookup and inference-lock wait. Retrieval includes SQL/vector/ranking/evidence. Response preparation includes budget serialization. Vector scan is a retrieval subcomponent.",
+      "Count": 1600,
+      "Errors": 0,
+      "ModelQueryIncludingLock": {
+        "Count": 1600,
+        "P50Ms": 6.6239,
+        "P95Ms": 11.328800000000001,
+        "P99Ms": 12.414000000000001,
+        "MaximumMs": 15.5484
+      },
+      "Retrieval": {
+        "Count": 1600,
+        "P50Ms": 176.03320000000002,
+        "P95Ms": 191.8409,
+        "P99Ms": 219.6978,
+        "MaximumMs": 769.3899
+      },
+      "ExactVectorScan": {
+        "Count": 1600,
+        "P50Ms": 138.56969999999998,
+        "P95Ms": 152.44910000000002,
+        "P99Ms": 179.9222,
+        "MaximumMs": 709.1379999999999
+      },
+      "ResponsePreparation": {
+        "Count": 1600,
+        "P50Ms": 12.934599999999989,
+        "P95Ms": 14.458699999999993,
+        "P99Ms": 17.813499999999976,
+        "MaximumMs": 26.329700000000003
+      },
+      "Total": {
+        "Count": 1600,
+        "P50Ms": 195.6252,
+        "P95Ms": 211.051,
+        "P99Ms": 244.4161,
+        "MaximumMs": 790.2681
+      }
+    }
+  },
+  "NoOpIndexMs": 260.813,
+  "BodyEditMs": 17034.1745,
+  "VectorRefreshMs": 1776.6164,
+  "EditToVectorsMs": 18810.7909,
+  "PeakRssBytes": null,
+  "Gates": {
+    "noQueryErrors": true,
+    "lexicalP95AtMost100Ms": true,
+    "hybridP95AtMost500Ms": true,
+    "retrievalOnlyP95TargetAtMost250Ms": true,
+    "fiveThousandSymbolBodyEditAtMost2Seconds": null,
+    "fiveThousandSymbolSemanticRefreshAtMost10Seconds": null,
+    "peakRssAtMost2GiB": null
+  },
+  "Unmeasured": [
+    "owner/native IPC",
+    "MCP/provider transport",
+    "held-out relevance",
+    "other platforms",
+    "representative real repository",
+    "edit p95 including watcher debounce",
+    "owner admission queue and wire serialization latency",
+    "peak RSS unavailable from this runtime"
+  ],
+  "PassedMeasuredGates": true
+}

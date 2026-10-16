@@ -1,8 +1,8 @@
 {
   "implementationCommit": "d8487df1",
   "assemblyHashes": {
-    "Praxis.CodeIntelligence.dll": "sha256:",
-    "Praxis.CodeIntelligence.Benchmarks.dll": "sha256:"
+    "Praxis.CodeIntelligence.dll": "sha256:6d9dc9b2dcf024513a9a5e5f310b6ba0f48d0b95a90c89f1936cf931fcc9fe05",
+    "Praxis.CodeIntelligence.Benchmarks.dll": "sha256:7b443aa5c10532a0ff310d69e7fe218db497f83972776105cd041bc153c98fda"
   },
   "measurement": "Full process /usr/bin/time -l; cold process indexing, local inference, queries, edit publication and refresh",
   "maximumResidentSetBytes": 2020671488,
