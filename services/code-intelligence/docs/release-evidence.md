@@ -677,3 +677,9 @@ Background inference deferral (§31.3): at or above the memory soft limit the sc
 | terminology | 4 | 66.0 / 84.2 / 90.8 | 180.3 / 193.0 / 194.1 |
 
 Zero errors; all lexical (≤100 ms) and hybrid (≤500 ms) gates pass. Compared with the direct-API plan-5 matrix, the owner path adds about 1–15 ms at p95 and up to about 26 ms for four-client exact hybrid. One tail outlier, four-client exact hybrid p99 410 ms, is recorded. The owner process's resident memory, sampled once per second, peaked at 1,505,558,528 bytes across its own indexing, vector build and queries. Retrieval-only phases cannot be separated on this path because the owner reports no timings. Windows named-pipe transport and MCP stdio framing are not timed by this runner.
+
+## Cross-project 50k run (8 projects) — 16 October
+
+`--projects 8` split 49,999 source symbols across eight referencing projects with real cross-project calls (`benchmarks/macos-arm64-50000-8-projects-full.praxis.json`; `/usr/bin/time` peak RSS 1,546,551,296 bytes). Unfiltered: lexical p95 6.35 ms, hybrid 126.5 ms, retrieval-only 115.6 ms, body edit 16,101 ms, refresh 1,873 ms. Zero errors.
+
+**Fails:** four-reader hybrid queries filtered to one project (6,301 of 49,999 symbols): p50 127.5 ms, p95 383.8 ms, p99 393.1 ms; **retrieval-only p95 378.7 ms (> 250)**; vector phase p95 340.6 ms. The score pass ignores filters, so about 1 in 8 window candidates matches. When fewer than 100 validate, the query falls back to the exhaustive join, which explains the bimodal latency. The fix is to apply context, kind and project filters inside the score pass.
