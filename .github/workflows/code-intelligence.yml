@@ -69,6 +69,8 @@ jobs:
         run: |
           dotnet build services/code-intelligence/benchmarks/Praxis.CodeIntelligence.Benchmarks -c Release --no-restore --nologo -m:1 -p:UseSharedCompilation=false
           node services/code-intelligence/scripts/smoke-retained-benchmark.mjs
+      - name: Verify independent query-matrix runner safeguards
+        run: node --test services/code-intelligence/scripts/test-query-matrix.mjs
       - name: Measure generated 5k-symbol real-model fixture
         if: github.event_name == 'workflow_dispatch' && inputs.run_benchmarks && matrix.os == 'ubuntu-latest'
         run: |

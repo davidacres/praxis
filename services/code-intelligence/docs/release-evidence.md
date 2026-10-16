@@ -296,3 +296,17 @@ All 109 provisioned-model/SDK service tests pass; 131 captured responses validat
 ## Watcher-inclusive 5k update targets pass
 
 The current 100 ms maintenance / 350 ms debounce package completed 25 actual-watcher body edits with zero errors. Structural p95 was 1675.5366 ms and semantic-refresh conservative upper-bound p95 was 620.3558 ms, passing 2 seconds and 10 seconds respectively. All samples, the cold-first-edit outlier and measurement bounds are retained in `macos-arm64-5000-watcher-cadence.praxis.json`. This is one native process on this Mac, not the five-run reference-machine/concurrent-query protocol.
+
+## Full-process mapping-576 result
+
+The fresh immutable search-plan-5/schema-4 binary completed initial 50k indexing, real local inference, 400 queries per mode, edit publication and refresh. Independent peak RSS was 1915731968 bytes (passes 2 GiB); lexical p95 was 6.6607 ms; hybrid p95 was 506.9080 ms (**fails** 500 ms). There were no query or warmup errors. Initial structural indexing took 19.738 s and initial vectors 531.257 s. The pilot pass does not override this full-run failure. Raw and independent-process records are retained as `macos-arm64-50000-profile5-map576-full.praxis.json` and `macos-arm64-50000-profile5-map576-process.praxis.json`. This binary predates adapter-v7 assembly dependency edges and the optional phase observer; no exact-current-head release claim is made.
+
+CI [38897870350](https://github.com/davidacres/praxis/actions/runs/38897870350) passed Windows, macOS and Linux, including actual watcher smoke and the Windows signal-cleanup fix.
+
+## Observed assembly dependencies and repeatable query diagnostics
+
+Adapter `roslyn-5.9/v7` adds one compiler-observed external assembly dependency per context/assembly. Identity includes the actual assembly version/culture/public-key identity; the external module has no invented local declaration or inferred NuGet package name. Its dependency edge retains a deterministic original source occurrence/hash/range. Partial contexts remain possible; syntax-only contexts emit no assembly dependencies. Existing source-to-source dependencies remain source-backed and withdraw on edits. General delegate flow and unused configuration-only graph edges remain unsupported.
+
+All 111 C# tests pass with model/SDK fixtures, including assembly identity/source evidence, degraded contexts, graph publication/removal and optional measurement wire-equivalence/cancellation. The cumulative captured 261 responses validate across all 11 tools. Core/application compilation also passes.
+
+The internal opt-in query observer records model query including lock wait, retrieval, vector-scan subcomponent and response preparation without adding wire fields, text logging or persistent telemetry. Benchmarks exclude warmups from phase distributions. The query matrix starts independent processes, matches one/four-reader stride-17 workloads, preserves raw failures, validates sample counts/snapshots and refuses output within the retained fixture or overwrites. Its process/failed-result/containment safeguards pass. Exact, terminology, behaviour and negative categories are synthetic performance workloads; real cross-project and concurrent-edit performance remain distinct outstanding scenarios. The runner is implemented, not a completed five-run qualification.

@@ -140,7 +140,7 @@ public sealed class IndexingTests : IDisposable
         var manifest = semantic ? new PassiveManifest(1, [new("app", "App", ["Program.cs"], Metadata: [new(metadataPath, SourceFiles.Hash(File.ReadAllBytes(metadataPath)))], OutputKind: "exe")]) : null;
         var result = new RoslynAnalyzer().Analyze("repo", [Source("Program.cs", code)], manifest);
         Assert.Equal(semantic ? "complete" : "syntaxOnly", Assert.Single(result.Contexts).Resolution);
-        var module = Assert.Single(result.Symbols, s => s.Kind == "module");
+        var module = Assert.Single(result.Symbols, s => s.Kind == "module" && !s.External);
         Assert.Empty(module.Locations);
         var entry = Assert.Single(result.Symbols, s => s.Name == "[synthetic top-level entry]");
         Assert.Equal(module.Id, entry.ContainerId);

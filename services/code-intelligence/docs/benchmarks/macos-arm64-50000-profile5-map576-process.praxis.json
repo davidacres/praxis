@@ -1,0 +1,8 @@
+{
+  "implementationCommit": "64e83347",
+  "measurement": "Full process /usr/bin/time -l; initial indexing, real local inference, queries and edit/refresh; immutable binary copy predates adapter-v7 and query phase instrumentation",
+  "maximumResidentSetBytes": 1915731968,
+  "limitBytes": 2147483648,
+  "peakRssAtMost2GiB": true,
+  "rawReport": "macos-arm64-50000-profile5-map576-full.praxis.json"
+}

@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Indexing;
 /// <summary>In-memory compiler analysis from explicit inputs. Never evaluates a project or executes generators.</summary>
 public sealed class RoslynAnalyzer
 {
-    public const string AdapterVersion = "roslyn-5.9/v6";
+    public const string AdapterVersion = "roslyn-5.9/v7";
     private sealed record CompilationInput(PassiveProject Project, IndexedContext Context, CSharpCompilation Compilation, IReadOnlyList<Diagnostic> Diagnostics);
     private static readonly SymbolDisplayFormat SignatureFormat = SymbolDisplayFormat.CSharpErrorMessageFormat
         .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType | SymbolDisplayMemberOptions.IncludeType
@@ -44,6 +44,7 @@ public sealed class RoslynAnalyzer
             .ToDictionary(entry => entry.Tree, entry => entry.Model);
         var identities = new Dictionary<string, Dictionary<ISymbol, (string Id, string Json, bool External)>>(StringComparer.Ordinal);
         var symbols = new Dictionary<string, IndexedSymbol>(StringComparer.Ordinal);
+        var externalAssemblies = new Dictionary<string, string>(StringComparer.Ordinal);
         var projectRoots = new Dictionary<string, string>(StringComparer.Ordinal);
         var nodeSymbols = new Dictionary<SyntaxNode, string>();
         var sourceMethods = new Dictionary<string, (IMethodSymbol Symbol, IndexedContext Context)>();
@@ -354,19 +355,38 @@ public sealed class RoslynAnalyzer
                 }
             }
         }
-        // Lift observed source references to project dependencies without inventing
+        // Lift observed source references to project and assembly dependencies without inventing
         // source evidence for an unused configuration-only project reference.
         var projectDependencies = new Dictionary<string, IndexedCall>(StringComparer.Ordinal);
+        var assemblyDependencies = new HashSet<(string Context, string Assembly)>();
         var contextResolutions = inputs.Values.ToDictionary(input => input.Context.Id, input => input.Context.Resolution, StringComparer.Ordinal);
         foreach (var fact in calls.Concat(relationships))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (fact.TargetId is null || !symbols.TryGetValue(fact.TargetId, out var target) || target.External
-                || target.ContextId == fact.ContextId || !projectRoots.TryGetValue(target.ContextId, out var targetRoot)) continue;
+            if (fact.TargetId is null || !symbols.TryGetValue(fact.TargetId, out var target)) continue;
+            string targetRoot;
+            if (target.External)
+            {
+                if (!externalAssemblies.TryGetValue(target.Id, out var assembly)) continue;
+                // One observed dependency per context/assembly is sufficient. Keep
+                // its first deterministic occurrence instead of multiplying every
+                // primitive-type use into another dependency edge.
+                if (!assemblyDependencies.Add((fact.ContextId, assembly))) continue;
+                var identity = Identity.Json(1, "external", repositoryId, "csharp", assembly, "module", "assemblyRoot");
+                targetRoot = "pci:sym:" + SourceFiles.Hash(Encoding.UTF8.GetBytes(identity))[7..];
+                symbols.TryAdd(targetRoot, new(targetRoot, identity, "", "module", assembly, assembly,
+                    "External assembly " + assembly, SourceFiles.Hash(Encoding.UTF8.GetBytes(identity)), "resolved", null, true,
+                    "Compiler-bound assembly dependency; no local declaration or package-name inference.", []));
+            }
+            else
+            {
+                if (target.ContextId == fact.ContextId || !projectRoots.TryGetValue(target.ContextId, out var sourceRoot)) continue;
+                targetRoot = sourceRoot;
+            }
             var ownerRoot = projectRoots[fact.ContextId];
             var dependencyId = Identity.Id("pci:occ:", fact.ContextId, fact.FilePath, fact.Hash, fact.Start, fact.End, ownerRoot, "depends_on", targetRoot);
             projectDependencies.TryAdd(dependencyId, fact with { Id = dependencyId, OwnerId = ownerRoot, TargetId = targetRoot, Kind = "depends_on",
-                Resolution = fact.Resolution == "resolved" && contextResolutions[target.ContextId] == "complete" ? "resolved" : "possible" });
+                Resolution = fact.Resolution == "resolved" && (target.External || contextResolutions[target.ContextId] == "complete") ? "resolved" : "possible" });
             if (calls.Count + relationships.Count + projectDependencies.Count > 200_000)
                 throw new IOException("INPUT_TOO_LARGE: semantic fact limit exceeded.");
         }
@@ -462,6 +482,8 @@ public sealed class RoslynAnalyzer
             var result = ((syntax && !external ? "pci:syntactic:" : "pci:sym:") + SourceFiles.Hash(Encoding.UTF8.GetBytes(json))[7..], json, external);
             // Local callable descriptors depend on declaration ownership established
             // during traversal, so they deliberately bypass the symbol-only cache.
+            if (external && symbol.ContainingAssembly is { } assembly)
+                externalAssemblies[result.Item1] = assembly.Identity.ToString();
             if (!localCallable) contextIdentities[symbol] = result;
             return result;
         }

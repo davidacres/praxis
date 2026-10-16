@@ -78,7 +78,8 @@ public sealed class RelationshipTests
         Assert.All(result.Contexts, context => Assert.Equal("complete", context.Resolution));
         var library = result.Contexts.Single(context => context.Key == "library");
         var caller = result.Contexts.Single(context => context.Key == "caller");
-        var dependencies = result.Relationships.Where(edge => edge.Kind == "depends_on").ToArray();
+        var dependencies = result.Relationships.Where(edge => edge.Kind == "depends_on"
+            && !result.Symbols.Single(symbol => symbol.Id == edge.TargetId).External).ToArray();
         Assert.NotEmpty(dependencies);
         Assert.All(dependencies, edge =>
         {
@@ -96,7 +97,33 @@ public sealed class RelationshipTests
         const string unused = "class Caller {}";
         sources[1] = new("Caller.cs", SourceFiles.Hash(Encoding.UTF8.GetBytes(unused)), Encoding.UTF8.GetBytes(unused), unused);
         var unusedReference = new RoslynAnalyzer().Analyze("repo", sources, manifest);
-        Assert.DoesNotContain(unusedReference.Relationships, edge => edge.Kind == "depends_on");
+        Assert.DoesNotContain(unusedReference.Relationships, edge => edge.Kind == "depends_on"
+            && !unusedReference.Symbols.Single(symbol => symbol.Id == edge.TargetId).External);
+    }
+
+    [Fact]
+    public void ObservedAssemblyDependenciesRetainAssemblyVersionAndSourceEvidence()
+    {
+        const string code = "class Example { string Run(string value) => System.String.Concat(value, value); }";
+        var result = Analyze(code);
+        var edges = result.Relationships.Where(edge => edge.Kind == "depends_on").ToArray();
+        Assert.Single(edges);
+        foreach (var edge in edges)
+        {
+            var target = result.Symbols.Single(symbol => symbol.Id == edge.TargetId);
+            Assert.True(target.External); Assert.Equal("module", target.Kind); Assert.Empty(target.Locations);
+            Assert.Equal(typeof(object).Assembly.GetName().FullName, target.Name);
+            Assert.Contains(typeof(object).Assembly.GetName().FullName!, target.Identity);
+            Assert.Equal("resolved", edge.Resolution); Assert.Equal("Example.cs", edge.FilePath);
+            Assert.Equal(SourceFiles.Hash(Encoding.UTF8.GetBytes(code)), edge.Hash);
+            Assert.InRange(edge.End, edge.Start + 1, code.Length);
+            Assert.Contains(result.Calls.Concat(result.Relationships), occurrence => occurrence.Kind != "depends_on"
+                && occurrence.Start == edge.Start && occurrence.End == edge.End && occurrence.TargetId != edge.TargetId);
+        }
+        Assert.Single(edges.Select(edge => edge.TargetId).Distinct());
+        Assert.DoesNotContain(Analyze(code, semantic: false).Relationships, edge => edge.Kind == "depends_on");
+        var partial = Analyze(code + " class Broken { Missing value; }");
+        Assert.All(partial.Relationships.Where(edge => edge.Kind == "depends_on"), edge => Assert.Equal("possible", edge.Resolution));
     }
 
     [Fact]

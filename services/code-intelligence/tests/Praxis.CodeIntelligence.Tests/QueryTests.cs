@@ -34,6 +34,26 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public void BenchmarkMeasurementsKeepWireResultsUnchangedAndIncludeFailures()
+    {
+        var samples = new List<QueryMeasurement>();
+        var measured = new QueryService(database) { MeasurementObserver = samples.Add };
+        var arguments = new JsonObject { ["repositoryId"] = repository, ["query"] = "Target", ["mode"] = "lexical" };
+        var allowed = new HashSet<string> { repository };
+        Assert.Equal(queries.Execute("search_code", arguments, allowed).ToJsonString(),
+            measured.Execute("search_code", arguments, allowed).ToJsonString());
+        var success = Assert.Single(samples); Assert.True(success.Succeeded);
+        Assert.True(success.TotalMs >= success.RetrievalMs + success.ResponsePreparationMs);
+        Assert.True(success.RetrievalMs > 0); Assert.True(success.ResponsePreparationMs > 0);
+        Assert.Equal(0, success.ExactVectorScanMs);
+        using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
+        var response = measured.Execute("search_code", arguments, allowed, cancellation.Token);
+        Assert.Equal("CANCELLED", response["error"]!["code"]!.GetValue<string>());
+        Assert.Equal(2, samples.Count); Assert.False(samples[1].Succeeded);
+        Assert.True(samples[1].TotalMs >= 0);
+    }
+
+    [Fact]
     public void RevisionOnlyDocumentUpdatesPreserveFtsAndChangedTextRetokenizes()
     {
         var target = Symbol("Target")["symbolId"]!.GetValue<string>();
@@ -426,13 +446,19 @@ public sealed class QueryTests : IDisposable
             Assert.Equal("depends_on", edge!["kind"]!.GetValue<string>());
             Assert.Equal("resolved", edge["resolution"]!.GetValue<string>());
             var target = Assert.Single(trace["data"]!["nodes"]!.AsArray(), node => node!["symbolId"]!.GetValue<string>() == edge["targetSymbolId"]!.GetValue<string>());
-            Assert.Equal("Library [synthetic projectRoot]", target!["qualifiedName"]!.GetValue<string>());
+            if (!target!["external"]!.GetValue<bool>())
+                Assert.Equal("Library [synthetic projectRoot]", target["qualifiedName"]!.GetValue<string>());
             Assert.NotEmpty(edge["evidenceIds"]!.AsArray());
-            foreach (var id in edge["evidenceIds"]!.AsArray())
-                Assert.Contains(trace["evidence"]!.AsArray(), evidence => evidence!["id"]!.GetValue<string>() == id!.GetValue<string>() && evidence["path"]!.GetValue<string>() == "Example.cs");
+            var evidenceIds = edge["evidenceIds"]!.AsArray().Select(id => id!.GetValue<string>()).ToHashSet();
+            Assert.All(evidenceIds, id => Assert.Contains(trace["evidence"]!.AsArray(), evidence => evidence!["id"]!.GetValue<string>() == id));
+            var owner = Assert.Single(trace["data"]!["nodes"]!.AsArray(), node => node!["symbolId"]!.GetValue<string>() == edge["sourceSymbolId"]!.GetValue<string>());
+            var expectedPath = owner!["qualifiedName"]!.GetValue<string>() == "Library [synthetic projectRoot]" ? "Library.cs" : "Example.cs";
+            Assert.Contains(trace["evidence"]!.AsArray(), evidence => evidenceIds.Contains(evidence!["id"]!.GetValue<string>())
+                && evidence["path"]?.GetValue<string>() == expectedPath);
         });
         File.WriteAllText(Path.Combine(root, "Example.cs"), "class Caller { int Run() => 1; }"); indexer.Index(repository);
-        Assert.Empty(Query("trace_flow", input)["data"]!["edges"]!.AsArray());
+        var after = Query("trace_flow", input);
+        Assert.DoesNotContain(after["data"]!["nodes"]!.AsArray(), node => node!["qualifiedName"]!.GetValue<string>() == "Library [synthetic projectRoot]");
         Assert.Empty(database.Check());
     }
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -15,6 +16,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
     public const string RankingProfile = "rrf-k60-lexical64-vector1-alias0.5-v3";
     public const double LexicalWeight = 64.0;
     public const double AliasWeight = 0.5;
+    internal Action<QueryMeasurement>? MeasurementObserver { get; init; }
     internal int VectorChunkLimit { get; init; } = 200_000;
     private readonly CursorCodec cursors = new();
     private sealed record SearchCountKey(string Repository, long Generation, long Epoch, string? Context, string? Kinds, string? Projects, string? Profile);
@@ -40,6 +42,9 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
     {
         var repositoryId = arguments["repositoryId"] is JsonValue value && value.TryGetValue<string>(out var id) ? id : "unknown";
         long? generation = null, epoch = null;
+        var measurement = MeasurementObserver is null ? null : Stopwatch.StartNew();
+        double inferenceStart = 0, inferenceEnd = 0, responseStart = 0, vectorMs = 0;
+        var succeeded = false;
         try
         {
             JsonContract.Validate(tool, arguments);
@@ -48,11 +53,13 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             // Validate before inference: never silently omit query terms.
             if (tool == "search_code" && Text(arguments, "query")!.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Length > 64)
                 throw new QueryException("INVALID_ARGUMENT", "Search queries support at most 64 literal terms.");
+            inferenceStart = measurement?.Elapsed.TotalMilliseconds ?? 0;
             ModelQuery? embedded = null;
             if (tool == "search_code" && Text(arguments, "mode") != "lexical" && models is not null)
                 try { embedded = models.QueryEmbedding(repositoryId, Text(arguments, "query")!, cancellationToken); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException)
                 { cancellationToken.ThrowIfCancellationRequested(); /* Hybrid degrades to lexical; vector returns MODEL_UNAVAILABLE below. */ }
+            inferenceEnd = measurement?.Elapsed.TotalMilliseconds ?? 0;
             using var connection = database.Open(readOnly: true); using var transaction = connection.BeginTransaction(deferred: true);
             var repository = Rows(connection, transaction, "SELECT * FROM repositories WHERE repository_id=$0", repositoryId).SingleOrDefault()
                 ?? throw new QueryException("REPOSITORY_NOT_FOUND", "Repository is not registered.");
@@ -199,6 +206,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         var projects = filters?["projectIds"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
                         var languages = filters?["languages"]?.AsArray();
                         IReadOnlyList<VectorCandidate> vectors;
+                        var vectorStart = measurement?.Elapsed.TotalMilliseconds ?? 0;
                         try
                         {
                             vectors = languages is { Count: > 0 } && !languages.Any(x => x!.GetValue<string>() == "csharp") ? []
@@ -210,6 +218,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                             vectors = []; embedded = null;
                             warnings.Add(new JsonObject { ["code"] = "VECTOR_CAPACITY_EXCEEDED", ["message"] = "Vector capacity exceeded; lexical results returned." });
                         }
+                        finally { vectorMs = (measurement?.Elapsed.TotalMilliseconds ?? 0) - vectorStart; }
                         // Fetch the bounded top-k rows once, then retain vector score order.
                         var vectorRows = vectors.Count == 0 ? new Dictionary<string, JsonObject>(StringComparer.Ordinal)
                             : Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND symbol_id IN(SELECT value FROM json_each($1))",
@@ -421,6 +430,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 }
                 default: throw new QueryException("INVALID_ARGUMENT", "Unknown tool.");
             }
+            responseStart = measurement?.Elapsed.TotalMilliseconds ?? 0;
             var envelope = new JsonObject
             {
                 ["schemaVersion"] = "1.2", ["repositoryId"] = repositoryId, ["indexGeneration"] = generation, ["queryEpoch"] = epoch,
@@ -531,13 +541,24 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             }
             if (Encoding.UTF8.GetByteCount(envelope.ToJsonString()) > budget)
                 throw new QueryException("INPUT_TOO_LARGE", "A response item exceeds the requested budget; increase the budget or reduce source/graph bounds.");
-            transaction.Commit(); return envelope;
+            transaction.Commit(); succeeded = true; return envelope;
         }
         catch (Exception ex) when (ex is QueryException or KeyNotFoundException or IOException or UnauthorizedAccessException or OperationCanceledException or DecoderFallbackException)
         {
             var code = ex is QueryException query ? query.Code : ex is OperationCanceledException ? "CANCELLED" : ex is UnauthorizedAccessException ? "ACCESS_DENIED" : ex is DecoderFallbackException ? "UNSUPPORTED_ENCODING" : "SOURCE_UNREADABLE";
             return new JsonObject { ["schemaVersion"] = "1.2", ["repositoryId"] = repositoryId, ["indexGeneration"] = generation, ["queryEpoch"] = epoch,
                 ["error"] = new JsonObject { ["code"] = code, ["message"] = ex is QueryException ? ex.Message : "Requested source or operation is unavailable.", ["retryable"] = code is "CANCELLED" or "INDEX_STALE" } };
+        }
+        finally
+        {
+            if (measurement is not null)
+            {
+                var total = measurement.Elapsed.TotalMilliseconds;
+                var modelEnd = inferenceEnd > 0 ? inferenceEnd : inferenceStart > 0 ? total : 0;
+                var preparationStart = responseStart > 0 ? responseStart : total;
+                MeasurementObserver!(new(succeeded, Math.Max(0, modelEnd - inferenceStart),
+                    Math.Max(0, preparationStart - modelEnd), vectorMs, Math.Max(0, total - preparationStart), total));
+            }
         }
     }
 
@@ -576,3 +597,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
     private static bool HasSyntax(SqliteConnection connection, SqliteTransaction transaction, string repositoryId) => Convert.ToInt64(connection.Scalar(transaction,
         "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0 AND resolution!='complete'", repositoryId)) > 0;
 }
+
+// Benchmark-only observation: no source/query text, wire fields or persistent telemetry.
+internal sealed record QueryMeasurement(bool Succeeded, double ModelQueryIncludingLockMs, double RetrievalMs,
+    double ExactVectorScanMs, double ResponsePreparationMs, double TotalMs);

@@ -126,3 +126,17 @@ Unchanged reconciliation validates source bytes, support roles, captured manifes
 Model activation retains complete current vector sets only after value validation and exact regenerated source metadata agreement. Mismatched/corrupt sets or mappings are repaired; input/source/lease checks remain mandatory before committing.
 
 Native CI in `.github/workflows/code-intelligence.yml` executes Linux/Windows/macOS fixtures, schema validation, packaging and actual watcher smoke checks, with an optional Linux real-model benchmark. See the dated release evidence for exact runs and failures; hosted CI smoke is separate from performance and desktop/provider qualification.
+
+### Repeated query performance
+
+The retained benchmark verifies every source/manifest hash, index generation, epoch and complete active vector coverage before measuring. It refuses changed fixtures; migrate a private retained database explicitly with the matching service before reusing it. Query-only measurements never reindex or install models.
+
+`benchmark-query-matrix.mjs` starts a separate benchmark process per category/reader/run, performs 20 warmups and defaults to 200 timed queries per mode, five runs, with both one and four readers. It uses the same stride-17 query set for both reader counts, preserves every raw report and failure, and reports min/max p95. Categories are synthetic exact, terminology, behaviour and negative workloads; they do not establish relevance or cross-project performance. Phase timings separate model query (including its lock wait), retrieval (including SQL/vector/ranking/evidence), vector scan and response preparation. Vector scan is a retrieval subcomponent, not an additional duration. Direct API measurements exclude owner admission and wire serialization.
+
+```sh
+node services/code-intelligence/scripts/benchmark-query-matrix.mjs \
+  --dotnet /absolute/dotnet --benchmark /absolute/Praxis.CodeIntelligence.Benchmarks.dll \
+  --fixture /absolute/retained-fixture --output /existing/output/query-matrix.praxis.json
+```
+
+The output parent must exist and be outside the retained fixture. Existing output or raw-run directories are refused. Use `--runs 1 --categories exact` for a pilot; this does not satisfy the five-run protocol. Actual watcher edit timing has a separate `benchmark-watcher.mjs` runner; neither runner implies concurrent-edit or reference-machine qualification.

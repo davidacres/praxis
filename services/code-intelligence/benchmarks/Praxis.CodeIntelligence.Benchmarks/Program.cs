@@ -12,13 +12,16 @@ using Praxis.CodeIntelligence.Storage;
 var options = new Dictionary<string, string>(StringComparer.Ordinal);
 if (args.Length % 2 != 0) throw new ArgumentException("Expected flag/value pairs.");
 for (var i = 0; i < args.Length; i += 2)
-    if (args[i] is not ("--symbols" or "--queries" or "--output" or "--model" or "--retain-fixture" or "--reuse-fixture" or "--readers" or "--runs") || !options.TryAdd(args[i], args[i + 1]))
+    if (args[i] is not ("--symbols" or "--queries" or "--output" or "--model" or "--retain-fixture" or "--reuse-fixture" or "--readers" or "--runs" or "--category") || !options.TryAdd(args[i], args[i + 1]))
         throw new ArgumentException("Unknown or duplicate flag.");
 var symbols = int.Parse(options.GetValueOrDefault("--symbols", "5000"));
 var queries = int.Parse(options.GetValueOrDefault("--queries", "100"));
 if (symbols is < 100 or > 49999 || queries is < 10 or > 1000) throw new ArgumentException("Symbols must be 100–49999 source symbols (50000 total including metadata); queries 10–1000 per reader.");
 var output = Path.GetFullPath(options.GetValueOrDefault("--output", "benchmark.praxis.json"));
 if (!output.EndsWith(".praxis.json", StringComparison.Ordinal)) throw new ArgumentException("Output must end in .praxis.json.");
+var category = options.GetValueOrDefault("--category", "exact");
+if (category is not ("exact" or "terminology" or "behaviour" or "negative")) throw new ArgumentException("Unsupported query category.");
+if (options.ContainsKey("--category") && !options.ContainsKey("--reuse-fixture")) throw new ArgumentException("Query categories require a retained fixture.");
 var readers = int.Parse(options.GetValueOrDefault("--readers", "4"));
 var runs = int.Parse(options.GetValueOrDefault("--runs", "1"));
 if (readers is not (1 or 4) || runs is < 1 or > 5) throw new ArgumentException("Readers must be 1 or 4; runs 1–5.");
@@ -30,7 +33,7 @@ if (options.TryGetValue("--reuse-fixture", out var existing))
 {
     if (options.ContainsKey("--model") || options.ContainsKey("--symbols") || retain == "true")
         throw new ArgumentException("Reuse accepts only a retained fixture, queries and output; it never republishes or installs models.");
-    try { return await RetainedBenchmark.Run(existing, queries, output, readers, runs); }
+    try { return await RetainedBenchmark.Run(existing, queries, output, readers, runs, category); }
     catch (Exception error) when (error is IOException or ArgumentException or JsonException
         or UnauthorizedAccessException or InvalidOperationException or KeyNotFoundException)
     {
@@ -79,7 +82,7 @@ try
         Console.Error.WriteLine("Installing model and building vectors."); fingerprint = models.Install(bundle);
         watch.Restart(); models.Activate(repository, fingerprint, CancellationToken.None); initialVectorsMs = watch.Elapsed.TotalMilliseconds;
     }
-    var service = new QueryService(database, models); var allowed = new HashSet<string> { repository };
+    var metrics = new QueryMetrics(); var service = new QueryService(database, models) { MeasurementObserver = metrics.Record }; var allowed = new HashSet<string> { repository };
     void Search(string mode, int index)
     {
         var response = service.Execute("search_code", new JsonObject { ["repositoryId"] = repository, ["query"] = names[index % names.Count], ["mode"] = mode, ["limit"] = 10, ["responseBudgetTokens"] = 8000 }, allowed);
@@ -90,9 +93,9 @@ try
             || response["data"]?["vectorCoveredSymbolCount"]?.GetValue<long>() != sourceSymbols))
             throw new InvalidOperationException("Hybrid benchmark requires complete real vector coverage.");
     }
-    Console.Error.WriteLine("Measuring four-reader lexical queries."); var lexical = await RetainedBenchmark.Measure(Search, "lexical", queries);
+    Console.Error.WriteLine("Measuring four-reader lexical queries."); var lexical = await RetainedBenchmark.Measure(Search, "lexical", queries, metrics: metrics);
     Timing? hybrid = null;
-    if (fingerprint is not null) { Console.Error.WriteLine("Measuring four-reader hybrid queries."); hybrid = await RetainedBenchmark.Measure(Search, "hybrid", queries); }
+    if (fingerprint is not null) { Console.Error.WriteLine("Measuring four-reader hybrid queries."); hybrid = await RetainedBenchmark.Measure(Search, "hybrid", queries, metrics: metrics); }
     watch.Restart(); var unchanged = indexer.Index(repository); var noOpMs = watch.Elapsed.TotalMilliseconds;
     if (unchanged.Changed) throw new InvalidOperationException("Unchanged index republished.");
     var first = Path.Combine(root, paths[0]); var before = File.ReadAllText(first); var after = before.Replace("=> value + 0;", "=> value + 2;", StringComparison.Ordinal);
@@ -110,6 +113,7 @@ try
         ["noQueryErrors"] = lexical.Errors == 0 && lexical.WarmupErrors == 0 && (hybrid is null || hybrid.Errors == 0 && hybrid.WarmupErrors == 0),
         ["lexicalP95AtMost100Ms"] = lexical.P95Ms <= 100,
         ["hybridP95AtMost500Ms"] = hybrid is null ? null : hybrid.P95Ms <= 500,
+        ["retrievalOnlyP95TargetAtMost250Ms"] = hybrid?.QueryPhases?.Retrieval.P95Ms is double retrievalP95 ? retrievalP95 <= 250 : null,
         ["fiveThousandSymbolBodyEditAtMost2Seconds"] = symbols == 5000 ? editMs <= 2000 : null,
         ["fiveThousandSymbolSemanticRefreshAtMost10Seconds"] = symbols == 5000 && refreshMs.HasValue ? refreshMs <= 10000 : null,
         ["peakRssAtMost2GiB"] = rss.HasValue ? rss <= 2L * 1024 * 1024 * 1024 : null
@@ -128,7 +132,7 @@ try
         CorpusHash = SourceFiles.Hash(Encoding.UTF8.GetBytes(string.Join("\n", hashes))), ReferenceAssemblyHash = referenceHash,
         InitialIndexMs = initialMs, InitialVectorsMs = initialVectorsMs, Lexical = lexical, Hybrid = hybrid,
         NoOpIndexMs = noOpMs, BodyEditMs = editMs, VectorRefreshMs = refreshMs, EditToVectorsMs = refreshMs.HasValue ? editMs + refreshMs : (double?)null, PeakRssBytes = rss, Gates = gates,
-        Unmeasured = new[] { "owner/native IPC", "MCP/provider transport", "held-out relevance", "other platforms", "representative real repository", "edit p95 including watcher debounce", "retrieval-only latency" }.Concat(rss.HasValue ? Array.Empty<string>() : new[] { "peak RSS unavailable from this runtime" }).Concat(initial.Symbols < 50000 ? new[] { "50k-symbol capacity" } : fingerprint is null ? new[] { "50k-symbol hybrid capacity" } : Array.Empty<string>()).ToArray(),
+        Unmeasured = new[] { "owner/native IPC", "MCP/provider transport", "held-out relevance", "other platforms", "representative real repository", "edit p95 including watcher debounce", "owner admission queue and wire serialization latency" }.Concat(rss.HasValue ? Array.Empty<string>() : new[] { "peak RSS unavailable from this runtime" }).Concat(initial.Symbols < 50000 ? new[] { "50k-symbol capacity" } : fingerprint is null ? new[] { "50k-symbol hybrid capacity" } : Array.Empty<string>()).ToArray(),
         PassedMeasuredGates = gates.Values.All(value => value != false)
     };
     Directory.CreateDirectory(Path.GetDirectoryName(output)!);
@@ -144,5 +148,5 @@ try
 }
 finally { if (retain != "true" || !File.Exists(Path.Combine(temporary, "benchmark-fixture.praxis.json"))) Directory.Delete(temporary, recursive: true); }
 
-internal sealed record Timing(int Readers, int Count, double P50Ms, double P95Ms, double MaximumMs, double P99Ms, int Errors, int WarmupErrors, string[] ErrorMessages);
+internal sealed record Timing(int Readers, int Count, double P50Ms, double P95Ms, double MaximumMs, double P99Ms, int Errors, int WarmupErrors, string[] ErrorMessages, QueryPhaseSummary? QueryPhases = null);
 internal sealed record QueryRun(int Run, Timing Lexical, Timing? Hybrid);
