@@ -1,0 +1,72 @@
+{
+  "baselineRef": "c1e5ef94",
+  "changedRendererSource": "src/ui/dialogs.tsx",
+  "fixedIndexHash": "e89c4c0f23207a04867840bf0145218274bc94b0d63ff22d761dca9a6f5b693e",
+  "baselineIndexHash": "a2dbc66210a0ce98461f5efd9a530584d28f381367b2f218bc48fd238e063ef6",
+  "exitCode": 1,
+  "fixedRendererRestored": true,
+  "fullRun": {
+    "passed": 543,
+    "failed": 15,
+    "skipped": 3,
+    "workers": 4,
+    "failures": [
+      "e2e/aiCodingTask.spec.ts:172:5 \u203a each turn records its reply once, and follow-ups carry the earlier answer",
+      "e2e/aiThoughtGrouping.spec.ts:188:7 \u203a a multi-round-trip turn counts tokens once (provider reports usage)",
+      "e2e/aiThoughtGrouping.spec.ts:188:7 \u203a a multi-round-trip turn counts tokens once (provider omits usage)",
+      "e2e/aiTicketReview.spec.ts:299:5 \u203a a queued review follow-up is sent exactly once when the current turn completes",
+      "e2e/aiTicketReview.spec.ts:315:5 \u203a the review composer pastes and drops images, removes one and sends the retained image to the agent",
+      "e2e/bifrostProvider.spec.ts:7:5 \u203a Bifrost preset saves a virtual key and runs a streamed session on its exact endpoint",
+      "e2e/aiTicketReview.spec.ts:418:5 \u203a a pending read permission is answered directly in the review composer",
+      "e2e/app.spec.ts:214:5 \u203a adding and removing a connection updates the list",
+      "e2e/chatGadgets.spec.ts:394:5 \u203a internal memory citations stay persisted but do not render in the transcript",
+      "e2e/connectionsManager.spec.ts:161:5 \u203a connection rows edit names, lock backend type, and require boards to be removed first",
+      "e2e/easymode.spec.ts:71:5 \u203a EasyMode sidebar renders Sessions and Automations with + buttons and handles selection and navigation",
+      "e2e/newIssue.spec.ts:245:5 \u203a the demo board offers Subtask with a required story/task/bug parent",
+      "e2e/sessionProviderLimitRecovery.spec.ts:80:7 \u203a Given credits exhausted, When switching provider, Then stale warnings clear through continuation and reopen",
+      "e2e/sessionProviderLimitRecovery.spec.ts:80:7 \u203a Given budget exhausted, When switching provider, Then stale warnings clear through continuation and reopen",
+      "e2e/sessionProviderLimitRecovery.spec.ts:179:5 \u203a Given a recovery menu, When it is dismissed or Stop is selected, Then selection alone changes nothing and Stop keeps history"
+    ]
+  },
+  "previousDialogRerun": {
+    "passed": 1,
+    "failed": 14,
+    "workers": 4,
+    "failures": [
+      "e2e/aiThoughtGrouping.spec.ts:188:7 \u203a a multi-round-trip turn counts tokens once (provider reports usage)",
+      "e2e/aiCodingTask.spec.ts:172:5 \u203a each turn records its reply once, and follow-ups carry the earlier answer",
+      "e2e/aiThoughtGrouping.spec.ts:188:7 \u203a a multi-round-trip turn counts tokens once (provider omits usage)",
+      "e2e/bifrostProvider.spec.ts:7:5 \u203a Bifrost preset saves a virtual key and runs a streamed session on its exact endpoint",
+      "e2e/app.spec.ts:214:5 \u203a adding and removing a connection updates the list",
+      "e2e/chatGadgets.spec.ts:394:5 \u203a internal memory citations stay persisted but do not render in the transcript",
+      "e2e/aiTicketReview.spec.ts:299:5 \u203a a queued review follow-up is sent exactly once when the current turn completes",
+      "e2e/connectionsManager.spec.ts:161:5 \u203a connection rows edit names, lock backend type, and require boards to be removed first",
+      "e2e/easymode.spec.ts:71:5 \u203a EasyMode sidebar renders Sessions and Automations with + buttons and handles selection and navigation",
+      "e2e/sessionProviderLimitRecovery.spec.ts:80:7 \u203a Given credits exhausted, When switching provider, Then stale warnings clear through continuation and reopen",
+      "e2e/aiTicketReview.spec.ts:315:5 \u203a the review composer pastes and drops images, removes one and sends the retained image to the agent",
+      "e2e/sessionProviderLimitRecovery.spec.ts:80:7 \u203a Given budget exhausted, When switching provider, Then stale warnings clear through continuation and reopen",
+      "e2e/sessionProviderLimitRecovery.spec.ts:179:5 \u203a Given a recovery menu, When it is dismissed or Stop is selected, Then selection alone changes nothing and Stop keeps history",
+      "e2e/aiTicketReview.spec.ts:418:5 \u203a a pending read permission is answered directly in the review composer"
+    ]
+  },
+  "reproducedWithPreviousDialog": [
+    "e2e/aiCodingTask.spec.ts:172:5 \u203a each turn records its reply once, and follow-ups carry the earlier answer",
+    "e2e/aiThoughtGrouping.spec.ts:188:7 \u203a a multi-round-trip turn counts tokens once (provider omits usage)",
+    "e2e/aiThoughtGrouping.spec.ts:188:7 \u203a a multi-round-trip turn counts tokens once (provider reports usage)",
+    "e2e/aiTicketReview.spec.ts:299:5 \u203a a queued review follow-up is sent exactly once when the current turn completes",
+    "e2e/aiTicketReview.spec.ts:315:5 \u203a the review composer pastes and drops images, removes one and sends the retained image to the agent",
+    "e2e/aiTicketReview.spec.ts:418:5 \u203a a pending read permission is answered directly in the review composer",
+    "e2e/app.spec.ts:214:5 \u203a adding and removing a connection updates the list",
+    "e2e/bifrostProvider.spec.ts:7:5 \u203a Bifrost preset saves a virtual key and runs a streamed session on its exact endpoint",
+    "e2e/chatGadgets.spec.ts:394:5 \u203a internal memory citations stay persisted but do not render in the transcript",
+    "e2e/connectionsManager.spec.ts:161:5 \u203a connection rows edit names, lock backend type, and require boards to be removed first",
+    "e2e/easymode.spec.ts:71:5 \u203a EasyMode sidebar renders Sessions and Automations with + buttons and handles selection and navigation",
+    "e2e/sessionProviderLimitRecovery.spec.ts:179:5 \u203a Given a recovery menu, When it is dismissed or Stop is selected, Then selection alone changes nothing and Stop keeps history",
+    "e2e/sessionProviderLimitRecovery.spec.ts:80:7 \u203a Given budget exhausted, When switching provider, Then stale warnings clear through continuation and reopen",
+    "e2e/sessionProviderLimitRecovery.spec.ts:80:7 \u203a Given credits exhausted, When switching provider, Then stale warnings clear through continuation and reopen"
+  ],
+  "didNotReproduce": [
+    "e2e/newIssue.spec.ts:245:5 \u203a the demo board offers Subtask with a required story/task/bug parent"
+  ],
+  "scope": "Only dialogs.tsx was reverted for an alternate renderer build. Current source and fixed renderer were restored. This comparison does not claim all wider failures have been fixed."
+}
