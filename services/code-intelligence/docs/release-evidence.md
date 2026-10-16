@@ -14,7 +14,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
 | Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
 | 50k exact-query latency and memory | Plan-6/schema-5 full process: lexical p95 6.467 ms, hybrid p95 211.053 ms, retrieval-only p95 191.841 ms, independent peak RSS 2020671488 bytes; all measured gates pass (previous plan-5 run: hybrid 434.591, retrieval 414.348 failing) | 50k body edit 17034 ms vs 14263 ms before (no 50k gate). Repeat/concurrent-edit/reference-machine protocol open |
-| 50k concurrent edits | Plan 5: 25 edits, 15,570 lexical + 15,570 hybrid queries, zero errors, lexical p95 10.86 ms, hybrid p95 275.8 ms, independent peak RSS 2,112,667,648 bytes (passes 2 GiB by about 33 MiB) | **Headroom too thin to call qualified**; one run; §31.3 pressure admission not implemented; reference machine open |
+| 50k concurrent edits | With §31.3 pressure admission: 25 edits, 14,121 lexical + 14,121 hybrid queries, zero errors, lexical p95 10.98 ms, hybrid p95 286.9 ms, independent peak RSS 1,908,703,232 bytes (about 227 MiB under 2 GiB; pressure engaged in 11 of 1,362 one-second samples) | One run on a 12-core Mac; reference machine and repeated runs open |
 | Query matrix (plan 6) | Five runs × exact/terminology/behaviour/negative × one/four readers × 200 queries: 39/40 processes pass every gate; hybrid p95 max 322.743 ms; lexical p95 max 82.942 ms; zero errors | **Fails:** behaviour four-reader run 1 retrieval-only p95 301.9 ms; other four-reader terminology/behaviour runs 236–247 ms (thin margin). Concurrent edits, cross-project, owner/wire, full-process RSS, reference machine unmeasured |
 | Query matrix (mapping v7) | Same protocol after the memory fix: complete, zero errors, all lexical/hybrid p95 pass; 36/40 processes pass every gate | **Fails:** four-reader retrieval-only behaviour runs 1–3 (261.2/261.2/270.4 ms) and terminology run 4 (250.2 ms); the memory fix costs about 5–25 ms on broad four-reader retrieval |
 | Query matrix (vector plan 5, native scan) | Five runs × four categories × one/four readers × 200 queries: **40/40 processes pass every gate**, zero errors; four-reader retrieval-only p95 max 172.0 ms, hybrid p95 max 182.8 ms, lexical p95 max 85.1 ms | 12-core Mac only; reference 8-core/16 GiB machine, cross-project and owner/wire latency unmeasured |
@@ -645,3 +645,19 @@ Under mapping v7, four-reader retrieval had measured 245.9–270.4 ms. The full 
 - Edits under load: publish p50/max 24.8/33.5 s, refresh p50/max 3.5/9.2 s.
 
 Faster queries meant about 45% more queries ran during the edits, overlapping more reader and writer work. The memory result is a pass on one run with headroom too small to rely on. Specification §31.3 calls for pressure-based admission (at 80% of the budget, stop background inference, evict caches, reduce concurrency), which would make the budget hold by design rather than by margin. That is the next memory step.
+
+## Memory-pressure admission (specification §31.3) — 16 October
+
+`MemoryPressure` treats 80% of the 2 GiB process budget (1.6 GiB resident, from `Environment.WorkingSet`) as the soft limit. At or above it:
+- Newly opened read connections use no file mapping and a 2 MiB page cache instead of 128/16 MiB. Connections are per-query, so reader memory falls within moments.
+- `RepositoryIndexer.Index` and `ModelStore.Activate` end with one blocking, compacting, aggressive collection to return retained managed memory.
+
+`doctor` reports `memory: {residentBytes, softLimitBytes, budgetBytes, pressure}`. Results are unchanged; only caching changes. `MemoryPressureTests` runs in a non-parallel collection and forces the signal on both sides of the limit. It checks the connection settings, identical search output, the doctor report, and a publication under pressure with clean integrity checks. 117 C# tests pass, zero skipped. CI [38948504180](https://github.com/davidacres/praxis/actions/runs/38948504180) at `dc32a2fe` passed on Windows, Linux and macOS, so resident memory is observable on all three.
+
+**25-edit concurrent 50k run** (`benchmarks/macos-arm64-50000-memory-pressure-concurrent-edits/`):
+- Peak RSS **1,908,703,232 bytes**, about 227 MiB of headroom (the plan-5 run without admission had about 33 MiB). Pressure engaged in 11 of 1,362 one-second samples.
+- Idle: lexical p95 6.44 ms, hybrid 135.7 ms, retrieval-only 125.3 ms.
+- Concurrent: zero errors across 14,121 + 14,121 queries; lexical p95 10.98 ms; hybrid p95 286.9 ms (p99 670.6, max 3,808); minimum coverage 49,997 of 49,999.
+- Edits under load: publish p50/max 25.6/33.3 s, refresh p50/max 3.6/11.1 s.
+
+Query-only workloads peak around 0.85 GiB and never reach the soft limit, so the 40/40 plan-5 query matrix is unaffected. Admission does not cap Roslyn analysis itself; §31.3 allows large projects to exceed the reference profile with reported degraded capacity. That reporting, and stopping background inference at the soft limit, are not implemented.
