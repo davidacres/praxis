@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Indexing;
 /// <summary>In-memory compiler analysis from explicit inputs. Never evaluates a project or executes generators.</summary>
 public sealed class RoslynAnalyzer
 {
-    public const string AdapterVersion = "roslyn-5.9/v8";
+    public const string AdapterVersion = "roslyn-5.9/v9";
     private sealed record CompilationInput(PassiveProject Project, IndexedContext Context, CSharpCompilation Compilation, IReadOnlyList<Diagnostic> Diagnostics);
     private static readonly SymbolDisplayFormat SignatureFormat = SymbolDisplayFormat.CSharpErrorMessageFormat
         .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType | SymbolDisplayMemberOptions.IncludeType
@@ -17,6 +17,9 @@ public sealed class RoslynAnalyzer
             | SymbolDisplayMemberOptions.IncludeAccessibility | SymbolDisplayMemberOptions.IncludeModifiers)
         .WithParameterOptions(SymbolDisplayParameterOptions.IncludeType | SymbolDisplayParameterOptions.IncludeName
             | SymbolDisplayParameterOptions.IncludeParamsRefOut | SymbolDisplayParameterOptions.IncludeDefaultValue);
+
+    // Synthetic compiler-only tree path; cannot collide with a repository-relative path.
+    internal const string ImplicitUsingsPath = "\0implicit-usings/";
 
     public RepositoryAnalysis Analyze(string repositoryId, IReadOnlyList<SourceInput> sources, PassiveManifest? manifest,
         CancellationToken cancellationToken = default)
@@ -63,7 +66,7 @@ public sealed class RoslynAnalyzer
             foreach (var tree in input.Compilation.SyntaxTrees)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var source = byPath[tree.FilePath]; var model = models[tree];
+                if (!byPath.TryGetValue(tree.FilePath, out var source)) continue; var model = models[tree];
                 if (source.Role == "semanticSupport") continue;
                 var syntaxRoot = tree.GetRoot(cancellationToken);
                 nodeSymbols[syntaxRoot] = rootId;
@@ -143,7 +146,7 @@ public sealed class RoslynAnalyzer
         {
             foreach (var tree in input.Compilation.SyntaxTrees)
             {
-                var model = models[tree]; var source = byPath[tree.FilePath];
+                if (!byPath.TryGetValue(tree.FilePath, out var source)) continue; var model = models[tree];
                 if (source.Role == "semanticSupport") continue;
                 foreach (var node in tree.GetRoot(cancellationToken).DescendantNodes().Where(n => n is InvocationExpressionSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax or BaseTypeSyntax
                     || n is MethodDeclarationSyntax methodDeclaration && methodDeclaration.Modifiers.Any(SyntaxKind.OverrideKeyword)))
@@ -198,7 +201,7 @@ public sealed class RoslynAnalyzer
             }
             foreach (var diagnostic in input.Diagnostics.Take(1000))
             {
-                var tree = diagnostic.Location.SourceTree;
+                var tree = diagnostic.Location.SourceTree is { } located && byPath.ContainsKey(located.FilePath) ? located : null;
                 diagnostics.Add(new(input.Context.Id, tree?.FilePath, diagnostic.Id,
                     diagnostic.Severity == DiagnosticSeverity.Error ? "error" : diagnostic.Severity == DiagnosticSeverity.Warning ? "warning" : "info",
                     diagnostic.GetMessage()[..Math.Min(diagnostic.GetMessage().Length, 4096)],
@@ -212,7 +215,7 @@ public sealed class RoslynAnalyzer
             if (input.Context.Resolution == "syntaxOnly") continue;
             foreach (var tree in input.Compilation.SyntaxTrees)
             {
-                var source = byPath[tree.FilePath]; if (source.Role == "semanticSupport") continue;
+                if (!byPath.TryGetValue(tree.FilePath, out var source) || source.Role == "semanticSupport") continue;
                 var model = models[tree]; var root = tree.GetRoot(cancellationToken);
                 string? Owner(SyntaxNode node) => node.AncestorsAndSelf().Where(nodeSymbols.ContainsKey)
                     .Select(node => nodeSymbols[node]).FirstOrDefault(id => symbols[id].Kind is "type" or "method" or "function" or "constructor" or "accessor" or "module");
@@ -443,6 +446,11 @@ public sealed class RoslynAnalyzer
             if (!LanguageVersionFacts.TryParse(project.LanguageVersion, out var languageVersion)) throw new ArgumentException("Invalid C# language version.");
             var parseOptions = new CSharpParseOptions(languageVersion, preprocessorSymbols: project.Defines ?? []);
             var trees = projectSources.Select(source => CSharpSyntaxTree.ParseText(source.Text, parseOptions, source.Path, cancellationToken: cancellationToken)).ToArray();
+            // SDK implicit usings for a project with no generated GlobalUsings file. This
+            // tree is compiler input only: never a file, symbol source or diagnostic location.
+            if (project.ImplicitUsings is { Length: > 0 } implicitUsings)
+                trees = [.. trees, CSharpSyntaxTree.ParseText(string.Concat(implicitUsings.Select(value => "global using " + value + ";\n")), parseOptions,
+                    ImplicitUsingsPath + key, cancellationToken: cancellationToken)];
             var references = new List<MetadataReference>();
             foreach (var metadata in project.Metadata ?? [])
             {

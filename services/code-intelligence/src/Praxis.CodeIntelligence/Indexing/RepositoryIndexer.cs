@@ -130,6 +130,28 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 catch (Exception ex) when (ex is IOException or ArgumentException or JsonException)
                 { manifest = null; sources = authored; manifestDiagnostic = new("", null, "INDEX_STALE", "warning", "Passive context is unavailable or stale; indexed source using syntax-only analysis.", null); }
             }
+            // No captured manifest: infer project context from project files and restore
+            // output without executing anything. Failure degrades to syntax-only.
+            IReadOnlyList<IndexedDiagnostic> inferenceDiagnostics = [];
+            var inferredSources = sources;
+            if (repository.Config.Manifest is null)
+                try
+                {
+                    var inferred = ProjectInference.Infer(repository.Root, sources, repository.Config.Excludes ?? [], cancellationToken);
+                    inferenceDiagnostics = inferred?.Diagnostics ?? [];
+                    if (inferred?.Manifest is { } inferredManifest)
+                    {
+                        var combined = sources.ToDictionary(source => source.Path, StringComparer.Ordinal);
+                        foreach (var path in inferred.SupportSources) combined[path] = SourceFiles.Read(repository.Root, path, cancellationToken) with { Role = "semanticSupport" };
+                        sources = combined.Values.OrderBy(source => source.Path, StringComparer.Ordinal).ToArray();
+                        manifest = inferredManifest;
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or ArgumentException or JsonException or System.Xml.XmlException or UnauthorizedAccessException)
+                {
+                    manifest = null; sources = inferredSources;
+                    inferenceDiagnostics = [new("", null, "PROJECT_INFERENCE_FAILED", "warning", "Project context could not be inferred; indexed source using syntax-only analysis.", null)];
+                }
             var confirmed = SourceScanner.Scan(repository.Root, repository.Config.Excludes ?? [], cancellationToken);
             var supportPaths = sources.Where(source => source.Role == "semanticSupport").Select(source => source.Path).ToHashSet(StringComparer.Ordinal);
             if (!sources.Where(source => source.Role == "searchableSource").Select(s => (s.Path, s.Hash)).SequenceEqual(confirmed.Where(source => !supportPaths.Contains(source.Path)).Select(s => (s.Path, s.Hash)))) throw new IOException("INDEX_STALE: source snapshot changed during analysis.");
@@ -139,7 +161,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 throw new IOException("INDEX_STALE: manifest changed during analysis.");
             if (manifest is not null)
             {
-                _ = PassiveManifest.Read(repository.Root, repository.Config.Manifest!);
+                if (repository.Config.Manifest is not null) _ = PassiveManifest.Read(repository.Root, repository.Config.Manifest);
                 foreach (var metadata in manifest.Projects.SelectMany(project => project.Metadata ?? []).Distinct())
                     if (SourceFiles.Hash(PassiveManifest.ReadExternal(metadata.Path)) != metadata.ContentHash) throw new IOException("INDEX_STALE: reference changed during analysis.");
             }
@@ -149,8 +171,18 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 Sources = sources.Select(source => new { source.Path, source.Hash, source.Role }).OrderBy(source => source.Path, StringComparer.Ordinal)
             })));
             if (!force && TryUnchanged(repository, sources.Count, snapshotHash, cancellationToken, leaseToken) is IndexResult unchanged) return unchanged;
-            analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken);
+            try { analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken); }
+            catch (Exception ex) when (repository.Config.Manifest is null && manifest is not null && ex is IOException or ArgumentException
+                && !ex.Message.StartsWith("INDEX_STALE", StringComparison.Ordinal))
+            {
+                // An inferred context the compiler cannot use (limits, unusual references)
+                // must not make the repository unindexable.
+                sources = inferredSources; manifest = null;
+                inferenceDiagnostics = [.. inferenceDiagnostics, new("", null, "PROJECT_INFERENCE_FAILED", "warning", "Inferred project context could not be analysed; indexed source using syntax-only analysis.", null)];
+                analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken);
+            }
             if (manifestDiagnostic is not null) analysis = analysis with { Diagnostics = [.. analysis.Diagnostics, manifestDiagnostic] };
+            if (inferenceDiagnostics.Count > 0) analysis = analysis with { Diagnostics = [.. analysis.Diagnostics, .. inferenceDiagnostics] };
             // Analysis can be lengthy. Verify inputs again before any structural publication.
             var afterAnalysis = SourceScanner.Scan(repository.Root, repository.Config.Excludes ?? [], cancellationToken);
             if (!sources.Where(source => source.Role == "searchableSource").Select(source => (source.Path, source.Hash))
@@ -162,7 +194,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 throw new IOException("INDEX_STALE: manifest changed during analysis.");
             if (manifest is not null)
             {
-                _ = PassiveManifest.Read(repository.Root, repository.Config.Manifest!);
+                if (repository.Config.Manifest is not null) _ = PassiveManifest.Read(repository.Root, repository.Config.Manifest);
                 foreach (var metadata in manifest.Projects.SelectMany(project => project.Metadata ?? []).Distinct())
                     if (SourceFiles.Hash(PassiveManifest.ReadExternal(metadata.Path)) != metadata.ContentHash) throw new IOException("INDEX_STALE: reference changed during analysis.");
             }
