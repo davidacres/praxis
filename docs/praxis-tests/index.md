@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **614 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **615 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -261,6 +261,7 @@ This catalogue describes **614 Playwright tests** under `apps/praxis-desktop/mai
 | PT-CDB77B83E7 | chat Project Assignment.visual | assign chat ticket field lists tickets for a folder-backed project | `apps/praxis-desktop/main/e2e/chatProjectAssignment.visual.spec.ts:111` |
 | PT-DCF22F6C16 | code Intelligence | rebuild and relocation use the themed recovery flow and refresh status | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:38` |
 | PT-892AB10FFA | code Intelligence | budget-truncated search offers the returned cursor and shows the next page | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:54` |
+| PT-9231FEA5A4 | code Intelligence | source search and recovery remain keyboard accessible in light and dark themes | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:66` |
 | PT-C0D616E5B7 | code Intelligence Native | packaged service supports desktop source navigation and repository recovery | `apps/praxis-desktop/main/e2e/codeIntelligenceNative.spec.ts:9` |
 | PT-59DA0C8AD7 | command Palette | opens with the shortcut, filters, and navigates on Enter | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:21` |
 | PT-FA69F53102 | command Palette | closes on Escape without navigating | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:39` |

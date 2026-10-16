@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
 
 /**
@@ -65,10 +65,20 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
   const [validationError, setValidationError] = useState<string>();
   const [optionChecked, setOptionChecked] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const rememberFocus = () => { openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; };
+  useEffect(() => {
+    if (!active) return;
+    const target = active.kind === 'prompt' ? inputRef.current : cancelRef.current;
+    target?.focus();
+    if (target instanceof HTMLInputElement) target.select();
+  }, [active]);
 
   const confirmChoice = useCallback(
     (options: ConfirmOptions) =>
       new Promise<ConfirmResult>(resolve => {
+        rememberFocus();
         setOptionChecked(false);
         setActive({ kind: 'confirm', options, resolve: result => resolve(result) });
       }),
@@ -78,6 +88,7 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
   const confirmWithOption = useCallback(
     (options: ConfirmOptions) =>
       new Promise<{ confirmed: boolean; checked: boolean }>(resolve => {
+        rememberFocus();
         setOptionChecked(false);
         setActive({
           kind: 'confirm',
@@ -96,14 +107,10 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
   const prompt = useCallback(
     (options: PromptOptions) =>
       new Promise<string | null>(resolve => {
+        rememberFocus();
         setDraft(options.initialValue ?? '');
         setValidationError(undefined);
         setActive({ kind: 'prompt', options, resolve });
-        // Focus after the modal has mounted.
-        requestAnimationFrame(() => {
-          inputRef.current?.focus();
-          inputRef.current?.select();
-        });
       }),
     []
   );
@@ -116,6 +123,10 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
   const close = (settle: () => void) => {
     settle();
     setActive(undefined);
+    const opener = openerRef.current;
+    requestAnimationFrame(() => {
+      if (opener?.isConnected && !opener.matches(':disabled')) opener.focus();
+    });
   };
 
   const cancel = () => {
@@ -161,10 +172,19 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
             onKeyDown={event => {
               if (event.key === 'Escape') {
                 event.preventDefault();
+                event.stopPropagation();
                 cancel();
-              } else if (event.key === 'Enter' && active.kind === 'prompt') {
+              } else if (event.key === 'Enter' && active.kind === 'prompt' && event.target instanceof HTMLInputElement) {
                 event.preventDefault();
+                event.stopPropagation();
                 accept();
+              } else if (event.key === 'Tab') {
+                const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+                  'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+                )).filter(element => element.getClientRects().length > 0);
+                const first = controls[0], last = controls[controls.length - 1];
+                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+                else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
               }
             }}
           >
@@ -213,7 +233,7 @@ export function DialogHost({ children }: { children: React.ReactNode }) {
               )}
             </div>
             <div className="modal-footer app-dialog-actions">
-              <button type="button" className="btn" onClick={cancel}>
+              <button ref={cancelRef} type="button" className="btn" onClick={cancel}>
                 {active.options.cancelLabel ?? 'Cancel'}
               </button>
               {active.kind === 'confirm' && active.options.tertiaryLabel && (

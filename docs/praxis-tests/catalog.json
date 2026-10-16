@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 614,
+  "testCount": 615,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -4114,6 +4114,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "budget-truncated search offers the returned cursor and shows the next page",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-9231FEA5A4",
+      "title": "source search and recovery remain keyboard accessible in light and dark themes",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
+        "line": 66,
+        "project": "functional"
+      },
+      "area": "code Intelligence",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "source search and recovery remain keyboard accessible in light and dark themes",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

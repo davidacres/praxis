@@ -62,3 +62,49 @@ test('budget-truncated search offers the returned cursor and shows the next page
   await expect(panel).not.toContainText('FirstResult');
   await expect(panel.getByRole('button', { name: 'More search results', exact: true })).toHaveCount(0);
 });
+
+test('source search and recovery remain keyboard accessible in light and dark themes', async ({}, testInfo) => {
+  const { win, panel } = await openPanel();
+  await win.setViewportSize({ width: 1000, height: 800 });
+  for (const mode of ['light', 'dark']) {
+    await win.evaluate(mode => {
+      document.documentElement.setAttribute('data-mode', mode);
+      document.documentElement.setAttribute('data-theme', `praxis-${mode}`);
+      document.documentElement.style.setProperty('--ui-scale', '1.25');
+    }, mode);
+    const search = panel.getByLabel('Search source');
+    await search.fill('parser');
+    await search.press('Tab');
+    const submit = panel.getByRole('button', { name: 'Search code', exact: true });
+    await expect(submit).toBeFocused();
+    expect(await submit.evaluate(element => Number.parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);
+    await submit.press('Enter');
+    await expect(panel).toContainText('FirstResult');
+    const relocate = panel.getByRole('button', { name: 'Relocate repository', exact: true });
+    await relocate.focus();
+    await relocate.press('Enter');
+    const dialog = win.getByRole('dialog', { name: 'Relocate repository', exact: true });
+    await expect(dialog.getByRole('textbox')).toBeFocused();
+    await expect(dialog).toContainText('revokes all provider access');
+    await dialog.getByRole('button', { name: 'Relocate repository', exact: true }).focus();
+    await win.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeFocused();
+    await win.keyboard.press('Shift+Tab');
+    await expect(dialog.getByRole('button', { name: 'Relocate repository', exact: true })).toBeFocused();
+    await win.screenshot({ path: testInfo.outputPath(`code-intelligence-${mode}-keyboard-dialog.png`) });
+    await win.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(relocate).toBeEnabled();
+    await expect(relocate).toBeFocused();
+    await relocate.press('Enter');
+    await expect(dialog.getByRole('textbox')).toBeFocused();
+    await dialog.getByRole('textbox').press('Tab');
+    await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+    await win.keyboard.press('Enter');
+    await expect(dialog).toHaveCount(0);
+    await expect(panel).toContainText('/fixture/original');
+    expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await search.scrollIntoViewIfNeeded();
+    await win.screenshot({ path: testInfo.outputPath(`code-intelligence-${mode}-search.png`) });
+  }
+});
