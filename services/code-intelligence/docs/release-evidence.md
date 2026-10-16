@@ -683,3 +683,26 @@ Zero errors; all lexical (≤100 ms) and hybrid (≤500 ms) gates pass. Compared
 `--projects 8` split 49,999 source symbols across eight referencing projects with real cross-project calls (`benchmarks/macos-arm64-50000-8-projects-full.praxis.json`; `/usr/bin/time` peak RSS 1,546,551,296 bytes). Unfiltered: lexical p95 6.35 ms, hybrid 126.5 ms, retrieval-only 115.6 ms, body edit 16,101 ms, refresh 1,873 ms. Zero errors.
 
 **Fails:** four-reader hybrid queries filtered to one project (6,301 of 49,999 symbols): p50 127.5 ms, p95 383.8 ms, p99 393.1 ms; **retrieval-only p95 378.7 ms (> 250)**; vector phase p95 340.6 ms. The score pass ignores filters, so about 1 in 8 window candidates matches. When fewer than 100 validate, the query falls back to the exhaustive join, which explains the bimodal latency. The fix is to apply context, kind and project filters inside the score pass.
+
+## Filtered score pass (schema 6, vector plan 6) — 16 October
+
+`migration006.sql` rebuilds `vector_scan` with each symbol's `context_id` and `kind`, backfilled. Its triggers fill them, and a guarded trigger on `symbols` (fires only when context or kind actually change) keeps them current. `Check()` compares them against `symbols`. The score pass applies the same context, kind and project predicates as validation, so the ranked window holds only candidates that can pass. Validation against the source tables, rescoring from `vectors` and the exhaustive fallback are unchanged. The window test adds a direct kind change, which must keep `Check()` clean and results equal to the exhaustive scan; making the `symbols` trigger a no-op makes `Check()` fail. CI [38956534617](https://github.com/davidacres/praxis/actions/runs/38956534617) at `e2c1ac5d` passed on Windows, Linux and macOS.
+
+Eight-project 50k rerun (`benchmarks/macos-arm64-50000-8-projects-plan6-full.praxis.json`; peak RSS 1,669,152,768 bytes), zero errors:
+- Project-filtered hybrid: p50 115.3 ms, **p95 119.3 ms** (was 383.8), retrieval-only p95 **108.3 ms (passes 250; was 378.7)**, vector p95 66.0 ms.
+- Unfiltered: hybrid p95 126.9 ms, retrieval-only 116.1 ms.
+
+## Crash-recovery stress — 16 October
+
+`scripts/qualify-crash-recovery.mjs` builds a 2,000-symbol corpus with real vectors, then 20 times: edit a file, wait a seeded random 0–2.5 s, SIGKILL the owner, and restart it through the normal client. Each iteration requires clean integrity checks after restart and after recovery, a settled index with full vector coverage, and the edited content published.
+
+The first run (`evaluations/macos-arm64-crash-recovery-before-fixes.praxis.json`) **failed**:
+- Integrity was clean after all 20 kills, and every iteration settled.
+- **11 of 20 recoveries took about 60 s.** A job leased by the killed owner was reclaimed only when its 60-second lease expired.
+- **3 of 20 (kills 113–475 ms after the edit) reported settled within about 0.3 s without the edit.** The restarted owner reported "current" with no pending jobs during its watcher debounce, before it had looked at the sources. A client asking then was told a stale index was current.
+
+Fixes:
+- At start-up, while holding the exclusive owner lock, the owner reclaims every job leased by another owner (`ReclaimAbandonedLeases`; attempts kept, so a job that repeatedly kills its owner still reaches the retry limit).
+- Before publishing its endpoint, the owner queues reconciliation for every unpaused repository (`ScheduleStartupReconciliation`), so status shows pending work from the first request.
+
+New `SchedulerTests` and `HostTests` cases cover both. 120 C# tests pass, zero skipped. The stress rerun against the fixed package follows.

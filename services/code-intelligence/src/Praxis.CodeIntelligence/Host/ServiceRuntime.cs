@@ -184,6 +184,17 @@ public sealed class ServiceRuntime : IDisposable
             Identity.Id("pci:job:", repositoryId, "embed", key), repositoryId, key, JsonSerializer.Serialize(new { fingerprint }), repository.Generation, DateTimeOffset.UtcNow.ToString("O"));
         connection.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repositoryId); transaction.Commit();
     }
+    /// <summary>
+    /// Sources may have changed while no owner was watching. Queue reconciliation
+    /// before accepting clients so status never reports such an index as settled.
+    /// </summary>
+    public void ScheduleStartupReconciliation()
+    {
+        foreach (var repository in Indexer.List())
+            if (repository.State != "paused")
+                try { ScheduleIndex(repository.Id); }
+                catch (Exception ex) when (DiskFull(ex)) { PauseWrites(); }
+    }
     public void CancelRepositoryWork(string repositoryId)
     {
         if (activeJobs.TryGetValue(repositoryId, out var cancellation))

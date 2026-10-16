@@ -38,6 +38,28 @@ public sealed class HostTests
     }
 
     [Fact]
+    public async Task EditsMadeWhileNoOwnerRanAreQueuedAtStartupAndPublished()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "praxis-startup-reconcile-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "source"); Directory.CreateDirectory(source); File.WriteAllText(Path.Combine(source, "Example.cs"), "class Example { int Run() => 1; }");
+            string id; long generation;
+            using (var first = new ServiceRuntime(Path.Combine(root, "data"))) { id = first.Indexer.Register(source); generation = first.Indexer.Index(id).Generation; }
+            File.WriteAllText(Path.Combine(source, "Example.cs"), "class Example { int Run() => 2; int Added() => 3; }");
+            using var restarted = new ServiceRuntime(Path.Combine(root, "data"));
+            restarted.ScheduleStartupReconciliation();
+            var status = restarted.Dispatch(new JsonObject { ["action"] = "query", ["tool"] = "get_index_status", ["arguments"] = new JsonObject { ["repositoryId"] = id } }, CancellationToken.None);
+            Assert.Equal(1L, status["data"]!["jobsByState"]!["pending"]!.GetValue<long>());
+            await restarted.MaintainAsync(CancellationToken.None);
+            Assert.Equal(generation + 1, restarted.Indexer.Get(id).Generation);
+            var found = restarted.Dispatch(new JsonObject { ["action"] = "query", ["tool"] = "find_symbol", ["arguments"] = new JsonObject { ["repositoryId"] = id, ["name"] = "Added" } }, CancellationToken.None);
+            Assert.NotEmpty(found["data"]!["items"]!.AsArray());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task ExplicitRebuildRepublishesUnchangedInputsAndPreservesManualAliases()
     {
         var root = Path.Combine(Path.GetTempPath(), "praxis-rebuild-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
