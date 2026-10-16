@@ -34,6 +34,39 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public void SearchRejectsExcessTermsInsteadOfSilentlyDiscardingThem()
+    {
+        var accepted = Query("search_code", new() { ["query"] = string.Join(" ", Enumerable.Repeat("Target", 64)), ["mode"] = "lexical" });
+        Assert.Null(accepted["error"]); Assert.NotEmpty(accepted["data"]!["matches"]!.AsArray());
+        var rejected = Query("search_code", new() { ["query"] = string.Join(" ", Enumerable.Repeat("Target", 65)), ["mode"] = "hybrid" });
+        Assert.Equal("INVALID_ARGUMENT", rejected["error"]!["code"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void StructuralFiltersApplyBeforeTheLexicalCandidateLimit()
+    {
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "class Noise {\n" + string.Join("\n", Enumerable.Range(0, 350).Select(i =>
+            $"/// <summary>needle needle needle</summary>\n void Decoy{i}() {{}}")) + "\n}");
+        File.WriteAllText(Path.Combine(root, "Scoped.cs"), "/// <summary>needle</summary>\n public class Desired {} ");
+        var metadata = typeof(object).Assembly.Location;
+        MetadataInput[] references = [new(metadata, SourceFiles.Hash(File.ReadAllBytes(metadata)))];
+        File.WriteAllText(Path.Combine(root, "context.praxis.json"), JsonSerializer.Serialize(new PassiveManifest(1,
+            [new("noise", "NoiseProject", ["Example.cs"], Metadata: references), new("desired", "DesiredProject", ["Scoped.cs"], Metadata: references)])));
+        indexer.Index(repository);
+        var desired = Symbol("Desired");
+        using var connection = database.Open(readOnly: true); using var command = connection.CreateCommand();
+        command.CommandText = "SELECT project_id FROM contexts WHERE context_id=$context";
+        command.Parameters.AddWithValue("$context", desired["contextId"]!.GetValue<string>());
+        var project = (string)command.ExecuteScalar()!;
+        foreach (var filters in new[] { new JsonObject { ["kinds"] = new JsonArray("type") }, new JsonObject { ["projectIds"] = new JsonArray(project) } })
+        {
+            var response = Query("search_code", new() { ["query"] = "needle", ["mode"] = "lexical", ["filters"] = filters });
+            Assert.Null(response["error"]);
+            Assert.Contains(response["data"]!["matches"]!.AsArray(), match => match!["symbol"]!["symbolId"]!.GetValue<string>() == desired["symbolId"]!.GetValue<string>());
+        }
+    }
+
+    [Fact]
     public void ExactSignaturesSelectAnOverloadAndNamesRetainBothOverloads()
     {
         var overloads = Query("find_symbol", new() { ["name"] = "Overload" })["data"]!["items"]!.AsArray();

@@ -41,6 +41,9 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             JsonContract.Validate(tool, arguments);
             if (!allowedRepositories.Contains(repositoryId)) throw new QueryException("ACCESS_DENIED", "Repository access has not been granted.");
             cancellationToken.ThrowIfCancellationRequested();
+            // Validate before inference: never silently omit query terms.
+            if (tool == "search_code" && Text(arguments, "query")!.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Length > 64)
+                throw new QueryException("INVALID_ARGUMENT", "Search queries support at most 64 literal terms.");
             ModelQuery? embedded = null;
             if (tool == "search_code" && Text(arguments, "mode") != "lexical" && models is not null)
                 try { embedded = models.QueryEmbedding(repositoryId, Text(arguments, "query")!, cancellationToken); }
@@ -141,11 +144,18 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         throw new QueryException("INDEX_STALE", "Active model changed during query inference; restart the query.");
                     var query = Text(arguments, "query")!;
                     if (string.IsNullOrWhiteSpace(query)) throw new QueryException("INVALID_ARGUMENT", "Search query cannot be blank.");
-                    var tokens = query.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Take(32).Select(t => "\"" + t.Replace("\"", "\"\"") + "\"");
+                    var tokens = query.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(t => "\"" + t.Replace("\"", "\"\"") + "\"");
                     var fts = string.Join(" OR ", tokens);
+                    var retrievalFilters = arguments["filters"] as JsonObject;
+                    var retrievalKinds = retrievalFilters?["kinds"]?.ToJsonString();
+                    var retrievalProjects = retrievalFilters?["projectIds"]?.ToJsonString();
+                    var retrievalLanguage = retrievalFilters?["languages"] is not JsonArray { Count: > 0 } requestedLanguages
+                        || requestedLanguages.Any(language => language!.GetValue<string>() == "csharp");
+                    const string retrievalScope = " AND ($4 IS NULL OR json_array_length($4)=0 OR s.kind IN(SELECT value FROM json_each($4)))"
+                        + " AND ($5 IS NULL OR json_array_length($5)=0 OR s.defining_context_id IN(SELECT context_id FROM contexts WHERE project_id IN(SELECT value FROM json_each($5)))) AND $6";
                     // Pin the matched-candidate side first. Otherwise SQLite may
                     // walk every repository symbol and probe the tiny ranked set.
-                    var rows = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(SELECT d.symbol_id,bm25(symbol_fts,5.0,3.0,1.0,1.0) AS score FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0) SELECT s.*,r.score FROM ranked r CROSS JOIN symbols s ON s.symbol_id=r.symbol_id WHERE s.repository_id=$1 AND ($2 IS NULL OR s.defining_context_id=$2) ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 300", fts, repositoryId, contextId, query);
+                    var rows = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(SELECT d.symbol_id,bm25(symbol_fts,5.0,3.0,1.0,1.0) AS score FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0) SELECT s.*,r.score FROM ranked r CROSS JOIN symbols s ON s.symbol_id=r.symbol_id WHERE s.repository_id=$1 AND ($2 IS NULL OR s.defining_context_id=$2) " + retrievalScope + " ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 100", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguage);
                     bool Eligible(JsonObject row)
                     {
                         var filters = arguments["filters"] as JsonObject;
@@ -173,7 +183,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     {
                         // Each arm uses its repository-scoped index; exact retrieval
                         // must not depend on the bounded FTS candidate list.
-                        var exact = Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND name=$1 AND external=0 AND ($2 IS NULL OR defining_context_id=$2) UNION SELECT * FROM symbols WHERE repository_id=$0 AND qualified_name=$1 AND external=0 AND ($2 IS NULL OR defining_context_id=$2) UNION SELECT * FROM symbols WHERE repository_id=$0 AND signature=$1 AND external=0 AND ($2 IS NULL OR defining_context_id=$2) ORDER BY symbol_id LIMIT 300", repositoryId, query, contextId)
+                        var exact = Rows(connection, transaction, "SELECT s.* FROM (SELECT * FROM symbols WHERE repository_id=$0 AND name=$1 UNION SELECT * FROM symbols WHERE repository_id=$0 AND qualified_name=$1 UNION SELECT * FROM symbols WHERE repository_id=$0 AND signature=$1) s WHERE s.external=0 AND ($2 IS NULL OR s.defining_context_id=$2)" + retrievalScope + " ORDER BY s.symbol_id LIMIT 100", repositoryId, query, contextId, null, retrievalKinds, retrievalProjects, retrievalLanguage)
                             .Where(row => contextId is null || Text(row, "defining_context_id") == contextId).Where(Eligible).Take(100);
                         foreach (var row in exact) Add(row, "exact", 1);
                     }
@@ -197,7 +207,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     }
                     if (mode != "vector")
                     {
-                        var aliases = Rows(connection, transaction, "SELECT s.* FROM aliases a JOIN symbols s ON s.symbol_id=a.symbol_id WHERE a.repository_id=$0 AND a.enabled=1 AND a.phrase_key=$1 AND ($2 IS NULL OR s.defining_context_id=$2) ORDER BY s.symbol_id LIMIT 100", repositoryId, query.Trim().ToLowerInvariant(), contextId).Where(Eligible).ToArray();
+                        var aliases = Rows(connection, transaction, "SELECT DISTINCT s.* FROM aliases a JOIN symbols s ON s.symbol_id=a.symbol_id WHERE a.repository_id=$0 AND a.enabled=1 AND a.phrase_key=$1 AND ($2 IS NULL OR s.defining_context_id=$2) " + retrievalScope + " ORDER BY s.symbol_id LIMIT 100", repositoryId, query.Trim().ToLowerInvariant(), contextId, null, retrievalKinds, retrievalProjects, retrievalLanguage).Where(Eligible).ToArray();
                         for (var index = 0; index < aliases.Length; index++) Add(aliases[index], "alias", index + 1);
                         if (aliases.Length > 0) channels.Add("alias");
                     }

@@ -232,3 +232,7 @@ The fresh full-process Mac run passes the individual exact-query comparisons: hy
 Native CI [38867071673](https://github.com/davidacres/praxis/actions/runs/38867071673) at `5dbc7135` passed all three supported hosts with the selected policy, 98 C# tests, schemas, evaluator and retained-fixture smoke. Later benchmark-only repetition changes do not change the service binary; their expanded smoke passes locally and requires fresh CI.
 
 The real four-context Maze model pilot has complete compiler/vector coverage and a stable snapshot, but positive tuning Recall@10 is **0.7714285714 hybrid**, **0.5142857143 lexical**. It is not held-out evidence and does not establish the 0.80 quality gate. Both the corpus and all misses are preserved under `evaluations`; no reviews are claimed by merely setting flags.
+
+## Filtered retrieval and query-bound correction — 16 October
+
+Search now applies language, kind and project filters before the lexical, exact and alias candidate limits. Alias rows are deduplicated before ranking. A 350-decoy regression verifies that a valid selected project/type cannot disappear behind the unfiltered lexical cap. Queries support up to 64 literal terms; longer requests return `INVALID_ARGUMENT` before model inference rather than silently discarding terms after 32. The full provisioned-model/SDK suite passed 105 tests with zero failures/skips. The earlier 50k performance reports predate this change; fresh timing is required.
