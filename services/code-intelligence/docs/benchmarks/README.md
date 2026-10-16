@@ -100,3 +100,18 @@ Read page-cache version 2 requests 64 MiB (`cache_size=-65536`), still with the 
 ## Mapping coverage and working-set tradeoff
 
 On the identical retained snapshot, a 1 GiB mapping request with the same 64 MiB page-cache request measured hybrid p95 **362.8384 ms**, but query-only maximum RSS reached **2119991296 bytes** (too little margin below 2 GiB to infer whole-process acceptance). Reducing the mapping request to **640 MiB** measured p95 **415.1196 ms** and query-only maximum RSS **1906245632 bytes**. Both latency pilots pass 500 ms; neither query-only RSS is full-process qualification. The selected mapping is version 3; page-cache version 2 and vector query-plan version 3 are unchanged. Raw `retained-map1g` and `retained-map640` reports preserve actual settings, snapshot identity and one-sample diagnostics. These are individual fixed-snapshot observations, not the full repeated/category/concurrent-edit protocol.
+
+## Repeated warm exact-query runs
+
+The retained harness accepts `--readers 1|4` and `--runs 1..5`; these options are intentionally query-only and leave the retained fixture unchanged. For example:
+
+```sh
+dotnet path/to/Praxis.CodeIntelligence.Benchmarks.dll --reuse-fixture /absolute/generated-fixture --readers 4 --runs 5 --queries 100 --output repeated-four.praxis.json
+dotnet path/to/Praxis.CodeIntelligence.Benchmarks.dll --reuse-fixture /absolute/generated-fixture --readers 1 --runs 5 --queries 200 --output repeated-one.praxis.json
+```
+
+Reports preserve every run's p50/p95/p99, maximum, sample count, timed and warmup errors and bounded diagnostics. The top-level timing is the **worst-p95 run**, never a pooled value that hides a failure; p95 min/max are explicit and any error fails the aggregate gate. Timed failures retain elapsed time in the sample set. Fixture validation failures still reject the run before measurement.
+
+Default one-run/four-reader comparisons keep schedule version 1. Explicit one-reader or repeated runs use schedule version 2: ordinal `(iteration * readers + reader) * 17` modulo the stored query list. Query-list hash, schedule version and per-reader count are reported; compare identical workload settings for before/after claims. These repeated measurements cover exact-name synthetic queries only. Other categories, concurrent edits, owner/MCP transport, per-request queue/SQL/inference/serialization percentiles and full-process/cold RAM remain separate work.
+
+The native smoke now also verifies repeated single-reader counts/p99 and deliberately injects missing-query failures: all 40 failed timed requests and 20 failed warmups remain recorded, and the overall gate fails. It restores metadata and cleans up its owned fixture afterward.

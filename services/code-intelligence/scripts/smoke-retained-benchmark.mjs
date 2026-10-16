@@ -37,6 +37,26 @@ try {
   assert.equal(first.Lexical.Count, 40);
   if (process.env.PRAXIS_MODEL_BUNDLE) assert.equal(first.Hybrid.Count, 40);
   assert.ok(first.Unmeasured.includes('cold startup/index/embedding'));
+  const repeatedPath = path.join(output, 'repeated.praxis.json');
+  const repeatedRun = await invoke(['--reuse-fixture', fixture, '--readers', '1', '--runs', '2', '--queries', '10', '--output', repeatedPath]);
+  assert.ok(repeatedRun.code === 0 || repeatedRun.code === 2, repeatedRun.stderr);
+  const repeated = JSON.parse(await readFile(repeatedPath, 'utf8'));
+  assert.equal(repeated.Readers, 1); assert.equal(repeated.RunCount, 2); assert.equal(repeated.Measurements.length, 2);
+  assert.equal(repeated.QuerySetHash, first.QuerySetHash); assert.equal(repeated.QueryScheduleVersion, 2);
+  for (const sample of repeated.Measurements) {
+    assert.equal(sample.Lexical.Count, 10); assert.equal(sample.Lexical.Errors, 0);
+    assert.ok(sample.Lexical.P99Ms >= sample.Lexical.P95Ms);
+  }
+  try {
+    await writeFile(marker, JSON.stringify({ ...metadata, Queries: ['ScipAbsentProbeQ9999'] }));
+    const failedPath = path.join(output, 'failed-searches.praxis.json');
+    const failedRun = await invoke(['--reuse-fixture', fixture, '--queries', '10', '--output', failedPath]);
+    assert.equal(failedRun.code, 2, failedRun.stderr);
+    const failed = JSON.parse(await readFile(failedPath, 'utf8'));
+    assert.equal(failed.Lexical.Count, 40); assert.equal(failed.Lexical.Errors, 40); assert.equal(failed.Lexical.WarmupErrors, 20);
+    assert.equal(failed.Gates.noQueryErrors, false); assert.equal(failed.PassedMeasuredGates, false);
+    assert.notEqual(failed.QuerySetHash, first.QuerySetHash);
+  } finally { await writeFile(marker, originalMarker); }
   const refuse = async (name, message) => {
     const destination = path.join(output, `${name}.praxis.json`);
     const result = await invoke(['--reuse-fixture', fixture, '--queries', '10', '--output', destination]);
@@ -54,7 +74,7 @@ try {
   try { await writeFile(marker, JSON.stringify({ ...metadata, QueryEpoch: metadata.QueryEpoch + 1 })); await refuse('epoch', /index snapshot changed/); }
   finally { await writeFile(marker, originalMarker); }
   await run('restored');
-  console.log('Retained benchmark smoke passed: real queries, repeatable snapshot, source/membership/epoch rejection and restoration.');
+  console.log('Retained benchmark smoke passed: real queries, repeatable snapshot, source/membership/epoch rejection, repeated single-reader queries, retained failures and restoration.');
 } finally {
   // Delete only a fixture with this harness's known generated identity and parent.
   if (fixture && /^praxis-benchmark-[a-f0-9]{32}$/.test(path.basename(fixture))

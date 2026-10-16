@@ -12,20 +12,25 @@ using Praxis.CodeIntelligence.Storage;
 var options = new Dictionary<string, string>(StringComparer.Ordinal);
 if (args.Length % 2 != 0) throw new ArgumentException("Expected flag/value pairs.");
 for (var i = 0; i < args.Length; i += 2)
-    if (args[i] is not ("--symbols" or "--queries" or "--output" or "--model" or "--retain-fixture" or "--reuse-fixture") || !options.TryAdd(args[i], args[i + 1]))
+    if (args[i] is not ("--symbols" or "--queries" or "--output" or "--model" or "--retain-fixture" or "--reuse-fixture" or "--readers" or "--runs") || !options.TryAdd(args[i], args[i + 1]))
         throw new ArgumentException("Unknown or duplicate flag.");
 var symbols = int.Parse(options.GetValueOrDefault("--symbols", "5000"));
 var queries = int.Parse(options.GetValueOrDefault("--queries", "100"));
 if (symbols is < 100 or > 49999 || queries is < 10 or > 1000) throw new ArgumentException("Symbols must be 100–49999 source symbols (50000 total including metadata); queries 10–1000 per reader.");
 var output = Path.GetFullPath(options.GetValueOrDefault("--output", "benchmark.praxis.json"));
 if (!output.EndsWith(".praxis.json", StringComparison.Ordinal)) throw new ArgumentException("Output must end in .praxis.json.");
+var readers = int.Parse(options.GetValueOrDefault("--readers", "4"));
+var runs = int.Parse(options.GetValueOrDefault("--runs", "1"));
+if (readers is not (1 or 4) || runs is < 1 or > 5) throw new ArgumentException("Readers must be 1 or 4; runs 1–5.");
+if (!options.ContainsKey("--reuse-fixture") && (options.ContainsKey("--readers") || options.ContainsKey("--runs")))
+    throw new ArgumentException("Reader/run selection requires a retained query fixture.");
 var retain = options.GetValueOrDefault("--retain-fixture", "false");
 if (retain is not ("true" or "false")) throw new ArgumentException("--retain-fixture expects true or false.");
 if (options.TryGetValue("--reuse-fixture", out var existing))
 {
     if (options.ContainsKey("--model") || options.ContainsKey("--symbols") || retain == "true")
         throw new ArgumentException("Reuse accepts only a retained fixture, queries and output; it never republishes or installs models.");
-    try { return await RetainedBenchmark.Run(existing, queries, output); }
+    try { return await RetainedBenchmark.Run(existing, queries, output, readers, runs); }
     catch (Exception error) when (error is IOException or ArgumentException or JsonException
         or UnauthorizedAccessException or InvalidOperationException or KeyNotFoundException)
     {
@@ -102,6 +107,7 @@ try
     using var connection = database.Open(readOnly: true); using var command = connection.CreateCommand(); command.CommandText = "SELECT sqlite_version()";
     var gates = new Dictionary<string, bool?>
     {
+        ["noQueryErrors"] = lexical.Errors == 0 && lexical.WarmupErrors == 0 && (hybrid is null || hybrid.Errors == 0 && hybrid.WarmupErrors == 0),
         ["lexicalP95AtMost100Ms"] = lexical.P95Ms <= 100,
         ["hybridP95AtMost500Ms"] = hybrid is null ? null : hybrid.P95Ms <= 500,
         ["fiveThousandSymbolBodyEditAtMost2Seconds"] = symbols == 5000 ? editMs <= 2000 : null,
@@ -138,4 +144,5 @@ try
 }
 finally { if (retain != "true" || !File.Exists(Path.Combine(temporary, "benchmark-fixture.praxis.json"))) Directory.Delete(temporary, recursive: true); }
 
-internal sealed record Timing(int Readers, int Count, double P50Ms, double P95Ms, double MaximumMs);
+internal sealed record Timing(int Readers, int Count, double P50Ms, double P95Ms, double MaximumMs, double P99Ms, int Errors, int WarmupErrors, string[] ErrorMessages);
+internal sealed record QueryRun(int Run, Timing Lexical, Timing? Hybrid);

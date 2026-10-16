@@ -29,24 +29,35 @@ internal static class RetainedBenchmark
         File.WriteAllText(Path.Combine(directory, Marker), JsonSerializer.Serialize(fixture, Json) + "\n");
     }
 
-    internal static async Task<Timing> Measure(Action<string, int> search, string mode, int queries)
+    internal static async Task<Timing> Measure(Action<string, int> search, string mode, int queries, int readers = 4, bool linearSchedule = false)
     {
-        for (var i = 0; i < 20; i++) search(mode, i);
-        var times = new ConcurrentBag<double>(); using var start = new Barrier(4);
-        await Task.WhenAll(Enumerable.Range(0, 4).Select(reader => Task.Run(() =>
+        var messages = new ConcurrentQueue<string>(); int messageCount = 0, warmupErrors = 0, errors = 0;
+        void Record(Exception error)
+        {
+            if (Interlocked.Increment(ref messageCount) <= 10) messages.Enqueue(error.GetType().Name + ": " + error.Message);
+        }
+        for (var i = 0; i < 20; i++)
+            try { search(mode, i); }
+            catch (Exception error) when (error is not OutOfMemoryException) { warmupErrors++; Record(error); }
+        var times = new ConcurrentBag<double>(); using var start = new Barrier(readers);
+        await Task.WhenAll(Enumerable.Range(0, readers).Select(reader => Task.Run(() =>
         {
             start.SignalAndWait();
             for (var i = 0; i < queries; i++)
             {
-                var timer = Stopwatch.StartNew(); search(mode, i * 17 + reader); times.Add(timer.Elapsed.TotalMilliseconds);
+                var timer = Stopwatch.StartNew();
+                try { search(mode, linearSchedule ? (i * readers + reader) * 17 : i * 17 + reader); }
+                catch (Exception error) when (error is not OutOfMemoryException) { Interlocked.Increment(ref errors); Record(error); }
+                finally { times.Add(timer.Elapsed.TotalMilliseconds); }
             }
         })));
         var values = times.Order().ToArray();
-        return new(4, values.Length, values[(int)Math.Ceiling(values.Length * .5) - 1],
-            values[(int)Math.Ceiling(values.Length * .95) - 1], values[^1]);
+        return new(readers, values.Length, values[(int)Math.Ceiling(values.Length * .5) - 1],
+            values[(int)Math.Ceiling(values.Length * .95) - 1], values[^1],
+            values[(int)Math.Ceiling(values.Length * .99) - 1], errors, warmupErrors, messages.ToArray());
     }
 
-    internal static async Task<int> Run(string directory, int queries, string output)
+    internal static async Task<int> Run(string directory, int queries, string output, int readers, int runCount)
     {
         directory = SourceFiles.CanonicalDirectory(directory);
         var marker = SourceFiles.Resolve(directory, Marker);
@@ -94,14 +105,22 @@ internal static class RetainedBenchmark
                 || response["data"]?["vectorCoveredSymbolCount"]?.GetValue<long>() != fixture.SourceSymbols))
                 throw new IOException("Retained hybrid query requires complete current vector coverage.");
         }
-        Console.Error.WriteLine("Measuring retained four-reader lexical queries.");
-        var lexical = await Measure(Search, "lexical", queries);
-        Timing? hybrid = null;
-        if (fixture.Fingerprint is not null)
+        var samples = new List<QueryRun>(); var linearSchedule = readers != 4 || runCount > 1;
+        for (var run = 1; run <= runCount; run++)
         {
-            Console.Error.WriteLine("Measuring retained four-reader hybrid queries.");
-            hybrid = await Measure(Search, "hybrid", queries);
+            Console.Error.WriteLine($"Measuring retained {readers}-reader lexical queries, run {run}/{runCount}.");
+            var lexicalRun = await Measure(Search, "lexical", queries, readers, linearSchedule);
+            Timing? hybridRun = null;
+            if (fixture.Fingerprint is not null)
+            {
+                Console.Error.WriteLine($"Measuring retained {readers}-reader hybrid queries, run {run}/{runCount}.");
+                hybridRun = await Measure(Search, "hybrid", queries, readers, linearSchedule);
+            }
+            samples.Add(new(run, lexicalRun, hybridRun));
         }
+        var lexical = samples.OrderByDescending(sample => sample.Lexical.P95Ms).First().Lexical;
+        var hybrid = samples.Where(sample => sample.Hybrid is not null).Select(sample => sample.Hybrid!)
+            .OrderByDescending(sample => sample.P95Ms).FirstOrDefault();
         double? embeddingMs = null, candidateScanMs = null;
         if (fixture.Fingerprint is not null)
         {
@@ -119,9 +138,20 @@ internal static class RetainedBenchmark
             || after.State != repository.State) throw new IOException("Retained index changed during measurements.");
         using var connection = database.Open(readOnly: true);
         object? Scalar(string sql) { using var command = connection.CreateCommand(); command.CommandText = sql; return command.ExecuteScalar(); }
-        var gates = new Dictionary<string, bool?> { ["lexicalP95AtMost100Ms"] = lexical.P95Ms <= 100,
+        var gates = new Dictionary<string, bool?> {
+            ["noQueryErrors"] = samples.All(sample => sample.Lexical.Errors == 0 && sample.Lexical.WarmupErrors == 0
+                && (sample.Hybrid is null || sample.Hybrid.Errors == 0 && sample.Hybrid.WarmupErrors == 0)),
+            ["lexicalP95AtMost100Ms"] = lexical.P95Ms <= 100,
             ["hybridP95AtMost500Ms"] = hybrid is null ? null : hybrid.P95Ms <= 500 };
-        var report = new { Version = 1, ExecutionMode = "Retained post-edit synthetic snapshot; query-only, direct service API",
+        var report = new { Version = 2, ExecutionMode = "Retained post-edit synthetic snapshot; query-only, direct service API",
+            Readers = readers, RunCount = runCount, WarmupsPerRun = 20, QueriesPerReader = queries,
+            QueryScheduleVersion = linearSchedule ? 2 : 1,
+            QuerySetHash = SourceFiles.Hash(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(fixture.Queries))),
+            Measurements = samples, SummaryBasis = "Top-level timing is the run with highest p95; all runs and failures retained",
+            P95Range = new { LexicalMin = samples.Min(sample => sample.Lexical.P95Ms), LexicalMax = lexical.P95Ms,
+                HybridMin = samples.Where(sample => sample.Hybrid is not null).Select(sample => (double?)sample.Hybrid!.P95Ms).Min(),
+                HybridMax = hybrid?.P95Ms },
+            LogicalProcessors = Environment.ProcessorCount, OnnxInterOpThreads = 1, OnnxIntraOpThreads = Math.Clamp(Environment.ProcessorCount, 1, 4),
             TimestampUtc = DateTimeOffset.UtcNow, Runtime = RuntimeInformation.FrameworkDescription,
             OperatingSystem = RuntimeInformation.OSDescription, Architecture = RuntimeInformation.ProcessArchitecture.ToString(),
             Sqlite = Scalar("SELECT sqlite_version()"), ActualReadMappingBytes = Scalar("PRAGMA mmap_size"), ActualReadPageCacheSetting = Scalar("PRAGMA cache_size"),
@@ -134,7 +164,7 @@ internal static class RetainedBenchmark
                 QueryEmbeddingMs = embeddingMs, ExactCandidateScanMs = candidateScanMs },
             Gates = gates, PassedMeasuredGates = gates.Values.All(value => value != false),
             Unmeasured = new[] { "cold startup/index/embedding", "edit publication/refresh", "peak RSS from runtime",
-                "owner/MCP/provider transport", "held-out relevance", "five-run/category/concurrent-edit protocol" } };
+                "owner/MCP/provider transport", "held-out relevance", "other reader counts/query categories/concurrent edits; retained repeated runs are only exact queries" } };
         Directory.CreateDirectory(Path.GetDirectoryName(output)!);
         File.WriteAllText(output, JsonSerializer.Serialize(report, Json) + "\n");
         Console.WriteLine(output); Console.WriteLine(JsonSerializer.Serialize(gates));
