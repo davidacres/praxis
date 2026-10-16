@@ -17,12 +17,23 @@ public sealed class ServiceRuntime : IDisposable
     public DurableScheduler Scheduler { get; }
     private readonly RepositoryMonitor monitor = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> activeJobs = new(StringComparer.Ordinal);
-    private readonly string grantsDirectory;
+    private readonly string grantsDirectory, dataDirectory;
+    // Held open for the owner's lifetime so SQLite keeps its -wal/-shm files.
+    // Without it the last close removes them, and on a full volume no later
+    // connection (reads included) can recreate them.
+    private readonly Microsoft.Data.Sqlite.SqliteConnection keepAlive;
+    // SQLite has already rolled the failed transaction back; pausing keeps the
+    // maintenance loop alive without hammering a full volume.
+    private readonly object storageLock = new();
+    private DateTimeOffset? diskFullUtc; private DateTimeOffset writesResumeUtc = DateTimeOffset.MinValue;
+    internal TimeSpan DiskFullRetryDelay { get; init; } = TimeSpan.FromSeconds(30);
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
     public ServiceRuntime(string dataDirectory)
     {
         Directory.CreateDirectory(dataDirectory);
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dataDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        Database = new(Path.Combine(dataDirectory, "index.db")); Database.Initialize(); Indexer = new(Database);
+        this.dataDirectory = dataDirectory;
+        Database = new(Path.Combine(dataDirectory, "index.db")); Database.Initialize(); keepAlive = Database.Open(); Indexer = new(Database);
         models = new(Database, Path.Combine(dataDirectory, "models")); queries = new(Database, models);
         Scheduler = new(Database);
         grantsDirectory = Path.Combine(dataDirectory, "grants"); Directory.CreateDirectory(grantsDirectory);
@@ -85,7 +96,7 @@ public sealed class ServiceRuntime : IDisposable
                         return queries.Execute(request["tool"]!.GetValue<string>(), arguments, new HashSet<string>(), cancellationToken);
                     return result;
                 }
-                case "doctor": return Result(new { checks = Database.Check() });
+                case "doctor": return Result(new { checks = Database.Check(), storage = StorageStatus() });
                 case "model-install": return Result(new { fingerprint = models.Install(request["bundle"]!.GetValue<string>()) });
                 case "model-activate": QueueModel(repositoryId!, request["fingerprint"]!.GetValue<string>()); return Result(new { queued = true });
                 case "backup": Database.Backup(request["destination"]!.GetValue<string>()); return Result(new { backedUp = true });
@@ -93,10 +104,18 @@ public sealed class ServiceRuntime : IDisposable
             }
         }
         catch (OperationCanceledException) { return Error("CANCELLED", "Operation cancelled."); }
+        catch (Exception ex) when (DiskFull(ex))
+        {
+            PauseWrites();
+            return Error("DISK_FULL", "The index volume is full. The last committed index is unchanged; background writes are paused until space is available.", retryable: true);
+        }
         catch (KeyNotFoundException) { return Error("REPOSITORY_NOT_FOUND", "Repository is not registered."); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException)
         { return Error("OPERATION_FAILED", "Operation could not complete; check source access, passive context and owner state."); }
+        catch (Microsoft.Data.Sqlite.SqliteException)
+        { return Error("OPERATION_FAILED", "The index database could not complete the operation; run doctor for integrity checks.", retryable: true); }
     }
+    private bool DiskFull(Exception error) => StorageFailures.IsDiskFull(error, dataDirectory);
     private void RevokeRepositoryGrants(string repositoryId)
     {
         foreach (var path in Directory.EnumerateFiles(grantsDirectory))
@@ -135,7 +154,17 @@ public sealed class ServiceRuntime : IDisposable
         finally { File.Delete(temporary); }
     }
     public static JsonObject Result<T>(T data) => new() { ["data"] = System.Text.Json.JsonSerializer.SerializeToNode(data, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }) };
-    public static JsonObject Error(string code, string message) => new() { ["error"] = new JsonObject { ["code"] = code, ["message"] = message, ["retryable"] = false } };
+    public static JsonObject Error(string code, string message, bool retryable = false) => new() { ["error"] = new JsonObject { ["code"] = code, ["message"] = message, ["retryable"] = retryable } };
+    private void PauseWrites(bool diskFull = true)
+    {
+        lock (storageLock) { var now = Clock.GetUtcNow(); if (diskFull) diskFullUtc ??= now; writesResumeUtc = now + DiskFullRetryDelay; }
+    }
+    private object StorageStatus()
+    {
+        lock (storageLock)
+            return new { writesPaused = diskFullUtc is not null, code = diskFullUtc is null ? null : "DISK_FULL",
+                sinceUtc = diskFullUtc?.ToString("O"), retryUtc = diskFullUtc is null ? null : writesResumeUtc.ToString("O") };
+    }
     private void ScheduleIndex(string repositoryId)
     {
         var repository = Indexer.Get(repositoryId);
@@ -163,7 +192,28 @@ public sealed class ServiceRuntime : IDisposable
 
     public async Task MaintainAsync(CancellationToken cancellationToken)
     {
-        foreach (var repositoryId in monitor.Poll(Indexer.List())) ScheduleIndex(repositoryId);
+        bool resuming;
+        lock (storageLock)
+        {
+            if (Clock.GetUtcNow() < writesResumeUtc) return;
+            resuming = diskFullUtc is not null;
+        }
+        try
+        {
+            // A job that failed on a full volume may have exhausted its retries;
+            // reconcile everything once writes resume so no index stays stale.
+            if (resuming) foreach (var repository in Indexer.List()) if (repository.State != "paused") ScheduleIndex(repository.Id);
+            foreach (var repositoryId in monitor.Poll(Indexer.List())) ScheduleIndex(repositoryId);
+            await RunNextJobAsync(cancellationToken);
+            if (resuming) lock (storageLock) if (Clock.GetUtcNow() >= writesResumeUtc) diskFullUtc = null;
+        }
+        catch (Exception ex) when (DiskFull(ex)) { PauseWrites(); }
+        // Any other storage failure backs off rather than ending the maintenance loop.
+        catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or IOException) { PauseWrites(diskFull: false); }
+    }
+
+    private async Task RunNextJobAsync(CancellationToken cancellationToken)
+    {
         var job = Scheduler.LeaseNext(); if (job is null) return;
         using var work = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); activeJobs[job.RepositoryId] = work;
         using var heartbeatCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -186,7 +236,14 @@ public sealed class ServiceRuntime : IDisposable
             Scheduler.Complete(job);
         }
         catch (OperationCanceledException) { Scheduler.Fail(job, "CANCELLED"); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or JsonException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException)
+        catch (Exception ex) when (DiskFull(ex))
+        {
+            PauseWrites();
+            // Recording the failure is itself a write; if it cannot commit, the
+            // lease expires and normal recovery reclaims the job.
+            try { Scheduler.Fail(job, "DISK_FULL"); } catch (Exception recording) when (DiskFull(recording)) { }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or JsonException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException or Microsoft.Data.Sqlite.SqliteException)
         { Scheduler.Fail(job, ex is InvalidOperationException ? "INDEX_STALE" : "OPERATION_FAILED"); }
         finally
         {
@@ -194,5 +251,5 @@ public sealed class ServiceRuntime : IDisposable
             activeJobs.TryRemove(job.RepositoryId, out _);
         }
     }
-    public void Dispose() { foreach (var work in activeJobs.Values) work.Cancel(); monitor.Dispose(); models.Dispose(); }
+    public void Dispose() { foreach (var work in activeJobs.Values) work.Cancel(); monitor.Dispose(); models.Dispose(); keepAlive.Dispose(); }
 }

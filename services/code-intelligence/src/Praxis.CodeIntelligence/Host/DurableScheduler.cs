@@ -66,13 +66,16 @@ public sealed class DurableScheduler(IndexDatabase database, TimeProvider? timeP
     private bool Finish(LeasedJob job, string? errorCode, bool obsolete)
     {
         using var connection = database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
-        var retry = errorCode is not null && job.Attempts <= RetrySeconds.Length;
+        // A full volume is not the job's failure: the runtime pauses writes, so
+        // the job returns to pending without using an attempt or a backoff slot.
+        var diskFull = errorCode == "DISK_FULL";
+        var retry = errorCode is not null && (diskFull || job.Attempts <= RetrySeconds.Length);
         var state = obsolete ? "obsolete" : errorCode is null ? "succeeded" : retry ? "pending" : "failed";
-        var available = retry ? clock.GetUtcNow().AddSeconds(RetrySeconds[job.Attempts - 1]).ToString("O") : Now;
+        var available = retry && !diskFull ? clock.GetUtcNow().AddSeconds(RetrySeconds[job.Attempts - 1]).ToString("O") : Now;
         var changed = connection.Execute(transaction,
-            "UPDATE jobs SET state=$0,available_utc=$1,error_code=$2,error_message=$3,lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL "
+            "UPDATE jobs SET state=$0,available_utc=$1,error_code=$2,error_message=$3,lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL,attempts=attempts-$8 "
             + "WHERE job_id=$4 AND state='leased' AND lease_token=$5 AND lease_owner=$6 AND lease_until_utc>$7",
-            state, available, errorCode, errorCode is null ? null : "Background operation failed; retry or inspect repository status.", job.Id, job.Token, owner, Now) == 1;
+            state, available, errorCode, errorCode is null ? null : diskFull ? "The index volume is full; the job resumes when space is available." : "Background operation failed; retry or inspect repository status.", job.Id, job.Token, owner, Now, diskFull ? 1 : 0) == 1;
         if (changed) connection.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", job.RepositoryId);
         transaction.Commit(); return changed;
     }

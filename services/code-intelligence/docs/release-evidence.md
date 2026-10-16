@@ -8,6 +8,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Source/context and dependency graph | Source identity/evidence, cross-project source uses, captured project/assembly references and configuration withdrawal tested | General runtime delegate flow is explicitly unresolved; no NuGet-name inference |
 | Durable work and edit updates | Real 5k watcher: 25 edits, structural p95 1.676 s, semantic upper-bound p95 0.620 s, no errors | This measurement predates adapter v8; five-run/concurrent-edit protocol remains open |
 | MCP | Four local SDK/stdio tests pass, including native grants/errors and controlled in-flight child cancellation | Actual live provider adapter/inference cancellation qualification remains open |
+| Disk full | Actual full-volume qualification on macOS (64 MiB APFS image filled to ENOSPC): retryable `DISK_FULL`, reads keep serving the committed index, `doctor` reports paused writes with zero integrity findings, automatic recovery about 31 s after space returns; `SQLITE_FULL` fault test on every platform | Windows/Linux actual-volume runs; owner-start-on-already-full volume relies on the nearly-full heuristic |
 | JSON Schema | Fresh final-code batch: 132 responses across all 11 tools validate | Repeat for future wire changes |
 | Application/native packaging | Full application build and current native owner/SQLite/ONNX/IPC packaging smoke pass locally | Latest release-wide platform/UI matrix remains open |
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
@@ -508,3 +509,26 @@ The fresh-fixture benchmark gained an opt-in `--concurrent-edits N` phase (`f945
 | **Independent peak RSS** | **2,594,717,696 bytes: fails the 2 GiB budget** |
 
 The benchmark's own summary reports `PassedMeasuredGates: true` only because its in-process RSS gate is unavailable on macOS (`null`). The independent measurement is authoritative, and it fails. The idle full run peaked at 2,020,671,488 bytes, so the extra roughly 545 MiB comes from overlapping compilation/publication with four readers' mapped and cached pages. This is not yet attributed between the writer, the reader mappings and the page caches. Specification §31.3 requires memory-pressure admission (stop background inference, evict caches, reduce concurrency at 80% of the budget); that admission control is not implemented. Tail latency under edits (hybrid p99 856 ms, max 4.7 s) and publication slowing to about 2× are also recorded.
+
+## Disk-full handling and actual full-volume qualification — 16 October
+
+The first actual full-volume run (`scripts/qualify-disk-full.mjs`: a private 64 MiB APFS sparse image holds only the index data and is filled until the OS returns ENOSPC) **failed** every behavioural gate. Two causes:
+- **Every connection failed, reads included.** The owner opened a fresh, unpooled connection per operation. When the last one closed, SQLite deleted `index.db-wal` and `index.db-shm`, and a full volume could not recreate them. Every open, including reads and `doctor`, then failed with `SQLITE_CANTOPEN` (14).
+- **Failures were silent and permanent.** `SqliteException` was caught by neither `Dispatch` nor the owner's request handler, so clients saw "Unable to read beyond the end of the stream" instead of an error. The same exception faulted the background maintenance task, so indexing never resumed after space was freed until the owner restarted.
+
+Fixes (specification §31.3):
+- **Keep-alive connection.** The owner holds one idle connection open for its lifetime, so the WAL and shared-memory files persist. Reads keep working on a full volume, and writes fail inside SQLite with `SQLITE_FULL`, which rolls the transaction back.
+- **Classification.** `StorageFailures.IsDiskFull` recognises `SQLITE_FULL`, ENOSPC and the Windows disk-full codes, including wrapped exceptions. It also counts SQLite CANTOPEN/IOERR or other I/O failures when the index volume has under 16 MiB free (`NearlyFullBytes`); that is a heuristic for an owner started on an already-full volume.
+- **Errors.** `Dispatch` returns retryable `DISK_FULL`; other SQLite failures return `OPERATION_FAILED` instead of escaping. The owner replies `INTERNAL_ERROR` to any unexpected exception rather than dropping the client.
+- **Pausing and recovery.** Background writes pause on a 30 s retry delay. `doctor` reports `storage: {writesPaused, code, sinceUtc, retryUtc}`. A `DISK_FULL` job returns to pending without using an attempt or a backoff slot, and the first maintenance pass after the pause reconciles every unpaused repository. Other storage exceptions back off instead of ending the maintenance loop. The job-level handler now also records `SqliteException` failures.
+
+Result after the fixes (`evaluations/macos-arm64-actual-disk-full.praxis.json`), all five gates pass:
+- The volume was genuinely full (63,307,776 filler bytes).
+- `index` returned retryable `DISK_FULL`.
+- `doctor` reported `writesPaused: true` with code `DISK_FULL` and zero integrity findings.
+- Search results and generation were unchanged.
+- After the filler was deleted, the new file became searchable after about 31 s without a restart, and the pause cleared.
+
+`DiskFullTests` adds classification checks and a cross-platform `SQLITE_FULL` scenario: a page cap set through the internal test hook makes SQLite fail exactly as it does on a full volume. That scenario covers a direct action, background maintenance, the preserved committed state and recovery. Mutation checks: disabling the no-backoff `DISK_FULL` rule fails it. Disabling the outer maintenance catch does not fail the unit test, because the page cap cannot deterministically fail small scheduling writes; the actual-volume run is what covers that path.
+
+Verification: 116 C# tests, zero skipped; 13 evaluator tests through the packaged owner; 4 MCP SDK/stdio tests, zero skipped; native IPC packaging smoke. The actual-volume script is macOS-only (it uses `hdiutil`). Windows and Linux actual-volume runs remain open.

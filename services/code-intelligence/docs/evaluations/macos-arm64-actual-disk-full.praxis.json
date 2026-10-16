@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "platform": "darwin",
+  "architecture": "arm64",
+  "timestampUtc": "2026-10-16T16:10:40.000Z",
+  "measurement": "Packaged CLI and owner; index database on a 64 MiB APFS sparse image filled until ENOSPC",
+  "steps": [
+    {
+      "name": "baseline",
+      "generation": 1,
+      "searchHash": "sha256:532f85875e4738dbc1baa5ad17f1f817a3fe21d1b2b72113f20d0d3de09acb96"
+    },
+    {
+      "name": "volume filled",
+      "fillerBytes": 63307776
+    },
+    {
+      "name": "index on full volume",
+      "exitCode": 5,
+      "error": {
+        "code": "DISK_FULL",
+        "message": "The index volume is full. The last committed index is unchanged; background writes are paused until space is available.",
+        "retryable": true
+      },
+      "doctorStorage": {
+        "writesPaused": true,
+        "code": "DISK_FULL",
+        "sinceUtc": "2026-10-16T16:10:42.5554560+00:00",
+        "retryUtc": "2026-10-16T16:11:12.5554560+00:00"
+      },
+      "doctorChecks": [],
+      "generation": 1,
+      "generationUnchanged": true,
+      "searchUnchanged": true,
+      "searchError": null
+    },
+    {
+      "name": "space returned",
+      "recovered": {
+        "afterMs": 31332
+      },
+      "doctorStorage": {
+        "writesPaused": false,
+        "code": null,
+        "sinceUtc": null,
+        "retryUtc": null
+      },
+      "doctorChecks": []
+    }
+  ],
+  "gates": {
+    "diskActuallyFull": true,
+    "diskFullErrorReturned": true,
+    "writesPausedReported": true,
+    "committedStatePreserved": true,
+    "recoveredWithoutRestart": true
+  },
+  "passed": true
+}

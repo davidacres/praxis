@@ -20,6 +20,9 @@ public sealed class IndexDatabase
         return (sql, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sql))));
     }).ToArray();
     public string Path { get; }
+    // Deterministic SQLITE_FULL for fault tests: caps writable connections'
+    // page count, which makes SQLite fail exactly as it does on a full volume.
+    internal long? WritablePageLimit { get; set; }
 
     public IndexDatabase(string path) => Path = System.IO.Path.GetFullPath(path);
 
@@ -40,6 +43,7 @@ public sealed class IndexDatabase
             // Bound file-backed read mappings; SQLite retains WAL snapshot and
             // locking semantics and falls back to its pager where unsupported.
             if (readOnly) Execute(connection, $"PRAGMA mmap_size={MaximumReadMappingBytes}; PRAGMA cache_size=-{ReadPageCacheKiB};");
+            else if (WritablePageLimit is long pages) Execute(connection, $"PRAGMA max_page_count={pages};");
             return connection;
         }
         catch { connection.Dispose(); throw; }

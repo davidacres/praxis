@@ -1,0 +1,102 @@
+// Actual full-volume qualification on macOS: the index lives on a private,
+// size-limited disk image that is filled until the OS reports ENOSPC. Source
+// files stay outside the image. Never fills or touches any other volume.
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, mkdir, writeFile, readFile, rm, open, access } from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+const execute = promisify(execFile);
+const options = new Map();
+for (let index = 2; index < process.argv.length; index += 2) {
+  const key = process.argv[index], value = process.argv[index + 1];
+  if (!['--executable', '--output'].includes(key) || !value || options.has(key)) throw Error('Invalid arguments');
+  options.set(key, value);
+}
+if (process.platform !== 'darwin') throw Error('Actual disk-full qualification uses hdiutil and runs on macOS only');
+for (const key of ['--executable', '--output']) if (!options.has(key)) throw Error(`Missing ${key}`);
+const executable = path.resolve(options.get('--executable')), output = path.resolve(options.get('--output'));
+if (!output.endsWith('.praxis.json')) throw Error('Output must end in .praxis.json');
+try { await access(output); throw Error('Output already exists'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+const work = await mkdtemp(path.join(os.tmpdir(), 'pci-disk-full-'));
+const image = path.join(work, 'index.sparseimage'), volume = path.join(work, 'volume');
+const data = path.join(volume, 'data'), source = path.join(work, 'source');
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+const hash = text => text === undefined ? null : 'sha256:' + crypto.createHash('sha256').update(text).digest('hex');
+async function cli(...args) {
+  try { const { stdout } = await execute(executable, [...args, '--data', data], { timeout: 120_000 }); return { exitCode: 0, json: JSON.parse(stdout) }; }
+  catch (error) {
+    if (typeof error.code !== 'number') throw error;
+    return { exitCode: error.code, json: error.stdout ? JSON.parse(error.stdout) : null, stderr: error.stderr };
+  }
+}
+async function fillVolume() {
+  const filler = path.join(volume, 'filler.bin'); const handle = await open(filler, 'w'); const block = Buffer.alloc(1 << 20); let written = 0;
+  try {
+    // Shrink the write size near the end so the volume is genuinely exhausted.
+    for (let size = block.length; size >= 512;) {
+      try { await handle.write(block, 0, size); written += size; }
+      catch (error) { if (error.code !== 'ENOSPC') throw error; size >>= 1; }
+    }
+    await handle.sync();
+  } finally { await handle.close(); }
+  return { filler, written };
+}
+const report = { version: 1, platform: process.platform, architecture: process.arch, timestampUtc: new Date().toISOString(),
+  measurement: 'Packaged CLI and owner; index database on a 64 MiB APFS sparse image filled until ENOSPC', steps: [] };
+const step = (name, details) => { report.steps.push({ name, ...details }); console.error(name, JSON.stringify(details)); };
+let attached = false, ownerProcess;
+try {
+  await execute('hdiutil', ['create', '-size', '64m', '-fs', 'APFS', '-type', 'SPARSE', '-volname', 'PciDiskFull', image.replace(/\.sparseimage$/, '')]);
+  await mkdir(volume); await execute('hdiutil', ['attach', '-nobrowse', '-mountpoint', volume, image]); attached = true;
+  await mkdir(source);
+  await writeFile(path.join(source, 'Example.cs'), Array.from({ length: 50 }, (_, i) => `public class Example${i} { public int Run${i}() => ${i}; }`).join('\n'));
+  const registered = await cli('register', source); if (registered.exitCode) throw Error('Register failed: ' + JSON.stringify(registered));
+  const id = registered.json.data.repositoryId;
+  const indexed = await cli('index', id); if (indexed.exitCode) throw Error('Initial index failed: ' + JSON.stringify(indexed));
+  const owner = JSON.parse(await readFile(path.join(data, 'owner.json'), 'utf8')); ownerProcess = owner.processId;
+  const generation = async () => (await cli('status', id)).json?.indexGeneration ?? null;
+  const search = async query => { const result = await cli('search', id, query); return result.json ?? { cliExitCode: result.exitCode, stderr: result.stderr?.slice(0, 2000) }; };
+  const baseline = await search('Example7'); const baselineGeneration = await generation();
+  step('baseline', { generation: baselineGeneration, searchHash: hash(JSON.stringify(baseline.data.matches)) });
+
+  const { filler, written } = await fillVolume();
+  step('volume filled', { fillerBytes: written });
+  await writeFile(path.join(source, 'Large.cs'), Array.from({ length: 2000 }, (_, i) =>
+    `/// <summary>Grows the index beyond the remaining space ${i}.</summary>\npublic class Large${i} { public int Value${i}() => ${i}; }`).join('\n'));
+  const full = await cli('index', id);
+  const fullDoctor = (await cli('doctor')).json?.data;
+  const duringSearch = await search('Example7'); const duringGeneration = await generation();
+  step('index on full volume', { exitCode: full.exitCode, error: full.json?.error ?? null, doctorStorage: fullDoctor?.storage ?? null,
+    doctorChecks: fullDoctor?.checks ?? null, generation: duringGeneration, generationUnchanged: duringGeneration === baselineGeneration,
+    searchUnchanged: hash(JSON.stringify(duringSearch?.data?.matches)) === hash(JSON.stringify(baseline.data.matches)),
+    searchError: duringSearch?.error ?? (duringSearch?.cliExitCode === undefined ? null : duringSearch) });
+
+  await rm(filler);
+  let recovered = null; const started = Date.now();
+  while (Date.now() - started < 120_000) {
+    const result = await search('Large7');
+    if (result?.data?.matches?.length) { recovered = { afterMs: Date.now() - started }; break; }
+    await wait(2000);
+  }
+  const afterDoctor = (await cli('doctor')).json?.data;
+  step('space returned', { recovered, doctorStorage: afterDoctor?.storage ?? null, doctorChecks: afterDoctor?.checks ?? null });
+
+  const [, filled, onFull, afterSpace] = report.steps;
+  report.gates = {
+    diskActuallyFull: filled.fillerBytes > 0,
+    diskFullErrorReturned: onFull.error?.code === 'DISK_FULL' && onFull.error?.retryable === true,
+    writesPausedReported: onFull.doctorStorage?.writesPaused === true,
+    committedStatePreserved: onFull.searchUnchanged === true && onFull.generationUnchanged === true && Array.isArray(onFull.doctorChecks) && onFull.doctorChecks.length === 0,
+    recoveredWithoutRestart: afterSpace.recovered !== null && afterSpace.doctorStorage?.writesPaused === false && afterSpace.doctorChecks?.length === 0
+  };
+  report.passed = Object.values(report.gates).every(Boolean);
+} finally {
+  if (ownerProcess) try { process.kill(ownerProcess); await wait(1000); } catch { }
+  if (attached) await execute('hdiutil', ['detach', volume, '-force']).catch(error => console.error('Detach failed:', error.message));
+  await rm(work, { recursive: true, force: true });
+}
+await writeFile(output, JSON.stringify(report, null, 2) + '\n');
+console.log(JSON.stringify({ output, passed: report.passed, gates: report.gates }));
+if (!report.passed) process.exitCode = 2;

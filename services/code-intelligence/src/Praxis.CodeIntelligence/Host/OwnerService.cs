@@ -108,6 +108,12 @@ public static class OwnerService
                     finally { semaphore.Release(); }
                 }
                 catch (Exception ex) when (ex is IOException or OperationCanceledException or System.Text.Json.JsonException or InvalidOperationException) { }
+                catch (Exception)
+                {
+                    // Never drop a client without a coded reply; no details or stack traces.
+                    try { await Framing.WriteAsync(pipe, ServiceRuntime.Error("INTERNAL_ERROR", "The owner could not complete the request."), Framing.MaximumResponseBytes, lifetime.Token); }
+                    catch (Exception reply) when (reply is IOException or OperationCanceledException or ObjectDisposedException) { }
+                }
             }
         }
     }
