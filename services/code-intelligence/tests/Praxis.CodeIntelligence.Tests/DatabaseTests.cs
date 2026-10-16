@@ -85,6 +85,7 @@ public sealed class DatabaseTests : IDisposable
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
+    [InlineData(3)]
     public void OlderSchemaUpgradePreservesFactsAndAddsLookupIndexes(int version)
     {
         Directory.CreateDirectory(root);

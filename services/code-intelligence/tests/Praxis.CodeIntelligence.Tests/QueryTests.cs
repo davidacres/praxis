@@ -34,6 +34,29 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public void RevisionOnlyDocumentUpdatesPreserveFtsAndChangedTextRetokenizes()
+    {
+        var target = Symbol("Target")["symbolId"]!.GetValue<string>();
+        using var connection = database.Open(); using var command = connection.CreateCommand();
+        command.CommandText = "SELECT total_changes()"; var before = Convert.ToInt64(command.ExecuteScalar());
+        command.CommandText = "UPDATE search_documents SET input_revision='next-revision' WHERE symbol_id=$symbol";
+        command.Parameters.AddWithValue("$symbol", target); Assert.Equal(1, command.ExecuteNonQuery());
+        command.CommandText = "SELECT total_changes()";
+        Assert.Equal(1, Convert.ToInt64(command.ExecuteScalar()) - before);
+        command.CommandText = "SELECT count(*) FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH 'Target' AND d.symbol_id=$symbol";
+        Assert.Equal(1L, command.ExecuteScalar());
+        command.CommandText = "UPDATE search_documents SET name='RevisionProbe',signature='RevisionProbe',documentation='RevisionProbe',description='RevisionProbe' WHERE symbol_id=$symbol";
+        Assert.Equal(1, command.ExecuteNonQuery());
+        command.CommandText = "SELECT count(*) FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH 'Target' AND d.symbol_id=$symbol";
+        Assert.Equal(0L, command.ExecuteScalar());
+        var response = Query("search_code", new() { ["query"] = "RevisionProbe", ["mode"] = "lexical" });
+        Assert.Null(response["error"]);
+        Assert.Equal(target, Assert.Single(response["data"]!["matches"]!.AsArray())!["symbol"]!["symbolId"]!.GetValue<string>());
+        command.CommandText = "INSERT INTO symbol_fts(symbol_fts,rank) VALUES('integrity-check',1)"; command.ExecuteNonQuery();
+        Assert.Empty(database.Check());
+    }
+
+    [Fact]
     public void SearchRejectsExcessTermsInsteadOfSilentlyDiscardingThem()
     {
         var accepted = Query("search_code", new() { ["query"] = string.Join(" ", Enumerable.Repeat("Target", 64)), ["mode"] = "lexical" });

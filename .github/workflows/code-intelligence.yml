@@ -76,6 +76,11 @@ jobs:
           dotnet services/code-intelligence/benchmarks/Praxis.CodeIntelligence.Benchmarks/bin/Release/net10.0/Praxis.CodeIntelligence.Benchmarks.dll --symbols 5000 --queries 100 --model "$PRAXIS_MODEL_BUNDLE" --output "$RUNNER_TEMP/praxis-benchmarks/linux-x64-5000-hybrid.praxis.json"
       - name: Package host runtime and smoke-test native CLI, SQLite and ONNX
         run: node scripts/build-service.mjs --package
+      - name: Verify actual watcher and semantic refresh smoke
+        run: |
+          executable="$GITHUB_WORKSPACE/services/code-intelligence/artifacts/package/Praxis.CodeIntelligence"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then executable="$executable.exe"; fi
+          node services/code-intelligence/scripts/benchmark-watcher.mjs --executable "$executable" --model "$PRAXIS_MODEL_BUNDLE" --reference "$(dirname "$executable")/System.Private.CoreLib.dll" --symbols 100 --edits 5 --output "$RUNNER_TEMP/praxis-benchmarks/watcher-100-smoke.praxis.json"
       - name: Verify evaluator through the packaged owner
         run: |
           executable="$GITHUB_WORKSPACE/services/code-intelligence/artifacts/package/Praxis.CodeIntelligence"

@@ -1,0 +1,8 @@
+{
+  "implementationCommit": "38691641",
+  "measurement": "Full process /usr/bin/time -l, including compiler/indexing, local inference and edit/refresh",
+  "maximumResidentSetBytes": 1827373056,
+  "limitBytes": 2147483648,
+  "peakRssAtMost2GiB": true,
+  "rawReport": "macos-arm64-50000-profile5-map512-full.praxis.json"
+}
