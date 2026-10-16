@@ -153,7 +153,8 @@ public static class OwnerService
                     }
                     catch (Exception ex) when (!submitted && ex is IOException or TimeoutException or System.Text.Json.JsonException) { }
                 startup ??= Start(directory);
-                if (startup.HasExited && startup.ExitCode != 0 && !File.Exists(rendezvous)) throw new IOException("Owner startup failed. Local IPC permissions or owner locking may be unavailable.");
+                if (startup.HasExited && startup.ExitCode != 0 && !File.Exists(rendezvous))
+                    throw new IOException("Owner startup failed. " + (StartupFailure(startup) is { Length: > 0 } reason ? reason : "Local IPC permissions or owner locking may be unavailable."));
                 await Task.Delay(100, deadline.Token);
             }
             throw new IOException("Owner startup timed out.");
@@ -174,7 +175,20 @@ public static class OwnerService
         if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase)) start.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
         start.ArgumentList.Add("serve"); start.ArgumentList.Add("--data"); start.ArgumentList.Add(directory);
         var process = Process.Start(start) ?? throw new IOException("Cannot start owner.");
-        process.OutputDataReceived += (_, _) => { }; process.ErrorDataReceived += (_, _) => { }; process.BeginOutputReadLine(); process.BeginErrorReadLine(); return process;
+        // Keep only the owner's last few error lines so a startup failure can name its cause.
+        var lines = new Queue<string>(); Failures.AddOrUpdate(process, lines);
+        process.OutputDataReceived += (_, _) => { };
+        process.ErrorDataReceived += (_, line) => { if (line.Data is { Length: > 0 } text) lock (lines) { lines.Enqueue(text.Length > 400 ? text[..400] : text); while (lines.Count > 3) lines.Dequeue(); } };
+        process.BeginOutputReadLine(); process.BeginErrorReadLine(); return process;
+    }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Process, Queue<string>> Failures = new();
+    private static string StartupFailure(Process process)
+    {
+        process.WaitForExit(); // flush asynchronous stderr reads
+        if (!Failures.TryGetValue(process, out var lines)) return "";
+        string line; lock (lines) line = lines.LastOrDefault(entry => entry.Contains(':')) ?? lines.LastOrDefault() ?? "";
+        var separator = line.IndexOf(": ", StringComparison.Ordinal); // drop the owner's own error-code prefix
+        return separator > 0 && line[..separator].All(character => char.IsAsciiLetterUpper(character) || character == '_') ? line[(separator + 2)..] : line;
     }
     private static async Task WatchDisconnect(Stream stream, CancellationTokenSource cancellation)
     {

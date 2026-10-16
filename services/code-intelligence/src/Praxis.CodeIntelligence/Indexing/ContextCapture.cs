@@ -125,8 +125,12 @@ public static class ContextCapture
                 var reasons = (text + "\n" + errorText).Split('\n').Select(line => line.Trim())
                     .Where(line => Regex.IsMatch(line, @"\berror [A-Z]+[0-9]+:", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50)))
                     .Distinct(StringComparer.Ordinal).Take(3).Select(line => line.Length > 400 ? line[..400] + "…" : line).ToArray();
-                throw new IOException("Project context capture failed. " + (reasons.Length > 0 ? string.Join(" | ", reasons)
-                    : "Check SDK/references and explicitly choose --restore if needed."));
+                // Some failures (SDK resolution, global.json pins) carry no error code.
+                if (reasons.Length == 0)
+                    reasons = (errorText + "\n" + text).Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0)
+                        .Take(2).Select(line => line.Length > 400 ? line[..400] + "…" : line).ToArray();
+                throw new IOException("Project context capture failed. " + (reasons.Length > 0 ? string.Join(" | ", reasons) + " " : "")
+                    + "Check the SDK and references; add --restore only if restore output is missing.");
             }
             var first = text.IndexOf('{'); var last = text.LastIndexOf('}');
             if (first < 0 || last < first) throw new IOException("Project capture returned no bounded JSON metadata.");
