@@ -4091,7 +4091,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
-        "line": 38,
+        "line": 39,
         "project": "functional"
       },
       "area": "code Intelligence",
@@ -4107,7 +4107,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
-        "line": 54,
+        "line": 57,
         "project": "functional"
       },
       "area": "code Intelligence",
@@ -4123,7 +4123,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
-        "line": 66,
+        "line": 69,
         "project": "functional"
       },
       "area": "code Intelligence",

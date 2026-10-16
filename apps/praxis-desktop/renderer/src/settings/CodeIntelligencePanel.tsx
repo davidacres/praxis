@@ -65,7 +65,7 @@ export function CodeIntelligencePanel({ providers, servers, onServersChange }: {
   return (
     <section className="code-intelligence-panel" data-testid="code-intelligence-panel" aria-busy={busy}>
       <h4 className="settings-subsection-title">Code intelligence</h4>
-      <p className="settings-hint">Index C# locally for source search and static navigation. Registration never builds projects, restores packages, or downloads models.</p>
+      <p className="settings-hint">Index C# locally for source search and static navigation. Registration never builds projects, restores packages, or downloads models. Search uses saved files; unsaved editor changes are not indexed.</p>
       <fieldset disabled={busy}>
         <legend>Register a repository</legend>
         <label>Repository folder<input className="input" value={root} onChange={event => setRoot(event.target.value)} placeholder="Absolute repository path" /></label>

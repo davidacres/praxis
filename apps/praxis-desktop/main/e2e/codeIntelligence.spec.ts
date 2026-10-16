@@ -32,11 +32,14 @@ async function openPanel() {
   await win.getByTestId('ai-tab-tools').click();
   const panel = win.getByTestId('code-intelligence-panel');
   await expect(panel).toContainText('Generation 1');
+  await expect(panel).toContainText('Search uses saved files; unsaved editor changes are not indexed.');
   return { win, panel };
 }
 
 test('rebuild and relocation use the themed recovery flow and refresh status', async ({}, testInfo) => {
   const { win, panel } = await openPanel();
+  await panel.getByText('Index C# locally', { exact: false }).scrollIntoViewIfNeeded();
+  await win.screenshot({ path: testInfo.outputPath('code-intelligence-saved-files.png') });
   win.on('dialog', () => { throw new Error('Recovery must use an in-app dialog.'); });
   await panel.getByRole('button', { name: 'Rebuild index', exact: true }).click();
   await expect(panel).toContainText('Generation 2');
