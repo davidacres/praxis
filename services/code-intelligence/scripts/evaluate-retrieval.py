@@ -52,8 +52,11 @@ def validate(corpus):
             raise ValueError("Negative queries cannot have positive relevance labels.")
         if case["category"] != "negative" and not labels:
             raise ValueError("Nonnegative queries need explicit current relevance labels.")
-        if case["category"] == "exact" and len(labels) != 1:
-            raise ValueError("Exact queries require one unique relevance label.")
+        if "ambiguousExact" in case and (case["category"] != "exact" or not isinstance(case["ambiguousExact"], bool)):
+            raise ValueError("ambiguousExact is a boolean reserved for exact queries.")
+        if case["category"] == "exact" and ((case.get("ambiguousExact") is True and len(labels) < 2)
+                                                   or (case.get("ambiguousExact") is not True and len(labels) != 1)):
+            raise ValueError("Exact queries require one label, or explicit ambiguity with multiple labels.")
         for label in labels:
             if not isinstance(label, dict) or set(label) - {"name", "qualifiedName", "signature", "contextId"} or any(
                     not isinstance(value, str) or not value for value in label.values()):
@@ -130,6 +133,7 @@ def evaluate(corpus, invoke):
                                 and not any(evidence.get(identity, {}).get("path") in case.get("expectedEvidence", [])
                                             for identity in match.get("evidenceIds", []))]
             results.append({"id": case["id"], "category": case["category"], "split": case["split"], "mode": mode,
+                            "ambiguousExact": case.get("ambiguousExact", False),
                             **score(labelled[case["id"]], ids), "latencyMs": elapsed, "error": response.get("error"),
                             "indexGeneration": response.get("indexGeneration"), "queryEpoch": response.get("queryEpoch"),
                             "semanticAvailable": "vector" in data.get("channelsUsed", [])
@@ -144,7 +148,9 @@ def evaluate(corpus, invoke):
     recall = summary["hybrid/all"]["recallAt10"]
     category_deltas = [summary[f"hybrid/{category}"]["recallAt10"] - summary[f"lexical/{category}"]["recallAt10"]
                        for category in CATEGORIES if summary[f"hybrid/{category}"]["recallAt10"] is not None]
-    exact = [case for case in results if case["category"] == "exact" and case["mode"] == "hybrid" and case["split"] == "heldOut"]
+    exact = [case for case in results if case["category"] == "exact" and case["mode"] == "hybrid" and case["split"] == "heldOut" and not case["ambiguousExact"]]
+    ambiguous = [case for case in results if case["category"] == "exact" and case["mode"] == "hybrid"
+                 and case["split"] == "heldOut" and case["ambiguousExact"]]
     contexts = before.get("data", {}).get("contexts", [])
     gates = {**protocol,
              "completeCompilerContexts": bool(contexts)
@@ -157,6 +163,7 @@ def evaluate(corpus, invoke):
              "noDuplicateResults": all(not case["duplicateResults"] for case in results),
              "fullSemanticCoverage": all(case["semanticAvailable"] for case in results if case["mode"] == "hybrid"),
              "exactTop1": bool(exact) and all(case["top1"] for case in exact),
+             "ambiguousExactRecall": all(case["recallAt10"] == 1 for case in ambiguous),
              "heldOutRecallAtLeast080": recall is not None and recall >= .8,
              "noCategoryRegressionOver005": bool(category_deltas) and all(delta >= -.05 for delta in category_deltas),
              "expectedEvidencePresent": all(not case["missingExpectedEvidence"] for case in results),

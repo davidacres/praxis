@@ -51,6 +51,29 @@ def owner(semantic=True, change_epoch=False, miss=False, resolution="complete"):
 
 
 class EvaluationTests(unittest.TestCase):
+    def test_ambiguous_exact_queries_require_explicit_labels_and_complete_retrieval(self):
+        draft = corpus()
+        case = next(case for case in draft['queries'] if case['category'] == 'exact' and case['split'] == 'heldOut')
+        case['expected'].append({'name': 'second-overload', 'qualifiedName': 'second-overload'})
+        with self.assertRaises(ValueError):
+            retrieval.validate(draft)
+        case['ambiguousExact'] = True
+        report = retrieval.evaluate(draft, owner())
+        self.assertTrue(report['gates']['exactTop1'])
+        self.assertFalse(report['gates']['ambiguousExactRecall'])
+        original = owner()
+        def both(tool, arguments):
+            response = original(tool, arguments)
+            if tool == 'search_code' and arguments['query'] == case['query']:
+                match = json.loads(json.dumps(response['data']['matches'][0]))
+                match['symbol']['symbolId'] = 'second-overload'
+                response['data']['matches'].append(match)
+            return response
+        self.assertTrue(retrieval.evaluate(draft, both)['gates']['ambiguousExactRecall'])
+        case['expected'].pop()
+        with self.assertRaises(ValueError):
+            retrieval.validate(draft)
+
     def test_duplicates_cannot_promote_eleventh_result_or_inflate_recall(self):
         result = retrieval.score({'target'}, ['other'] * 10 + ['target'])
         self.assertEqual(0, result['recallAt10'])

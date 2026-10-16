@@ -1,0 +1,620 @@
+{
+  "version": 1,
+  "sourceRepository": "https://github.com/davidacres/maze",
+  "sourceRevision": "61d4510a8ef6946407fa310038ae0add1fffdf24",
+  "reviewed": false,
+  "reviewedBy": "",
+  "nearDuplicateSplitReviewed": false,
+  "negativeAbstentionReviewed": false,
+  "reviewedExplanationCount": 0,
+  "notes": "Same tuning texts and source-grounded declarations, with compiler-qualified selectors in the four-project subset. Human review declarations remain false.",
+  "queries": [
+    {
+      "id": "maze-draft-1",
+      "category": "exact",
+      "split": "tuning",
+      "query": "GenerateRefreshTokenAsync",
+      "expected": [
+        {
+          "name": "GenerateRefreshTokenAsync",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.GenerateRefreshTokenAsync(System.Guid, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/RefreshTokenService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-2",
+      "category": "exact",
+      "split": "tuning",
+      "query": "RevokeAllUserTokensAsync",
+      "expected": [
+        {
+          "name": "RevokeAllUserTokensAsync",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.RevokeAllUserTokensAsync(System.Guid, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/RefreshTokenService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-3",
+      "category": "exact",
+      "split": "tuning",
+      "query": "ProviderHealthMonitor",
+      "expected": [
+        {
+          "name": "ProviderHealthMonitor",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderHealthMonitor.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-4",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "reject expired revoked or inactive-user refresh credentials and consume a valid token",
+      "expected": [
+        {
+          "name": "ValidateAndConsumeRefreshTokenAsync",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.ValidateAndConsumeRefreshTokenAsync(string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/RefreshTokenService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-5",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "delete old revoked refresh tokens and expired credentials from the database",
+      "expected": [
+        {
+          "name": "CleanupExpiredTokensAsync",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.CleanupExpiredTokensAsync(System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/RefreshTokenService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-6",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "calculate uptime excluding accumulated provider downtime",
+      "expected": [
+        {
+          "name": "CalculateUptime",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.CalculateUptime(Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderHealthMonitor.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-7",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "SHA256 token hashing",
+      "expected": [
+        {
+          "name": "ComputeTokenHash",
+          "qualifiedName": "Maze.UserService.Services.RefreshTokenService.ComputeTokenHash(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/RefreshTokenService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-8",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "degraded provider success rate and response time status",
+      "expected": [
+        {
+          "name": "DetermineStatus",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.DetermineStatus(Maze.SearchCore.Models.ProviderStats, Maze.SearchCore.Services.ProviderHealthMonitor.ProviderHealthData)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderHealthMonitor.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-9",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "match dynamic collection terms ignoring accents punctuation and case",
+      "expected": [
+        {
+          "name": "Matches",
+          "qualifiedName": "Maze.SearchCore.Services.DynamicCollectionMatcher.Matches(Maze.SearchCore.Models.MediaItem, System.Collections.Generic.IReadOnlyList<string>)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/DynamicCollectionMatcher.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-10",
+      "category": "exact",
+      "split": "tuning",
+      "query": "RecordSearchAsync",
+      "expected": [
+        {
+          "name": "RecordSearchAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService.RecordSearchAsync(Maze.SearchCore.Models.SearchMetrics, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchMetricsService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-11",
+      "category": "exact",
+      "split": "tuning",
+      "query": "GetAnalyticsAsync",
+      "expected": [
+        {
+          "name": "GetAnalyticsAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService.GetAnalyticsAsync(System.DateTime?, System.DateTime?, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchMetricsService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-12",
+      "category": "exact",
+      "split": "tuning",
+      "query": "GetRecentSearchesAsync",
+      "expected": [
+        {
+          "name": "GetRecentSearchesAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService.GetRecentSearchesAsync(int, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchMetricsService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-13",
+      "category": "exact",
+      "split": "tuning",
+      "query": "GetTopQueriesAsync",
+      "expected": [
+        {
+          "name": "GetTopQueriesAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService.GetTopQueriesAsync(int, System.TimeSpan?, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchMetricsService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-14",
+      "category": "exact",
+      "split": "tuning",
+      "query": "LoadAllRulesAsync",
+      "expected": [
+        {
+          "name": "LoadAllRulesAsync",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderRuleLoader.LoadAllRulesAsync()"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderRuleLoader.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-15",
+      "category": "exact",
+      "split": "tuning",
+      "query": "LoadRuleFromFileAsync",
+      "expected": [
+        {
+          "name": "LoadRuleFromFileAsync",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderRuleLoader.LoadRuleFromFileAsync(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderRuleLoader.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-16",
+      "category": "exact",
+      "split": "tuning",
+      "query": "CreateProvidersFromRules",
+      "expected": [
+        {
+          "name": "CreateProvidersFromRules",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderRuleLoader.CreateProvidersFromRules(System.Collections.Generic.List<Maze.SearchCore.Models.ProviderRule>)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderRuleLoader.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-17",
+      "category": "exact",
+      "split": "tuning",
+      "query": "AnalyzeQueryAsync",
+      "expected": [
+        {
+          "name": "AnalyzeQueryAsync",
+          "qualifiedName": "Maze.SearchCore.Services.QueryIntelligenceService.AnalyzeQueryAsync(string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/QueryIntelligenceService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-18",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "JSONL metrics persistence",
+      "expected": [
+        {
+          "name": "RecordSearchAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService.RecordSearchAsync(Maze.SearchCore.Models.SearchMetrics, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchMetricsService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-19",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "case-insensitive trailing-comma provider rule deserialization",
+      "expected": [
+        {
+          "name": "LoadRuleFromFileAsync",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderRuleLoader.LoadRuleFromFileAsync(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderRuleLoader.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-20",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "JSON HTML parser type validation",
+      "expected": [
+        {
+          "name": "ValidateRule",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderRuleLoader.ValidateRule(Maze.SearchCore.Models.ProviderRule)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderRuleLoader.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-21",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "SHA256 search cache key site selection sort order",
+      "expected": [
+        {
+          "name": "GenerateCacheKey",
+          "qualifiedName": "Maze.SearchCore.Services.SearchCacheService.GenerateCacheKey(string, Maze.SearchCore.Models.SortBy, Maze.SearchCore.Models.SortOrder, System.Collections.Generic.IEnumerable<string>, Maze.SearchCore.Models.SiteSelection?)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchCacheService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-22",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "year quality season episode intent classification",
+      "expected": [
+        {
+          "name": "AnalyzeQueryAsync",
+          "qualifiedName": "Maze.SearchCore.Services.QueryIntelligenceService.AnalyzeQueryAsync(string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/QueryIntelligenceService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-23",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "top twenty query frequency analytics",
+      "expected": [
+        {
+          "name": "GetAnalyticsAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService.GetAnalyticsAsync(System.DateTime?, System.DateTime?, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchMetricsService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-24",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "Unicode nonspacing mark removal",
+      "expected": [
+        {
+          "name": "RemoveDiacritics",
+          "qualifiedName": "Maze.SearchCore.Services.DynamicCollectionMatcher.RemoveDiacritics(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/DynamicCollectionMatcher.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-25",
+      "category": "terminology",
+      "split": "tuning",
+      "query": "five consecutive provider failures downtime",
+      "expected": [
+        {
+          "name": "RecordFailureAsync",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderHealthMonitor.RecordFailureAsync(string, string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderHealthMonitor.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-26",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "remove cached searches associated with one provider while preserving others",
+      "expected": [
+        {
+          "name": "InvalidateProviderAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchCacheService.InvalidateProviderAsync(string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchCacheService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-27",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "clear every tracked search cache entry and its provider mapping",
+      "expected": [
+        {
+          "name": "InvalidateAllAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchCacheService.InvalidateAllAsync(System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchCacheService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-28",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "store search response with expiration and track keys by result source",
+      "expected": [
+        {
+          "name": "SetCachedResponseAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchCacheService.SetCachedResponseAsync(string, Maze.SearchCore.Models.SearchResponse, System.TimeSpan, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchCacheService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-29",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "return null for a blank cache key or a cache miss",
+      "expected": [
+        {
+          "name": "GetCachedResponseAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchCacheService.GetCachedResponseAsync(string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchCacheService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-30",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "combine recent and file metrics skipping malformed lines and apply date filters",
+      "expected": [
+        {
+          "name": "LoadMetricsAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService.LoadMetricsAsync(System.DateTime?, System.DateTime?, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchMetricsService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-31",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "archive oversized metrics log with a timestamp under a semaphore",
+      "expected": [
+        {
+          "name": "RotateMetricsFileIfNeededAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService.RotateMetricsFileIfNeededAsync(System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchMetricsService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-32",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "delete all except the five newest metrics archives",
+      "expected": [
+        {
+          "name": "CleanupOldArchivesAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchMetricsService.CleanupOldArchivesAsync(System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchMetricsService.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-33",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "return an empty rule list when the provider rules directory is absent",
+      "expected": [
+        {
+          "name": "LoadAllRulesAsync",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderRuleLoader.LoadAllRulesAsync()"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderRuleLoader.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-34",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "construct a generic rule provider using a named HTTP client and registry",
+      "expected": [
+        {
+          "name": "CreateProviderFromRule",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderRuleLoader.CreateProviderFromRule(Maze.SearchCore.Models.ProviderRule)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderRuleLoader.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-35",
+      "category": "behaviour",
+      "split": "tuning",
+      "query": "continue creating providers when one rule raises an exception",
+      "expected": [
+        {
+          "name": "CreateProvidersFromRules",
+          "qualifiedName": "Maze.SearchCore.Services.ProviderRuleLoader.CreateProvidersFromRules(System.Collections.Generic.List<Maze.SearchCore.Models.ProviderRule>)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ProviderRuleLoader.cs"
+      ],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-36",
+      "category": "negative",
+      "split": "tuning",
+      "query": "Kubernetes pod autoscaler reconciliation",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-37",
+      "category": "negative",
+      "split": "tuning",
+      "query": "Bitcoin proof of work miner implementation",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-38",
+      "category": "negative",
+      "split": "tuning",
+      "query": "DICOM radiology image decoder",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-39",
+      "category": "negative",
+      "split": "tuning",
+      "query": "Terraform AWS infrastructure state importer",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": false
+    },
+    {
+      "id": "maze-draft-40",
+      "category": "negative",
+      "split": "tuning",
+      "query": "OpenGL vertex shader compiler",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": false
+    }
+  ],
+  "implementationCommit": "11e8ecd873dc8cafe79c780a2c2ca01e185af2fb",
+  "compilerManifestHash": "sha256:64b01ce03c56699642ad140acfbd785f5f32957f119e80bd03c1c0db01c74d0c"
+}
