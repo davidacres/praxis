@@ -55,6 +55,33 @@ public sealed class VectorFilterTests
             Check(alpha.Context, null, [beta.Project], _ => false);
             Check(null, null, ["missing"], _ => false);
             Check("missing", null, null, _ => false);
+            snapshot.Commit();
+            string corruptedSymbol, set; byte[] original;
+            using (var select = connection.CreateCommand())
+            {
+                select.CommandText = "SELECT e.symbol_id,e.set_id,v.values_blob FROM embedding_sets e JOIN vectors v ON v.set_id=e.set_id WHERE e.expected_chunks=1 ORDER BY e.symbol_id LIMIT 1";
+                using var reader = select.ExecuteReader(); Assert.True(reader.Read());
+                corruptedSymbol = reader.GetString(0); set = reader.GetString(1); original = (byte[])reader.GetValue(2);
+            }
+            void Store(byte[] bytes)
+            {
+                using var writer = database.Open(); using var command = writer.CreateCommand();
+                // Simulate on-disk corruption, bypassing only the length CHECK.
+                // Normal publication cannot create these malformed rows.
+                command.CommandText = "PRAGMA ignore_check_constraints=ON; UPDATE embedding_sets SET state='pending' WHERE set_id=$set; UPDATE vectors SET values_blob=$bytes WHERE set_id=$set; UPDATE embedding_sets SET state='ready' WHERE set_id=$set;";
+                command.Parameters.AddWithValue("$set", set); command.Parameters.AddWithValue("$bytes", bytes);
+                command.ExecuteNonQuery();
+            }
+            foreach (var length in new[] { original.Length - 4, original.Length + 4 })
+            {
+                var malformed = new byte[length]; original.AsSpan(0, Math.Min(length, original.Length)).CopyTo(malformed);
+                Store(malformed);
+                using var read = database.Open(readOnly: true); using var transaction = read.BeginTransaction(deferred: true);
+                var actual = ModelStore.Candidates(read, transaction, repository, query, null, null, null);
+                Assert.Equal(all.Where(candidate => candidate.SymbolId != corruptedSymbol), actual);
+            }
+            Store(original);
+            Assert.Empty(database.Check());
         }
         finally { Directory.Delete(root, recursive: true); }
     }
