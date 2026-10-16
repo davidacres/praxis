@@ -224,3 +224,11 @@ Review policy clarification: specification §32 asks for reviewed labels and rec
 ## Repeated-query evidence support
 
 The retained benchmark supports one/four readers and up to five warm runs, preserving each run, p99, p95 min/max and all failed sample timings. Any timed/warmup error fails its gate. Workload hash/schedule/count are explicit; repeated runs use a declared deterministic schedule version 2. Real-model smoke verifies repeatability plus an injected 40-request/20-warmup failure case with no omitted samples. This is evaluation support, not a completed category/concurrent-edit performance protocol. The fresh full-process 50k selected-policy run remains in flight in an immutable copy of the prior benchmark build.
+
+## Fresh selected-policy 50k process and compiler-backed tuning pilot
+
+The fresh full-process Mac run passes the individual exact-query comparisons: hybrid p95 **478.7044 ms**, lexical p95 **4.4348 ms**, and independent peak RSS **2015674368 bytes** (below 2 GiB, compiler/native/model included). The full raw report and overlap/measurement limitations are recorded under `benchmarks`; this is not the complete repeated/category/concurrent-edit or cross-platform capacity gate.
+
+Native CI [38867071673](https://github.com/davidacres/praxis/actions/runs/38867071673) at `5dbc7135` passed all three supported hosts with the selected policy, 98 C# tests, schemas, evaluator and retained-fixture smoke. Later benchmark-only repetition changes do not change the service binary; their expanded smoke passes locally and requires fresh CI.
+
+The real four-context Maze model pilot has complete compiler/vector coverage and a stable snapshot, but positive tuning Recall@10 is **0.7714285714 hybrid**, **0.5142857143 lexical**. It is not held-out evidence and does not establish the 0.80 quality gate. Both the corpus and all misses are preserved under `evaluations`; no reviews are claimed by merely setting flags.
