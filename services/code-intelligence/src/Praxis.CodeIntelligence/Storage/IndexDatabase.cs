@@ -11,8 +11,8 @@ public sealed class IndexDatabase
 {
     public const int SchemaVersion = 2;
     public const int ReadMappingVersion = 1;
-    public const int ReadPageCacheVersion = 1;
-    public const int ReadPageCacheKiB = 16 * 1024;
+    public const int ReadPageCacheVersion = 2;
+    public const int ReadPageCacheKiB = 64 * 1024;
     public const long MaximumReadMappingBytes = 128L * 1024 * 1024;
     private static readonly (string Sql, string Checksum)[] Migrations = Enumerable.Range(1, SchemaVersion).Select(version =>
     {

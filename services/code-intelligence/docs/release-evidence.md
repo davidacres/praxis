@@ -212,3 +212,5 @@ The fixed-snapshot plan-1/plan-2 measurements are preserved in `benchmarks`: hyb
 ## SQLite read page-cache experiment
 
 Read page-cache version 1 requests 16 MiB per read connection, retaining the 128 MiB file-mapping request and normal connection disposal. Snapshot/WAL, filter and malformed-vector fixtures pass in the full 98-test local C# suite; all 109 response schemas validate. The fixed-snapshot result is hybrid p95 579.3655 ms versus plan 3's 636.7387 ms, with query-only maximum RSS 964886528 bytes. It still fails 500 ms and does not qualify cold/full-process RAM or repeated/category acceptance. Raw observations are under `benchmarks`.
+
+Read page-cache version 2 requests 64 MiB per read connection. The same 98-test suite and 109 schemas pass. Its fixed-snapshot hybrid p95 is 544.4594 ms with query-only maximum RSS 1153794048 bytes, still above the latency target. No whole-process memory qualification is inferred from that query-only value.

@@ -1,0 +1,58 @@
+{
+  "Version": 1,
+  "ExecutionMode": "Retained post-edit synthetic snapshot; query-only, direct service API",
+  "TimestampUtc": "2026-10-16T07:07:12.99366+00:00",
+  "Runtime": ".NET 10.0.13",
+  "OperatingSystem": "macOS 26.6.0",
+  "Architecture": "Arm64",
+  "Sqlite": "3.53.3",
+  "ActualReadMappingBytes": 134217728,
+  "ActualReadPageCacheSetting": -65536,
+  "ReadMappingVersion": 1,
+  "MaximumReadMappingBytes": 134217728,
+  "ReadPageCacheVersion": 2,
+  "ReadPageCacheKiB": 65536,
+  "SearchPlanVersion": 2,
+  "SearchCountCacheVersion": 1,
+  "VectorScorerVersion": 3,
+  "VectorQueryPlanVersion": 3,
+  "SourceSymbols": 49999,
+  "OriginalCorpusHash": "sha256:f14bc8736fbc2bbcf4c984a76c488edf6c55324d0cadd3b0a0f2581ba2a99993",
+  "SnapshotHash": "sha256:e9faa363c8d3dd2237e4501543472d4764d078d7a00566bc4c9c0b485071c185",
+  "ReferenceHash": "sha256:b435af0b749740a312891b3ab0d014091b1b75573dfede5b1c3eff96c533332b",
+  "ModelFingerprint": "sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba",
+  "Generation": 2,
+  "QueryEpoch": 4,
+  "Lexical": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 3.7192,
+    "P95Ms": 7.4355,
+    "MaximumMs": 11.6071
+  },
+  "Hybrid": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 494.4356,
+    "P95Ms": 544.4594,
+    "MaximumMs": 647.6281
+  },
+  "DiagnosticSample": {
+    "Basis": "One warmed single-reader observation after timed queries; not latency percentiles",
+    "QueryEmbeddingMs": 4.0933,
+    "ExactCandidateScanMs": 289.143
+  },
+  "Gates": {
+    "lexicalP95AtMost100Ms": true,
+    "hybridP95AtMost500Ms": false
+  },
+  "PassedMeasuredGates": false,
+  "Unmeasured": [
+    "cold startup/index/embedding",
+    "edit publication/refresh",
+    "peak RSS from runtime",
+    "owner/MCP/provider transport",
+    "held-out relevance",
+    "five-run/category/concurrent-edit protocol"
+  ]
+}
