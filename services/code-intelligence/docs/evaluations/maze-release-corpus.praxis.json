@@ -1,0 +1,2785 @@
+{
+  "version": 1,
+  "sourceRevision": "61d4510a8ef6946407fa310038ae0add1fffdf24",
+  "reviewed": true,
+  "reviewedBy": "Codex AI source inspection, 16 October 2026; no human sign-off claimed",
+  "nearDuplicateSplitReviewed": true,
+  "negativeAbstentionReviewed": false,
+  "reviewedExplanationCount": 0,
+  "notes": "Frozen 120-case corpus, 40 tuning/80 held-out. Queries and source labels reviewed before any new corpus results were observed. Changes from Maze commit are explicit controlled rename/move scenarios, not source repository edits. Negative result/abstention review pending execution. Generated explanations are outside M3; no generated explanation review claimed.",
+  "queries": [
+    {
+      "id": "maze-release-exact-01",
+      "category": "exact",
+      "query": "MapUserSummary",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "MapUserSummary",
+          "qualifiedName": "Maze.UserService.Services.UserManagementService.MapUserSummary(Maze.UserService.Models.User, bool)"
+        },
+        {
+          "name": "MapUserSummary",
+          "qualifiedName": "Maze.UserService.Services.UserManagementService.MapUserSummary(Maze.UserService.Models.User)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Services/UserManagementService.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.UserService/Services/UserManagementService.cs",
+        "contentHash": "sha256:0752d69fd83a89dd4d30c62a309a66585d8e85936d128631f462e2f8739215c2",
+        "startUtf16": 19241,
+        "endUtf16": 20754,
+        "reviewScope": "Both overload declarations and distinct parameter types",
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "ambiguousExact": true
+    },
+    {
+      "id": "maze-release-exact-02",
+      "category": "exact",
+      "query": "Maze.SearchCore.SDK.IPluginMarketplace.CheckForUpdatesAsync(System.Threading.CancellationToken)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "CheckForUpdatesAsync",
+          "qualifiedName": "Maze.SearchCore.SDK.IPluginMarketplace.CheckForUpdatesAsync(System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs",
+        "contentHash": "sha256:1d7f51466ff6154ad812069dbe44fa9eb138330d765829e087f2af16f8b8d2d9",
+        "startUtf16": 1217,
+        "endUtf16": 1297,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-03",
+      "category": "exact",
+      "query": "Maze.SearchCore.SDK.IPluginMarketplace.GetInstalledPluginsAsync(System.Threading.CancellationToken)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "GetInstalledPluginsAsync",
+          "qualifiedName": "Maze.SearchCore.SDK.IPluginMarketplace.GetInstalledPluginsAsync(System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs",
+        "contentHash": "sha256:1d7f51466ff6154ad812069dbe44fa9eb138330d765829e087f2af16f8b8d2d9",
+        "startUtf16": 1056,
+        "endUtf16": 1140,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-04",
+      "category": "exact",
+      "query": "Maze.SearchCore.SDK.IPluginMarketplace.GetPluginDetailsAsync(string, System.Threading.CancellationToken)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "GetPluginDetailsAsync",
+          "qualifiedName": "Maze.SearchCore.SDK.IPluginMarketplace.GetPluginDetailsAsync(string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs",
+        "contentHash": "sha256:1d7f51466ff6154ad812069dbe44fa9eb138330d765829e087f2af16f8b8d2d9",
+        "startUtf16": 576,
+        "endUtf16": 669,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-05",
+      "category": "exact",
+      "query": "Maze.SearchCore.SDK.IPluginMarketplace.GetPopularPluginsAsync(int, System.Threading.CancellationToken)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "GetPopularPluginsAsync",
+          "qualifiedName": "Maze.SearchCore.SDK.IPluginMarketplace.GetPopularPluginsAsync(int, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs",
+        "contentHash": "sha256:1d7f51466ff6154ad812069dbe44fa9eb138330d765829e087f2af16f8b8d2d9",
+        "startUtf16": 407,
+        "endUtf16": 505,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-06",
+      "category": "exact",
+      "query": "Maze.SearchCore.SDK.IPluginMarketplace.InstallPluginAsync(string, System.Threading.CancellationToken)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "InstallPluginAsync",
+          "qualifiedName": "Maze.SearchCore.SDK.IPluginMarketplace.InstallPluginAsync(string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs",
+        "contentHash": "sha256:1d7f51466ff6154ad812069dbe44fa9eb138330d765829e087f2af16f8b8d2d9",
+        "startUtf16": 751,
+        "endUtf16": 830,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-07",
+      "category": "exact",
+      "query": "Maze.SearchCore.SDK.IPluginMarketplace.SearchPluginsAsync(string, int, System.Threading.CancellationToken)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "SearchPluginsAsync",
+          "qualifiedName": "Maze.SearchCore.SDK.IPluginMarketplace.SearchPluginsAsync(string, int, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/SDK/IPluginMarketplace.cs",
+        "contentHash": "sha256:1d7f51466ff6154ad812069dbe44fa9eb138330d765829e087f2af16f8b8d2d9",
+        "startUtf16": 227,
+        "endUtf16": 335,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-08",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.SearchProviders.IChatProvider",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "IChatProvider",
+          "qualifiedName": "Maze.SearchCore.Services.SearchProviders.IChatProvider"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchProviders/IChatProvider.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/SearchProviders/IChatProvider.cs",
+        "contentHash": "sha256:848506b4382cd2aafe76832d6bc58059015e8d35e4fec459eac1bf7a3ecc2019",
+        "startUtf16": 180,
+        "endUtf16": 391,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-09",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.SearchProviders.IChatProvider.ChatAsync(string, System.Collections.Generic.List<Maze.SearchCore.Models.ChatMessage>, System.Threading.CancellationToken)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "ChatAsync",
+          "qualifiedName": "Maze.SearchCore.Services.SearchProviders.IChatProvider.ChatAsync(string, System.Collections.Generic.List<Maze.SearchCore.Models.ChatMessage>, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchProviders/IChatProvider.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/SearchProviders/IChatProvider.cs",
+        "contentHash": "sha256:848506b4382cd2aafe76832d6bc58059015e8d35e4fec459eac1bf7a3ecc2019",
+        "startUtf16": 301,
+        "endUtf16": 389,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-10",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.SearchProviders.FakeSearchProviderMetadata.IsEnabled(Microsoft.Extensions.Configuration.IConfiguration)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "IsEnabled",
+          "qualifiedName": "Maze.SearchCore.Services.SearchProviders.FakeSearchProviderMetadata.IsEnabled(Microsoft.Extensions.Configuration.IConfiguration)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchProviders/FakeSearchProviders.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/SearchProviders/FakeSearchProviders.cs",
+        "contentHash": "sha256:aeab560e935061f16e20dd43212fc42bcf13dbe71d38bb2ad2c1301f9331ad81",
+        "startUtf16": 708,
+        "endUtf16": 1079,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-11",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.TorrentScrapingService.ValidateMagnetLink(string?)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ValidateMagnetLink",
+          "qualifiedName": "Maze.SearchCore.Services.TorrentScrapingService.ValidateMagnetLink(string?)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ScrapingService.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/ScrapingService.cs",
+        "contentHash": "sha256:ae5540ed1247b94622002d9ea16ba3746b317fffeabdaaae9aa7ced21ccd7ab1",
+        "startUtf16": 99699,
+        "endUtf16": 100913,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-12",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.TorrentScrapingService.IsAnime(string)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "IsAnime",
+          "qualifiedName": "Maze.SearchCore.Services.TorrentScrapingService.IsAnime(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ScrapingService.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/ScrapingService.cs",
+        "contentHash": "sha256:ae5540ed1247b94622002d9ea16ba3746b317fffeabdaaae9aa7ced21ccd7ab1",
+        "startUtf16": 105810,
+        "endUtf16": 107000,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-13",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.TorrentScrapingService.IsMovie(string)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "IsMovie",
+          "qualifiedName": "Maze.SearchCore.Services.TorrentScrapingService.IsMovie(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ScrapingService.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/ScrapingService.cs",
+        "contentHash": "sha256:ae5540ed1247b94622002d9ea16ba3746b317fffeabdaaae9aa7ced21ccd7ab1",
+        "startUtf16": 108232,
+        "endUtf16": 109240,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-14",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.TorrentScrapingService.IsTVShow(string)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "IsTVShow",
+          "qualifiedName": "Maze.SearchCore.Services.TorrentScrapingService.IsTVShow(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/ScrapingService.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/ScrapingService.cs",
+        "contentHash": "sha256:ae5540ed1247b94622002d9ea16ba3746b317fffeabdaaae9aa7ced21ccd7ab1",
+        "startUtf16": 107098,
+        "endUtf16": 108136,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-15",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.SearchProviders.IProviderCompatibilityValidator.ValidateProviderSelection(System.Collections.Generic.IEnumerable<(string Name, Maze.SearchCore.Models.SearchCapability Capabilities, bool Enabled)>)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ValidateProviderSelection",
+          "qualifiedName": "Maze.SearchCore.Services.SearchProviders.IProviderCompatibilityValidator.ValidateProviderSelection(System.Collections.Generic.IEnumerable<(string Name, Maze.SearchCore.Models.SearchCapability Capabilities, bool Enabled)>)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchProviders/IProviderCompatibilityValidator.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/SearchProviders/IProviderCompatibilityValidator.cs",
+        "contentHash": "sha256:ff51e10900ec3b25b2d32416448f12977aed3cfdca4994c8ed9be488ed958752",
+        "startUtf16": 589,
+        "endUtf16": 735,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-16",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.SearchProviders.IProviderCompatibilityValidator.CanEnableTogether(Maze.SearchCore.Models.SearchCapability, Maze.SearchCore.Models.SearchCapability)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "CanEnableTogether",
+          "qualifiedName": "Maze.SearchCore.Services.SearchProviders.IProviderCompatibilityValidator.CanEnableTogether(Maze.SearchCore.Models.SearchCapability, Maze.SearchCore.Models.SearchCapability)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchProviders/IProviderCompatibilityValidator.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/SearchProviders/IProviderCompatibilityValidator.cs",
+        "contentHash": "sha256:ff51e10900ec3b25b2d32416448f12977aed3cfdca4994c8ed9be488ed958752",
+        "startUtf16": 345,
+        "endUtf16": 432,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-17",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.CollectionService.CacheSearchResult(Maze.SearchCore.Models.SearchResult)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "CacheSearchResult",
+          "qualifiedName": "Maze.SearchCore.Services.CollectionService.CacheSearchResult(Maze.SearchCore.Models.SearchResult)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/CollectionService.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/CollectionService.cs",
+        "contentHash": "sha256:ee6de5ddaa0bd1c0aba6e015dfa312fa0d6b72797b699998fd932a82ac7ad85e",
+        "startUtf16": 6260,
+        "endUtf16": 7030,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-18",
+      "category": "exact",
+      "query": "Maze.SearchCore.Services.SearchCacheExtensions.GetSearchCacheTtl(string, bool)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "GetSearchCacheTtl",
+          "qualifiedName": "Maze.SearchCore.Services.SearchCacheExtensions.GetSearchCacheTtl(string, bool)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Services/SearchCacheService.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Services/SearchCacheService.cs",
+        "contentHash": "sha256:779c271768515fff290a9ce762d535da9d28eaf6ff86f5bef353441ef6e5dc84",
+        "startUtf16": 5424,
+        "endUtf16": 5869,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-19",
+      "category": "exact",
+      "query": "Maze.UserService.Authentication.MazeJwtTokenService.GenerateAccessToken(Maze.UserService.Models.User)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "GenerateAccessToken",
+          "qualifiedName": "Maze.UserService.Authentication.MazeJwtTokenService.GenerateAccessToken(Maze.UserService.Models.User)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.UserService/Authentication/MazeJwtTokenService.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.UserService/Authentication/MazeJwtTokenService.cs",
+        "contentHash": "sha256:30f0589667725506afaac2e9d4f667dae414c8e82cd14a1f1a5318b829899e3a",
+        "startUtf16": 1208,
+        "endUtf16": 2626,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-exact-20",
+      "category": "exact",
+      "query": "Maze.SearchCore.Repositories.MediaCatalogRepository.MapToEntity",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "MapToEntity",
+          "qualifiedName": "Maze.SearchCore.Repositories.MediaCatalogRepository.MapToEntity(Maze.SearchCore.Models.MediaItem)"
+        },
+        {
+          "name": "MapToEntity",
+          "qualifiedName": "Maze.SearchCore.Repositories.MediaCatalogRepository.MapToEntity(Maze.SearchCore.Models.MediaCollection)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Repositories/MediaCatalogRepository.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Repositories/MediaCatalogRepository.cs",
+        "contentHash": "sha256:21ee1f58cf499b35818fc813537c76e1db66c262c33ea2c77cea37210f791f50",
+        "startUtf16": 29988,
+        "endUtf16": 34982,
+        "reviewScope": "Both overload declarations and distinct parameter types",
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "ambiguousExact": true
+    },
+    {
+      "id": "maze-release-terminology-01",
+      "category": "terminology",
+      "query": "provider configuration input field definition",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "ConfigurationFieldRule",
+          "qualifiedName": "Maze.SearchCore.Models.ConfigurationFieldRule"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/ProviderRule.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/ProviderRule.cs",
+        "contentHash": "sha256:1b624aacfca2c03a0081ab4fc924b259f8e49a2d311314a9d442f990c7f2b93d",
+        "startUtf16": 6642,
+        "endUtf16": 7026,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-02",
+      "category": "terminology",
+      "query": "single response field extraction rule",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "FieldExtractionRule",
+          "qualifiedName": "Maze.SearchCore.Models.FieldExtractionRule"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/ProviderRule.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/ProviderRule.cs",
+        "contentHash": "sha256:1b624aacfca2c03a0081ab4fc924b259f8e49a2d311314a9d442f990c7f2b93d",
+        "startUtf16": 3786,
+        "endUtf16": 4957,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-03",
+      "category": "terminology",
+      "query": "transformations of extracted provider fields",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "FieldTransformation",
+          "qualifiedName": "Maze.SearchCore.Models.FieldTransformation"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/ProviderRule.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/ProviderRule.cs",
+        "contentHash": "sha256:1b624aacfca2c03a0081ab4fc924b259f8e49a2d311314a9d442f990c7f2b93d",
+        "startUtf16": 5989,
+        "endUtf16": 6533,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-04",
+      "category": "terminology",
+      "query": "follow a URL to obtain additional data",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "FollowRule",
+          "qualifiedName": "Maze.SearchCore.Models.FollowRule"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/ProviderRule.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/ProviderRule.cs",
+        "contentHash": "sha256:1b624aacfca2c03a0081ab4fc924b259f8e49a2d311314a9d442f990c7f2b93d",
+        "startUtf16": 5044,
+        "endUtf16": 5898,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-05",
+      "category": "terminology",
+      "query": "HTTP request configuration for a provider rule",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "HttpRequestRule",
+          "qualifiedName": "Maze.SearchCore.Models.HttpRequestRule"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/ProviderRule.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/ProviderRule.cs",
+        "contentHash": "sha256:1b624aacfca2c03a0081ab4fc924b259f8e49a2d311314a9d442f990c7f2b93d",
+        "startUtf16": 1760,
+        "endUtf16": 2880,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-06",
+      "category": "terminology",
+      "query": "response parser configuration",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "ParserRule",
+          "qualifiedName": "Maze.SearchCore.Models.ParserRule"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/ProviderRule.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/ProviderRule.cs",
+        "contentHash": "sha256:1b624aacfca2c03a0081ab4fc924b259f8e49a2d311314a9d442f990c7f2b93d",
+        "startUtf16": 2971,
+        "endUtf16": 3702,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-07",
+      "category": "terminology",
+      "query": "configuration for recent search endpoints",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "RecentSearchRule",
+          "qualifiedName": "Maze.SearchCore.Models.RecentSearchRule"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/ProviderRule.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/ProviderRule.cs",
+        "contentHash": "sha256:1b624aacfca2c03a0081ab4fc924b259f8e49a2d311314a9d442f990c7f2b93d",
+        "startUtf16": 7103,
+        "endUtf16": 7605,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-08",
+      "category": "terminology",
+      "query": "membership link between dynamic collections and parent catalogue items",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "MediaCollectionMemberEntity",
+          "qualifiedName": "Maze.SearchCore.Data.Entities.MediaCollectionMemberEntity"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Data/Entities/MediaCollectionMemberEntity.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Data/Entities/MediaCollectionMemberEntity.cs",
+        "contentHash": "sha256:ba88364cc514279368c0de432c805010038fb50afdd7d6b137fcab888dec426a",
+        "startUtf16": 763,
+        "endUtf16": 1208,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-09",
+      "category": "terminology",
+      "query": "user judgement that overrides a misplaced media warning",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "MediaPlacementDecisionEntity",
+          "qualifiedName": "Maze.SearchCore.Data.Entities.MediaPlacementDecisionEntity"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Data/Entities/MediaPlacementDecisionEntity.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Data/Entities/MediaPlacementDecisionEntity.cs",
+        "contentHash": "sha256:7584a9895b1872b01230def7ba64933a73de6704bc5c5fb312e8d6418f4e9975",
+        "startUtf16": 781,
+        "endUtf16": 1195,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-10",
+      "category": "terminology",
+      "query": "stored history of search queries",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "SearchHistoryEntity",
+          "qualifiedName": "Maze.SearchCore.Data.Entities.SearchHistoryEntity"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Data/Entities/SearchHistoryEntity.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Data/Entities/SearchHistoryEntity.cs",
+        "contentHash": "sha256:ab83989c4db9de396798124e1da621df50b8580aca237fe41d8a4a7b5720683c",
+        "startUtf16": 125,
+        "endUtf16": 1064,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-11",
+      "category": "terminology",
+      "query": "embedded audiobook tags preferred over ambiguous track filenames",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "AudioFileTags",
+          "qualifiedName": "Maze.SearchCore.Models.AudioFileTags"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/MediaCollectionModels.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/MediaCollectionModels.cs",
+        "contentHash": "sha256:cf726f19cb33ce20385e2a5bfefa991401e8dfbcd0215112333c44b11b68d9a0",
+        "startUtf16": 6554,
+        "endUtf16": 8517,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-12",
+      "category": "terminology",
+      "query": "collection identity learned from metadata of its existing contents",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "CollectionPlacementProfile",
+          "qualifiedName": "Maze.SearchCore.Models.CollectionPlacementProfile"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/MediaPlacementModels.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/MediaPlacementModels.cs",
+        "contentHash": "sha256:dbd3e43be9bde5d7ca856d85e6758116d4919da467598fd70170df9019a79084",
+        "startUtf16": 641,
+        "endUtf16": 1511,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-13",
+      "category": "terminology",
+      "query": "dynamic collection inherits classification from parent",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "DynamicCollectionInheritance",
+          "qualifiedName": "Maze.SearchCore.Models.DynamicCollectionInheritance"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/DynamicCollectionInheritance.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/DynamicCollectionInheritance.cs",
+        "contentHash": "sha256:1ea5669429c305775242d6273b89b0139075dd506486d109ffabd6502eb8a539",
+        "startUtf16": 498,
+        "endUtf16": 1985,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-14",
+      "category": "terminology",
+      "query": "episode-specific metadata rather than whole-series metadata",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "EpisodeMetadataSnapshot",
+          "qualifiedName": "Maze.SearchCore.Models.EpisodeMetadataSnapshot"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/MediaCollectionModels.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/MediaCollectionModels.cs",
+        "contentHash": "sha256:cf726f19cb33ce20385e2a5bfefa991401e8dfbcd0215112333c44b11b68d9a0",
+        "startUtf16": 10937,
+        "endUtf16": 11282,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-15",
+      "category": "terminology",
+      "query": "media item in wrong collection with recommended placement",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "MisplacedMediaItem",
+          "qualifiedName": "Maze.SearchCore.Models.MisplacedMediaItem"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/MediaPlacementModels.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/MediaPlacementModels.cs",
+        "contentHash": "sha256:dbd3e43be9bde5d7ca856d85e6758116d4919da467598fd70170df9019a79084",
+        "startUtf16": 4271,
+        "endUtf16": 4732,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-16",
+      "category": "terminology",
+      "query": "request to move an item to a user-selected alternative collection",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "MovePlacementRequest",
+          "qualifiedName": "Maze.SearchCore.Models.MovePlacementRequest"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/MediaPlacementModels.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/MediaPlacementModels.cs",
+        "contentHash": "sha256:dbd3e43be9bde5d7ca856d85e6758116d4919da467598fd70170df9019a79084",
+        "startUtf16": 5055,
+        "endUtf16": 5390,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-17",
+      "category": "terminology",
+      "query": "reason a catalogue item is considered misplaced",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "PlacementIssueKind",
+          "qualifiedName": "Maze.SearchCore.Models.PlacementIssueKind"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/MediaPlacementModels.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/MediaPlacementModels.cs",
+        "contentHash": "sha256:dbd3e43be9bde5d7ca856d85e6758116d4919da467598fd70170df9019a79084",
+        "startUtf16": 3533,
+        "endUtf16": 3942,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-18",
+      "category": "terminology",
+      "query": "outcome of moving a media file to another collection",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "PlacementMoveResult",
+          "qualifiedName": "Maze.SearchCore.Models.PlacementMoveResult"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/MediaPlacementModels.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/MediaPlacementModels.cs",
+        "contentHash": "sha256:dbd3e43be9bde5d7ca856d85e6758116d4919da467598fd70170df9019a79084",
+        "startUtf16": 4817,
+        "endUtf16": 4952,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-19",
+      "category": "terminology",
+      "query": "quality scoring weights configuration",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "QualityAssessmentSettings",
+          "qualifiedName": "Maze.SearchCore.Models.QualityAssessmentSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/QualityAssessmentSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/QualityAssessmentSettings.cs",
+        "contentHash": "sha256:9dec7d4b18d11c780fd5a7d59484a2685084943e92a84e852846939b1ea50c56",
+        "startUtf16": 177,
+        "endUtf16": 1183,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-terminology-20",
+      "category": "terminology",
+      "query": "singleton service settings stored in SQL without the database connection string",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ServiceSettings",
+          "qualifiedName": "Maze.SearchCore.Models.ServiceSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Models/ServiceSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Models/ServiceSettings.cs",
+        "contentHash": "sha256:e5da43b74352f69019c2d6402ebf2af2202a18b3667bdec217250291d7108e5a",
+        "startUtf16": 660,
+        "endUtf16": 1677,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-01",
+      "category": "behaviour",
+      "query": "limit bulk organize or refresh operations to the current collection search filter",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "FilterItemsForBulkOperation",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaCollectionController.FilterItemsForBulkOperation(System.Collections.Generic.IEnumerable<Maze.SearchCore.Models.MediaItem>, string?, string?)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaCollectionController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaCollectionController.cs",
+        "contentHash": "sha256:c06514d1a107a7505d1d0d11914db84a6bedb0b47cb2890a84f5dc2a8504e7dd",
+        "startUtf16": 98709,
+        "endUtf16": 99518,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-02",
+      "category": "behaviour",
+      "query": "split an audiobook filename into book title and chapter number",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "ParseAudiobookFilename",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaCollectionController.ParseAudiobookFilename(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaCollectionController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaCollectionController.cs",
+        "contentHash": "sha256:c06514d1a107a7505d1d0d11914db84a6bedb0b47cb2890a84f5dc2a8504e7dd",
+        "startUtf16": 93192,
+        "endUtf16": 94222,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-03",
+      "category": "behaviour",
+      "query": "log dynamic child refresh failures without failing the completed parent scan",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "RefreshDynamicChildrenAsync",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaCollectionController.RefreshDynamicChildrenAsync(string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaCollectionController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaCollectionController.cs",
+        "contentHash": "sha256:c06514d1a107a7505d1d0d11914db84a6bedb0b47cb2890a84f5dc2a8504e7dd",
+        "startUtf16": 59481,
+        "endUtf16": 60059,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-04",
+      "category": "behaviour",
+      "query": "identify the series directory containing a file beneath an extras folder",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "TryGetExtrasSeriesFolder",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaCollectionController.TryGetExtrasSeriesFolder(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaCollectionController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaCollectionController.cs",
+        "contentHash": "sha256:c06514d1a107a7505d1d0d11914db84a6bedb0b47cb2890a84f5dc2a8504e7dd",
+        "startUtf16": 66663,
+        "endUtf16": 67253,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-05",
+      "category": "behaviour",
+      "query": "map a file extension to the media content type accepted by modules",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "FromExtension",
+          "qualifiedName": "Maze.ModuleContracts.ModuleMediaContentTypes.FromExtension(string?)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.ModuleContracts/ModuleMediaContentTypes.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.ModuleContracts/ModuleMediaContentTypes.cs",
+        "contentHash": "sha256:9d1e898f7a1c6f1f9168adf8714efd3408ffa4efdc4f4a6f6d70190d5d9af1cc",
+        "startUtf16": 1258,
+        "endUtf16": 2338,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-06",
+      "category": "behaviour",
+      "query": "describe a database connection without revealing passwords or local file paths",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "Describe",
+          "qualifiedName": "Maze.Common.MazeConnectionStringResolver.Describe(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/MazeConnectionStringResolver.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/MazeConnectionStringResolver.cs",
+        "contentHash": "sha256:3f347dc208e74562b8c64e2cd1d03221cc12e4b9df9ecebf73ced2e8f76360f7",
+        "startUtf16": 3224,
+        "endUtf16": 3616,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-07",
+      "category": "behaviour",
+      "query": "distinguish SQLite connection strings from SQL Server configuration",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "DetectProvider",
+          "qualifiedName": "Maze.Common.MazeConnectionStringResolver.DetectProvider(string?)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/MazeConnectionStringResolver.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/MazeConnectionStringResolver.cs",
+        "contentHash": "sha256:3f347dc208e74562b8c64e2cd1d03221cc12e4b9df9ecebf73ced2e8f76360f7",
+        "startUtf16": 3926,
+        "endUtf16": 4549,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-08",
+      "category": "behaviour",
+      "query": "fall back to a service-local SQLite file when no connection string was configured",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ResolveDefault",
+          "qualifiedName": "Maze.Common.MazeConnectionStringResolver.ResolveDefault(string, string?, string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/MazeConnectionStringResolver.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/MazeConnectionStringResolver.cs",
+        "contentHash": "sha256:3f347dc208e74562b8c64e2cd1d03221cc12e4b9df9ecebf73ced2e8f76360f7",
+        "startUtf16": 2409,
+        "endUtf16": 2944,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-09",
+      "category": "behaviour",
+      "query": "HTTP endpoint to commit a previously previewed episode metadata correction",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "AcceptEpisodeMetadata",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.AcceptEpisodeMetadata(string, string, Maze.SearchCore.Models.EpisodeMetadataSnapshot, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 8509,
+        "endUtf16": 9038,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-10",
+      "category": "behaviour",
+      "query": "HTTP endpoint to commit previewed metadata for a movie series or audiobook",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "AcceptItemMetadata",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.AcceptItemMetadata(string, string, Maze.SearchCore.Models.CatalogMetadataSnapshot, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 12133,
+        "endUtf16": 12645,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-11",
+      "category": "behaviour",
+      "query": "HTTP endpoint to confirm a media item belongs at its current location without moving it",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "AcceptPlacement",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.AcceptPlacement(string, string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 1830,
+        "endUtf16": 2606,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-12",
+      "category": "behaviour",
+      "query": "HTTP endpoint to record a viewer request for a replacement copy or missing episode",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "CreateMediaRequest",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.CreateMediaRequest(string, Maze.SearchCore.Models.CreateMediaRequestRequest)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 13025,
+        "endUtf16": 13460,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-13",
+      "category": "behaviour",
+      "query": "HTTP endpoint to remove a catalogue entry only when its source file is missing",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "DeleteMissingItem",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.DeleteMissingItem(string, string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 5123,
+        "endUtf16": 5959,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-14",
+      "category": "behaviour",
+      "query": "HTTP endpoint to show a viewer the on-disk location of a catalogue item",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "GetItemLocation",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.GetItemLocation(string, string)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 4159,
+        "endUtf16": 4735,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-15",
+      "category": "behaviour",
+      "query": "HTTP endpoint to retrieve all misplaced catalogue items in one request",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "GetMisplacedItems",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.GetMisplacedItems(System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 1411,
+        "endUtf16": 1628,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-16",
+      "category": "behaviour",
+      "query": "HTTP endpoint to move a media file to the recommended collection as a viewer",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "MovePlacement",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.MovePlacement(string, string, Maze.SearchCore.Models.MovePlacementRequest?, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 2964,
+        "endUtf16": 3728,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-17",
+      "category": "behaviour",
+      "query": "HTTP endpoint to preview episode metadata using corrected series season episode or year",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "PreviewEpisodeMetadata",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.PreviewEpisodeMetadata(string, string, Maze.SearchCore.Models.RefreshEpisodeMetadataRequest, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 7510,
+        "endUtf16": 8390,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-18",
+      "category": "behaviour",
+      "query": "HTTP endpoint to preview title metadata using corrected movie title type or year",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "PreviewItemMetadata",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.PreviewItemMetadata(string, string, Maze.SearchCore.Models.RefreshCatalogMetadataRequest, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 11136,
+        "endUtf16": 11999,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-19",
+      "category": "behaviour",
+      "query": "HTTP endpoint to refresh one episode overview still and air date",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "RefreshEpisodeMetadata",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.RefreshEpisodeMetadata(string, string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 6316,
+        "endUtf16": 7117,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-behaviour-20",
+      "category": "behaviour",
+      "query": "HTTP endpoint to refresh poster overview rating and certification for a title",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "RefreshItemMetadata",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaLibraryController.RefreshItemMetadata(string, string, Maze.SearchCore.Models.RefreshCatalogMetadataRequest?, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaLibraryController.cs",
+        "contentHash": "sha256:39b179cca6ebb2c996fe4f1b0c0343f2af26d48bb81fee5d2dc720609cedcee2",
+        "startUtf16": 9998,
+        "endUtf16": 10889,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-01",
+      "category": "crossProject",
+      "query": "Find the shared Maze Permission Policies declaration referenced from Maze.SearchCore.Controllers.AnalyticsController",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "MazePermissionPolicies",
+          "qualifiedName": "Maze.Authorization.MazePermissionPolicies"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Authorization/MazePermissionPolicies.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Authorization/MazePermissionPolicies.cs",
+        "contentHash": "sha256:65c400bdb30c69e52e70af1f06149c03a1f62564e255c5989460e4534deeee11",
+        "startUtf16": 31,
+        "endUtf16": 2574,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Controllers.AnalyticsController",
+        "sourcePath": "src/Services/Maze.SearchCore/Controllers/AnalyticsController.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Authorization.MazePermissionPolicies"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-02",
+      "category": "crossProject",
+      "query": "Find the shared Maze Permission Requirement declaration referenced from lambda expression",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "MazePermissionRequirement",
+          "qualifiedName": "Maze.Authorization.MazePermissionRequirement"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Authorization/MazePermissionRequirement.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Authorization/MazePermissionRequirement.cs",
+        "contentHash": "sha256:5b5c0a9bb16bb25a8adcbe8a972b4993a6618a2e31daaa353724b130a739236e",
+        "startUtf16": 74,
+        "endUtf16": 273,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "lambda expression",
+        "sourcePath": "src/Services/Maze.UserService/Program.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Authorization.MazePermissionRequirement"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-03",
+      "category": "crossProject",
+      "query": "Find the shared User Role Names declaration referenced from Maze.UserService.Controllers.UsersController.GetAvailableRoles()",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "UserRoleNames",
+          "qualifiedName": "Maze.Authorization.UserRoleNames"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Authorization/UserRoleNames.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Authorization/UserRoleNames.cs",
+        "contentHash": "sha256:fe6ae194709ec55880b0e64de89c7857d6af0965826b63da69fcce698265af73",
+        "startUtf16": 31,
+        "endUtf16": 532,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.UserService.Controllers.UsersController.GetAvailableRoles()",
+        "sourcePath": "src/Services/Maze.UserService/Controllers/UsersController.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Authorization.UserRoleNames"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-04",
+      "category": "crossProject",
+      "query": "Find the shared Audiobook Match Evidence declaration referenced from Maze.SearchCore.Services.CatalogMetadataService.ValidateExistingAudioMatchAsync(Maze.SearchCore.Models.MediaItem, System.Threading.CancellationToken)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "AudiobookMatchEvidence",
+          "qualifiedName": "Maze.Common.AudiobookMatchEvidence"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/AudiobookMatchEvidence.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/AudiobookMatchEvidence.cs",
+        "contentHash": "sha256:bcd41cb494c26c68a34b7be113dfc1cfe17af4c6c8f445357de9920532db0f6f",
+        "startUtf16": 24,
+        "endUtf16": 375,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Services.CatalogMetadataService.ValidateExistingAudioMatchAsync(Maze.SearchCore.Models.MediaItem, System.Threading.CancellationToken)",
+        "sourcePath": "src/Services/Maze.SearchCore/Services/CatalogMetadataService.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.AudiobookMatchEvidence"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-05",
+      "category": "crossProject",
+      "query": "Find the shared Audiobook Match Input declaration referenced from Maze.SearchCore.Services.CatalogMetadataService.ValidateExistingAudioMatchAsync(Maze.SearchCore.Models.MediaItem, System.Threading.CancellationToken)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "AudiobookMatchInput",
+          "qualifiedName": "Maze.Common.AudiobookMatchInput"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/AudiobookMatchInput.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/AudiobookMatchInput.cs",
+        "contentHash": "sha256:ed07237e4191b53d9825fa93280b9124982c238e58c1260dbe4640ecfc388c52",
+        "startUtf16": 24,
+        "endUtf16": 199,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Services.CatalogMetadataService.ValidateExistingAudioMatchAsync(Maze.SearchCore.Models.MediaItem, System.Threading.CancellationToken)",
+        "sourcePath": "src/Services/Maze.SearchCore/Services/CatalogMetadataService.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.AudiobookMatchInput"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-06",
+      "category": "crossProject",
+      "query": "Find the shared Audiobook Metadata Matcher declaration referenced from Maze.SearchCore.Services.CatalogMetadataService.ValidateExistingAudioMatchAsync(Maze.SearchCore.Models.MediaItem, System.Threading.CancellationToken)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "AudiobookMetadataMatcher",
+          "qualifiedName": "Maze.Common.AudiobookMetadataMatcher"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/AudiobookMetadataMatcher.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/AudiobookMetadataMatcher.cs",
+        "contentHash": "sha256:f5003cae4d3c1243c2e6e9d9695b37703bf5e9ff70619570cccaec275c5fe407",
+        "startUtf16": 375,
+        "endUtf16": 7575,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Services.CatalogMetadataService.ValidateExistingAudioMatchAsync(Maze.SearchCore.Models.MediaItem, System.Threading.CancellationToken)",
+        "sourcePath": "src/Services/Maze.SearchCore/Services/CatalogMetadataService.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.AudiobookMetadataMatcher"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-07",
+      "category": "crossProject",
+      "query": "Find the shared Generic System Auth Options declaration referenced from Maze.UserService.Controllers.AuthController",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "GenericSystemAuthOptions",
+          "qualifiedName": "Maze.Common.Authentication.GenericSystemAuthOptions"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Authentication/GenericSystemAuthOptions.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Authentication/GenericSystemAuthOptions.cs",
+        "contentHash": "sha256:d60a8a27dbfb07ff5b37368848476a1e8184cfa3ee79cc3ebf488444e15f3338",
+        "startUtf16": 465,
+        "endUtf16": 2723,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.UserService.Controllers.AuthController",
+        "sourcePath": "src/Services/Maze.UserService/Controllers/AuthController.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Authentication.GenericSystemAuthOptions"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-08",
+      "category": "crossProject",
+      "query": "Find the shared Generic System Authorization Evaluator declaration referenced from Maze.UserService.Controllers.AuthController.AuthorizeGenericSystemSession(Maze.UserService.Models.Dtos.GenericSystemSessionRequest, System.Threading.CancellationToken)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "GenericSystemAuthorizationEvaluator",
+          "qualifiedName": "Maze.Common.Authentication.GenericSystemAuthorizationEvaluator"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Authentication/GenericSystemAuthorizationSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Authentication/GenericSystemAuthorizationSettings.cs",
+        "contentHash": "sha256:0e48edc9511c7c32dd1e2411ce5aec618fc078010ec356acebe51db03c24c1fd",
+        "startUtf16": 585,
+        "endUtf16": 3645,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.UserService.Controllers.AuthController.AuthorizeGenericSystemSession(Maze.UserService.Models.Dtos.GenericSystemSessionRequest, System.Threading.CancellationToken)",
+        "sourcePath": "src/Services/Maze.UserService/Controllers/AuthController.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Authentication.GenericSystemAuthorizationEvaluator"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-09",
+      "category": "crossProject",
+      "query": "Find the shared Generic System Authorization Settings declaration referenced from Maze.UserService.Controllers.AuthController.AuthorizeGenericSystemSession(Maze.UserService.Models.Dtos.GenericSystemSessionRequest, System.Threading.CancellationToken)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "GenericSystemAuthorizationSettings",
+          "qualifiedName": "Maze.Common.Authentication.GenericSystemAuthorizationSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Authentication/GenericSystemAuthorizationSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Authentication/GenericSystemAuthorizationSettings.cs",
+        "contentHash": "sha256:0e48edc9511c7c32dd1e2411ce5aec618fc078010ec356acebe51db03c24c1fd",
+        "startUtf16": 120,
+        "endUtf16": 583,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.UserService.Controllers.AuthController.AuthorizeGenericSystemSession(Maze.UserService.Models.Dtos.GenericSystemSessionRequest, System.Threading.CancellationToken)",
+        "sourcePath": "src/Services/Maze.UserService/Controllers/AuthController.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Authentication.GenericSystemAuthorizationSettings"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-10",
+      "category": "crossProject",
+      "query": "Find the shared Maze Auth Options declaration referenced from Maze.UserService.Authentication.MazeJwtTokenService",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "MazeAuthOptions",
+          "qualifiedName": "Maze.Common.Authentication.MazeAuthOptions"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Authentication/MazeAuthOptions.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Authentication/MazeAuthOptions.cs",
+        "contentHash": "sha256:767e533329a7122753f14a9da1cf4155de8d7fdb67186cf2ff52c87973202ccb",
+        "startUtf16": 651,
+        "endUtf16": 3686,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.UserService.Authentication.MazeJwtTokenService",
+        "sourcePath": "src/Services/Maze.UserService/Authentication/MazeJwtTokenService.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Authentication.MazeAuthOptions"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-11",
+      "category": "crossProject",
+      "query": "Find the shared Operational Endpoint Responses declaration referenced from src/Services/Maze.SearchCore/Program.cs [synthetic top-level entry]",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "OperationalEndpointResponses",
+          "qualifiedName": "Maze.Common.Health.OperationalEndpointResponses"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Health/OperationalEndpointResponses.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Health/OperationalEndpointResponses.cs",
+        "contentHash": "sha256:fd70aeca6462750014ce2dbd0feed4268dbcabb873466f1e82c93e5438ba5bbf",
+        "startUtf16": 251,
+        "endUtf16": 1997,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "src/Services/Maze.SearchCore/Program.cs [synthetic top-level entry]",
+        "sourcePath": "src/Services/Maze.SearchCore/Program.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Health.OperationalEndpointResponses"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-12",
+      "category": "crossProject",
+      "query": "Find the shared Maze Connection String Resolver declaration referenced from Maze.SearchCore.Controllers.SettingsController.GetConnectionConfiguration(Maze.Common.MazeConnectionStringResolver, Microsoft.Extensions.Configuration.IConfiguration)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "MazeConnectionStringResolver",
+          "qualifiedName": "Maze.Common.MazeConnectionStringResolver"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/MazeConnectionStringResolver.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/MazeConnectionStringResolver.cs",
+        "contentHash": "sha256:3f347dc208e74562b8c64e2cd1d03221cc12e4b9df9ecebf73ced2e8f76360f7",
+        "startUtf16": 720,
+        "endUtf16": 6076,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Controllers.SettingsController.GetConnectionConfiguration(Maze.Common.MazeConnectionStringResolver, Microsoft.Extensions.Configuration.IConfiguration)",
+        "sourcePath": "src/Services/Maze.SearchCore/Controllers/SettingsController.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.MazeConnectionStringResolver"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-13",
+      "category": "crossProject",
+      "query": "Find the shared App Settings declaration referenced from Maze.SearchCore.Controllers.ChatController.Chat(Maze.SearchCore.Models.ChatRequest, System.Threading.CancellationToken)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "AppSettings",
+          "qualifiedName": "Maze.Common.Models.AppSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Models/AppSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Models/AppSettings.cs",
+        "contentHash": "sha256:4791fcf1b11f045cb3838373ebbcd9a3ef813f0e32699ace1b4008877d450a54",
+        "startUtf16": 31,
+        "endUtf16": 578,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Controllers.ChatController.Chat(Maze.SearchCore.Models.ChatRequest, System.Threading.CancellationToken)",
+        "sourcePath": "src/Services/Maze.SearchCore/Controllers/ChatController.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Models.AppSettings"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-14",
+      "category": "crossProject",
+      "query": "Find the shared Home Settings declaration referenced from Maze.SearchCore.Services.ExternalSettingsService.ComposeFromRow(Maze.SearchCore.Models.ServiceSettings)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "HomeSettings",
+          "qualifiedName": "Maze.Common.Models.HomeSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Models/AppSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Models/AppSettings.cs",
+        "contentHash": "sha256:4791fcf1b11f045cb3838373ebbcd9a3ef813f0e32699ace1b4008877d450a54",
+        "startUtf16": 1653,
+        "endUtf16": 1988,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Services.ExternalSettingsService.ComposeFromRow(Maze.SearchCore.Models.ServiceSettings)",
+        "sourcePath": "src/Services/Maze.SearchCore/Services/ExternalSettingsService.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Models.HomeSettings"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-15",
+      "category": "crossProject",
+      "query": "Find the shared Media Scan Settings declaration referenced from Maze.SearchCore.Controllers.MediaCollectionController.IsMediaTypeAllowed(Maze.SearchCore.Models.MediaType, Maze.Common.Models.MediaScanSettings)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "MediaScanSettings",
+          "qualifiedName": "Maze.Common.Models.MediaScanSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Models/AppSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Models/AppSettings.cs",
+        "contentHash": "sha256:4791fcf1b11f045cb3838373ebbcd9a3ef813f0e32699ace1b4008877d450a54",
+        "startUtf16": 1028,
+        "endUtf16": 1500,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Controllers.MediaCollectionController.IsMediaTypeAllowed(Maze.SearchCore.Models.MediaType, Maze.Common.Models.MediaScanSettings)",
+        "sourcePath": "src/Services/Maze.SearchCore/Controllers/MediaCollectionController.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Models.MediaScanSettings"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-16",
+      "category": "crossProject",
+      "query": "Find the shared Module Registry Settings declaration referenced from Maze.SearchCore.Services.ExternalSettingsService.ComposeFromRow(Maze.SearchCore.Models.ServiceSettings)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ModuleRegistrySettings",
+          "qualifiedName": "Maze.Common.Models.ModuleRegistrySettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Models/AppSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Models/AppSettings.cs",
+        "contentHash": "sha256:4791fcf1b11f045cb3838373ebbcd9a3ef813f0e32699ace1b4008877d450a54",
+        "startUtf16": 2443,
+        "endUtf16": 2652,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Services.ExternalSettingsService.ComposeFromRow(Maze.SearchCore.Models.ServiceSettings)",
+        "sourcePath": "src/Services/Maze.SearchCore/Services/ExternalSettingsService.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Models.ModuleRegistrySettings"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-17",
+      "category": "crossProject",
+      "query": "Find the shared Open Ai Settings declaration referenced from Maze.SearchCore.Controllers.SettingsController.GetSettings()",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "OpenAiSettings",
+          "qualifiedName": "Maze.Common.Models.OpenAiSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Models/AppSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Models/AppSettings.cs",
+        "contentHash": "sha256:4791fcf1b11f045cb3838373ebbcd9a3ef813f0e32699ace1b4008877d450a54",
+        "startUtf16": 1990,
+        "endUtf16": 2108,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Controllers.SettingsController.GetSettings()",
+        "sourcePath": "src/Services/Maze.SearchCore/Controllers/SettingsController.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Models.OpenAiSettings"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-18",
+      "category": "crossProject",
+      "query": "Find the shared Search Provider Settings declaration referenced from Maze.SearchCore.Controllers.ChatController.Chat(Maze.SearchCore.Models.ChatRequest, System.Threading.CancellationToken)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "SearchProviderSettings",
+          "qualifiedName": "Maze.Common.Models.SearchProviderSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Models/AppSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Models/AppSettings.cs",
+        "contentHash": "sha256:4791fcf1b11f045cb3838373ebbcd9a3ef813f0e32699ace1b4008877d450a54",
+        "startUtf16": 2110,
+        "endUtf16": 2441,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Controllers.ChatController.Chat(Maze.SearchCore.Models.ChatRequest, System.Threading.CancellationToken)",
+        "sourcePath": "src/Services/Maze.SearchCore/Controllers/ChatController.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Models.SearchProviderSettings"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-19",
+      "category": "crossProject",
+      "query": "Find the shared Site Settings declaration referenced from Maze.SearchCore.Services.ExternalSettingsService.ComposeFromRow(Maze.SearchCore.Models.ServiceSettings)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "SiteSettings",
+          "qualifiedName": "Maze.Common.Models.SiteSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Models/AppSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Models/AppSettings.cs",
+        "contentHash": "sha256:4791fcf1b11f045cb3838373ebbcd9a3ef813f0e32699ace1b4008877d450a54",
+        "startUtf16": 580,
+        "endUtf16": 1026,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Services.ExternalSettingsService.ComposeFromRow(Maze.SearchCore.Models.ServiceSettings)",
+        "sourcePath": "src/Services/Maze.SearchCore/Services/ExternalSettingsService.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Models.SiteSettings"
+      }
+    },
+    {
+      "id": "maze-release-crossProject-20",
+      "category": "crossProject",
+      "query": "Find the shared Storage Settings declaration referenced from Maze.SearchCore.Services.AppConfigService.GetSettingsPathAsync()",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "StorageSettings",
+          "qualifiedName": "Maze.Common.Models.StorageSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "src/Shared/Maze.Common/Models/AppSettings.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Models/AppSettings.cs",
+        "contentHash": "sha256:4791fcf1b11f045cb3838373ebbcd9a3ef813f0e32699ace1b4008877d450a54",
+        "startUtf16": 1502,
+        "endUtf16": 1651,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "crossProjectEvidence": {
+        "sourceQualifiedName": "Maze.SearchCore.Services.AppConfigService.GetSettingsPathAsync()",
+        "sourcePath": "src/Services/Maze.SearchCore/Services/AppConfigService.cs",
+        "relationship": "references",
+        "targetQualifiedName": "Maze.Common.Models.StorageSettings"
+      }
+    },
+    {
+      "id": "maze-release-stale-01",
+      "category": "stale",
+      "query": "Maze.Common.Authentication.GenericSystemAuthenticationExtensions.ScipRenamedAddGenericSystemJwtBearer(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration, System.Action<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>?)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "ScipRenamedAddGenericSystemJwtBearer",
+          "qualifiedName": "Maze.Common.Authentication.GenericSystemAuthenticationExtensions.ScipRenamedAddGenericSystemJwtBearer(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration, System.Action<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>?)"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Shared/Maze.Common/Authentication/GenericSystemAuthenticationExtensions.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Authentication/GenericSystemAuthenticationExtensions.cs",
+        "contentHash": "sha256:8255359b64db817b2a82c8400bc946f9bfa0837cbd191b7c16f22127b765b627",
+        "startUtf16": 1246,
+        "endUtf16": 2774,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Shared/Maze.Common/Authentication/GenericSystemAuthenticationExtensions.cs",
+        "currentPath": "scip-evaluation-moved/src/Shared/Maze.Common/Authentication/GenericSystemAuthenticationExtensions.cs",
+        "oldName": "AddGenericSystemJwtBearer",
+        "oldQualifiedName": "Maze.Common.Authentication.GenericSystemAuthenticationExtensions.AddGenericSystemJwtBearer(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration, System.Action<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>?)",
+        "newName": "ScipRenamedAddGenericSystemJwtBearer"
+      }
+    },
+    {
+      "id": "maze-release-stale-02",
+      "category": "stale",
+      "query": "Maze.Common.Authentication.MazeAuthenticationExtensions.ScipRenamedAddMazeJwtBearer(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration, System.Action<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>?)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "ScipRenamedAddMazeJwtBearer",
+          "qualifiedName": "Maze.Common.Authentication.MazeAuthenticationExtensions.ScipRenamedAddMazeJwtBearer(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration, System.Action<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>?)"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Shared/Maze.Common/Authentication/MazeAuthenticationExtensions.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/Authentication/MazeAuthenticationExtensions.cs",
+        "contentHash": "sha256:d123ff201df34182e0e3ed7a2372956c9c85a9712e9ede1b9533c7dd0645556b",
+        "startUtf16": 1108,
+        "endUtf16": 2509,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Shared/Maze.Common/Authentication/MazeAuthenticationExtensions.cs",
+        "currentPath": "scip-evaluation-moved/src/Shared/Maze.Common/Authentication/MazeAuthenticationExtensions.cs",
+        "oldName": "AddMazeJwtBearer",
+        "oldQualifiedName": "Maze.Common.Authentication.MazeAuthenticationExtensions.AddMazeJwtBearer(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration, System.Action<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>?)",
+        "newName": "ScipRenamedAddMazeJwtBearer"
+      }
+    },
+    {
+      "id": "maze-release-stale-03",
+      "category": "stale",
+      "query": "Maze.Common.ScipRenamedIEncryptedSettingsProtector",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "ScipRenamedIEncryptedSettingsProtector",
+          "qualifiedName": "Maze.Common.ScipRenamedIEncryptedSettingsProtector"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Shared/Maze.Common/IEncryptedSettingsProtector.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/IEncryptedSettingsProtector.cs",
+        "contentHash": "sha256:37f71bb2523b592ba41badcde75939371b45edfba829a428b0a35d543cd5e2c3",
+        "startUtf16": 386,
+        "endUtf16": 516,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Shared/Maze.Common/IEncryptedSettingsProtector.cs",
+        "currentPath": "scip-evaluation-moved/src/Shared/Maze.Common/IEncryptedSettingsProtector.cs",
+        "oldName": "IEncryptedSettingsProtector",
+        "oldQualifiedName": "Maze.Common.IEncryptedSettingsProtector",
+        "newName": "ScipRenamedIEncryptedSettingsProtector"
+      }
+    },
+    {
+      "id": "maze-release-stale-04",
+      "category": "stale",
+      "query": "Maze.Common.ScipRenamedIMazeEnvironment",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "ScipRenamedIMazeEnvironment",
+          "qualifiedName": "Maze.Common.ScipRenamedIMazeEnvironment"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Shared/Maze.Common/IMazeEnvironment.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/IMazeEnvironment.cs",
+        "contentHash": "sha256:c74a48065d495a337f18b0bcdc71049a1dc389ba9f8c3c19c8f7e0dd16399591",
+        "startUtf16": 199,
+        "endUtf16": 701,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Shared/Maze.Common/IMazeEnvironment.cs",
+        "currentPath": "scip-evaluation-moved/src/Shared/Maze.Common/IMazeEnvironment.cs",
+        "oldName": "IMazeEnvironment",
+        "oldQualifiedName": "Maze.Common.IMazeEnvironment",
+        "newName": "ScipRenamedIMazeEnvironment"
+      }
+    },
+    {
+      "id": "maze-release-stale-05",
+      "category": "stale",
+      "query": "Maze.Common.MazeConfigurationStoreServiceCollectionExtensions.ScipRenamedAddMazeConfigurationStore(Microsoft.Extensions.DependencyInjection.IServiceCollection)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "ScipRenamedAddMazeConfigurationStore",
+          "qualifiedName": "Maze.Common.MazeConfigurationStoreServiceCollectionExtensions.ScipRenamedAddMazeConfigurationStore(Microsoft.Extensions.DependencyInjection.IServiceCollection)"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Shared/Maze.Common/MazeConfigurationStoreServiceCollectionExtensions.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/MazeConfigurationStoreServiceCollectionExtensions.cs",
+        "contentHash": "sha256:f84d43687b18c3ec71dfa0ffc458ce9f56ba92f8d0d7fb2cbf33c2c9642d8c5b",
+        "startUtf16": 903,
+        "endUtf16": 1185,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Shared/Maze.Common/MazeConfigurationStoreServiceCollectionExtensions.cs",
+        "currentPath": "scip-evaluation-moved/src/Shared/Maze.Common/MazeConfigurationStoreServiceCollectionExtensions.cs",
+        "oldName": "AddMazeConfigurationStore",
+        "oldQualifiedName": "Maze.Common.MazeConfigurationStoreServiceCollectionExtensions.AddMazeConfigurationStore(Microsoft.Extensions.DependencyInjection.IServiceCollection)",
+        "newName": "ScipRenamedAddMazeConfigurationStore"
+      }
+    },
+    {
+      "id": "maze-release-stale-06",
+      "category": "stale",
+      "query": "Maze.Common.MazeDataProtectionServiceCollectionExtensions.ScipRenamedAddMazePersistedDataProtection(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration, string)",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "ScipRenamedAddMazePersistedDataProtection",
+          "qualifiedName": "Maze.Common.MazeDataProtectionServiceCollectionExtensions.ScipRenamedAddMazePersistedDataProtection(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration, string)"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Shared/Maze.Common/MazeDataProtectionServiceCollectionExtensions.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/MazeDataProtectionServiceCollectionExtensions.cs",
+        "contentHash": "sha256:8eec83a12bf30a3b4364e49b3644fb347f5588f5fe053bb75f786be8bcce79f3",
+        "startUtf16": 1291,
+        "endUtf16": 1974,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Shared/Maze.Common/MazeDataProtectionServiceCollectionExtensions.cs",
+        "currentPath": "scip-evaluation-moved/src/Shared/Maze.Common/MazeDataProtectionServiceCollectionExtensions.cs",
+        "oldName": "AddMazePersistedDataProtection",
+        "oldQualifiedName": "Maze.Common.MazeDataProtectionServiceCollectionExtensions.AddMazePersistedDataProtection(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration, string)",
+        "newName": "ScipRenamedAddMazePersistedDataProtection"
+      }
+    },
+    {
+      "id": "maze-release-stale-07",
+      "category": "stale",
+      "query": "Maze.Common.ScipRenamedMazeEnvironment",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedMazeEnvironment",
+          "qualifiedName": "Maze.Common.ScipRenamedMazeEnvironment"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Shared/Maze.Common/MazeEnvironment.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/MazeEnvironment.cs",
+        "contentHash": "sha256:7dc302ffa11bf14116922d1f332e6be6d970368a1998bcb4bd09889bb363ba1c",
+        "startUtf16": 309,
+        "endUtf16": 1625,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Shared/Maze.Common/MazeEnvironment.cs",
+        "currentPath": "scip-evaluation-moved/src/Shared/Maze.Common/MazeEnvironment.cs",
+        "oldName": "MazeEnvironment",
+        "oldQualifiedName": "Maze.Common.MazeEnvironment",
+        "newName": "ScipRenamedMazeEnvironment"
+      }
+    },
+    {
+      "id": "maze-release-stale-08",
+      "category": "stale",
+      "query": "Maze.Common.ScipRenamedMazeEnvironmentOptions",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedMazeEnvironmentOptions",
+          "qualifiedName": "Maze.Common.ScipRenamedMazeEnvironmentOptions"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Shared/Maze.Common/MazeEnvironmentOptions.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/MazeEnvironmentOptions.cs",
+        "contentHash": "sha256:dd71634d0fd7f1207ca26ec2826f4144384b506071f7d39e00252507fcbe0b0b",
+        "startUtf16": 237,
+        "endUtf16": 578,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Shared/Maze.Common/MazeEnvironmentOptions.cs",
+        "currentPath": "scip-evaluation-moved/src/Shared/Maze.Common/MazeEnvironmentOptions.cs",
+        "oldName": "MazeEnvironmentOptions",
+        "oldQualifiedName": "Maze.Common.MazeEnvironmentOptions",
+        "newName": "ScipRenamedMazeEnvironmentOptions"
+      }
+    },
+    {
+      "id": "maze-release-stale-09",
+      "category": "stale",
+      "query": "Maze.Common.MazeEnvironmentServiceCollectionExtensions.ScipRenamedAddMazeEnvironment(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedAddMazeEnvironment",
+          "qualifiedName": "Maze.Common.MazeEnvironmentServiceCollectionExtensions.ScipRenamedAddMazeEnvironment(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration)"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Shared/Maze.Common/MazeEnvironmentServiceCollectionExtensions.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.Common/MazeEnvironmentServiceCollectionExtensions.cs",
+        "contentHash": "sha256:5b2d8e21cf81f786aa909b1e23b12aea250cae4881decd4237a18d4638420c6b",
+        "startUtf16": 375,
+        "endUtf16": 709,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Shared/Maze.Common/MazeEnvironmentServiceCollectionExtensions.cs",
+        "currentPath": "scip-evaluation-moved/src/Shared/Maze.Common/MazeEnvironmentServiceCollectionExtensions.cs",
+        "oldName": "AddMazeEnvironment",
+        "oldQualifiedName": "Maze.Common.MazeEnvironmentServiceCollectionExtensions.AddMazeEnvironment(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.Extensions.Configuration.IConfiguration)",
+        "newName": "ScipRenamedAddMazeEnvironment"
+      }
+    },
+    {
+      "id": "maze-release-stale-10",
+      "category": "stale",
+      "query": "Maze.ModuleContracts.ScipRenamedModuleCapabilities",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedModuleCapabilities",
+          "qualifiedName": "Maze.ModuleContracts.ScipRenamedModuleCapabilities"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Shared/Maze.ModuleContracts/ModuleCapabilities.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Shared/Maze.ModuleContracts/ModuleCapabilities.cs",
+        "contentHash": "sha256:63ea0d2af4d049fc586311bb48460ec4bc09b3e676ee21563b92491a13b61678",
+        "startUtf16": 284,
+        "endUtf16": 692,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Shared/Maze.ModuleContracts/ModuleCapabilities.cs",
+        "currentPath": "scip-evaluation-moved/src/Shared/Maze.ModuleContracts/ModuleCapabilities.cs",
+        "oldName": "ModuleCapabilities",
+        "oldQualifiedName": "Maze.ModuleContracts.ModuleCapabilities",
+        "newName": "ScipRenamedModuleCapabilities"
+      }
+    },
+    {
+      "id": "maze-release-stale-11",
+      "category": "stale",
+      "query": "Maze.SearchCore.Authentication.ScipRenamedServiceTokenAuthenticationHandler",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedServiceTokenAuthenticationHandler",
+          "qualifiedName": "Maze.SearchCore.Authentication.ScipRenamedServiceTokenAuthenticationHandler"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/Authentication/ServiceTokenAuthenticationHandler.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Authentication/ServiceTokenAuthenticationHandler.cs",
+        "contentHash": "sha256:76a1e2d9d9e646191cb2edcb7d492a7139c67cefa7803d0890ca27c580181bc1",
+        "startUtf16": 605,
+        "endUtf16": 2466,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Services/Maze.SearchCore/Authentication/ServiceTokenAuthenticationHandler.cs",
+        "currentPath": "scip-evaluation-moved/src/Services/Maze.SearchCore/Authentication/ServiceTokenAuthenticationHandler.cs",
+        "oldName": "ServiceTokenAuthenticationHandler",
+        "oldQualifiedName": "Maze.SearchCore.Authentication.ServiceTokenAuthenticationHandler",
+        "newName": "ScipRenamedServiceTokenAuthenticationHandler"
+      }
+    },
+    {
+      "id": "maze-release-stale-12",
+      "category": "stale",
+      "query": "Maze.SearchCore.Authentication.ScipRenamedServiceTokenAuthenticationOptions",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedServiceTokenAuthenticationOptions",
+          "qualifiedName": "Maze.SearchCore.Authentication.ScipRenamedServiceTokenAuthenticationOptions"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/Authentication/ServiceTokenAuthenticationOptions.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Authentication/ServiceTokenAuthenticationOptions.cs",
+        "contentHash": "sha256:61fbfe628718782673ec48dcfe043dff5954ddaf9b5c2203b07f1c798526ea66",
+        "startUtf16": 268,
+        "endUtf16": 646,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Services/Maze.SearchCore/Authentication/ServiceTokenAuthenticationOptions.cs",
+        "currentPath": "scip-evaluation-moved/src/Services/Maze.SearchCore/Authentication/ServiceTokenAuthenticationOptions.cs",
+        "oldName": "ServiceTokenAuthenticationOptions",
+        "oldQualifiedName": "Maze.SearchCore.Authentication.ServiceTokenAuthenticationOptions",
+        "newName": "ScipRenamedServiceTokenAuthenticationOptions"
+      }
+    },
+    {
+      "id": "maze-release-stale-13",
+      "category": "stale",
+      "query": "Maze.SearchCore.Controllers.ScipRenamedMediaAssetLocationController",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedMediaAssetLocationController",
+          "qualifiedName": "Maze.SearchCore.Controllers.ScipRenamedMediaAssetLocationController"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/Controllers/MediaAssetLocationController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaAssetLocationController.cs",
+        "contentHash": "sha256:5e4656e6644e4bc934924373f0f3708a3f4c8d7910bef3d07cba6184bfca1c80",
+        "startUtf16": 990,
+        "endUtf16": 2748,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Services/Maze.SearchCore/Controllers/MediaAssetLocationController.cs",
+        "currentPath": "scip-evaluation-moved/src/Services/Maze.SearchCore/Controllers/MediaAssetLocationController.cs",
+        "oldName": "MediaAssetLocationController",
+        "oldQualifiedName": "Maze.SearchCore.Controllers.MediaAssetLocationController",
+        "newName": "ScipRenamedMediaAssetLocationController"
+      }
+    },
+    {
+      "id": "maze-release-stale-14",
+      "category": "stale",
+      "query": "Maze.SearchCore.Controllers.MediaPlacementController.ScipRenamedAcceptCurrentLocation(string, System.Threading.CancellationToken)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedAcceptCurrentLocation",
+          "qualifiedName": "Maze.SearchCore.Controllers.MediaPlacementController.ScipRenamedAcceptCurrentLocation(string, System.Threading.CancellationToken)"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/Controllers/MediaPlacementController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaPlacementController.cs",
+        "contentHash": "sha256:f12bdf04c433dbed8ec0a1c58ccd37eaa777bd8c580317740dd8c30362daf505",
+        "startUtf16": 1453,
+        "endUtf16": 1900,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Services/Maze.SearchCore/Controllers/MediaPlacementController.cs",
+        "currentPath": "scip-evaluation-moved/src/Services/Maze.SearchCore/Controllers/MediaPlacementController.cs",
+        "oldName": "AcceptCurrentLocation",
+        "oldQualifiedName": "Maze.SearchCore.Controllers.MediaPlacementController.AcceptCurrentLocation(string, System.Threading.CancellationToken)",
+        "newName": "ScipRenamedAcceptCurrentLocation"
+      }
+    },
+    {
+      "id": "maze-release-stale-15",
+      "category": "stale",
+      "query": "Maze.SearchCore.Controllers.ScipRenamedMediaRequestController",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedMediaRequestController",
+          "qualifiedName": "Maze.SearchCore.Controllers.ScipRenamedMediaRequestController"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/Controllers/MediaRequestController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/MediaRequestController.cs",
+        "contentHash": "sha256:bd09e7d472df937c111465e39aa25a9432016d6ffb7cffb611a7c7aa8e99d173",
+        "startUtf16": 413,
+        "endUtf16": 1095,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Services/Maze.SearchCore/Controllers/MediaRequestController.cs",
+        "currentPath": "scip-evaluation-moved/src/Services/Maze.SearchCore/Controllers/MediaRequestController.cs",
+        "oldName": "MediaRequestController",
+        "oldQualifiedName": "Maze.SearchCore.Controllers.MediaRequestController",
+        "newName": "ScipRenamedMediaRequestController"
+      }
+    },
+    {
+      "id": "maze-release-stale-16",
+      "category": "stale",
+      "query": "Maze.SearchCore.Controllers.SearchController.ScipRenamedCreateProviderRule(Maze.SearchCore.Controllers.SearchController.CreateRuleRequest)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedCreateProviderRule",
+          "qualifiedName": "Maze.SearchCore.Controllers.SearchController.ScipRenamedCreateProviderRule(Maze.SearchCore.Controllers.SearchController.CreateRuleRequest)"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/Controllers/SearchController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/SearchController.cs",
+        "contentHash": "sha256:ed1b9c8c9f616c4b915b2880008dc3ea77ba6e48c23b6e8ee2bf3b51f3890134",
+        "startUtf16": 13008,
+        "endUtf16": 13769,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Services/Maze.SearchCore/Controllers/SearchController.cs",
+        "currentPath": "scip-evaluation-moved/src/Services/Maze.SearchCore/Controllers/SearchController.cs",
+        "oldName": "CreateProviderRule",
+        "oldQualifiedName": "Maze.SearchCore.Controllers.SearchController.CreateProviderRule(Maze.SearchCore.Controllers.SearchController.CreateRuleRequest)",
+        "newName": "ScipRenamedCreateProviderRule"
+      }
+    },
+    {
+      "id": "maze-release-stale-17",
+      "category": "stale",
+      "query": "Maze.SearchCore.Controllers.SettingsController.ScipRenamedAuthorizationCheck()",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedAuthorizationCheck",
+          "qualifiedName": "Maze.SearchCore.Controllers.SettingsController.ScipRenamedAuthorizationCheck()"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/Controllers/SettingsController.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Controllers/SettingsController.cs",
+        "contentHash": "sha256:aaf18a746c59663de03174b113520e3dcf62072191401d28462447d3b18aa859",
+        "startUtf16": 7756,
+        "endUtf16": 7850,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Services/Maze.SearchCore/Controllers/SettingsController.cs",
+        "currentPath": "scip-evaluation-moved/src/Services/Maze.SearchCore/Controllers/SettingsController.cs",
+        "oldName": "AuthorizationCheck",
+        "oldQualifiedName": "Maze.SearchCore.Controllers.SettingsController.AuthorizationCheck()",
+        "newName": "ScipRenamedAuthorizationCheck"
+      }
+    },
+    {
+      "id": "maze-release-stale-18",
+      "category": "stale",
+      "query": "Maze.SearchCore.Repositories.IMediaCatalogRepository.ScipRenamedGetMemberItemsAsync(string)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedGetMemberItemsAsync",
+          "qualifiedName": "Maze.SearchCore.Repositories.IMediaCatalogRepository.ScipRenamedGetMemberItemsAsync(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/Repositories/IMediaCatalogRepository.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Repositories/IMediaCatalogRepository.cs",
+        "contentHash": "sha256:7f6ed09117e1950e9cf4c57abbf5cf49980db479fd2a1cdf626f8f12010fbebe",
+        "startUtf16": 4109,
+        "endUtf16": 4172,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Services/Maze.SearchCore/Repositories/IMediaCatalogRepository.cs",
+        "currentPath": "scip-evaluation-moved/src/Services/Maze.SearchCore/Repositories/IMediaCatalogRepository.cs",
+        "oldName": "GetMemberItemsAsync",
+        "oldQualifiedName": "Maze.SearchCore.Repositories.IMediaCatalogRepository.GetMemberItemsAsync(string)",
+        "newName": "ScipRenamedGetMemberItemsAsync"
+      }
+    },
+    {
+      "id": "maze-release-stale-19",
+      "category": "stale",
+      "query": "Maze.SearchCore.Repositories.MediaCatalogRepository.ScipRenamedGetMemberItemsAsync(string)",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedGetMemberItemsAsync",
+          "qualifiedName": "Maze.SearchCore.Repositories.MediaCatalogRepository.ScipRenamedGetMemberItemsAsync(string)"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/Repositories/MediaCatalogRepository.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/Repositories/MediaCatalogRepository.cs",
+        "contentHash": "sha256:21ee1f58cf499b35818fc813537c76e1db66c262c33ea2c77cea37210f791f50",
+        "startUtf16": 44486,
+        "endUtf16": 45112,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Services/Maze.SearchCore/Repositories/MediaCatalogRepository.cs",
+        "currentPath": "scip-evaluation-moved/src/Services/Maze.SearchCore/Repositories/MediaCatalogRepository.cs",
+        "oldName": "GetMemberItemsAsync",
+        "oldQualifiedName": "Maze.SearchCore.Repositories.MediaCatalogRepository.GetMemberItemsAsync(string)",
+        "newName": "ScipRenamedGetMemberItemsAsync"
+      }
+    },
+    {
+      "id": "maze-release-stale-20",
+      "category": "stale",
+      "query": "Maze.SearchCore.SDK.ScipRenamedPluginConfigurationField",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ScipRenamedPluginConfigurationField",
+          "qualifiedName": "Maze.SearchCore.SDK.ScipRenamedPluginConfigurationField"
+        }
+      ],
+      "expectedEvidence": [
+        "scip-evaluation-moved/src/Services/Maze.SearchCore/SDK/SearchProviderPlugin.cs"
+      ],
+      "reviewed": true,
+      "sourceReview": {
+        "path": "src/Services/Maze.SearchCore/SDK/SearchProviderPlugin.cs",
+        "contentHash": "sha256:ea9346731eb8f39fa6c00ccb5585e9efd570ffdc651f613917d6ccdd754766fc",
+        "startUtf16": 3193,
+        "endUtf16": 3645,
+        "reviewedBy": "Codex AI source inspection; no independent human review claimed"
+      },
+      "transition": {
+        "kind": "renameSymbolAndMoveFile",
+        "originalPath": "src/Services/Maze.SearchCore/SDK/SearchProviderPlugin.cs",
+        "currentPath": "scip-evaluation-moved/src/Services/Maze.SearchCore/SDK/SearchProviderPlugin.cs",
+        "oldName": "PluginConfigurationField",
+        "oldQualifiedName": "Maze.SearchCore.SDK.PluginConfigurationField",
+        "newName": "ScipRenamedPluginConfigurationField"
+      }
+    },
+    {
+      "id": "maze-release-negative-01",
+      "category": "negative",
+      "query": "simulate electron orbitals with a Hartree Fock solver",
+      "split": "tuning",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-02",
+      "category": "negative",
+      "query": "decode a spacecraft deep space telemetry packet",
+      "split": "tuning",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-03",
+      "category": "negative",
+      "query": "plan robotic arm inverse kinematics trajectories",
+      "split": "tuning",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-04",
+      "category": "negative",
+      "query": "assemble long read DNA sequences into chromosomes",
+      "split": "tuning",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-05",
+      "category": "negative",
+      "query": "calculate finite element beam buckling modes",
+      "split": "tuning",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-06",
+      "category": "negative",
+      "query": "estimate satellite orbit from radar observations",
+      "split": "tuning",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-07",
+      "category": "negative",
+      "query": "execute a chess engine alpha beta search",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-08",
+      "category": "negative",
+      "query": "generate an aircraft flight control actuator signal",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-09",
+      "category": "negative",
+      "query": "solve Navier Stokes fluid turbulence equations",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-10",
+      "category": "negative",
+      "query": "perform seismic wave full waveform inversion",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-11",
+      "category": "negative",
+      "query": "price an exotic financial option by Monte Carlo simulation",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-12",
+      "category": "negative",
+      "query": "compile a quantum circuit into hardware gates",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-13",
+      "category": "negative",
+      "query": "reconstruct CT scan voxels from a sinogram",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-14",
+      "category": "negative",
+      "query": "compute elliptic curve pairing based signatures",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-15",
+      "category": "negative",
+      "query": "schedule industrial CNC tool paths for a milling machine",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-16",
+      "category": "negative",
+      "query": "infer protein folding geometry from amino acid sequences",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-17",
+      "category": "negative",
+      "query": "solve capacitated vehicle routing for delivery trucks",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-18",
+      "category": "negative",
+      "query": "classify handwritten digits with a convolutional neural network trainer",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-19",
+      "category": "negative",
+      "query": "calculate chemical reaction equilibrium concentrations",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "maze-release-negative-20",
+      "category": "negative",
+      "query": "synthesize speech waveforms from phoneme durations",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    }
+  ],
+  "reviewMethod": "Reviewed declaration/source excerpts for every positive target, full behaviour helper/endpoint bodies, model fields and compiler-resolved cross-project edges. Source files do not cross tuning/held-out splits. Negative topics were checked against all 219 authored files and the four-project domain boundary. Controlled stale cases rename identifiers consistently and move their defining files in a private overlay; transition proof must be verified before results count."
+}
