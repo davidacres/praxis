@@ -12,6 +12,7 @@ public sealed record VectorCandidate(string SymbolId, double Score);
 public sealed class ModelStore(IndexDatabase database, string directory) : IDisposable
 {
     public const int VectorScorerVersion = 3;
+    public const int VectorQueryPlanVersion = 2;
     private readonly object queryLock = new(); private LocalModel? cached; private string? cachedFingerprint;
     private string ProfileDirectory(string fingerprint)
     {
@@ -145,8 +146,11 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             var names = values.Select(value => { var parameter = "$" + parameters.Count; parameters.Add(value); return parameter; });
             filter += " AND " + column + " IN(" + string.Join(',', names) + ")";
         }
+        // Context identity is already constrained by the symbols FK. Only
+        // project filtering needs the context row during the exhaustive scan.
+        var contextJoin = projectIds is { Count: > 0 } ? " JOIN contexts c ON c.context_id=s.defining_context_id" : "";
         using var command = connection.Command(transaction,
-            "SELECT s.symbol_id,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id JOIN representation_targets r ON r.symbol_id=e.symbol_id AND r.model_fingerprint=e.model_fingerprint JOIN symbols s ON s.symbol_id=e.symbol_id JOIN contexts c ON c.context_id=s.defining_context_id WHERE s.repository_id=$0 AND e.model_fingerprint=$1 AND ($2 IS NULL OR s.defining_context_id=$2) AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND r.eligibility='eligible' AND v.dimensions=384 AND (SELECT count(*) FROM vectors complete WHERE complete.set_id=e.set_id)=e.expected_chunks" + filter, parameters.ToArray());
+            "SELECT s.symbol_id,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id JOIN representation_targets r ON r.symbol_id=e.symbol_id AND r.model_fingerprint=e.model_fingerprint JOIN symbols s ON s.symbol_id=e.symbol_id" + contextJoin + " WHERE s.repository_id=$0 AND e.model_fingerprint=$1 AND ($2 IS NULL OR s.defining_context_id=$2) AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND r.eligibility='eligible' AND v.dimensions=384 AND (SELECT count(*) FROM vectors complete WHERE complete.set_id=e.set_id)=e.expected_chunks" + filter, parameters.ToArray());
         using var reader = command.ExecuteReader(); var scores = new Dictionary<string, double>(StringComparer.Ordinal); var scanned = 0;
         var bytes = new byte[LocalModel.Dimensions * 4];
         while (reader.Read())

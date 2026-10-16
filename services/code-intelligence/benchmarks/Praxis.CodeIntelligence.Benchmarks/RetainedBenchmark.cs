@@ -102,6 +102,18 @@ internal static class RetainedBenchmark
             Console.Error.WriteLine("Measuring retained four-reader hybrid queries.");
             hybrid = await Measure(Search, "hybrid", queries);
         }
+        double? embeddingMs = null, candidateScanMs = null;
+        if (fixture.Fingerprint is not null)
+        {
+            var timer = Stopwatch.StartNew();
+            var vector = models.QueryEmbedding(repository.Id, fixture.Queries[0], CancellationToken.None)!;
+            embeddingMs = timer.Elapsed.TotalMilliseconds;
+            using var read = database.Open(readOnly: true); using var snapshot = read.BeginTransaction(deferred: true);
+            timer.Restart();
+            var candidates = ModelStore.Candidates(read, snapshot, repository.Id, vector, null, null, null);
+            candidateScanMs = timer.Elapsed.TotalMilliseconds;
+            if (candidates.Count == 0) throw new IOException("Diagnostic scan returned no candidates.");
+        }
         var after = indexer.Get(repository.Id);
         if (after.Generation != repository.Generation || after.QueryEpoch != repository.QueryEpoch || after.Root != repository.Root
             || after.State != repository.State) throw new IOException("Retained index changed during measurements.");
@@ -114,9 +126,11 @@ internal static class RetainedBenchmark
             OperatingSystem = RuntimeInformation.OSDescription, Architecture = RuntimeInformation.ProcessArchitecture.ToString(),
             Sqlite = Scalar("SELECT sqlite_version()"), ActualReadMappingBytes = Scalar("PRAGMA mmap_size"),
             IndexDatabase.ReadMappingVersion, IndexDatabase.MaximumReadMappingBytes, QueryService.SearchPlanVersion,
-            QueryService.SearchCountCacheVersion, ModelStore.VectorScorerVersion,
+            QueryService.SearchCountCacheVersion, ModelStore.VectorScorerVersion, ModelStore.VectorQueryPlanVersion,
             fixture.SourceSymbols, fixture.OriginalCorpusHash, SnapshotHash = snapshotHash, fixture.ReferenceHash,
             ModelFingerprint = fixture.Fingerprint, fixture.Generation, fixture.QueryEpoch, Lexical = lexical, Hybrid = hybrid,
+            DiagnosticSample = new { Basis = "One warmed single-reader observation after timed queries; not latency percentiles",
+                QueryEmbeddingMs = embeddingMs, ExactCandidateScanMs = candidateScanMs },
             Gates = gates, PassedMeasuredGates = gates.Values.All(value => value != false),
             Unmeasured = new[] { "cold startup/index/embedding", "edit publication/refresh", "peak RSS from runtime",
                 "owner/MCP/provider transport", "held-out relevance", "five-run/category/concurrent-edit protocol" } };
