@@ -156,7 +156,7 @@ internal static class RetainedBenchmark
             OperatingSystem = RuntimeInformation.OSDescription, Architecture = RuntimeInformation.ProcessArchitecture.ToString(),
             Sqlite = Scalar("SELECT sqlite_version()"), ActualReadMappingBytes = Scalar("PRAGMA mmap_size"), ActualReadPageCacheSetting = Scalar("PRAGMA cache_size"),
             IndexDatabase.ReadMappingVersion, IndexDatabase.MaximumReadMappingBytes,
-            IndexDatabase.ReadPageCacheVersion, IndexDatabase.ReadPageCacheKiB, QueryService.SearchPlanVersion,
+            IndexDatabase.ReadPageCacheVersion, IndexDatabase.ReadPageCacheKiB, QueryService.SearchPlanVersion, QueryService.RankingProfile, QueryService.LexicalWeight,
             QueryService.SearchCountCacheVersion, ModelStore.VectorScorerVersion, ModelStore.VectorQueryPlanVersion,
             fixture.SourceSymbols, fixture.OriginalCorpusHash, SnapshotHash = snapshotHash, fixture.ReferenceHash,
             ModelFingerprint = fixture.Fingerprint, fixture.Generation, fixture.QueryEpoch, Lexical = lexical, Hybrid = hybrid,

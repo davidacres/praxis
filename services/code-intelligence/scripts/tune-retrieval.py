@@ -1,4 +1,4 @@
-import json,subprocess,time,signal,hashlib,argparse
+import json,subprocess,time,signal,hashlib,argparse,os
 from pathlib import Path
 parser=argparse.ArgumentParser(description='Select fusion weights using only frozen tuning cases and complete channel ranks.')
 for option in ['executable','data','baseline','corpus','output']:parser.add_argument('--'+option,required=True,type=Path)
@@ -6,7 +6,7 @@ args=parser.parse_args()
 if not str(args.output).endswith('.praxis.json'):parser.error('Output must end in .praxis.json')
 exe=str(args.executable.resolve());data=str(args.data.resolve())
 report=json.loads(args.baseline.read_text());repository=report['fixtureRepositoryId']
-corpus=json.loads(args.corpus.read_text());cases=[case for case in corpus['queries'] if case['split']=='tuning'];assert len(cases)==40
+raw_corpus=args.corpus.read_bytes();corpus=json.loads(raw_corpus);cases=[case for case in corpus['queries'] if case['split']=='tuning'];assert len(cases)==40
 owner=subprocess.Popen([exe,'serve','--data',data],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 try:
  for _ in range(150):
@@ -60,10 +60,11 @@ try:
    values.append(recall);rr.append(mrr);per[case['id']]=recall
   trials.append(dict(lexicalWeight=lexical,vectorWeight=1,aliasWeight=1,macroRecallAt10=sum(values)/len(values),mrrAt10=sum(rr)/len(rr),perCaseRecall=per))
  best=max(trials,key=lambda t:(t['macroRecallAt10'],t['mrrAt10'],-t['lexicalWeight']))
- output=dict(selectionBasis='Only the 40 frozen tuning cases; maximum macro recall, then MRR, then lower lexical weight. No held-out cases loaded for selection.',corpusHash='sha256:'+hashlib.sha256(args.corpus.read_bytes()).hexdigest(),indexGeneration=snapshot['indexGeneration'],queryEpoch=snapshot['queryEpoch'],selected=best,trials=trials,cases=collected)
+ output=dict(selectionBasis='Only the 40 frozen tuning cases; maximum macro recall, then MRR, then lower lexical weight. No held-out cases loaded for selection.',corpusHash='sha256:'+hashlib.sha256(raw_corpus).hexdigest(),indexGeneration=snapshot['indexGeneration'],queryEpoch=snapshot['queryEpoch'],selected=best,trials=trials,cases=collected)
  args.output.write_text(json.dumps(output,indent=2)+'\n');print('SELECTED',best,flush=True)
 finally:
  if owner.poll() is None:
-  owner.send_signal(signal.SIGINT)
+  if os.name == "nt":owner.terminate()
+  else:owner.send_signal(signal.SIGINT)
   try:owner.wait(timeout=5)
   except subprocess.TimeoutExpired:owner.kill();owner.wait(timeout=5)

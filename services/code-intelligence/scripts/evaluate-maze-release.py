@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import signal
@@ -39,7 +40,7 @@ def main():
                     for key in ('sources', 'supportSources') for path in project.get(key, [])})
     def safe_relative(path):
         relative = PurePosixPath(path)
-        if relative.is_absolute() or '..' in relative.parts or '\\' in path:
+        if not path or ':' in path or relative.is_absolute() or '..' in relative.parts or '\\' in path:
             raise ValueError('Unsafe captured source path')
         return Path(*relative.parts)
     for case in corpus['queries']:
@@ -167,7 +168,10 @@ def main():
         return 0 if report['passedDeclaredGates'] else 2
     finally:
         if owner.poll() is None:
-            owner.send_signal(signal.SIGINT)
+            if os.name == "nt":
+                owner.terminate()
+            else:
+                owner.send_signal(signal.SIGINT)
             try:
                 owner.wait(timeout=5)
             except subprocess.TimeoutExpired:
