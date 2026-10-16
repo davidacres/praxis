@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "sourceRepository": "https://github.com/davidacres/maze",
+  "sourceRevision": "61d4510a8ef6946407fa310038ae0add1fffdf24",
+  "sdk": "10.0.100",
+  "trackedSourceChanges": false,
+  "manifestHash": "sha256:64b01ce03c56699642ad140acfbd785f5f32957f119e80bd03c1c0db01c74d0c",
+  "scope": [
+    "src/Services/Maze.SearchCore",
+    "src/Services/Maze.UserService",
+    "src/Shared/Maze.Common",
+    "src/Shared/Maze.ModuleContracts"
+  ],
+  "exclusions": [
+    "tests",
+    "src/Tools",
+    "src/Modules",
+    "src/Web",
+    "src/Services/Maze.MetaDataService",
+    "src/Shared/MazeHub.Shared",
+    ".github",
+    ".agents",
+    ".claude"
+  ],
+  "preparation": {
+    "restoreSource": "https://api.nuget.org/v3/index.json",
+    "buildProject": "src/Services/Maze.SearchCore/Maze.SearchCore.csproj",
+    "emitCompilerGeneratedFiles": true,
+    "generatedOutput": "obj/scip-generated",
+    "buildErrors": 0,
+    "buildWarnings": 563,
+    "applicationsStarted": false
+  },
+  "contexts": [
+    {
+      "project_key": "src/Services/Maze.SearchCore/Maze.SearchCore.csproj#Debug#net10.0",
+      "resolution": "complete"
+    },
+    {
+      "project_key": "src/Services/Maze.UserService/Maze.UserService.csproj#Debug#net10.0",
+      "resolution": "complete"
+    },
+    {
+      "project_key": "src/Shared/Maze.Common/Maze.Common.csproj#Debug#net10.0",
+      "resolution": "complete"
+    },
+    {
+      "project_key": "src/Shared/Maze.ModuleContracts/Maze.ModuleContracts.csproj#Debug#net10.0",
+      "resolution": "complete"
+    }
+  ],
+  "files": [
+    {
+      "role": "searchableSource",
+      "count": 219
+    },
+    {
+      "role": "semanticSupport",
+      "count": 6
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "info",
+      "count": 90
+    },
+    {
+      "severity": "warning",
+      "count": 1537
+    }
+  ],
+  "crossProjectEdges": [
+    {
+      "kind": "calls",
+      "resolution": "resolved",
+      "count": 76
+    },
+    {
+      "kind": "depends_on",
+      "resolution": "resolved",
+      "count": 618
+    },
+    {
+      "kind": "imports",
+      "resolution": "resolved",
+      "count": 45
+    },
+    {
+      "kind": "may_call",
+      "resolution": "possible",
+      "count": 11
+    },
+    {
+      "kind": "reads",
+      "resolution": "resolved",
+      "count": 167
+    },
+    {
+      "kind": "references",
+      "resolution": "resolved",
+      "count": 487
+    },
+    {
+      "kind": "returns_type",
+      "resolution": "resolved",
+      "count": 6
+    },
+    {
+      "kind": "uses_type",
+      "resolution": "resolved",
+      "count": 99
+    },
+    {
+      "kind": "writes",
+      "resolution": "resolved",
+      "count": 85
+    }
+  ],
+  "qualification": "Compiler context and observed graph preparation only; no held-out relevance or manual review acceptance"
+}

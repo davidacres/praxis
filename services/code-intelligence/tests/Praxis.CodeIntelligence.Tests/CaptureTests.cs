@@ -45,11 +45,12 @@ public sealed class CaptureTests
         var root = Path.Combine(Path.GetTempPath(), "praxis-capture-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
-            File.WriteAllText(Path.Combine(root, "Example.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup></Project>");
-            File.WriteAllText(Path.Combine(root, "Example.cs"), "public class Example { public int Run(int input) => input + 1; }");
+            File.WriteAllText(Path.Combine(root, "Example.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "Example.cs"), "public class Example { public Task<int> Run(int input) => Task.FromResult(input + DateTime.Now.Day); }");
             var output = await ContextCapture.CaptureAsync(root, "Example.csproj", restore: true);
             var manifest = PassiveManifest.Read(root, output); var project = Assert.Single(manifest.Projects);
             Assert.Contains("Example.cs", project.Sources); Assert.NotEmpty(project.Metadata!); Assert.NotEmpty(project.Inputs!);
+            Assert.Contains(project.SupportSources ?? [], source => source.EndsWith("GlobalUsings.g.cs", StringComparison.Ordinal));
             var database = new IndexDatabase(Path.Combine(root, "data", "index.db")); database.Initialize(); var indexer = new RepositoryIndexer(database);
             var repository = indexer.Register(root, new(output)); indexer.Index(repository);
             using var connection = database.Open(readOnly: true); using var command = connection.CreateCommand(); command.CommandText = "SELECT resolution FROM contexts";

@@ -33,6 +33,7 @@ def owner(semantic=True, change_epoch=False, miss=False, resolution="complete"):
         result = {'indexGeneration': 1, 'queryEpoch': 2}
         if tool == 'get_index_status':
             result['data'] = {'contexts': [{'resolution': resolution}]}
+            result['freshness'] = {'state': 'current' if resolution == 'complete' else 'partial'}
             statuses += 1
             if change_epoch and statuses > 1:
                 result['queryEpoch'] = 3
@@ -79,6 +80,23 @@ class EvaluationTests(unittest.TestCase):
             if case['category'] == 'behaviour':
                 case['split'] = 'tuning'
         self.assertFalse(retrieval.validate(draft)['heldOutEveryCategory'])
+
+    def test_diagnostic_truncation_does_not_hide_global_compiler_coverage(self):
+        native = owner()
+        def truncated(tool, arguments):
+            result = native(tool, arguments)
+            if tool == 'get_index_status':
+                result['truncated'] = True
+            return result
+        self.assertTrue(retrieval.evaluate(corpus(), truncated)['gates']['completeCompilerContexts'])
+        native = owner()
+        def hidden_partial(tool, arguments):
+            result = native(tool, arguments)
+            if tool == 'get_index_status':
+                result['truncated'] = True
+                result['freshness']['state'] = 'partial'
+            return result
+        self.assertFalse(retrieval.evaluate(corpus(), hidden_partial)['gates']['completeCompilerContexts'])
 
     def test_changed_epoch_invalidates_snapshot(self):
         self.assertFalse(retrieval.evaluate(corpus(), owner(change_epoch=True))['gates']['stableSnapshot'])

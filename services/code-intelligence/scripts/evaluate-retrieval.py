@@ -147,7 +147,8 @@ def evaluate(corpus, invoke):
     exact = [case for case in results if case["category"] == "exact" and case["mode"] == "hybrid" and case["split"] == "heldOut"]
     contexts = before.get("data", {}).get("contexts", [])
     gates = {**protocol,
-             "completeCompilerContexts": bool(contexts) and not before.get("truncated")
+             "completeCompilerContexts": bool(contexts)
+             and before.get("freshness", {}).get("state") == "current"
              and all(context.get("resolution") == "complete" for context in contexts),
              "stableSnapshot": not after.get("error") and before.get("indexGeneration") == after.get("indexGeneration")
              and before.get("queryEpoch") == after.get("queryEpoch")

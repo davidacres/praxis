@@ -1,0 +1,323 @@
+{
+  "schemaVersion": "1.2",
+  "repositoryId": "pci:repo:c365c3d269de464a812db82bb51e6590",
+  "indexGeneration": 2,
+  "queryEpoch": 10,
+  "freshness": {
+    "state": "current",
+    "lastReconciledUtc": "2026-10-16T06:43:38.1335170+00:00",
+    "pendingContextCount": 0,
+    "basis": "observedSnapshot"
+  },
+  "data": {
+    "desiredRevision": 2,
+    "contexts": [
+      {
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f",
+        "state": "ready",
+        "resolution": "complete",
+        "desiredRevision": 2,
+        "publishedRevision": 2,
+        "capabilities": [
+          "declarations",
+          "lexical",
+          "calls",
+          "references",
+          "accesses",
+          "typeDependencies"
+        ]
+      },
+      {
+        "contextId": "pci:ctx:4360911e110196a23a93eeed57c993d6bec07d9f11b14dc66e9d905f556d3e13",
+        "state": "ready",
+        "resolution": "complete",
+        "desiredRevision": 2,
+        "publishedRevision": 2,
+        "capabilities": [
+          "declarations",
+          "lexical",
+          "calls",
+          "references",
+          "accesses",
+          "typeDependencies"
+        ]
+      },
+      {
+        "contextId": "pci:ctx:642e1a096dbfa2df0f3957ef82dda7662b1043cd196867d68b1a7d9355e2ac69",
+        "state": "ready",
+        "resolution": "complete",
+        "desiredRevision": 2,
+        "publishedRevision": 2,
+        "capabilities": [
+          "declarations",
+          "lexical",
+          "calls",
+          "references",
+          "accesses",
+          "typeDependencies"
+        ]
+      },
+      {
+        "contextId": "pci:ctx:6ca46a271b38a50b5a44943f5d65ad821a65e0da66f2d0e0a396a6c341e393f7",
+        "state": "ready",
+        "resolution": "complete",
+        "desiredRevision": 2,
+        "publishedRevision": 2,
+        "capabilities": [
+          "declarations",
+          "lexical",
+          "calls",
+          "references",
+          "accesses",
+          "typeDependencies"
+        ]
+      }
+    ],
+    "jobsByState": {
+      "pending": 0,
+      "leased": 1,
+      "succeeded": 0,
+      "failed": 0,
+      "obsolete": 0
+    },
+    "models": [],
+    "lastReconciledUtc": "2026-10-16T06:43:38.1335170+00:00",
+    "diagnostics": [
+      {
+        "id": "pci:diag:00399dbf68244595b06735264798ce47",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:642e1a096dbfa2df0f3957ef82dda7662b1043cd196867d68b1a7d9355e2ac69"
+      },
+      {
+        "id": "pci:diag:004e0a9659ae452e970f3fc1f9ccefdb",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=7.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'HtmlAgilityPack' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:0067e4effde44e1b8c10f89ab16c6a67",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:0093171edee34a919f44d9cc9fa2ec19",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:009fd2d2557547eda7302de8fb211e35",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:00b013752c6b4d3d9e57d45d8b01e173",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'Microsoft.Extensions.Diagnostics.HealthChecks, Version=9.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60' used by 'Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore' matches identity 'Microsoft.Extensions.Diagnostics.HealthChecks, Version=10.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60' of 'Microsoft.Extensions.Diagnostics.HealthChecks', you may need to supply runtime policy",
+        "contextId": "pci:ctx:642e1a096dbfa2df0f3957ef82dda7662b1043cd196867d68b1a7d9355e2ac69"
+      },
+      {
+        "id": "pci:diag:00c3ef9d119f4362af2879b8fcfe685b",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:00cb3c213a99456bafe5daf03953f8a2",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:00fc2d0aba33455eb61001acdd5c27c2",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:0122c5ae84c34360be2f692d34a79bb6",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:642e1a096dbfa2df0f3957ef82dda7662b1043cd196867d68b1a7d9355e2ac69"
+      },
+      {
+        "id": "pci:diag:0187d4045f5c4bc1976ca299958d0ab9",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Linq.Expressions, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Linq.Expressions, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Linq.Expressions', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:01be1b42548045848c60fff8dc385c66",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=9.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.Extensions.AI.Abstractions' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:01d2820607274564a53c034defc936ca",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:642e1a096dbfa2df0f3957ef82dda7662b1043cd196867d68b1a7d9355e2ac69"
+      },
+      {
+        "id": "pci:diag:025098856188455b96b28065b1ead6f8",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:0251dcff9ef04c2cb01ee71337686f35",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore.Relational' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:0261cd58732c467b8abc82105697f872",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:642e1a096dbfa2df0f3957ef82dda7662b1043cd196867d68b1a7d9355e2ac69"
+      },
+      {
+        "id": "pci:diag:02677d1b24b84065a9e1243fb2f69bda",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:02770fb5bf7a4fdabd615979bb781cae",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'Microsoft.AspNetCore.Authentication, Version=9.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60' used by 'Microsoft.AspNetCore.Authentication.JwtBearer' matches identity 'Microsoft.AspNetCore.Authentication, Version=10.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60' of 'Microsoft.AspNetCore.Authentication', you may need to supply runtime policy",
+        "contextId": "pci:ctx:4360911e110196a23a93eeed57c993d6bec07d9f11b14dc66e9d905f556d3e13"
+      },
+      {
+        "id": "pci:diag:02870ad7e8294074a08fd49f7d08527e",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'Microsoft.AspNetCore.Authentication, Version=9.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60' used by 'Microsoft.AspNetCore.Authentication.JwtBearer' matches identity 'Microsoft.AspNetCore.Authentication, Version=10.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60' of 'Microsoft.AspNetCore.Authentication', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:02939ffba303487fa256613f49aedf72",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:029e67a593e2458b98a8c16202b26868",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:02a1872d3c9e4108b5b8ec1847a74478",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:02ae96ef594049bd826f71460ccc205d",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:642e1a096dbfa2df0f3957ef82dda7662b1043cd196867d68b1a7d9355e2ac69"
+      },
+      {
+        "id": "pci:diag:02c195db370c40f78960059a7b5d4175",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:02d06625e6264ae3925e2b173b31ca2e",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'Microsoft.AspNetCore.Authentication, Version=9.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60' used by 'Microsoft.AspNetCore.Authentication.JwtBearer' matches identity 'Microsoft.AspNetCore.Authentication, Version=10.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60' of 'Microsoft.AspNetCore.Authentication', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:02d06c05e25346cca898ed1accfb712a",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:0371b943b6874e05bdd798902f317620",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:642e1a096dbfa2df0f3957ef82dda7662b1043cd196867d68b1a7d9355e2ac69"
+      },
+      {
+        "id": "pci:diag:03da788b609d4d76bcaf332904af51b2",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'Microsoft.AspNetCore.Authentication, Version=9.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60' used by 'Microsoft.AspNetCore.Authentication.JwtBearer' matches identity 'Microsoft.AspNetCore.Authentication, Version=10.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60' of 'Microsoft.AspNetCore.Authentication', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:041c5abc86b84e65b2139599aff0932e",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:642e1a096dbfa2df0f3957ef82dda7662b1043cd196867d68b1a7d9355e2ac69"
+      },
+      {
+        "id": "pci:diag:0460719d70794740ae2a50a7f8761cae",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      },
+      {
+        "id": "pci:diag:04b1831bcd3b41108d4abb5ee7c6866f",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:642e1a096dbfa2df0f3957ef82dda7662b1043cd196867d68b1a7d9355e2ac69"
+      },
+      {
+        "id": "pci:diag:04c734444aad4e0390d40387754827f0",
+        "code": "CS1701",
+        "severity": "warning",
+        "message": "Assuming assembly reference 'System.Runtime, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' used by 'Microsoft.EntityFrameworkCore' matches identity 'System.Runtime, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' of 'System.Runtime', you may need to supply runtime policy",
+        "contextId": "pci:ctx:29eeec932b1afe2dda436f0b1603e21c743ce171d3c291e07803772e3c0c286f"
+      }
+    ],
+    "ownerState": "directLocalSession"
+  },
+  "evidence": [],
+  "warnings": [
+    {
+      "code": "RESPONSE_TRUNCATED",
+      "message": "Collection detail shortened to fit the response budget; request a larger budget for more detail.",
+      "retryable": false
+    }
+  ],
+  "truncated": true,
+  "nextCursor": null
+}
