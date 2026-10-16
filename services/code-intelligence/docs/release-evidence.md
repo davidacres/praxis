@@ -14,9 +14,10 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
 | Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
 | 50k exact-query latency and memory | Plan-6/schema-5 full process: lexical p95 6.467 ms, hybrid p95 211.053 ms, retrieval-only p95 191.841 ms, independent peak RSS 2020671488 bytes; all measured gates pass (previous plan-5 run: hybrid 434.591, retrieval 414.348 failing) | 50k body edit 17034 ms vs 14263 ms before (no 50k gate). Repeat/concurrent-edit/reference-machine protocol open |
-| 50k concurrent edits | Mapping v7: 25 edits, 10,714 lexical + 10,714 hybrid queries, zero errors, lexical p95 11.667 ms, hybrid p95 408.155 ms, independent peak RSS 1,966,702,592 bytes (passes 2 GiB; was 2,594,717,696 with mapping v6) | About 173 MiB headroom on one run; reference machine, repeats and §31.3 pressure admission open |
+| 50k concurrent edits | Plan 5: 25 edits, 15,570 lexical + 15,570 hybrid queries, zero errors, lexical p95 10.86 ms, hybrid p95 275.8 ms, independent peak RSS 2,112,667,648 bytes (passes 2 GiB by about 33 MiB) | **Headroom too thin to call qualified**; one run; §31.3 pressure admission not implemented; reference machine open |
 | Query matrix (plan 6) | Five runs × exact/terminology/behaviour/negative × one/four readers × 200 queries: 39/40 processes pass every gate; hybrid p95 max 322.743 ms; lexical p95 max 82.942 ms; zero errors | **Fails:** behaviour four-reader run 1 retrieval-only p95 301.9 ms; other four-reader terminology/behaviour runs 236–247 ms (thin margin). Concurrent edits, cross-project, owner/wire, full-process RSS, reference machine unmeasured |
 | Query matrix (mapping v7) | Same protocol after the memory fix: complete, zero errors, all lexical/hybrid p95 pass; 36/40 processes pass every gate | **Fails:** four-reader retrieval-only behaviour runs 1–3 (261.2/261.2/270.4 ms) and terminology run 4 (250.2 ms); the memory fix costs about 5–25 ms on broad four-reader retrieval |
+| Query matrix (vector plan 5, native scan) | Five runs × four categories × one/four readers × 200 queries: **40/40 processes pass every gate**, zero errors; four-reader retrieval-only p95 max 172.0 ms, hybrid p95 max 182.8 ms, lexical p95 max 85.1 ms | 12-core Mac only; reference 8-core/16 GiB machine, cross-project and owner/wire latency unmeasured |
 | Broader terminology performance (history) | (Superseded for the vector path by the ranked-validation checkpoint below: one-reader hybrid p95 228.496 ms, four-reader 365.737 ms, single pilot.) Two independent 50k processes, matched 200-query sets/mode: one reader lexical/hybrid p95 74.371/353.665 ms; four readers 98.664/507.817 ms; no errors | Four-reader hybrid fails 500 ms and retrieval-only fails 250 ms. Five repeats, other categories and concurrent edits remain open |
 | Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Final mapping-v6 run 38904504214 passes Windows/macOS/Linux (112 tests per host, schemas, native packaging, retained/matrix safeguards and watcher smoke) |
 
@@ -617,3 +618,30 @@ Single-run pilot, terminology and behaviour categories (`benchmarks/macos-arm64-
 | behaviour, 4 readers | 185.9 ms | **175.5 ms** | 71.6 ms | 77.6 ms |
 
 Under mapping v7, four-reader retrieval had measured 245.9–270.4 ms. The full matrix and concurrent-edit run follow.
+
+## Vector plan 5 qualification — 16 October
+
+**Native CI:** [38943640382](https://github.com/davidacres/praxis/actions/runs/38943640382) at `00318731` passed on Windows, Linux and macOS.
+
+**Full query matrix** (`benchmarks/macos-arm64-50000-plan5-native-query-matrix*`): five runs × exact/terminology/behaviour/negative × one/four readers × 200 queries, 20 warmups and matched query sets. It is complete with zero errors, and **all 40 processes pass every gate**, the first fully passing matrix. Ranges across five runs:
+
+| Category | Readers | Lexical p95 | Hybrid p95 | Retrieval-only p95 |
+|---|---|---|---|---|
+| exact | 1 | 1.6–1.7 | 79.5–81.2 | 76.0–77.3 |
+| exact | 4 | 6.9–7.2 | 121.5–126.1 | 110.7–114.4 |
+| terminology | 1 | 46.4–46.9 | 119.1–121.0 | 115.4–117.2 |
+| terminology | 4 | 73.5–78.9 | 178.9–182.8 | 168.7–172.0 |
+| behaviour | 1 | 47.3–48.5 | 120.4–121.8 | 116.8–117.5 |
+| behaviour | 4 | 79.6–85.1 | 179.9–182.4 | 168.0–172.0 |
+| negative | 1 | 1.5–1.7 | 81.5–86.1 | 77.9–82.6 |
+| negative | 4 | 6.7–8.0 | 124.3–131.3 | 113.8–121.8 |
+
+(milliseconds; targets: lexical 100, hybrid 500, retrieval-only 250)
+
+**25-edit concurrent 50k run** (`benchmarks/macos-arm64-50000-plan5-native-concurrent-edits/`):
+- Peak RSS 2,112,667,648 bytes: **passes 2 GiB by about 33 MiB**. The plan-4 run peaked at 1,966,702,592.
+- Idle: lexical p95 6.45 ms, hybrid 127.4 ms, retrieval-only 116.4 ms, body edit 16,677 ms, refresh 1,839 ms.
+- Concurrent: zero errors across 15,570 + 15,570 queries; lexical p95 10.86 ms (p99 119.6); hybrid p95 275.8 ms (p99 643.4, max 3,062); minimum coverage 49,997 of 49,999.
+- Edits under load: publish p50/max 24.8/33.5 s, refresh p50/max 3.5/9.2 s.
+
+Faster queries meant about 45% more queries ran during the edits, overlapping more reader and writer work. The memory result is a pass on one run with headroom too small to rely on. Specification §31.3 calls for pressure-based admission (at 80% of the budget, stop background inference, evict caches, reduce concurrency), which would make the budget hold by design rather than by margin. That is the next memory step.
