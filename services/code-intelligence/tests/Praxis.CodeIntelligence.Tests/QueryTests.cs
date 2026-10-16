@@ -34,6 +34,33 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public void IdentifierTermsIncludeAcronymsNamespacesAndSignatureTypes()
+    {
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "namespace HTTPServices; class JSONPayload {} class HTTPClient { void Read_XML(JSONPayload input) {} }");
+        indexer.Index(repository);
+        foreach (var term in new[] { "HTTP", "Services", "XML", "Payload" })
+        {
+            var response = Query("search_code", new() { ["query"] = term, ["mode"] = "lexical" });
+            Assert.Null(response["error"]);
+            Assert.Contains(response["data"]!["matches"]!.AsArray(), match => match!["symbol"]!["qualifiedName"]!.GetValue<string>().Contains("Read_XML", StringComparison.Ordinal));
+        }
+        Assert.Contains("Read_XML", Symbol("Read_XML")["qualifiedName"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void ExactQualifiedMatchPrecedesAnAliasWithLexicalSupport()
+    {
+        var target = Symbol("Target"); var qualified = target["qualifiedName"]!.GetValue<string>();
+        indexer.AddAlias(repository, Symbol("Caller")["symbolId"]!.GetValue<string>(), qualified);
+        var response = Query("search_code", new() { ["query"] = qualified, ["mode"] = "lexical" });
+        Assert.Null(response["error"]);
+        var first = response["data"]!["matches"]![0]!;
+        Assert.Equal(target["symbolId"]!.GetValue<string>(), first["symbol"]!["symbolId"]!.GetValue<string>());
+        Assert.Contains(first["reasons"]!.AsArray(), reason => reason!.GetValue<string>() == "exact");
+        Assert.Empty(Query("search_code", new() { ["query"] = qualified, ["mode"] = "lexical", ["filters"] = new JsonObject { ["kinds"] = new JsonArray("type") } })["data"]!["matches"]!.AsArray());
+    }
+
+    [Fact]
     public async Task SearchCountsRespectFiltersAndNewStructuralSnapshotsUnderConcurrentReads()
     {
         long Count(string kind, string? project = null) => Query("search_code", new()

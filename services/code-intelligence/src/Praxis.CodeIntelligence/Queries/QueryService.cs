@@ -145,7 +145,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     var fts = string.Join(" OR ", tokens);
                     // Pin the matched-candidate side first. Otherwise SQLite may
                     // walk every repository symbol and probe the tiny ranked set.
-                    var rows = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(SELECT d.symbol_id,bm25(symbol_fts,10.0,3.0,2.0,1.0) AS score FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0) SELECT s.*,r.score FROM ranked r CROSS JOIN symbols s ON s.symbol_id=r.symbol_id WHERE s.repository_id=$1 AND ($2 IS NULL OR s.defining_context_id=$2) ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 300", fts, repositoryId, contextId, query);
+                    var rows = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(SELECT d.symbol_id,bm25(symbol_fts,5.0,3.0,1.0,1.0) AS score FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0) SELECT s.*,r.score FROM ranked r CROSS JOIN symbols s ON s.symbol_id=r.symbol_id WHERE s.repository_id=$1 AND ($2 IS NULL OR s.defining_context_id=$2) ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 300", fts, repositoryId, contextId, query);
                     bool Eligible(JsonObject row)
                     {
                         var filters = arguments["filters"] as JsonObject;
@@ -164,10 +164,19 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     {
                         var candidateId = Text(row, "symbol_id")!;
                         if (!candidates.TryGetValue(candidateId, out var candidate)) candidate = (row, new(), new(), 0);
+                        if (channel != "graph" && candidate.Ranks.ContainsKey(channel)) return;
                         if (channel != "graph") candidate.Ranks[channel] = position;
                         candidate.Reasons.Add(channel); candidate.Score += 1.0 / (60 + position); candidates[candidateId] = candidate;
                     }
-                    for (var index = 0; index < rows.Count; index++) { Add(rows[index], "lexical", index + 1); if (Text(rows[index], "name") == query) Add(rows[index], "exact", 1); }
+                    for (var index = 0; index < rows.Count; index++) Add(rows[index], "lexical", index + 1);
+                    if (mode != "vector")
+                    {
+                        // Each arm uses its repository/name index; exact retrieval
+                        // must not depend on the bounded FTS candidate list.
+                        var exact = Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND name=$1 AND external=0 AND ($2 IS NULL OR defining_context_id=$2) UNION SELECT * FROM symbols WHERE repository_id=$0 AND qualified_name=$1 AND external=0 AND ($2 IS NULL OR defining_context_id=$2) ORDER BY symbol_id LIMIT 300", repositoryId, query, contextId)
+                            .Where(row => contextId is null || Text(row, "defining_context_id") == contextId).Where(Eligible).Take(100);
+                        foreach (var row in exact) Add(row, "exact", 1);
+                    }
                     var channels = new JsonArray(); if (mode != "vector") channels.Add("lexical");
                     if (embedded is not null)
                     {
@@ -211,7 +220,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         if (graphSupport.Count > 0) channels.Add("graph");
                     }
                     // Graph-only expansion never outranks a direct retrieval match.
-                    var ordered = candidates.Values.OrderByDescending(c => c.Ranks.Count > 0).ThenByDescending(c => c.Score).ThenBy(c => Text(c.Row, "symbol_id"), StringComparer.Ordinal).ToArray();
+                    var ordered = candidates.Values.OrderByDescending(c => c.Ranks.ContainsKey("exact")).ThenByDescending(c => c.Ranks.Count > 0).ThenByDescending(c => c.Score).ThenBy(c => Text(c.Row, "symbol_id"), StringComparer.Ordinal).ToArray();
                     more = ordered.Length > offset + limit; var matches = new JsonArray();
                     foreach (var candidate in ordered.Skip(offset).Take(limit))
                     {

@@ -224,7 +224,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                     location.Range.Start.Line, location.Range.Start.Character, location.Range.End.Line, location.Range.End.Character);
             if (!symbol.External)
                 batch.Execute("INSERT INTO search_documents(symbol_id,input_revision,name,signature,documentation,description) VALUES($0,$1,$2,$3,$4,$5) ON CONFLICT(symbol_id) DO UPDATE SET input_revision=excluded.input_revision,name=excluded.name,signature=excluded.signature,documentation=excluded.documentation,description=excluded.description",
-                    symbol.Id, symbol.Revision, symbol.QualifiedName + " " + SplitCamel(symbol.Name), symbol.Signature, symbol.Documentation, $"{symbol.Kind} {symbol.QualifiedName}. {symbol.Signature}");
+                    symbol.Id, symbol.Revision, SearchTerms(symbol.QualifiedName), SearchTerms(symbol.Signature), symbol.Documentation, $"{symbol.Kind} {symbol.QualifiedName}. {symbol.Signature}");
         }
         EmbeddingReuse.Publish(connection, transaction, analysis, sources, reusable, cancellationToken, batch, retain);
         if (retain)
@@ -396,10 +396,21 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         connection.Execute(transaction, "DELETE FROM files WHERE repository_id=$0", id);
         connection.Execute(transaction, "DELETE FROM diagnostics WHERE repository_id=$0", id);
     }
-    private static string SplitCamel(string text)
+    // Keep original identifiers for exact token queries, and append readable
+    // terms for acronym, namespace, underscore and parameter-type searches.
+    private static string SearchTerms(string text)
     {
-        var output = new StringBuilder();
-        for (var i = 0; i < text.Length; i++) { if (i > 0 && char.IsUpper(text[i]) && char.IsLower(text[i - 1])) output.Append(' '); output.Append(text[i]); }
+        var output = new StringBuilder(text).Append(' ');
+        for (var i = 0; i < text.Length; i++)
+        {
+            var current = text[i];
+            if (!char.IsLetterOrDigit(current)) { output.Append(' '); continue; }
+            if (i > 0 && char.IsUpper(current)
+                && (char.IsLower(text[i - 1]) || char.IsDigit(text[i - 1])
+                    || (char.IsUpper(text[i - 1]) && i + 1 < text.Length && char.IsLower(text[i + 1]))))
+                output.Append(' ');
+            output.Append(current);
+        }
         return output.ToString();
     }
 }

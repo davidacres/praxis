@@ -1,0 +1,210 @@
+{
+  "Version": 2,
+  "ExecutionMode": "Retained post-edit synthetic snapshot; query-only, direct service API",
+  "Readers": 4,
+  "RunCount": 5,
+  "WarmupsPerRun": 20,
+  "QueriesPerReader": 100,
+  "QueryScheduleVersion": 2,
+  "QuerySetHash": "sha256:33f48379dead10332c6a87a6374063d8993eb759ee4cbb54a8f1eb6a7a0c3dbd",
+  "Measurements": [
+    {
+      "Run": 1,
+      "Lexical": {
+        "Readers": 4,
+        "Count": 400,
+        "P50Ms": 3.5196,
+        "P95Ms": 4.3687,
+        "MaximumMs": 5.4892,
+        "P99Ms": 4.8589,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": []
+      },
+      "Hybrid": {
+        "Readers": 4,
+        "Count": 400,
+        "P50Ms": 396.8381,
+        "P95Ms": 412.9679,
+        "MaximumMs": 463.4441,
+        "P99Ms": 424.249,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": []
+      }
+    },
+    {
+      "Run": 2,
+      "Lexical": {
+        "Readers": 4,
+        "Count": 400,
+        "P50Ms": 3.6139,
+        "P95Ms": 4.4457,
+        "MaximumMs": 6.5294,
+        "P99Ms": 5.7277,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": []
+      },
+      "Hybrid": {
+        "Readers": 4,
+        "Count": 400,
+        "P50Ms": 393.2938,
+        "P95Ms": 411.1688,
+        "MaximumMs": 477.7127,
+        "P99Ms": 425.6877,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": []
+      }
+    },
+    {
+      "Run": 3,
+      "Lexical": {
+        "Readers": 4,
+        "Count": 400,
+        "P50Ms": 3.5525,
+        "P95Ms": 3.9265,
+        "MaximumMs": 5.9747,
+        "P99Ms": 5.0642,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": []
+      },
+      "Hybrid": {
+        "Readers": 4,
+        "Count": 400,
+        "P50Ms": 397.2535,
+        "P95Ms": 414.8927,
+        "MaximumMs": 450.9025,
+        "P99Ms": 431.0089,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": []
+      }
+    },
+    {
+      "Run": 4,
+      "Lexical": {
+        "Readers": 4,
+        "Count": 400,
+        "P50Ms": 3.5565,
+        "P95Ms": 4.0447,
+        "MaximumMs": 6.384,
+        "P99Ms": 4.903,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": []
+      },
+      "Hybrid": {
+        "Readers": 4,
+        "Count": 400,
+        "P50Ms": 396.7875,
+        "P95Ms": 413.5582,
+        "MaximumMs": 426.3847,
+        "P99Ms": 420.444,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": []
+      }
+    },
+    {
+      "Run": 5,
+      "Lexical": {
+        "Readers": 4,
+        "Count": 400,
+        "P50Ms": 3.476,
+        "P95Ms": 4.1526,
+        "MaximumMs": 9.1976,
+        "P99Ms": 5.5966,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": []
+      },
+      "Hybrid": {
+        "Readers": 4,
+        "Count": 400,
+        "P50Ms": 397.6596,
+        "P95Ms": 427.7546,
+        "MaximumMs": 506.9274,
+        "P99Ms": 441.862,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": []
+      }
+    }
+  ],
+  "SummaryBasis": "Top-level timing is the run with highest p95; all runs and failures retained",
+  "P95Range": {
+    "LexicalMin": 3.9265,
+    "LexicalMax": 4.4457,
+    "HybridMin": 411.1688,
+    "HybridMax": 427.7546
+  },
+  "LogicalProcessors": 12,
+  "OnnxInterOpThreads": 1,
+  "OnnxIntraOpThreads": 4,
+  "TimestampUtc": "2026-10-16T07:43:55.203772+00:00",
+  "Runtime": ".NET 10.0.13",
+  "OperatingSystem": "macOS 26.6.0",
+  "Architecture": "Arm64",
+  "Sqlite": "3.53.3",
+  "ActualReadMappingBytes": 671088640,
+  "ActualReadPageCacheSetting": -65536,
+  "ReadMappingVersion": 3,
+  "MaximumReadMappingBytes": 671088640,
+  "ReadPageCacheVersion": 2,
+  "ReadPageCacheKiB": 65536,
+  "SearchPlanVersion": 2,
+  "SearchCountCacheVersion": 1,
+  "VectorScorerVersion": 3,
+  "VectorQueryPlanVersion": 3,
+  "SourceSymbols": 49999,
+  "OriginalCorpusHash": "sha256:f14bc8736fbc2bbcf4c984a76c488edf6c55324d0cadd3b0a0f2581ba2a99993",
+  "SnapshotHash": "sha256:e9faa363c8d3dd2237e4501543472d4764d078d7a00566bc4c9c0b485071c185",
+  "ReferenceHash": "sha256:b435af0b749740a312891b3ab0d014091b1b75573dfede5b1c3eff96c533332b",
+  "ModelFingerprint": "sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba",
+  "Generation": 2,
+  "QueryEpoch": 4,
+  "Lexical": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 3.6139,
+    "P95Ms": 4.4457,
+    "MaximumMs": 6.5294,
+    "P99Ms": 5.7277,
+    "Errors": 0,
+    "WarmupErrors": 0,
+    "ErrorMessages": []
+  },
+  "Hybrid": {
+    "Readers": 4,
+    "Count": 400,
+    "P50Ms": 397.6596,
+    "P95Ms": 427.7546,
+    "MaximumMs": 506.9274,
+    "P99Ms": 441.862,
+    "Errors": 0,
+    "WarmupErrors": 0,
+    "ErrorMessages": []
+  },
+  "DiagnosticSample": {
+    "Basis": "One warmed single-reader observation after timed queries; not latency percentiles",
+    "QueryEmbeddingMs": 2.7062,
+    "ExactCandidateScanMs": 253.9019
+  },
+  "Gates": {
+    "noQueryErrors": true,
+    "lexicalP95AtMost100Ms": true,
+    "hybridP95AtMost500Ms": true
+  },
+  "PassedMeasuredGates": true,
+  "Unmeasured": [
+    "cold startup/index/embedding",
+    "edit publication/refresh",
+    "peak RSS from runtime",
+    "owner/MCP/provider transport",
+    "held-out relevance",
+    "other reader counts/query categories/concurrent edits; retained repeated runs are only exact queries"
+  ]
+}

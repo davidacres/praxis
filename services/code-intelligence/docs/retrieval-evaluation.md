@@ -60,3 +60,7 @@ python3 -m unittest discover -s services/code-intelligence/scripts -p 'test_*.py
 ```
 
 Set `PRAXIS_CODE_INTELLIGENCE_EXE` to run the additional real packaged-owner fixture. It owns temporary source/data and its process, verifies the CLI report and honest lexical-fallback/draft failure, then cleans up. Native CI runs it on all three supported hosts after packaging.
+
+### Identifier retrieval correction
+
+Adapter `roslyn-5.9/v6` retains original qualified identifiers in lexical documents and appends split terms, including acronym boundaries, namespace segments, underscores and signature parameter types. Displayed symbol identities remain unchanged. The adapter version invalidates unchanged-file snapshots so reindexing republishes the documents. FTS field weights are name 5, signature 3, documentation 1 and description 1. Independent indexed name/qualified-name lookup supplies an exact-match bucket before reciprocal-rank fusion; a symbol contributes at most once per non-graph channel. Full-signature exact lookup remains a separate outstanding requirement. These changes need fresh representative relevance measurements; the saved v5 pilot and capacity reports are historical baselines.
