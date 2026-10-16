@@ -1,0 +1,276 @@
+{
+  "Version": 2,
+  "ExecutionMode": "Retained post-edit synthetic snapshot; query-only, direct service API",
+  "Readers": 4,
+  "RunCount": 1,
+  "WarmupsPerRun": 20,
+  "QueriesPerReader": 50,
+  "QueryCategory": "exact",
+  "QueryScheduleVersion": 2,
+  "QueryStride": 17,
+  "QuerySetHash": "sha256:2ffd1f501395570e690913d6e79d131a43348fd0960ca415bf1160e841cebcb8",
+  "Measurements": [
+    {
+      "Run": 1,
+      "Lexical": {
+        "Readers": 4,
+        "Count": 200,
+        "P50Ms": 6.123,
+        "P95Ms": 6.7351,
+        "MaximumMs": 7.9287,
+        "P99Ms": 7.2386,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": [],
+        "QueryPhases": {
+          "Basis": "Direct API phases; no owner admission queue or wire serialization. Model query includes model lookup and inference-lock wait. Retrieval includes SQL/vector/ranking/evidence. Response preparation includes budget serialization. Vector scan is a retrieval subcomponent.",
+          "Count": 200,
+          "Errors": 0,
+          "ModelQueryIncludingLock": {
+            "Count": 200,
+            "P50Ms": 0.00010000000000000026,
+            "P95Ms": 0.00020000000000000052,
+            "P99Ms": 0.0002999999999999999,
+            "MaximumMs": 0.0004000000000000002
+          },
+          "Retrieval": {
+            "Count": 200,
+            "P50Ms": 5.677,
+            "P95Ms": 6.3217,
+            "P99Ms": 6.7382,
+            "MaximumMs": 7.4487
+          },
+          "ExactVectorScan": {
+            "Count": 200,
+            "P50Ms": 0,
+            "P95Ms": 0,
+            "P99Ms": 0,
+            "MaximumMs": 0
+          },
+          "ResponsePreparation": {
+            "Count": 200,
+            "P50Ms": 0.45980000000000043,
+            "P95Ms": 0.5750000000000002,
+            "P99Ms": 0.6122999999999994,
+            "MaximumMs": 0.6757
+          },
+          "Total": {
+            "Count": 200,
+            "P50Ms": 6.1207,
+            "P95Ms": 6.7323,
+            "P99Ms": 7.2357,
+            "MaximumMs": 7.9186
+          }
+        }
+      },
+      "Hybrid": {
+        "Readers": 4,
+        "Count": 200,
+        "P50Ms": 180.6278,
+        "P95Ms": 194.4426,
+        "MaximumMs": 198.3586,
+        "P99Ms": 197.044,
+        "Errors": 0,
+        "WarmupErrors": 0,
+        "ErrorMessages": [],
+        "QueryPhases": {
+          "Basis": "Direct API phases; no owner admission queue or wire serialization. Model query includes model lookup and inference-lock wait. Retrieval includes SQL/vector/ranking/evidence. Response preparation includes budget serialization. Vector scan is a retrieval subcomponent.",
+          "Count": 200,
+          "Errors": 0,
+          "ModelQueryIncludingLock": {
+            "Count": 200,
+            "P50Ms": 6.0246,
+            "P95Ms": 9.8263,
+            "P99Ms": 11.9443,
+            "MaximumMs": 12.152000000000001
+          },
+          "Retrieval": {
+            "Count": 200,
+            "P50Ms": 169.53199999999998,
+            "P95Ms": 182.9967,
+            "P99Ms": 186.9311,
+            "MaximumMs": 188.891
+          },
+          "ExactVectorScan": {
+            "Count": 200,
+            "P50Ms": 124.8399,
+            "P95Ms": 138.2046,
+            "P99Ms": 142.1857,
+            "MaximumMs": 144.5067
+          },
+          "ResponsePreparation": {
+            "Count": 200,
+            "P50Ms": 4.49369999999999,
+            "P95Ms": 5.569000000000017,
+            "P99Ms": 8.036699999999996,
+            "MaximumMs": 8.871400000000023
+          },
+          "Total": {
+            "Count": 200,
+            "P50Ms": 180.6258,
+            "P95Ms": 194.4395,
+            "P99Ms": 197.0415,
+            "MaximumMs": 198.3547
+          }
+        }
+      }
+    }
+  ],
+  "SummaryBasis": "Top-level timing is the run with highest p95; all runs and failures retained",
+  "P95Range": {
+    "LexicalMin": 6.7351,
+    "LexicalMax": 6.7351,
+    "HybridMin": 194.4426,
+    "HybridMax": 194.4426
+  },
+  "LogicalProcessors": 12,
+  "OnnxInterOpThreads": 1,
+  "OnnxIntraOpThreads": 4,
+  "TimestampUtc": "2026-10-16T17:13:45.220606+00:00",
+  "Runtime": ".NET 10.0.13",
+  "OperatingSystem": "macOS 26.6.0",
+  "Architecture": "Arm64",
+  "Sqlite": "3.53.3",
+  "ActualReadMappingBytes": 134217728,
+  "ActualReadPageCacheSetting": -16384,
+  "ReadMappingVersion": 7,
+  "MaximumReadMappingBytes": 134217728,
+  "ReadPageCacheVersion": 3,
+  "ReadPageCacheKiB": 16384,
+  "SearchPlanVersion": 6,
+  "RankingProfile": "rrf-k60-lexical64-vector1-alias0.5-v3",
+  "LexicalWeight": 64,
+  "AliasWeight": 0.5,
+  "SearchCountCacheVersion": 1,
+  "VectorScorerVersion": 4,
+  "VectorQueryPlanVersion": 4,
+  "SourceSymbols": 49999,
+  "OriginalCorpusHash": "sha256:f14bc8736fbc2bbcf4c984a76c488edf6c55324d0cadd3b0a0f2581ba2a99993",
+  "SnapshotHash": "sha256:e9faa363c8d3dd2237e4501543472d4764d078d7a00566bc4c9c0b485071c185",
+  "ReferenceHash": "sha256:b435af0b749740a312891b3ab0d014091b1b75573dfede5b1c3eff96c533332b",
+  "ModelFingerprint": "sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba",
+  "Generation": 2,
+  "QueryEpoch": 4,
+  "Lexical": {
+    "Readers": 4,
+    "Count": 200,
+    "P50Ms": 6.123,
+    "P95Ms": 6.7351,
+    "MaximumMs": 7.9287,
+    "P99Ms": 7.2386,
+    "Errors": 0,
+    "WarmupErrors": 0,
+    "ErrorMessages": [],
+    "QueryPhases": {
+      "Basis": "Direct API phases; no owner admission queue or wire serialization. Model query includes model lookup and inference-lock wait. Retrieval includes SQL/vector/ranking/evidence. Response preparation includes budget serialization. Vector scan is a retrieval subcomponent.",
+      "Count": 200,
+      "Errors": 0,
+      "ModelQueryIncludingLock": {
+        "Count": 200,
+        "P50Ms": 0.00010000000000000026,
+        "P95Ms": 0.00020000000000000052,
+        "P99Ms": 0.0002999999999999999,
+        "MaximumMs": 0.0004000000000000002
+      },
+      "Retrieval": {
+        "Count": 200,
+        "P50Ms": 5.677,
+        "P95Ms": 6.3217,
+        "P99Ms": 6.7382,
+        "MaximumMs": 7.4487
+      },
+      "ExactVectorScan": {
+        "Count": 200,
+        "P50Ms": 0,
+        "P95Ms": 0,
+        "P99Ms": 0,
+        "MaximumMs": 0
+      },
+      "ResponsePreparation": {
+        "Count": 200,
+        "P50Ms": 0.45980000000000043,
+        "P95Ms": 0.5750000000000002,
+        "P99Ms": 0.6122999999999994,
+        "MaximumMs": 0.6757
+      },
+      "Total": {
+        "Count": 200,
+        "P50Ms": 6.1207,
+        "P95Ms": 6.7323,
+        "P99Ms": 7.2357,
+        "MaximumMs": 7.9186
+      }
+    }
+  },
+  "Hybrid": {
+    "Readers": 4,
+    "Count": 200,
+    "P50Ms": 180.6278,
+    "P95Ms": 194.4426,
+    "MaximumMs": 198.3586,
+    "P99Ms": 197.044,
+    "Errors": 0,
+    "WarmupErrors": 0,
+    "ErrorMessages": [],
+    "QueryPhases": {
+      "Basis": "Direct API phases; no owner admission queue or wire serialization. Model query includes model lookup and inference-lock wait. Retrieval includes SQL/vector/ranking/evidence. Response preparation includes budget serialization. Vector scan is a retrieval subcomponent.",
+      "Count": 200,
+      "Errors": 0,
+      "ModelQueryIncludingLock": {
+        "Count": 200,
+        "P50Ms": 6.0246,
+        "P95Ms": 9.8263,
+        "P99Ms": 11.9443,
+        "MaximumMs": 12.152000000000001
+      },
+      "Retrieval": {
+        "Count": 200,
+        "P50Ms": 169.53199999999998,
+        "P95Ms": 182.9967,
+        "P99Ms": 186.9311,
+        "MaximumMs": 188.891
+      },
+      "ExactVectorScan": {
+        "Count": 200,
+        "P50Ms": 124.8399,
+        "P95Ms": 138.2046,
+        "P99Ms": 142.1857,
+        "MaximumMs": 144.5067
+      },
+      "ResponsePreparation": {
+        "Count": 200,
+        "P50Ms": 4.49369999999999,
+        "P95Ms": 5.569000000000017,
+        "P99Ms": 8.036699999999996,
+        "MaximumMs": 8.871400000000023
+      },
+      "Total": {
+        "Count": 200,
+        "P50Ms": 180.6258,
+        "P95Ms": 194.4395,
+        "P99Ms": 197.0415,
+        "MaximumMs": 198.3547
+      }
+    }
+  },
+  "DiagnosticSample": {
+    "Basis": "One warmed single-reader observation after timed queries; not latency percentiles",
+    "QueryEmbeddingMs": 2.389,
+    "ExactCandidateScanMs": 69.1542
+  },
+  "Gates": {
+    "noQueryErrors": true,
+    "lexicalP95AtMost100Ms": true,
+    "hybridP95AtMost500Ms": true,
+    "retrievalOnlyP95TargetAtMost250Ms": true
+  },
+  "PassedMeasuredGates": true,
+  "Unmeasured": [
+    "cold startup/index/embedding",
+    "edit publication/refresh",
+    "peak RSS from runtime",
+    "owner/MCP/provider transport",
+    "held-out relevance",
+    "other reader counts/query categories/concurrent edits; this report covers only its declared category"
+  ]
+}

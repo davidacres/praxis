@@ -14,8 +14,9 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
 | Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
 | 50k exact-query latency and memory | Plan-6/schema-5 full process: lexical p95 6.467 ms, hybrid p95 211.053 ms, retrieval-only p95 191.841 ms, independent peak RSS 2020671488 bytes; all measured gates pass (previous plan-5 run: hybrid 434.591, retrieval 414.348 failing) | 50k body edit 17034 ms vs 14263 ms before (no 50k gate). Repeat/concurrent-edit/reference-machine protocol open |
-| 50k concurrent edits | 25 real edits published/refreshed while four readers alternated lexical/hybrid (11,870 queries each): zero errors, lexical p95 12.118 ms, hybrid p95 417.431 ms, vector coverage never below 49,997/49,999 | **Fails memory:** independent peak RSS 2,594,717,696 bytes (> 2 GiB). Edit publish p50 31.4 s under load vs 16.3 s idle. Reference machine and repeats open |
+| 50k concurrent edits | Mapping v7: 25 edits, 10,714 lexical + 10,714 hybrid queries, zero errors, lexical p95 11.667 ms, hybrid p95 408.155 ms, independent peak RSS 1,966,702,592 bytes (passes 2 GiB; was 2,594,717,696 with mapping v6) | About 173 MiB headroom on one run; reference machine, repeats and §31.3 pressure admission open |
 | Query matrix (plan 6) | Five runs × exact/terminology/behaviour/negative × one/four readers × 200 queries: 39/40 processes pass every gate; hybrid p95 max 322.743 ms; lexical p95 max 82.942 ms; zero errors | **Fails:** behaviour four-reader run 1 retrieval-only p95 301.9 ms; other four-reader terminology/behaviour runs 236–247 ms (thin margin). Concurrent edits, cross-project, owner/wire, full-process RSS, reference machine unmeasured |
+| Query matrix (mapping v7) | Same protocol after the memory fix: complete, zero errors, all lexical/hybrid p95 pass; 36/40 processes pass every gate | **Fails:** four-reader retrieval-only behaviour runs 1–3 (261.2/261.2/270.4 ms) and terminology run 4 (250.2 ms); the memory fix costs about 5–25 ms on broad four-reader retrieval |
 | Broader terminology performance (history) | (Superseded for the vector path by the ranked-validation checkpoint below: one-reader hybrid p95 228.496 ms, four-reader 365.737 ms, single pilot.) Two independent 50k processes, matched 200-query sets/mode: one reader lexical/hybrid p95 74.371/353.665 ms; four readers 98.664/507.817 ms; no errors | Four-reader hybrid fails 500 ms and retrieval-only fails 250 ms. Five repeats, other categories and concurrent edits remain open |
 | Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Final mapping-v6 run 38904504214 passes Windows/macOS/Linux (112 tests per host, schemas, native packaging, retained/matrix safeguards and watcher smoke) |
 
@@ -574,3 +575,23 @@ Two fresh 50k runs with 10 concurrent edits used the query-only frontier's 128 M
 | 128/16 MiB + `DOTNET_GCConserveMemory=7` | 1,905,836,032 | 209 / 198 ms | 11.5 / 420 ms | 0 | 28.5 s |
 
 The reader policy cuts the concurrent peak by about 0.70 GB, more than the 0.33 GiB it saves in query-only runs. Concurrent readers no longer stack large file mappings on top of the writer. The GC setting adds only about 20 MB and is slower, so it is not adopted. `IndexDatabase` now uses mapping version 7 (128 MiB) and page-cache version 3 (16 MiB). 116 C# tests pass, zero skipped. Headroom to 2 GiB is about 211 MiB in one run on a 12-core Mac. The policy still needs the full query matrix, the 25-edit concurrent protocol and the reference machine.
+
+## Mapping v7 qualification — 16 October
+
+**Native CI:** [38937746342](https://github.com/davidacres/praxis/actions/runs/38937746342) at `605eb881` passed on Windows, Linux and macOS.
+
+**Full query matrix** (`benchmarks/macos-arm64-50000-map7-query-matrix*`): five runs × four categories × one/four readers × 200 queries. It is complete, with zero errors and no runner failures. **It fails** with 36 of 40 processes passing every gate, against 39 of 40 under mapping v6. Every lexical (≤100 ms) and hybrid (≤500 ms) p95 passes. Retrieval-only p95 at four readers, five runs each:
+- Behaviour: 236.1–270.4 ms; runs 1–3 fail.
+- Terminology: 245.9–250.2 ms; run 4 fails by 0.2 ms.
+- Exact: 179.6–189.8 ms, all pass.
+- Negative: 177.0–184.8 ms, all pass.
+
+The single-run frontier did not show this cost. Over five runs the smaller reader settings add roughly 5–25 ms to broad four-reader retrieval, which had almost no margin.
+
+**25-edit concurrent 50k run** (`benchmarks/macos-arm64-50000-map7-concurrent-edits/`), under `/usr/bin/time -l`:
+- Peak RSS **1,966,702,592 bytes; passes 2 GiB** (mapping v6: 2,594,717,696).
+- Idle: lexical p95 6.38 ms, hybrid 198.2 ms, retrieval-only 186.7 ms, body edit 16,706 ms, refresh 1,889 ms.
+- Concurrent: zero errors across 10,714 + 10,714 queries; lexical p95 11.667 ms, hybrid p95 408.155 ms (p99 794.6, max 1,953.5); minimum vector coverage 49,997 of 49,999.
+- Edits under load: publish p50/max 27.7/34.0 s, refresh p50/max 3.5/9.9 s.
+
+**Trade-off as it stands:** mapping v7 fixes the memory failure and introduces four marginal retrieval-only failures in broad four-reader workloads. Making broad retrieval itself cheaper is the next step, rather than trading memory for latency.
