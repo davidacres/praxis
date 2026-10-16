@@ -49,11 +49,24 @@ try {
         if (process.env.PRAXIS_MODEL_BUNDLE) await run(executable, ['model-check', process.env.PRAXIS_MODEL_BUNDLE]);
         await smokeNativeIpc(executable);
       }
-      await rm(previous, { recursive: true, force: true });
-      try { await rename(destination, previous); hadPrevious = true; } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      try { await rename(stage, destination); } catch (error) { if (hadPrevious) await rename(previous, destination); throw error; }
-      await rm(previous, { recursive: true, force: true });
+      await removeTree(previous);
+      try { await settle(() => rename(destination, previous)); hadPrevious = true; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      try { await settle(() => rename(stage, destination)); } catch (error) { if (hadPrevious) await settle(() => rename(previous, destination)); throw error; }
+      await removeTree(previous);
       process.stdout.write(`Packaged code intelligence for ${rid}.\n`);
-    } finally { await rm(stage, { recursive: true, force: true }); }
+    } finally { await removeTree(stage); }
   }
 } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }
+
+// Windows can keep a just-exited smoke-test owner's DLLs locked briefly, so
+// staging moves and removals retry transient EPERM/EBUSY instead of failing.
+async function settle(operation) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await operation(); }
+    catch (error) {
+      if (attempt >= 20 || !['EPERM', 'EBUSY', 'EACCES'].includes(error.code)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+  }
+}
+function removeTree(target) { return rm(target, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 }); }
