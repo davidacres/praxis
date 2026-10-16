@@ -133,6 +133,20 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             // No captured manifest: infer project context from project files and restore
             // output without executing anything. Failure degrades to syntax-only.
             IReadOnlyList<IndexedDiagnostic> inferenceDiagnostics = [];
+            var hasTsJs = sources.Any(TypeScriptAnalyzer.IsTypeScriptOrJavaScript);
+            TypeScriptDiscovery? tsDiscovery = null;
+            if (hasTsJs)
+            {
+                tsDiscovery = TypeScriptAnalyzer.Discover(repository.Root, repository.Config.Excludes ?? [], cancellationToken);
+                if (tsDiscovery.SupportSources.Count > 0)
+                {
+                    var combined = sources.ToDictionary(source => source.Path, StringComparer.Ordinal);
+                    foreach (var support in tsDiscovery.SupportSources) combined[support.Path] = support;
+                    sources = combined.Values.OrderBy(source => source.Path, StringComparer.Ordinal).ToArray();
+                    if (sources.Count > 25_000 || sources.Sum(source => (long)source.Bytes.Length) > 256L * 1024 * 1024)
+                        throw new IOException("INPUT_TOO_LARGE: source snapshot exceeds its limit.");
+                }
+            }
             var inferredSources = sources;
             if (repository.Config.Manifest is null)
                 try
@@ -165,21 +179,68 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 foreach (var metadata in manifest.Projects.SelectMany(project => project.Metadata ?? []).Distinct())
                     if (SourceFiles.Hash(PassiveManifest.ReadExternal(metadata.Path)) != metadata.ContentHash) throw new IOException("INDEX_STALE: reference changed during analysis.");
             }
-            snapshotHash = SourceFiles.Hash(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            if (tsDiscovery is not null)
             {
-                Adapter = RoslynAnalyzer.AdapterVersion, ManifestHash = manifestHash, Manifest = manifest, repository.Config,
-                Sources = sources.Select(source => new { source.Path, source.Hash, source.Role }).OrderBy(source => source.Path, StringComparer.Ordinal)
-            })));
+                foreach (var cfg in tsDiscovery.Configs)
+                    if (SourceFiles.Read(repository.Root, cfg.Path, cancellationToken).Hash != cfg.Hash)
+                        throw new IOException("INDEX_STALE: tsconfig changed during analysis.");
+            }
+            snapshotHash = !hasTsJs
+                ? SourceFiles.Hash(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+                {
+                    Adapter = RoslynAnalyzer.AdapterVersion, ManifestHash = manifestHash, Manifest = manifest, repository.Config,
+                    Sources = sources.Select(source => new { source.Path, source.Hash, source.Role }).OrderBy(source => source.Path, StringComparer.Ordinal)
+                })))
+                : SourceFiles.Hash(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+                {
+                    Adapter = RoslynAnalyzer.AdapterVersion, TypeScriptAdapter = TypeScriptAnalyzer.AdapterVersion,
+                    ManifestHash = manifestHash, Manifest = manifest, TypeScriptConfigs = tsDiscovery!.Configs, repository.Config,
+                    Sources = sources.Select(source => new { source.Path, source.Hash, source.Role }).OrderBy(source => source.Path, StringComparer.Ordinal)
+                })));
             if (!force && TryUnchanged(repository, sources.Count, snapshotHash, cancellationToken, leaseToken) is IndexResult unchanged) return unchanged;
-            try { analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken); }
-            catch (Exception ex) when (repository.Config.Manifest is null && manifest is not null && ex is IOException or ArgumentException
-                && !ex.Message.StartsWith("INDEX_STALE", StringComparison.Ordinal))
+            if (!hasTsJs)
             {
-                // An inferred context the compiler cannot use (limits, unusual references)
-                // must not make the repository unindexable.
-                sources = inferredSources; manifest = null;
-                inferenceDiagnostics = [.. inferenceDiagnostics, new("", null, "PROJECT_INFERENCE_FAILED", "warning", "Inferred project context could not be analysed; indexed source using syntax-only analysis.", null)];
-                analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken);
+                try { analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken); }
+                catch (Exception ex) when (repository.Config.Manifest is null && manifest is not null && ex is IOException or ArgumentException
+                    && !ex.Message.StartsWith("INDEX_STALE", StringComparison.Ordinal))
+                {
+                    // An inferred context the compiler cannot use (limits, unusual references)
+                    // must not make the repository unindexable.
+                    sources = inferredSources; manifest = null;
+                    inferenceDiagnostics = [.. inferenceDiagnostics, new("", null, "PROJECT_INFERENCE_FAILED", "warning", "Inferred project context could not be analysed; indexed source using syntax-only analysis.", null)];
+                    analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken);
+                }
+            }
+            else
+            {
+                var csharpSources = sources.Where(source => source.Language == "csharp").ToArray();
+                var tsSources = sources.Where(TypeScriptAnalyzer.IsTypeScriptOrJavaScript).ToArray();
+                RepositoryAnalysis? csharpAnalysis = null;
+                if (csharpSources.Any(source => source.Role == "searchableSource") || manifest is not null)
+                {
+                    try { csharpAnalysis = new RoslynAnalyzer().Analyze(id, csharpSources, manifest, cancellationToken); }
+                    catch (Exception ex) when (repository.Config.Manifest is null && manifest is not null && ex is IOException or ArgumentException
+                        && !ex.Message.StartsWith("INDEX_STALE", StringComparison.Ordinal))
+                    {
+                        sources = inferredSources; manifest = null;
+                        csharpSources = sources.Where(source => source.Language == "csharp").ToArray();
+                        inferenceDiagnostics = [.. inferenceDiagnostics, new("", null, "PROJECT_INFERENCE_FAILED", "warning", "Inferred project context could not be analysed; indexed source using syntax-only analysis.", null)];
+                        csharpAnalysis = new RoslynAnalyzer().Analyze(id, csharpSources, manifest, cancellationToken);
+                    }
+                }
+                var tsAnalysis = new TypeScriptAnalyzer().Analyze(id, repository.Root, tsSources, tsDiscovery!.Configs, cancellationToken);
+                analysis = csharpAnalysis is null
+                    ? tsAnalysis with { Diagnostics = [.. tsAnalysis.Diagnostics, .. tsDiscovery.Diagnostics] }
+                    : new RepositoryAnalysis(
+                        [.. csharpAnalysis.Contexts, .. tsAnalysis.Contexts],
+                        [.. csharpAnalysis.Symbols, .. tsAnalysis.Symbols],
+                        [.. csharpAnalysis.Calls, .. tsAnalysis.Calls],
+                        [.. csharpAnalysis.Diagnostics, .. tsAnalysis.Diagnostics, .. tsDiscovery.Diagnostics])
+                    {
+                        Relationships = [.. csharpAnalysis.Relationships, .. tsAnalysis.Relationships],
+                        ConfiguredDependencies = [.. csharpAnalysis.ConfiguredDependencies, .. tsAnalysis.ConfiguredDependencies]
+                    };
+                if (analysis.Symbols.Count > 50_000) throw new IOException("INPUT_TOO_LARGE: symbol limit exceeded.");
             }
             if (manifestDiagnostic is not null) analysis = analysis with { Diagnostics = [.. analysis.Diagnostics, manifestDiagnostic] };
             if (inferenceDiagnostics.Count > 0) analysis = analysis with { Diagnostics = [.. analysis.Diagnostics, .. inferenceDiagnostics] };
@@ -197,6 +258,12 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 if (repository.Config.Manifest is not null) _ = PassiveManifest.Read(repository.Root, repository.Config.Manifest);
                 foreach (var metadata in manifest.Projects.SelectMany(project => project.Metadata ?? []).Distinct())
                     if (SourceFiles.Hash(PassiveManifest.ReadExternal(metadata.Path)) != metadata.ContentHash) throw new IOException("INDEX_STALE: reference changed during analysis.");
+            }
+            if (tsDiscovery is not null)
+            {
+                foreach (var cfg in tsDiscovery.Configs)
+                    if (SourceFiles.Read(repository.Root, cfg.Path, cancellationToken).Hash != cfg.Hash)
+                        throw new IOException("INDEX_STALE: tsconfig changed during analysis.");
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DecoderFallbackException)
@@ -239,15 +306,15 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         var generation = repository.Generation + 1;
         var fileIds = retainedFiles ?? sources.ToDictionary(s => s.Path, _ => "pci:file:" + Guid.NewGuid().ToString("N"), StringComparer.Ordinal);
         foreach (var source in sources)
-            batch.Execute("INSERT INTO files(file_id,repository_id,relative_path,path_key,observed_hash,size_bytes,language,role,state) VALUES($0,$1,$2,$3,$4,$5,'csharp',$6,'ready') ON CONFLICT(file_id) DO UPDATE SET observed_hash=excluded.observed_hash,size_bytes=excluded.size_bytes,role=excluded.role,state='ready'",
-                fileIds[source.Path], id, source.Path, OperatingSystem.IsWindows() ? source.Path.ToUpperInvariant() : source.Path, source.Hash, source.Bytes.Length, source.Role);
+            batch.Execute("INSERT INTO files(file_id,repository_id,relative_path,path_key,observed_hash,size_bytes,language,role,state) VALUES($0,$1,$2,$3,$4,$5,$6,$7,'ready') ON CONFLICT(file_id) DO UPDATE SET observed_hash=excluded.observed_hash,size_bytes=excluded.size_bytes,language=excluded.language,role=excluded.role,state='ready'",
+                fileIds[source.Path], id, source.Path, OperatingSystem.IsWindows() ? source.Path.ToUpperInvariant() : source.Path, source.Hash, source.Bytes.Length, source.Language, source.Role);
         foreach (var context in analysis.Contexts)
         {
             var projectId = Identity.Id("pci:project:", id, context.Key);
-            batch.Execute("INSERT INTO projects VALUES($0,$1,$2,$3,'csharp') ON CONFLICT(project_id) DO UPDATE SET relative_path=excluded.relative_path", projectId, id, context.Key, context.ProjectPath);
+            batch.Execute("INSERT INTO projects VALUES($0,$1,$2,$3,$4) ON CONFLICT(project_id) DO UPDATE SET relative_path=excluded.relative_path,language=excluded.language", projectId, id, context.Key, context.ProjectPath, context.Language);
             batch.Execute("INSERT INTO contexts(context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,desired_revision,published_revision,state,resolution,capabilities_json) VALUES($0,$1,$2,$3,$3,$7,$8,$4,$4,'ready',$5,$6) ON CONFLICT(context_id) DO UPDATE SET context_hash=excluded.context_hash,api_hash=excluded.api_hash,adapter_version=excluded.adapter_version,options_json=excluded.options_json,desired_revision=excluded.desired_revision,published_revision=excluded.published_revision,state=excluded.state,resolution=excluded.resolution,capabilities_json=excluded.capabilities_json",
                 context.Id, projectId, context.Key, context.Hash, generation, context.Resolution,
-                JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls", "references", "accesses", "typeDependencies" }), RoslynAnalyzer.AdapterVersion, JsonSerializer.Serialize(new { snapshotHash }));
+                JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls", "references", "accesses", "typeDependencies" }), context.AdapterVersion, JsonSerializer.Serialize(new { snapshotHash }));
             foreach (var source in context.Sources)
                 batch.Execute("INSERT INTO context_files VALUES($0,$1,$2,$3) ON CONFLICT(context_id,file_id) DO UPDATE SET analysed_hash=excluded.analysed_hash,generation=excluded.generation", context.Id, fileIds[source.Path], source.Hash, generation);
         }
@@ -330,8 +397,8 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             throw new InvalidOperationException("INDEX_STALE: repository changed during input validation.");
         var total = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0", repository.Id));
         var matching = Convert.ToInt64(connection.Scalar(transaction,
-            "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0 AND c.adapter_version=$1 AND json_extract(c.options_json,'$.snapshotHash')=$2",
-            repository.Id, RoslynAnalyzer.AdapterVersion, snapshotHash));
+            "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0 AND c.adapter_version IN($1,$2) AND json_extract(c.options_json,'$.snapshotHash')=$3",
+            repository.Id, RoslynAnalyzer.AdapterVersion, TypeScriptAnalyzer.AdapterVersion, snapshotHash));
         if (total == 0 || total != matching) return null;
         var symbols = Convert.ToInt32(connection.Scalar(transaction, "SELECT count(*) FROM symbols WHERE repository_id=$0", repository.Id));
         connection.Execute(transaction, "UPDATE repositories SET state='ready',last_reconciled_utc=$0 WHERE repository_id=$1", DateTimeOffset.UtcNow.ToString("O"), repository.Id);

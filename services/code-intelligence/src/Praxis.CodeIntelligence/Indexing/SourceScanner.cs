@@ -25,7 +25,7 @@ public static class SourceScanner
                     if (!ExcludedDirectories.Contains(System.IO.Path.GetFileName(entry))) directories.Push(entry);
                     continue;
                 }
-                if (!entry.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || entry.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!IsSearchableSourceFile(entry)) continue;
                 candidates.Add(relative);
                 if (candidates.Count > 25_000) throw new IOException("INPUT_TOO_LARGE: repository source limit exceeded.");
             }
@@ -36,6 +36,27 @@ public static class SourceScanner
             if (bytes > 256L * 1024 * 1024) throw new IOException("INPUT_TOO_LARGE: repository source limit exceeded.");
         }
         return sources.OrderBy(s => s.Path, StringComparer.Ordinal).ToArray();
+    }
+
+    public static bool IsSearchableSourceFile(string path)
+    {
+        if (path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            return !path.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase);
+        if (path.EndsWith(".d.ts", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".d.mts", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".d.cts", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (path.EndsWith(".ts", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".tsx", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".mts", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".cts", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (path.EndsWith(".min.js", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return path.EndsWith(".js", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".jsx", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".mjs", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".cjs", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsExcluded(string relativePath, IReadOnlyList<string> prefixes) => prefixes.Any(prefix =>

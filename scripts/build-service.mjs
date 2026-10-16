@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rename, rm, access, copyFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rename, rm, access, copyFile, cp, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -38,7 +38,10 @@ try {
     try {
       await run(cli, ['publish', project, '--configuration', 'Release', '--runtime', rid, '--self-contained', 'true', '--output', stage, '-m:1', '-p:UseSharedCompilation=false', '-p:RestoreLockedMode=true']);
       const executable = path.join(stage, `Praxis.CodeIntelligence${rid.startsWith('win-') ? '.exe' : ''}`);
-      await access(executable); await access(path.join(stage, 'contracts.json'));
+      await access(executable); await access(path.join(stage, 'contracts.json')); await access(path.join(stage, 'ts-sidecar.mjs'));
+      await mkdir(path.join(stage, 'node_modules'), { recursive: true });
+      await cp(path.join(root, 'node_modules', 'typescript'), path.join(stage, 'node_modules', 'typescript'), { recursive: true });
+      try { await cp(path.join(root, 'node_modules', '@typescript'), path.join(stage, 'node_modules', '@typescript'), { recursive: true }); } catch (error) { if (error.code !== 'ENOENT') throw error; }
       await copyFile(path.join(service, 'models', 'minilm-manifest.json'), path.join(stage, 'baseline-model-manifest.json'));
       await writeFile(path.join(stage, 'package-manifest.json'), JSON.stringify({ runtime: rid, schemaVersion: '1.2', selfContained: true, modelWeightsIncluded: false }, null, 2) + '\n');
       const hostRid = `${{ linux: 'linux', darwin: 'osx', win32: 'win' }[process.platform]}-${process.arch}`;

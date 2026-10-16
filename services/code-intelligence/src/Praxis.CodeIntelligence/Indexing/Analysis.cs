@@ -13,7 +13,8 @@ public sealed record IndexedCall(string Id, string ContextId, string FilePath, s
 public sealed record IndexedDependency(string Id, string ContextId, string OwnerId, string TargetId,
     string InputRevision, string Resolution, string ReferenceIdentity, string? TargetContextId = null, string? RequiredContextHash = null);
 public sealed record IndexedDiagnostic(string ContextId, string? FilePath, string Code, string Severity, string Message, SourceRange? Range);
-public sealed record IndexedContext(string Key, string ProjectPath, string Id, string Hash, string Resolution, IReadOnlyList<SourceInput> Sources);
+public sealed record IndexedContext(string Key, string ProjectPath, string Id, string Hash, string Resolution, IReadOnlyList<SourceInput> Sources,
+    string Language = "csharp", string AdapterVersion = RoslynAnalyzer.AdapterVersion);
 public sealed record RepositoryAnalysis(IReadOnlyList<IndexedContext> Contexts, IReadOnlyList<IndexedSymbol> Symbols,
     IReadOnlyList<IndexedCall> Calls, IReadOnlyList<IndexedDiagnostic> Diagnostics)
 {

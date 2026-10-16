@@ -3,7 +3,10 @@ using System.Text;
 
 namespace Praxis.CodeIntelligence.Indexing;
 
-public sealed record SourceInput(string Path, string Hash, byte[] Bytes, string Text, string Role = "searchableSource");
+public sealed record SourceInput(string Path, string Hash, byte[] Bytes, string Text, string Role = "searchableSource")
+{
+    public string Language => SourceFiles.Language(Path);
+}
 
 /// <summary>Bounded source reads. Coordinates use decoded UTF-16; freshness uses raw bytes.</summary>
 public static class SourceFiles
@@ -12,6 +15,13 @@ public static class SourceFiles
     private static readonly UTF8Encoding Utf8 = new(false, true);
     private static readonly UnicodeEncoding Utf16Le = new(false, false, true);
     private static readonly UnicodeEncoding Utf16Be = new(true, false, true);
+
+    public static string Language(string path) => System.IO.Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".ts" or ".tsx" or ".mts" or ".cts" => "typescript",
+        ".js" or ".jsx" or ".mjs" or ".cjs" => "javascript",
+        _ => "csharp"
+    };
 
     public static string Hash(ReadOnlySpan<byte> bytes) => "sha256:" + Convert.ToHexStringLower(SHA256.HashData(bytes));
 

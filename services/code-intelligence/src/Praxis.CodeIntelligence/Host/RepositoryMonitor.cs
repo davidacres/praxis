@@ -53,8 +53,14 @@ public sealed class RepositoryMonitor : IDisposable
         if (SourceScanner.IsExcluded(relative, repository.Config.Excludes ?? [])) return;
         if (relative.Split('/').Any(part => part is ".git" or "bin" or "obj" or "node_modules" or "vendor" or "dist")) return;
         var extension = Path.GetExtension(fullPath);
-        if (extension.Length == 0 || extension is ".cs" or ".csproj" or ".props" or ".targets" || relative.EndsWith(".praxis.json", StringComparison.OrdinalIgnoreCase)
-            || Path.GetFileName(fullPath) is ".gitignore" or ".editorconfig") Mark(repository.Id);
+        var fileName = Path.GetFileName(fullPath);
+        if (extension.Length == 0
+            || extension is ".cs" or ".csproj" or ".props" or ".targets"
+                or ".ts" or ".tsx" or ".mts" or ".cts"
+                or ".js" or ".jsx" or ".mjs" or ".cjs"
+            || relative.EndsWith(".praxis.json", StringComparison.OrdinalIgnoreCase)
+            || fileName is ".gitignore" or ".editorconfig" or "tsconfig.json" or "jsconfig.json" or "package.json")
+            Mark(repository.Id);
     }
     private void Mark(string id)
     {

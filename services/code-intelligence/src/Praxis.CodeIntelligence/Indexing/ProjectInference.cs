@@ -39,7 +39,7 @@ public static class ProjectInference
         root = SourceFiles.CanonicalDirectory(root);
         var projectPaths = FindProjects(root, excludes, cancellationToken);
         if (projectPaths.Count == 0) return null;
-        var sourcePaths = sources.Where(source => source.Role == "searchableSource").Select(source => source.Path).ToArray();
+        var sourcePaths = sources.Where(source => source.Role == "searchableSource" && source.Language == "csharp").Select(source => source.Path).ToArray();
         var keyByPath = projectPaths.ToDictionary(path => path, path => path[..^".csproj".Length], StringComparer.Ordinal);
         var projectDirectories = projectPaths.Select(path => DirectoryOf(path)).ToArray();
         var diagnostics = new List<IndexedDiagnostic>(); var support = new List<string>();

@@ -17,5 +17,6 @@
     <EmbeddedResource Include="Storage/migration006.sql" />
     <EmbeddedResource Include="../../contracts.json" LogicalName="Praxis.CodeIntelligence.contracts.json" />
     <Content Include="../../contracts.json" Link="contracts.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../scripts/ts-sidecar.mjs" Link="ts-sidecar.mjs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

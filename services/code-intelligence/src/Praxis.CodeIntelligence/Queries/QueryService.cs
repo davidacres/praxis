@@ -21,7 +21,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
     // Lexical candidates read before symbol joins; 0 always uses the full ranked join.
     internal int LexicalWindow { get; init; } = 1024;
     private readonly CursorCodec cursors = new();
-    private sealed record SearchCountKey(string Repository, long Generation, long Epoch, string? Context, string? Kinds, string? Projects, string? Profile);
+    private sealed record SearchCountKey(string Repository, long Generation, long Epoch, string? Context, string? Kinds, string? Projects, string? Profile, string? Languages = null);
     private readonly Dictionary<SearchCountKey, long> searchCounts = new();
     private readonly object searchCountLock = new();
 
@@ -170,15 +170,18 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     var retrievalFilters = arguments["filters"] as JsonObject;
                     var retrievalKinds = retrievalFilters?["kinds"]?.ToJsonString();
                     var retrievalProjects = retrievalFilters?["projectIds"]?.ToJsonString();
-                    var retrievalLanguage = retrievalFilters?["languages"] is not JsonArray { Count: > 0 } requestedLanguages
-                        || requestedLanguages.Any(language => language!.GetValue<string>() == "csharp");
+                    var retrievalLanguages = retrievalFilters?["languages"] is JsonArray { Count: > 0 } requestedLanguages ? requestedLanguages.ToJsonString() : null;
+                    const string symbolLanguageScope = " AND ($6 IS NULL OR json_array_length($6)=0"
+                        + " OR EXISTS(SELECT 1 FROM locations l JOIN files f ON f.file_id=l.file_id WHERE l.symbol_id=s.symbol_id AND f.language IN(SELECT value FROM json_each($6)))"
+                        + " OR (NOT EXISTS(SELECT 1 FROM locations l WHERE l.symbol_id=s.symbol_id) AND s.defining_context_id IN(SELECT c.context_id FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.language IN(SELECT value FROM json_each($6)))))";
                     const string retrievalScope = " AND ($4 IS NULL OR json_array_length($4)=0 OR s.kind IN(SELECT value FROM json_each($4)))"
-                        + " AND ($5 IS NULL OR json_array_length($5)=0 OR s.defining_context_id IN(SELECT context_id FROM contexts WHERE project_id IN(SELECT value FROM json_each($5)))) AND $6";
+                        + " AND ($5 IS NULL OR json_array_length($5)=0 OR s.defining_context_id IN(SELECT context_id FROM contexts WHERE project_id IN(SELECT value FROM json_each($5))))"
+                        + symbolLanguageScope;
                     // Pin the matched-candidate side first. Otherwise SQLite may
                     // walk every repository symbol and probe the tiny ranked set.
                     const string rankedMatches = "SELECT d.symbol_id,bm25(symbol_fts,5.0,3.0,1.0,1.0) AS score FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0";
                     const string scoped = " FROM ranked r CROSS JOIN symbols s ON s.symbol_id=r.symbol_id WHERE s.repository_id=$1 AND ($2 IS NULL OR s.defining_context_id=$2) " + retrievalScope;
-                    List<JsonObject> FullRanked() => Rows(connection, transaction, "WITH ranked AS MATERIALIZED(" + rankedMatches + ") SELECT s.*,r.score" + scoped + " ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 100", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguage);
+                    List<JsonObject> FullRanked() => Rows(connection, transaction, "WITH ranked AS MATERIALIZED(" + rankedMatches + ") SELECT s.*,r.score" + scoped + " ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 100", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguages);
                     List<JsonObject> rows;
                     if (mode == "vector") rows = [];
                     else if (LexicalWindow <= 0) rows = FullRanked();
@@ -188,16 +191,30 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         // exact-name rows (indexed) first, then the best-scored window. If
                         // the window was full yet yields too few rows, FullRanked decides.
                         var named = connection.Scalar(transaction, "SELECT 1 FROM symbols WHERE repository_id=$0 AND name=$1 LIMIT 1", repositoryId, query) is not null;
-                        var exactNamed = named ? Rows(connection, transaction, "WITH ranked AS MATERIALIZED(" + rankedMatches + " AND d.symbol_id IN(SELECT symbol_id FROM symbols WHERE repository_id=$1 AND name=$3)) SELECT s.*,r.score" + scoped + " ORDER BY r.score,s.symbol_id LIMIT 100", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguage) : [];
-                        var windowed = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(" + rankedMatches + " ORDER BY score,d.symbol_id LIMIT $7) SELECT s.*,r.score" + scoped + " AND s.name!=$3 ORDER BY r.score,s.symbol_id", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguage, LexicalWindow);
+                        var exactNamed = named ? Rows(connection, transaction, "WITH ranked AS MATERIALIZED(" + rankedMatches + " AND d.symbol_id IN(SELECT symbol_id FROM symbols WHERE repository_id=$1 AND name=$3)) SELECT s.*,r.score" + scoped + " ORDER BY r.score,s.symbol_id LIMIT 100", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguages) : [];
+                        var windowed = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(" + rankedMatches + " ORDER BY score,d.symbol_id LIMIT $7) SELECT s.*,r.score" + scoped + " AND s.name!=$3 ORDER BY r.score,s.symbol_id", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguages, LexicalWindow);
                         rows = exactNamed.Concat(windowed).Take(100).ToList();
                         if (rows.Count < 100 && Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM (SELECT 1 FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0 LIMIT $1)", fts, LexicalWindow)) >= LexicalWindow)
                             rows = FullRanked();
                     }
+                    bool SymbolMatchesLanguage(JsonObject row, JsonArray languages)
+                    {
+                        var symId = Text(row, "symbol_id");
+                        var fileLang = connection.Scalar(transaction, "SELECT f.language FROM locations l JOIN files f ON f.file_id=l.file_id WHERE l.symbol_id=$0 LIMIT 1", symId) as string;
+                        if (fileLang is not null) return languages.Any(x => x!.GetValue<string>() == fileLang);
+                        var defCtx = Text(row, "defining_context_id");
+                        if (defCtx is not null)
+                        {
+                            var projLang = connection.Scalar(transaction, "SELECT p.language FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE c.context_id=$0", defCtx) as string;
+                            if (projLang is not null) return languages.Any(x => x!.GetValue<string>() == projLang);
+                        }
+                        var extLang = connection.Scalar(transaction, "SELECT json_extract(descriptor_json,'$[3]') FROM symbols WHERE symbol_id=$0 AND external=1", symId) as string;
+                        return extLang is not null && languages.Any(x => x!.GetValue<string>() == extLang);
+                    }
                     bool Eligible(JsonObject row)
                     {
                         var filters = arguments["filters"] as JsonObject;
-                        if (filters?["languages"] is JsonArray { Count: > 0 } languages && !languages.Any(x => x!.GetValue<string>() == "csharp")) return false;
+                        if (filters?["languages"] is JsonArray { Count: > 0 } languages && !SymbolMatchesLanguage(row, languages)) return false;
                         if (filters?["kinds"] is JsonArray { Count: > 0 } kinds && !kinds.Any(x => x!.GetValue<string>() == Text(row, "kind"))) return false;
                         if (filters?["projectIds"] is JsonArray { Count: > 0 } projects)
                         {
@@ -221,7 +238,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     {
                         // Each arm uses its repository-scoped index; exact retrieval
                         // must not depend on the bounded FTS candidate list.
-                        var exact = Rows(connection, transaction, "SELECT s.* FROM (SELECT * FROM symbols WHERE repository_id=$0 AND name=$1 UNION SELECT * FROM symbols WHERE repository_id=$0 AND qualified_name=$1 UNION SELECT * FROM symbols WHERE repository_id=$0 AND signature=$1) s WHERE s.external=0 AND ($2 IS NULL OR s.defining_context_id=$2)" + retrievalScope + " ORDER BY s.symbol_id LIMIT 100", repositoryId, query, contextId, null, retrievalKinds, retrievalProjects, retrievalLanguage)
+                        var exact = Rows(connection, transaction, "SELECT s.* FROM (SELECT * FROM symbols WHERE repository_id=$0 AND name=$1 UNION SELECT * FROM symbols WHERE repository_id=$0 AND qualified_name=$1 UNION SELECT * FROM symbols WHERE repository_id=$0 AND signature=$1) s WHERE s.external=0 AND ($2 IS NULL OR s.defining_context_id=$2)" + retrievalScope + " ORDER BY s.symbol_id LIMIT 100", repositoryId, query, contextId, null, retrievalKinds, retrievalProjects, retrievalLanguages)
                             .Where(row => contextId is null || Text(row, "defining_context_id") == contextId).Where(Eligible).Take(100);
                         foreach (var row in exact) Add(row, "exact", 1);
                     }
@@ -231,13 +248,12 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         var filters = arguments["filters"] as JsonObject;
                         var kinds = filters?["kinds"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
                         var projects = filters?["projectIds"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
-                        var languages = filters?["languages"]?.AsArray();
+                        var languages = filters?["languages"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
                         IReadOnlyList<VectorCandidate> vectors;
                         var vectorStart = measurement?.Elapsed.TotalMilliseconds ?? 0;
                         try
                         {
-                            vectors = languages is { Count: > 0 } && !languages.Any(x => x!.GetValue<string>() == "csharp") ? []
-                                : ModelStore.Candidates(connection, transaction, repositoryId, embedded, contextId, kinds, projects, cancellationToken, VectorChunkLimit);
+                            vectors = ModelStore.Candidates(connection, transaction, repositoryId, embedded, contextId, kinds, projects, cancellationToken, VectorChunkLimit, ModelStore.DefaultValidationWindow, languages);
                         }
                         catch (InvalidOperationException error) when (error.Message == "VECTOR_CAPACITY_EXCEEDED")
                         {
@@ -257,7 +273,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     }
                     if (mode != "vector")
                     {
-                        var aliases = Rows(connection, transaction, "SELECT DISTINCT s.* FROM aliases a JOIN symbols s ON s.symbol_id=a.symbol_id WHERE a.repository_id=$0 AND a.enabled=1 AND a.phrase_key=$1 AND ($2 IS NULL OR s.defining_context_id=$2) " + retrievalScope + " ORDER BY s.symbol_id LIMIT 100", repositoryId, query.Trim().ToLowerInvariant(), contextId, null, retrievalKinds, retrievalProjects, retrievalLanguage).Where(Eligible).ToArray();
+                        var aliases = Rows(connection, transaction, "SELECT DISTINCT s.* FROM aliases a JOIN symbols s ON s.symbol_id=a.symbol_id WHERE a.repository_id=$0 AND a.enabled=1 AND a.phrase_key=$1 AND ($2 IS NULL OR s.defining_context_id=$2) " + retrievalScope + " ORDER BY s.symbol_id LIMIT 100", repositoryId, query.Trim().ToLowerInvariant(), contextId, null, retrievalKinds, retrievalProjects, retrievalLanguages).Where(Eligible).ToArray();
                         for (var index = 0; index < aliases.Length; index++) Add(aliases[index], "alias", index + 1);
                         if (aliases.Length > 0) channels.Add("alias");
                     }
@@ -298,14 +314,20 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     }
                     var kindsJson = (arguments["filters"] as JsonObject)?["kinds"] is JsonArray { Count: > 0 } kindFilters ? kindFilters.ToJsonString() : null;
                     var projectsJson = (arguments["filters"] as JsonObject)?["projectIds"] is JsonArray { Count: > 0 } projectFilters ? projectFilters.ToJsonString() : null;
-                    var languageFilter = (arguments["filters"] as JsonObject)?["languages"]?.AsArray();
-                    var hasLanguage = languageFilter is null or { Count: 0 } || languageFilter.Any(x => x!.GetValue<string>() == "csharp");
+                    var languagesJson = (arguments["filters"] as JsonObject)?["languages"] is JsonArray { Count: > 0 } languageFilters ? languageFilters.ToJsonString() : null;
                     const string scope = "s.repository_id=$0 AND s.external=0 AND ($1 IS NULL OR s.defining_context_id=$1) AND ($2 IS NULL OR s.kind IN(SELECT value FROM json_each($2))) AND ($3 IS NULL OR c.project_id IN(SELECT value FROM json_each($3)))";
-                    var countKey = new SearchCountKey(repositoryId, generation.Value, epoch.Value, contextId, kindsJson, projectsJson, null);
-                    var eligible = hasLanguage ? SnapshotCount(countKey, () => Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE " + scope, repositoryId, contextId, kindsJson, projectsJson))) : 0L;
-                    var covered = embedded is null || !hasLanguage ? 0L : SnapshotCount(countKey with { Profile = embedded.Fingerprint }, () => Convert.ToInt64(connection.Scalar(transaction,
-                        "SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id JOIN contexts c ON c.context_id=s.defining_context_id JOIN representation_targets r ON r.symbol_id=s.symbol_id AND r.model_fingerprint=e.model_fingerprint WHERE " + scope
-                        + " AND e.model_fingerprint=$4 AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND (SELECT count(*) FROM vectors v WHERE v.set_id=e.set_id)=e.expected_chunks", repositoryId, contextId, kindsJson, projectsJson, embedded.Fingerprint)));
+                    const string langCountFilter = " AND (EXISTS(SELECT 1 FROM locations l JOIN files f ON f.file_id=l.file_id WHERE l.symbol_id=s.symbol_id AND f.language IN(SELECT value FROM json_each($5))) OR (NOT EXISTS(SELECT 1 FROM locations l WHERE l.symbol_id=s.symbol_id) AND c.project_id IN(SELECT p.project_id FROM projects p WHERE p.language IN(SELECT value FROM json_each($5)))))";
+                    var countKey = new SearchCountKey(repositoryId, generation.Value, epoch.Value, contextId, kindsJson, projectsJson, null, languagesJson);
+                    var eligible = languagesJson is null
+                        ? SnapshotCount(countKey, () => Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE " + scope, repositoryId, contextId, kindsJson, projectsJson)))
+                        : SnapshotCount(countKey, () => Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM symbols s JOIN contexts c ON c.context_id=s.defining_context_id WHERE " + scope + langCountFilter, repositoryId, contextId, kindsJson, projectsJson, null, languagesJson)));
+                    var covered = embedded is null ? 0L : languagesJson is null
+                        ? SnapshotCount(countKey with { Profile = embedded.Fingerprint }, () => Convert.ToInt64(connection.Scalar(transaction,
+                            "SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id JOIN contexts c ON c.context_id=s.defining_context_id JOIN representation_targets r ON r.symbol_id=s.symbol_id AND r.model_fingerprint=e.model_fingerprint WHERE " + scope
+                            + " AND e.model_fingerprint=$4 AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND (SELECT count(*) FROM vectors v WHERE v.set_id=e.set_id)=e.expected_chunks", repositoryId, contextId, kindsJson, projectsJson, embedded.Fingerprint)))
+                        : SnapshotCount(countKey with { Profile = embedded.Fingerprint }, () => Convert.ToInt64(connection.Scalar(transaction,
+                            "SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id JOIN contexts c ON c.context_id=s.defining_context_id JOIN representation_targets r ON r.symbol_id=s.symbol_id AND r.model_fingerprint=e.model_fingerprint WHERE " + scope + langCountFilter
+                            + " AND e.model_fingerprint=$4 AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND (SELECT count(*) FROM vectors v WHERE v.set_id=e.set_id)=e.expected_chunks", repositoryId, contextId, kindsJson, projectsJson, embedded.Fingerprint, languagesJson)));
                     if (embedded is not null && covered < eligible) warnings.Add(new JsonObject { ["code"] = "INDEX_STALE", ["message"] = "Vector coverage is incomplete; only complete current vector sets are eligible." });
                     data = new() { ["matches"] = matches, ["channelsUsed"] = channels, ["eligibleSymbolCount"] = eligible, ["vectorCoveredSymbolCount"] = covered }; break;
                 }

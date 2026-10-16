@@ -164,7 +164,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
     /// saturated, or the chunk capacity is exceeded, the full validated scan
     /// decides instead, so the result never depends on the window size.
     /// </summary>
-    public static IReadOnlyList<VectorCandidate> Candidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000, int validationWindow = DefaultValidationWindow)
+    public static IReadOnlyList<VectorCandidate> Candidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000, int validationWindow = DefaultValidationWindow, IReadOnlyList<string>? languages = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         LocalModel.ValidateVector(query.Vector);
@@ -173,7 +173,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         // The score pass has no repository predicate (that needs the symbols join
         // this path avoids), so it is only valid when every vector is this repository's.
         if (Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM repositories")) != 1)
-            return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks);
+            return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks, languages);
         // Stepped through SQLite directly and scored from SQLite's own row buffer:
         // the ADO.NET reader's per-row overhead and blob copy cost more than the
         // scoring itself. The statement runs inside the caller's read transaction.
@@ -188,6 +188,12 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             string Parameters(IReadOnlyList<string> values) => string.Join(',', values.Select(value => { scanValues.Add(value); return "?" + scanValues.Count; }));
             if (kinds is { Count: > 0 }) scanSql.Append(" AND kind IN(").Append(Parameters(kinds)).Append(')');
             if (projectIds is { Count: > 0 }) scanSql.Append(" AND context_id IN(SELECT context_id FROM contexts WHERE project_id IN(").Append(Parameters(projectIds)).Append("))");
+            if (languages is { Count: > 0 })
+            {
+                var langParams = Parameters(languages);
+                scanSql.Append(" AND (symbol_id IN(SELECT l.symbol_id FROM locations l JOIN files f ON f.file_id=l.file_id WHERE f.language IN(").Append(langParams).Append("))")
+                    .Append(" OR (NOT EXISTS(SELECT 1 FROM locations l WHERE l.symbol_id=vector_scan.symbol_id) AND context_id IN(SELECT c.context_id FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.language IN(").Append(langParams).Append("))))");
+            }
             ThrowOnError(handle, SQLitePCL.raw.sqlite3_prepare_v2(handle, scanSql.ToString(), out var scan));
             using (scan)
             {
@@ -205,7 +211,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
                 if (!overflow && step != SQLitePCL.raw.SQLITE_DONE) ThrowOnError(handle, step);
             }
         }
-        if (overflow) return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks);
+        if (overflow) return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks, languages);
         cancellationToken.ThrowIfCancellationRequested();
         var ranked = window.Results();
         // Fewer scored chunks than the window cannot have evicted anything,
@@ -218,6 +224,11 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             if (values is null || values.Count == 0) continue;
             var names = values.Select(value => { var parameter = "$" + parameters.Count; parameters.Add(value); return parameter; });
             filter += " AND " + column + " IN(" + string.Join(',', names) + ")";
+        }
+        if (languages is { Count: > 0 })
+        {
+            var names = string.Join(',', languages.Select(value => { var parameter = "$" + parameters.Count; parameters.Add(value); return parameter; }));
+            filter += $" AND (EXISTS(SELECT 1 FROM locations l JOIN files f ON f.file_id=l.file_id WHERE l.symbol_id=s.symbol_id AND f.language IN({names})) OR (NOT EXISTS(SELECT 1 FROM locations l WHERE l.symbol_id=s.symbol_id) AND s.defining_context_id IN(SELECT ctx.context_id FROM contexts ctx JOIN projects p ON p.project_id=ctx.project_id WHERE p.language IN({names}))))";
         }
         var contextJoin = projectIds is { Count: > 0 } ? " JOIN contexts c ON c.context_id=s.defining_context_id" : "";
         using var validate = connection.Command(transaction,
@@ -239,12 +250,12 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
                     if (reader.GetBytes(0, 0, bytes, 0, bytes.Length) == bytes.Length && VectorScoring.TryScore(bytes, query.Vector, out var score) && (best is null || score > best))
                         best = score;
             if (best != candidate.Score)
-                return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks);
+                return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks, languages);
             current.Add(candidate);
             if (current.Count == 100) return current;
         }
         return windowSaturated
-            ? ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks)
+            ? ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks, languages)
             : current;
     }
 
@@ -254,7 +265,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             throw new SqliteException(SQLitePCL.raw.sqlite3_errmsg(handle).utf8_to_string(), code);
     }
 
-    internal static IReadOnlyList<VectorCandidate> ExhaustiveCandidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000)
+    internal static IReadOnlyList<VectorCandidate> ExhaustiveCandidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000, IReadOnlyList<string>? languages = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         LocalModel.ValidateVector(query.Vector); var parameters = new List<object?> { repositoryId, query.Fingerprint, contextId };
@@ -265,6 +276,11 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             if (values.Count == 0) continue;
             var names = values.Select(value => { var parameter = "$" + parameters.Count; parameters.Add(value); return parameter; });
             filter += " AND " + column + " IN(" + string.Join(',', names) + ")";
+        }
+        if (languages is { Count: > 0 })
+        {
+            var names = string.Join(',', languages.Select(value => { var parameter = "$" + parameters.Count; parameters.Add(value); return parameter; }));
+            filter += $" AND (EXISTS(SELECT 1 FROM locations l JOIN files f ON f.file_id=l.file_id WHERE l.symbol_id=s.symbol_id AND f.language IN({names})) OR (NOT EXISTS(SELECT 1 FROM locations l WHERE l.symbol_id=s.symbol_id) AND s.defining_context_id IN(SELECT ctx.context_id FROM contexts ctx JOIN projects p ON p.project_id=ctx.project_id WHERE p.language IN({names}))))";
         }
         // Context identity is already constrained by the symbols FK. Only
         // project filtering needs the context row during the exhaustive scan.
