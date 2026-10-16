@@ -171,9 +171,9 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     for (var index = 0; index < rows.Count; index++) Add(rows[index], "lexical", index + 1);
                     if (mode != "vector")
                     {
-                        // Each arm uses its repository/name index; exact retrieval
+                        // Each arm uses its repository-scoped index; exact retrieval
                         // must not depend on the bounded FTS candidate list.
-                        var exact = Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND name=$1 AND external=0 AND ($2 IS NULL OR defining_context_id=$2) UNION SELECT * FROM symbols WHERE repository_id=$0 AND qualified_name=$1 AND external=0 AND ($2 IS NULL OR defining_context_id=$2) ORDER BY symbol_id LIMIT 300", repositoryId, query, contextId)
+                        var exact = Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND name=$1 AND external=0 AND ($2 IS NULL OR defining_context_id=$2) UNION SELECT * FROM symbols WHERE repository_id=$0 AND qualified_name=$1 AND external=0 AND ($2 IS NULL OR defining_context_id=$2) UNION SELECT * FROM symbols WHERE repository_id=$0 AND signature=$1 AND external=0 AND ($2 IS NULL OR defining_context_id=$2) ORDER BY symbol_id LIMIT 300", repositoryId, query, contextId)
                             .Where(row => contextId is null || Text(row, "defining_context_id") == contextId).Where(Eligible).Take(100);
                         foreach (var row in exact) Add(row, "exact", 1);
                     }

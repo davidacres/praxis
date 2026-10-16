@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Storage;
 /// <summary>Owns schema compatibility and connection policy; source files are never modified.</summary>
 public sealed class IndexDatabase
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
     public const int ReadMappingVersion = 3;
     public const int ReadPageCacheVersion = 2;
     public const int ReadPageCacheKiB = 64 * 1024;

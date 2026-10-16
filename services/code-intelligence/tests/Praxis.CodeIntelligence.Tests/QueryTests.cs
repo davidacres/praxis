@@ -34,6 +34,26 @@ public sealed class QueryTests : IDisposable
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
     [Fact]
+    public void ExactSignaturesSelectAnOverloadAndNamesRetainBothOverloads()
+    {
+        var overloads = Query("find_symbol", new() { ["name"] = "Overload" })["data"]!["items"]!.AsArray();
+        Assert.Equal(2, overloads.Count);
+        foreach (var overload in overloads)
+        {
+            var signature = overload!["signature"]!.GetValue<string>();
+            indexer.AddAlias(repository, Symbol("Caller")["symbolId"]!.GetValue<string>(), signature);
+            var response = Query("search_code", new() { ["query"] = signature, ["mode"] = "lexical" });
+            Assert.Null(response["error"]);
+            var first = response["data"]!["matches"]![0]!;
+            Assert.Equal(overload["symbolId"]!.GetValue<string>(), first["symbol"]!["symbolId"]!.GetValue<string>());
+            Assert.Contains(first["reasons"]!.AsArray(), reason => reason!.GetValue<string>() == "exact");
+        }
+        var byName = Query("search_code", new() { ["query"] = "Overload", ["mode"] = "lexical" })["data"]!["matches"]!.AsArray();
+        Assert.Equal(2, byName.Count(match => match!["reasons"]!.AsArray().Any(reason => reason!.GetValue<string>() == "exact")));
+        Assert.Empty(database.Check());
+    }
+
+    [Fact]
     public void IdentifierTermsIncludeAcronymsNamespacesAndSignatureTypes()
     {
         File.WriteAllText(Path.Combine(root, "Example.cs"), "namespace HTTPServices; class JSONPayload {} class HTTPClient { void Read_XML(JSONPayload input) {} }");

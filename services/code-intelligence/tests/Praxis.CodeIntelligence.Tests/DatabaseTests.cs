@@ -82,26 +82,34 @@ public sealed class DatabaseTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => Database.Initialize());
     }
 
-    [Fact]
-    public void VersionOneUpgradePreservesFactsAndAddsCascadeLookupIndexes()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void OlderSchemaUpgradePreservesFactsAndAddsLookupIndexes(int version)
     {
         Directory.CreateDirectory(root);
         using (var raw = new SqliteConnection($"Data Source={Database.Path};Pooling=False"))
         {
-            raw.Open(); using var command = raw.CreateCommand();
-            using var stream = typeof(IndexDatabase).Assembly.GetManifestResourceStream("Praxis.CodeIntelligence.Storage.migration001.sql")!;
-            using var reader = new StreamReader(stream); var migration = reader.ReadToEnd();
-            command.CommandText = migration; command.ExecuteNonQuery();
-            var checksum = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(migration)));
-            command.CommandText = "INSERT INTO schema_migrations VALUES(1,$checksum,'fixture'); PRAGMA user_version=1; INSERT INTO repositories(repository_id,canonical_root,path_policy) VALUES('kept','/fixture','caseSensitive');";
-            command.Parameters.AddWithValue("$checksum", checksum); command.ExecuteNonQuery();
+            raw.Open();
+            for (var next = 1; next <= version; next++)
+            {
+                using var command = raw.CreateCommand();
+                using var stream = typeof(IndexDatabase).Assembly.GetManifestResourceStream($"Praxis.CodeIntelligence.Storage.migration{next:000}.sql")!;
+                using var reader = new StreamReader(stream); var migration = reader.ReadToEnd();
+                command.CommandText = migration; command.ExecuteNonQuery();
+                var checksum = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(migration)));
+                command.CommandText = $"INSERT INTO schema_migrations VALUES({next},$checksum,'fixture'); PRAGMA user_version={next};";
+                command.Parameters.AddWithValue("$checksum", checksum); command.ExecuteNonQuery();
+            }
+            using var insert = raw.CreateCommand();
+            insert.CommandText = "INSERT INTO repositories(repository_id,canonical_root,path_policy) VALUES('kept','/fixture','caseSensitive');"; insert.ExecuteNonQuery();
         }
         Database.Initialize(); Database.Initialize(); Assert.Empty(Database.Check());
-        var backup = Assert.Single(Directory.GetFiles(root, "index.db.schema1.*.praxis.db"));
+        var backup = Assert.Single(Directory.GetFiles(root, $"index.db.schema{version}.*.praxis.db"));
         using (var saved = new SqliteConnection($"Data Source={backup};Mode=ReadOnly;Pooling=False"))
         {
             saved.Open(); using var query = saved.CreateCommand(); query.CommandText = "PRAGMA user_version";
-            Assert.Equal(1L, query.ExecuteScalar());
+            Assert.Equal((long)version, query.ExecuteScalar());
             query.CommandText = "SELECT repository_id FROM repositories"; Assert.Equal("kept", query.ExecuteScalar());
             query.CommandText = "PRAGMA quick_check"; Assert.Equal("ok", query.ExecuteScalar());
         }
@@ -109,7 +117,9 @@ public sealed class DatabaseTests : IDisposable
         check.CommandText = "SELECT repository_id FROM repositories"; Assert.Equal("kept", check.ExecuteScalar());
         check.CommandText = "SELECT count(*) FROM schema_migrations"; Assert.Equal((long)IndexDatabase.SchemaVersion, check.ExecuteScalar());
         check.CommandText = "EXPLAIN QUERY PLAN SELECT edge_id FROM edges WHERE occurrence_id='fixture'";
-        using var plan = check.ExecuteReader(); Assert.True(plan.Read()); Assert.Contains("edge_occurrence", plan.GetString(3));
+        using (var plan = check.ExecuteReader()) { Assert.True(plan.Read()); Assert.Contains("edge_occurrence", plan.GetString(3)); }
+        check.CommandText = "EXPLAIN QUERY PLAN SELECT symbol_id FROM symbols WHERE repository_id='kept' AND signature='fixture'";
+        using var signaturePlan = check.ExecuteReader(); Assert.True(signaturePlan.Read()); Assert.Contains("symbol_signature", signaturePlan.GetString(3));
     }
 
     [Fact]
