@@ -562,3 +562,15 @@ Query-only reader-policy frontier on the retained schema-5 fixture: four readers
 | 64 MiB / 16 MiB | 0.71 GiB · 281.8 · 270.1 ms | 0.63 GiB · 213.1 ms |
 
 With the dense `vector_scan` table, a 128 MiB map and 16 MiB cache saves about 0.33 GiB of query RSS with no measurable latency cost (single runs). That alone does not close a roughly 0.45 GiB overrun, so writer-side retention is being measured next. No policy has been adopted yet.
+
+## Reader policy for concurrent edits (mapping v7, page cache v3) — 16 October
+
+Two fresh 50k runs with 10 concurrent edits used the query-only frontier's 128 MiB map and 16 MiB cache (`benchmarks/macos-arm64-50000-concurrent-reader-policy/`; the experiment build differs from the adopted code only in the version constants and a comment):
+
+| Run | `/usr/bin/time` peak RSS | Idle hybrid / retrieval p95 | Concurrent lexical / hybrid p95 | Concurrent errors | Publish p50 under load |
+|---|---|---|---|---|---|
+| 512/64 MiB (attribution run above) | 2,623,160,320 (**fails**) | n/a | n/a | 0 | n/a |
+| 128/16 MiB | **1,926,168,576 (passes 2 GiB)** | 209 / 198 ms | 12.3 / 380 ms | 0 | 26.8 s |
+| 128/16 MiB + `DOTNET_GCConserveMemory=7` | 1,905,836,032 | 209 / 198 ms | 11.5 / 420 ms | 0 | 28.5 s |
+
+The reader policy cuts the concurrent peak by about 0.70 GB, more than the 0.33 GiB it saves in query-only runs. Concurrent readers no longer stack large file mappings on top of the writer. The GC setting adds only about 20 MB and is slower, so it is not adopted. `IndexDatabase` now uses mapping version 7 (128 MiB) and page-cache version 3 (16 MiB). 116 C# tests pass, zero skipped. Headroom to 2 GiB is about 211 MiB in one run on a 12-core Mac. The policy still needs the full query matrix, the 25-edit concurrent protocol and the reference machine.

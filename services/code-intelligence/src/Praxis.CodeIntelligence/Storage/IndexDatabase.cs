@@ -10,10 +10,13 @@ namespace Praxis.CodeIntelligence.Storage;
 public sealed class IndexDatabase
 {
     public const int SchemaVersion = 5;
-    public const int ReadMappingVersion = 6;
-    public const int ReadPageCacheVersion = 2;
-    public const int ReadPageCacheKiB = 64 * 1024;
-    public const long MaximumReadMappingBytes = 512L * 1024 * 1024;
+    // Version 7/3: with the dense vector_scan table, a 128 MiB map and 16 MiB
+    // cache per reader match the 512/64 MiB latency while keeping concurrent
+    // edits within the 2 GiB budget (see release evidence, 16 October).
+    public const int ReadMappingVersion = 7;
+    public const int ReadPageCacheVersion = 3;
+    public const int ReadPageCacheKiB = 16 * 1024;
+    public const long MaximumReadMappingBytes = 128L * 1024 * 1024;
     private static readonly (string Sql, string Checksum)[] Migrations = Enumerable.Range(1, SchemaVersion).Select(version =>
     {
         var sql = ReadMigration(version);
