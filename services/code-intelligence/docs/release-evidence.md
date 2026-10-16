@@ -2,21 +2,19 @@
 
 Updated 16 October 2026. M3 implementation is in progress; this document is not a release approval.
 
-| Check | Evidence | Result |
+| Check | Current evidence | Remaining qualification |
 |---|---|---|
-| C# suite | SDK10.0.402, real MiniLM bundle and explicit SDK capture fixture; latest run | 97 local and on each native CI host passed,0 failed,0 skipped |
-| Source/context | Raw UTF16 hashes, path policy, passive no-execution, SDK capture, generated support and stale/deleted inputs | Covered by targeted tests |
-| Durable jobs | Coalescing, backoff, heartbeat, expired owner recovery, wrong-token publication, pause and atomic refresh enqueue | Covered by targeted tests |
-| Automatic embeddings | Runtime registration/index, queued activation, real inference, edit, empty stale vector results, background refresh | Covered by native model fixture |
-| Git policy | Ignored invalid-encoding source skipped before reads; configured fsmonitor cannot execute | Test passed |
-| MCP/settings | SDK initialize/list/call, scoped denial/cancellation, provider handover filter, settings regressions | 46 focused Node tests passed |
-| JSON Schema | 109 actual responses across11tools, including metadata/unresolved evidence, graph expansion and trimmed status/summary/pages/source | Passed with JSON Schema2020-12 |
-| Full application build | Includes service, renderer import guard, Vite, copied renderer and trusted IPC guard | Passed after restoring complete SettingsPage source; exact remote blob checked |
-| Linux native package | Self-contained publish, native CLI help, SQLite initialization and native ONNX model check | Passed on Linux x64, Windows x64 and macOS arm64 in native CI |
-| UI e2e/screenshots | macOS: two mocked recovery/search regressions and one real packaged-service desktop flow; source/dialog captures inspected | Focused checks pass; full theme/accessibility/platform qualification remains open |
-| Native owner process/platform matrix | Packaged macOS arm64 startup, lock, concurrent queries, grants, backup, restart and crash takeover | Linux x64, Windows x64 and macOS arm64 passed native CI |
-| Live provider invocation | No paid/live adapter runs authorized or performed | Outstanding |
-| Performance/quality corpus | Local macOS 5k comparison in docs/benchmarks; 50k-symbol and120-query relevance protocol | Local body edit 1532.0555 ms, hybrid p95 129.0305 ms; normative scale/quality gates outstanding |
+| C# compiler/storage/model suite | 112 passed, zero failures/skips with SDK/model fixtures | Latest three-host follow-up is running |
+| Source/context and dependency graph | Source identity/evidence, cross-project source uses, captured project/assembly references and configuration withdrawal tested | General runtime delegate flow is explicitly unresolved; no NuGet-name inference |
+| Durable work and edit updates | Real 5k watcher: 25 edits, structural p95 1.676 s, semantic upper-bound p95 0.620 s, no errors | This measurement predates adapter v8; five-run/concurrent-edit protocol remains open |
+| MCP | Four local SDK/stdio tests pass, including native grants/errors and controlled in-flight child cancellation | Actual live provider adapter/inference cancellation qualification remains open |
+| JSON Schema | Fresh final-code batch: 132 responses across all 11 tools validate | Repeat for future wire changes |
+| Application/native packaging | Full application build and current native owner/SQLite/ONNX/IPC packaging smoke pass locally | Latest release-wide platform/UI matrix remains open |
+| Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run is in progress with failures outside the code-intelligence flows; baseline comparison pending |
+| Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
+| 50k latency and memory | Full mapping-576 run: lexical p95 6.661 ms; hybrid p95 506.908 ms **fails** 500 ms; independent peak RSS 1915731968 bytes passes 2 GiB | Streaming scorer v4 is implemented/tested but awaits fresh isolated measurement; complete category/repeat/concurrent-edit protocol remains open |
+| Query-matrix tooling | Eight independent 100-symbol smoke processes pass; phase samples, reader schedules, failure retention and fixture containment verified | This is harness proof, not 50k qualification |
+| Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Fresh run 38901354276 pending |
 
 ## Platform and provider claims
 
@@ -326,3 +324,7 @@ All 112 C# tests pass with zero skips using SDK/model fixtures. Source-use proof
 ## Follow-up CI harness corrections
 
 CI 38900116034 preserved two failures: macOS/Linux retained-smoke compared hashes from 40 four-reader queries against 10 single-reader queries after the hash began describing the actual timed workload; Windows fixture Git setup left its process alive on a cold-start timeout, masking the assertion with a directory-lock cleanup error. The smoke now uses 40 queries for both reader counts and verifies exact phase sample counts. Fixture-only Git setup allows 15 seconds, kills/drains owned work on timeout and still fails the timeout explicitly; production ignore-policy deadlines are unchanged. All 112 provisioned C# tests pass locally, and the real retained smoke passes including source/membership/epoch tampering, repeated matched-reader schedules, failure retention and restoration. Fresh native CI is still required.
+
+## Adapter-v8/exact-streaming fixed-corpus recheck
+
+The current native package revalidated all 20 controlled transitions and reran the fixed 120-query corpus after startup reconciliation settled. Every declared gate passes: acceptance Recall@10 0.893939 and MRR@10 0.672042 equal lexical, with no errors/duplicates, missing evidence, mixed epochs or incomplete compiler/vector coverage. The new report `maze-release-configured-dependencies-results.praxis.json` preserves all samples and explicitly records adapter v8 and scorer v4. This is a repeat of the published corpus, not a new blind study or evidence of semantic recall gains. Desktop tests ran concurrently, so these CLI timings are quality-run diagnostics, not capacity latency qualification.
