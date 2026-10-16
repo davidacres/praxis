@@ -4,7 +4,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 
 | Check | Current evidence | Remaining qualification |
 |---|---|---|
-| C# compiler/storage/model suite | 112 passed, zero failures/skips with SDK/model fixtures | Final mapping-v6 run 38904504214 passes on Windows/macOS/Linux |
+| C# compiler/storage/model suite | 114 passed, zero failures/skips with SDK/model fixtures (schema 5, vector plan 4, search plan 6) | Run [38918489261](https://github.com/davidacres/praxis/actions/runs/38918489261) at `d8487df1` passes on Windows/macOS/Linux |
 | Source/context and dependency graph | Source identity/evidence, cross-project source uses, captured project/assembly references and configuration withdrawal tested | General runtime delegate flow is explicitly unresolved; no NuGet-name inference |
 | Durable work and edit updates | Real 5k watcher: 25 edits, structural p95 1.676 s, semantic upper-bound p95 0.620 s, no errors | This measurement predates adapter v8; five-run/concurrent-edit protocol remains open |
 | MCP | Four local SDK/stdio tests pass, including native grants/errors and controlled in-flight child cancellation | Actual live provider adapter/inference cancellation qualification remains open |
@@ -13,7 +13,8 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
 | Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
 | 50k exact-query latency and memory | Final mapping-v6/scorer-v4 full process: lexical p95 5.895 ms, hybrid p95 434.591 ms, independent peak RSS 2004254720 bytes; main limits pass | Retrieval-only p95 414.348 ms fails 250 ms; complete category/repeat/concurrent-edit/reference-machine protocol remains open |
-| Broader terminology performance | (Superseded for the vector path by the ranked-validation checkpoint below: one-reader hybrid p95 228.496 ms, four-reader 365.737 ms, single pilot.) Two independent 50k processes, matched 200-query sets/mode: one reader lexical/hybrid p95 74.371/353.665 ms; four readers 98.664/507.817 ms; no errors | Four-reader hybrid fails 500 ms and retrieval-only fails 250 ms. Five repeats, other categories and concurrent edits remain open |
+| Query matrix (plan 6) | Five runs × exact/terminology/behaviour/negative × one/four readers × 200 queries: 39/40 processes pass every gate; hybrid p95 max 322.743 ms; lexical p95 max 82.942 ms; zero errors | **Fails:** behaviour four-reader run 1 retrieval-only p95 301.9 ms; other four-reader terminology/behaviour runs 236–247 ms (thin margin). Concurrent edits, cross-project, owner/wire, full-process RSS, reference machine unmeasured |
+| Broader terminology performance (history) | (Superseded for the vector path by the ranked-validation checkpoint below: one-reader hybrid p95 228.496 ms, four-reader 365.737 ms, single pilot.) Two independent 50k processes, matched 200-query sets/mode: one reader lexical/hybrid p95 74.371/353.665 ms; four readers 98.664/507.817 ms; no errors | Four-reader hybrid fails 500 ms and retrieval-only fails 250 ms. Five repeats, other categories and concurrent edits remain open |
 | Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Final mapping-v6 run 38904504214 passes Windows/macOS/Linux (112 tests per host, schemas, native packaging, retained/matrix safeguards and watcher smoke) |
 
 ## Platform and provider claims
@@ -429,3 +430,33 @@ Terminology pilot (schema-5 fixture, same query-set hash, zero errors; `benchmar
 | 4 | 78.1 ms (was 98.8) | 258.9 ms | **237.4 ms (passes 250)** | 146.9 ms |
 
 This is the first measurement where four-reader retrieval-only passes. The margin is about 13 ms, from a single run in one category, so it is not qualification.
+
+## Full query matrix, plan 6 — 16 October
+
+`benchmarks/macos-arm64-50000-plan6-query-matrix*` contains 40 independent processes on the schema-5 retained fixture. That is five runs of each category (exact, terminology, behaviour, negative) at one and four readers, 200 timed queries per mode and 20 warmups, with matched query-set hashes per group. The matrix is complete with zero query errors and no runner failures. **The matrix fails:** one of 40 processes misses the retrieval-only target.
+
+| Category | Readers | Lexical p95 range | Hybrid p95 range | Retrieval-only p95 range |
+|---|---|---|---|---|
+| exact | 1 | 1.54–1.68 ms | 104.1–106.2 ms | 98.4–100.8 ms |
+| exact | 4 | 6.73–7.32 ms | 192.6–205.1 ms | 172.2–181.8 ms |
+| terminology | 1 | 46.2–47.9 ms | 147.5–148.5 ms | 142.2–143.2 ms |
+| terminology | 4 | 74.5–77.1 ms | 261.4–268.3 ms | 239.1–246.7 ms |
+| behaviour | 1 | 46.7–47.9 ms | 148.9–150.3 ms | 143.5–145.1 ms |
+| behaviour | 4 | 76.4–82.9 ms | 256.3–322.7 ms | 236.4–**301.9** ms |
+| negative | 1 | 1.59–1.67 ms | 108.0–110.3 ms | 102.3–104.4 ms |
+| negative | 4 | 6.61–6.82 ms | 199.1–206.7 ms | 178.9–185.7 ms |
+
+Lexical (≤100 ms) and hybrid (≤500 ms) pass in every process. Retrieval-only (≤250 ms) fails once: behaviour four-reader run 1, at 301.9 ms with a 206.4 ms vector-scan p95. The other four runs in that group measured 236–241 ms. The cause is not established; it looks like a first-run or host effect rather than a deterministic regression, but that is not proven. Broad four-reader workloads otherwise sit within 3–14 ms of the target on this 12-core Mac, so the reference 8-core machine may well fail.
+
+Native CI [38918489261](https://github.com/davidacres/praxis/actions/runs/38918489261) at `d8487df1` passed on Windows, Linux and macOS with the schema-5/plan-6 code.
+
+Still open:
+- The four-reader retrieval margin.
+- Concurrent-edit, cross-project and owner/wire measurements.
+- Full-process RSS with schema 5.
+- Edit-publication cost of the duplicated vector writes.
+- Reference hardware.
+- Provider, platform and accessibility checks.
+- Recovery, stress and disk-full qualification.
+- The two runtime identifiers with no execution evidence (Linux arm64, macOS x64).
+- The broader desktop suite.
