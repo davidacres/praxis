@@ -14,7 +14,7 @@ Before ending any work turn, preserve meaningful code, tests and documentation r
 
 Reviewed specification v1.2 survives in ChatGPT Library as Praxis-Semantic-Code-Intelligence-Specification-v1.2.md, library_file_id libfile_c2a46c2667188191b9b11ff21270aaab, version 2, 149539 bytes. Preserve it verbatim in services/code-intelligence/docs/specification-v1.2.md before implementation.
 
-C# release is M3; TypeScript/JavaScript M4, optional local LLM M5, scale/federation M6 remain future. Passive indexing never implicitly builds, restores or runs generators. Explicit capture warns it can execute project code. Local-only indexing; provider tool-output egress requires explicit repository/provider grant. Native IPC only: private Unix socket or current-user Windows pipe, random-token rendezvous and kernel-held stable lock. No TCP substitute.
+C# release is M3; TypeScript/JavaScript M4 is implemented (CI-019 / TASK-459); optional local LLM M5, scale/federation M6 remain future. Passive indexing never implicitly builds, restores or runs generators. Explicit capture warns it can execute project code. Local-only indexing; provider tool-output egress requires explicit repository/provider grant. Native IPC only: private Unix socket or current-user Windows pipe, random-token rendezvous and kernel-held stable lock. No TCP substitute.
 
 Roslyn facts, SQLite+FTS5, local ONNX MiniLM384. Raw-byte SHA256 source hashes, UTF16 coordinates, context-scoped canonical identities, distinct pci:syntactic fallback IDs. Atomic publication/queryEpoch; HMAC snapshot-safe cursors; bounded queries and evidence with no dangling graph endpoints.
 

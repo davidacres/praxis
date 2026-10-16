@@ -155,7 +155,7 @@ Search counts are bounded scalar-only snapshot entries keyed by repository/gener
 5. Complete theme/accessibility/platform qualification and provider cancellation/error transcripts. On macOS the two recovery/search specs and a new real packaged-service desktop flow pass, with source/dialog captures inspected. Earlier Linux attempts remain blocked evidence, not a current macOS blocker.
 6. Measure scale/quality gates. Conservative full-context publication is intentional until equivalence/performance evidence supports more targeted invalidation.
 
-Native IPC, corruption/full-disk recovery, crash takeover, package dependencies and offline operation require execution on required platforms before release. Review the full normative acceptance list rather than treating the test count as coverage of every gate. M4 TypeScript/JavaScript, M5 local LLM enrichment and M6 scale/federation remain future milestones.
+Native IPC, corruption/full-disk recovery, crash takeover, package dependencies and offline operation require execution on required platforms before release. Review the full normative acceptance list rather than treating the test count as coverage of every gate. M4 TypeScript/JavaScript (CI-019 / TASK-459) is implemented and verified across 132 tests; M5 local LLM enrichment and M6 scale/federation remain future milestones.
 
 ## Preservation
 
@@ -753,3 +753,22 @@ Transitive project references: the SDK flows `ProjectReference` transitively unl
 4. **Wording.** Panel and relocation copy describe automatic project detection.
 
 All five desktop code-intelligence specs pass, the packaged-service one included; there are 4 MCP tests (zero skipped) and 126 C# tests. CI [38969353019](https://github.com/davidacres/praxis/actions/runs/38969353019) passed on Windows, Linux and macOS after one rerun. The first Windows attempt hit a transient `EPERM` on a just-exited owner's DLL during package cleanup, now retried (`8cb9a40d`).
+
+## TypeScript and JavaScript language adapter (M4 / CI-019 / TASK-459) — 16–17 October
+
+The M4 TypeScript and JavaScript language adapter (`ts-sidecar.mjs`, `TypeScriptAnalyzer.cs`) was implemented and integrated into the Code Intelligence service on `feat/code-intelligence-typescript`.
+
+1. **Deterministic Node sidecar (`ts-sidecar.mjs`):** Runs TypeScript 7.0.2 programmatic compiler API over NDJSON stdio. Strictly relies on Praxis's internal runtime dependency (`package.json`), never executing untrusted project scripts, plugins or repo `node_modules` (§26.1).
+2. **Contexts and project ownership:** Scans `tsconfig.json` and `jsconfig.json` trees and project references. Multi-project containment assigns each source file to its deepest containing project directory, preventing symbol duplicates across projects.
+3. **AST & semantic coverage:**
+   - Overloads, interface merging, namespace merging, parameter properties, function ordinals.
+   - Relationships: `calls`, `may_call` (virtual/interface dynamic dispatch), `implements`, `inherits`, and `overrides`.
+   - Syntax-only fallback: On process timeout or sidecar error, the service falls back to syntax-only extraction and emits diagnostic `TYPESCRIPT_SIDECAR_FAILED`.
+4. **Polyglot indexing and search:**
+   - Multi-language search (`csharp`, `typescript`, `javascript`) in lexical, exact, vector, and hybrid modes with language filters.
+   - Preserves byte-identical snapshot hashes for C#-only repositories.
+   - Watches `.ts`, `.tsx`, `.js`, `.jsx`, and config files in `RepositoryMonitor`.
+   - Bundles `ts-sidecar.mjs` and `node_modules/typescript` into self-contained service packages (`build-service.mjs`).
+5. **Test evidence:**
+   - 132 tests pass (0 failures, 0 skipped) under `PRAXIS_DOTNET` and `PRAXIS_MODEL_BUNDLE` via `npm run test:code-intelligence`.
+   - Verified overloads, merging, parameter properties, call hierarchies, multi-project references, polyglot vector/hybrid searches, untrusted script rejection, and fallback.

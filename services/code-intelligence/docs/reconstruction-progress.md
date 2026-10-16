@@ -207,6 +207,17 @@ Search counts are bounded scalar-only snapshot entries keyed by repository/gener
 
 **94 C# tests passed, zero failures/skips; 109 actual responses validate across all 11 schemas.** The same 50k lexical-only fixture measured p95 100.806 ms with count reuse alone and **3.9272 ms** after the join-plan fix. Both raw reports and the failed intermediate run are retained in `docs/benchmarks`. This establishes a local single-run lexical improvement; model-enabled hybrid, full protocol and relevance acceptance remain open.
 
+## TypeScript and JavaScript language adapter checkpoint (M4 / TASK-459 / CI-019 — 16–17 October)
+
+The M4 TypeScript and JavaScript compiler adapter is implemented via a bounded, deterministic Node sidecar (`services/code-intelligence/scripts/ts-sidecar.mjs`) using TypeScript 7.0.2 programmatic sync/AST API.
+- **Untrusted repository guard (§26.1):** Sidecar exclusively resolves Praxis's bundled copy of TypeScript; repository-local scripts, plugins, and dependencies are never executed.
+- **Multi-project tsconfig ownership:** Detects `tsconfig.json` / `jsconfig.json` roots and project references; source files map to their deepest containing project context without duplicate symbol emissions across contexts.
+- **Symbol & Relationship Semantics:** Handles declaration merging across interfaces and namespaces, function overloads with 1-based ordinals, constructor parameter properties, call hierarchies (`calls`, `may_call`), interface implementations, class inheritance, and method overrides.
+- **Polyglot & Multi-language search:** Exact, lexical, vector, and hybrid searches support language filtering (`csharp`, `typescript`, `javascript`). Synthetic project root symbols inherit context language.
+- **Failure fallback:** Process failure or missing runtime falls back to C# syntax-only symbol discovery with diagnostic `TYPESCRIPT_SIDECAR_FAILED`.
+- **Packaging & Monitoring:** `ts-sidecar.mjs` and trusted TypeScript are packaged in the service distribution; the host watcher dirty detection monitors `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs`, `.cjs`, and `tsconfig.json` / `jsconfig.json` changes.
+- **Suite status:** 132 C# tests pass (zero failed, zero skipped) with model bundle and SDK configured.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.
@@ -214,7 +225,7 @@ Search counts are bounded scalar-only snapshot entries keyed by repository/gener
 - Irreducible single-item budget behavior and execution of Windows/macOS source-handle fixtures.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
-Current indexing performs full-context compiler analysis and atomically updates or replaces structural facts. It does not yet implement targeted API-stamp invalidation or establish complete performance/release acceptance. M4–M6 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
+Current indexing performs full-context compiler analysis and atomically updates or replaces structural facts. It does not yet implement targeted API-stamp invalidation or establish complete performance/release acceptance. M4 (TypeScript and JavaScript language adapter, TASK-459 / CI-019) is implemented and verified with 132 tests passing. M5–M6 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
 
 ## Preservation policy
 
