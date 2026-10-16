@@ -240,3 +240,7 @@ Search now applies language, kind and project filters before the lexical, exact 
 ## Model activation disk reserve — 16 October
 
 Model activation now checks available space on the SQLite database volume before inference/publication, requiring the larger of 1 GiB or twice a conservative projected four-chunk profile (float32 payload plus span/index overhead). This is a preflight rather than a reservation; transactional publication still protects against later write failure. A real-model fault fixture injects zero available bytes without filling the host disk and verifies the previous vector results and query epoch remain unchanged. All 106 service tests passed with the pinned model and SDK enabled. Actual operating-system disk exhaustion remains a separate recovery scenario.
+
+## Vector capacity fallback — 16 October
+
+The exact vector scan retains its 200,000-chunk default bound. Exceeding it now returns lexical candidates with an explicit capacity warning in hybrid mode and `VECTOR_CAPACITY_EXCEEDED` in vector-only mode, rather than escaping as an unhandled operation failure. An actual-model fixture lowers the scan bound to exercise both paths without constructing a huge database; it verifies no partial vector channel or coverage claim survives fallback. Search plan version 3 identifies the filtered/exact-ranking implementation. All 107 service tests passed with no skips.

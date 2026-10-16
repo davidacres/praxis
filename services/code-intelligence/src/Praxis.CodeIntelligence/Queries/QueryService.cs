@@ -11,7 +11,8 @@ namespace Praxis.CodeIntelligence.Queries;
 public sealed class QueryService(IndexDatabase database, ModelStore? models = null)
 {
     public const int SearchCountCacheVersion = 1;
-    public const int SearchPlanVersion = 2;
+    public const int SearchPlanVersion = 3;
+    internal int VectorChunkLimit { get; init; } = 200_000;
     private readonly CursorCodec cursors = new();
     private sealed record SearchCountKey(string Repository, long Generation, long Epoch, string? Context, string? Kinds, string? Projects, string? Profile);
     private readonly Dictionary<SearchCountKey, long> searchCounts = new();
@@ -194,8 +195,18 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         var kinds = filters?["kinds"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
                         var projects = filters?["projectIds"]?.AsArray().Select(x => x!.GetValue<string>()).ToArray();
                         var languages = filters?["languages"]?.AsArray();
-                        var vectors = languages is { Count: > 0 } && !languages.Any(x => x!.GetValue<string>() == "csharp") ? []
-                            : ModelStore.Candidates(connection, transaction, repositoryId, embedded, contextId, kinds, projects, cancellationToken);
+                        IReadOnlyList<VectorCandidate> vectors;
+                        try
+                        {
+                            vectors = languages is { Count: > 0 } && !languages.Any(x => x!.GetValue<string>() == "csharp") ? []
+                                : ModelStore.Candidates(connection, transaction, repositoryId, embedded, contextId, kinds, projects, cancellationToken, VectorChunkLimit);
+                        }
+                        catch (InvalidOperationException error) when (error.Message == "VECTOR_CAPACITY_EXCEEDED")
+                        {
+                            if (mode == "vector") throw new QueryException("VECTOR_CAPACITY_EXCEEDED", "The exact vector scan exceeds the configured chunk capacity.");
+                            vectors = []; embedded = null;
+                            warnings.Add(new JsonObject { ["code"] = "VECTOR_CAPACITY_EXCEEDED", ["message"] = "Vector capacity exceeded; lexical results returned." });
+                        }
                         // Fetch the bounded top-k rows once, then retain vector score order.
                         var vectorRows = vectors.Count == 0 ? new Dictionary<string, JsonObject>(StringComparer.Ordinal)
                             : Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND symbol_id IN(SELECT value FROM json_each($1))",
@@ -203,7 +214,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                                 .ToDictionary(row => Text(row, "symbol_id")!, StringComparer.Ordinal);
                         var position = 0;
                         foreach (var vector in vectors) Add(vectorRows[vector.SymbolId], "vector", ++position);
-                        channels.Add("vector");
+                        if (embedded is not null) channels.Add("vector");
                     }
                     if (mode != "vector")
                     {

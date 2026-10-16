@@ -43,6 +43,30 @@ public sealed class ModelTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    [LocalModelFact]
+    public void VectorCapacityReturnsHonestHybridFallbackAndExplicitRequiredVectorError()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pci-vector-capacity-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var database = new IndexDatabase(Path.Combine(root, "data", "index.db")); database.Initialize();
+            File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { int Preserve() => 1; }");
+            var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root); indexer.Index(repository);
+            using var store = new ModelStore(database, Path.Combine(root, "models"));
+            var profile = store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!); store.Activate(repository, profile, CancellationToken.None);
+            var queries = new QueryService(database, store) { VectorChunkLimit = 1 };
+            JsonObject Search(string mode) => queries.Execute("search_code", new() { ["repositoryId"] = repository, ["query"] = "Preserve", ["mode"] = mode }, new HashSet<string> { repository });
+            var hybrid = Search("hybrid"); Assert.Null(hybrid["error"]);
+            Assert.NotEmpty(hybrid["data"]!["matches"]!.AsArray());
+            Assert.DoesNotContain(hybrid["data"]!["channelsUsed"]!.AsArray(), channel => channel!.GetValue<string>() == "vector");
+            Assert.Equal(0, hybrid["data"]!["vectorCoveredSymbolCount"]!.GetValue<long>());
+            Assert.Contains(hybrid["warnings"]!.AsArray(), warning => warning!["code"]!.GetValue<string>() == "VECTOR_CAPACITY_EXCEEDED");
+            Assert.Equal("VECTOR_CAPACITY_EXCEEDED", Search("vector")["error"]!["code"]!.GetValue<string>());
+            Assert.Null(Search("lexical")["error"]); Assert.Empty(database.Check());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void RepresentationPrioritizesIdentityAndRecordsBoundedSourceCoordinates()
     {

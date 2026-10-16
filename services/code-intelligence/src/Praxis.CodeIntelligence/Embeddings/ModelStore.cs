@@ -146,7 +146,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         }
     }
 
-    public static IReadOnlyList<VectorCandidate> Candidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default)
+    public static IReadOnlyList<VectorCandidate> Candidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000)
     {
         cancellationToken.ThrowIfCancellationRequested();
         LocalModel.ValidateVector(query.Vector); var parameters = new List<object?> { repositoryId, query.Fingerprint, contextId };
@@ -167,7 +167,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         var bytes = new byte[LocalModel.Dimensions * 4];
         while (reader.Read())
         {
-            if (++scanned > 200_000) throw new InvalidOperationException("VECTOR_CAPACITY_EXCEEDED");
+            if (++scanned > maximumChunks) throw new InvalidOperationException("VECTOR_CAPACITY_EXCEEDED");
             if ((scanned & 127) == 0) cancellationToken.ThrowIfCancellationRequested();
             if (reader.GetBytes(1, 0, bytes, 0, bytes.Length) != bytes.Length) continue;
             if (!VectorScoring.TryScore(bytes, query.Vector, out var score)) continue;
