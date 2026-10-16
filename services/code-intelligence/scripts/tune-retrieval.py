@@ -47,18 +47,18 @@ try:
   collected.append(dict(id=case['id'],category=case['category'],expected=expected,candidates=matches))
   print('Collected tuning',case['id'],len(matches),flush=True)
  trials=[]
- for lexical in [1,1.25,1.5,2,3,4]:
+ for lexical in [1,1.25,1.5,2,3,4,6,8,12,16,24,32,48,64,96,128]:
   values=[];rr=[];per={}
   for case in collected:
    if not case['expected']:continue
    def key(m):
-    ranks=m['ranks'];score=sum((lexical if channel=='lexical' else 1)/(60+rank) for channel,rank in ranks.items())
+    ranks=m['ranks'];score=sum((lexical if channel=='lexical' else .5 if channel=='alias' else 1)/(60+rank) for channel,rank in ranks.items())
     return (-(1 if 'exact' in ranks else 0),-score,m['symbolId'])
    ordered=[m['symbolId'] for m in sorted(case['candidates'],key=key)[:10]]
    recall=len(set(ordered)&set(case['expected']))/len(case['expected'])
    mrr=next((1/(i+1) for i,v in enumerate(ordered) if v in case['expected']),0)
    values.append(recall);rr.append(mrr);per[case['id']]=recall
-  trials.append(dict(lexicalWeight=lexical,vectorWeight=1,aliasWeight=1,macroRecallAt10=sum(values)/len(values),mrrAt10=sum(rr)/len(rr),perCaseRecall=per))
+  trials.append(dict(lexicalWeight=lexical,vectorWeight=1,aliasWeight=.5,macroRecallAt10=sum(values)/len(values),mrrAt10=sum(rr)/len(rr),perCaseRecall=per))
  best=max(trials,key=lambda t:(t['macroRecallAt10'],t['mrrAt10'],-t['lexicalWeight']))
  output=dict(selectionBasis='Only the 40 frozen tuning cases; maximum macro recall, then MRR, then lower lexical weight. No held-out cases loaded for selection.',corpusHash='sha256:'+hashlib.sha256(raw_corpus).hexdigest(),indexGeneration=snapshot['indexGeneration'],queryEpoch=snapshot['queryEpoch'],selected=best,trials=trials,cases=collected)
  args.output.write_text(json.dumps(output,indent=2)+'\n');print('SELECTED',best,flush=True)
