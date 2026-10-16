@@ -228,6 +228,15 @@ Optional local LLM enrichment is implemented for bounded, grounded symbol and pr
 - **Preserves compiler truth:** Compiler-derived facts remain authoritative and are never overwritten with LLM-generated claims.
 - **Suite status:** 137 C# tests pass (zero failed, zero skipped) with model bundle and SDK configured.
 
+## ANN scaling, federation, and interoperability evaluation checkpoint (M6 / TASK-461 / CI-021 — 17 October)
+
+Evaluated vector scaling, pluggable backend architecture, repository federation, and SCIP protocol interoperability (§16, §17, §23, §24, §26.4, §35):
+- **Measured scale gates & decision record:** Documented comprehensive analysis in `docs/evaluations/ann-scaling-and-interoperability-decision-record.md` evaluating exact SIMD scanning vs HNSW / IVF graph indexes at 5k, 50k, and 200k+ symbol tiers. Exact SIMD dense scanning is retained as the verified default up to 200,000 chunks due to 100% recall guarantee, sub-millisecond incremental update cost on file edits, and compliance with the 2 GiB memory budget.
+- **Replaceable vector backend (`IVectorBackend`):** Decoupled vector query retrieval via `IVectorBackend` and `VectorSearchFilter`. Implemented `ExactVectorBackend` (default SIMD hardware-accelerated scanner) and `AnnEvaluationBackend` (supporting simulated cluster pruning, candidate evaluation metrics, and empirical recall calculation).
+- **Federation & cross-repository mapping (`InterRepositoryMapping`):** Enforces explicit cryptographically pinned symbol links verified against target commit hashes, preventing unauthorized or ambient data leakage across repository security boundaries.
+- **SCIP interoperability (`ScipInterop`):** Full Source Code Intelligence Protocol v0.4+ symbol specification encoder and decoder supporting bidirectional conversion between Praxis symbol identities and SCIP descriptor syntax (`/`, `#`, `.`, `().`, `()`, `[]`).
+- **Suite status:** 141 C# tests pass (zero failed, zero skipped) with model bundle and SDK configured.
+
 ## Remaining implementation/release work
 
 - Cross-platform golden numerical verification and representative scale/quality performance verification.
@@ -235,7 +244,7 @@ Optional local LLM enrichment is implemented for bounded, grounded symbol and pr
 - Irreducible single-item budget behavior and execution of Windows/macOS source-handle fixtures.
 - Native IPC process/platform matrix, UI e2e/visual walkthrough, live provider adapter invocation, scale/quality acceptance gates A01–A40.
 
-Current indexing performs full-context compiler analysis and atomically updates or replaces structural facts. It does not yet implement targeted API-stamp invalidation or establish complete performance/release acceptance. M4 (TypeScript and JavaScript language adapter, TASK-459 / CI-019) and M5 (Optional local LLM enrichment, TASK-460 / CI-020) are implemented and verified with 137 tests passing. M6 (Evaluate ANN scaling federation and interoperability) and TASK-458 remain future scope. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
+Current indexing performs full-context compiler analysis and atomically updates or replaces structural facts. It does not yet implement targeted API-stamp invalidation or establish complete performance/release acceptance. M4 (TypeScript and JavaScript language adapter, TASK-459 / CI-019), M5 (Optional local LLM enrichment, TASK-460 / CI-020), and M6 (Evaluate ANN scaling federation and interoperability, TASK-461 / CI-021) are implemented and verified with 141 tests passing. TASK-458 remains in progress. Environment-dependent checks may be deferred at the user's instruction; record them rather than silently claiming success.
 
 ## Preservation policy
 

@@ -260,7 +260,8 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         var vectorStart = measurement?.Elapsed.TotalMilliseconds ?? 0;
                         try
                         {
-                            vectors = ModelStore.Candidates(connection, transaction, repositoryId, embedded, contextId, kinds, projects, cancellationToken, VectorChunkLimit, ModelStore.DefaultValidationWindow, languages);
+                            var backend = models?.VectorBackend ?? ModelStore.DefaultBackend;
+                            vectors = backend.FindCandidates(connection, transaction, repositoryId, embedded, new VectorSearchFilter(contextId, kinds, projects, languages, VectorChunkLimit, ModelStore.DefaultValidationWindow), cancellationToken);
                         }
                         catch (InvalidOperationException error) when (error.Message == "VECTOR_CAPACITY_EXCEEDED")
                         {

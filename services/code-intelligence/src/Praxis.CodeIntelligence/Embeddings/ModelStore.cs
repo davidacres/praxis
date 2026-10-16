@@ -164,7 +164,13 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
     /// saturated, or the chunk capacity is exceeded, the full validated scan
     /// decides instead, so the result never depends on the window size.
     /// </summary>
-    public static IReadOnlyList<VectorCandidate> Candidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000, int validationWindow = DefaultValidationWindow, IReadOnlyList<string>? languages = null)
+    public static readonly IVectorBackend DefaultBackend = new ExactVectorBackend();
+    public IVectorBackend VectorBackend { get; set; } = DefaultBackend;
+
+    public static IReadOnlyList<VectorCandidate> Candidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000, int validationWindow = DefaultValidationWindow, IReadOnlyList<string>? languages = null) =>
+        CandidatesCore(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks, validationWindow, languages);
+
+    internal static IReadOnlyList<VectorCandidate> CandidatesCore(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000, int validationWindow = DefaultValidationWindow, IReadOnlyList<string>? languages = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         LocalModel.ValidateVector(query.Vector);

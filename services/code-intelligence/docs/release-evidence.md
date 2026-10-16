@@ -797,3 +797,26 @@ The M5 optional local LLM enrichment (`Praxis.CodeIntelligence.Enrichment`) was 
 6. **Test evidence:**
    - 137 tests pass (0 failures, 0 skipped) under `PRAXIS_DOTNET` and `PRAXIS_MODEL_BUNDLE` via `npm run test:code-intelligence`.
    - All 5 dedicated enrichment tests in `EnrichmentTests.cs` pass covering loopback validation, schema grounding rejection, cached `explain_symbol` responses, aggregate `summarize_project` descriptions, and invalidation upon dependency edits.
+
+## ANN scaling, federation, and interoperability evaluation (M6 / CI-021 / TASK-461) — 17 October
+
+The M6 evaluation, architecture, and interop integration were completed on `feat/code-intelligence-m6-ann-interop`:
+
+1. **Scale gates analysis & decision record:**
+   - Published `docs/evaluations/ann-scaling-and-interoperability-decision-record.md`.
+   - Analyzed exact SIMD vector scoring vs HNSW/IVF-PQ across small (5k), medium (50k), and large (200k+) symbol scales.
+   - Retained SIMD-accelerated dense scan as default: guarantees 100% recall, zero graph update overhead on incremental edits, and operates well within the 2 GiB memory ceiling (~850–1,350 MiB at 50k symbols).
+   - Established threshold for activating approximate index partitioning at 200,000 chunks or if hybrid query p95 exceeds 500 ms SLA.
+2. **Pluggable vector backend architecture (`IVectorBackend`):**
+   - Decoupled `ModelStore` vector candidate retrieval through `IVectorBackend` and `VectorSearchFilter`.
+   - Provided `ExactVectorBackend` (default SIMD hardware-accelerated scanner).
+   - Provided `AnnEvaluationBackend` (supporting simulated cluster pruning, candidate evaluation metrics, and empirical recall calculation).
+3. **Federation & cryptographic pin mapping (`InterRepositoryMapping`):**
+   - Implemented `InterRepositoryMapping` and `InterRepositoryMappingRegistry` for explicit cross-repository symbol mapping.
+   - Enforces cryptographic target commit hash pinning (`TargetCommitHash`), preventing stale/divergent resolution or unauthorized ambient access across repository boundaries (§17, §35).
+4. **SCIP protocol interoperability (`ScipInterop`):**
+   - Implemented Source Code Intelligence Protocol v0.4+ encoder and decoder.
+   - Supports round-trip translation between internal Praxis symbol identities and SCIP descriptor grammar (`/`, `#`, `.`, `().`, `()`, `[]`).
+5. **Test evidence:**
+   - 141 tests pass (0 failures, 0 skipped) under `PRAXIS_DOTNET` and `PRAXIS_MODEL_BUNDLE` via `npm run test:code-intelligence`.
+   - `AnnAndInteropTests.cs` covers backend switching, ANN evaluation pruning metrics, SCIP symbol formatting/parsing round-trip, and commit-hash verified inter-repository mapping.
