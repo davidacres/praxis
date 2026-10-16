@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "platform": "darwin",
+  "architecture": "arm64",
+  "cpu": "Apple M3 Pro",
+  "logicalProcessors": 12,
+  "memoryBytes": 19327352832,
+  "timestampUtc": "2026-10-16T19:15:15.919Z",
+  "symbols": 49999,
+  "queriesPerMode": 200,
+  "measurement": "Native owner over its local Unix-socket protocol from a persistent client; includes connect, token handshake, admission, dispatch and framing. Setup is untimed.",
+  "corpusHash": "sha256:f14bc8736fbc2bbcf4c984a76c488edf6c55324d0cadd3b0a0f2581ba2a99993",
+  "ownerInitialIndexMs": 18819.564208,
+  "modelFingerprint": "sha256:cee9c5b0d7765f298742c8c40da17095de5338a4b46e4f310cedcc4eb23dffba",
+  "ownerVectorsMs": 523014.473542,
+  "groups": [
+    {
+      "category": "exact",
+      "clients": 1,
+      "mode": "lexical",
+      "count": 200,
+      "errors": 0,
+      "errorSamples": [],
+      "p50Ms": 0.9645000000018626,
+      "p95Ms": 1.2815000000409782,
+      "p99Ms": 1.6521669999929145,
+      "maximumMs": 2.1090410000178963
+    },
+    {
+      "category": "exact",
+      "clients": 1,
+      "mode": "hybrid",
+      "count": 200,
+      "errors": 0,
+      "errorSamples": [],
+      "p50Ms": 79.80820900003891,
+      "p95Ms": 82.76687500008848,
+      "p99Ms": 86.23395899997558,
+      "maximumMs": 580.8993750000373
+    },
+    {
+      "category": "exact",
+      "clients": 4,
+      "mode": "lexical",
+      "count": 200,
+      "errors": 0,
+      "errorSamples": [],
+      "p50Ms": 6.152083000051789,
+      "p95Ms": 7.846625000005588,
+      "p99Ms": 8.451375000062399,
+      "maximumMs": 9.179415999911726
+    },
+    {
+      "category": "exact",
+      "clients": 4,
+      "mode": "hybrid",
+      "count": 200,
+      "errors": 0,
+      "errorSamples": [],
+      "p50Ms": 123.60820800007787,
+      "p95Ms": 152.06454100005794,
+      "p99Ms": 410.33024999999907,
+      "maximumMs": 411.8924579999875
+    },
+    {
+      "category": "terminology",
+      "clients": 1,
+      "mode": "lexical",
+      "count": 200,
+      "errors": 0,
+      "errorSamples": [],
+      "p50Ms": 45.56220799998846,
+      "p95Ms": 47.543291000067256,
+      "p99Ms": 48.44270899996627,
+      "maximumMs": 49.04787499993108
+    },
+    {
+      "category": "terminology",
+      "clients": 1,
+      "mode": "hybrid",
+      "count": 200,
+      "errors": 0,
+      "errorSamples": [],
+      "p50Ms": 121.28233399998862,
+      "p95Ms": 124.95741599996109,
+      "p99Ms": 132.8992909999797,
+      "maximumMs": 340.0743749999674
+    },
+    {
+      "category": "terminology",
+      "clients": 4,
+      "mode": "lexical",
+      "count": 200,
+      "errors": 0,
+      "errorSamples": [],
+      "p50Ms": 66.02329200005624,
+      "p95Ms": 84.23687499994412,
+      "p99Ms": 90.79341599997133,
+      "maximumMs": 93.24004100007005
+    },
+    {
+      "category": "terminology",
+      "clients": 4,
+      "mode": "hybrid",
+      "count": 200,
+      "errors": 0,
+      "errorSamples": [],
+      "p50Ms": 180.33608300006017,
+      "p95Ms": 193.03437499993015,
+      "p99Ms": 194.07433299999684,
+      "maximumMs": 198.39687499997672
+    }
+  ],
+  "gates": {
+    "noQueryErrors": true,
+    "lexicalP95AtMost100Ms": true,
+    "hybridP95AtMost500Ms": true
+  },
+  "ownerPeakRssSampledBytes": 1505558528,
+  "ownerRssSamplingNote": "ps sampled once per second; short peaks between samples are not captured",
+  "unmeasured": [
+    "retrieval-only owner phases (owner reports no timings)",
+    "concurrent edits through the owner",
+    "Windows named-pipe transport",
+    "MCP stdio/provider framing"
+  ],
+  "passedMeasuredGates": true
+}

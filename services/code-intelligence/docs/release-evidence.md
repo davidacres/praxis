@@ -18,6 +18,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Query matrix (plan 6) | Five runs × exact/terminology/behaviour/negative × one/four readers × 200 queries: 39/40 processes pass every gate; hybrid p95 max 322.743 ms; lexical p95 max 82.942 ms; zero errors | **Fails:** behaviour four-reader run 1 retrieval-only p95 301.9 ms; other four-reader terminology/behaviour runs 236–247 ms (thin margin). Concurrent edits, cross-project, owner/wire, full-process RSS, reference machine unmeasured |
 | Query matrix (mapping v7) | Same protocol after the memory fix: complete, zero errors, all lexical/hybrid p95 pass; 36/40 processes pass every gate | **Fails:** four-reader retrieval-only behaviour runs 1–3 (261.2/261.2/270.4 ms) and terminology run 4 (250.2 ms); the memory fix costs about 5–25 ms on broad four-reader retrieval |
 | Query matrix (vector plan 5, native scan) | Five runs × four categories × one/four readers × 200 queries: **40/40 processes pass every gate**, zero errors; four-reader retrieval-only p95 max 172.0 ms, hybrid p95 max 182.8 ms, lexical p95 max 85.1 ms | 12-core Mac only; reference 8-core/16 GiB machine, cross-project and owner/wire latency unmeasured |
+| Owner protocol queries | 50k via the native owner's socket protocol (connect, token handshake, admission, dispatch, framing): zero errors; hybrid p95 82.8/152.1 ms (exact, 1/4 clients), 125.0/193.0 ms (terminology); owner sampled peak RSS 1.51 GB through its own indexing, vectors and queries | Single run; Windows named pipes and MCP stdio framing not timed; exact 4-client hybrid p99 410 ms |
 | Broader terminology performance (history) | (Superseded for the vector path by the ranked-validation checkpoint below: one-reader hybrid p95 228.496 ms, four-reader 365.737 ms, single pilot.) Two independent 50k processes, matched 200-query sets/mode: one reader lexical/hybrid p95 74.371/353.665 ms; four readers 98.664/507.817 ms; no errors | Four-reader hybrid fails 500 ms and retrieval-only fails 250 ms. Five repeats, other categories and concurrent edits remain open |
 | Native CI | Run 38897870350 passed Windows/macOS/Linux; follow-up 38900116034 found harness/fixture issues now fixed locally | Final mapping-v6 run 38904504214 passes Windows/macOS/Linux (112 tests per host, schemas, native packaging, retained/matrix safeguards and watcher smoke) |
 
@@ -663,3 +664,16 @@ Faster queries meant about 45% more queries ran during the edits, overlapping mo
 Query-only workloads peak around 0.85 GiB and never reach the soft limit, so the 40/40 plan-5 query matrix is unaffected. Admission does not cap Roslyn analysis itself; §31.3 allows large projects to exceed the reference profile with reported degraded capacity. That reporting, and stopping background inference at the soft limit, are not implemented.
 
 Background inference deferral (§31.3): at or above the memory soft limit the scheduler leases only non-embedding jobs, so queued model activation and vector refresh stay pending (repository model `building`) until resident memory falls; indexing continues. `MemoryPressureTests.PressureDefersBackgroundInferenceUntilMemoryFalls` uses the real model and fails if the gate is removed. 118 C# tests pass, zero skipped.
+
+## Owner-protocol query latency — 16 October
+
+`scripts/benchmark-owner-queries.mjs` starts a real native owner. The owner indexes a 49,999-symbol synthetic corpus with its own durable jobs (untimed: 18.8 s analysis, 523 s vectors) and is driven over its Unix-socket protocol from a persistent Node client: one connection per request, as the native client does, including connect, token handshake, per-repository admission (four query slots), dispatch and JSON framing. There are 200 timed queries per cell after 20 warmups. Raw: `benchmarks/macos-arm64-50000-owner-protocol-queries.praxis.json`.
+
+| Category | Clients | Lexical p50 / p95 / p99 | Hybrid p50 / p95 / p99 |
+|---|---|---|---|
+| exact | 1 | 1.0 / 1.3 / 1.7 | 79.8 / 82.8 / 86.2 |
+| exact | 4 | 6.2 / 7.8 / 8.5 | 123.6 / 152.1 / 410.3 |
+| terminology | 1 | 45.6 / 47.5 / 48.4 | 121.3 / 125.0 / 132.9 |
+| terminology | 4 | 66.0 / 84.2 / 90.8 | 180.3 / 193.0 / 194.1 |
+
+Zero errors; all lexical (≤100 ms) and hybrid (≤500 ms) gates pass. Compared with the direct-API plan-5 matrix, the owner path adds about 1–15 ms at p95 and up to about 26 ms for four-client exact hybrid. One tail outlier, four-client exact hybrid p99 410 ms, is recorded. The owner process's resident memory, sampled once per second, peaked at 1,505,558,528 bytes across its own indexing, vector build and queries. Retrieval-only phases cannot be separated on this path because the owner reports no timings. Windows named-pipe transport and MCP stdio framing are not timed by this runner.
