@@ -1,0 +1,14 @@
+{
+  "implementationCommit": "f945c529",
+  "assemblyHashes": {
+    "Praxis.CodeIntelligence.dll": "sha256:4c56bb983775701d1bc07366bebbcc61508cf06ea923d9c334b9f77f3af287e8",
+    "Praxis.CodeIntelligence.Benchmarks.dll": "sha256:d4862c4fef4a196e36409a919168b596f880af45b6257733bc93e224675ce3a1"
+  },
+  "measurement": "Full process /usr/bin/time -l; cold indexing, local inference, idle queries, edit publication and refresh, then 25 concurrent edits with four alternating lexical/hybrid readers",
+  "maximumResidentSetBytes": 2594717696,
+  "limitBytes": 2147483648,
+  "peakRssAtMost2GiB": false,
+  "note": "The benchmark's in-process peakRssAtMost2GiB gate is null on macOS (PeakWorkingSet64 unavailable); this independent measurement fails the budget.",
+  "rawReport": "macos-arm64-50000-plan6-concurrent-edits-full.praxis.json",
+  "fullReleaseQualified": false
+}
