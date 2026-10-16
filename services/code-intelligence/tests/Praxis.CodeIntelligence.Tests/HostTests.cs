@@ -134,12 +134,12 @@ public sealed class HostTests
         var root = Path.Combine(Path.GetTempPath(), "praxis-host-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
-            var runtime = new ServiceRuntime(Path.Combine(root, "data")); var id = runtime.Indexer.Register(root);
+            using var runtime = new ServiceRuntime(Path.Combine(root, "data")); var id = runtime.Indexer.Register(root);
             JsonObject Request(string action) => new() { ["action"] = action, ["repositoryId"] = id, ["client"] = "codex" };
             JsonObject Query(string client) => new() { ["action"] = "query", ["client"] = client, ["tool"] = "get_index_status", ["arguments"] = new JsonObject { ["repositoryId"] = id } };
             Assert.Equal("ACCESS_DENIED", runtime.Dispatch(Query("codex"), CancellationToken.None)["error"]!["code"]!.GetValue<string>());
             Assert.Null(runtime.Dispatch(Request("grant"), CancellationToken.None)["error"]);
-            Assert.Null(new ServiceRuntime(Path.Combine(root, "data")).Dispatch(Query("codex"), CancellationToken.None)["error"]);
+            using (var restarted = new ServiceRuntime(Path.Combine(root, "data"))) Assert.Null(restarted.Dispatch(Query("codex"), CancellationToken.None)["error"]);
             Assert.Equal("ACCESS_DENIED", runtime.Dispatch(Query("claude"), CancellationToken.None)["error"]!["code"]!.GetValue<string>());
             runtime.Dispatch(Request("revoke"), CancellationToken.None);
             Assert.Equal("ACCESS_DENIED", runtime.Dispatch(Query("codex"), CancellationToken.None)["error"]!["code"]!.GetValue<string>());
