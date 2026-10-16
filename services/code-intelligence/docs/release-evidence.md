@@ -416,3 +416,16 @@ Terminology pilot, same query-set hash, zero errors (`benchmarks/macos-arm64-500
 | 4 | 280.9 ms | 260.2 ms (**fails 250**) | 140.8 ms (was 225.1) | 98.8 ms |
 
 Single run, one category. Edit-publication cost (vector bytes are now written twice) has not been re-measured.
+
+## Lexical candidate window checkpoint (search plan 6) — 16 October
+
+The lexical arm no longer joins every FTS match to `symbols` just to take 100. It reads exact-name rows first through the indexed `symbols(repository_id,name)` lookup, which is skipped when no symbol has that name. Next it reads the best 1024 matches by (`bm25`, symbol ID) and joins only those, applying the context, kind, project and language filters and excluding exact-name rows. If that yields fewer than 100 rows and the window was full, the previous full ranked join decides. The order is identical to the old `(name=query) DESC, score, symbol_id`. Vector-only searches no longer compute the lexical arm they discarded. A new test compares full responses for five queries × three kind filters × windows 1/7/150/1024 against the full join. It fails under each of three injected ordering/fallback/exclusion bugs. 114 C# tests pass, zero skipped.
+
+Terminology pilot (schema-5 fixture, same query-set hash, zero errors; `benchmarks/macos-arm64-50000-lexical-window-terminology-pilot*`):
+
+| Readers | Lexical p95 | Hybrid p95 | Retrieval p95 | Vector scan p95 |
+|---|---|---|---|---|
+| 1 | 47.2 ms (was 74.2) | 148.2 ms | 143.0 ms | 70.8 ms |
+| 4 | 78.1 ms (was 98.8) | 258.9 ms | **237.4 ms (passes 250)** | 146.9 ms |
+
+This is the first measurement where four-reader retrieval-only passes. The margin is about 13 ms, from a single run in one category, so it is not qualification.

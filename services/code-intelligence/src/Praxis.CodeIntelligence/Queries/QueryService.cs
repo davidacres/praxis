@@ -12,12 +12,14 @@ namespace Praxis.CodeIntelligence.Queries;
 public sealed class QueryService(IndexDatabase database, ModelStore? models = null)
 {
     public const int SearchCountCacheVersion = 1;
-    public const int SearchPlanVersion = 5;
+    public const int SearchPlanVersion = 6;
     public const string RankingProfile = "rrf-k60-lexical64-vector1-alias0.5-v3";
     public const double LexicalWeight = 64.0;
     public const double AliasWeight = 0.5;
     internal Action<QueryMeasurement>? MeasurementObserver { get; init; }
     internal int VectorChunkLimit { get; init; } = 200_000;
+    // Lexical candidates read before symbol joins; 0 always uses the full ranked join.
+    internal int LexicalWindow { get; init; } = 1024;
     private readonly CursorCodec cursors = new();
     private sealed record SearchCountKey(string Repository, long Generation, long Epoch, string? Context, string? Kinds, string? Projects, string? Profile);
     private readonly Dictionary<SearchCountKey, long> searchCounts = new();
@@ -174,7 +176,24 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         + " AND ($5 IS NULL OR json_array_length($5)=0 OR s.defining_context_id IN(SELECT context_id FROM contexts WHERE project_id IN(SELECT value FROM json_each($5)))) AND $6";
                     // Pin the matched-candidate side first. Otherwise SQLite may
                     // walk every repository symbol and probe the tiny ranked set.
-                    var rows = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(SELECT d.symbol_id,bm25(symbol_fts,5.0,3.0,1.0,1.0) AS score FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0) SELECT s.*,r.score FROM ranked r CROSS JOIN symbols s ON s.symbol_id=r.symbol_id WHERE s.repository_id=$1 AND ($2 IS NULL OR s.defining_context_id=$2) " + retrievalScope + " ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 100", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguage);
+                    const string rankedMatches = "SELECT d.symbol_id,bm25(symbol_fts,5.0,3.0,1.0,1.0) AS score FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0";
+                    const string scoped = " FROM ranked r CROSS JOIN symbols s ON s.symbol_id=r.symbol_id WHERE s.repository_id=$1 AND ($2 IS NULL OR s.defining_context_id=$2) " + retrievalScope;
+                    List<JsonObject> FullRanked() => Rows(connection, transaction, "WITH ranked AS MATERIALIZED(" + rankedMatches + ") SELECT s.*,r.score" + scoped + " ORDER BY (s.name=$3) DESC,r.score,s.symbol_id LIMIT 100", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguage);
+                    List<JsonObject> rows;
+                    if (mode == "vector") rows = [];
+                    else if (LexicalWindow <= 0) rows = FullRanked();
+                    else
+                    {
+                        // Same order as FullRanked without joining every match to symbols:
+                        // exact-name rows (indexed) first, then the best-scored window. If
+                        // the window was full yet yields too few rows, FullRanked decides.
+                        var named = connection.Scalar(transaction, "SELECT 1 FROM symbols WHERE repository_id=$0 AND name=$1 LIMIT 1", repositoryId, query) is not null;
+                        var exactNamed = named ? Rows(connection, transaction, "WITH ranked AS MATERIALIZED(" + rankedMatches + " AND d.symbol_id IN(SELECT symbol_id FROM symbols WHERE repository_id=$1 AND name=$3)) SELECT s.*,r.score" + scoped + " ORDER BY r.score,s.symbol_id LIMIT 100", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguage) : [];
+                        var windowed = Rows(connection, transaction, "WITH ranked AS MATERIALIZED(" + rankedMatches + " ORDER BY score,d.symbol_id LIMIT $7) SELECT s.*,r.score" + scoped + " AND s.name!=$3 ORDER BY r.score,s.symbol_id", fts, repositoryId, contextId, query, retrievalKinds, retrievalProjects, retrievalLanguage, LexicalWindow);
+                        rows = exactNamed.Concat(windowed).Take(100).ToList();
+                        if (rows.Count < 100 && Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM (SELECT 1 FROM symbol_fts JOIN search_documents d ON d.search_id=symbol_fts.rowid WHERE symbol_fts MATCH $0 LIMIT $1)", fts, LexicalWindow)) >= LexicalWindow)
+                            rows = FullRanked();
+                    }
                     bool Eligible(JsonObject row)
                     {
                         var filters = arguments["filters"] as JsonObject;
@@ -187,7 +206,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         }
                         return true;
                     }
-                    rows = mode == "vector" ? [] : rows.Where(Eligible).Take(100).ToList();
+                    rows = rows.Where(Eligible).Take(100).ToList();
                     var candidates = new Dictionary<string, (JsonObject Row, JsonObject Ranks, JsonArray Reasons, double Score)>(StringComparer.Ordinal);
                     void Add(JsonObject row, string channel, int position)
                     {
