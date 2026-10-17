@@ -36,39 +36,49 @@ def collect(executable, data, repository, corpus):
                 raise RuntimeError(json.dumps(response)[:500])
             return response
 
-        snapshot = None
-        for _ in range(240):  # wait for a settled snapshot with every model job done
+        # Wait for a settled snapshot: start-up reconciliation may republish once, so require
+        # the same generation and epoch, no queued jobs and an active model over several polls.
+        snapshot, previous, stable = None, None, 0
+        for _ in range(480):
             status = invoke('get_index_status', {})
             jobs = status['data']['jobsByState']
-            if not jobs.get('pending') and not jobs.get('leased') and any(m['state'] == 'active' for m in status['data']['models']):
-                snapshot = (status['indexGeneration'], status['queryEpoch'])
+            key = (status['indexGeneration'], status['queryEpoch'])
+            settled = not jobs.get('pending') and not jobs.get('leased') and any(m['state'] == 'active' for m in status['data']['models'])
+            stable = stable + 1 if settled and key == previous else 0
+            previous = key
+            if stable >= 30:  # ~15 s: the owner queues one reconcile a few seconds after start
+                snapshot = key
                 break
-            time.sleep(1)
+            time.sleep(.5)
         if snapshot is None:
             raise TimeoutError('Index did not settle with an active model')
-        collected = []
-        for case in corpus['queries']:
-            expected = [invoke('find_symbol', dict(**selector, limit=50))['data']['items'][0]['symbolId'] for selector in case['expected']]
-            candidates, cursor, seen = [], None, set()
-            while True:
-                request = dict(query=case['query'], mode='hybrid', limit=50, **({'cursor': cursor} if cursor else {}))
-                response = invoke('search_code', request)
-                if (response['indexGeneration'], response['queryEpoch']) != snapshot:
-                    raise ValueError('Mixed snapshot')
-                for match in response['data']['matches']:
-                    identity = match['symbol']['symbolId']
-                    if identity in seen:
-                        raise ValueError('Duplicate candidate across pages')
-                    seen.add(identity)
-                    candidates.append(dict(symbolId=identity, ranks=match['ranks']))
-                cursor = response.get('nextCursor')
-                if not cursor:
-                    break
-            collected.append(dict(id=case['id'], category=case['category'], split=case['split'], expected=expected, candidates=candidates))
-        return collected
+        return collect_settled(invoke, snapshot, corpus)
     finally:
         owner.terminate()
         owner.wait(timeout=10)
+
+
+def collect_settled(invoke, snapshot, corpus):
+    collected = []
+    for case in corpus['queries']:
+        expected = [invoke('find_symbol', dict(**selector, limit=50))['data']['items'][0]['symbolId'] for selector in case['expected']]
+        candidates, cursor, seen = [], None, set()
+        while True:
+            request = dict(query=case['query'], mode='hybrid', limit=50, **({'cursor': cursor} if cursor else {}))
+            response = invoke('search_code', request)
+            if (response['indexGeneration'], response['queryEpoch']) != snapshot:
+                raise ValueError('Mixed snapshot')
+            for match in response['data']['matches']:
+                identity = match['symbol']['symbolId']
+                if identity in seen:
+                    raise ValueError('Duplicate candidate across pages')
+                seen.add(identity)
+                candidates.append(dict(symbolId=identity, ranks=match['ranks']))
+            cursor = response.get('nextCursor')
+            if not cursor:
+                break
+        collected.append(dict(id=case['id'], category=case['category'], split=case['split'], expected=expected, candidates=candidates))
+    return collected
 
 
 def ranked(case, lexical, floor, cap):

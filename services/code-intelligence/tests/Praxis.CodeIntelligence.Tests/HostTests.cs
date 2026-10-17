@@ -170,6 +170,38 @@ public sealed class HostTests
     }
 
     [Fact]
+    public async Task AnIdleReconcileKeepsTheQueryEpochSoPagingCursorsSurvive()
+    {
+        // The monitor reconciles every repository each minute. Job bookkeeping alone must not
+        // change the query epoch (spec: heartbeat/log-only changes do not increment it), or every
+        // paging cursor expires within a minute on a repository nobody is editing.
+        var root = Path.Combine(Path.GetTempPath(), "praxis-epoch-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            for (var i = 0; i < 6; i++) File.WriteAllText(Path.Combine(root, $"Widget{i}.cs"), $"class Widget{i} {{ void Render() {{}} }}");
+            using var runtime = new ServiceRuntime(Path.Combine(root, "data")); var id = runtime.Indexer.Register(root); runtime.Indexer.Index(id);
+            JsonObject Search(string? cursor)
+            {
+                var arguments = new JsonObject { ["repositoryId"] = id, ["query"] = "Render", ["mode"] = "lexical", ["limit"] = 2 };
+                if (cursor is not null) arguments["cursor"] = cursor;
+                return runtime.Dispatch(new JsonObject { ["action"] = "query", ["tool"] = "search_code", ["arguments"] = arguments }, CancellationToken.None);
+            }
+            var first = Search(null); var cursor = first["nextCursor"]!.GetValue<string>();
+            runtime.Scheduler.Schedule(id, "index", "reconcile", "{}", runtime.Indexer.Get(id).Generation);
+            await runtime.MaintainAsync(CancellationToken.None);
+            var next = Search(cursor);
+            Assert.Null(next["error"]);
+            Assert.Equal(first["queryEpoch"]!.GetValue<long>(), next["queryEpoch"]!.GetValue<long>());
+            Assert.NotEmpty(next["data"]!["matches"]!.AsArray());
+            // A real change still invalidates the cursor.
+            File.WriteAllText(Path.Combine(root, "Widget0.cs"), "class Widget0 { void Render() {} void Hide() {} }");
+            runtime.Indexer.Index(id);
+            Assert.Equal("CURSOR_EXPIRED", Search(cursor)["error"]!["code"]!.GetValue<string>());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void OnlyReadsAndGrantFileChangesBypassTheWriter()
     {
         // Background index and vector jobs hold the writer for minutes; these must not queue behind them.

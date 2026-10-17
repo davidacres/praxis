@@ -29,7 +29,6 @@ public sealed class DurableScheduler(IndexDatabase database, TimeProvider? timeP
             "INSERT INTO jobs(job_id,repository_id,kind,input_key,payload_json,desired_revision,state,available_utc) VALUES($0,$1,$2,$3,$4,$5,'pending',$6) "
             + "ON CONFLICT(job_id) DO UPDATE SET payload_json=excluded.payload_json,desired_revision=excluded.desired_revision,state='pending',attempts=0,available_utc=excluded.available_utc,lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL,error_code=NULL,error_message=NULL",
             id, repositoryId, kind, inputKey, payload, desiredRevision, Now);
-        connection.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repositoryId);
         transaction.Commit(); return id;
     }
 
@@ -48,7 +47,6 @@ public sealed class DurableScheduler(IndexDatabase database, TimeProvider? timeP
         {
             connection.Execute(transaction, "UPDATE jobs SET state='leased',attempts=attempts+1,lease_token=$0,lease_owner=$1,lease_until_utc=$2 WHERE job_id=$3 AND state='pending'",
                 job.Token, owner, clock.GetUtcNow().AddSeconds(60).ToString("O"), job.Id);
-            connection.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", job.RepositoryId);
         }
         transaction.Commit(); return job;
     }
@@ -77,15 +75,13 @@ public sealed class DurableScheduler(IndexDatabase database, TimeProvider? timeP
             "UPDATE jobs SET state=$0,available_utc=$1,error_code=$2,error_message=$3,lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL,attempts=attempts-$8 "
             + "WHERE job_id=$4 AND state='leased' AND lease_token=$5 AND lease_owner=$6 AND lease_until_utc>$7",
             state, available, errorCode, errorCode is null ? null : diskFull ? "The index volume is full; the job resumes when space is available." : "Background operation failed; retry or inspect repository status.", job.Id, job.Token, owner, Now, diskFull ? 1 : 0) == 1;
-        if (changed) connection.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", job.RepositoryId);
         transaction.Commit(); return changed;
     }
 
     public void CancelRepository(string repositoryId)
     {
         using var connection = database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
-        var changed = connection.Execute(transaction, "UPDATE jobs SET state='obsolete',lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL WHERE repository_id=$0 AND state IN('pending','leased')", repositoryId);
-        if (changed > 0) connection.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repositoryId);
+        connection.Execute(transaction, "UPDATE jobs SET state='obsolete',lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL WHERE repository_id=$0 AND state IN('pending','leased')", repositoryId);
         transaction.Commit();
     }
 
