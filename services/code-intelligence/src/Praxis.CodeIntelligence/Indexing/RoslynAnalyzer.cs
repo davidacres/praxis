@@ -303,7 +303,6 @@ public sealed class RoslynAnalyzer
                     foreach (var operation in body.DescendantsAndSelf())
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        if (Owner(operation.Syntax) is not string owner) continue;
                         var method = operation switch
                         {
                             IBinaryOperation binary => binary.OperatorMethod,
@@ -313,7 +312,11 @@ public sealed class RoslynAnalyzer
                             IConversionOperation conversion => conversion.OperatorMethod,
                             _ => null
                         };
-                        if (method is { MethodKind: MethodKind.UserDefinedOperator or MethodKind.Conversion } && Target(method) is string targetId)
+                        var userDefined = method is { MethodKind: MethodKind.UserDefinedOperator or MethodKind.Conversion };
+                        // Resolve the owner only for the rare operation that records a fact.
+                        if (!userDefined && operation is not IPropertyReferenceOperation { Property.IsIndexer: true }
+                            || Owner(operation.Syntax) is not string owner) continue;
+                        if (userDefined && Target(method!) is string targetId)
                         {
                             var node = operation.Syntax;
                             var occurrenceId = Identity.Id("pci:occ:", input.Context.Id, source.Path, source.Hash, node.Span.Start, node.Span.End, owner, "calls", targetId);
