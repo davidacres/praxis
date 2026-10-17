@@ -12,9 +12,12 @@
 //   --no-mcp          print the `claude mcp add` command instead of running it
 //   --exe <path>      service executable (default $PRAXIS_CODE_INTELLIGENCE_EXE, then the local package)
 //   --data <folder>   service data folder (default: the desktop's)
-//   --model <folder>  model bundle to install and activate (default: the desktop's download, if present)
+//   --model <folder>  model bundle to install and activate (default: the desktop's download,
+//                     fetched from Hugging Face at the pinned revision when it is missing)
+//   --no-download     never download the model; search stays keyword-only without one
 import { execFile, spawnSync } from 'node:child_process';
-import { existsSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -40,7 +43,7 @@ if (!existsSync(bridge)) fail('MCP bridge not built. Run: npm run build:core');
 const data = option('--data') ?? load(path.join(repository, 'packages/core/out/codeIntelligence/runtimePaths.js')).codeIntelligenceDataDirectory();
 const { repositoryNames } = load(bridge); // the names the bridge shows agents
 const modelOption = option('--model');
-const printOnly = flag('--no-mcp'); const disconnect = flag('--disconnect'); const list = flag('--list');
+const printOnly = flag('--no-mcp'); const noDownload = flag('--no-download'); const disconnect = flag('--disconnect'); const list = flag('--list');
 if (!existsSync(executable)) fail(`Code intelligence service not found at ${executable}. Run: npm run package:code-intelligence`);
 
 async function call(...command) {
@@ -93,14 +96,59 @@ console.log(state === 'ready' ? ' done.' : ` still ${state}; it continues in the
 const desktopModel = path.join(process.platform === 'darwin' ? path.join(os.homedir(), 'Library/Application Support')
   : process.platform === 'win32' ? (process.env.APPDATA ?? path.join(os.homedir(), 'AppData/Roaming')) : (process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config')),
   'Praxis', 'models', 'semantic-search');
-const model = modelOption ?? process.env.PRAXIS_MODEL_BUNDLE ?? (existsSync(path.join(desktopModel, 'manifest.json')) ? desktopModel : undefined);
+// The service pins exactly one model; its manifest is the single source of truth.
+const pinned = JSON.parse(readFileSync(path.join(service, 'models/bge-small-manifest.json'), 'utf8'));
+const isPinned = folder => {
+  try { const manifest = JSON.parse(readFileSync(path.join(folder, 'manifest.json'), 'utf8')); return manifest.modelId === pinned.modelId && manifest.revision === pinned.revision; }
+  catch { return false; }
+};
+
+// Same files, revision and checksums as the desktop download, into the same folder, so the
+// desktop and this script share one copy. Written to a temporary folder and moved into place
+// only after both checksums match; an older model in that folder (MiniLM) is replaced.
+async function downloadPinnedModel(destination) {
+  const staging = `${destination}.download-${process.pid}`;
+  rmSync(staging, { recursive: true, force: true }); mkdirSync(staging, { recursive: true });
+  const assets = [
+    { name: 'vocab.txt', remote: 'vocab.txt', sha256: pinned.vocabSha256 },
+    { name: 'model.onnx', remote: 'onnx/model.onnx', sha256: pinned.modelSha256 }
+  ];
+  try {
+    for (const asset of assets) {
+      const response = await fetch(`https://huggingface.co/${pinned.modelId}/resolve/${pinned.revision}/${asset.remote}`);
+      if (!response.ok || !response.body) throw new Error(`${asset.name}: HTTP ${response.status}`);
+      const total = Number(response.headers.get('content-length')) || 0;
+      const hash = createHash('sha256'); const file = createWriteStream(path.join(staging, asset.name));
+      let received = 0; let shown = -1;
+      for await (const chunk of response.body) {
+        hash.update(chunk); received += chunk.length;
+        if (!file.write(chunk)) await new Promise(resolve => file.once('drain', resolve));
+        const percent = total ? Math.floor(received * 100 / total) : -1;
+        if (process.stdout.isTTY && percent !== shown && percent % 5 === 0) { shown = percent; process.stdout.write(`\r  ${asset.name}: ${percent}% of ${(total / 1e6).toFixed(0)} MB`); }
+      }
+      await new Promise((resolve, reject) => file.end(error => (error ? reject(error) : resolve())));
+      if (process.stdout.isTTY) process.stdout.write('\n');
+      if (hash.digest('hex') !== asset.sha256) throw new Error(`${asset.name} does not match its pinned SHA-256`);
+    }
+    writeFileSync(path.join(staging, 'manifest.json'), JSON.stringify(pinned, null, 2));
+    rmSync(destination, { recursive: true, force: true }); mkdirSync(path.dirname(destination), { recursive: true });
+    renameSync(staging, destination);
+  } catch (error) { rmSync(staging, { recursive: true, force: true }); throw error; }
+}
+
+let model = modelOption ?? process.env.PRAXIS_MODEL_BUNDLE ?? (isPinned(desktopModel) ? desktopModel : undefined);
+if (!model && !noDownload) {
+  console.log(`Downloading the semantic search model (${pinned.modelId}, about 133 MB, ${pinned.license}) …`);
+  try { await downloadPinnedModel(desktopModel); model = desktopModel; console.log('  Verified against the pinned checksums.'); }
+  catch (error) { console.log(`  Download failed: ${error.message}. Search stays keyword-only; run connect again to retry.`); }
+}
 if (model && state !== 'ready') console.log('Run connect again once indexing finishes to activate the semantic model.');
 else if (model) {
   const { fingerprint } = await call('model-install', model);
   const status = await call('status', repositoryId);
   if ((status?.models ?? []).some(entry => entry.fingerprint === fingerprint && entry.state === 'active')) console.log('Semantic model already active.');
   else { await call('model-activate', repositoryId, fingerprint); console.log('Semantic model activated; vectors build in the background.'); }
-} else console.log('No semantic model found, so search is keyword-only. Download it in Praxis (Code intelligence page) or pass --model <bundle>.');
+} else if (noDownload) console.log('No semantic model, so search is keyword-only (--no-download). Download it in Praxis or run connect without --no-download.');
 
 // `node` from PATH survives Node upgrades; a versioned install path (Homebrew's Cellar) does not.
 const node = spawnSync('node', ['--version'], { stdio: 'ignore', shell: process.platform === 'win32' }).status === 0 ? 'node' : process.execPath;

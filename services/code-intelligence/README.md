@@ -82,7 +82,7 @@ npm run connect:code-intelligence -- --list                   # what claude-cli 
 npm run connect:code-intelligence -- --disconnect /path/to/repo
 ```
 
-`connect` registers the folder, grants the client and waits for the index. If a model bundle is available it then activates the semantic model. The bundle comes from `--model`, `PRAXIS_MODEL_BUNDLE`, or the desktop's download. The first time, it also adds a user-scope `code-intelligence` MCP server to Claude Code; `--no-mcp` prints the command instead. Later repositories need only `connect`. The running server picks up new grants on its next lookup, without a restart. It needs `npm run package:code-intelligence` and `npm run build:core`. `--client`, `--exe` and `--data` override the defaults.
+`connect` registers the folder, grants the client and waits for the index. It then activates the semantic model. The bundle comes from `--model`, `PRAXIS_MODEL_BUNDLE`, or the desktop's download folder. When none of those holds the pinned model, `connect` downloads it into the desktop's folder, so the desktop and `connect` share one copy. The download is about 133 MB from Hugging Face at the pinned revision, and both files are checked against the manifest's SHA-256 before they are used. `--no-download` skips the download, and search stays keyword-only. The first time, it also adds a user-scope `code-intelligence` MCP server to Claude Code; `--no-mcp` prints the command instead. Later repositories need only `connect`. The running server picks up new grants on its next lookup, without a restart. It needs `npm run package:code-intelligence` and `npm run build:core`. `--client`, `--exe` and `--data` override the defaults.
 
 The bridge runs in this mode when its repository argument is `*`:
 
