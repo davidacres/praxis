@@ -132,6 +132,29 @@ test('configure button in notification opens Code Intelligence settings page', a
   await expect(settingsPanel).toBeVisible();
 });
 
+test('a finished download that the service then refuses is reported, never shown as enabled', async () => {
+  // Proven against the old progress listener, which declared success at 100% downloaded:
+  // the success line and the error rendered together.
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { semanticSearchPrompt: true });
+  await app.electronApp.evaluate(({ ipcMain, BrowserWindow }) => {
+    ipcMain.removeHandler('ai:downloadSemanticModel');
+    ipcMain.handle('ai:downloadSemanticModel', async () => {
+      for (const window of BrowserWindow.getAllWindows())
+        window.webContents.send('ai:semanticModelProgress', { bytesDownloaded: 133324998, totalBytes: 133324998, percent: 100 });
+      await new Promise(resolve => setTimeout(resolve, 300));
+      throw new Error('The local code intelligence service did not install the model: fixture refusal');
+    });
+  });
+
+  const notification = app.window.getByTestId('semantic-search-notification');
+  await expect(notification).toBeVisible({ timeout: 10000 });
+  await notification.getByTestId('semantic-notification-enable-btn').click();
+  await expect(notification.getByRole('alert')).toContainText('fixture refusal');
+  await expect(notification.getByTestId('semantic-notification-success')).toHaveCount(0);
+  // Still offered, so the user can retry.
+  await expect(notification.getByTestId('semantic-notification-enable-btn')).toBeVisible();
+});
+
 test('offers an update instead of enable when an earlier model is installed', async () => {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { semanticSearchPrompt: true });
   await app.electronApp.evaluate(({ ipcMain }) => {

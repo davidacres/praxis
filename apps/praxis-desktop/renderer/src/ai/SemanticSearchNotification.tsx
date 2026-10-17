@@ -40,16 +40,10 @@ export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNot
     void checkStatus();
 
     if (window.praxis?.ai?.onSemanticModelProgress) {
+      // Progress only: a finished download is not yet an installed, active model —
+      // handleEnable declares success once the whole install has resolved.
       const unsubscribe = window.praxis.ai.onSemanticModelProgress(ev => {
-        if (cancelled) return;
-        setProgress(ev);
-        if (ev.percent >= 100) {
-          setDownloading(false);
-          setSuccess(true);
-          setTimeout(() => {
-            if (!cancelled) setVisible(false);
-          }, 2500);
-        }
+        if (!cancelled) setProgress(ev);
       });
       return () => {
         cancelled = true;
@@ -75,6 +69,7 @@ export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNot
     setError('');
     try {
       await window.praxis.ai.downloadSemanticModel();
+      setDownloading(false);
       setSuccess(true);
       setTimeout(() => setVisible(false), 2500);
     } catch (err) {

@@ -44,8 +44,13 @@ async function invoke(args: string[], input?: Record<string, unknown>): Promise<
   const runtime = service();
   return new Promise((resolve, reject) => {
     const child = execFile(runtime.executable, [...(runtime.assembly ? [runtime.assembly] : []), ...args, '--data', dataDirectory()],
-      { windowsHide: true, timeout: 125_000, maxBuffer: 128 * 1024, encoding: 'utf8' }, (_error, stdout) => {
-        try { resolve(JSON.parse(stdout) as CodeIntelligenceResponse); } catch { reject(new Error('Local code intelligence service could not complete this operation.')); }
+      { windowsHide: true, timeout: 125_000, maxBuffer: 128 * 1024, encoding: 'utf8' }, (_error, stdout, stderr) => {
+        try { resolve(JSON.parse(stdout) as CodeIntelligenceResponse); } catch {
+          // The CLI reports failures it cannot express as JSON (such as an owner that will
+          // not start) on stderr; keep its first line so the cause is visible.
+          const reason = String(stderr ?? '').split(/\r?\n/).find(line => line.trim())?.trim().slice(0, 300);
+          reject(new Error('Local code intelligence service could not complete this operation' + (reason ? `: ${reason}` : '.')));
+        }
       });
     child.stdin?.on('error', () => { }); child.stdin?.end(input ? JSON.stringify(input) : undefined);
   });
@@ -108,6 +113,8 @@ export function registerCodeIntelligenceIpc(): void {
   ipcMain.handle('ai:downloadSemanticModel', async (): Promise<SemanticModelStatus> => {
     await downloadSemanticModel();
     const installRes = await invoke(['model-install', getSemanticModelDirectory()]);
+    // A downloaded model the service refused is not an installed one.
+    if (installRes.error) throw new Error(`The local code intelligence service did not install the model: ${installRes.error.message}`);
     const fp = (installRes.data as Record<string, unknown>)?.fingerprint;
     if (typeof fp === 'string') {
       setCachedFingerprint(fp);
