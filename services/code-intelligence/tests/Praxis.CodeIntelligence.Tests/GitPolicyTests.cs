@@ -24,7 +24,8 @@ public sealed class GitPolicyTests
                     process.Kill(entireProcessTree: true);
                     Assert.True(process.WaitForExit(5000), "Timed-out fixture Git process did not exit after kill.");
                 }
-                Assert.True(Task.WaitAll([output, error], 5000), "Fixture Git output did not drain.");
+                // A loaded Windows runner can take seconds to close the pipes after exit.
+                Assert.True(Task.WaitAll([output, error], 15_000), "Fixture Git output did not drain.");
                 Assert.True(exited, "Fixture Git setup exceeded 15 seconds.");
                 Assert.Equal(0, process.ExitCode);
             }

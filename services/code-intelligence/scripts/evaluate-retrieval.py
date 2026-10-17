@@ -115,9 +115,13 @@ def evaluate(corpus, invoke):
     before = invoke("get_index_status", {})
     if before.get("error"):
         raise ValueError("Cannot read index status: " + json.dumps(before["error"]))
+    # Vector mode needs an active model; without one it returns MODEL_UNAVAILABLE by
+    # design, which is not a tool error. Hybrid still reports its lexical fallback.
+    model_active = any(model.get("state") == "active" for model in before.get("data", {}).get("models", []))
+    modes = ("lexical", "hybrid", "vector") if model_active else ("lexical", "hybrid")
     results = []
     for case in corpus["queries"]:
-        for mode in ("lexical", "hybrid", "vector"):
+        for mode in modes:
             started = time.perf_counter()
             try:
                 response = invoke("search_code", {"query": case["query"], "mode": mode, "limit": 10})
@@ -177,7 +181,7 @@ def evaluate(corpus, invoke):
             "generatedExplanationsInScope": generated_in_scope,
             "notApplicable": [] if generated_in_scope else ["Generated explanation review: M3 exposes deterministic structural facts; optional LLM generation is M5."],
             "measurement": "Sequential CLI/owner transport included; not the capacity performance protocol",
-            "contexts": contexts,
+            "contexts": contexts, "vectorModeEvaluated": model_active,
             "before": {key: before.get(key) for key in ("indexGeneration", "queryEpoch")},
             "after": {key: after.get(key) for key in ("indexGeneration", "queryEpoch")},
             "summary": summary, "gates": gates, "passedDeclaredGates": all(gates.values()), "results": results}

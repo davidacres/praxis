@@ -71,7 +71,12 @@ const volumes = {
     description: '64 MiB NTFS VHDX mounted on an empty folder',
     async attach() {
       const image = path.join(work, 'index.vhdx'), script = path.join(work, 'diskpart.txt');
-      const diskpart = async lines => { await writeFile(script, lines.join('\r\n') + '\r\n'); return execute('diskpart', ['/s', script], { timeout: 120_000 }); };
+      const diskpart = async lines => {
+        await writeFile(script, lines.join('\r\n') + '\r\n');
+        // diskpart reports its reason on stdout; keep it in the error.
+        try { return await execute('diskpart', ['/s', script], { timeout: 120_000 }); }
+        catch (error) { throw Error(`diskpart failed (${lines[0]}): ${(error.stdout ?? '').trim().slice(-2000)}`); }
+      };
       await mkdir(volume);
       await diskpart([`create vdisk file="${image}" maximum=64 type=expandable`, `select vdisk file="${image}"`, 'attach vdisk',
         'create partition primary', 'format fs=ntfs quick label=PciDiskFull', `assign mount="${volume}"`]);
@@ -132,7 +137,8 @@ try {
 } finally {
   if (ownerProcess) try { process.kill(ownerProcess); await wait(1000); } catch { }
   if (detach) await detach().catch(error => console.error('Detach failed:', error.message));
-  await rm(work, { recursive: true, force: true });
+  // A still-attached image must not hide the original failure.
+  await rm(work, { recursive: true, force: true }).catch(error => console.error('Cleanup failed:', error.message));
 }
 await writeFile(output, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify({ output, passed: report.passed, gates: report.gates }));
