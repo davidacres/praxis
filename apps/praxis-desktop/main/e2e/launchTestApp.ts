@@ -81,6 +81,7 @@ const WORKFLOW_TUTORIAL_KEY = 'praxis-workflow-tutorial-seen';
 const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
 const SEMANTIC_SEARCH_DISMISS_KEY = 'praxis:semantic-search-prompt-dismissed';
+const SEMANTIC_SEARCH_UPDATE_DISMISS_KEY = 'praxis:semantic-search-update-dismissed';
 
 // The app stores a durable route per workspace under
 // `praxis-last-workspace-route:<workspaceId>`. The bare key is the legacy
@@ -162,12 +163,12 @@ export async function launchTestApp(
     }
   } else if (skipAiOnboarding || skipSemanticSearchPrompt) {
     await window.evaluate(
-      ({ aiKey, wfKey, skipWorkflowTutorial, searchKey, skipSemanticSearchPrompt }) => {
+      ({ aiKey, wfKey, skipWorkflowTutorial, searchKey, searchUpdateKey, skipSemanticSearchPrompt }) => {
         localStorage.setItem(aiKey, '1');
         if (skipWorkflowTutorial) localStorage.setItem(wfKey, '1');
-        if (skipSemanticSearchPrompt) localStorage.setItem(searchKey, 'true');
+        if (skipSemanticSearchPrompt) { localStorage.setItem(searchKey, 'true'); localStorage.setItem(searchUpdateKey, 'true'); }
       },
-      { aiKey: AI_ONBOARDED_KEY, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial, searchKey: SEMANTIC_SEARCH_DISMISS_KEY, skipSemanticSearchPrompt }
+      { aiKey: AI_ONBOARDED_KEY, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial, searchKey: SEMANTIC_SEARCH_DISMISS_KEY, searchUpdateKey: SEMANTIC_SEARCH_UPDATE_DISMISS_KEY, skipSemanticSearchPrompt }
     );
     await window.reload();
     await window.waitForLoadState('domcontentloaded');
@@ -193,10 +194,10 @@ async function seedWorkspace(
   skipSemanticSearchPrompt: boolean
 ): Promise<void> {
   await window.evaluate(
-    async ({ activeKey, routeKey, openNewSession, aiKey, skipAiOnboarding, wfKey, skipWorkflowTutorial, searchKey, skipSemanticSearchPrompt }) => {
+    async ({ activeKey, routeKey, openNewSession, aiKey, skipAiOnboarding, wfKey, skipWorkflowTutorial, searchKey, searchUpdateKey, skipSemanticSearchPrompt }) => {
       if (skipAiOnboarding) localStorage.setItem(aiKey, '1');
       if (skipWorkflowTutorial) localStorage.setItem(wfKey, '1');
-      if (skipSemanticSearchPrompt) localStorage.setItem(searchKey, 'true');
+      if (skipSemanticSearchPrompt) { localStorage.setItem(searchKey, 'true'); localStorage.setItem(searchUpdateKey, 'true'); }
       const existing = await window.praxis.workspaces.list();
       const workspace = existing[0] ?? (await window.praxis.workspaces.create({ name: 'Test Workspace', projectIds: [] }));
       localStorage.setItem(activeKey, workspace.id);
@@ -218,6 +219,7 @@ async function seedWorkspace(
       wfKey: WORKFLOW_TUTORIAL_KEY,
       skipWorkflowTutorial,
       searchKey: SEMANTIC_SEARCH_DISMISS_KEY,
+      searchUpdateKey: SEMANTIC_SEARCH_UPDATE_DISMISS_KEY,
       skipSemanticSearchPrompt
     }
   );

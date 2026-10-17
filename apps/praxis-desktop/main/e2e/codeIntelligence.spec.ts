@@ -7,9 +7,9 @@ test.afterEach(async () => {
   app = undefined;
 });
 
-async function openPanel() {
+async function openPanel({ updateAvailable = false }: { updateAvailable?: boolean } = {}) {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
-  await app.electronApp.evaluate(({ ipcMain }) => {
+  await app.electronApp.evaluate(({ ipcMain }, updateAvailable) => {
     let root = '/fixture/original';
     let generation = 1;
     let modelInstalled = false;
@@ -37,9 +37,10 @@ async function openPanel() {
       installed: modelInstalled,
       active: modelInstalled,
       fingerprint: modelInstalled ? 'sha256:fixture-fingerprint' : undefined,
-      sizeBytes: modelInstalled ? 90636722 : 0,
-      architecture: modelInstalled ? 'BERT / MiniLM (ONNX)' : undefined,
-      modelId: 'sentence-transformers/all-MiniLM-L6-v2',
+      sizeBytes: modelInstalled ? 133324998 : 0,
+      updateAvailable: !modelInstalled && updateAvailable,
+      architecture: modelInstalled ? 'BERT / bge-small (ONNX)' : undefined,
+      modelId: 'BAAI/bge-small-en-v1.5',
       downloading: false,
       progressPercent: modelInstalled ? 100 : 0
     }));
@@ -51,9 +52,9 @@ async function openPanel() {
         installed: true,
         active: true,
         fingerprint: 'sha256:fixture-fingerprint',
-        sizeBytes: 90636722,
-        architecture: 'BERT / MiniLM (ONNX)',
-        modelId: 'sentence-transformers/all-MiniLM-L6-v2',
+        sizeBytes: 133324998,
+        architecture: 'BERT / bge-small (ONNX)',
+        modelId: 'BAAI/bge-small-en-v1.5',
         downloading: false,
         progressPercent: 100
       };
@@ -70,7 +71,7 @@ async function openPanel() {
       generation = 0;
       root = '';
     });
-  });
+  }, updateAvailable);
 
   const win = app.window;
   await win.getByTestId('titlebar-settings').click();
@@ -114,7 +115,7 @@ test('semantic search card shows status, allows downloading model, and deleting 
   // Download button
   const downloadBtn = semanticCard.getByTestId('semantic-model-download-btn');
   await expect(downloadBtn).toBeVisible();
-  await expect(downloadBtn).toContainText('Enable Semantic Search (~90 MB)');
+  await expect(downloadBtn).toContainText('Enable Semantic Search (~130 MB)');
 
   // Trigger download
   await downloadBtn.click();
@@ -149,9 +150,22 @@ test('model details show the pinned model read-only once installed', async () =>
   await expect(details.locator('input')).toHaveCount(0);
 
   const metadata = panel.getByTestId('semantic-model-metadata');
-  await expect(metadata).toContainText('sentence-transformers/all-MiniLM-L6-v2');
-  await expect(metadata).toContainText('BERT / MiniLM (ONNX)');
-  await expect(metadata).toContainText('86.4 MB');
+  await expect(metadata).toContainText('BAAI/bge-small-en-v1.5');
+  await expect(metadata).toContainText('BERT / bge-small (ONNX)');
+  await expect(metadata).toContainText('127.1 MB');
+});
+
+test('an earlier model on disk is offered as an update, and updating activates semantic search', async () => {
+  const { panel } = await openPanel({ updateAvailable: true });
+  const badge = panel.getByTestId('semantic-model-badge');
+  await expect(badge).toHaveText('Model update required');
+  const updateBtn = panel.getByTestId('semantic-model-download-btn');
+  await expect(updateBtn).toContainText('Update Semantic Search Model (~130 MB)');
+  await expect(panel.getByTestId('semantic-model-advanced-details')).toHaveCount(0);
+
+  await updateBtn.click();
+  await expect(badge).toHaveText('Semantic search active');
+  await expect(panel.getByTestId('semantic-model-delete-btn')).toBeVisible();
 });
 
 test('code intelligence panel maintains accessibility in light and dark modes', async ({}, testInfo) => {

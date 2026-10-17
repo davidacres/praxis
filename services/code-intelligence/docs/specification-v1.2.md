@@ -45,7 +45,7 @@ Non-goals for v1.2: proving runtime execution order, exhaustive reflection analy
 | Vector persistence | SQLite float32 BLOBs plus an in-process exact cosine-search backend for v1.2 |
 | Larger vector indexes | A replaceable ANN backend after measured scale gates; LanceDB is a candidate, not a mandatory runtime dependency |
 | Embedding runtime | Local ONNX Runtime C# provider with an explicitly installed model bundle |
-| Baseline embedding model | A validated ONNX export of `sentence-transformers/all-MiniLM-L6-v2`, 384 dimensions; release bundle must pin upstream revision and checksums |
+| Baseline embedding model | A validated ONNX export of `BAAI/bge-small-en-v1.5`, 384 dimensions (amended 2026-10-17; originally `sentence-transformers/all-MiniLM-L6-v2`); release bundle must pin upstream revision and checksums |
 | Summaries | Deterministic structural descriptions first; optional local LLM enrichment later |
 | Local LLM integration | Disabled by default; loopback HTTP provider with a configured model and structured output validation |
 | MCP | stdio initially; pin SDK and negotiated protocol support in release lockfiles |
@@ -249,7 +249,7 @@ Summary cache key includes source/context revisions, evidence dependency hashes,
 
 Model assets are installed through an explicit provisioning command or an offline bundle. Runtime indexing never downloads models. Installation verifies licence metadata, model/tokenizer/config checksums and a golden-output fixture before activation. Release packaging must provide a tested bundle for each supported runtime; a model name alone is not an acceptable release artifact.
 
-Baseline is the MiniLM model in §2, with its validated WordPiece tokenizer, attention-mask-aware mean pooling and L2 normalisation implementation. Baseline input limit is 256 word pieces including special tokens; query/document prefixes are empty. M0 pins the exact ONNX export and upstream revision in `model-manifest.json`; this artifact is produced and tested during implementation, not invented in this specification. Alternative models require a new manifest and quality/latency evaluation.
+Baseline is the bge-small model in §2, with its validated WordPiece tokenizer (byte-identical to MiniLM's vocabulary), CLS pooling and L2 normalisation. Baseline input limit is 256 word pieces including special tokens; queries take the instruction `Represent this sentence for searching relevant passages: ` and documents take no prefix. *Amended 2026-10-17:* the original baseline was MiniLM with attention-mask mean pooling and empty prefixes; bge-small replaced it after the fixed 120-query Maze evaluation (vector-only held-out Recall@10 0.515 → 0.758, hybrid unchanged at equal weighting, then fusion retuned on the tuning split only — see `docs/evaluations/README.md`). The licence policy for models is in the repository's `LICENSING.md`. M0 pins the exact ONNX export and upstream revision in `model-manifest.json`; this artifact is produced and tested during implementation, not invented in this specification. Alternative models require a new manifest and quality/latency evaluation.
 
 Required manifest fields: model ID and revision, artifact SHA-256 values, tokenizer identity, maximum tokens, output dimensions, pooling strategy, normalisation, metric, query/document prefixes, runtime requirements, licence, golden-fixture checksum and representation version. Fingerprint is the hash of canonical manifest JSON. Dimension is derived from the manifest and checked against actual inference output; there is no independent `1536` default.
 
@@ -422,7 +422,7 @@ The service must not execute builds/tests, plugins or source generators implicit
   },
   "embedding": {
     "provider": "onnx-local",
-    "modelManifestPath": "models/minilm/model-manifest.json",
+    "modelManifestPath": "models/bge-small/model-manifest.json",
     "workers": 1,
     "vectorBackend": "sqlite-exact",
     "maxSymbols": 50000,
@@ -527,7 +527,8 @@ These sources establish underlying API/protocol behaviour. Architecture choices 
 - [SQLite WAL](https://www.sqlite.org/wal.html), [foreign keys](https://www.sqlite.org/foreignkeys.html), and [FTS5](https://www.sqlite.org/fts5.html): writer concurrency, integrity and lexical indexing.
 - [FileSystemWatcher buffer documentation](https://learn.microsoft.com/en-us/dotnet/api/system.io.filesystemwatcher.internalbuffersize?view=net-10.0): watcher buffers can overflow; reconciliation is required by this design.
 - [ONNX Runtime C#](https://onnxruntime.ai/docs/get-started/with-csharp): local inference and platform packaging.
-- [MiniLM model card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2): baseline model; validate the pinned export, tokenizer, pooling and licence in M0.
+- [bge-small-en-v1.5 model card](https://huggingface.co/BAAI/bge-small-en-v1.5): baseline model since 2026-10-17 (MIT); pinned export, tokenizer, CLS pooling, query instruction and licence are validated by the golden fixture.
+- [MiniLM model card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2): original baseline model (Apache-2.0); historical evaluation reports use it.
 - [MCP C# transports](https://csharp.sdk.modelcontextprotocol.io/v2/concepts/transports/transports.html): stdio and Streamable HTTP. Future HTTP service requires a separate authentication/transport specification.
 - [SCIP Code Intelligence Protocol](https://github.com/scip-code/scip): external interoperability candidate; not the name of a new Praxis protocol.
 

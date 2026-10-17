@@ -92,7 +92,7 @@ public sealed class ModelTests
     [LocalModelFact]
     public void BaselineMatchesIndependentPythonTokenizerAndOnnxGolden()
     {
-        var fixture = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "minilm-golden.json")))!;
+        var fixture = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "bge-small-golden.json")))!;
         var bundle = Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!;
         var tokenizer = new WordPieceTokenizer(File.ReadLines(Path.Combine(bundle, "vocab.txt")));
         using var model = new LocalModel(bundle);

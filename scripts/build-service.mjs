@@ -42,7 +42,7 @@ try {
       await mkdir(path.join(stage, 'node_modules'), { recursive: true });
       await cp(path.join(root, 'node_modules', 'typescript'), path.join(stage, 'node_modules', 'typescript'), { recursive: true });
       try { await cp(path.join(root, 'node_modules', '@typescript'), path.join(stage, 'node_modules', '@typescript'), { recursive: true }); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      await copyFile(path.join(service, 'models', 'minilm-manifest.json'), path.join(stage, 'baseline-model-manifest.json'));
+      await copyFile(path.join(service, 'models', 'bge-small-manifest.json'), path.join(stage, 'baseline-model-manifest.json'));
       await writeFile(path.join(stage, 'package-manifest.json'), JSON.stringify({ runtime: rid, schemaVersion: '1.2', selfContained: true, modelWeightsIncluded: false }, null, 2) + '\n');
       const hostRid = `${{ linux: 'linux', darwin: 'osx', win32: 'win' }[process.platform]}-${process.arch}`;
       if (rid === hostRid) {

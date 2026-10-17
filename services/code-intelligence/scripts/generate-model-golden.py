@@ -45,13 +45,16 @@ for index, text in enumerate(texts):
                       'firstToken': first, 'endToken': end, 'truncated': len(ids) > 4 * 254})
     case = {'text': text, 'tokenChunks': chunks, 'chunkSpans': spans}
     if index in (0, 1, 2, 4):
-        tokens = np.array([chunks[0]], dtype=np.int64)
+        # A query embeds the manifest's query prefix + text, first chunk only.
+        query_ids = tokenizer.encode(manifest['queryPrefix'] + text, add_special_tokens=False).ids
+        tokens = np.array([[101] + query_ids[:254] + [102]], dtype=np.int64)
         hidden = session.run(None, {'input_ids': tokens, 'attention_mask': np.ones_like(tokens), 'token_type_ids': np.zeros_like(tokens)})[0]
-        pooled = hidden.mean(axis=1)[0]
+        pooled = hidden[0, 0] if manifest['pooling'] == 'cls' else hidden.mean(axis=1)[0]
         vector = pooled / np.linalg.norm(pooled)
         case['queryVector'] = vector.tolist()
     cases.append(case)
 data = {'version': 1, 'reference': {'tokenizers': tokenizers.__version__, 'onnxruntime': ort.__version__, 'numpy': np.__version__, 'provider': 'CPUExecutionProvider'},
+        'modelId': manifest['modelId'], 'pooling': manifest['pooling'], 'queryPrefix': manifest['queryPrefix'],
         'modelSha256': manifest['modelSha256'], 'vocabSha256': manifest['vocabSha256'],
         'absoluteTolerance': 0.00001, 'minimumCosine': 0.99999, 'cases': cases}
 output.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')

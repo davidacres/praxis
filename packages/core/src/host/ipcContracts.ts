@@ -823,6 +823,8 @@ export interface SemanticModelStatus {
   downloading?: boolean;
   progressPercent?: number;
   error?: string;
+  /** Files from an earlier pinned model are on disk; downloading replaces them with the current one. */
+  updateAvailable?: boolean;
   modelId?: string;
   architecture?: string;
 }

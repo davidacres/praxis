@@ -4,6 +4,8 @@ import { Icon } from '../ui/Icon';
 import './semanticSearchNotification.css';
 
 export const SEMANTIC_SEARCH_DISMISS_KEY = 'praxis:semantic-search-prompt-dismissed';
+/** Separate from the enable prompt: dismissing "enable" once must not hide a model update. */
+export const SEMANTIC_SEARCH_UPDATE_DISMISS_KEY = 'praxis:semantic-search-update-dismissed';
 
 export interface SemanticSearchNotificationProps {
   onOpenSettings?: () => void;
@@ -11,6 +13,7 @@ export interface SemanticSearchNotificationProps {
 
 export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNotificationProps) {
   const [visible, setVisible] = useState(false);
+  const [update, setUpdate] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState<SemanticModelProgressEvent>();
   const [success, setSuccess] = useState(false);
@@ -21,14 +24,13 @@ export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNot
 
     const checkStatus = async () => {
       try {
-        const isDismissed = localStorage.getItem(SEMANTIC_SEARCH_DISMISS_KEY);
-        if (isDismissed) return;
-
         if (window.praxis?.ai?.getSemanticModelStatus) {
           const status = await window.praxis.ai.getSemanticModelStatus();
-          if (!cancelled && !status.installed) {
-            setVisible(true);
-          }
+          if (cancelled || status.installed) return;
+          const isUpdate = status.updateAvailable === true;
+          if (localStorage.getItem(isUpdate ? SEMANTIC_SEARCH_UPDATE_DISMISS_KEY : SEMANTIC_SEARCH_DISMISS_KEY)) return;
+          setUpdate(isUpdate);
+          setVisible(true);
         }
       } catch {
         // Soft fail
@@ -63,7 +65,7 @@ export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNot
   if (!visible) return null;
 
   const handleDismiss = () => {
-    localStorage.setItem(SEMANTIC_SEARCH_DISMISS_KEY, 'true');
+    localStorage.setItem(update ? SEMANTIC_SEARCH_UPDATE_DISMISS_KEY : SEMANTIC_SEARCH_DISMISS_KEY, 'true');
     setVisible(false);
   };
 
@@ -99,7 +101,7 @@ export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNot
             <Icon name="sparkles" size={16} />
           </span>
           <h4 className="semantic-search-notification-title" data-testid="semantic-search-notification-title">
-            Semantic Code Search
+            {update ? 'Semantic Search Update' : 'Semantic Code Search'}
           </h4>
           <span className="semantic-search-notification-badge">Recommended</span>
         </div>
@@ -117,7 +119,9 @@ export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNot
 
       {!success && (
         <p className="semantic-search-notification-body">
-          Enable natural language semantic search across functions, symbols, and codebase repositories. Runs 100% locally on your machine with zero external network traffic.
+          {update
+            ? 'A more accurate search model is available. Until it is installed, code search uses keyword matching only. Runs 100% locally on your machine.'
+            : 'Enable natural language semantic search across functions, symbols, and codebase repositories. Runs 100% locally on your machine with zero external network traffic.'}
         </p>
       )}
 
@@ -140,7 +144,7 @@ export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNot
       {success && (
         <div className="semantic-search-notification-success" data-testid="semantic-notification-success">
           <Icon name="check" size={16} />
-          <span>Semantic search is now enabled and active!</span>
+          <span>{update ? 'Semantic search model updated!' : 'Semantic search is now enabled and active!'}</span>
         </div>
       )}
 
@@ -174,7 +178,7 @@ export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNot
             onClick={handleEnable}
             data-testid="semantic-notification-enable-btn"
           >
-            Enable (~90 MB)
+            {update ? 'Update (~130 MB)' : 'Enable (~130 MB)'}
           </button>
         </div>
       )}

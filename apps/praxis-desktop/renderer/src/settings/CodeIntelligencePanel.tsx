@@ -167,7 +167,7 @@ export function CodeIntelligencePanel({
     if (!window.praxis?.ai?.deleteSemanticModel) return;
     const ok = await confirm({
       title: 'Remove Semantic Search Model?',
-      message: 'This removes the offline model files to free disk space (~90 MB). Code search will continue using standard keyword matching.',
+      message: 'This removes the offline model files to free disk space (~130 MB). Code search will continue using standard keyword matching.',
       confirmLabel: 'Remove Model',
       danger: true
     });
@@ -210,6 +210,7 @@ export function CodeIntelligencePanel({
         await window.praxis.ai.resetCodeIntelligence();
       }
       localStorage.removeItem('praxis:semantic-search-prompt-dismissed');
+      localStorage.removeItem('praxis:semantic-search-update-dismissed');
       setRepositoryId('');
       setStatus(undefined);
       setModelStatus({ installed: false, active: false });
@@ -258,6 +259,8 @@ export function CodeIntelligencePanel({
               ? 'Downloading…'
               : modelStatus.installed
               ? 'Semantic search active'
+              : modelStatus.updateAvailable
+              ? 'Model update required'
               : 'Standard keyword search active'}
           </span>
         </div>
@@ -292,7 +295,13 @@ export function CodeIntelligencePanel({
               onClick={() => void handleDownloadModel()}
             >
               <Icon name="sparkles" size={13} />
-              <span>{downloading ? 'Downloading…' : 'Enable Semantic Search (~90 MB)'}</span>
+              <span>
+                {downloading
+                  ? 'Downloading…'
+                  : modelStatus.updateAvailable
+                  ? 'Update Semantic Search Model (~130 MB)'
+                  : 'Enable Semantic Search (~130 MB)'}
+              </span>
             </button>
           ) : (
             <button

@@ -7,18 +7,23 @@ import { createHash } from 'node:crypto';
 import type { SemanticModelProgressEvent, SemanticModelStatus } from '@praxis/core';
 import { broadcastToAllWindows } from './windowBroadcast.js';
 
+// Mirrors services/code-intelligence/models/bge-small-manifest.json, which the service
+// pins and verifies; LocalModel refuses any other model, revision or checksum.
+const MODEL_ID = 'BAAI/bge-small-en-v1.5';
+const MODEL_REVISION = '5c38ec7c405ec4b44b94cc5a9bb96e735b38267a';
+
 const ASSETS = [
   {
     name: 'vocab.txt',
-    url: 'https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/vocab.txt',
+    url: `https://huggingface.co/${MODEL_ID}/resolve/${MODEL_REVISION}/vocab.txt`,
     size: 231508,
     sha256: '07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3'
   },
   {
     name: 'model.onnx',
-    url: 'https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/onnx/model.onnx',
-    size: 90405214,
-    sha256: '6fd5d72fe4589f189f8ebc006442dbb529bb7ce38f8082112682524616046452'
+    url: `https://huggingface.co/${MODEL_ID}/resolve/${MODEL_REVISION}/onnx/model.onnx`,
+    size: 133093490,
+    sha256: '828e1496d7fabb79cfa4dcd84fa38625c0d3d21da474a00f08db0f559940cf35'
   }
 ];
 
@@ -26,20 +31,20 @@ const TOTAL_BYTES = ASSETS.reduce((sum, a) => sum + a.size, 0);
 
 const MANIFEST_CONTENT = {
   version: 1,
-  modelId: 'sentence-transformers/all-MiniLM-L6-v2',
-  revision: '1110a243fdf4706b3f48f1d95db1a4f5529b4d41',
-  modelSha256: '6fd5d72fe4589f189f8ebc006442dbb529bb7ce38f8082112682524616046452',
+  modelId: MODEL_ID,
+  revision: MODEL_REVISION,
+  modelSha256: '828e1496d7fabb79cfa4dcd84fa38625c0d3d21da474a00f08db0f559940cf35',
   vocabSha256: '07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3',
   dimensions: 384,
   maximumTokens: 256,
   tokenizer: 'bert-uncased-wordpiece-v3',
-  pooling: 'attention-mask-mean',
+  pooling: 'cls',
   normalization: 'l2',
   metric: 'cosine',
-  queryPrefix: '',
+  queryPrefix: 'Represent this sentence for searching relevant passages: ',
   documentPrefix: '',
   representationVersion: 2,
-  license: 'Apache-2.0'
+  license: 'MIT'
 };
 
 export function getSemanticModelDirectory(): string {
@@ -53,12 +58,29 @@ let isDownloading = false;
 let currentProgress = 0;
 let cachedFingerprint: string | undefined;
 
+function hasModelFiles(dir: string): boolean {
+  return ['manifest.json', 'model.onnx', 'vocab.txt'].every(name => fs.existsSync(path.join(dir, name)));
+}
+
+function installedManifest(dir: string): { modelId?: unknown; revision?: unknown } | undefined {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+/** True only for the pinned model; an older download (e.g. MiniLM) is not "installed". */
 export function isSemanticModelInstalled(): boolean {
   const dir = getSemanticModelDirectory();
-  const manifestPath = path.join(dir, 'manifest.json');
-  const modelPath = path.join(dir, 'model.onnx');
-  const vocabPath = path.join(dir, 'vocab.txt');
-  return fs.existsSync(manifestPath) && fs.existsSync(modelPath) && fs.existsSync(vocabPath);
+  if (!hasModelFiles(dir)) return false;
+  const manifest = installedManifest(dir);
+  return manifest?.modelId === MODEL_ID && manifest?.revision === MODEL_REVISION;
+}
+
+/** Model files from an earlier pinned model are present; downloading replaces them. */
+export function isSemanticModelUpdateAvailable(): boolean {
+  return hasModelFiles(getSemanticModelDirectory()) && !isSemanticModelInstalled();
 }
 
 export function getCachedFingerprint(): string | undefined {
@@ -90,8 +112,9 @@ export function getSemanticModelStatus(): SemanticModelStatus {
     sizeBytes,
     downloading: isDownloading,
     progressPercent: currentProgress,
+    updateAvailable: isSemanticModelUpdateAvailable(),
     modelId: MANIFEST_CONTENT.modelId,
-    architecture: installed ? 'BERT / MiniLM (ONNX)' : undefined
+    architecture: installed ? 'BERT / bge-small (ONNX)' : undefined
   };
 }
 
