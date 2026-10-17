@@ -977,3 +977,42 @@ This was the first run of the M4 adapter on a real repository: Praxis itself, at
 - Real Claude Code use against this index.
 - Call graphs for files outside any `tsconfig` (the e2e specs).
 - The sidecar memory above.
+
+## TypeScript retrieval pilot on Praxis — 17 October
+
+**Corpus.** `evaluations/praxis-typescript-corpus.praxis.json` (commit `08611507`): 48 queries.
+- 10 exact, 12 terminology, 12 behaviour, 6 cross-project and 8 negative. All are held-out; nothing is tuned on this corpus.
+- Queries and labels were written from declarations and doc comments, and committed before any search ran against them.
+- It is a pilot. It is below the release protocol size and has no stale category, so the protocol-size gates fail by design.
+
+**Run.** Adapter v2 and bge-small, at the corpus revision, using `evaluate-retrieval.py` against an already-provisioned index. Results are in `praxis-typescript-pilot-results.praxis.json`. Building vectors for about 39,800 symbols took 1,364 s on the 12-core Mac.
+
+| Category | Lexical R@10 / MRR | Hybrid R@10 / MRR | Vector R@10 / MRR |
+|---|---|---|---|
+| All (40 labelled) | 0.738 / 0.707 | **0.787 / 0.718** | 0.800 / 0.618 |
+| Exact | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / 0.720 |
+| Terminology | 0.333 / 0.292 | 0.500 / 0.308 | 0.500 / 0.333 |
+| Behaviour | 1.000 / 1.000 | 1.000 / 1.000 | 1.000 / 0.812 |
+| Cross-project | 0.583 / 0.464 | 0.583 / 0.500 | 0.667 / 0.628 |
+
+**Gates that pass:**
+- Exact top-1.
+- No tool errors and no duplicate results.
+- Stable snapshot.
+- Full semantic coverage.
+- Expected evidence present.
+- No category regression over 0.05 against lexical.
+
+**Gates that fail:**
+- Protocol size, as noted above.
+- Negative-abstention review not declared.
+- Held-out recall ≥ 0.80: hybrid is 0.787.
+- Complete compiler contexts: two C# test/benchmark projects are partial, and the e2e specs are syntax-only.
+
+Hybrid p95 was 164 ms in the sequential CLI run.
+
+**Reading.**
+- Exact names and behaviour descriptions are found reliably. The behaviour queries share wording with their doc comments, so they are easier than Maze's.
+- Terminology is the weak category, as it is on Maze. Hybrid lifts recall from 0.333 to 0.500, but four of twelve queries still miss in every mode. For example, "save leftover edits as a commit before a checkout is deleted" does not reach `preserveUncommittedWork`.
+- Cross-project misses happen where one of the two labels is a constant or a small helper, for example `DEFAULT_APP_SETTINGS` and `isTicketReviewKey`.
+- The same fusion work that would help Maze's terminology queries applies here.
