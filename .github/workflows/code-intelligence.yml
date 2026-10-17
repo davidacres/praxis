@@ -7,6 +7,10 @@ on:
         description: 'Run the generated 5k-symbol real-model benchmark on Linux'
         type: boolean
         default: false
+      run_qualification:
+        description: 'Run actual full-volume and crash-recovery qualification on every host'
+        type: boolean
+        default: false
   pull_request:
     paths:
       - 'services/code-intelligence/**'
@@ -99,3 +103,63 @@ jobs:
             ${{ runner.temp }}/praxis-contract-samples
             ${{ runner.temp }}/praxis-benchmarks
             services/code-intelligence/artifacts/package/package-manifest.json
+
+  qualification:
+    name: Disk-full and crash-recovery qualification (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch' && inputs.run_qualification
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      PRAXIS_DOTNET: dotnet
+    steps:
+      - name: Enable long paths for Windows checkout
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.402'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Configure runner-local fixture locations
+        run: |
+          printf 'PRAXIS_MODEL_BUNDLE=%s/praxis-model\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'PRAXIS_QUALIFICATION=%s/praxis-qualification\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Provision hash-pinned local model assets
+        run: python services/code-intelligence/scripts/prepare-model.py "$PRAXIS_MODEL_BUNDLE"
+      - name: Restore locked service dependencies
+        run: dotnet restore services/code-intelligence/Praxis.CodeIntelligence.slnx --locked-mode --disable-parallel -m:1
+      - name: Package host runtime
+        run: node scripts/build-service.mjs --package
+      - name: Qualify an actual full volume
+        run: |
+          mkdir -p "$PRAXIS_QUALIFICATION"
+          executable="$GITHUB_WORKSPACE/services/code-intelligence/artifacts/package/Praxis.CodeIntelligence"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then executable="$executable.exe"; fi
+          node services/code-intelligence/scripts/qualify-disk-full.mjs --executable "$executable" --output "$PRAXIS_QUALIFICATION/disk-full-${{ runner.os }}.praxis.json"
+      - name: Qualify crash recovery under abrupt owner termination
+        if: always()
+        run: |
+          mkdir -p "$PRAXIS_QUALIFICATION"
+          executable="$GITHUB_WORKSPACE/services/code-intelligence/artifacts/package/Praxis.CodeIntelligence"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then executable="$executable.exe"; fi
+          node services/code-intelligence/scripts/qualify-crash-recovery.mjs --executable "$executable" --model "$PRAXIS_MODEL_BUNDLE" --reference "$(dirname "$executable")/System.Private.CoreLib.dll" --symbols 2000 --iterations 20 --output "$PRAXIS_QUALIFICATION/crash-recovery-${{ runner.os }}.praxis.json"
+      - name: Preserve qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-intelligence-qualification-${{ matrix.os }}
+          retention-days: 30
+          path: ${{ runner.temp }}/praxis-qualification

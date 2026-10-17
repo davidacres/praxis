@@ -1,6 +1,8 @@
-// Actual full-volume qualification on macOS: the index lives on a private,
-// size-limited disk image that is filled until the OS reports ENOSPC. Source
-// files stay outside the image. Never fills or touches any other volume.
+// Actual full-volume qualification: the index lives on a private, size-limited
+// volume that is filled until the OS reports ENOSPC. Source files stay outside
+// it. Never fills or touches any other volume. macOS uses an APFS sparse image
+// (hdiutil), Linux a loop-mounted ext4 image (sudo mount), Windows an NTFS VHDX
+// mounted on an empty folder (diskpart, which needs an elevated shell).
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, writeFile, readFile, rm, open, access } from 'node:fs/promises';
@@ -14,13 +16,12 @@ for (let index = 2; index < process.argv.length; index += 2) {
   if (!['--executable', '--output'].includes(key) || !value || options.has(key)) throw Error('Invalid arguments');
   options.set(key, value);
 }
-if (process.platform !== 'darwin') throw Error('Actual disk-full qualification uses hdiutil and runs on macOS only');
 for (const key of ['--executable', '--output']) if (!options.has(key)) throw Error(`Missing ${key}`);
 const executable = path.resolve(options.get('--executable')), output = path.resolve(options.get('--output'));
 if (!output.endsWith('.praxis.json')) throw Error('Output must end in .praxis.json');
 try { await access(output); throw Error('Output already exists'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 const work = await mkdtemp(path.join(os.tmpdir(), 'pci-disk-full-'));
-const image = path.join(work, 'index.sparseimage'), volume = path.join(work, 'volume');
+const volume = path.join(work, 'volume');
 const data = path.join(volume, 'data'), source = path.join(work, 'source');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const hash = text => text === undefined ? null : 'sha256:' + crypto.createHash('sha256').update(text).digest('hex');
@@ -43,13 +44,49 @@ async function fillVolume() {
   } finally { await handle.close(); }
   return { filler, written };
 }
+// Each platform mounts a 64 MiB volume at `volume` and returns how to detach it.
+const volumes = {
+  darwin: {
+    description: '64 MiB APFS sparse image',
+    async attach() {
+      const image = path.join(work, 'index');
+      await execute('hdiutil', ['create', '-size', '64m', '-fs', 'APFS', '-type', 'SPARSE', '-volname', 'PciDiskFull', image]);
+      await mkdir(volume); await execute('hdiutil', ['attach', '-nobrowse', '-mountpoint', volume, image + '.sparseimage']);
+      return () => execute('hdiutil', ['detach', volume, '-force']);
+    }
+  },
+  linux: {
+    description: '64 MiB loop-mounted ext4 image with no reserved blocks',
+    async attach() {
+      const image = path.join(work, 'index.ext4');
+      await execute('truncate', ['-s', '64M', image]);
+      await execute('mkfs.ext4', ['-q', '-F', '-m', '0', image]);
+      await mkdir(volume); await execute('sudo', ['-n', 'mount', '-o', 'loop', image, volume]);
+      const detach = () => execute('sudo', ['-n', 'umount', '-l', volume]);
+      await execute('sudo', ['-n', 'chown', `${process.getuid()}:${process.getgid()}`, volume]).catch(async error => { await detach(); throw error; });
+      return detach;
+    }
+  },
+  win32: {
+    description: '64 MiB NTFS VHDX mounted on an empty folder',
+    async attach() {
+      const image = path.join(work, 'index.vhdx'), script = path.join(work, 'diskpart.txt');
+      const diskpart = async lines => { await writeFile(script, lines.join('\r\n') + '\r\n'); return execute('diskpart', ['/s', script], { timeout: 120_000 }); };
+      await mkdir(volume);
+      await diskpart([`create vdisk file="${image}" maximum=64 type=expandable`, `select vdisk file="${image}"`, 'attach vdisk',
+        'create partition primary', 'format fs=ntfs quick label=PciDiskFull', `assign mount="${volume}"`]);
+      return () => diskpart([`select vdisk file="${image}"`, 'detach vdisk']);
+    }
+  }
+};
+const platformVolume = volumes[process.platform];
+if (!platformVolume) throw Error(`No disk-full volume recipe for ${process.platform}`);
 const report = { version: 1, platform: process.platform, architecture: process.arch, timestampUtc: new Date().toISOString(),
-  measurement: 'Packaged CLI and owner; index database on a 64 MiB APFS sparse image filled until ENOSPC', steps: [] };
+  measurement: `Packaged CLI and owner; index database on a ${platformVolume.description} filled until ENOSPC`, steps: [] };
 const step = (name, details) => { report.steps.push({ name, ...details }); console.error(name, JSON.stringify(details)); };
-let attached = false, ownerProcess;
+let detach, ownerProcess;
 try {
-  await execute('hdiutil', ['create', '-size', '64m', '-fs', 'APFS', '-type', 'SPARSE', '-volname', 'PciDiskFull', image.replace(/\.sparseimage$/, '')]);
-  await mkdir(volume); await execute('hdiutil', ['attach', '-nobrowse', '-mountpoint', volume, image]); attached = true;
+  detach = await platformVolume.attach();
   await mkdir(source);
   await writeFile(path.join(source, 'Example.cs'), Array.from({ length: 50 }, (_, i) => `public class Example${i} { public int Run${i}() => ${i}; }`).join('\n'));
   const registered = await cli('register', source); if (registered.exitCode) throw Error('Register failed: ' + JSON.stringify(registered));
@@ -94,7 +131,7 @@ try {
   report.passed = Object.values(report.gates).every(Boolean);
 } finally {
   if (ownerProcess) try { process.kill(ownerProcess); await wait(1000); } catch { }
-  if (attached) await execute('hdiutil', ['detach', volume, '-force']).catch(error => console.error('Detach failed:', error.message));
+  if (detach) await detach().catch(error => console.error('Detach failed:', error.message));
   await rm(work, { recursive: true, force: true });
 }
 await writeFile(output, JSON.stringify(report, null, 2) + '\n');

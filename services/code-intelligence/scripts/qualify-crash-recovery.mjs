@@ -1,6 +1,8 @@
 // Crash-recovery stress: repeatedly SIGKILL the native owner at random points
 // while it publishes an edit or refreshes vectors, restart it through the normal
 // client, and require integrity, the edited content and full vector coverage.
+// On Windows, Node's process.kill(pid, 'SIGKILL') calls TerminateProcess: the
+// same abrupt, no-cleanup termination.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, writeFile, rm, access } from 'node:fs/promises';
@@ -16,7 +18,6 @@ for (let index = 2; index < process.argv.length; index += 2) {
   options.set(key, value);
 }
 for (const key of ['--executable', '--model', '--reference', '--output']) if (!options.has(key)) throw Error(`Missing ${key}`);
-if (process.platform === 'win32') throw Error('Uses SIGKILL; run on macOS or Linux');
 const executable = path.resolve(options.get('--executable')), model = path.resolve(options.get('--model'));
 const reference = path.resolve(options.get('--reference')), output = path.resolve(options.get('--output'));
 const symbols = Number(options.get('--symbols') ?? 2000), iterations = Number(options.get('--iterations') ?? 20);
@@ -34,7 +35,7 @@ const cli = async (...args) => {
 };
 const ownerPid = async () => { try { return JSON.parse(await readFile(path.join(data, 'owner.json'), 'utf8')).processId; } catch { return null; } };
 const report = { version: 1, platform: process.platform, architecture: process.arch, timestampUtc: new Date().toISOString(), symbols, iterations,
-  seed: Number(options.get('--seed') ?? 4211), measurement: 'Packaged CLI and auto-started owner; SIGKILL at a random delay (0–2.5 s) after each source edit', samples: [] };
+  seed: Number(options.get('--seed') ?? 4211), measurement: `Packaged CLI and auto-started owner; ${process.platform === 'win32' ? 'TerminateProcess' : 'SIGKILL'} at a random delay (0–2.5 s) after each source edit`, samples: [] };
 let repository;
 try {
   const paths = [], originals = []; let remaining = symbols - 1, ordinal = 0;
