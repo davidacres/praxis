@@ -85,7 +85,7 @@ def validate(corpus):
 
 def aggregate(results):
     summary = {}
-    for mode in ("lexical", "hybrid"):
+    for mode in ("lexical", "hybrid", "vector"):
         for category in sorted(CATEGORIES | {"all"}):
             cases = [case for case in results if case["mode"] == mode and case["split"] == "heldOut"
                      and (category == "all" or case["category"] == category)]
@@ -117,7 +117,7 @@ def evaluate(corpus, invoke):
         raise ValueError("Cannot read index status: " + json.dumps(before["error"]))
     results = []
     for case in corpus["queries"]:
-        for mode in ("lexical", "hybrid"):
+        for mode in ("lexical", "hybrid", "vector"):
             started = time.perf_counter()
             try:
                 response = invoke("search_code", {"query": case["query"], "mode": mode, "limit": 10})
